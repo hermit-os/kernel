@@ -8,7 +8,7 @@ use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{fmt, future, u32, u8};
+use core::{future, u32, u8};
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -39,340 +39,386 @@ const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
 pub(crate) trait FuseInterface {
-	fn send_command<const CODE: u32>(
-		&mut self,
-		cmd: &<Op<CODE> as OpTrait>::Cmd,
-		rsp: &mut <Op<CODE> as OpTrait>::Rsp,
-	) where
-		Op<CODE>: OpTrait;
+	fn send_command<O: ops::Op>(&mut self, cmd: &Cmd<O>, rsp: &mut Rsp<O>);
 
 	fn get_mount_point(&self) -> String;
 }
 
-pub(crate) trait OpTrait {
-	type InStruct: core::fmt::Debug;
-	type InPayload: ?Sized;
-	type OutStruct: core::fmt::Debug;
-	type OutPayload: ?Sized;
+pub(crate) mod ops {
+	use alloc::boxed::Box;
+	use core::ffi::CStr;
+	use core::mem::MaybeUninit;
 
-	type Cmd: ?Sized + AsSliceU8 = ReqPart<fuse_abi::InHeader, Self::InStruct, Self::InPayload>;
-	type Rsp: ?Sized + AsSliceU8 =
-		ReqPart<fuse_abi::OutHeader, MaybeUninit<Self::OutStruct>, Self::OutPayload>;
-}
+	use super::{Cmd, Rsp};
+	use crate::fd::PollEvent;
+	use crate::fs::{fuse_abi, SeekWhence};
 
-pub(crate) struct Op<const CODE: u32>;
+	pub(crate) trait Op {
+		const OP_CODE: fuse_abi::Opcode;
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Init as u32 }> {
-	type InStruct = fuse_abi::InitIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::InitOut;
-	type OutPayload = ();
-}
-
-impl Op<{ fuse_abi::Opcode::Init as u32 }> {
-	fn create() -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(
-			fuse_abi::ROOT_ID,
-			fuse_abi::InitIn {
-				major: 7,
-				minor: 31,
-				max_readahead: 0,
-				flags: 0,
-			},
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+		type InStruct: core::fmt::Debug;
+		type InPayload: ?Sized;
+		type OutStruct: core::fmt::Debug;
+		type OutPayload: ?Sized;
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Create as u32 }> {
-	type InStruct = fuse_abi::CreateIn;
-	type InPayload = CStr;
-	type OutStruct = fuse_abi::CreateOut;
-	type OutPayload = ();
-}
+	#[derive(Debug)]
+	pub(crate) struct Init;
 
-impl Op<{ fuse_abi::Opcode::Create as u32 }> {
-	fn create(
-		path: &str,
-		flags: u32,
-		mode: u32,
-	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::cmd_from_str(
-			fuse_abi::ROOT_ID,
-			fuse_abi::CreateIn {
-				flags,
-				mode,
-				..Default::default()
-			},
-			path,
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+	impl Op for Init {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Init;
+		type InStruct = fuse_abi::InitIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::InitOut;
+		type OutPayload = ();
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Open as u32 }> {
-	type InStruct = fuse_abi::OpenIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::OpenOut;
-	type OutPayload = ();
-}
+	impl Init {
+		pub(crate) fn create() -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				fuse_abi::ROOT_ID,
+				fuse_abi::InitIn {
+					major: 7,
+					minor: 31,
+					max_readahead: 0,
+					flags: 0,
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-impl Op<{ fuse_abi::Opcode::Open as u32 }> {
-	fn create(nid: u64, flags: u32) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(
-			nid,
-			fuse_abi::OpenIn {
-				flags,
-				..Default::default()
-			},
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+			(cmd, rsp)
+		}
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Write as u32 }> {
-	type InStruct = fuse_abi::WriteIn;
-	type InPayload = [u8];
-	type OutStruct = fuse_abi::WriteOut;
-	type OutPayload = ();
-}
+	#[derive(Debug)]
+	pub(crate) struct Create;
 
-impl Op<{ fuse_abi::Opcode::Write as u32 }> {
-	fn create(
-		nid: u64,
-		fh: u64,
-		buf: &[u8],
-		offset: u64,
-	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::cmd_from_array(
-			nid,
-			fuse_abi::WriteIn {
-				fh,
-				offset,
-				size: buf.len().try_into().unwrap(),
-				..Default::default()
-			},
-			buf,
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+	impl Op for Create {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Create;
+		type InStruct = fuse_abi::CreateIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::CreateOut;
+		type OutPayload = ();
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Read as u32 }> {
-	type InStruct = fuse_abi::ReadIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::ReadOut;
+	impl Create {
+		#[allow(clippy::self_named_constructors)]
+		pub(crate) fn create(
+			path: &str,
+			flags: u32,
+			mode: u32,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(
+				fuse_abi::ROOT_ID,
+				fuse_abi::CreateIn {
+					flags,
+					mode,
+					..Default::default()
+				},
+				path,
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-	// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
-	// instead of a MaybeUninit<[_]>.
-	type OutPayload = [MaybeUninit<u8>];
-}
-
-impl Op<{ fuse_abi::Opcode::Read as u32 }> {
-	fn create(
-		nid: u64,
-		fh: u64,
-		size: u32,
-		offset: u64,
-	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(
-			nid,
-			fuse_abi::ReadIn {
-				fh,
-				offset,
-				size,
-				..Default::default()
-			},
-		);
-		let rsp = unsafe {
-			<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Rsp::new_uninit(
-				size.try_into().unwrap(),
-			)
-		};
-
-		(cmd, rsp)
+			(cmd, rsp)
+		}
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Lseek as u32 }> {
-	type InStruct = fuse_abi::LseekIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::LseekOut;
-	type OutPayload = ();
-}
+	#[derive(Debug)]
+	pub(crate) struct Open;
 
-impl Op<{ fuse_abi::Opcode::Lseek as u32 }> {
-	fn create(
-		nid: u64,
-		fh: u64,
-		offset: isize,
-		whence: SeekWhence,
-	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(
-			nid,
-			fuse_abi::LseekIn {
-				fh,
-				offset: offset.try_into().unwrap(),
-				whence: num::ToPrimitive::to_u32(&whence).unwrap(),
-				..Default::default()
-			},
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+	impl Op for Open {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Open;
+		type InStruct = fuse_abi::OpenIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::OpenOut;
+		type OutPayload = ();
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Readlink as u32 }> {
-	type InStruct = fuse_abi::ReadlinkIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::ReadlinkOut;
+	impl Open {
+		pub(crate) fn create(nid: u64, flags: u32) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::OpenIn {
+					flags,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-	// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
-	// instead of a MaybeUninit<[_]>.
-	type OutPayload = [MaybeUninit<u8>];
-}
-
-impl Op<{ fuse_abi::Opcode::Readlink as u32 }> {
-	fn create(nid: u64, size: u32) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(nid, fuse_abi::ReadlinkIn {});
-		let rsp = unsafe {
-			<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Rsp::new_uninit(
-				size.try_into().unwrap(),
-			)
-		};
-
-		(cmd, rsp)
+			(cmd, rsp)
+		}
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Release as u32 }> {
-	type InStruct = fuse_abi::ReleaseIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::ReleaseOut;
-	type OutPayload = ();
-}
+	#[derive(Debug)]
+	pub(crate) struct Write;
 
-impl Op<{ fuse_abi::Opcode::Release as u32 }> {
-	fn create(nid: u64, fh: u64) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(
-			nid,
-			fuse_abi::ReleaseIn {
-				fh,
-				..Default::default()
-			},
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+	impl Op for Write {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Write;
+		type InStruct = fuse_abi::WriteIn;
+		type InPayload = [u8];
+		type OutStruct = fuse_abi::WriteOut;
+		type OutPayload = ();
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Poll as u32 }> {
-	type InStruct = fuse_abi::PollIn;
-	type InPayload = ();
-	type OutStruct = fuse_abi::PollOut;
-	type OutPayload = ();
-}
+	impl Write {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			buf: &[u8],
+			offset: u64,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_array(
+				nid,
+				fuse_abi::WriteIn {
+					fh,
+					offset,
+					size: buf.len().try_into().unwrap(),
+					..Default::default()
+				},
+				buf,
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-impl Op<{ fuse_abi::Opcode::Poll as u32 }> {
-	fn create(
-		nid: u64,
-		fh: u64,
-		kh: u64,
-		event: PollEvent,
-	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::new_cmd(
-			nid,
-			fuse_abi::PollIn {
-				fh,
-				kh,
-				events: event.bits() as u32,
-				..Default::default()
-			},
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+			(cmd, rsp)
+		}
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
-	type InStruct = fuse_abi::MkdirIn;
-	type InPayload = CStr;
-	type OutStruct = fuse_abi::EntryOut;
-	type OutPayload = ();
-}
+	#[derive(Debug)]
+	pub(crate) struct Read;
 
-impl Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
-	fn create(path: &str, mode: u32) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::cmd_from_str(
-			fuse_abi::ROOT_ID,
-			fuse_abi::MkdirIn {
-				mode,
-				..Default::default()
-			},
-			path,
-		);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
+	impl Op for Read {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Read;
+		type InStruct = fuse_abi::ReadIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::ReadOut;
 
-		(cmd, rsp)
+		// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
+		// instead of a MaybeUninit<[_]>.
+		type OutPayload = [MaybeUninit<u8>];
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Unlink as u32 }> {
-	type InStruct = fuse_abi::UnlinkIn;
-	type InPayload = CStr;
-	type OutStruct = fuse_abi::UnlinkOut;
-	type OutPayload = ();
-}
+	impl Read {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			size: u32,
+			offset: u64,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::ReadIn {
+					fh,
+					offset,
+					size,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Rsp::<Self>::new_uninit(size.try_into().unwrap()) };
 
-impl Op<{ fuse_abi::Opcode::Unlink as u32 }> {
-	fn create(name: &str) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::cmd_from_str(fuse_abi::ROOT_ID, fuse_abi::UnlinkIn {}, name);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+			(cmd, rsp)
+		}
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
-	type InStruct = fuse_abi::RmdirIn;
-	type InPayload = CStr;
-	type OutStruct = fuse_abi::RmdirOut;
-	type OutPayload = ();
-}
+	#[derive(Debug)]
+	pub(crate) struct Lseek;
 
-impl Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
-	fn create(name: &str) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::cmd_from_str(fuse_abi::ROOT_ID, fuse_abi::RmdirIn {}, name);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
-
-		(cmd, rsp)
+	impl Op for Lseek {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Lseek;
+		type InStruct = fuse_abi::LseekIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::LseekOut;
+		type OutPayload = ();
 	}
-}
 
-impl OpTrait for Op<{ fuse_abi::Opcode::Lookup as u32 }> {
-	type InStruct = fuse_abi::LookupIn;
-	type InPayload = CStr;
-	type OutStruct = fuse_abi::EntryOut;
-	type OutPayload = ();
-}
+	impl Lseek {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			offset: isize,
+			whence: SeekWhence,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::LseekIn {
+					fh,
+					offset: offset.try_into().unwrap(),
+					whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-impl Op<{ fuse_abi::Opcode::Lookup as u32 }> {
-	fn create(name: &str) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
-		let cmd = Self::cmd_from_str(fuse_abi::ROOT_ID, fuse_abi::LookupIn {}, name);
-		let rsp = unsafe { Box::new_uninit().assume_init() };
+			(cmd, rsp)
+		}
+	}
 
-		(cmd, rsp)
+	#[derive(Debug)]
+	pub(crate) struct Readlink;
+
+	impl Op for Readlink {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Readlink;
+		type InStruct = fuse_abi::ReadlinkIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::ReadlinkOut;
+
+		// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
+		// instead of a MaybeUninit<[_]>.
+		type OutPayload = [MaybeUninit<u8>];
+	}
+
+	impl Readlink {
+		pub(crate) fn create(nid: u64, size: u32) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(nid, fuse_abi::ReadlinkIn {});
+			let rsp = unsafe { Rsp::<Self>::new_uninit(size.try_into().unwrap()) };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Release;
+
+	impl Op for Release {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Release;
+		type InStruct = fuse_abi::ReleaseIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::ReleaseOut;
+		type OutPayload = ();
+	}
+
+	impl Release {
+		pub(crate) fn create(nid: u64, fh: u64) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::ReleaseIn {
+					fh,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Poll;
+
+	impl Op for Poll {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Poll;
+		type InStruct = fuse_abi::PollIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::PollOut;
+		type OutPayload = ();
+	}
+
+	impl Poll {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			kh: u64,
+			event: PollEvent,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::PollIn {
+					fh,
+					kh,
+					events: event.bits() as u32,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Mkdir;
+
+	impl Op for Mkdir {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Mkdir;
+		type InStruct = fuse_abi::MkdirIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::EntryOut;
+		type OutPayload = ();
+	}
+
+	impl Mkdir {
+		pub(crate) fn create(path: &str, mode: u32) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(
+				fuse_abi::ROOT_ID,
+				fuse_abi::MkdirIn {
+					mode,
+					..Default::default()
+				},
+				path,
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Unlink;
+
+	impl Op for Unlink {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Unlink;
+		type InStruct = fuse_abi::UnlinkIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::UnlinkOut;
+		type OutPayload = ();
+	}
+
+	impl Unlink {
+		pub(crate) fn create(name: &str) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(fuse_abi::ROOT_ID, fuse_abi::UnlinkIn {}, name);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Rmdir;
+
+	impl Op for Rmdir {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Rmdir;
+		type InStruct = fuse_abi::RmdirIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::RmdirOut;
+		type OutPayload = ();
+	}
+
+	impl Rmdir {
+		pub(crate) fn create(name: &str) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(fuse_abi::ROOT_ID, fuse_abi::RmdirIn {}, name);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Lookup;
+
+	impl Op for Lookup {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Lookup;
+		type InStruct = fuse_abi::LookupIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::EntryOut;
+		type OutPayload = ();
+	}
+
+	impl Lookup {
+		pub(crate) fn create(name: &str) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(fuse_abi::ROOT_ID, fuse_abi::LookupIn {}, name);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
 	}
 }
 
@@ -401,31 +447,109 @@ impl From<fuse_abi::Attr> for FileAttr {
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct ReqPart<H, T: fmt::Debug, P: ?Sized> {
-	common_header: H,
-	op_header: T,
-	payload: P,
+pub(crate) struct Cmd<O: ops::Op> {
+	in_header: fuse_abi::InHeader,
+	op_header: O::InStruct,
+	payload: O::InPayload,
 }
 
-impl<T: core::fmt::Debug, P: ?Sized> AsSliceU8 for ReqPart<fuse_abi::InHeader, T, P> {
-	fn len(&self) -> usize {
-		self.common_header.len.try_into().unwrap()
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct UninitCmd<O: ops::Op> {
+	in_header: MaybeUninit<fuse_abi::InHeader>,
+	op_header: MaybeUninit<O::InStruct>,
+	payload: [MaybeUninit<u8>],
+}
+
+// We use this struct to obtain the layout of the type without the payload.
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct PayloadlessCmd<O: ops::Op> {
+	in_header: MaybeUninit<fuse_abi::InHeader>,
+	op_header: MaybeUninit<O::InStruct>,
+	payload: (),
+}
+
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = ()>,
+{
+	fn new(nodeid: u64, op_header: O::InStruct) -> Box<Self> {
+		Box::new(Cmd {
+			in_header: fuse_abi::InHeader {
+				len: Layout::new::<Self>().size() as u32,
+				opcode: O::OP_CODE as u32,
+				nodeid,
+				unique: 1,
+				..Default::default()
+			},
+			op_header,
+			payload: (),
+		})
 	}
 }
 
-// Since we don't bother with initializing the len field, we use the default len implementation.
-impl<T: core::fmt::Debug, P: ?Sized> AsSliceU8 for ReqPart<fuse_abi::OutHeader, MaybeUninit<T>, P> {}
+impl<O: ops::Op> Cmd<O> {
+	fn with_capacity(nodeid: u64, op_header: O::InStruct, len: usize) -> Box<UninitCmd<O>>
+	where
+		Cmd<O>: core::ptr::Pointee<Metadata = usize>,
+	{
+		let mut cmd = unsafe { Self::new_uninit(len) };
+		cmd.in_header = MaybeUninit::new(fuse_abi::InHeader {
+			len: core::mem::size_of_val(cmd.as_ref())
+				.try_into()
+				.expect("The command is too large"),
+			opcode: O::OP_CODE as u32,
+			nodeid,
+			unique: 1,
+			..Default::default()
+		});
+		cmd.op_header = MaybeUninit::new(op_header);
+		cmd
+	}
+}
 
-impl<H, T: fmt::Debug, P: ?Sized> ReqPart<H, T, P>
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = [u8]>,
+{
+	fn from_array(nodeid: u64, op_header: O::InStruct, data: &[u8]) -> Box<Cmd<O>> {
+		let mut cmd = Self::with_capacity(nodeid, op_header, data.len());
+		MaybeUninit::write_slice(&mut cmd.payload, data);
+		unsafe { core::intrinsics::transmute(cmd) }
+	}
+}
+
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = CStr>,
+{
+	fn from_str(nodeid: u64, op_header: O::InStruct, str: &str) -> Box<Cmd<O>> {
+		let str_bytes = str.as_bytes();
+		// Plus one for the NUL terminator
+		let mut cmd = Self::with_capacity(nodeid, op_header, str_bytes.len() + 1);
+		MaybeUninit::write_slice(&mut cmd.payload[..str_bytes.len()], str_bytes);
+		cmd.payload[str_bytes.len()] = MaybeUninit::new(b'\0');
+		unsafe { core::intrinsics::transmute(cmd) }
+	}
+}
+
+impl<O: ops::Op> AsSliceU8 for Cmd<O> {
+	fn len(&self) -> usize {
+		self.in_header.len.try_into().unwrap()
+	}
+}
+
+impl<O: ops::Op> Cmd<O>
 where
 	Self: core::ptr::Pointee<Metadata = usize>,
 {
 	// MaybeUninit does not accept DSTs as type parameter
-	unsafe fn new_uninit(len: usize) -> Box<Self> {
+	unsafe fn new_uninit(len: usize) -> Box<UninitCmd<O>> {
 		unsafe {
-			Box::from_raw(core::ptr::from_raw_parts_mut::<Self>(
+			Box::from_raw(core::ptr::from_raw_parts_mut(
 				alloc(
-					Layout::new::<ReqPart<H, T, ()>>()
+					Layout::new::<PayloadlessCmd<O>>()
 						.extend(Layout::array::<u8>(len).expect("The length is too much."))
 						.expect("The layout size overflowed.")
 						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
@@ -437,95 +561,53 @@ where
 	}
 }
 
-// We create the objects through the Operation struct rather than the Cmd struct to be able access the Opcode.
-
-impl<const O: u32> Op<O>
-where
-	Self: OpTrait<Cmd = ReqPart<fuse_abi::InHeader, <Self as OpTrait>::InStruct, ()>>,
-{
-	fn new_cmd(
-		nodeid: u64,
-		op_header: <Self as OpTrait>::InStruct,
-	) -> Box<ReqPart<fuse_abi::InHeader, <Self as OpTrait>::InStruct, ()>> {
-		Box::new(ReqPart {
-			common_header: fuse_abi::InHeader {
-				len: Layout::new::<<Self as OpTrait>::Cmd>().size() as u32,
-				opcode: O,
-				nodeid,
-				unique: 1,
-				..Default::default()
-			},
-			op_header,
-			payload: (),
-		})
-	}
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct Rsp<O: ops::Op> {
+	out_header: MaybeUninit<fuse_abi::OutHeader>,
+	op_header: MaybeUninit<O::OutStruct>,
+	payload: O::OutPayload,
 }
 
-impl<const O: u32> Op<O>
-where
-	Self: OpTrait,
-{
-	fn cmd_with_capacity(
-		nodeid: u64,
-		op_header: <Op<O> as OpTrait>::InStruct,
-		len: usize,
-	) -> Box<ReqPart<fuse_abi::InHeader, <Self as OpTrait>::InStruct, [u8]>> {
-		let mut cmd = unsafe { ReqPart::new_uninit(len) };
-		cmd.common_header = fuse_abi::InHeader {
-			len: core::mem::size_of_val(cmd.as_ref())
-				.try_into()
-				.expect("The command is too large"),
-			opcode: O,
-			nodeid,
-			unique: 1,
-			..Default::default()
-		};
-		cmd.op_header = op_header;
-		cmd
-	}
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct PayloadlessRsp<O: ops::Op> {
+	out_header: MaybeUninit<fuse_abi::OutHeader>,
+	op_header: MaybeUninit<O::OutStruct>,
+	payload: (),
 }
 
-impl<const O: u32> Op<O>
-where
-	Self: OpTrait<Cmd = ReqPart<fuse_abi::InHeader, <Self as OpTrait>::InStruct, [u8]>>,
-{
-	fn cmd_from_array(
-		nodeid: u64,
-		op_header: <Self as OpTrait>::InStruct,
-		data: &[u8],
-	) -> Box<<Self as OpTrait>::Cmd> {
-		let mut cmd = Self::cmd_with_capacity(nodeid, op_header, data.len());
-		cmd.payload.copy_from_slice(data);
-		cmd
-	}
-}
+// Since we don't bother with initializing the len field, we use the default len implementation.
+impl<O: ops::Op> AsSliceU8 for Rsp<O> {}
 
-impl<const O: u32> Op<O>
+impl<O: ops::Op> Rsp<O>
 where
-	Self: OpTrait<Cmd = ReqPart<fuse_abi::InHeader, <Self as OpTrait>::InStruct, CStr>>,
+	Self: core::ptr::Pointee<Metadata = usize>,
 {
-	fn cmd_from_str(
-		nodeid: u64,
-		op_header: <Self as OpTrait>::InStruct,
-		str: &str,
-	) -> Box<<Self as OpTrait>::Cmd> {
-		let str_bytes = str.as_bytes();
-		// Plus one for the NUL terminator
-		let mut cmd = Self::cmd_with_capacity(nodeid, op_header, str_bytes.len() + 1);
-		cmd.payload[..str_bytes.len()].copy_from_slice(str_bytes);
-		cmd.payload[str_bytes.len()] = b'\0';
-		unsafe { core::intrinsics::transmute(cmd) }
+	unsafe fn new_uninit(len: usize) -> Box<Self> {
+		unsafe {
+			Box::from_raw(core::ptr::from_raw_parts_mut(
+				alloc(
+					Layout::new::<PayloadlessRsp<O>>()
+						.extend(Layout::array::<u8>(len).expect("The length is too much."))
+						.expect("The layout size overflowed.")
+						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
+						.pad_to_align(),
+				) as *mut (),
+				len,
+			))
+		}
 	}
 }
 
 fn lookup(name: &str) -> Option<u64> {
-	let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::create(name);
+	let (cmd, mut rsp) = ops::Lookup::create(name);
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command::<{ fuse_abi::Opcode::Lookup as u32 }>(cmd.as_ref(), rsp.as_mut());
-	if rsp.common_header.error == 0 {
-		Some(unsafe { rsp.op_header.assume_init().nodeid })
+		.send_command(cmd.as_ref(), rsp.as_mut());
+	if unsafe { rsp.out_header.assume_init_ref().error } == 0 {
+		Some(unsafe { rsp.op_header.assume_init_ref().nodeid })
 	} else {
 		None
 	}
@@ -533,19 +615,19 @@ fn lookup(name: &str) -> Option<u64> {
 
 fn readlink(nid: u64) -> Result<String, IoError> {
 	let len = MAX_READ_LEN as u32;
-	let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Readlink as u32 }>::create(nid, len);
+	let (cmd, mut rsp) = ops::Readlink::create(nid, len);
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command::<{ fuse_abi::Opcode::Readlink as u32 }>(cmd.as_ref(), rsp.as_mut());
-	let len: usize = if rsp.common_header.len as usize
+		.send_command(cmd.as_ref(), rsp.as_mut());
+	let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
 		- ::core::mem::size_of::<fuse_abi::OutHeader>()
 		- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 		>= len.try_into().unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
-		rsp.common_header.len as usize
+		(unsafe { rsp.out_header.assume_init_ref().len } as usize)
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
 			- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 	};
@@ -578,19 +660,18 @@ impl FuseFileHandleInner {
 
 		future::poll_fn(|cx| {
 			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-				let (cmd, mut rsp) =
-					Op::<{ fuse_abi::Opcode::Poll as u32 }>::create(nid, fh, kh, events);
+				let (cmd, mut rsp) = ops::Poll::create(nid, fh, kh, events);
 				get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
-					.send_command::<{ fuse_abi::Opcode::Poll as u32 }>(cmd.as_ref(), rsp.as_mut());
+					.send_command(cmd.as_ref(), rsp.as_mut());
 
-				if rsp.common_header.error < 0 {
+				if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 					Poll::Ready(Err(IoError::EIO))
 				} else {
 					let revents = unsafe {
 						PollEvent::from_bits(
-							i16::try_from(rsp.op_header.assume_init().revents).unwrap(),
+							i16::try_from(rsp.op_header.assume_init_ref().revents).unwrap(),
 						)
 						.unwrap()
 					};
@@ -618,24 +699,20 @@ impl FuseFileHandleInner {
 			len = MAX_READ_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Read as u32 }>::create(
-				nid,
-				fh,
-				len.try_into().unwrap(),
-				self.offset as u64,
-			);
+			let (cmd, mut rsp) =
+				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{ fuse_abi::Opcode::Read as u32 }>(cmd.as_ref(), rsp.as_mut());
-			let len: usize = if rsp.common_header.len as usize
+				.send_command(cmd.as_ref(), rsp.as_mut());
+			let len: usize = if (unsafe { rsp.out_header.assume_init_ref().len } as usize)
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 				>= len
 			{
 				len
 			} else {
-				rsp.common_header.len as usize
+				(unsafe { rsp.out_header.assume_init_ref().len } as usize)
 					- ::core::mem::size_of::<fuse_abi::OutHeader>()
 					- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			};
@@ -664,22 +741,17 @@ impl FuseFileHandleInner {
 			len = MAX_WRITE_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Write as u32 }>::create(
-				nid,
-				fh,
-				&buf[..len],
-				self.offset as u64,
-			);
+			let (cmd, mut rsp) = ops::Write::create(nid, fh, &buf[..len], self.offset as u64);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{ fuse_abi::Opcode::Write as u32 }>(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut());
 
-			if rsp.common_header.error < 0 {
+			if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 				return Err(IoError::EIO);
 			}
 
-			let rsp_size = unsafe { rsp.op_header.assume_init().size };
+			let rsp_size = unsafe { rsp.op_header.assume_init_ref().size };
 			let len: usize = if rsp_size > buf.len().try_into().unwrap() {
 				buf.len()
 			} else {
@@ -697,18 +769,17 @@ impl FuseFileHandleInner {
 		debug!("FUSE lseek");
 
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) =
-				Op::<{ fuse_abi::Opcode::Lseek as u32 }>::create(nid, fh, offset, whence);
+			let (cmd, mut rsp) = ops::Lseek::create(nid, fh, offset, whence);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{ fuse_abi::Opcode::Lseek as u32 }>(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut());
 
-			if rsp.common_header.error < 0 {
+			if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 				return Err(IoError::EIO);
 			}
 
-			let rsp_offset = unsafe { rsp.op_header.assume_init().offset };
+			let rsp_offset = unsafe { rsp.op_header.assume_init_ref().offset };
 
 			Ok(rsp_offset.try_into().unwrap())
 		} else {
@@ -720,14 +791,12 @@ impl FuseFileHandleInner {
 impl Drop for FuseFileHandleInner {
 	fn drop(&mut self) {
 		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
-			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Release as u32 }>::create(
-				self.fuse_nid.unwrap(),
-				self.fuse_fh.unwrap(),
-			);
+			let (cmd, mut rsp) =
+				ops::Release::create(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command::<{ fuse_abi::Opcode::Release as u32 }>(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut());
 		}
 	}
 }
@@ -799,13 +868,13 @@ impl VfsNode for FuseDirectory {
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
-		let (mut cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Open as u32 }>::create(fuse_nid, 0x10000);
-		cmd.common_header.opcode = fuse_abi::Opcode::Opendir as u32;
+		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+		cmd.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Open as u32 }>(cmd.as_ref(), rsp.as_mut());
-		let fuse_fh = unsafe { rsp.op_header.assume_init().fh };
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		let fuse_fh = unsafe { rsp.op_header.assume_init_ref().fh };
 
 		debug!("FUSE readdir: {}", path);
 
@@ -814,22 +883,21 @@ impl VfsNode for FuseDirectory {
 		let mut offset: usize = 0;
 
 		// read content of the directory
-		let (mut cmd, mut rsp) =
-			Op::<{ fuse_abi::Opcode::Read as u32 }>::create(fuse_nid, fuse_fh, len, 0);
-		cmd.common_header.opcode = fuse_abi::Opcode::Readdir as u32;
+		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+		cmd.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Read as u32 }>(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut());
 
-		let len: usize = if rsp.common_header.len as usize
+		let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
 			- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			rsp.common_header.len as usize
+			(unsafe { rsp.out_header.assume_init_ref().len } as usize)
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 		};
@@ -840,7 +908,9 @@ impl VfsNode for FuseDirectory {
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while rsp.common_header.len as usize - offset > core::mem::size_of::<fuse_abi::Dirent>() {
+		while (unsafe { rsp.out_header.assume_init_ref().len } as usize) - offset
+			> core::mem::size_of::<fuse_abi::Dirent>()
+		{
 			let dirent =
 				unsafe { &*(rsp.payload.as_ptr().byte_add(offset) as *const fuse_abi::Dirent) };
 
@@ -859,11 +929,11 @@ impl VfsNode for FuseDirectory {
 			}));
 		}
 
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Release as u32 }>::create(fuse_nid, fuse_fh);
+		let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Release as u32 }>(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut());
 
 		Ok(entries)
 	}
@@ -882,13 +952,13 @@ impl VfsNode for FuseDirectory {
 		debug!("FUSE stat: {}", path);
 
 		// Is there a better way to implement this?
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::create(&path);
+		let (cmd, mut rsp) = ops::Lookup::create(&path);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Lookup as u32 }>(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut());
 
-		if rsp.common_header.error != 0 {
+		if unsafe { rsp.out_header.assume_init_ref().error } != 0 {
 			// TODO: Correct error handling
 			return Err(IoError::EIO);
 		}
@@ -918,11 +988,11 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE lstat: {}", path);
 
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::create(&path);
+		let (cmd, mut rsp) = ops::Lookup::create(&path);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Lookup as u32 }>(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut());
 
 		let attr = unsafe { rsp.op_header.assume_init().attr };
 		Ok(FileAttr::from(attr))
@@ -963,26 +1033,21 @@ impl VfsNode for FuseDirectory {
 			}
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Open as u32 }>::create(
-				file_guard.fuse_nid.unwrap(),
-				opt.bits().try_into().unwrap(),
-			);
+			let (cmd, mut rsp) =
+				ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{ fuse_abi::Opcode::Open as u32 }>(cmd.as_ref(), rsp.as_mut());
-			file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init().fh });
+				.send_command(cmd.as_ref(), rsp.as_mut());
+			file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init_ref().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
-			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Create as u32 }>::create(
-				&path,
-				opt.bits().try_into().unwrap(),
-				mode.bits(),
-			);
+			let (cmd, mut rsp) =
+				ops::Create::create(&path, opt.bits().try_into().unwrap(), mode.bits());
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{ fuse_abi::Opcode::Create as u32 }>(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut());
 
 			let inner = unsafe { rsp.op_header.assume_init() };
 			file_guard.fuse_nid = Some(inner.entry.nodeid);
@@ -1005,11 +1070,11 @@ impl VfsNode for FuseDirectory {
 				.collect()
 		};
 
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Unlink as u32 }>::create(&path);
+		let (cmd, mut rsp) = ops::Unlink::create(&path);
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Unlink as u32 }>(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut());
 		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
@@ -1026,11 +1091,11 @@ impl VfsNode for FuseDirectory {
 				.collect()
 		};
 
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Rmdir as u32 }>::create(&path);
+		let (cmd, mut rsp) = ops::Rmdir::create(&path);
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Rmdir as u32 }>(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut());
 		trace!("rmdir answer {:?}", rsp);
 
 		Ok(())
@@ -1050,16 +1115,19 @@ impl VfsNode for FuseDirectory {
 				.map(|v| "/".to_owned() + v)
 				.collect()
 		};
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Mkdir as u32 }>::create(&path, mode.bits());
+		let (cmd, mut rsp) = ops::Mkdir::create(&path, mode.bits());
 
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{ fuse_abi::Opcode::Mkdir as u32 }>(cmd.as_ref(), rsp.as_mut());
-		if rsp.common_header.error == 0 {
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		if unsafe { rsp.out_header.assume_init_ref().error } == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(rsp.common_header.error).unwrap())
+			Err(
+				num::FromPrimitive::from_i32(unsafe { rsp.out_header.assume_init_ref().error })
+					.unwrap(),
+			)
 		}
 	}
 }
@@ -1068,10 +1136,8 @@ pub(crate) fn init() {
 	debug!("Try to initialize fuse filesystem");
 
 	if let Some(driver) = get_filesystem_driver() {
-		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Init as u32 }>::create();
-		driver
-			.lock()
-			.send_command::<{ fuse_abi::Opcode::Init as u32 }>(cmd.as_ref(), rsp.as_mut());
+		let (cmd, mut rsp) = ops::Init::create();
+		driver.lock().send_command(cmd.as_ref(), rsp.as_mut());
 		trace!("fuse init answer: {:?}", rsp);
 
 		let mount_point = format!("/{}", driver.lock().get_mount_point());

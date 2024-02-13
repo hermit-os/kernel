@@ -153,21 +153,13 @@ impl VirtioFsDriver {
 }
 
 impl FuseInterface for VirtioFsDriver {
-	fn send_command<const CODE: u32>(
-		&mut self,
-		cmd: &<fuse::Op<CODE> as fuse::OpTrait>::Cmd,
-		rsp: &mut <fuse::Op<CODE> as fuse::OpTrait>::Rsp,
-	) where
-		fuse::Op<CODE>: fuse::OpTrait,
-	{
+	fn send_command<O: fuse::ops::Op>(&mut self, cmd: &fuse::Cmd<O>, rsp: &mut fuse::Rsp<O>) {
 		if let Some(mut buff_tkn) = self.ready_queue.pop() {
 			let cmd_len = Some(cmd.len());
 			let rsp_len = Some(rsp.len());
 			buff_tkn.restr_size(cmd_len, rsp_len).unwrap();
 
-			let transfer_tkn = buff_tkn
-				.write(Some(cmd), None::<&<fuse::Op<CODE> as fuse::OpTrait>::Rsp>)
-				.unwrap();
+			let transfer_tkn = buff_tkn.write(Some(cmd), None::<&fuse::Rsp<O>>).unwrap();
 			let transfer = transfer_tkn.dispatch_blocking().unwrap();
 			let (_, response) = transfer.ret_cpy().unwrap();
 			let tkn = transfer.reuse().unwrap();

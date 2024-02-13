@@ -1,3 +1,4 @@
+#[cfg(all(feature = "fuse", feature = "pci"))]
 pub(crate) const ROOT_ID: u64 = 1;
 
 #[allow(dead_code)]
