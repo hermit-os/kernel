@@ -3,6 +3,7 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 
+use align_address::Align;
 use hermit_sync::RawInterruptTicketMutex;
 use talc::{ErrOnOom, Span, Talc, Talck};
 
