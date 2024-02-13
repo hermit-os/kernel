@@ -1,14 +1,20 @@
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::future::{self, Future};
 use core::sync::atomic::{AtomicI32, Ordering};
+use core::task::Poll::{Pending, Ready};
+use core::time::Duration;
 
 use ahash::RandomState;
+use async_trait::async_trait;
 use dyn_clone::DynClone;
 use hashbrown::HashMap;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::env;
+use crate::executor::{block_on, poll_on};
 use crate::fd::stdio::*;
 use crate::fs::{self, DirectoryEntry, FileAttr, SeekWhence};
 
@@ -56,12 +62,13 @@ pub(crate) enum IoCtl {
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: pflock::PFLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>> =
-	pflock::PFLock::new(HashMap::<
-		FileDescriptor,
-		Arc<dyn ObjectInterface>,
-		RandomState,
-	>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static OBJECT_MAP: async_lock::RwLock<
+	HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>,
+> = async_lock::RwLock::new(HashMap::<
+	FileDescriptor,
+	Arc<dyn ObjectInterface>,
+	RandomState,
+>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Atomic counter to determine the next unused file descriptor
 pub(crate) static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
@@ -78,6 +85,35 @@ bitflags! {
 		const O_APPEND = 0o2000;
 		const O_DIRECT = 0o40000;
 	}
+}
+
+bitflags! {
+	#[derive(Debug, Copy, Clone, Default)]
+	pub struct PollEvent: i16 {
+		const EMPTY = 0;
+		const POLLIN = 0x1;
+		const POLLPRI = 0x2;
+		const POLLOUT = 0x4;
+		const POLLERR = 0x8;
+		const POLLHUP = 0x10;
+		const POLLNVAL = 0x20;
+		const POLLRDNORM = 0x040;
+		const POLLRDBAND = 0x080;
+		const POLLWRNORM = 0x0100;
+		const POLLWRBAND = 0x0200;
+		const POLLRDHUP = 0x2000;
+	}
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct PollFd {
+	/// file descriptor
+	pub fd: i32,
+	/// events to look for
+	pub events: PollEvent,
+	/// events returned
+	pub revents: PollEvent,
 }
 
 bitflags! {
@@ -112,17 +148,29 @@ impl Default for AccessPermission {
 	}
 }
 
+#[async_trait]
 pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
-	/// `read` attempts to read `len` bytes from the object references
+	/// check if an IO event is possible
+	async fn poll(&self, _event: PollEvent) -> Result<PollEvent, IoError> {
+		Ok(PollEvent::EMPTY)
+	}
+
+	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	fn read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
-	/// `write` attempts to write `len` bytes to the object references
+	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	fn write(&self, _buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, _buf: &[u8]) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
+	}
+
+	/// `is_nonblocking` returns `true`, if `read`, `write`, `recv` and send operations
+	/// don't block.
+	fn is_nonblocking(&self) -> bool {
+		false
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
@@ -253,11 +301,16 @@ pub(crate) fn open(
 	let fs = fs::FILESYSTEM.get().unwrap();
 	if let Ok(file) = fs.open(name, flags, mode) {
 		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-		if OBJECT_MAP.write().try_insert(fd, file).is_err() {
-			Err(IoError::EINVAL)
-		} else {
-			Ok(fd as FileDescriptor)
-		}
+		block_on(
+			async {
+				if OBJECT_MAP.write().await.try_insert(fd, file).is_err() {
+					Err(IoError::EINVAL)
+				} else {
+					Ok(fd as FileDescriptor)
+				}
+			},
+			None,
+		)
 	} else {
 		Err(IoError::EINVAL)
 	}
@@ -268,22 +321,122 @@ pub(crate) fn close(fd: FileDescriptor) {
 }
 
 pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError> {
-	get_object(fd)?.read(buf)
+	let obj = get_object(fd)?;
+
+	if buf.is_empty() {
+		return Ok(0);
+	}
+
+	if obj.is_nonblocking() {
+		poll_on(obj.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
+			if x == IoError::ETIME {
+				IoError::EAGAIN
+			} else {
+				x
+			}
+		})
+	} else {
+		match poll_on(obj.async_read(buf), Some(Duration::from_secs(2))) {
+			Err(IoError::ETIME) => block_on(obj.async_read(buf), None),
+			Err(x) => Err(x),
+			Ok(x) => Ok(x),
+		}
+	}
 }
 
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
-	get_object(fd)?.write(buf)
+	let obj = get_object(fd)?;
+
+	if buf.is_empty() {
+		return Ok(0);
+	}
+
+	if obj.is_nonblocking() {
+		poll_on(obj.async_write(buf), Some(Duration::ZERO)).map_err(|x| {
+			if x == IoError::ETIME {
+				IoError::EAGAIN
+			} else {
+				x
+			}
+		})
+	} else {
+		match poll_on(obj.async_write(buf), Some(Duration::from_secs(2))) {
+			Err(IoError::ETIME) => block_on(obj.async_write(buf), None),
+			Err(x) => Err(x),
+			Ok(x) => Ok(x),
+		}
+	}
+}
+
+async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
+	future::poll_fn(|cx| {
+		let mut ready: bool = false;
+
+		for i in &mut *fds {
+			let fd = i.fd;
+			let mut pinned_obj = core::pin::pin!(async_get_object(fd));
+			if let Ready(Ok(obj)) = pinned_obj.as_mut().poll(cx) {
+				let mut pinned = core::pin::pin!(obj.poll(i.events));
+				if let Ready(Ok(e)) = pinned.as_mut().poll(cx) {
+					ready = true;
+					i.revents = e;
+				}
+			}
+		}
+
+		if ready {
+			Ready(())
+		} else {
+			Pending
+		}
+	})
+	.await;
+
+	Ok(())
+}
+
+pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
+	if timeout >= 0 {
+		// for larger timeouts, we block on the async function
+		if timeout >= 5000 {
+			block_on(
+				poll_fds(fds),
+				Some(Duration::from_millis(timeout.try_into().unwrap())),
+			)
+		} else {
+			poll_on(
+				poll_fds(fds),
+				Some(Duration::from_millis(timeout.try_into().unwrap())),
+			)
+		}
+	} else {
+		block_on(poll_fds(fds), None)
+	}
+}
+
+#[inline]
+async fn async_get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	Ok((*(OBJECT_MAP.read().await.get(&fd).ok_or(IoError::EINVAL)?)).clone())
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(IoError::EINVAL)?)).clone())
+	block_on(async_get_object(fd), None)
+}
+
+#[inline]
+async fn async_insert_object(
+	fd: FileDescriptor,
+	obj: Arc<dyn ObjectInterface>,
+) -> Result<(), IoError> {
+	let _ = OBJECT_MAP.write().await.insert(fd, obj);
+	Ok(())
 }
 
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
-) -> Option<Arc<dyn ObjectInterface>> {
-	OBJECT_MAP.write().insert(fd, obj)
+) -> Result<(), IoError> {
+	block_on(async_insert_object(fd, obj), None)
 }
 
 // The dup system call allocates a new file descriptor that refers
@@ -291,56 +444,77 @@ pub(crate) fn insert_object(
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
 pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
-	let mut guard = OBJECT_MAP.write();
-	let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
+	block_on(
+		async {
+			let mut guard = OBJECT_MAP.write().await;
+			let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
 
-	let new_fd = || -> i32 {
-		for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
-			if !guard.contains_key(&i) {
-				return i;
+			let new_fd = || -> i32 {
+				for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
+					if !guard.contains_key(&i) {
+						return i;
+					}
+				}
+				FD_COUNTER.fetch_add(1, Ordering::SeqCst)
+			};
+
+			let fd = new_fd();
+			if guard.try_insert(fd, obj).is_err() {
+				Err(IoError::EMFILE)
+			} else {
+				Ok(fd as FileDescriptor)
 			}
-		}
-		FD_COUNTER.fetch_add(1, Ordering::SeqCst)
-	};
-
-	let fd = new_fd();
-	if guard.try_insert(fd, obj).is_err() {
-		Err(IoError::EMFILE)
-	} else {
-		Ok(fd as FileDescriptor)
-	}
+		},
+		None,
+	)
 }
 
 pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	if fd <= 2 {
-		Err(IoError::EINVAL)
-	} else {
-		let obj = OBJECT_MAP.write().remove(&fd).ok_or(IoError::EINVAL)?;
-		Ok(obj)
-	}
+	block_on(
+		async {
+			if fd <= 2 {
+				Err(IoError::EINVAL)
+			} else {
+				let obj = OBJECT_MAP
+					.write()
+					.await
+					.remove(&fd)
+					.ok_or(IoError::EINVAL)?;
+				Ok(obj)
+			}
+		},
+		None,
+	)
 }
 
-pub(crate) fn init() {
-	let mut guard = OBJECT_MAP.write();
-	if env::is_uhyve() {
-		guard
-			.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
-			.unwrap();
-		guard
-			.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
-			.unwrap();
-		guard
-			.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
-			.unwrap();
-	} else {
-		guard
-			.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
-			.unwrap();
-		guard
-			.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
-			.unwrap();
-		guard
-			.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
-			.unwrap();
-	}
+pub(crate) fn init() -> Result<(), IoError> {
+	block_on(
+		async {
+			let mut guard = OBJECT_MAP.write().await;
+			if env::is_uhyve() {
+				guard
+					.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
+					.map_err(|_| IoError::EIO)?;
+			} else {
+				guard
+					.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
+					.map_err(|_| IoError::EIO)?;
+			}
+
+			Ok(())
+		},
+		None,
+	)
 }

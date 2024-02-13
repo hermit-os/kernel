@@ -1,15 +1,20 @@
+use alloc::boxed::Box;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use core::ptr;
 
+use async_lock::Mutex;
+use async_trait::async_trait;
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
+use crate::arch;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use crate::arch::mm::{paging, VirtAddr};
-use crate::console::CONSOLE;
-use crate::fd::{IoError, ObjectInterface, STDERR_FILENO, STDOUT_FILENO};
+use crate::fd::{IoError, ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO};
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
+
+static IO_LOCK: Mutex<()> = Mutex::new(());
 
 #[repr(C, packed)]
 struct SysWrite {
@@ -76,10 +81,25 @@ impl GenericStdin {
 #[derive(Debug, Clone)]
 pub struct GenericStdout;
 
+#[async_trait]
 impl ObjectInterface for GenericStdout {
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		// stdin/err/out all go to console
-		CONSOLE.lock().write_all(buf);
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		if event.contains(PollEvent::POLLOUT) {
+			result.insert(PollEvent::POLLOUT);
+		} else if event.contains(PollEvent::POLLWRNORM) {
+			result.insert(PollEvent::POLLWRNORM);
+		} else if event.contains(PollEvent::POLLWRBAND) {
+			result.insert(PollEvent::POLLWRBAND);
+		}
+
+		Ok(result)
+	}
+
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		let _guard = IO_LOCK.lock().await;
+		arch::output_message_buf(buf);
 
 		Ok(buf.len())
 	}
@@ -94,10 +114,25 @@ impl GenericStdout {
 #[derive(Debug, Clone)]
 pub struct GenericStderr;
 
+#[async_trait]
 impl ObjectInterface for GenericStderr {
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		// stdin/err/out all go to console
-		CONSOLE.lock().write_all(buf);
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		if event.contains(PollEvent::POLLOUT) {
+			result.insert(PollEvent::POLLOUT);
+		} else if event.contains(PollEvent::POLLWRNORM) {
+			result.insert(PollEvent::POLLWRNORM);
+		} else if event.contains(PollEvent::POLLWRBAND) {
+			result.insert(PollEvent::POLLWRBAND);
+		}
+
+		Ok(result)
+	}
+
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		let _guard = IO_LOCK.lock().await;
+		arch::output_message_buf(buf);
 
 		Ok(buf.len())
 	}
@@ -123,8 +158,23 @@ impl UhyveStdin {
 #[derive(Debug, Clone)]
 pub struct UhyveStdout;
 
+#[async_trait]
 impl ObjectInterface for UhyveStdout {
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		if event.contains(PollEvent::POLLOUT) {
+			result.insert(PollEvent::POLLOUT);
+		} else if event.contains(PollEvent::POLLWRNORM) {
+			result.insert(PollEvent::POLLWRNORM);
+		} else if event.contains(PollEvent::POLLWRBAND) {
+			result.insert(PollEvent::POLLWRBAND);
+		}
+
+		Ok(result)
+	}
+
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
@@ -141,8 +191,23 @@ impl UhyveStdout {
 #[derive(Debug, Clone)]
 pub struct UhyveStderr;
 
+#[async_trait]
 impl ObjectInterface for UhyveStderr {
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		if event.contains(PollEvent::POLLOUT) {
+			result.insert(PollEvent::POLLOUT);
+		} else if event.contains(PollEvent::POLLWRNORM) {
+			result.insert(PollEvent::POLLWRNORM);
+		} else if event.contains(PollEvent::POLLWRBAND) {
+			result.insert(PollEvent::POLLWRBAND);
+		}
+
+		Ok(result)
+	}
+
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(STDERR_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 

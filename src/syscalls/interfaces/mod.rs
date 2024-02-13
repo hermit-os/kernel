@@ -48,7 +48,7 @@ pub trait SyscallInterface: Send + Sync {
 		(argc, argv, envv)
 	}
 
-	fn shutdown(&self, _arg: i32) -> ! {
-		arch::processor::shutdown()
+	fn shutdown(&self, error_code: i32) -> ! {
+		arch::processor::shutdown(error_code)
 	}
 }

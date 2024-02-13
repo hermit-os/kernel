@@ -193,6 +193,7 @@ impl Qemu {
 		if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
 			memory = memory.max(256);
 		}
+		memory = memory.max(64);
 		memory
 	}
 

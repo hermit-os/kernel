@@ -181,7 +181,6 @@ impl RxQueues {
 			Ok(transfer)
 		} else {
 			warn!("Unfinished transfer in post processing. Returning buffer to queue. This will need explicit cleanup.");
-			transfer.close();
 			Err(VirtioNetError::ProcessOngoing)
 		}
 	}

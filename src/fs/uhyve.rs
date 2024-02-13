@@ -6,12 +6,14 @@ use alloc::vec::Vec;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use core::ptr;
 
-use hermit_sync::SpinMutex;
+use async_lock::Mutex;
+use async_trait::async_trait;
 #[cfg(target_arch = "x86_64")]
 use x86::io::outl;
 
 use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::env::is_uhyve;
+use crate::executor::block_on;
 use crate::fd::IoError;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
@@ -201,25 +203,26 @@ impl Drop for UhyveFileHandleInner {
 }
 
 #[derive(Debug)]
-struct UhyveFileHandle(pub Arc<SpinMutex<UhyveFileHandleInner>>);
+struct UhyveFileHandle(pub Arc<Mutex<UhyveFileHandleInner>>);
 
 impl UhyveFileHandle {
 	pub fn new(fd: i32) -> Self {
-		Self(Arc::new(SpinMutex::new(UhyveFileHandleInner::new(fd))))
+		Self(Arc::new(Mutex::new(UhyveFileHandleInner::new(fd))))
 	}
 }
 
+#[async_trait]
 impl ObjectInterface for UhyveFileHandle {
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		self.0.lock().read(buf)
+	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+		self.0.lock().await.read(buf)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		self.0.lock().write(buf)
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		self.0.lock().await.write(buf)
 	}
 
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
-		self.0.lock().lseek(offset, whence)
+		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
 	}
 }
 

@@ -115,12 +115,13 @@ pub fn halt() {
 }
 
 /// Shutdown the system
-pub fn shutdown() -> ! {
+#[allow(unused_variables)]
+pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
 	cfg_if::cfg_if! {
 		if #[cfg(feature = "semihosting")] {
-			semihosting::process::exit(0)
+			semihosting::process::exit(error_code)
 		} else {
 			unsafe {
 				const PSCI_SYSTEM_OFF: u64 = 0x84000008;

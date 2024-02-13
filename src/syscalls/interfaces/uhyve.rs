@@ -167,8 +167,8 @@ impl SyscallInterface for Uhyve {
 		(syscmdsize.argc, argv, env)
 	}
 
-	fn shutdown(&self, arg: i32) -> ! {
-		let mut sysexit = SysExit::new(arg);
+	fn shutdown(&self, error_code: i32) -> ! {
+		let mut sysexit = SysExit::new(error_code);
 		uhyve_send(UHYVE_PORT_EXIT, &mut sysexit);
 
 		loop {

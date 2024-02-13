@@ -997,7 +997,7 @@ fn triple_fault() -> ! {
 }
 
 /// Shutdown the system
-pub fn shutdown() -> ! {
+pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 	let acpi_result: Result<Infallible, ()> = {
 		#[cfg(feature = "acpi")]
@@ -1019,7 +1019,11 @@ pub fn shutdown() -> ! {
 				PlatformInfo::Multiboot { .. } => {
 					// Try QEMU's debug exit
 					let exit_handler = qemu_exit::X86::new(0xf4, 3);
-					exit_handler.exit_success()
+					if error_code == 0 {
+						exit_handler.exit_success()
+					} else {
+						exit_handler.exit_failure()
+					}
 				}
 				PlatformInfo::Uhyve { .. } => todo!(),
 			}
