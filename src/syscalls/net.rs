@@ -36,10 +36,6 @@ pub const IP_DROP_MEMBERSHIP: i32 = 4;
 pub const SHUT_RD: i32 = 0;
 pub const SHUT_WR: i32 = 1;
 pub const SHUT_RDWR: i32 = 2;
-pub const SOCK_DGRAM: i32 = 2;
-pub const SOCK_STREAM: i32 = 1;
-pub const SOCK_NONBLOCK: i32 = 0o4000;
-pub const SOCK_CLOEXEC: i32 = 0o40000;
 pub const SOL_SOCKET: i32 = 4095;
 pub const SO_BROADCAST: i32 = 32;
 pub const SO_ERROR: i32 = 4103;
@@ -59,6 +55,17 @@ pub type socklen_t = u32;
 pub type in_addr_t = u32;
 pub type in_port_t = u16;
 pub type time_t = i64;
+
+bitflags! {
+	#[derive(Debug, Copy, Clone)]
+	#[repr(C)]
+	pub struct SockType: i32 {
+		const SOCK_DGRAM = 2;
+		const SOCK_STREAM = 1;
+		const SOCK_NONBLOCK = 0o4000;
+		const SOCK_CLOEXEC = 0o40000;
+	}
+}
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
@@ -249,14 +256,14 @@ pub struct linger {
 	pub l_linger: i32,
 }
 
-extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
+extern "C" fn __sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 	debug!(
-		"sys_socket: domain {}, type {}, protocol {}",
+		"sys_socket: domain {}, type {:?}, protocol {}",
 		domain, type_, protocol
 	);
 
 	if (domain != AF_INET && domain != AF_INET6)
-		|| (type_ & SOCK_STREAM != SOCK_STREAM && type_ & SOCK_DGRAM != SOCK_DGRAM)
+		|| !type_.intersects(SockType::SOCK_STREAM | SockType::SOCK_DGRAM)
 		|| protocol != 0
 	{
 		-EINVAL
@@ -267,12 +274,12 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "udp")]
-			if type_ & SOCK_DGRAM == SOCK_DGRAM {
+			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
 				let socket = udp::Socket::new(handle);
 
-				if type_ & SOCK_NONBLOCK == SOCK_NONBLOCK {
+				if type_.contains(SockType::SOCK_NONBLOCK) {
 					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
 				}
 
@@ -282,12 +289,12 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			}
 
 			#[cfg(feature = "tcp")]
-			if type_ & SOCK_STREAM == SOCK_STREAM {
+			if type_.contains(SockType::SOCK_STREAM) {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
 				let socket = tcp::Socket::new(handle);
 
-				if type_ & SOCK_NONBLOCK == SOCK_NONBLOCK {
+				if type_.contains(SockType::SOCK_NONBLOCK) {
 					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
 				}
 
@@ -658,7 +665,7 @@ extern "C" fn __sys_recvfrom(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
+pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 	kernel_function!(__sys_socket(domain, type_, protocol))
 }
 
