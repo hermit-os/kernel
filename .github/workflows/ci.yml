@@ -126,7 +126,7 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64, riscv64]
-        package: [rusty_demo, httpd, testudp, hello_world]
+        package: [rusty_demo, httpd, testudp, hello_world, miotcp, mioudp]
         netdev: [none, virtio-net-pci, rtl8139]
         profile: [dev, release]
         smp: [1, 4]
@@ -135,6 +135,10 @@ jobs:
             package: httpd
           - arch: riscv64
             package: testudp
+          - arch: riscv64
+            package: mioudp
+          - arch: riscv64
+            package: miotcp
           # microvm (Firecracker) test does not run on aarch64 or riscv64
           - package: hello_world
             arch: aarch64
@@ -163,6 +167,10 @@ jobs:
             netdev: none
           - package: testudp
             netdev: none
+          - package: miotcp
+            netdev: none
+          - package: mioudp
+            netdev: none
         include:
           - arch: x86_64
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev socat
@@ -181,6 +189,10 @@ jobs:
           - package: httpd
             flags: --features ci,dhcpv4
           - package: testudp
+            flags: --features udp,dhcpv4
+          - package: miotcp
+            flags: --features dhcpv4
+          - package: mioudp
             flags: --features udp,dhcpv4
           - package: hello_world
             flags: --no-default-features --microvm
