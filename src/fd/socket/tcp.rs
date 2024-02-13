@@ -33,7 +33,7 @@ pub struct Socket {
 	handle: Handle,
 	port: AtomicU16,
 	nonblocking: AtomicBool,
-	old_connection: AtomicBool,
+	listen: AtomicBool,
 }
 
 impl Socket {
@@ -42,7 +42,7 @@ impl Socket {
 			handle,
 			port: AtomicU16::new(0),
 			nonblocking: AtomicBool::new(false),
-			old_connection: AtomicBool::new(false),
+			listen: AtomicBool::new(false),
 		}
 	}
 
@@ -208,9 +208,7 @@ impl ObjectInterface for Socket {
 					Poll::Pending
 				}
 				_ => {
-					if self.is_nonblocking()
-						&& socket.may_recv() && !self.old_connection.swap(true, Ordering::Acquire)
-					{
+					if socket.may_recv() && self.listen.swap(false, Ordering::Relaxed) {
 						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
 						if event.contains(PollEvent::POLLIN) {
 							result.insert(PollEvent::POLLIN);
@@ -385,6 +383,7 @@ impl ObjectInterface for Socket {
 	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
 		self.with(|socket| {
 			if !socket.is_open() {
+				self.listen.store(true, Ordering::Relaxed);
 				socket
 					.listen(self.port.load(Ordering::Acquire))
 					.map(|_| ())
@@ -461,7 +460,7 @@ impl Clone for Socket {
 			handle,
 			port: AtomicU16::new(port),
 			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
-			old_connection: AtomicBool::new(false),
+			listen: AtomicBool::new(false),
 		};
 
 		if port > 0 {
