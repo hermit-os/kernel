@@ -180,6 +180,7 @@ pub fn boot_processor_init() {
 
 	apic::init();
 	scheduler::install_timer_handler();
+	serial::install_serial_interrupt();
 	finish_processor_init();
 	interrupts::enable();
 }

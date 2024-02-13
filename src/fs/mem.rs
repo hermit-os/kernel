@@ -50,16 +50,18 @@ struct RomFileInterface {
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
 		let pos_guard = self.pos.lock().await;
 		let pos = *pos_guard;
 
 		if event.contains(PollEvent::POLLIN) && pos < len {
 			result.insert(PollEvent::POLLIN);
-		} else if event.contains(PollEvent::POLLRDNORM) && pos < len {
+		}
+		if event.contains(PollEvent::POLLRDNORM) && pos < len {
 			result.insert(PollEvent::POLLRDNORM);
-		} else if event.contains(PollEvent::POLLRDBAND) && pos < len {
+		}
+		if event.contains(PollEvent::POLLRDBAND) && pos < len {
 			result.insert(PollEvent::POLLRDBAND);
 		}
 
@@ -134,22 +136,27 @@ pub struct RamFileInterface {
 #[async_trait]
 impl ObjectInterface for RamFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
 		let pos_guard = self.pos.lock().await;
 		let pos = *pos_guard;
 
 		if event.contains(PollEvent::POLLIN) && pos < len {
 			result.insert(PollEvent::POLLIN);
-		} else if event.contains(PollEvent::POLLRDNORM) && pos < len {
+		}
+		if event.contains(PollEvent::POLLRDNORM) && pos < len {
 			result.insert(PollEvent::POLLRDNORM);
-		} else if event.contains(PollEvent::POLLRDBAND) && pos < len {
+		}
+		if event.contains(PollEvent::POLLRDBAND) && pos < len {
 			result.insert(PollEvent::POLLRDBAND);
-		} else if event.contains(PollEvent::POLLOUT) {
+		}
+		if event.contains(PollEvent::POLLOUT) {
 			result.insert(PollEvent::POLLOUT);
-		} else if event.contains(PollEvent::POLLWRNORM) {
+		}
+		if event.contains(PollEvent::POLLWRNORM) {
 			result.insert(PollEvent::POLLWRNORM);
-		} else if event.contains(PollEvent::POLLWRBAND) {
+		}
+		if event.contains(PollEvent::POLLWRBAND) {
 			result.insert(PollEvent::POLLWRBAND);
 		}
 

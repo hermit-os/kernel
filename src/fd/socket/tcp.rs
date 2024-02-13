@@ -33,6 +33,7 @@ pub struct Socket {
 	handle: Handle,
 	port: AtomicU16,
 	nonblocking: AtomicBool,
+	listen: AtomicBool,
 }
 
 impl Socket {
@@ -41,6 +42,7 @@ impl Socket {
 			handle,
 			port: AtomicU16::new(0),
 			nonblocking: AtomicBool::new(false),
+			listen: AtomicBool::new(false),
 		}
 	}
 
@@ -125,7 +127,7 @@ impl Socket {
 					let _ = socket.listen(self.port.load(Ordering::Acquire));
 					Poll::Ready(())
 				}
-				tcp::State::Listen => Poll::Ready(()),
+				tcp::State::Listen | tcp::State::Established => Poll::Ready(()),
 				_ => {
 					socket.register_recv_waker(cx.waker());
 					Poll::Pending
@@ -166,27 +168,67 @@ impl Socket {
 #[async_trait]
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::CloseWait
-				| tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Listen
-				| tcp::State::TimeWait => {
-					result.insert(PollEvent::POLLNVAL);
-					Poll::Ready(Ok(result))
+				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+					if event.contains(PollEvent::POLLOUT) {
+						result.insert(PollEvent::POLLOUT);
+					}
+					if event.contains(PollEvent::POLLWRNORM) {
+						result.insert(PollEvent::POLLWRNORM);
+					}
+					if event.contains(PollEvent::POLLWRBAND) {
+						result.insert(PollEvent::POLLWRBAND);
+					}
+
+					if event.contains(PollEvent::POLLIN) {
+						result.insert(PollEvent::POLLIN);
+					}
+					if event.contains(PollEvent::POLLRDNORM) {
+						result.insert(PollEvent::POLLRDNORM);
+					}
+					if event.contains(PollEvent::POLLRDBAND) {
+						result.insert(PollEvent::POLLRDBAND);
+					}
+
+					if result.is_empty() {
+						Poll::Ready(Ok(PollEvent::POLLHUP))
+					} else {
+						Poll::Ready(Ok(result))
+					}
+				}
+				tcp::State::FinWait1 | tcp::State::FinWait2 | tcp::State::TimeWait => {
+					Poll::Ready(Ok(PollEvent::POLLHUP))
+				}
+				tcp::State::Listen => {
+					socket.register_recv_waker(cx.waker());
+					socket.register_send_waker(cx.waker());
+					Poll::Pending
 				}
 				_ => {
+					if socket.may_recv() && self.listen.swap(false, Ordering::Relaxed) {
+						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
+						if event.contains(PollEvent::POLLIN) {
+							result.insert(PollEvent::POLLIN);
+						}
+						if event.contains(PollEvent::POLLRDNORM) {
+							result.insert(PollEvent::POLLRDNORM);
+						}
+						if event.contains(PollEvent::POLLRDBAND) {
+							result.insert(PollEvent::POLLRDBAND);
+						}
+					}
+
 					if socket.can_send() {
 						if event.contains(PollEvent::POLLOUT) {
 							result.insert(PollEvent::POLLOUT);
-						} else if event.contains(PollEvent::POLLWRNORM) {
+						}
+						if event.contains(PollEvent::POLLWRNORM) {
 							result.insert(PollEvent::POLLWRNORM);
-						} else if event.contains(PollEvent::POLLWRBAND) {
+						}
+						if event.contains(PollEvent::POLLWRBAND) {
 							result.insert(PollEvent::POLLWRBAND);
 						}
 					}
@@ -194,15 +236,18 @@ impl ObjectInterface for Socket {
 					if socket.can_recv() {
 						if event.contains(PollEvent::POLLIN) {
 							result.insert(PollEvent::POLLIN);
-						} else if event.contains(PollEvent::POLLRDNORM) {
+						}
+						if event.contains(PollEvent::POLLRDNORM) {
 							result.insert(PollEvent::POLLRDNORM);
-						} else if event.contains(PollEvent::POLLRDBAND) {
+						}
+						if event.contains(PollEvent::POLLRDBAND) {
 							result.insert(PollEvent::POLLRDBAND);
 						}
 					}
 
 					if result.is_empty() {
 						socket.register_recv_waker(cx.waker());
+						socket.register_send_waker(cx.waker());
 						Poll::Pending
 					} else {
 						Poll::Ready(Ok(result))
@@ -310,7 +355,17 @@ impl ObjectInterface for Socket {
 	}
 
 	fn accept(&self) -> Result<IpEndpoint, IoError> {
-		block_on(self.async_accept(), None)
+		if self.is_nonblocking() {
+			block_on(self.async_accept(), Some(Duration::ZERO.into())).map_err(|x| {
+				if x == IoError::ETIME {
+					IoError::EAGAIN
+				} else {
+					x
+				}
+			})
+		} else {
+			block_on(self.async_accept(), None)
+		}
 	}
 
 	fn getpeername(&self) -> Option<IpEndpoint> {
@@ -328,6 +383,7 @@ impl ObjectInterface for Socket {
 	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
 		self.with(|socket| {
 			if !socket.is_open() {
+				self.listen.store(true, Ordering::Relaxed);
 				socket
 					.listen(self.port.load(Ordering::Acquire))
 					.map(|_| ())
@@ -374,10 +430,10 @@ impl ObjectInterface for Socket {
 	fn ioctl(&self, cmd: IoCtl, value: bool) -> Result<(), IoError> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
-				info!("set device to nonblocking mode");
+				trace!("set device to nonblocking mode");
 				self.nonblocking.store(true, Ordering::Release);
 			} else {
-				info!("set device to blocking mode");
+				trace!("set device to blocking mode");
 				self.nonblocking.store(false, Ordering::Release);
 			}
 
@@ -398,11 +454,20 @@ impl Clone for Socket {
 			panic!("Unable to create handle");
 		};
 
-		Self {
+		drop(guard);
+		let port = self.port.load(Ordering::Acquire);
+		let obj = Self {
 			handle,
-			port: AtomicU16::new(self.port.load(Ordering::Acquire)),
+			port: AtomicU16::new(port),
 			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
+			listen: AtomicBool::new(false),
+		};
+
+		if port > 0 {
+			let _ = obj.listen(1024);
 		}
+
+		obj
 	}
 }
 
