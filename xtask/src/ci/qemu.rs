@@ -309,6 +309,7 @@ fn test_mioudp() -> Result<()> {
 	socket.connect("127.0.0.1:9975")?;
 	socket.send(buf.as_bytes())?;
 
+	socket.set_read_timeout(Some(Duration::from_secs(10)))?;
 	let mut buf = [0; 128];
 	let received = socket.recv(&mut buf)?;
 	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
