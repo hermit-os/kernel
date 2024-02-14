@@ -512,7 +512,9 @@ where
 {
 	fn from_array(nodeid: u64, op_header: O::InStruct, data: &[u8]) -> Box<Cmd<O>> {
 		let mut cmd = Self::with_capacity(nodeid, op_header, data.len());
-		MaybeUninit::write_slice(&mut cmd.payload, data);
+		for (target, source) in cmd.payload.iter_mut().zip(data) {
+			*target = MaybeUninit::new(*source);
+		}
 		unsafe { core::intrinsics::transmute(cmd) }
 	}
 }
@@ -525,7 +527,9 @@ where
 		let str_bytes = str.as_bytes();
 		// Plus one for the NUL terminator
 		let mut cmd = Self::with_capacity(nodeid, op_header, str_bytes.len() + 1);
-		MaybeUninit::write_slice(&mut cmd.payload[..str_bytes.len()], str_bytes);
+		for (target, source) in cmd.payload[..str_bytes.len()].iter_mut().zip(str_bytes) {
+			*target = MaybeUninit::new(*source);
+		}
 		cmd.payload[str_bytes.len()] = MaybeUninit::new(b'\0');
 		unsafe { core::intrinsics::transmute(cmd) }
 	}

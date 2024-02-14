@@ -18,7 +18,6 @@
 #![feature(exposed_provenance)]
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
-#![feature(maybe_uninit_write_slice)]
 #![feature(naked_functions)]
 #![feature(new_uninit)]
 #![feature(noop_waker)]
