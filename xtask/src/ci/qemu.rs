@@ -1,6 +1,7 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, UdpSocket};
 use std::process::{Child, Command, ExitStatus};
+use std::str::from_utf8;
 use std::time::Duration;
 use std::{env, thread};
 
@@ -284,8 +285,8 @@ fn test_testudp() -> Result<()> {
 	socket.send(buf.as_bytes())?;
 
 	let mut buf = [0; 128];
-	socket.recv(&mut buf)?;
-	eprintln!("[CI] receive: {buf:?}");
+	let received = socket.recv(&mut buf)?;
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
 
 	Ok(())
 }
@@ -298,8 +299,8 @@ fn test_miotcp() -> Result<()> {
 	stream.write_all(buf.as_bytes())?;
 
 	let mut buf = vec![];
-	stream.read_to_end(&mut buf)?;
-	eprintln!("[CI] receive: {buf:?}");
+	let received = stream.read_to_end(&mut buf)?;
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
 
 	Ok(())
 }
