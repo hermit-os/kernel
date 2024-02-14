@@ -1,5 +1,7 @@
-use std::net::UdpSocket;
+use std::io::{Read, Write};
+use std::net::{TcpStream, UdpSocket};
 use std::process::{Child, Command, ExitStatus};
+use std::str::from_utf8;
 use std::time::Duration;
 use std::{env, thread};
 
@@ -90,6 +92,8 @@ impl Qemu {
 		match self.build.package.as_str() {
 			"httpd" => test_httpd()?,
 			"testudp" => test_testudp()?,
+			"miotcp" => test_miotcp()?,
+			"mioudp" => test_mioudp()?,
 			_ => {}
 		}
 
@@ -279,6 +283,36 @@ fn test_testudp() -> Result<()> {
 	let socket = UdpSocket::bind("127.0.0.1:0")?;
 	socket.connect("127.0.0.1:9975")?;
 	socket.send(buf.as_bytes())?;
+
+	Ok(())
+}
+
+fn test_miotcp() -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+	let buf = "exit";
+	eprintln!("[CI] send {buf:?} via TCP to 127.0.0.1:9975");
+	let mut stream = TcpStream::connect("127.0.0.1:9975")?;
+	stream.write_all(buf.as_bytes())?;
+
+	let mut buf = vec![];
+	let received = stream.read_to_end(&mut buf)?;
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+
+	Ok(())
+}
+
+fn test_mioudp() -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+	let buf = "exit";
+	eprintln!("[CI] send {buf:?} via UDP to 127.0.0.1:9975");
+	let socket = UdpSocket::bind("127.0.0.1:0")?;
+	socket.connect("127.0.0.1:9975")?;
+	socket.send(buf.as_bytes())?;
+
+	let mut buf = [0; 128];
+	let received = socket.recv(&mut buf)?;
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+
 	Ok(())
 }
 
