@@ -2,6 +2,7 @@
 
 use alloc::boxed::Box;
 use core::arch::asm;
+use core::mem::MaybeUninit;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
@@ -231,8 +232,8 @@ impl Drop for TaskStacks {
 }
 
 pub struct TaskTLS {
-	_block: Box<[u8]>,
-	thread_ptr: Box<*mut ()>,
+	_block: Box<[MaybeUninit<u8>]>,
+	thread_ptr: *mut (),
 }
 
 impl TaskTLS {
@@ -253,31 +254,33 @@ impl TaskTLS {
 			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
 		};
 
+		// As described in “ELF Handling For Thread-Local Storage”
+		let tls_offset = usize::try_from(tls_info.memsz)
+			.unwrap()
+			.align_up(usize::try_from(tls_info.align).unwrap());
+
 		// Allocate TLS block
 		let mut block = {
-			// As described in “ELF Handling For Thread-Local Storage”
-			let tls_offset = usize::try_from(tls_info.memsz)
-				.unwrap()
-				.align_up(usize::try_from(tls_info.align).unwrap());
-
 			// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
 			// So the thread pointer needs to be `block_ptr + tls_offset`.
-			// Allocating only tls_len bytes would be enough to hold the TLS block.
-			// For the thread pointer to be sound though, we need it's value to be included in or one byte past the same allocation.
-			vec![0; tls_offset].into_boxed_slice()
+			// GNU style TLS requires `gs:0` to represent the same address as the thread pointer.
+			// Since the thread pointer points to the end of the TLS blocks, we need to store it there.
+			let tcb_size = mem::size_of::<*mut ()>();
+
+			vec![MaybeUninit::<u8>::uninit(); tls_offset + tcb_size].into_boxed_slice()
 		};
 
 		// Initialize beginning of the TLS block with TLS initialization image
 		block[..tls_init_image.len()].copy_from_slice(tls_init_image);
 
-		// The end of the TLS block was already zeroed by the allocator
+		// Fill the rest of the block with zeros
+		block[tls_init_image.len()..tls_offset].fill(MaybeUninit::new(0));
 
 		// thread_ptr = block_ptr + tls_offset
-		// block.len() == tls_offset
-		let thread_ptr = block.as_mut_ptr_range().end.cast::<()>();
-
-		// Put thread pointer on heap, so it does not move and can be referenced in fs:0
-		let thread_ptr = Box::new(thread_ptr);
+		let thread_ptr = block[tls_offset..].as_mut_ptr().cast::<()>();
+		unsafe {
+			thread_ptr.cast::<*mut ()>().write(thread_ptr);
+		}
 
 		let this = Self {
 			_block: block,
@@ -286,8 +289,8 @@ impl TaskTLS {
 		Some(Box::new(this))
 	}
 
-	fn thread_ptr(&self) -> &*mut () {
-		&self.thread_ptr
+	fn thread_ptr(&self) -> *mut () {
+		self.thread_ptr
 	}
 }
 
@@ -342,7 +345,7 @@ impl TaskFrame for Task {
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).fs = ptr::from_ref(tls.thread_ptr()).addr() as u64;
+				(*state).fs = tls.thread_ptr().addr() as u64;
 			}
 			(*state).rip = task_start as usize as u64;
 			(*state).rdi = func as usize as u64;
