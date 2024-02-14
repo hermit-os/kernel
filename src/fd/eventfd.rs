@@ -142,34 +142,21 @@ impl ObjectInterface for EventFd {
 	}
 
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut ret = PollEvent::empty();
 		let guard = self.state.lock().await;
 
+		let mut available = PollEvent::empty();
+
 		if guard.counter < u64::MAX - 1 {
-			if event.contains(PollEvent::POLLOUT) {
-				ret.insert(PollEvent::POLLOUT);
-			}
-			if event.contains(PollEvent::POLLWRNORM) {
-				ret.insert(PollEvent::POLLWRNORM);
-			}
-			if event.contains(PollEvent::POLLWRBAND) {
-				ret.insert(PollEvent::POLLWRBAND);
-			}
+			available.insert(PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND);
 		}
 
 		if guard.counter > 0 {
-			if event.contains(PollEvent::POLLIN) {
-				ret.insert(PollEvent::POLLIN);
-			}
-			if event.contains(PollEvent::POLLRDNORM) {
-				ret.insert(PollEvent::POLLRDNORM);
-			}
-			if event.contains(PollEvent::POLLRDBAND) {
-				ret.insert(PollEvent::POLLRDBAND);
-			}
+			available.insert(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND);
 		}
 
 		drop(guard);
+
+		let ret = event & available;
 
 		future::poll_fn(|cx| {
 			if ret.is_empty() {

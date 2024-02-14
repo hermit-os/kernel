@@ -168,30 +168,15 @@ impl Socket {
 #[async_trait]
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut ret = PollEvent::empty();
-
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
-					if event.contains(PollEvent::POLLOUT) {
-						ret.insert(PollEvent::POLLOUT);
-					}
-					if event.contains(PollEvent::POLLWRNORM) {
-						ret.insert(PollEvent::POLLWRNORM);
-					}
-					if event.contains(PollEvent::POLLWRBAND) {
-						ret.insert(PollEvent::POLLWRBAND);
-					}
+					let available = PollEvent::POLLOUT
+						| PollEvent::POLLWRNORM | PollEvent::POLLWRBAND
+						| PollEvent::POLLIN | PollEvent::POLLRDNORM
+						| PollEvent::POLLRDBAND;
 
-					if event.contains(PollEvent::POLLIN) {
-						ret.insert(PollEvent::POLLIN);
-					}
-					if event.contains(PollEvent::POLLRDNORM) {
-						ret.insert(PollEvent::POLLRDNORM);
-					}
-					if event.contains(PollEvent::POLLRDBAND) {
-						ret.insert(PollEvent::POLLRDBAND);
-					}
+					let ret = event & available;
 
 					if ret.is_empty() {
 						Poll::Ready(Ok(PollEvent::POLLHUP))
@@ -208,32 +193,24 @@ impl ObjectInterface for Socket {
 					Poll::Pending
 				}
 				_ => {
+					let mut available = PollEvent::empty();
+
 					if socket.can_recv()
 						|| socket.may_recv() && self.listen.swap(false, Ordering::Relaxed)
 					{
 						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
-						if event.contains(PollEvent::POLLIN) {
-							ret.insert(PollEvent::POLLIN);
-						}
-						if event.contains(PollEvent::POLLRDNORM) {
-							ret.insert(PollEvent::POLLRDNORM);
-						}
-						if event.contains(PollEvent::POLLRDBAND) {
-							ret.insert(PollEvent::POLLRDBAND);
-						}
+						available.insert(
+							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
+						);
 					}
 
 					if socket.can_send() {
-						if event.contains(PollEvent::POLLOUT) {
-							ret.insert(PollEvent::POLLOUT);
-						}
-						if event.contains(PollEvent::POLLWRNORM) {
-							ret.insert(PollEvent::POLLWRNORM);
-						}
-						if event.contains(PollEvent::POLLWRBAND) {
-							ret.insert(PollEvent::POLLWRBAND);
-						}
+						available.insert(
+							PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+						);
 					}
+
+					let ret = event & available;
 
 					if ret.is_empty() {
 						socket.register_recv_waker(cx.waker());

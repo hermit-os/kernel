@@ -50,19 +50,14 @@ struct RomFileInterface {
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut ret = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
-		if event.contains(PollEvent::POLLIN) && pos < len {
-			ret.insert(PollEvent::POLLIN);
-		}
-		if event.contains(PollEvent::POLLRDNORM) && pos < len {
-			ret.insert(PollEvent::POLLRDNORM);
-		}
-		if event.contains(PollEvent::POLLRDBAND) && pos < len {
-			ret.insert(PollEvent::POLLRDBAND);
-		}
+		let ret = if pos < len {
+			event.intersection(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND)
+		} else {
+			PollEvent::empty()
+		};
 
 		Ok(ret)
 	}
@@ -135,30 +130,16 @@ pub struct RamFileInterface {
 #[async_trait]
 impl ObjectInterface for RamFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut ret = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
-		if event.contains(PollEvent::POLLIN) && pos < len {
-			ret.insert(PollEvent::POLLIN);
-		}
-		if event.contains(PollEvent::POLLRDNORM) && pos < len {
-			ret.insert(PollEvent::POLLRDNORM);
-		}
-		if event.contains(PollEvent::POLLRDBAND) && pos < len {
-			ret.insert(PollEvent::POLLRDBAND);
-		}
-		if event.contains(PollEvent::POLLOUT) {
-			ret.insert(PollEvent::POLLOUT);
-		}
-		if event.contains(PollEvent::POLLWRNORM) {
-			ret.insert(PollEvent::POLLWRNORM);
-		}
-		if event.contains(PollEvent::POLLWRBAND) {
-			ret.insert(PollEvent::POLLWRBAND);
+		let mut available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
+
+		if pos < len {
+			available.insert(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND);
 		}
 
-		Ok(ret)
+		Ok(event & available)
 	}
 
 	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
