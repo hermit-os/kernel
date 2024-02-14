@@ -52,8 +52,7 @@ impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
 		let mut result: PollEvent = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
-		let pos_guard = self.pos.lock().await;
-		let pos = *pos_guard;
+		let pos = *self.pos.lock().await;
 
 		if event.contains(PollEvent::POLLIN) && pos < len {
 			result.insert(PollEvent::POLLIN);
@@ -138,8 +137,7 @@ impl ObjectInterface for RamFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
 		let mut result: PollEvent = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
-		let pos_guard = self.pos.lock().await;
-		let pos = *pos_guard;
+		let pos = *self.pos.lock().await;
 
 		if event.contains(PollEvent::POLLIN) && pos < len {
 			result.insert(PollEvent::POLLIN);
