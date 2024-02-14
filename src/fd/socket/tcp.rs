@@ -208,7 +208,9 @@ impl ObjectInterface for Socket {
 					Poll::Pending
 				}
 				_ => {
-					if socket.may_recv() && self.listen.swap(false, Ordering::Relaxed) {
+					if socket.can_recv()
+						|| socket.may_recv() && self.listen.swap(false, Ordering::Relaxed)
+					{
 						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
 						if event.contains(PollEvent::POLLIN) {
 							ret.insert(PollEvent::POLLIN);
@@ -230,18 +232,6 @@ impl ObjectInterface for Socket {
 						}
 						if event.contains(PollEvent::POLLWRBAND) {
 							ret.insert(PollEvent::POLLWRBAND);
-						}
-					}
-
-					if socket.can_recv() {
-						if event.contains(PollEvent::POLLIN) {
-							ret.insert(PollEvent::POLLIN);
-						}
-						if event.contains(PollEvent::POLLRDNORM) {
-							ret.insert(PollEvent::POLLRDNORM);
-						}
-						if event.contains(PollEvent::POLLRDBAND) {
-							ret.insert(PollEvent::POLLRDBAND);
 						}
 					}
 
