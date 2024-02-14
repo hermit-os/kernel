@@ -490,10 +490,7 @@ where
 }
 
 impl<O: ops::Op> Cmd<O> {
-	fn with_capacity(nodeid: u64, op_header: O::InStruct, len: usize) -> Box<UninitCmd<O>>
-	where
-		Cmd<O>: core::ptr::Pointee<Metadata = usize>,
-	{
+	fn with_capacity(nodeid: u64, op_header: O::InStruct, len: usize) -> Box<UninitCmd<O>> {
 		let mut cmd = unsafe { Self::new_uninit(len) };
 		cmd.in_header = MaybeUninit::new(fuse_abi::InHeader {
 			len: core::mem::size_of_val(cmd.as_ref())
@@ -540,23 +537,20 @@ impl<O: ops::Op> AsSliceU8 for Cmd<O> {
 	}
 }
 
-impl<O: ops::Op> Cmd<O>
-where
-	Self: core::ptr::Pointee<Metadata = usize>,
-{
+impl<O: ops::Op> Cmd<O> {
 	// MaybeUninit does not accept DSTs as type parameter
 	unsafe fn new_uninit(len: usize) -> Box<UninitCmd<O>> {
 		unsafe {
-			Box::from_raw(core::ptr::from_raw_parts_mut(
+			Box::from_raw(core::ptr::slice_from_raw_parts_mut(
 				alloc(
 					Layout::new::<PayloadlessCmd<O>>()
 						.extend(Layout::array::<u8>(len).expect("The length is too much."))
 						.expect("The layout size overflowed.")
 						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
 						.pad_to_align(),
-				) as *mut (),
-				len,
-			))
+				),
+				0,
+			) as *mut UninitCmd<O>)
 		}
 	}
 }
@@ -582,20 +576,20 @@ impl<O: ops::Op> AsSliceU8 for Rsp<O> {}
 
 impl<O: ops::Op> Rsp<O>
 where
-	Self: core::ptr::Pointee<Metadata = usize>,
+	O: ops::Op<OutPayload = [MaybeUninit<u8>]>,
 {
 	unsafe fn new_uninit(len: usize) -> Box<Self> {
 		unsafe {
-			Box::from_raw(core::ptr::from_raw_parts_mut(
+			Box::from_raw(core::ptr::slice_from_raw_parts_mut(
 				alloc(
 					Layout::new::<PayloadlessRsp<O>>()
 						.extend(Layout::array::<u8>(len).expect("The length is too much."))
 						.expect("The layout size overflowed.")
 						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
 						.pad_to_align(),
-				) as *mut (),
-				len,
-			))
+				),
+				0,
+			) as *mut Rsp<O>)
 		}
 	}
 }

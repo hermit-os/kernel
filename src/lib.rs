@@ -23,7 +23,6 @@
 #![feature(new_uninit)]
 #![feature(noop_waker)]
 #![feature(pointer_is_aligned)]
-#![feature(ptr_metadata)]
 #![feature(slice_from_ptr_range)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
