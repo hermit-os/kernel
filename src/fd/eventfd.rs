@@ -142,37 +142,37 @@ impl ObjectInterface for EventFd {
 	}
 
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::empty();
+		let mut ret = PollEvent::empty();
 		let guard = self.state.lock().await;
 
 		if guard.counter < u64::MAX - 1 {
 			if event.contains(PollEvent::POLLOUT) {
-				result.insert(PollEvent::POLLOUT);
+				ret.insert(PollEvent::POLLOUT);
 			}
 			if event.contains(PollEvent::POLLWRNORM) {
-				result.insert(PollEvent::POLLWRNORM);
+				ret.insert(PollEvent::POLLWRNORM);
 			}
 			if event.contains(PollEvent::POLLWRBAND) {
-				result.insert(PollEvent::POLLWRBAND);
+				ret.insert(PollEvent::POLLWRBAND);
 			}
 		}
 
 		if guard.counter > 0 {
 			if event.contains(PollEvent::POLLIN) {
-				result.insert(PollEvent::POLLIN);
+				ret.insert(PollEvent::POLLIN);
 			}
 			if event.contains(PollEvent::POLLRDNORM) {
-				result.insert(PollEvent::POLLRDNORM);
+				ret.insert(PollEvent::POLLRDNORM);
 			}
 			if event.contains(PollEvent::POLLRDBAND) {
-				result.insert(PollEvent::POLLRDBAND);
+				ret.insert(PollEvent::POLLRDBAND);
 			}
 		}
 
 		drop(guard);
 
 		future::poll_fn(|cx| {
-			if result.is_empty() {
+			if ret.is_empty() {
 				let mut pinned = core::pin::pin!(self.state.lock());
 				if let Poll::Ready(mut guard) = pinned.as_mut().poll(cx) {
 					if event.intersects(
@@ -186,13 +186,13 @@ impl ObjectInterface for EventFd {
 						guard.write_queue.push_back(cx.waker().clone());
 						Poll::Pending
 					} else {
-						Poll::Ready(Ok(result))
+						Poll::Ready(Ok(ret))
 					}
 				} else {
 					Poll::Pending
 				}
 			} else {
-				Poll::Ready(Ok(result))
+				Poll::Ready(Ok(ret))
 			}
 		})
 		.await
