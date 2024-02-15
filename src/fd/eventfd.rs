@@ -169,6 +169,8 @@ impl ObjectInterface for EventFd {
 			}
 		}
 
+		drop(guard);
+
 		future::poll_fn(|cx| {
 			if result.is_empty() {
 				let mut pinned = core::pin::pin!(self.state.lock());
