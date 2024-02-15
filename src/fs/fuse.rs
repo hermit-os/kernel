@@ -4,10 +4,11 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ffi::CStr;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{fmt, future, u32, u8};
+use core::{future, u32, u8};
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -21,15 +22,14 @@ use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::executor::block_on;
 use crate::fd::{IoError, PollEvent};
 use crate::fs::{
-	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
-	SeekWhence, VfsNode,
+	self, fuse_abi, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface,
+	OpenOption, SeekWhence, VfsNode,
 };
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
 // possible responses for command: qemu/tools/virtiofsd/fuse_lowlevel.h
 
-const FUSE_ROOT_ID: u64 = 1;
 const MAX_READ_LEN: usize = 1024 * 64;
 const MAX_WRITE_LEN: usize = 1024 * 64;
 
@@ -38,191 +38,392 @@ const U64_SIZE: usize = ::core::mem::size_of::<u64>();
 const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
-#[allow(dead_code)]
-const FUSE_GETATTR_FH: u32 = 1 << 0;
-
-#[repr(C)]
-#[derive(Debug)]
-struct fuse_dirent {
-	pub d_ino: u64,
-	pub d_off: u64,
-	pub d_namelen: u32,
-	pub d_type: u32,
-	pub d_name: [u8; 0],
-}
-
 pub(crate) trait FuseInterface {
-	fn send_command<S, T>(&mut self, cmd: &Cmd<S>, rsp: &mut Rsp<T>)
-	where
-		S: FuseIn + core::fmt::Debug,
-		T: FuseOut + core::fmt::Debug;
+	fn send_command<O: ops::Op>(&mut self, cmd: &Cmd<O>, rsp: &mut Rsp<O>);
 
 	fn get_mount_point(&self) -> String;
 }
 
-#[repr(C)]
-#[derive(Debug, Default)]
-struct fuse_in_header {
-	pub len: u32,
-	pub opcode: u32,
-	pub unique: u64,
-	pub nodeid: u64,
-	pub uid: u32,
-	pub gid: u32,
-	pub pid: u32,
-	pub padding: u32,
+pub(crate) mod ops {
+	use alloc::boxed::Box;
+	use core::ffi::CStr;
+	use core::mem::MaybeUninit;
+
+	use super::{Cmd, Rsp};
+	use crate::fd::PollEvent;
+	use crate::fs::{fuse_abi, SeekWhence};
+
+	pub(crate) trait Op {
+		const OP_CODE: fuse_abi::Opcode;
+
+		type InStruct: core::fmt::Debug;
+		type InPayload: ?Sized;
+		type OutStruct: core::fmt::Debug;
+		type OutPayload: ?Sized;
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Init;
+
+	impl Op for Init {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Init;
+		type InStruct = fuse_abi::InitIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::InitOut;
+		type OutPayload = ();
+	}
+
+	impl Init {
+		pub(crate) fn create() -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				fuse_abi::ROOT_ID,
+				fuse_abi::InitIn {
+					major: 7,
+					minor: 31,
+					max_readahead: 0,
+					flags: 0,
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Create;
+
+	impl Op for Create {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Create;
+		type InStruct = fuse_abi::CreateIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::CreateOut;
+		type OutPayload = ();
+	}
+
+	impl Create {
+		#[allow(clippy::self_named_constructors)]
+		pub(crate) fn create(
+			path: &str,
+			flags: u32,
+			mode: u32,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(
+				fuse_abi::ROOT_ID,
+				fuse_abi::CreateIn {
+					flags,
+					mode,
+					..Default::default()
+				},
+				path,
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Open;
+
+	impl Op for Open {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Open;
+		type InStruct = fuse_abi::OpenIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::OpenOut;
+		type OutPayload = ();
+	}
+
+	impl Open {
+		pub(crate) fn create(nid: u64, flags: u32) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::OpenIn {
+					flags,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Write;
+
+	impl Op for Write {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Write;
+		type InStruct = fuse_abi::WriteIn;
+		type InPayload = [u8];
+		type OutStruct = fuse_abi::WriteOut;
+		type OutPayload = ();
+	}
+
+	impl Write {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			buf: &[u8],
+			offset: u64,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_array(
+				nid,
+				fuse_abi::WriteIn {
+					fh,
+					offset,
+					size: buf.len().try_into().unwrap(),
+					..Default::default()
+				},
+				buf,
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Read;
+
+	impl Op for Read {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Read;
+		type InStruct = fuse_abi::ReadIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::ReadOut;
+
+		// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
+		// instead of a MaybeUninit<[_]>.
+		type OutPayload = [MaybeUninit<u8>];
+	}
+
+	impl Read {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			size: u32,
+			offset: u64,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::ReadIn {
+					fh,
+					offset,
+					size,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Rsp::<Self>::new_uninit(size.try_into().unwrap()) };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Lseek;
+
+	impl Op for Lseek {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Lseek;
+		type InStruct = fuse_abi::LseekIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::LseekOut;
+		type OutPayload = ();
+	}
+
+	impl Lseek {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			offset: isize,
+			whence: SeekWhence,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::LseekIn {
+					fh,
+					offset: offset.try_into().unwrap(),
+					whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Readlink;
+
+	impl Op for Readlink {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Readlink;
+		type InStruct = fuse_abi::ReadlinkIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::ReadlinkOut;
+
+		// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
+		// instead of a MaybeUninit<[_]>.
+		type OutPayload = [MaybeUninit<u8>];
+	}
+
+	impl Readlink {
+		pub(crate) fn create(nid: u64, size: u32) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(nid, fuse_abi::ReadlinkIn {});
+			let rsp = unsafe { Rsp::<Self>::new_uninit(size.try_into().unwrap()) };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Release;
+
+	impl Op for Release {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Release;
+		type InStruct = fuse_abi::ReleaseIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::ReleaseOut;
+		type OutPayload = ();
+	}
+
+	impl Release {
+		pub(crate) fn create(nid: u64, fh: u64) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::ReleaseIn {
+					fh,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Poll;
+
+	impl Op for Poll {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Poll;
+		type InStruct = fuse_abi::PollIn;
+		type InPayload = ();
+		type OutStruct = fuse_abi::PollOut;
+		type OutPayload = ();
+	}
+
+	impl Poll {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			kh: u64,
+			event: PollEvent,
+		) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::new(
+				nid,
+				fuse_abi::PollIn {
+					fh,
+					kh,
+					events: event.bits() as u32,
+					..Default::default()
+				},
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Mkdir;
+
+	impl Op for Mkdir {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Mkdir;
+		type InStruct = fuse_abi::MkdirIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::EntryOut;
+		type OutPayload = ();
+	}
+
+	impl Mkdir {
+		pub(crate) fn create(path: &str, mode: u32) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(
+				fuse_abi::ROOT_ID,
+				fuse_abi::MkdirIn {
+					mode,
+					..Default::default()
+				},
+				path,
+			);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Unlink;
+
+	impl Op for Unlink {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Unlink;
+		type InStruct = fuse_abi::UnlinkIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::UnlinkOut;
+		type OutPayload = ();
+	}
+
+	impl Unlink {
+		pub(crate) fn create(name: &str) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(fuse_abi::ROOT_ID, fuse_abi::UnlinkIn {}, name);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Rmdir;
+
+	impl Op for Rmdir {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Rmdir;
+		type InStruct = fuse_abi::RmdirIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::RmdirOut;
+		type OutPayload = ();
+	}
+
+	impl Rmdir {
+		pub(crate) fn create(name: &str) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(fuse_abi::ROOT_ID, fuse_abi::RmdirIn {}, name);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Lookup;
+
+	impl Op for Lookup {
+		const OP_CODE: fuse_abi::Opcode = fuse_abi::Opcode::Lookup;
+		type InStruct = fuse_abi::LookupIn;
+		type InPayload = CStr;
+		type OutStruct = fuse_abi::EntryOut;
+		type OutPayload = ();
+	}
+
+	impl Lookup {
+		pub(crate) fn create(name: &str) -> (Box<Cmd<Self>>, Box<Rsp<Self>>) {
+			let cmd = Cmd::<Self>::from_str(fuse_abi::ROOT_ID, fuse_abi::LookupIn {}, name);
+			let rsp = unsafe { Box::new_uninit().assume_init() };
+
+			(cmd, rsp)
+		}
+	}
 }
 
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_out_header {
-	pub len: u32,
-	pub error: i32,
-	pub unique: u64,
-}
-
-#[repr(C)]
-#[derive(Debug, Default)]
-struct fuse_init_in {
-	pub major: u32,
-	pub minor: u32,
-	pub max_readahead: u32,
-	pub flags: u32,
-}
-
-unsafe impl FuseIn for fuse_init_in {}
-
-#[repr(C)]
-#[derive(Debug, Default)]
-struct fuse_init_out {
-	pub major: u32,
-	pub minor: u32,
-	pub max_readahead: u32,
-	pub flags: u32,
-	pub max_background: u16,
-	pub congestion_threshold: u16,
-	pub max_write: u32,
-	pub time_gran: u32,
-	pub unused: [u32; 9],
-}
-unsafe impl FuseOut for fuse_init_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_read_in {
-	pub fh: u64,
-	pub offset: u64,
-	pub size: u32,
-	pub read_flags: u32,
-	pub lock_owner: u64,
-	pub flags: u32,
-	pub padding: u32,
-}
-
-unsafe impl FuseIn for fuse_read_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-pub struct fuse_write_in {
-	pub fh: u64,
-	pub offset: u64,
-	pub size: u32,
-	pub write_flags: u32,
-	pub lock_owner: u64,
-	pub flags: u32,
-	pub padding: u32,
-}
-unsafe impl FuseIn for fuse_write_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_write_out {
-	pub size: u32,
-	pub padding: u32,
-}
-unsafe impl FuseOut for fuse_write_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_read_out {}
-unsafe impl FuseOut for fuse_read_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_lookup_in {}
-unsafe impl FuseIn for fuse_lookup_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_readlink_in {}
-
-unsafe impl FuseIn for fuse_readlink_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-pub struct fuse_readlink_out {}
-unsafe impl FuseOut for fuse_readlink_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_attr_out {
-	pub attr_valid: u64,
-	pub attr_valid_nsec: u32,
-	pub dummy: u32,
-	pub attr: fuse_attr,
-}
-
-unsafe impl FuseOut for fuse_attr_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_entry_out {
-	pub nodeid: u64,
-	pub generation: u64,
-	pub entry_valid: u64,
-	pub attr_valid: u64,
-	pub entry_valid_nsec: u32,
-	pub attr_valid_nsec: u32,
-	pub attr: fuse_attr,
-}
-
-unsafe impl FuseOut for fuse_entry_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_attr {
-	/// inode number
-	pub ino: u64,
-	/// size in bytes
-	pub size: u64,
-	/// size in blocks
-	pub blocks: u64,
-	/// time of last access
-	pub atime: u64,
-	/// time of last modification
-	pub mtime: u64,
-	/// time of last status change
-	pub ctime: u64,
-	pub atimensec: u32,
-	pub mtimensec: u32,
-	pub ctimensec: u32,
-	/// access permissions
-	pub mode: u32,
-	/// number of hard links
-	pub nlink: u32,
-	/// user id
-	pub uid: u32,
-	/// group id
-	pub gid: u32,
-	/// device id
-	pub rdev: u32,
-	/// block size
-	pub blksize: u32,
-	pub padding: u32,
-}
-
-impl From<fuse_attr> for FileAttr {
-	fn from(attr: fuse_attr) -> FileAttr {
+impl From<fuse_abi::Attr> for FileAttr {
+	fn from(attr: fuse_abi::Attr) -> FileAttr {
 		FileAttr {
 			st_ino: attr.ino,
 			st_nlink: attr.nlink as u64,
@@ -245,957 +446,166 @@ impl From<fuse_attr> for FileAttr {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_create_in {
-	pub flags: u32,
-	pub mode: u32,
-	pub umask: u32,
-	pub open_flags: u32,
-}
-unsafe impl FuseIn for fuse_create_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_create_out {
-	pub entry: fuse_entry_out,
-	pub open: fuse_open_out,
-}
-
-unsafe impl FuseOut for fuse_create_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_open_in {
-	pub flags: u32,
-	pub unused: u32,
-}
-
-unsafe impl FuseIn for fuse_open_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_open_out {
-	pub fh: u64,
-	pub open_flags: u32,
-	pub padding: u32,
-}
-
-unsafe impl FuseOut for fuse_open_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_release_in {
-	pub fh: u64,
-	pub flags: u32,
-	pub release_flags: u32,
-	pub lock_owner: u64,
-}
-
-unsafe impl FuseIn for fuse_release_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_release_out {}
-unsafe impl FuseOut for fuse_release_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_rmdir_in {}
-unsafe impl FuseIn for fuse_rmdir_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_rmdir_out {}
-unsafe impl FuseOut for fuse_rmdir_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_mkdir_in {
-	pub mode: u32,
-	pub umask: u32,
-}
-unsafe impl FuseIn for fuse_mkdir_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_unlink_in {}
-unsafe impl FuseIn for fuse_unlink_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_unlink_out {}
-unsafe impl FuseOut for fuse_unlink_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_lseek_in {
-	pub fh: u64,
-	pub offset: u64,
-	pub whence: u32,
-	pub padding: u32,
-}
-unsafe impl FuseIn for fuse_lseek_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_lseek_out {
-	offset: u64,
-}
-unsafe impl FuseOut for fuse_lseek_out {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_poll_in {
-	pub fh: u64,
-	pub kh: u64,
-	pub flags: u32,
-	pub events: u32,
-}
-unsafe impl FuseIn for fuse_poll_in {}
-
-#[repr(C)]
-#[derive(Default, Debug)]
-struct fuse_poll_out {
-	revents: u32,
-	padding: u32,
-}
-unsafe impl FuseOut for fuse_poll_out {}
-
-#[repr(u32)]
-#[derive(Debug, Copy, Clone)]
-#[allow(non_camel_case_types)]
-#[allow(dead_code)]
-enum Opcode {
-	FUSE_LOOKUP = 1,
-	FUSE_FORGET = 2, // no reply
-	FUSE_GETATTR = 3,
-	FUSE_SETATTR = 4,
-	FUSE_READLINK = 5,
-	FUSE_SYMLINK = 6,
-	FUSE_MKNOD = 8,
-	FUSE_MKDIR = 9,
-	FUSE_UNLINK = 10,
-	FUSE_RMDIR = 11,
-	FUSE_RENAME = 12,
-	FUSE_LINK = 13,
-	FUSE_OPEN = 14,
-	FUSE_READ = 15,
-	FUSE_WRITE = 16,
-	FUSE_STATFS = 17,
-	FUSE_RELEASE = 18,
-	FUSE_FSYNC = 20,
-	FUSE_SETXATTR = 21,
-	FUSE_GETXATTR = 22,
-	FUSE_LISTXATTR = 23,
-	FUSE_REMOVEXATTR = 24,
-	FUSE_FLUSH = 25,
-	FUSE_INIT = 26,
-	FUSE_OPENDIR = 27,
-	FUSE_READDIR = 28,
-	FUSE_RELEASEDIR = 29,
-	FUSE_FSYNCDIR = 30,
-	FUSE_GETLK = 31,
-	FUSE_SETLK = 32,
-	FUSE_SETLKW = 33,
-	FUSE_ACCESS = 34,
-	FUSE_CREATE = 35,
-	FUSE_INTERRUPT = 36,
-	FUSE_BMAP = 37,
-	FUSE_DESTROY = 38,
-	FUSE_IOCTL = 39,
-	FUSE_POLL = 40,
-	FUSE_NOTIFY_REPLY = 41,
-	FUSE_BATCH_FORGET = 42,
-	FUSE_FALLOCATE = 43,
-	FUSE_READDIRPLUS = 44,
-	FUSE_RENAME2 = 45,
-	FUSE_LSEEK = 46,
-
-	FUSE_SETVOLNAME = 61,
-	FUSE_GETXTIMES = 62,
-	FUSE_EXCHANGE = 63,
-
-	CUSE_INIT = 4096,
-}
-
-/// Marker trait, which signals that a struct is a valid Fuse command.
-/// Struct has to be repr(C)!
-pub(crate) unsafe trait FuseIn {}
-/// Marker trait, which signals that a struct is a valid Fuse response.
-/// Struct has to be repr(C)!
-pub(crate) unsafe trait FuseOut {}
-
-#[repr(C)]
 #[derive(Debug)]
-pub(crate) struct Cmd<T: FuseIn + fmt::Debug> {
-	header: fuse_in_header,
-	cmd: T,
-	extra_buffer: [u8],
-}
-
-impl<T: FuseIn + core::fmt::Debug> AsSliceU8 for Cmd<T> {
-	fn len(&self) -> usize {
-		self.header.len.try_into().unwrap()
-	}
+pub(crate) struct Cmd<O: ops::Op> {
+	in_header: fuse_abi::InHeader,
+	op_header: O::InStruct,
+	payload: O::InPayload,
 }
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct Rsp<T: FuseOut + fmt::Debug> {
-	header: fuse_out_header,
-	rsp: MaybeUninit<T>,
-	extra_buffer: [MaybeUninit<u8>],
+pub(crate) struct UninitCmd<O: ops::Op> {
+	in_header: MaybeUninit<fuse_abi::InHeader>,
+	op_header: MaybeUninit<O::InStruct>,
+	payload: [MaybeUninit<u8>],
 }
 
-impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {
-	fn len(&self) -> usize {
-		self.header.len.try_into().unwrap()
-	}
+// We use this struct to obtain the layout of the type without the payload.
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct PayloadlessCmd<O: ops::Op> {
+	in_header: MaybeUninit<fuse_abi::InHeader>,
+	op_header: MaybeUninit<O::InStruct>,
+	payload: (),
 }
 
-fn create_in_header<T>(nodeid: u64, opcode: Opcode) -> fuse_in_header
+impl<O: ops::Op> Cmd<O>
 where
-	T: FuseIn,
+	O: ops::Op<InPayload = ()>,
 {
-	fuse_in_header {
-		len: (core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<T>()) as u32,
-		opcode: opcode as u32,
-		unique: 1,
-		nodeid,
-		..Default::default()
+	fn new(nodeid: u64, op_header: O::InStruct) -> Box<Self> {
+		Box::new(Cmd {
+			in_header: fuse_abi::InHeader {
+				len: Layout::new::<Self>().size() as u32,
+				opcode: O::OP_CODE as u32,
+				nodeid,
+				unique: 1,
+				..Default::default()
+			},
+			op_header,
+			payload: (),
+		})
 	}
 }
 
-fn create_init() -> (Box<Cmd<fuse_init_in>>, Box<Rsp<fuse_init_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_init_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_init_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_init_in>;
-		(*raw).header = create_in_header::<fuse_init_in>(FUSE_ROOT_ID, Opcode::FUSE_INIT);
-		(*raw).header.len = len.try_into().unwrap();
-		(*raw).cmd = fuse_init_in {
-			major: 7,
-			minor: 31,
-			max_readahead: 0,
-			flags: 0,
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_init_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_init_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_init_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
-}
-
-fn create_create(
-	path: &str,
-	flags: u32,
-	mode: u32,
-) -> (Box<Cmd<fuse_create_in>>, Box<Rsp<fuse_create_out>>) {
-	let slice = path.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_create_in>()
-		+ slice.len()
-		+ 1;
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_create_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_create_in>;
-		(*raw).header = create_in_header::<fuse_create_in>(FUSE_ROOT_ID, Opcode::FUSE_CREATE);
-		(*raw).header.len = len.try_into().unwrap();
-		(*raw).cmd = fuse_create_in {
-			flags,
-			mode,
-			..Default::default()
-		};
-		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
-		(*raw).extra_buffer[slice.len()] = 0;
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_create_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_create_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_create_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
-}
-
-fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_open_in>>, Box<Rsp<fuse_open_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_open_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_open_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_open_in>;
-		(*raw).header = create_in_header::<fuse_open_in>(nid, Opcode::FUSE_OPEN);
-		(*raw).cmd = fuse_open_in {
-			flags,
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_open_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_open_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_open_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
-}
-
-// TODO: do write zerocopy?
-fn create_write(
-	nid: u64,
-	fh: u64,
-	buf: &[u8],
-	offset: u64,
-) -> (Box<Cmd<fuse_write_in>>, Box<Rsp<fuse_write_out>>) {
-	let len =
-		core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_write_in>() + buf.len();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_write_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, buf.len()) as *mut Cmd<fuse_write_in>;
-		(*raw).header = fuse_in_header {
-			len: len.try_into().unwrap(),
-			opcode: Opcode::FUSE_WRITE as u32,
+impl<O: ops::Op> Cmd<O> {
+	fn with_capacity(nodeid: u64, op_header: O::InStruct, len: usize) -> Box<UninitCmd<O>> {
+		let mut cmd = unsafe { Self::new_uninit(len) };
+		cmd.in_header = MaybeUninit::new(fuse_abi::InHeader {
+			len: core::mem::size_of_val(cmd.as_ref())
+				.try_into()
+				.expect("The command is too large"),
+			opcode: O::OP_CODE as u32,
+			nodeid,
 			unique: 1,
-			nodeid: nid,
 			..Default::default()
-		};
-		(*raw).cmd = fuse_write_in {
-			fh,
-			offset,
-			size: buf.len().try_into().unwrap(),
-			..Default::default()
-		};
-		(*raw).extra_buffer.copy_from_slice(buf);
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_write_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_write_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_write_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+		});
+		cmd.op_header = MaybeUninit::new(op_header);
+		cmd
+	}
 }
 
-fn create_read(
-	nid: u64,
-	fh: u64,
-	size: u32,
-	offset: u64,
-) -> (Box<Cmd<fuse_read_in>>, Box<Rsp<fuse_read_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_read_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_read_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_read_in>;
-		(*raw).header = create_in_header::<fuse_read_in>(nid, Opcode::FUSE_READ);
-		(*raw).cmd = fuse_read_in {
-			fh,
-			offset,
-			size,
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>()
-		+ core::mem::size_of::<fuse_read_out>()
-		+ usize::try_from(size).unwrap();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_read_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
-			as *mut Rsp<fuse_read_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = [u8]>,
+{
+	fn from_array(nodeid: u64, op_header: O::InStruct, data: &[u8]) -> Box<Cmd<O>> {
+		let mut cmd = Self::with_capacity(nodeid, op_header, data.len());
+		for (target, source) in cmd.payload.iter_mut().zip(data) {
+			*target = MaybeUninit::new(*source);
+		}
+		unsafe { core::intrinsics::transmute(cmd) }
+	}
 }
 
-fn create_lseek(
-	nid: u64,
-	fh: u64,
-	offset: isize,
-	whence: SeekWhence,
-) -> (Box<Cmd<fuse_lseek_in>>, Box<Rsp<fuse_lseek_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_lseek_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_lseek_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_lseek_in>;
-		(*raw).header = fuse_in_header {
-			len: len.try_into().unwrap(),
-			opcode: Opcode::FUSE_LSEEK as u32,
-			unique: 1,
-			nodeid: nid,
-			..Default::default()
-		};
-		(*raw).cmd = fuse_lseek_in {
-			fh,
-			offset: offset.try_into().unwrap(),
-			whence: num::ToPrimitive::to_u32(&whence).unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_lseek_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_lseek_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_lseek_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = CStr>,
+{
+	fn from_str(nodeid: u64, op_header: O::InStruct, str: &str) -> Box<Cmd<O>> {
+		let str_bytes = str.as_bytes();
+		// Plus one for the NUL terminator
+		let mut cmd = Self::with_capacity(nodeid, op_header, str_bytes.len() + 1);
+		for (target, source) in cmd.payload[..str_bytes.len()].iter_mut().zip(str_bytes) {
+			*target = MaybeUninit::new(*source);
+		}
+		cmd.payload[str_bytes.len()] = MaybeUninit::new(b'\0');
+		unsafe { core::intrinsics::transmute(cmd) }
+	}
 }
 
-fn create_readlink(
-	nid: u64,
-	size: u32,
-) -> (Box<Cmd<fuse_readlink_in>>, Box<Rsp<fuse_readlink_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_readlink_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_readlink_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_readlink_in>;
-		(*raw).header = create_in_header::<fuse_readlink_in>(nid, Opcode::FUSE_READLINK);
-		(*raw).header.len = len.try_into().unwrap();
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>()
-		+ core::mem::size_of::<fuse_readlink_out>()
-		+ usize::try_from(size).unwrap();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_readlink_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
-			as *mut Rsp<fuse_readlink_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+impl<O: ops::Op> AsSliceU8 for Cmd<O> {
+	fn len(&self) -> usize {
+		self.in_header.len.try_into().unwrap()
+	}
 }
 
-fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse_release_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_release_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_release_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_release_in>;
-		(*raw).header = create_in_header::<fuse_release_in>(nid, Opcode::FUSE_RELEASE);
-		(*raw).cmd = fuse_release_in {
-			fh,
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_release_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_release_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_release_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+impl<O: ops::Op> Cmd<O> {
+	// MaybeUninit does not accept DSTs as type parameter
+	unsafe fn new_uninit(len: usize) -> Box<UninitCmd<O>> {
+		unsafe {
+			Box::from_raw(core::ptr::slice_from_raw_parts_mut(
+				alloc(
+					Layout::new::<PayloadlessCmd<O>>()
+						.extend(Layout::array::<u8>(len).expect("The length is too much."))
+						.expect("The layout size overflowed.")
+						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
+						.pad_to_align(),
+				),
+				0,
+			) as *mut UninitCmd<O>)
+		}
+	}
 }
 
-fn create_poll(
-	nid: u64,
-	fh: u64,
-	kh: u64,
-	event: PollEvent,
-) -> (Box<Cmd<fuse_poll_in>>, Box<Rsp<fuse_poll_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_poll_in>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_poll_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_poll_in>;
-		(*raw).header = create_in_header::<fuse_poll_in>(nid, Opcode::FUSE_POLL);
-		(*raw).cmd = fuse_poll_in {
-			fh,
-			kh,
-			events: event.bits() as u32,
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_poll_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_poll_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_poll_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct Rsp<O: ops::Op> {
+	out_header: MaybeUninit<fuse_abi::OutHeader>,
+	op_header: MaybeUninit<O::OutStruct>,
+	payload: O::OutPayload,
 }
 
-fn create_mkdir(path: &str, mode: u32) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse_entry_out>>) {
-	let slice = path.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_mkdir_in>()
-		+ slice.len()
-		+ 1;
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_mkdir_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_mkdir_in>;
-		(*raw).header = create_in_header::<fuse_mkdir_in>(FUSE_ROOT_ID, Opcode::FUSE_MKDIR);
-		(*raw).header.len = len.try_into().unwrap();
-		(*raw).cmd = fuse_mkdir_in {
-			mode,
-			..Default::default()
-		};
-		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
-		(*raw).extra_buffer[slice.len()] = 0;
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_entry_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_entry_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct PayloadlessRsp<O: ops::Op> {
+	out_header: MaybeUninit<fuse_abi::OutHeader>,
+	op_header: MaybeUninit<O::OutStruct>,
+	payload: (),
 }
 
-fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_out>>) {
-	let slice = name.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_unlink_in>()
-		+ slice.len()
-		+ 1;
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_unlink_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_unlink_in>;
-		(*raw).header = create_in_header::<fuse_unlink_in>(FUSE_ROOT_ID, Opcode::FUSE_UNLINK);
-		(*raw).header.len = len.try_into().unwrap();
-		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
-		(*raw).extra_buffer[slice.len()] = 0;
+// Since we don't bother with initializing the len field, we use the default len implementation.
+impl<O: ops::Op> AsSliceU8 for Rsp<O> {}
 
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_unlink_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_unlink_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_unlink_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
-}
-
-fn create_rmdir(name: &str) -> (Box<Cmd<fuse_rmdir_in>>, Box<Rsp<fuse_rmdir_out>>) {
-	let slice = name.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_rmdir_in>()
-		+ slice.len()
-		+ 1;
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_rmdir_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_rmdir_in>;
-		(*raw).header = create_in_header::<fuse_rmdir_in>(FUSE_ROOT_ID, Opcode::FUSE_RMDIR);
-		(*raw).header.len = len.try_into().unwrap();
-		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
-		(*raw).extra_buffer[slice.len()] = 0;
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_rmdir_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_rmdir_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_rmdir_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
-}
-
-fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_out>>) {
-	let slice = name.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_lookup_in>()
-		+ slice.len()
-		+ 1;
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_lookup_in>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_lookup_in>;
-		(*raw).header = create_in_header::<fuse_lookup_in>(FUSE_ROOT_ID, Opcode::FUSE_LOOKUP);
-		(*raw).header.len = len.try_into().unwrap();
-		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
-		(*raw).extra_buffer[slice.len()] = 0;
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_entry_out>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_entry_out>;
-		(*raw).header = fuse_out_header {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
+impl<O: ops::Op> Rsp<O>
+where
+	O: ops::Op<OutPayload = [MaybeUninit<u8>]>,
+{
+	unsafe fn new_uninit(len: usize) -> Box<Self> {
+		unsafe {
+			Box::from_raw(core::ptr::slice_from_raw_parts_mut(
+				alloc(
+					Layout::new::<PayloadlessRsp<O>>()
+						.extend(Layout::array::<u8>(len).expect("The length is too much."))
+						.expect("The layout size overflowed.")
+						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
+						.pad_to_align(),
+				),
+				0,
+			) as *mut Rsp<O>)
+		}
+	}
 }
 
 fn lookup(name: &str) -> Option<u64> {
-	let (cmd, mut rsp) = create_lookup(name);
+	let (cmd, mut rsp) = ops::Lookup::create(name);
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
 		.send_command(cmd.as_ref(), rsp.as_mut());
-	if rsp.header.error == 0 {
-		Some(unsafe { rsp.rsp.assume_init().nodeid })
+	if unsafe { rsp.out_header.assume_init_ref().error } == 0 {
+		Some(unsafe { rsp.op_header.assume_init_ref().nodeid })
 	} else {
 		None
 	}
@@ -1203,25 +613,25 @@ fn lookup(name: &str) -> Option<u64> {
 
 fn readlink(nid: u64) -> Result<String, IoError> {
 	let len = MAX_READ_LEN as u32;
-	let (cmd, mut rsp) = create_readlink(nid, len);
+	let (cmd, mut rsp) = ops::Readlink::create(nid, len);
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
 		.send_command(cmd.as_ref(), rsp.as_mut());
-	let len: usize = if rsp.header.len as usize
-		- ::core::mem::size_of::<fuse_out_header>()
-		- ::core::mem::size_of::<fuse_readlink_out>()
+	let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
+		- ::core::mem::size_of::<fuse_abi::OutHeader>()
+		- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 		>= len.try_into().unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
-		rsp.header.len as usize
-			- ::core::mem::size_of::<fuse_out_header>()
-			- ::core::mem::size_of::<fuse_readlink_out>()
+		(unsafe { rsp.out_header.assume_init_ref().len } as usize)
+			- ::core::mem::size_of::<fuse_abi::OutHeader>()
+			- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 	};
 
 	Ok(String::from_utf8(unsafe {
-		MaybeUninit::slice_assume_init_ref(&rsp.extra_buffer[..len]).to_vec()
+		MaybeUninit::slice_assume_init_ref(&rsp.payload[..len]).to_vec()
 	})
 	.unwrap())
 }
@@ -1248,18 +658,20 @@ impl FuseFileHandleInner {
 
 		future::poll_fn(|cx| {
 			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-				let (cmd, mut rsp) = create_poll(nid, fh, kh, events);
+				let (cmd, mut rsp) = ops::Poll::create(nid, fh, kh, events);
 				get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
 					.send_command(cmd.as_ref(), rsp.as_mut());
 
-				if rsp.header.error < 0 {
+				if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 					Poll::Ready(Err(IoError::EIO))
 				} else {
 					let revents = unsafe {
-						PollEvent::from_bits(i16::try_from(rsp.rsp.assume_init().revents).unwrap())
-							.unwrap()
+						PollEvent::from_bits(
+							i16::try_from(rsp.op_header.assume_init_ref().revents).unwrap(),
+						)
+						.unwrap()
 					};
 					if !revents.intersects(events)
 						&& !revents.intersects(
@@ -1285,26 +697,27 @@ impl FuseFileHandleInner {
 			len = MAX_READ_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_read(nid, fh, len.try_into().unwrap(), self.offset as u64);
+			let (cmd, mut rsp) =
+				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
-			let len: usize = if rsp.header.len as usize
-				- ::core::mem::size_of::<fuse_out_header>()
-				- ::core::mem::size_of::<fuse_read_out>()
+			let len: usize = if (unsafe { rsp.out_header.assume_init_ref().len } as usize)
+				- ::core::mem::size_of::<fuse_abi::OutHeader>()
+				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 				>= len
 			{
 				len
 			} else {
-				rsp.header.len as usize
-					- ::core::mem::size_of::<fuse_out_header>()
-					- ::core::mem::size_of::<fuse_read_out>()
+				(unsafe { rsp.out_header.assume_init_ref().len } as usize)
+					- ::core::mem::size_of::<fuse_abi::OutHeader>()
+					- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			};
 			self.offset += len;
 
 			buf[..len].copy_from_slice(unsafe {
-				MaybeUninit::slice_assume_init_ref(&rsp.extra_buffer[..len])
+				MaybeUninit::slice_assume_init_ref(&rsp.payload[..len])
 			});
 
 			Ok(len)
@@ -1326,17 +739,17 @@ impl FuseFileHandleInner {
 			len = MAX_WRITE_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_write(nid, fh, &buf[..len], self.offset as u64);
+			let (cmd, mut rsp) = ops::Write::create(nid, fh, &buf[..len], self.offset as u64);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
 
-			if rsp.header.error < 0 {
+			if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 				return Err(IoError::EIO);
 			}
 
-			let rsp_size = unsafe { rsp.rsp.assume_init().size };
+			let rsp_size = unsafe { rsp.op_header.assume_init_ref().size };
 			let len: usize = if rsp_size > buf.len().try_into().unwrap() {
 				buf.len()
 			} else {
@@ -1354,17 +767,17 @@ impl FuseFileHandleInner {
 		debug!("FUSE lseek");
 
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_lseek(nid, fh, offset, whence);
+			let (cmd, mut rsp) = ops::Lseek::create(nid, fh, offset, whence);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
 
-			if rsp.header.error < 0 {
+			if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 				return Err(IoError::EIO);
 			}
 
-			let rsp_offset = unsafe { rsp.rsp.assume_init().offset };
+			let rsp_offset = unsafe { rsp.op_header.assume_init_ref().offset };
 
 			Ok(rsp_offset.try_into().unwrap())
 		} else {
@@ -1376,7 +789,8 @@ impl FuseFileHandleInner {
 impl Drop for FuseFileHandleInner {
 	fn drop(&mut self) {
 		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
-			let (cmd, mut rsp) = create_release(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
+			let (cmd, mut rsp) =
+				ops::Release::create(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
@@ -1452,13 +866,13 @@ impl VfsNode for FuseDirectory {
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
-		let (mut cmd, mut rsp) = create_open(fuse_nid, 0x10000);
-		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32;
+		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+		cmd.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
-		let fuse_fh = unsafe { rsp.rsp.assume_init().fh };
+		let fuse_fh = unsafe { rsp.op_header.assume_init_ref().fh };
 
 		debug!("FUSE readdir: {}", path);
 
@@ -1467,36 +881,38 @@ impl VfsNode for FuseDirectory {
 		let mut offset: usize = 0;
 
 		// read content of the directory
-		let (mut cmd, mut rsp) = create_read(fuse_nid, fuse_fh, len, 0);
-		cmd.header.opcode = Opcode::FUSE_READDIR as u32;
+		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+		cmd.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
 
-		let len: usize = if rsp.header.len as usize
-			- ::core::mem::size_of::<fuse_out_header>()
-			- ::core::mem::size_of::<fuse_read_out>()
+		let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
+			- ::core::mem::size_of::<fuse_abi::OutHeader>()
+			- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			rsp.header.len as usize
-				- ::core::mem::size_of::<fuse_out_header>()
-				- ::core::mem::size_of::<fuse_read_out>()
+			(unsafe { rsp.out_header.assume_init_ref().len } as usize)
+				- ::core::mem::size_of::<fuse_abi::OutHeader>()
+				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 		};
 
-		if len <= core::mem::size_of::<fuse_dirent>() {
+		if len <= core::mem::size_of::<fuse_abi::Dirent>() {
 			debug!("FUSE no new dirs");
 			return Err(IoError::ENOENT);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while rsp.header.len as usize - offset > core::mem::size_of::<fuse_dirent>() {
+		while (unsafe { rsp.out_header.assume_init_ref().len } as usize) - offset
+			> core::mem::size_of::<fuse_abi::Dirent>()
+		{
 			let dirent =
-				unsafe { &*(rsp.extra_buffer.as_ptr().byte_add(offset) as *const fuse_dirent) };
+				unsafe { &*(rsp.payload.as_ptr().byte_add(offset) as *const fuse_abi::Dirent) };
 
-			offset += core::mem::size_of::<fuse_dirent>() + dirent.d_namelen as usize;
+			offset += core::mem::size_of::<fuse_abi::Dirent>() + dirent.d_namelen as usize;
 			// Allign to dirent struct
 			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
@@ -1511,7 +927,7 @@ impl VfsNode for FuseDirectory {
 			}));
 		}
 
-		let (cmd, mut rsp) = create_release(fuse_nid, fuse_fh);
+		let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
@@ -1534,18 +950,18 @@ impl VfsNode for FuseDirectory {
 		debug!("FUSE stat: {}", path);
 
 		// Is there a better way to implement this?
-		let (cmd, mut rsp) = create_lookup(&path);
+		let (cmd, mut rsp) = ops::Lookup::create(&path);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
 
-		if rsp.header.error != 0 {
+		if unsafe { rsp.out_header.assume_init_ref().error } != 0 {
 			// TODO: Correct error handling
 			return Err(IoError::EIO);
 		}
 
-		let rsp = unsafe { rsp.rsp.assume_init() };
+		let rsp = unsafe { rsp.op_header.assume_init() };
 		let attr = rsp.attr;
 
 		if attr.mode & S_IFMT != S_IFLNK {
@@ -1570,13 +986,13 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE lstat: {}", path);
 
-		let (cmd, mut rsp) = create_lookup(&path);
+		let (cmd, mut rsp) = ops::Lookup::create(&path);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
 
-		let attr = unsafe { rsp.rsp.assume_init().attr };
+		let attr = unsafe { rsp.op_header.assume_init().attr };
 		Ok(FileAttr::from(attr))
 	}
 
@@ -1616,21 +1032,22 @@ impl VfsNode for FuseDirectory {
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, mut rsp) =
-				create_open(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
+				ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
-			file_guard.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
+			file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init_ref().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
-			let (cmd, mut rsp) = create_create(&path, opt.bits().try_into().unwrap(), mode.bits());
+			let (cmd, mut rsp) =
+				ops::Create::create(&path, opt.bits().try_into().unwrap(), mode.bits());
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
 
-			let inner = unsafe { rsp.rsp.assume_init() };
+			let inner = unsafe { rsp.op_header.assume_init() };
 			file_guard.fuse_nid = Some(inner.entry.nodeid);
 			file_guard.fuse_fh = Some(inner.open.fh);
 		}
@@ -1651,7 +1068,7 @@ impl VfsNode for FuseDirectory {
 				.collect()
 		};
 
-		let (cmd, mut rsp) = create_unlink(&path);
+		let (cmd, mut rsp) = ops::Unlink::create(&path);
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -1672,7 +1089,7 @@ impl VfsNode for FuseDirectory {
 				.collect()
 		};
 
-		let (cmd, mut rsp) = create_rmdir(&path);
+		let (cmd, mut rsp) = ops::Rmdir::create(&path);
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -1696,16 +1113,19 @@ impl VfsNode for FuseDirectory {
 				.map(|v| "/".to_owned() + v)
 				.collect()
 		};
-		let (cmd, mut rsp) = create_mkdir(&path, mode.bits());
+		let (cmd, mut rsp) = ops::Mkdir::create(&path, mode.bits());
 
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
-		if rsp.header.error == 0 {
+		if unsafe { rsp.out_header.assume_init_ref().error } == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(rsp.header.error).unwrap())
+			Err(
+				num::FromPrimitive::from_i32(unsafe { rsp.out_header.assume_init_ref().error })
+					.unwrap(),
+			)
 		}
 	}
 }
@@ -1714,7 +1134,7 @@ pub(crate) fn init() {
 	debug!("Try to initialize fuse filesystem");
 
 	if let Some(driver) = get_filesystem_driver() {
-		let (cmd, mut rsp) = create_init();
+		let (cmd, mut rsp) = ops::Init::create();
 		driver.lock().send_command(cmd.as_ref(), rsp.as_mut());
 		trace!("fuse init answer: {:?}", rsp);
 
