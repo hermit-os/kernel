@@ -3,6 +3,8 @@ use core::sync::atomic::Ordering;
 
 use x86_64::instructions::tables;
 use x86_64::registers::segmentation::{Segment, CS, DS, ES, SS};
+#[cfg(feature = "common-os")]
+use x86_64::structures::gdt::DescriptorFlags;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
@@ -15,9 +17,16 @@ use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {
-	let gdt = Box::leak(Box::new(GlobalDescriptorTable::new()));
+	let gdt: &mut GlobalDescriptorTable = Box::leak(Box::new(GlobalDescriptorTable::new()));
 	let kernel_code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
 	let kernel_data_selector = gdt.add_entry(Descriptor::kernel_data_segment());
+	#[cfg(feature = "common-os")]
+	{
+		let _user_code32_selector =
+			gdt.add_entry(Descriptor::UserSegment(DescriptorFlags::USER_CODE32.bits()));
+		let _user_data64_selector = gdt.add_entry(Descriptor::user_data_segment());
+		let _user_code64_selector = gdt.add_entry(Descriptor::user_code_segment());
+	}
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
 	let tss = Box::leak(Box::new(TaskStateSegment::new()));
@@ -60,5 +69,13 @@ pub fn add_current_core() {
 }
 
 pub extern "C" fn set_current_kernel_stack() {
+	#[cfg(feature = "common-os")]
+	unsafe {
+		let root = crate::scheduler::get_root_page_table();
+		if root != x86::controlregs::cr3().try_into().unwrap() {
+			x86::controlregs::cr3_write(root.try_into().unwrap());
+		}
+	}
+
 	core_scheduler().set_current_kernel_stack();
 }

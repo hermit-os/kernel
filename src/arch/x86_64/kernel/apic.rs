@@ -22,6 +22,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::scheduler::CoreId;
 use crate::{arch, env, mm, scheduler};
@@ -199,16 +200,19 @@ impl fmt::Display for IoApicRecord {
 }
 
 #[cfg(feature = "smp")]
-extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: interrupts::ExceptionStackFrame) {
+extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER);
 	unsafe {
 		cr3_write(cr3());
 	}
 	eoi();
+	swapgs(&stack_frame);
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	error!("APIC LVT Error Interrupt");
 	error!("ESR: {:#X}", local_apic_read(IA32_X2APIC_ESR));
 	error!("{:#?}", stack_frame);
@@ -217,12 +221,14 @@ extern "x86-interrupt" fn error_interrupt_handler(stack_frame: interrupts::Excep
 }
 
 extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	error!("Spurious Interrupt: {:#?}", stack_frame);
 	scheduler::abort();
 }
 
 #[cfg(feature = "smp")]
-extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStackFrame) {
+extern "x86-interrupt" fn wakeup_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	debug!("Received Wakeup Interrupt");
@@ -233,6 +239,7 @@ extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStac
 	if core_scheduler.is_scheduling() {
 		core_scheduler.reschedule();
 	}
+	swapgs(&stack_frame);
 }
 
 #[inline]

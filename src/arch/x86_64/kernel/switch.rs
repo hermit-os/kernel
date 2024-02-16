@@ -4,6 +4,68 @@ use core::{mem, ptr};
 use crate::core_local::CoreLocal;
 use crate::set_current_kernel_stack;
 
+#[cfg(not(feature = "common-os"))]
+macro_rules! push_gs {
+	() => {
+		r#"
+		"#
+	};
+}
+
+#[cfg(not(feature = "common-os"))]
+macro_rules! pop_gs {
+	() => {
+		r#"
+		"#
+	};
+}
+
+#[cfg(all(feature = "fsgsbase", feature = "common-os"))]
+macro_rules! push_gs {
+	() => {
+		r#"
+		rdfsbase rax
+		push rax
+		"#
+	};
+}
+
+#[cfg(all(feature = "fsgsbase", feature = "common-os"))]
+macro_rules! pop_gs {
+	() => {
+		r#"
+		pop rax
+		wrfsbase rax
+		"#
+	};
+}
+
+#[cfg(all(not(feature = "fsgsbase"), feature = "common-os"))]
+macro_rules! push_gs {
+	() => {
+		r#"
+		mov ecx, 0xc0000101 // Kernel GS.Base Model Specific Register
+		rdmsr
+		sub rsp, 8
+		mov [rsp+4], edx
+		mov [rsp], eax
+		"#
+	};
+}
+
+#[cfg(all(not(feature = "fsgsbase"), feature = "common-os"))]
+macro_rules! pop_gs {
+	() => {
+		r#"
+		mov ecx, 0xc0000101 // Kernel GS.Base Model Specific Register
+		mov edx, [rsp+4]
+		mov eax, [rsp]
+		add rsp, 8
+		wrmsr
+		"#
+	};
+}
+
 #[cfg(feature = "fsgsbase")]
 macro_rules! push_fs {
 	() => {
@@ -71,7 +133,8 @@ macro_rules! save_context {
 			push r14
 			push r15
 			"#,
-			push_fs!()
+			push_fs!(),
+			push_gs!()
 		)
 	};
 }
@@ -79,6 +142,7 @@ macro_rules! save_context {
 macro_rules! restore_context {
 	() => {
 		concat!(
+			pop_gs!(),
 			pop_fs!(),
 			r#"
 			pop r15
@@ -104,7 +168,7 @@ macro_rules! restore_context {
 }
 
 #[naked]
-pub unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {
+pub(crate) unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {
 	// `old_stack` is in `rdi` register
 	// `new_stack` is in `rsi` register
 
@@ -131,7 +195,7 @@ pub unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usiz
 /// Performa a context switch to an idle task or a task, which already is owner
 /// of the FPU.
 #[naked]
-pub unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {
+pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {
 	// `old_stack` is in `rdi` register
 	// `new_stack` is in `rsi` register
 

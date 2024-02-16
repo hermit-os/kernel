@@ -50,7 +50,9 @@ extern crate std;
 #[macro_use]
 extern crate num_derive;
 
+#[cfg(not(feature = "common-os"))]
 use alloc::alloc::Layout;
+#[cfg(not(feature = "common-os"))]
 use core::alloc::GlobalAlloc;
 #[cfg(feature = "smp")]
 use core::hint::spin_loop;
@@ -64,6 +66,7 @@ pub use env::is_uhyve as _is_uhyve;
 use mm::allocator::LockedAllocator;
 
 pub(crate) use crate::arch::*;
+pub use crate::config::DEFAULT_STACK_SIZE;
 pub(crate) use crate::config::*;
 pub use crate::fs::create_file;
 use crate::kernel::is_uhyve_with_pci;
@@ -76,7 +79,7 @@ mod macros;
 #[macro_use]
 mod logging;
 
-mod arch;
+pub mod arch;
 mod config;
 pub mod console;
 mod drivers;
@@ -88,7 +91,7 @@ pub mod fd;
 pub mod fs;
 pub mod io;
 mod mm;
-mod scheduler;
+pub mod scheduler;
 mod synch;
 pub mod syscalls;
 pub mod time;
@@ -132,7 +135,7 @@ static ALLOCATOR: LockedAllocator = LockedAllocator::new();
 /// Returning a null pointer indicates that either memory is exhausted or
 /// `size` and `align` do not meet this allocator's size or alignment constraints.
 ///
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
@@ -174,7 +177,7 @@ pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 /// # Errors
 /// Returns null if the new layout does not meet the size and alignment constraints of the
 /// allocator, or if reallocation otherwise fails.
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 pub(crate) extern "C" fn __sys_realloc(
 	ptr: *mut u8,
 	size: usize,
@@ -219,7 +222,7 @@ pub(crate) extern "C" fn __sys_realloc(
 ///
 /// # Errors
 /// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	unsafe {
 		let layout_res = Layout::from_size_align(size, align);

@@ -2,6 +2,8 @@ use x86::io::*;
 
 use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::interrupts::ExceptionStackFrame;
+use crate::arch::x86_64::swapgs;
+use crate::scheduler;
 
 const PIC1_COMMAND_PORT: u16 = 0x20;
 const PIC1_DATA_PORT: u16 = 0x21;
@@ -72,11 +74,14 @@ pub fn init() {
 	}
 }
 
-extern "x86-interrupt" fn spurious_interrupt_on_master(_stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn spurious_interrupt_on_master(stack_frame: ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	debug!("Spurious Interrupt on Master PIC (IRQ7)");
+	scheduler::abort();
 }
 
-extern "x86-interrupt" fn spurious_interrupt_on_slave(_stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn spurious_interrupt_on_slave(stack_frame: ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	debug!("Spurious Interrupt on Slave PIC (IRQ15)");
 
 	// As this is an interrupt forwarded by the master, we have to acknowledge it on the master
@@ -84,6 +89,7 @@ extern "x86-interrupt" fn spurious_interrupt_on_slave(_stack_frame: ExceptionSta
 	unsafe {
 		outb(PIC1_COMMAND_PORT, PIC_EOI_COMMAND);
 	}
+	scheduler::abort();
 }
 
 fn edit_mask(int_no: u8, insert: bool) {

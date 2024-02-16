@@ -778,6 +778,8 @@ pub fn detect_features() {
 }
 
 pub fn configure() {
+	let cpuid = CpuId::new();
+
 	// setup MSR EFER
 	unsafe {
 		wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_LMA | EFER_SCE | EFER_NXE);
@@ -807,6 +809,15 @@ pub fn configure() {
 	// CR4 CONFIGURATION
 	//
 	let mut cr4 = unsafe { cr4() };
+
+	let has_pge = match cpuid.get_feature_info() {
+		Some(finfo) => finfo.has_pge(),
+		None => false,
+	};
+
+	if has_pge {
+		cr4 |= Cr4::CR4_ENABLE_GLOBAL_PAGES;
+	}
 
 	// Enable Machine Check Exceptions.
 	// No need to check for support here, all x86-64 CPUs support it.
@@ -860,6 +871,27 @@ pub fn configure() {
 		unsafe {
 			xcr0_write(xcr0);
 		}
+	}
+
+	// enable support of syscall and sysret
+	#[cfg(feature = "common-os")]
+	unsafe {
+		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
+			Some(finfo) => finfo.has_syscall_sysret(),
+			None => false,
+		};
+
+		if has_syscall {
+			info!("Enable SYSCALL support");
+		} else {
+			panic!("Syscall support is missing");
+		}
+		wrmsr(IA32_STAR, (0x1Bu64 << 48) | (0x08u64 << 32));
+		wrmsr(
+			IA32_LSTAR,
+			crate::arch::x86_64::kernel::syscall::syscall_handler as u64,
+		);
+		wrmsr(IA32_FMASK, 1 << 9); // clear IF flag during system call
 	}
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.

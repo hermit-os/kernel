@@ -71,7 +71,8 @@ pub(crate) fn network_irqhandler(_state: &State) -> bool {
 }
 
 #[cfg(target_arch = "x86_64")]
-pub(crate) extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
+pub(crate) extern "x86-interrupt" fn network_irqhandler(stack_frame: ExceptionStackFrame) {
+	crate::arch::x86_64::swapgs(&stack_frame);
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	debug!("Receive network interrupt");
@@ -79,6 +80,7 @@ pub(crate) extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionS
 	let _ = _irqhandler();
 
 	core_scheduler().reschedule();
+	crate::arch::x86_64::swapgs(&stack_frame);
 }
 
 #[cfg(target_arch = "riscv64")]

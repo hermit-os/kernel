@@ -1,3 +1,4 @@
+#[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
@@ -12,7 +13,9 @@ use core::ops::DerefMut;
 use crate::arch;
 use crate::arch::core_local::*;
 use crate::arch::mm::VirtAddr;
-use crate::arch::scheduler::{TaskStacks, TaskTLS};
+use crate::arch::scheduler::TaskStacks;
+#[cfg(not(feature = "common-os"))]
+use crate::arch::scheduler::TaskTLS;
 use crate::scheduler::CoreId;
 
 /// Returns the most significant bit.
@@ -31,7 +34,7 @@ fn msb(n: u64) -> Option<u32> {
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum TaskStatus {
+pub(crate) enum TaskStatus {
 	Invalid,
 	Ready,
 	Running,
@@ -91,7 +94,7 @@ pub const IDLE_PRIO: Priority = Priority::from(0);
 pub const NO_PRIORITIES: usize = 31;
 
 #[derive(Copy, Clone, Debug)]
-pub struct TaskHandle {
+pub(crate) struct TaskHandle {
 	id: TaskId,
 	priority: Priority,
 	#[cfg(feature = "smp")]
@@ -144,7 +147,7 @@ impl Eq for TaskHandle {}
 
 /// Realize a priority queue for task handles
 #[derive(Default)]
-pub struct TaskHandlePriorityQueue {
+pub(crate) struct TaskHandlePriorityQueue {
 	queues: [Option<VecDeque<TaskHandle>>; NO_PRIORITIES],
 	prio_bitmap: u64,
 }
@@ -240,7 +243,7 @@ impl TaskHandlePriorityQueue {
 }
 
 /// Realize a priority queue for tasks
-pub struct PriorityTaskQueue {
+pub(crate) struct PriorityTaskQueue {
 	queues: [LinkedList<Rc<RefCell<Task>>>; NO_PRIORITIES],
 	prio_bitmap: u64,
 }
@@ -358,7 +361,7 @@ impl PriorityTaskQueue {
 	not(any(target_arch = "x86_64", target_arch = "aarch64")),
 	repr(align(64))
 )]
-pub struct Task {
+pub(crate) struct Task {
 	/// The ID of this context
 	pub id: TaskId,
 	/// Status of a task, e.g. if the task is ready or blocked
@@ -376,13 +379,17 @@ pub struct Task {
 	/// Stack of the task
 	pub stacks: TaskStacks,
 	/// Task Thread-Local-Storage (TLS)
+	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Box<TaskTLS>>,
+	// Physical address of the 1st level page table
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	pub root_page_table: usize,
 	/// lwIP error code for this task
 	#[cfg(feature = "newlib")]
 	pub lwip_errno: i32,
 }
 
-pub trait TaskFrame {
+pub(crate) trait TaskFrame {
 	/// Create the initial stack frame for a new task
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize);
 }
@@ -406,7 +413,10 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks,
+			#[cfg(not(feature = "common-os"))]
 			tls: None,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			root_page_table: arch::create_new_root_page_table(),
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}
@@ -424,7 +434,10 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
+			#[cfg(not(feature = "common-os"))]
 			tls: None,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}
@@ -448,7 +461,7 @@ impl BlockedTask {
 	}
 }
 
-pub struct BlockedTaskQueue {
+pub(crate) struct BlockedTaskQueue {
 	list: LinkedList<BlockedTask>,
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	network_wakeup_time: Option<u64>,

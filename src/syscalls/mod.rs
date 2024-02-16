@@ -25,7 +25,7 @@ use crate::fd::{
 };
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
 mod condvar;
@@ -42,6 +42,8 @@ mod recmutex;
 mod semaphore;
 mod spinlock;
 mod system;
+#[cfg(feature = "common-os")]
+pub(crate) mod table;
 mod tasks;
 mod timer;
 
@@ -70,19 +72,19 @@ pub(crate) fn init() {
 	sbrk_init();
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	kernel_function!(__sys_malloc(size, align))
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
 	kernel_function!(__sys_realloc(ptr, size, align, new_size))
 }
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	kernel_function!(__sys_free(ptr, size, align))

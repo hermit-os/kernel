@@ -1,9 +1,13 @@
 //! Architecture dependent interface to initialize a task
 
+#[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
 use core::arch::asm;
+#[cfg(not(feature = "common-os"))]
 use core::mem::MaybeUninit;
-use core::{mem, ptr, slice};
+#[cfg(not(feature = "common-os"))]
+use core::slice;
+use core::{mem, ptr};
 
 use align_address::Align;
 
@@ -15,12 +19,16 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
+#[cfg(not(feature = "common-os"))]
 use crate::kernel;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::PerCoreSchedulerExt;
 
 #[repr(C, packed)]
 struct State {
+	#[cfg(feature = "common-os")]
+	/// GS register
+	gs: u64,
 	/// FS register for TLS support
 	fs: u64,
 	/// R15 register
@@ -231,11 +239,13 @@ impl Drop for TaskStacks {
 	}
 }
 
+#[cfg(not(feature = "common-os"))]
 pub struct TaskTLS {
 	_block: Box<[MaybeUninit<u8>]>,
 	thread_ptr: *mut (),
 }
 
+#[cfg(not(feature = "common-os"))]
 impl TaskTLS {
 	// For details on thread-local storage data structures see
 	//
@@ -328,6 +338,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		// Check if TLS is allocated already and if the task uses thread-local storage.
+		#[cfg(not(feature = "common-os"))]
 		if self.tls.is_none() {
 			self.tls = TaskTLS::from_environment();
 		}
@@ -344,6 +355,7 @@ impl TaskFrame for Task {
 			let state = stack.as_mut_ptr::<State>();
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
+			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
 				(*state).fs = tls.thread_ptr().addr() as u64;
 			}

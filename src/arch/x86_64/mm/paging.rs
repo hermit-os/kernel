@@ -2,15 +2,18 @@ use core::fmt::Debug;
 use core::ptr;
 
 use x86_64::instructions::tlb;
-use x86_64::registers::control::Cr3;
+use x86_64::registers::control::Cr2;
+pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
+use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
+	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
 };
 
+use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
-use crate::{env, mm};
+use crate::{env, mm, scheduler};
 
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
@@ -22,6 +25,12 @@ pub trait PageTableEntryFlagsExt {
 	fn writable(&mut self) -> &mut Self;
 
 	fn execute_disable(&mut self) -> &mut Self;
+
+	fn execute_enable(&mut self) -> &mut Self;
+
+	fn user(&mut self) -> &mut Self;
+
+	fn kernel(&mut self) -> &mut Self;
 }
 
 impl PageTableEntryFlagsExt for PageTableEntryFlags {
@@ -47,6 +56,21 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 
 	fn execute_disable(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::NO_EXECUTE);
+		self
+	}
+
+	fn execute_enable(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::NO_EXECUTE);
+		self
+	}
+
+	fn user(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::USER_ACCESSIBLE);
+		self
+	}
+
+	fn kernel(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
 		self
 	}
 }
@@ -218,7 +242,7 @@ where
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
 			Err(UnmapError::PageNotMapped) => {
-				debug!("Tried to unmap {page:?}, which was not mapped.")
+				info!("Tried to unmap {page:?}, which was not mapped.")
 			}
 			Err(err) => panic!("{err:?}"),
 		}
@@ -228,6 +252,39 @@ where
 #[inline]
 pub fn get_application_page_size() -> usize {
 	LargePageSize::SIZE as usize
+}
+
+#[cfg(not(feature = "common-os"))]
+pub(crate) extern "x86-interrupt" fn page_fault_handler(
+	stack_frame: ExceptionStackFrame,
+	error_code: PageFaultErrorCode,
+) {
+	error!("Page fault (#PF)!");
+	error!("page_fault_linear_address = {:p}", Cr2::read());
+	error!("error_code = {error_code:?}");
+	error!("fs = {:#X}", processor::readfs());
+	error!("gs = {:#X}", processor::readgs());
+	error!("stack_frame = {stack_frame:#?}");
+	scheduler::abort();
+}
+
+#[cfg(feature = "common-os")]
+pub(crate) extern "x86-interrupt" fn page_fault_handler(
+	mut stack_frame: ExceptionStackFrame,
+	error_code: PageFaultErrorCode,
+) {
+	unsafe {
+		if stack_frame.as_mut().read().code_segment != 0x08 {
+			core::arch::asm!("swapgs", options(nostack));
+		}
+	}
+	error!("Page fault (#PF)!");
+	error!("page_fault_linear_address = {:p}", Cr2::read());
+	error!("error_code = {error_code:?}");
+	error!("fs = {:#X}", processor::readfs());
+	error!("gs = {:#X}", processor::readgs());
+	error!("stack_frame = {stack_frame:#?}");
+	scheduler::abort();
 }
 
 pub fn init() {}
@@ -306,7 +363,7 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 }
 
 #[allow(dead_code)]
-unsafe fn print_page_tables(levels: usize) {
+pub(crate) unsafe fn print_page_tables(levels: usize) {
 	assert!((1..=4).contains(&levels));
 
 	fn print(table: &x86_64::structures::paging::PageTable, level: usize, min_level: usize) {
@@ -332,14 +389,14 @@ unsafe fn print_page_tables(levels: usize) {
 	}
 
 	// Recursive
-	// let mut recursive_page_table = unsafe { recursive_page_table() };
-	// let pt = recursive_page_table.level_4_table();
+	let mut recursive_page_table = unsafe { recursive_page_table() };
+	let pt = recursive_page_table.level_4_table();
 
 	// Identity mapped
-	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
-	let level_4_table_ptr =
-		ptr::from_exposed_addr::<PageTable>(level_4_table_addr.try_into().unwrap());
-	let pt = unsafe { &*level_4_table_ptr };
+	//let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	//let level_4_table_ptr =
+	//	ptr::from_exposed_addr::<PageTable>(level_4_table_addr.try_into().unwrap());
+	//let pt = unsafe { &*level_4_table_ptr };
 
 	print(pt, 4, 5 - levels);
 }
