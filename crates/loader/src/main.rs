@@ -20,7 +20,10 @@ mod none;
 #[cfg(target_os = "uefi")]
 mod uefi;
 
-#[cfg(all(target_arch = "x86_64", target_os = "none", not(feature = "fc")))]
+#[cfg(any(
+	target_os = "uefi",
+	all(target_arch = "x86_64", target_os = "none", not(feature = "fc"))
+))]
 extern crate alloc;
 
 #[cfg(target_os = "none")]

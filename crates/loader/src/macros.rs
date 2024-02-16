@@ -3,12 +3,18 @@
 /// Adapted from [`std::print`].
 ///
 /// [`std::print`]: https://doc.rust-lang.org/stable/std/macro.print.html
-#[cfg(target_os = "none")]
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => {{
-        $crate::_print(::core::format_args!($($arg)*));
-    }};
+    ($($arg:tt)*) => {
+        #[cfg(target_os = "none")]
+        {
+            $crate::_print(::core::format_args!($($arg)*));
+        }
+        #[cfg(target_os = "uefi")]
+        {
+            ::uefi_services::print!($($arg)*);
+        }
+    };
 }
 
 /// Prints to the standard output, with a newline.
@@ -16,15 +22,21 @@ macro_rules! print {
 /// Adapted from [`std::println`].
 ///
 /// [`std::println`]: https://doc.rust-lang.org/stable/std/macro.println.html
-#[cfg(target_os = "none")]
 #[macro_export]
 macro_rules! println {
     () => {
         $crate::print!("\n")
     };
-    ($($arg:tt)*) => {{
-        $crate::_print(::core::format_args!("{}\n", format_args!($($arg)*)));
-    }};
+    ($($arg:tt)*) => {
+        #[cfg(target_os = "none")]
+        {
+            $crate::_print(::core::format_args!("{}\n", format_args!($($arg)*)));
+        }
+        #[cfg(target_os = "uefi")]
+        {
+            ::uefi_services::println!($($arg)*);
+        }
+    };
 }
 
 /// Prints and returns the value of a given expression for quick and dirty
