@@ -50,21 +50,16 @@ struct RomFileInterface {
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
-		if event.contains(PollEvent::POLLIN) && pos < len {
-			result.insert(PollEvent::POLLIN);
-		}
-		if event.contains(PollEvent::POLLRDNORM) && pos < len {
-			result.insert(PollEvent::POLLRDNORM);
-		}
-		if event.contains(PollEvent::POLLRDBAND) && pos < len {
-			result.insert(PollEvent::POLLRDBAND);
-		}
+		let ret = if pos < len {
+			event.intersection(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND)
+		} else {
+			PollEvent::empty()
+		};
 
-		Ok(result)
+		Ok(ret)
 	}
 
 	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
@@ -135,30 +130,16 @@ pub struct RamFileInterface {
 #[async_trait]
 impl ObjectInterface for RamFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::empty();
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
-		if event.contains(PollEvent::POLLIN) && pos < len {
-			result.insert(PollEvent::POLLIN);
-		}
-		if event.contains(PollEvent::POLLRDNORM) && pos < len {
-			result.insert(PollEvent::POLLRDNORM);
-		}
-		if event.contains(PollEvent::POLLRDBAND) && pos < len {
-			result.insert(PollEvent::POLLRDBAND);
-		}
-		if event.contains(PollEvent::POLLOUT) {
-			result.insert(PollEvent::POLLOUT);
-		}
-		if event.contains(PollEvent::POLLWRNORM) {
-			result.insert(PollEvent::POLLWRNORM);
-		}
-		if event.contains(PollEvent::POLLWRBAND) {
-			result.insert(PollEvent::POLLWRBAND);
+		let mut available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
+
+		if pos < len {
+			available.insert(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND);
 		}
 
-		Ok(result)
+		Ok(event & available)
 	}
 
 	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
