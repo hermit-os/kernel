@@ -124,7 +124,6 @@ jobs:
       run:
         working-directory: kernel
     strategy:
-      fail-fast: false
       matrix:
         arch: [x86_64, aarch64, riscv64]
         package: [rusty_demo, httpd, testudp, hello_world, miotcp, mioudp]
