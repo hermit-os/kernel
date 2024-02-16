@@ -11,6 +11,7 @@ align-address = "0.1"
 hermit-entry = { version = "0.9", features = ["loader"] }
 log = "0.4"
 sptr = "0.3"
+vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
 
 [features]
 default = []

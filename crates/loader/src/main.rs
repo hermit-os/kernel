@@ -20,6 +20,9 @@ mod none;
 #[cfg(target_os = "uefi")]
 mod uefi;
 
+#[cfg(all(target_arch = "x86_64", target_os = "none", not(feature = "fc")))]
+extern crate alloc;
+
 #[cfg(target_os = "none")]
 #[doc(hidden)]
 fn _print(args: core::fmt::Arguments<'_>) {
