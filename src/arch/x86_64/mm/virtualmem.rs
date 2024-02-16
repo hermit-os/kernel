@@ -149,10 +149,10 @@ pub const fn kernel_heap_end() -> VirtAddr {
 #[cfg(all(feature = "common-os", not(feature = "newlib")))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr(0x200_0000_0000u64)
+	VirtAddr(0x100_0000_0000u64)
 }
 
-#[cfg(all(not(featur = "common-os"), feature = "newlib"))]
+#[cfg(all(not(feature = "common-os"), feature = "newlib"))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
 	VirtAddr(0x1_0000_0000u64)
