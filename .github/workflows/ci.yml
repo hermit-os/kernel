@@ -126,76 +126,17 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64, riscv64]
-        package: [rusty_demo, httpd, testudp, hello_world, miotcp, mioudp]
-        netdev: [none, virtio-net-pci, rtl8139]
         profile: [dev, release]
-        smp: [1, 4]
-        exclude:
-          - arch: riscv64
-            package: httpd
-          - arch: riscv64
-            package: testudp
-          - arch: riscv64
-            package: mioudp
-          - arch: riscv64
-            package: miotcp
-          # microvm (Firecracker) test does not run on aarch64 or riscv64
-          - package: hello_world
-            arch: aarch64
-          - package: hello_world
-            arch: riscv64
-          # https://github.com/hermit-os/kernel/issues/995
-          - package: hello_world
-            smp: 4
-          # https://github.com/hermit-os/kernel/issues/737
-          - arch: aarch64
-            smp: 4
-          # rtl8139 support does not build on aarch64
-          - arch: aarch64
-            netdev: rtl8139
-          # Following packages do not depend on the netdev
-          - package: rusty_demo
-            netdev: virtio-net-pci
-          - package: rusty_demo
-            netdev: rtl8139
-          - package: hello_world
-            netdev: virtio-net-pci
-          - package: hello_world
-            netdev: rtl8139
-          # Following packages require a netdev
-          - package: httpd
-            netdev: none
-          - package: testudp
-            netdev: none
-          - package: miotcp
-            netdev: none
-          - package: mioudp
-            netdev: none
         include:
           - arch: x86_64
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev
+            flags: --features pci-ids
           - arch: aarch64
             packages: qemu-system-aarch64
+            flags: --features pci-ids
           - arch: riscv64
             packages: qemu-system-misc
             flags: --no-default-features
-
-          - arch: x86_64
-            package: rusty_demo
-            flags: --features pci-ids --virtiofsd
-          - arch: aarch64
-            package: rusty_demo
-            flags: --features pci-ids
-          - package: httpd
-            flags: --features ci,dhcpv4
-          - package: testudp
-            flags: --features udp,dhcpv4
-          - package: miotcp
-            flags: --features dhcpv4
-          - package: mioudp
-            flags: --features udp,dhcpv4
-          - package: hello_world
-            flags: --no-default-features --microvm
 
     steps:
       - name: Checkout hermit-rs
@@ -221,7 +162,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.arch }}-${{ matrix.profile }}
-          save-if: ${{ github.ref == 'refs/heads/main' && matrix.package == 'rusty_demo' }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             .
             kernel
@@ -229,23 +170,38 @@ jobs:
       - name: Download loader
         run: gh release download --repo hermit-os/loader --pattern hermit-loader-${{ matrix.arch }}
       - name: Install virtiofsd
-        if: ${{ matrix.arch == 'x86_64' && matrix.package == 'rusty_demo' }}
         run: cargo install --locked virtiofsd
-      - name: Run VM
-        # cargo accepts multiple 'features' flags
-        # The '… && … || …' expression is like a ternary operator
-        run: >
-              cargo xtask ci qemu
-              --arch ${{ matrix.arch }}
-              --package ${{ matrix.package }}
-              --smp ${{ matrix.smp }}
-              ${{ matrix.flags }}
-              ${{ matrix.netdev == 'rtl8139' && '--features rtl8139' || '' }}
-              ${{ matrix.netdev != 'none' && format('--netdev {0}', matrix.netdev) || '' }}
-              --profile ${{ matrix.profile }}
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --virtiofsd
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --smp 4 --virtiofsd
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --smp 4
+        # https://github.com/hermit-os/kernel/issues/737
+        if: ${{ matrix.arch != 'aarch64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,dhcpv4 --netdev virtio-net-pci
+        if: ${{ matrix.arch != 'riscv64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,dhcpv4 --netdev rtl8139 --features rtl8139
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package testudp --features udp,dhcpv4 --netdev virtio-net-pci
+        if: ${{ matrix.arch != 'riscv64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package testudp --features udp,dhcpv4 --netdev rtl8139 --features rtl8139
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package miotcp --features dhcpv4 --netdev virtio-net-pci
+        if: ${{ matrix.arch != 'riscv64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package miotcp --features dhcpv4 --netdev rtl8139 --features rtl8139
+        if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features udp,dhcpv4 --netdev virtio-net-pci
+        if: ${{ matrix.arch != 'riscv64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features udp,dhcpv4 --netdev rtl8139 --features rtl8139
+        if: ${{ matrix.arch == 'x86_64' }}
 
   run-x86_64-kvm:
-    name: Run Hermit for Rust (x86_64 + kvm)
+    name: Run (x86_64, kvm)
     runs-on: [self-hosted]
     defaults:
       run:
