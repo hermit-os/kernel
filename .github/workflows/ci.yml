@@ -173,7 +173,7 @@ jobs:
             netdev: none
         include:
           - arch: x86_64
-            packages: qemu-system-x86 libcap-ng-dev libseccomp-dev socat
+            packages: qemu-system-x86 libcap-ng-dev libseccomp-dev
           - arch: aarch64
             packages: qemu-system-aarch64
           - arch: riscv64
