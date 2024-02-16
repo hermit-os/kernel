@@ -221,9 +221,7 @@ pub fn lsb(value: u64) -> Option<u32> {
 
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
-	unsafe {
-		riscv::asm::wfi();
-	}
+	riscv::asm::wfi();
 }
 
 /// Shutdown the system
