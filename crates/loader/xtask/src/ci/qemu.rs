@@ -49,6 +49,7 @@ impl Qemu {
 
 			sh.create_dir("target/esp/efi/boot")?;
 			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
+			sh.write_file("target/esp/efi/boot/hermit-app", "Hello, UEFI!\n")?;
 		}
 
 		let target = self.build.target();
