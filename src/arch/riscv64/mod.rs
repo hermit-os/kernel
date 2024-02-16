@@ -5,7 +5,7 @@ pub mod mm;
 #[cfg(target_arch = "riscv64")]
 #[inline(always)]
 pub(crate) fn memory_barrier() {
-	unsafe { riscv::asm::sfence_vma_all() }
+	riscv::asm::sfence_vma_all()
 }
 
 pub fn init_drivers() {

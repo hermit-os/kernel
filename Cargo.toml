@@ -1,6 +1,6 @@
 [package]
 name = "hermit-kernel"
-version = "0.6.7"
+version = "0.6.8"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>",
