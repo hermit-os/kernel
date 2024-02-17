@@ -34,12 +34,12 @@ mod futex;
 mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-pub mod net;
 mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+pub mod socket;
 mod spinlock;
 mod system;
 #[cfg(feature = "common-os")]
