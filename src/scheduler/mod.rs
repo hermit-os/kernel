@@ -500,7 +500,7 @@ impl PerCoreScheduler {
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
 				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
-					let new_fd = || -> Result<i32, IoError> {
+					let new_fd = || -> Result<FileDescriptor, IoError> {
 						let mut fd: FileDescriptor = 0;
 						loop {
 							if !guard.contains_key(&fd) {
@@ -564,7 +564,7 @@ impl PerCoreScheduler {
 				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
 					let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
 
-					let new_fd = || -> Result<i32, IoError> {
+					let new_fd = || -> Result<FileDescriptor, IoError> {
 						let mut fd: FileDescriptor = 0;
 						loop {
 							if !guard.contains_key(&fd) {
@@ -581,7 +581,7 @@ impl PerCoreScheduler {
 					if guard.try_insert(fd, obj).is_err() {
 						Ready(Err(IoError::EMFILE))
 					} else {
-						Ready(Ok(fd as FileDescriptor))
+						Ready(Ok(fd))
 					}
 				} else {
 					Pending
