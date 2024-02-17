@@ -8,14 +8,11 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::sync::atomic::Ordering;
 
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
-use crate::fd::{
-	insert_object, AccessPermission, IoError, ObjectInterface, OpenOption, FD_COUNTER,
-};
+use crate::fd::{insert_object, AccessPermission, IoError, ObjectInterface, OpenOption};
 use crate::io::Write;
 use crate::time::{timespec, SystemTime};
 
@@ -384,11 +381,7 @@ pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 /// Open a directory to read the directory entries
 pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
 	let obj = FILESYSTEM.get().unwrap().opendir(name)?;
-	let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-
-	let _ = insert_object(fd, obj);
-
-	Ok(fd)
+	Ok(insert_object(obj)?)
 }
 
 use crate::fd::{self, FileDescriptor};

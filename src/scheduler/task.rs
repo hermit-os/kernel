@@ -2,21 +2,30 @@
 use alloc::boxed::Box;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-use core::cmp::Ordering;
-use core::fmt;
 use core::num::NonZeroU64;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use core::ops::DerefMut;
+use core::{cmp, fmt};
 
-use crate::arch;
+use ahash::RandomState;
+use hashbrown::HashMap;
+use hermit_sync::OnceCell;
+
 use crate::arch::core_local::*;
 use crate::arch::mm::VirtAddr;
 use crate::arch::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
 use crate::arch::scheduler::TaskTLS;
+use crate::executor::poll_on;
+use crate::fd::stdio::*;
+use crate::fd::{
+	FileDescriptor, IoError, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
+};
 use crate::scheduler::CoreId;
+use crate::{arch, env};
 
 /// Returns the most significant bit.
 ///
@@ -126,13 +135,13 @@ impl TaskHandle {
 }
 
 impl Ord for TaskHandle {
-	fn cmp(&self, other: &Self) -> Ordering {
+	fn cmp(&self, other: &Self) -> cmp::Ordering {
 		self.id.cmp(&other.id)
 	}
 }
 
 impl PartialOrd for TaskHandle {
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+	fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
 		Some(self.cmp(other))
 	}
 }
@@ -379,6 +388,9 @@ pub(crate) struct Task {
 	pub core_id: CoreId,
 	/// Stack of the task
 	pub stacks: TaskStacks,
+	/// Mapping between file descriptor and the referenced object
+	pub object_map:
+		Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Box<TaskTLS>>,
@@ -402,6 +414,9 @@ impl Task {
 		task_status: TaskStatus,
 		task_prio: Priority,
 		stacks: TaskStacks,
+		object_map: Arc<
+			async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>,
+		>,
 	) -> Task {
 		debug!("Creating new task {} on core {}", tid, core_id);
 
@@ -415,6 +430,7 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks,
+			object_map,
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
@@ -427,6 +443,53 @@ impl Task {
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
 		debug!("Creating idle task {}", tid);
 
+		/// All cores use the same mapping between file descriptor and the referenced object
+		static OBJECT_MAP: OnceCell<
+			Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+		> = OnceCell::new();
+
+		if core_id == 0 {
+			OBJECT_MAP
+				.set(Arc::new(async_lock::RwLock::new(HashMap::<
+					FileDescriptor,
+					Arc<dyn ObjectInterface>,
+					RandomState,
+				>::with_hasher(
+					RandomState::with_seeds(0, 0, 0, 0),
+				))))
+				.unwrap();
+			let objmap = OBJECT_MAP.get().unwrap().clone();
+			let _ = poll_on(
+				async {
+					let mut guard = objmap.write().await;
+					if env::is_uhyve() {
+						guard
+							.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
+							.map_err(|_| IoError::EIO)?;
+						guard
+							.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
+							.map_err(|_| IoError::EIO)?;
+						guard
+							.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
+							.map_err(|_| IoError::EIO)?;
+					} else {
+						guard
+							.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
+							.map_err(|_| IoError::EIO)?;
+						guard
+							.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
+							.map_err(|_| IoError::EIO)?;
+						guard
+							.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
+							.map_err(|_| IoError::EIO)?;
+					}
+
+					Ok(())
+				},
+				None,
+			);
+		}
+
 		Task {
 			id: tid,
 			status: TaskStatus::Idle,
@@ -437,6 +500,7 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
+			object_map: OBJECT_MAP.get().unwrap().clone(),
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]

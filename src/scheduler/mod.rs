@@ -1,13 +1,16 @@
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
+use alloc::sync::Arc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ptr;
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use ahash::RandomState;
 use crossbeam_utils::Backoff;
+use hashbrown::HashMap;
 use hermit_sync::{without_interrupts, *};
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
@@ -19,6 +22,7 @@ use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::arch::{get_processor_count, interrupts};
+use crate::fd::{FileDescriptor, IoError, ObjectInterface};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 
@@ -199,6 +203,8 @@ struct NewTask {
 	prio: Priority,
 	core_id: CoreId,
 	stacks: TaskStacks,
+	object_map:
+		Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 }
 
 impl From<NewTask> for Task {
@@ -210,8 +216,9 @@ impl From<NewTask> for Task {
 			prio,
 			core_id,
 			stacks,
+			object_map,
 		} = value;
-		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks);
+		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks, object_map);
 		task.create_stack_frame(func, arg);
 		task
 	}
@@ -236,6 +243,7 @@ impl PerCoreScheduler {
 			prio,
 			core_id,
 			stacks,
+			object_map: core_scheduler().get_current_task_object_map(),
 		};
 
 		// Add it to the task lists.
@@ -443,6 +451,121 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
 		without_interrupts(|| self.current_task.borrow().id)
+	}
+
+	#[inline]
+	pub fn get_current_task_object_map(
+		&self,
+	) -> Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>> {
+		without_interrupts(|| self.current_task.borrow().object_map.clone())
+	}
+
+	#[inline]
+	pub async fn get_object(
+		&self,
+		fd: FileDescriptor,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		// executor disables the interrupts during the polling of the futures
+		// => Borrowing of the current_task is not interrupted by the scheduler
+		Ok((*(self
+			.current_task
+			.borrow()
+			.object_map
+			.read()
+			.await
+			.get(&fd)
+			.ok_or(IoError::EINVAL)?))
+		.clone())
+	}
+
+	#[inline]
+	pub async fn insert_object(
+		&self,
+		obj: Arc<dyn ObjectInterface>,
+	) -> Result<FileDescriptor, IoError> {
+		// executor disables the interrupts during the polling of the futures
+		// => Borrowing of the current_task is not interrupted by the scheduler
+		let borrowed = self.current_task.borrow();
+		let mut guard = borrowed.object_map.write().await;
+
+		let new_fd = || -> Result<i32, IoError> {
+			let mut fd: FileDescriptor = 0;
+			loop {
+				if !guard.contains_key(&fd) {
+					break Ok(fd);
+				} else if fd == FileDescriptor::MAX {
+					break Err(IoError::EOVERFLOW);
+				}
+
+				fd = fd.saturating_add(1);
+			}
+		};
+
+		let fd = new_fd()?;
+		let _ = guard.insert(fd, obj.clone());
+
+		Ok(fd)
+	}
+
+	#[inline]
+	pub async fn replace_object(
+		&self,
+		fd: FileDescriptor,
+		obj: Arc<dyn ObjectInterface>,
+	) -> Result<(), IoError> {
+		// executor disables the interrupts during the polling of the futures
+		// => Borrowing of the current_task is not interrupted by the scheduler
+		let _ = self
+			.current_task
+			.borrow()
+			.object_map
+			.write()
+			.await
+			.insert(fd, obj);
+		Ok(())
+	}
+
+	pub async fn dup_object(&self, fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
+		// executor disables the interrupts during the polling of the futures
+		// => Borrowing of the current_task is not interrupted by the scheduler
+		let borrowed = self.current_task.borrow();
+		let mut guard = borrowed.object_map.write().await;
+		let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
+
+		let new_fd = || -> Result<i32, IoError> {
+			let mut fd: FileDescriptor = 0;
+			loop {
+				if !guard.contains_key(&fd) {
+					break Ok(fd);
+				} else if fd == FileDescriptor::MAX {
+					break Err(IoError::EOVERFLOW);
+				}
+
+				fd = fd.saturating_add(1);
+			}
+		};
+
+		let fd = new_fd()?;
+		if guard.try_insert(fd, obj).is_err() {
+			Err(IoError::EMFILE)
+		} else {
+			Ok(fd as FileDescriptor)
+		}
+	}
+
+	pub async fn remove_object(
+		&self,
+		fd: FileDescriptor,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		// executor disables the interrupts during the polling of the futures
+		// => Borrowing of the current_task is not interrupted by the scheduler
+		self.current_task
+			.borrow()
+			.object_map
+			.write()
+			.await
+			.remove(&fd)
+			.ok_or(IoError::EINVAL)
 	}
 
 	#[inline]

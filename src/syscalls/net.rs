@@ -4,7 +4,6 @@ use alloc::sync::Arc;
 use core::ffi::c_void;
 use core::mem::size_of;
 use core::ops::DerefMut;
-use core::sync::atomic::Ordering;
 
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
@@ -15,7 +14,7 @@ use crate::executor::network::{NetworkState, NIC};
 use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
 use crate::fd::socket::udp;
-use crate::fd::{get_object, insert_object, ObjectInterface, SocketOption, FD_COUNTER};
+use crate::fd::{get_object, insert_object, replace_object, ObjectInterface, SocketOption};
 use crate::syscalls::{IoCtl, __sys_write};
 
 pub const AF_INET: i32 = 0;
@@ -271,8 +270,6 @@ extern "C" fn __sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 		let mut guard = NIC.lock();
 
 		if let NetworkState::Initialized(nic) = guard.deref_mut() {
-			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-
 			#[cfg(feature = "udp")]
 			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();
@@ -283,7 +280,7 @@ extern "C" fn __sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
 				}
 
-				insert_object(fd, Arc::new(socket)).expect("FD is already used");
+				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
 
 				return fd;
 			}
@@ -298,7 +295,7 @@ extern "C" fn __sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
 				}
 
-				insert_object(fd, Arc::new(socket)).expect("FD is already used");
+				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
 
 				return fd;
 			}
@@ -319,9 +316,8 @@ extern "C" fn __sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 				|endpoint| {
 					let new_obj = dyn_clone::clone_box(&*v);
-					insert_object(fd, Arc::from(new_obj)).unwrap();
-					let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-					insert_object(new_fd, v).expect("FD is already used");
+					replace_object(fd, Arc::from(new_obj)).unwrap();
+					let new_fd = insert_object(v).unwrap();
 
 					if !addr.is_null() && !addrlen.is_null() {
 						let addrlen = unsafe { &mut *addrlen };
