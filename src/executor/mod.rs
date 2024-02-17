@@ -134,7 +134,7 @@ where
 		// run background tasks
 		run();
 
-		if let Poll::Ready(t) = without_interrupts(|| future.as_mut().poll(&mut cx)) {
+		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			if !no_retransmission {
 				let wakeup_time =
@@ -205,7 +205,7 @@ where
 		run();
 
 		let now = now();
-		if let Poll::Ready(t) = without_interrupts(|| future.as_mut().poll(&mut cx)) {
+		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			if !no_retransmission {
 				let network_timer =

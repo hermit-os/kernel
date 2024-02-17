@@ -470,17 +470,19 @@ impl PerCoreScheduler {
 		&self,
 		fd: FileDescriptor,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		// executor disables the interrupts during the polling of the futures
-		// => Borrowing of the current_task is not interrupted by the scheduler
 		future::poll_fn(|cx| {
-			let borrowed = self.current_task.borrow();
-			let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
-			let x = if let Ready(guard) = pinned_obj.as_mut().poll(cx) {
-				Ready(guard.get(&fd).cloned().ok_or(IoError::EINVAL))
-			} else {
-				Pending
-			};
+				let x = if let Ready(guard) = pinned_obj.as_mut().poll(cx) {
+					Ready(guard.get(&fd).cloned().ok_or(IoError::EINVAL))
+				} else {
+					Pending
+				};
+
+				x
+			});
 
 			x
 		})
@@ -492,32 +494,34 @@ impl PerCoreScheduler {
 		&self,
 		obj: Arc<dyn ObjectInterface>,
 	) -> Result<FileDescriptor, IoError> {
-		// executor disables the interrupts during the polling of the futures
-		// => Borrowing of the current_task is not interrupted by the scheduler
 		future::poll_fn(|cx| {
-			let borrowed = self.current_task.borrow();
-			let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
-			let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
-				let new_fd = || -> Result<i32, IoError> {
-					let mut fd: FileDescriptor = 0;
-					loop {
-						if !guard.contains_key(&fd) {
-							break Ok(fd);
-						} else if fd == FileDescriptor::MAX {
-							break Err(IoError::EOVERFLOW);
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					let new_fd = || -> Result<i32, IoError> {
+						let mut fd: FileDescriptor = 0;
+						loop {
+							if !guard.contains_key(&fd) {
+								break Ok(fd);
+							} else if fd == FileDescriptor::MAX {
+								break Err(IoError::EOVERFLOW);
+							}
+
+							fd = fd.saturating_add(1);
 						}
+					};
 
-						fd = fd.saturating_add(1);
-					}
+					let fd = new_fd()?;
+					let _ = guard.insert(fd, obj.clone());
+					Ready(Ok(fd))
+				} else {
+					Pending
 				};
 
-				let fd = new_fd()?;
-				let _ = guard.insert(fd, obj.clone());
-				Ready(Ok(fd))
-			} else {
-				Pending
-			};
+				x
+			});
 
 			x
 		})
@@ -531,18 +535,20 @@ impl PerCoreScheduler {
 		fd: FileDescriptor,
 		obj: Arc<dyn ObjectInterface>,
 	) -> Result<(), IoError> {
-		// executor disables the interrupts during the polling of the futures
-		// => Borrowing of the current_task is not interrupted by the scheduler
 		future::poll_fn(|cx| {
-			let borrowed = self.current_task.borrow();
-			let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
-			let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
-				guard.insert(fd, obj.clone());
-				Ready(Ok(()))
-			} else {
-				Pending
-			};
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					guard.insert(fd, obj.clone());
+					Ready(Ok(()))
+				} else {
+					Pending
+				};
+
+				x
+			});
 
 			x
 		})
@@ -550,37 +556,39 @@ impl PerCoreScheduler {
 	}
 
 	pub async fn dup_object(&self, fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
-		// executor disables the interrupts during the polling of the futures
-		// => Borrowing of the current_task is not interrupted by the scheduler
 		future::poll_fn(|cx| {
-			let borrowed = self.current_task.borrow();
-			let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
-			let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
-				let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
 
-				let new_fd = || -> Result<i32, IoError> {
-					let mut fd: FileDescriptor = 0;
-					loop {
-						if !guard.contains_key(&fd) {
-							break Ok(fd);
-						} else if fd == FileDescriptor::MAX {
-							break Err(IoError::EOVERFLOW);
+					let new_fd = || -> Result<i32, IoError> {
+						let mut fd: FileDescriptor = 0;
+						loop {
+							if !guard.contains_key(&fd) {
+								break Ok(fd);
+							} else if fd == FileDescriptor::MAX {
+								break Err(IoError::EOVERFLOW);
+							}
+
+							fd = fd.saturating_add(1);
 						}
+					};
 
-						fd = fd.saturating_add(1);
+					let fd = new_fd()?;
+					if guard.try_insert(fd, obj).is_err() {
+						Ready(Err(IoError::EMFILE))
+					} else {
+						Ready(Ok(fd as FileDescriptor))
 					}
+				} else {
+					Pending
 				};
 
-				let fd = new_fd()?;
-				if guard.try_insert(fd, obj).is_err() {
-					Ready(Err(IoError::EMFILE))
-				} else {
-					Ready(Ok(fd as FileDescriptor))
-				}
-			} else {
-				Pending
-			};
+				x
+			});
 
 			x
 		})
@@ -591,16 +599,18 @@ impl PerCoreScheduler {
 		&self,
 		fd: FileDescriptor,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		// executor disables the interrupts during the polling of the futures
-		// => Borrowing of the current_task is not interrupted by the scheduler
 		future::poll_fn(|cx| {
-			let borrowed = self.current_task.borrow();
-			let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
-			let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
-				Ready(guard.remove(&fd).ok_or(IoError::EINVAL))
-			} else {
-				Pending
-			};
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					Ready(guard.remove(&fd).ok_or(IoError::EINVAL))
+				} else {
+					Pending
+				};
+
+				x
+			});
 
 			x
 		})
