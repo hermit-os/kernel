@@ -390,7 +390,7 @@ pub(crate) struct Task {
 	pub core_id: CoreId,
 	/// Stack of the task
 	pub stacks: TaskStacks,
-	/// Mapping between file descriptor and the referenced object
+	/// Mapping between file descriptor and the referenced IO interface
 	pub object_map:
 		Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 	/// Task Thread-Local-Storage (TLS)

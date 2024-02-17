@@ -354,6 +354,10 @@ pub unsafe fn jump_to_user_land(entry_point: u64, code_size: u64) -> ! {
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
+	use crate::executor::block_on;
+
+	info!("Create new file descriptor table");
+	block_on(core_scheduler().recreate_objmap(), None).unwrap();
 
 	let ds = 0x23u64;
 	let cs = 0x2bu64;
