@@ -381,7 +381,7 @@ pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 /// Open a directory to read the directory entries
 pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
 	let obj = FILESYSTEM.get().unwrap().opendir(name)?;
-	Ok(insert_object(obj)?)
+	insert_object(obj)
 }
 
 use crate::fd::{self, FileDescriptor};

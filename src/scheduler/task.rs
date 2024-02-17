@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 #[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
 use alloc::collections::{LinkedList, VecDeque};

@@ -422,6 +422,7 @@ pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> Result<FileDescrip
 	block_on(core_scheduler().insert_object(obj), None)
 }
 
+#[allow(dead_code)]
 pub(crate) fn replace_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
