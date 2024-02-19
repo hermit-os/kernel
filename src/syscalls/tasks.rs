@@ -1,13 +1,11 @@
 use alloc::collections::BTreeMap;
 use core::isize;
 #[cfg(feature = "newlib")]
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::core_local::*;
-use crate::arch::get_processor_count;
 use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::*;
@@ -229,17 +227,7 @@ extern "C" fn __sys_spawn2(
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
-
-	let core_id = if selector < 0 {
-		// use Round Robin to schedule the cores
-		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
-	} else {
-		selector as u32
-	};
-
-	scheduler::PerCoreScheduler::spawn(func, arg, Priority::from(prio), core_id, stack_size).into()
-		as Tid
+	scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into()
 }
 
 #[no_mangle]

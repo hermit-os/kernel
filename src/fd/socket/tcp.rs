@@ -13,8 +13,14 @@ use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 use crate::executor::block_on;
 use crate::executor::network::{now, Handle, NetworkState, NIC};
 use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent, SocketOption};
-use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
+
+/// further receives will be disallowed
+pub const SHUT_RD: i32 = 0;
+/// further sends will be disallowed
+pub const SHUT_WR: i32 = 1;
+/// further sends and receives will be disallowed
+pub const SHUT_RDWR: i32 = 2;
 
 fn get_ephemeral_port() -> u16 {
 	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);

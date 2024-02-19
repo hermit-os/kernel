@@ -91,14 +91,6 @@ impl fmt::Display for CpuFrequency {
 	}
 }
 
-pub struct FPUState;
-
-impl FPUState {
-	pub fn new() -> Self {
-		Self {}
-	}
-}
-
 pub fn seed_entropy() -> Option<[u8; 32]> {
 	None
 }

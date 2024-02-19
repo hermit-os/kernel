@@ -140,13 +140,19 @@ pub fn print_information() {
 /// End of the virtual memory address space reserved for kernel memory.
 /// This also marks the start of the virtual memory address space reserved for the task heap.
 /// In case of pure rust applications, we don't have a task heap.
-#[cfg(not(feature = "newlib"))]
+#[cfg(all(not(feature = "common-os"), not(feature = "newlib")))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
 	VirtAddr(0x8000_0000_0000u64)
 }
 
-#[cfg(feature = "newlib")]
+#[cfg(all(feature = "common-os", not(feature = "newlib")))]
+#[inline]
+pub const fn kernel_heap_end() -> VirtAddr {
+	VirtAddr(0x100_0000_0000u64)
+}
+
+#[cfg(all(not(feature = "common-os"), feature = "newlib"))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
 	VirtAddr(0x1_0000_0000u64)

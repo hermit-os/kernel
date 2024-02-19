@@ -2,30 +2,26 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::{self, Future};
-use core::sync::atomic::{AtomicI32, Ordering};
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
-use ahash::RandomState;
 use async_trait::async_trait;
 use dyn_clone::DynClone;
-use hashbrown::HashMap;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
-use crate::env;
+use crate::arch::kernel::core_local::core_scheduler;
 use crate::executor::{block_on, poll_on};
-use crate::fd::stdio::*;
 use crate::fs::{self, DirectoryEntry, FileAttr, SeekWhence};
 
 mod eventfd;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub(crate) mod socket;
-mod stdio;
+pub(crate) mod stdio;
 
-const STDIN_FILENO: FileDescriptor = 0;
-const STDOUT_FILENO: FileDescriptor = 1;
-const STDERR_FILENO: FileDescriptor = 2;
+pub(crate) const STDIN_FILENO: FileDescriptor = 0;
+pub(crate) const STDOUT_FILENO: FileDescriptor = 1;
+pub(crate) const STDERR_FILENO: FileDescriptor = 2;
 
 // TODO: Integrate with src/errno.rs ?
 #[allow(clippy::upper_case_acronyms)]
@@ -46,6 +42,7 @@ pub enum IoError {
 	EMFILE = crate::errno::EMFILE as isize,
 	EEXIST = crate::errno::EEXIST as isize,
 	EADDRINUSE = crate::errno::EADDRINUSE as isize,
+	EOVERFLOW = crate::errno::EOVERFLOW as isize,
 }
 
 #[allow(dead_code)]
@@ -61,17 +58,6 @@ pub(crate) enum IoCtl {
 }
 
 pub(crate) type FileDescriptor = i32;
-
-/// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: async_lock::RwLock<
-	HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>,
-> = async_lock::RwLock::new(HashMap::<
-	FileDescriptor,
-	Arc<dyn ObjectInterface>,
-	RandomState,
->::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
-/// Atomic counter to determine the next unused file descriptor
-pub(crate) static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
 bitflags! {
 	/// Options for opening files
@@ -309,17 +295,8 @@ pub(crate) fn open(
 
 	let fs = fs::FILESYSTEM.get().unwrap();
 	if let Ok(file) = fs.open(name, flags, mode) {
-		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-		block_on(
-			async {
-				if OBJECT_MAP.write().await.try_insert(fd, file).is_err() {
-					Err(IoError::EINVAL)
-				} else {
-					Ok(fd as FileDescriptor)
-				}
-			},
-			None,
-		)
+		let fd = insert_object(file)?;
+		Ok(fd)
 	} else {
 		Err(IoError::EINVAL)
 	}
@@ -384,7 +361,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, IoError> {
 		for i in &mut *fds {
 			let fd = i.fd;
 			i.revents = PollEvent::empty();
-			let mut pinned_obj = core::pin::pin!(async_get_object(fd));
+			let mut pinned_obj = core::pin::pin!(core_scheduler().get_object(fd));
 			if let Ready(Ok(obj)) = pinned_obj.as_mut().poll(cx) {
 				let mut pinned = core::pin::pin!(obj.poll(i.events));
 				if let Ready(Ok(e)) = pinned.as_mut().poll(cx) {
@@ -431,36 +408,26 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, IoErro
 /// from the new file descriptor.
 pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, IoError> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
-	let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-	block_on(async_insert_object(fd, Arc::new(obj)), None)?;
+	let fd = block_on(core_scheduler().insert_object(Arc::new(obj)), None)?;
 
 	Ok(fd)
 }
 
-#[inline]
-async fn async_get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	Ok((*(OBJECT_MAP.read().await.get(&fd).ok_or(IoError::EINVAL)?)).clone())
-}
-
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	block_on(async_get_object(fd), None)
+	block_on(core_scheduler().get_object(fd), None)
 }
 
-#[inline]
-async fn async_insert_object(
+pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> Result<FileDescriptor, IoError> {
+	block_on(core_scheduler().insert_object(obj), None)
+}
+
+#[allow(dead_code)]
+pub(crate) fn replace_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
 ) -> Result<(), IoError> {
-	let _ = OBJECT_MAP.write().await.insert(fd, obj);
-	Ok(())
-}
-
-pub(crate) fn insert_object(
-	fd: FileDescriptor,
-	obj: Arc<dyn ObjectInterface>,
-) -> Result<(), IoError> {
-	block_on(async_insert_object(fd, obj), None)
+	block_on(core_scheduler().replace_object(fd, obj), None)
 }
 
 // The dup system call allocates a new file descriptor that refers
@@ -468,77 +435,9 @@ pub(crate) fn insert_object(
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
 pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
-	block_on(
-		async {
-			let mut guard = OBJECT_MAP.write().await;
-			let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
-
-			let new_fd = || -> i32 {
-				for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
-					if !guard.contains_key(&i) {
-						return i;
-					}
-				}
-				FD_COUNTER.fetch_add(1, Ordering::SeqCst)
-			};
-
-			let fd = new_fd();
-			if guard.try_insert(fd, obj).is_err() {
-				Err(IoError::EMFILE)
-			} else {
-				Ok(fd as FileDescriptor)
-			}
-		},
-		None,
-	)
+	block_on(core_scheduler().dup_object(fd), None)
 }
 
 pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	block_on(
-		async {
-			if fd <= 2 {
-				Err(IoError::EINVAL)
-			} else {
-				let obj = OBJECT_MAP
-					.write()
-					.await
-					.remove(&fd)
-					.ok_or(IoError::EINVAL)?;
-				Ok(obj)
-			}
-		},
-		None,
-	)
-}
-
-pub(crate) fn init() -> Result<(), IoError> {
-	block_on(
-		async {
-			let mut guard = OBJECT_MAP.write().await;
-			if env::is_uhyve() {
-				guard
-					.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
-					.map_err(|_| IoError::EIO)?;
-				guard
-					.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
-					.map_err(|_| IoError::EIO)?;
-				guard
-					.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
-					.map_err(|_| IoError::EIO)?;
-			} else {
-				guard
-					.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
-					.map_err(|_| IoError::EIO)?;
-				guard
-					.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
-					.map_err(|_| IoError::EIO)?;
-				guard
-					.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
-					.map_err(|_| IoError::EIO)?;
-			}
-
-			Ok(())
-		},
-		None,
-	)
+	block_on(core_scheduler().remove_object(fd), None)
 }

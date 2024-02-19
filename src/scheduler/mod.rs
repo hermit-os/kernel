@@ -1,28 +1,36 @@
+#![allow(clippy::type_complexity)]
+
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
+use alloc::sync::Arc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::future::{self, Future};
 use core::ptr;
 use core::sync::atomic::{AtomicU32, Ordering};
+use core::task::Poll::{Pending, Ready};
 
+use ahash::RandomState;
 use crossbeam_utils::Backoff;
+use hashbrown::HashMap;
 use hermit_sync::{without_interrupts, *};
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 
 use crate::arch;
 use crate::arch::core_local::*;
-use crate::arch::interrupts;
 #[cfg(target_arch = "riscv64")]
 use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
+use crate::arch::{get_processor_count, interrupts};
+use crate::fd::{FileDescriptor, IoError, ObjectInterface};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 
-pub(crate) mod task;
+pub mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
@@ -40,7 +48,7 @@ static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 pub type CoreId = u32;
 
 #[cfg(feature = "smp")]
-pub struct SchedulerInput {
+pub(crate) struct SchedulerInput {
 	/// Queue of new tasks
 	new_tasks: VecDeque<NewTask>,
 	/// Queue of task, which are wakeup by another core
@@ -62,7 +70,7 @@ impl SchedulerInput {
 	not(any(target_arch = "x86_64", target_arch = "aarch64")),
 	repr(align(64))
 )]
-pub struct PerCoreScheduler {
+pub(crate) struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
 	#[cfg(feature = "smp")]
 	core_id: CoreId,
@@ -81,7 +89,7 @@ pub struct PerCoreScheduler {
 	blocked_tasks: BlockedTaskQueue,
 }
 
-pub trait PerCoreSchedulerExt {
+pub(crate) trait PerCoreSchedulerExt {
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag will be cleared during the reschedule
 	fn reschedule(self);
@@ -199,6 +207,8 @@ struct NewTask {
 	prio: Priority,
 	core_id: CoreId,
 	stacks: TaskStacks,
+	object_map:
+		Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 }
 
 impl From<NewTask> for Task {
@@ -210,8 +220,9 @@ impl From<NewTask> for Task {
 			prio,
 			core_id,
 			stacks,
+			object_map,
 		} = value;
-		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks);
+		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks, object_map);
 		task.create_stack_frame(func, arg);
 		task
 	}
@@ -236,6 +247,7 @@ impl PerCoreScheduler {
 			prio,
 			core_id,
 			stacks,
+			object_map: core_scheduler().get_current_task_object_map(),
 		};
 
 		// Add it to the task lists.
@@ -315,6 +327,7 @@ impl PerCoreScheduler {
 			prio: current_task_borrowed.prio,
 			core_id,
 			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
+			object_map: current_task_borrowed.object_map.clone(),
 		};
 
 		// Add it to the task lists.
@@ -443,6 +456,211 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
 		without_interrupts(|| self.current_task.borrow().id)
+	}
+
+	#[inline]
+	pub fn get_current_task_object_map(
+		&self,
+	) -> Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>> {
+		without_interrupts(|| self.current_task.borrow().object_map.clone())
+	}
+
+	/// Map a file descriptor to their IO interface and returns
+	/// the shared reference
+	#[inline]
+	pub async fn get_object(
+		&self,
+		fd: FileDescriptor,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		future::poll_fn(|cx| {
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
+
+				let x = if let Ready(guard) = pinned_obj.as_mut().poll(cx) {
+					Ready(guard.get(&fd).cloned().ok_or(IoError::EINVAL))
+				} else {
+					Pending
+				};
+
+				x
+			});
+
+			x
+		})
+		.await
+	}
+
+	/// Creates a new map between file descriptor and their IO interface and
+	/// clone the standard descriptors.
+	#[allow(dead_code)]
+	pub async fn recreate_objmap(&self) -> Result<(), IoError> {
+		let mut map = HashMap::<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>::with_hasher(
+			RandomState::with_seeds(0, 0, 0, 0),
+		);
+
+		future::poll_fn(|cx| {
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
+
+				let x = if let Ready(guard) = pinned_obj.as_mut().poll(cx) {
+					// clone standard file descriptors
+					for i in 0..3 {
+						if let Some(obj) = guard.get(&i) {
+							map.insert(i, obj.clone());
+						}
+					}
+
+					Ready(Ok(()))
+				} else {
+					Pending
+				};
+
+				x
+			});
+
+			x
+		})
+		.await?;
+
+		without_interrupts(|| {
+			self.current_task.borrow_mut().object_map = Arc::new(async_lock::RwLock::new(map));
+		});
+
+		Ok(())
+	}
+
+	/// Insert a new IO interface and returns a file descriptor as
+	/// identifier to this object
+	pub async fn insert_object(
+		&self,
+		obj: Arc<dyn ObjectInterface>,
+	) -> Result<FileDescriptor, IoError> {
+		future::poll_fn(|cx| {
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					let new_fd = || -> Result<FileDescriptor, IoError> {
+						let mut fd: FileDescriptor = 0;
+						loop {
+							if !guard.contains_key(&fd) {
+								break Ok(fd);
+							} else if fd == FileDescriptor::MAX {
+								break Err(IoError::EOVERFLOW);
+							}
+
+							fd = fd.saturating_add(1);
+						}
+					};
+
+					let fd = new_fd()?;
+					let _ = guard.insert(fd, obj.clone());
+					Ready(Ok(fd))
+				} else {
+					Pending
+				};
+
+				x
+			});
+
+			x
+		})
+		.await
+	}
+
+	/// Replace an existing IO interface by a new one
+	#[allow(dead_code)]
+	pub async fn replace_object(
+		&self,
+		fd: FileDescriptor,
+		obj: Arc<dyn ObjectInterface>,
+	) -> Result<(), IoError> {
+		future::poll_fn(|cx| {
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					guard.insert(fd, obj.clone());
+					Ready(Ok(()))
+				} else {
+					Pending
+				};
+
+				x
+			});
+
+			x
+		})
+		.await
+	}
+
+	/// Duplicate a IO interface and returns a new file descriptor as
+	/// identifier to the new copy
+	pub async fn dup_object(&self, fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
+		future::poll_fn(|cx| {
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
+
+					let new_fd = || -> Result<FileDescriptor, IoError> {
+						let mut fd: FileDescriptor = 0;
+						loop {
+							if !guard.contains_key(&fd) {
+								break Ok(fd);
+							} else if fd == FileDescriptor::MAX {
+								break Err(IoError::EOVERFLOW);
+							}
+
+							fd = fd.saturating_add(1);
+						}
+					};
+
+					let fd = new_fd()?;
+					if guard.try_insert(fd, obj).is_err() {
+						Ready(Err(IoError::EMFILE))
+					} else {
+						Ready(Ok(fd))
+					}
+				} else {
+					Pending
+				};
+
+				x
+			});
+
+			x
+		})
+		.await
+	}
+
+	/// Remove a IO interface, which is named by the file descriptor
+	pub async fn remove_object(
+		&self,
+		fd: FileDescriptor,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		future::poll_fn(|cx| {
+			let x = without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+				let x = if let Ready(mut guard) = pinned_obj.as_mut().poll(cx) {
+					Ready(guard.remove(&fd).ok_or(IoError::EINVAL))
+				} else {
+					Pending
+				};
+
+				x
+			});
+
+			x
+		})
+		.await
 	}
 
 	#[inline]
@@ -708,12 +926,12 @@ fn get_tid() -> TaskId {
 }
 
 #[inline]
-pub fn abort() -> ! {
+pub(crate) fn abort() -> ! {
 	core_scheduler().exit(-1)
 }
 
 /// Add a per-core scheduler for the current core.
-pub fn add_current_core() {
+pub(crate) fn add_current_core() {
 	// Create an idle task for this core.
 	let core_id = core_id();
 	let tid = get_tid();
@@ -764,6 +982,30 @@ fn get_scheduler_input(core_id: CoreId) -> &'static InterruptTicketMutex<Schedul
 	SCHEDULER_INPUTS.lock()[usize::try_from(core_id).unwrap()]
 }
 
+pub fn spawn(
+	func: extern "C" fn(usize),
+	arg: usize,
+	prio: Priority,
+	stack_size: usize,
+	selector: isize,
+) -> TaskId {
+	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
+
+	let core_id = if selector < 0 {
+		// use Round Robin to schedule the cores
+		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+	} else {
+		selector as u32
+	};
+
+	PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size)
+}
+
+pub fn getpid() -> TaskId {
+	core_scheduler().get_current_task_id()
+}
+
+#[allow(clippy::result_unit_err)]
 pub fn join(id: TaskId) -> Result<(), ()> {
 	let core_scheduler = core_scheduler();
 
@@ -791,4 +1033,13 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
 	TASKS.lock().get(&id).copied()
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
+
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub(crate) fn get_root_page_table() -> usize {
+	let current_task_borrowed = core_scheduler().current_task.borrow_mut();
+	current_task_borrowed.root_page_table
 }

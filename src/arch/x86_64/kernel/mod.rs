@@ -1,3 +1,5 @@
+#[cfg(feature = "common-os")]
+use core::arch::asm;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -29,7 +31,9 @@ pub mod serial;
 #[cfg(target_os = "none")]
 mod start;
 pub mod switch;
-pub mod systemtime;
+#[cfg(feature = "common-os")]
+mod syscall;
+pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
@@ -267,5 +271,122 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 		}
 		#[cfg(feature = "smp")]
 		crate::application_processor_main();
+	}
+}
+
+#[cfg(feature = "common-os")]
+const LOADER_START: usize = 0x10000000000;
+#[cfg(feature = "common-os")]
+const LOADER_STACK_SIZE: usize = 0x8000;
+
+#[cfg(feature = "common-os")]
+pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
+where
+	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> Result<(), ()>,
+{
+	use core::ptr::slice_from_raw_parts_mut;
+
+	use align_address::Align;
+	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+
+	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
+	use crate::arch::x86_64::mm::physicalmem;
+
+	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
+	let physaddr =
+		physicalmem::allocate_aligned(code_size as usize, BasePageSize::SIZE as usize).unwrap();
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable().user().execute_enable();
+	paging::map::<BasePageSize>(
+		VirtAddr::from(LOADER_START),
+		physaddr,
+		code_size / BasePageSize::SIZE as usize,
+		flags,
+	);
+
+	let code_slice = unsafe { &mut *slice_from_raw_parts_mut(LOADER_START as *mut u8, code_size) };
+
+	if tls_size > 0 {
+		// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
+		// So the thread pointer needs to be `block_ptr + tls_offset`.
+		// GNU style TLS requires `gs:0` to represent the same address as the thread pointer.
+		// Since the thread pointer points to the end of the TLS blocks, we need to store it there.
+		let tcb_size = core::mem::size_of::<*mut ()>();
+		let tls_offset = tls_size as usize;
+
+		let tls_memsz = (tls_offset + tcb_size).align_up(BasePageSize::SIZE as usize);
+		let physaddr =
+			physicalmem::allocate_aligned(tls_memsz, BasePageSize::SIZE as usize).unwrap();
+
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().user().execute_disable();
+		let tls_virt = VirtAddr::from(LOADER_START + code_size + BasePageSize::SIZE as usize);
+		paging::map::<BasePageSize>(
+			tls_virt,
+			physaddr,
+			tls_memsz / BasePageSize::SIZE as usize,
+			flags,
+		);
+		let block = unsafe {
+			&mut *slice_from_raw_parts_mut(tls_virt.as_mut_ptr() as *mut u8, tls_offset + tcb_size)
+		};
+		for elem in block.iter_mut() {
+			*elem = 0;
+		}
+
+		// thread_ptr = block_ptr + tls_offset
+		let thread_ptr = block[tls_offset..].as_mut_ptr().cast::<()>();
+		unsafe {
+			thread_ptr.cast::<*mut ()>().write(thread_ptr);
+		}
+		crate::arch::x86_64::kernel::processor::writefs(thread_ptr as usize);
+
+		func(code_slice, Some(block))
+	} else {
+		func(code_slice, None)
+	}
+}
+
+#[cfg(feature = "common-os")]
+pub unsafe fn jump_to_user_land(entry_point: u64, code_size: u64) -> ! {
+	use align_address::Align;
+	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+
+	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
+	use crate::executor::block_on;
+
+	info!("Create new file descriptor table");
+	block_on(core_scheduler().recreate_objmap(), None).unwrap();
+
+	let ds = 0x23u64;
+	let cs = 0x2bu64;
+	let entry_point: u64 = (LOADER_START as u64) | entry_point;
+	let stack_pointer: u64 = LOADER_START as u64
+		+ (code_size + LOADER_STACK_SIZE as u64).align_up(BasePageSize::SIZE)
+		- 128 /* red zone */ - 8;
+
+	debug!(
+		"Jump to user space at 0x{:x}, stack pointer 0x{:x}",
+		entry_point, stack_pointer
+	);
+	unsafe {
+		asm!(
+			"and rsp, {0}",
+			"swapgs",
+			"push {1}",
+			"push {2}",
+			"push {3}",
+			"push {4}",
+			"push {5}",
+			"iretq",
+			const u64::MAX - (TaskStacks::MARKER_SIZE as u64 - 1),
+			in(reg) ds,
+			in(reg) stack_pointer,
+			const 0x1202u64,
+			in(reg) cs,
+			in(reg) entry_point,
+			options(nostack, noreturn)
+		);
 	}
 }

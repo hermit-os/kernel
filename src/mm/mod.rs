@@ -104,12 +104,13 @@ pub(crate) fn init() {
 		- reserved_space)
 		.align_down(LargePageSize::SIZE as usize);
 
-	// we reserve 10% of the memory for stack allocations
-	let stack_reserve: usize = (available_memory * 10) / 100;
 	let heap_start_addr;
 
-	#[cfg(feature = "newlib")]
+	#[cfg(all(feature = "newlib", not(feature = "common-os")))]
 	{
+		// we reserve 10% of the memory for stack allocations
+		let stack_reserve: usize = (available_memory * 10) / 100;
+
 		info!("An application with a C-based runtime is running on top of Hermit!");
 		let kernel_heap_size = 10 * LargePageSize::SIZE as usize;
 
@@ -131,8 +132,56 @@ pub(crate) fn init() {
 		heap_start_addr = map_addr;
 	}
 
-	#[cfg(not(feature = "newlib"))]
+	#[cfg(all(not(feature = "newlib"), feature = "common-os"))]
 	{
+		info!("Using HermitOS as common OS!");
+
+		// we reserve at least 75% of the memory for the user space
+		let reserve: usize = (available_memory * 75) / 100;
+		// 64 MB is enough as kernel heap
+		let reserve = core::cmp::min(reserve, 0x4000000);
+
+		let virt_size: usize = reserve.align_down(LargePageSize::SIZE as usize);
+		let virt_addr =
+			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize)
+				.unwrap();
+		heap_start_addr = virt_addr;
+
+		info!(
+			"Heap: size {} MB, start address {:p}",
+			virt_size >> 20,
+			virt_addr
+		);
+
+		#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
+		if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
+			// Mount large pages to the next huge page boundary
+			let npages = (virt_addr.align_up_to_huge_page().as_usize() - virt_addr.as_usize())
+				/ LargePageSize::SIZE as usize;
+			if let Err(n) = paging::map_heap::<LargePageSize>(virt_addr, npages) {
+				map_addr = virt_addr + n * LargePageSize::SIZE as usize;
+				map_size = virt_size - (map_addr - virt_addr).as_usize();
+			} else {
+				map_addr = virt_addr.align_up_to_huge_page();
+				map_size = virt_size - (map_addr - virt_addr).as_usize();
+			}
+		} else {
+			map_addr = virt_addr;
+			map_size = virt_size;
+		}
+
+		#[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64")))]
+		{
+			map_addr = virt_addr;
+			map_size = virt_size;
+		}
+	}
+
+	#[cfg(all(not(feature = "newlib"), not(feature = "common-os")))]
+	{
+		// we reserve 10% of the memory for stack allocations
+		let stack_reserve: usize = (available_memory * 10) / 100;
+
 		info!("A pure Rust application is running on top of Hermit!");
 
 		// At first, we map only a small part into the heap.

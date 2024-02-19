@@ -10,7 +10,7 @@ use hashbrown::HashMap;
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
 
-pub use crate::arch::kernel::{self, get_base_address, get_image_size, get_ram_address};
+pub(crate) use crate::arch::kernel::{self, get_base_address, get_image_size, get_ram_address};
 use crate::kernel::boot_info;
 
 static CLI: OnceCell<Cli> = OnceCell::new();
