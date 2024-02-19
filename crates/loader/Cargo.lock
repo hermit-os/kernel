@@ -483,9 +483,9 @@ dependencies = [
 
 [[package]]
 name = "riscv"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "575e01d1b3282801143c2a09e5ddddb0be7fc9bec2f1d624b789c9e9559a0023"
+checksum = "2f5c1b8bf41ea746266cdee443d1d1e9125c86ce1447e1a2615abd34330d33a9"
 dependencies = [
  "critical-section",
  "embedded-hal",
