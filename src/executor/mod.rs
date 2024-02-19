@@ -9,6 +9,7 @@ pub(crate) mod task;
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use core::future::Future;
+use core::pin::pin;
 use core::sync::atomic::AtomicU32;
 use core::task::{Context, Poll, Waker};
 use core::time::Duration;
@@ -127,8 +128,7 @@ where
 	let start = now();
 	let waker = core::task::Waker::noop();
 	let mut cx = Context::from_waker(&waker);
-	let mut future = future;
-	let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
+	let mut future = pin!(future);
 
 	loop {
 		// run background tasks
@@ -197,8 +197,7 @@ where
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.clone().into();
 	let mut cx = Context::from_waker(&waker);
-	let mut future = future;
-	let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
+	let mut future = pin!(future);
 
 	loop {
 		// run background tasks
