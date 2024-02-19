@@ -15,29 +15,32 @@ impl Clippy {
 		for target in [Arch::X86_64, Arch::Aarch64] {
 			target.install()?;
 
-			let target_args = target.cargo_args();
-			cmd!(sh, "cargo clippy {target_args...}").run()?;
-			cmd!(sh, "cargo clippy {target_args...}")
+			let triple = target.triple();
+			cmd!(sh, "cargo clippy --target={triple}").run()?;
+			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
 				.run()?;
-			cmd!(sh, "cargo clippy {target_args...}")
+			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 			// TODO: Enable clippy for newlib
 			// https://github.com/hermit-os/kernel/issues/470
-			// cmd!(sh, "cargo clippy {target_args...}")
+			// cmd!(sh, "cargo clippy --target={triple}")
 			// 	.arg("--no-default-features")
 			// 	.arg("--features=acpi,fsgsbase,newlib,smp,vga")
 			// 	.run()?;
 		}
 
 		{
-			let target_args = Arch::Riscv64.cargo_args();
-			cmd!(sh, "cargo clippy {target_args...}")
+			let target = Arch::Riscv64;
+			target.install()?;
+
+			let triple = target.triple();
+			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
 				.run()?;
-			cmd!(sh, "cargo clippy {target_args...}")
+			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
 				.arg("--features=smp,tcp")
 				.run()?;
