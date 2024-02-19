@@ -95,13 +95,13 @@ pub mod features {
 
 	impl PartialEq<Features> for u64 {
 		fn eq(&self, other: &Features) -> bool {
-			self == other
+			*self == u64::from(*other)
 		}
 	}
 
 	impl PartialEq<u64> for Features {
 		fn eq(&self, other: &u64) -> bool {
-			self == other
+			u64::from(*self) == *other
 		}
 	}
 
