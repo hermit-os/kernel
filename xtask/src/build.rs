@@ -26,7 +26,7 @@ impl Build {
 	pub fn run(self) -> Result<()> {
 		let sh = crate::sh()?;
 
-		self.cargo_build.artifact.arch.install()?;
+		self.cargo_build.artifact.arch.install_for_build()?;
 
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
