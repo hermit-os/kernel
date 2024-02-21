@@ -974,28 +974,18 @@ pub struct PackedVq {
 // This is currently unlikely, as the Tokens hold a Rc<Virtq> for refering to their origin
 // queue. This could be eased
 impl Virtq for PackedVq {
-	/// Enables interrupts for this virtqueue upon receiving a transfer
 	fn enable_notifs(&self) {
 		self.drv_event.borrow_mut().enable_notif();
 	}
 
-	/// Disables interrupts for this virtqueue upon receiving a transfer
 	fn disable_notifs(&self) {
 		self.drv_event.borrow_mut().disable_notif();
 	}
 
-	/// See `Virtq.poll()` documentation
 	fn poll(&self) {
 		self.descr_ring.borrow_mut().poll();
 	}
 
-	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
-	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
-	/// a device notification if wanted by the device.
-	///
-	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-	/// updated notification flags before finishing transfers!
 	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
@@ -1029,18 +1019,6 @@ impl Virtq for PackedVq {
 		}
 	}
 
-	/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
-	/// upon finish.
-	///
-	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-	/// updated notification flags before finishing transfers!
-	///
-	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
-	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
-	/// a device notification if wanted by the device.
-	///
-	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	fn dispatch_batch_await(
 		&self,
 		mut tkns: Vec<TransferToken>,
@@ -1084,11 +1062,6 @@ impl Virtq for PackedVq {
 		}
 	}
 
-	/// See `Virtq.prep_transfer()` documentation.
-	///
-	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-	/// updated notification flags before finishing transfers!
 	fn dispatch(&self, tkn: TransferToken, notif: bool) {
 		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
 
@@ -1119,16 +1092,10 @@ impl Virtq for PackedVq {
 		}
 	}
 
-	/// See `Virtq.index()` documentation
 	fn index(&self) -> VqIndex {
 		self.index
 	}
 
-	/// Creates a new Virtq of the specified (VqSize)[VqSize] and the (VqIndex)[VqIndex].
-	/// The index represents the "ID" of the virtqueue.
-	/// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
-	///
-	/// Be aware, that devices define a maximum number of queues and a maximal size they can handle.
 	fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
@@ -1229,7 +1196,6 @@ impl Virtq for PackedVq {
 		})
 	}
 
-	/// See `Virtq.prep_transfer_from_raw()` documentation.
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
 		send: Option<(&[u8], BuffSpec<'_>)>,
@@ -1787,7 +1753,6 @@ impl Virtq for PackedVq {
 		}
 	}
 
-	/// See `Virtq.prep_buffer()` documentation.
 	fn prep_buffer(
 		self: Rc<Self>,
 		send: Option<BuffSpec<'_>>,

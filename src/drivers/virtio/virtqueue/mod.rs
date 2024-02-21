@@ -131,8 +131,27 @@ pub trait Virtq {
 	/// * All finished `TransferTokens` will have a state of `TransferState::Finished`.
 	fn poll(&self);
 
+	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
+	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
+	/// a device notification if wanted by the device.
+	///
+	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
+	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
+	/// updated notification flags before finishing transfers!
 	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool);
 
+	/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
+	/// upon finish.
+	///
+	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
+	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
+	/// updated notification flags before finishing transfers!
+	///
+	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
+	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
+	/// a device notification if wanted by the device.
+	///
+	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	fn dispatch_batch_await(
 		&self,
 		tkns: Vec<TransferToken>,
@@ -140,7 +159,7 @@ pub trait Virtq {
 		notif: bool,
 	);
 
-	/// Creates a new Virtq of the specified (VqSize)[VqSize] and the (VqIndex)[VqIndex].
+	/// Creates a new Virtq of the specified [VqSize] and the [VqIndex].
 	/// The index represents the "ID" of the virtqueue.
 	/// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
 	///
@@ -422,8 +441,8 @@ pub fn dispatch_batch_await(
 	}
 }
 
-/// The trait needs to be implemented on structures which are to be used via the `prep_transfer()` function of virtqueues and for
-/// structures which are to be used to write data into buffers of a [BufferToken] via `BufferToken.write()` or
+/// The trait needs to be implemented for
+/// structures which are to be used to write data into buffers of a [BufferToken] via [BufferToken::write] or
 /// `BufferToken.write_seq()`.
 ///
 /// **INFO:*
@@ -638,7 +657,7 @@ impl Transfer {
 	/// The returned data is of type `Box<[Box<[u8]>]>`. This function therefore preserves
 	/// the scattered structure of the buffer,
 	///
-	/// If one create this buffer via a `Virtq.prep_transfer()` or `Virtq.prep_transfer_from_raw()`
+	/// If one creates this buffer via a `Virtq.prep_transfer_from_raw()`
 	/// call, a casting back to the original structure `T` is NOT possible.
 	/// In these cases please use `Transfer.ret_cpy()` or use 'BuffSpec::Single' only!
 	pub fn ret_scat_cpy(
