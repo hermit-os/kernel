@@ -12,7 +12,6 @@
 	allow(incomplete_features)
 )]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
-#![cfg_attr(target_arch = "riscv64", feature(offset_of))]
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(exposed_provenance)]
