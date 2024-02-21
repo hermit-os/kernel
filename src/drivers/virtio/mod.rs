@@ -206,7 +206,4 @@ pub mod device {
 			}
 		}
 	}
-
-	/// Empty trait to unify all device specific configuration structs.
-	pub trait DevCfg {}
 }
