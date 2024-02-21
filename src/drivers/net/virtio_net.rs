@@ -488,6 +488,7 @@ impl NetworkDriver for VirtioNetDriver {
 		self.checksums.clone()
 	}
 
+	#[allow(dead_code)]
 	fn has_packet(&self) -> bool {
 		self.recv_vqs.poll();
 		!self.recv_vqs.poll_queue.borrow().is_empty()

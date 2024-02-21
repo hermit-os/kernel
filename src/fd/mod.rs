@@ -179,11 +179,13 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `unlink` removes file entry
+	#[allow(dead_code)]
 	fn unlink(&self, _path: &str) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `rmdir` removes directory entry
+	#[allow(dead_code)]
 	fn rmdir(&self, _path: &str) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
@@ -196,6 +198,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `mkdir` creates a directory entry
+	#[allow(dead_code)]
 	fn mkdir(&self, _path: &str, _mode: u32) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
@@ -244,6 +247,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// `getpeername` get address of connected peer
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[allow(dead_code)]
 	fn getpeername(&self) -> Option<IpEndpoint> {
 		None
 	}

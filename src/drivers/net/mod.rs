@@ -42,6 +42,7 @@ pub(crate) trait NetworkDriver {
 	where
 		F: FnOnce(&mut [u8]) -> R;
 	/// Check if a packet is available
+	#[allow(dead_code)]
 	fn has_packet(&self) -> bool;
 	/// Enable / disable the polling mode of the network interface
 	fn set_polling_mode(&mut self, value: bool);
