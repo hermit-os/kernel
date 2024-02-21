@@ -12,7 +12,6 @@ use core::sync::atomic::{fence, Ordering};
 
 use align_address::Align;
 
-use self::error::VqPackedError;
 use super::super::features::Features;
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -20,8 +19,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer,
-	TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer, TransferState,
+	TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -974,19 +973,19 @@ pub struct PackedVq {
 // This interface is also public in order to allow people to use the PackedVq directly!
 // This is currently unlikely, as the Tokens hold a Rc<Virtq> for refering to their origin
 // queue. This could be eased
-impl PackedVq {
+impl Virtq for PackedVq {
 	/// Enables interrupts for this virtqueue upon receiving a transfer
-	pub fn enable_notifs(&self) {
+	fn enable_notifs(&self) {
 		self.drv_event.borrow_mut().enable_notif();
 	}
 
 	/// Disables interrupts for this virtqueue upon receiving a transfer
-	pub fn disable_notifs(&self) {
+	fn disable_notifs(&self) {
 		self.drv_event.borrow_mut().disable_notif();
 	}
 
 	/// See `Virtq.poll()` documentation
-	pub fn poll(&self) {
+	fn poll(&self) {
 		self.descr_ring.borrow_mut().poll();
 	}
 
@@ -997,7 +996,7 @@ impl PackedVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) {
+	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
 
@@ -1042,7 +1041,7 @@ impl PackedVq {
 	/// a device notification if wanted by the device.
 	///
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
-	pub fn dispatch_batch_await(
+	fn dispatch_batch_await(
 		&self,
 		mut tkns: Vec<TransferToken>,
 		await_queue: Rc<RefCell<VecDeque<Transfer>>>,
@@ -1090,7 +1089,7 @@ impl PackedVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch(&self, tkn: TransferToken, notif: bool) {
+	fn dispatch(&self, tkn: TransferToken, notif: bool) {
 		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
 
 		if notif {
@@ -1121,18 +1120,22 @@ impl PackedVq {
 	}
 
 	/// See `Virtq.index()` documentation
-	pub fn index(&self) -> VqIndex {
+	fn index(&self) -> VqIndex {
 		self.index
 	}
 
-	/// See `Virtq::new()` documentation
-	pub fn new(
+	/// Creates a new Virtq of the specified (VqSize)[VqSize] and the (VqIndex)[VqIndex].
+	/// The index represents the "ID" of the virtqueue.
+	/// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
+	///
+	/// Be aware, that devices define a maximum number of queues and a maximal size they can handle.
+	fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
 		feats: u64,
-	) -> Result<Self, VqPackedError> {
+	) -> Result<Self, VirtqError> {
 		// Currently we do not have support for in order use.
 		// This steems from the fact, that the packedVq ReadCtrl currently is not
 		// able to derive other finished transfer from a used-buffer notification.
@@ -1142,7 +1145,7 @@ impl PackedVq {
 		// and adjust its ReadCtrl accordingly.
 		if feats & Features::VIRTIO_F_IN_ORDER == Features::VIRTIO_F_IN_ORDER {
 			info!("PackedVq has no support for VIRTIO_F_IN_ORDER. Aborting...");
-			return Err(VqPackedError::FeatNotSupported(
+			return Err(VirtqError::FeatNotSupported(
 				feats & Features::VIRTIO_F_IN_ORDER,
 			));
 		}
@@ -1150,7 +1153,7 @@ impl PackedVq {
 		// Get a handler to the queues configuration area.
 		let mut vq_handler = match com_cfg.select_vq(index.into()) {
 			Some(handler) => handler,
-			None => return Err(VqPackedError::QueueNotExisting(index.into())),
+			None => return Err(VirtqError::QueueNotExisting(index.into())),
 		};
 
 		// Must catch zero size as it is not allowed for packed queues.
@@ -1158,7 +1161,7 @@ impl PackedVq {
 		//
 		// See Virtio specification v1.1. - 4.1.4.3.2
 		let vq_size = if (size.0 == 0) | (size.0 > 32768) {
-			return Err(VqPackedError::SizeNotAllowed(size.0));
+			return Err(VirtqError::QueueSizeNotAllowed(size.0));
 		} else {
 			vq_handler.set_vq_size(size.0)
 		};
@@ -1227,27 +1230,24 @@ impl PackedVq {
 	}
 
 	/// See `Virtq.prep_transfer_from_raw()` documentation.
-	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
-		&self,
-		master: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec<'_>)>,
-		recv: Option<(*mut K, BuffSpec<'_>)>,
+	fn prep_transfer_from_raw(
+		self: Rc<Self>,
+		send: Option<(&[u8], BuffSpec<'_>)>,
+		recv: Option<(&mut [u8], BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
 			(None, None) => Err(VirtqError::BufferNotSpecified),
 			(Some((send_data, send_spec)), None) => {
 				match send_spec {
 					BuffSpec::Single(size) => {
-						let data_slice = unsafe { (*send_data).as_slice_u8() };
-
 						// Buffer must have the right size
-						if data_slice.len() != size.into() {
-							return Err(VirtqError::BufferSizeWrong(data_slice.len()));
+						if send_data.len() != size.into() {
+							return Err(VirtqError::BufferSizeWrong(send_data.len()));
 						}
 
 						let desc = match self
 							.mem_pool
-							.pull_from_raw(Rc::clone(&self.mem_pool), data_slice)
+							.pull_from_raw(Rc::clone(&self.mem_pool), send_data)
 						{
 							Ok(desc) => desc,
 							Err(vq_err) => return Err(vq_err),
@@ -1258,11 +1258,11 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Single {
 									desc_lst: vec![desc].into_boxed_slice(),
-									len: data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: None,
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1271,15 +1271,14 @@ impl PackedVq {
 						})
 					}
 					BuffSpec::Multiple(size_lst) => {
-						let data_slice = unsafe { (*send_data).as_slice_u8() };
 						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
 						let mut index = 0usize;
 
 						for byte in size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match data_slice.get(index..end_index) {
+							let next_slice = match send_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
+								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
 							};
 
 							match self
@@ -1299,11 +1298,11 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Multiple {
 									desc_lst: desc_lst.into_boxed_slice(),
-									len: data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: None,
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1312,15 +1311,14 @@ impl PackedVq {
 						})
 					}
 					BuffSpec::Indirect(size_lst) => {
-						let data_slice = unsafe { (*send_data).as_slice_u8() };
 						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
 						let mut index = 0usize;
 
 						for byte in size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match data_slice.get(index..end_index) {
+							let next_slice = match send_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
+								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
 							};
 
 							desc_lst.push(
@@ -1343,11 +1341,11 @@ impl PackedVq {
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
 									ctrl_desc,
-									len: data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: None,
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1360,16 +1358,14 @@ impl PackedVq {
 			(None, Some((recv_data, recv_spec))) => {
 				match recv_spec {
 					BuffSpec::Single(size) => {
-						let data_slice = unsafe { (*recv_data).as_slice_u8() };
-
 						// Buffer must have the right size
-						if data_slice.len() != size.into() {
-							return Err(VirtqError::BufferSizeWrong(data_slice.len()));
+						if recv_data.len() != size.into() {
+							return Err(VirtqError::BufferSizeWrong(recv_data.len()));
 						}
 
 						let desc = match self
 							.mem_pool
-							.pull_from_raw(Rc::clone(&self.mem_pool), data_slice)
+							.pull_from_raw(Rc::clone(&self.mem_pool), recv_data)
 						{
 							Ok(desc) => desc,
 							Err(vq_err) => return Err(vq_err),
@@ -1381,10 +1377,10 @@ impl PackedVq {
 								send_buff: None,
 								recv_buff: Some(Buffer::Single {
 									desc_lst: vec![desc].into_boxed_slice(),
-									len: data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1393,15 +1389,14 @@ impl PackedVq {
 						})
 					}
 					BuffSpec::Multiple(size_lst) => {
-						let data_slice = unsafe { (*recv_data).as_slice_u8() };
 						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
 						let mut index = 0usize;
 
 						for byte in size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match data_slice.get(index..end_index) {
+							let next_slice = match recv_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
+								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
 							};
 
 							match self
@@ -1422,10 +1417,10 @@ impl PackedVq {
 								send_buff: None,
 								recv_buff: Some(Buffer::Multiple {
 									desc_lst: desc_lst.into_boxed_slice(),
-									len: data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1434,15 +1429,14 @@ impl PackedVq {
 						})
 					}
 					BuffSpec::Indirect(size_lst) => {
-						let data_slice = unsafe { (*recv_data).as_slice_u8() };
 						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
 						let mut index = 0usize;
 
 						for byte in size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match data_slice.get(index..end_index) {
+							let next_slice = match recv_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
+								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
 							};
 
 							desc_lst.push(
@@ -1466,10 +1460,10 @@ impl PackedVq {
 								recv_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
 									ctrl_desc,
-									len: data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1482,31 +1476,27 @@ impl PackedVq {
 			(Some((send_data, send_spec)), Some((recv_data, recv_spec))) => {
 				match (send_spec, recv_spec) {
 					(BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
-						let send_data_slice = unsafe { (*send_data).as_slice_u8() };
-
 						// Buffer must have the right size
-						if send_data_slice.len() != send_size.into() {
-							return Err(VirtqError::BufferSizeWrong(send_data_slice.len()));
+						if send_data.len() != send_size.into() {
+							return Err(VirtqError::BufferSizeWrong(send_data.len()));
 						}
 
 						let send_desc = match self
 							.mem_pool
-							.pull_from_raw(Rc::clone(&self.mem_pool), send_data_slice)
+							.pull_from_raw(Rc::clone(&self.mem_pool), send_data)
 						{
 							Ok(desc) => desc,
 							Err(vq_err) => return Err(vq_err),
 						};
 
-						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
-
 						// Buffer must have the right size
-						if recv_data_slice.len() != recv_size.into() {
-							return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()));
+						if recv_data.len() != recv_size.into() {
+							return Err(VirtqError::BufferSizeWrong(recv_data.len()));
 						}
 
 						let recv_desc = match self
 							.mem_pool
-							.pull_from_raw(Rc::clone(&self.mem_pool), recv_data_slice)
+							.pull_from_raw(Rc::clone(&self.mem_pool), recv_data)
 						{
 							Ok(desc) => desc,
 							Err(vq_err) => return Err(vq_err),
@@ -1517,15 +1507,15 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Single {
 									desc_lst: vec![send_desc].into_boxed_slice(),
-									len: send_data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: Some(Buffer::Single {
 									desc_lst: vec![recv_desc].into_boxed_slice(),
-									len: recv_data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1534,33 +1524,28 @@ impl PackedVq {
 						})
 					}
 					(BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
-						let send_data_slice = unsafe { (*send_data).as_slice_u8() };
-
 						// Buffer must have the right size
-						if send_data_slice.len() != send_size.into() {
-							return Err(VirtqError::BufferSizeWrong(send_data_slice.len()));
+						if send_data.len() != send_size.into() {
+							return Err(VirtqError::BufferSizeWrong(send_data.len()));
 						}
 
 						let send_desc = match self
 							.mem_pool
-							.pull_from_raw(Rc::clone(&self.mem_pool), send_data_slice)
+							.pull_from_raw(Rc::clone(&self.mem_pool), send_data)
 						{
 							Ok(desc) => desc,
 							Err(vq_err) => return Err(vq_err),
 						};
 
-						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
 						let mut recv_desc_lst: Vec<MemDescr> =
 							Vec::with_capacity(recv_size_lst.len());
 						let mut index = 0usize;
 
 						for byte in recv_size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data_slice.get(index..end_index) {
+							let next_slice = match recv_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => {
-									return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
-								}
+								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
 							};
 
 							match self
@@ -1580,15 +1565,15 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Single {
 									desc_lst: vec![send_desc].into_boxed_slice(),
-									len: send_data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: Some(Buffer::Multiple {
 									desc_lst: recv_desc_lst.into_boxed_slice(),
-									len: recv_data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1597,18 +1582,15 @@ impl PackedVq {
 						})
 					}
 					(BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
-						let send_data_slice = unsafe { (*send_data).as_slice_u8() };
 						let mut send_desc_lst: Vec<MemDescr> =
 							Vec::with_capacity(send_size_lst.len());
 						let mut index = 0usize;
 
 						for byte in send_size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data_slice.get(index..end_index) {
+							let next_slice = match send_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => {
-									return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
-								}
+								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
 							};
 
 							match self
@@ -1623,18 +1605,15 @@ impl PackedVq {
 							index += usize::from(*byte);
 						}
 
-						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
 						let mut recv_desc_lst: Vec<MemDescr> =
 							Vec::with_capacity(recv_size_lst.len());
 						let mut index = 0usize;
 
 						for byte in recv_size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data_slice.get(index..end_index) {
+							let next_slice = match recv_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => {
-									return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
-								}
+								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
 							};
 
 							match self
@@ -1654,15 +1633,15 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Multiple {
 									desc_lst: send_desc_lst.into_boxed_slice(),
-									len: send_data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: Some(Buffer::Multiple {
 									desc_lst: recv_desc_lst.into_boxed_slice(),
-									len: recv_data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1671,18 +1650,15 @@ impl PackedVq {
 						})
 					}
 					(BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
-						let send_data_slice = unsafe { (*send_data).as_slice_u8() };
 						let mut send_desc_lst: Vec<MemDescr> =
 							Vec::with_capacity(send_size_lst.len());
 						let mut index = 0usize;
 
 						for byte in send_size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data_slice.get(index..end_index) {
+							let next_slice = match send_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => {
-									return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
-								}
+								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
 							};
 
 							match self
@@ -1697,16 +1673,14 @@ impl PackedVq {
 							index += usize::from(*byte);
 						}
 
-						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
-
 						// Buffer must have the right size
-						if recv_data_slice.len() != recv_size.into() {
-							return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()));
+						if recv_data.len() != recv_size.into() {
+							return Err(VirtqError::BufferSizeWrong(recv_data.len()));
 						}
 
 						let recv_desc = match self
 							.mem_pool
-							.pull_from_raw(Rc::clone(&self.mem_pool), recv_data_slice)
+							.pull_from_raw(Rc::clone(&self.mem_pool), recv_data)
 						{
 							Ok(desc) => desc,
 							Err(vq_err) => return Err(vq_err),
@@ -1717,15 +1691,15 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Multiple {
 									desc_lst: send_desc_lst.into_boxed_slice(),
-									len: send_data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
 								recv_buff: Some(Buffer::Single {
 									desc_lst: vec![recv_desc].into_boxed_slice(),
-									len: recv_data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1734,18 +1708,15 @@ impl PackedVq {
 						})
 					}
 					(BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
-						let send_data_slice = unsafe { (*send_data).as_slice_u8() };
 						let mut send_desc_lst: Vec<MemDescr> =
 							Vec::with_capacity(send_size_lst.len());
 						let mut index = 0usize;
 
 						for byte in send_size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data_slice.get(index..end_index) {
+							let next_slice = match send_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => {
-									return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
-								}
+								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
 							};
 
 							send_desc_lst.push(
@@ -1757,18 +1728,15 @@ impl PackedVq {
 							index += usize::from(*byte);
 						}
 
-						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
 						let mut recv_desc_lst: Vec<MemDescr> =
 							Vec::with_capacity(recv_size_lst.len());
 						let mut index = 0usize;
 
 						for byte in recv_size_lst {
 							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data_slice.get(index..end_index) {
+							let next_slice = match recv_data.get(index..end_index) {
 								Some(slice) => slice,
-								None => {
-									return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
-								}
+								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
 							};
 
 							recv_desc_lst.push(
@@ -1793,16 +1761,16 @@ impl PackedVq {
 								recv_buff: Some(Buffer::Indirect {
 									desc_lst: recv_desc_lst.into_boxed_slice(),
 									ctrl_desc: ctrl_desc.no_dealloc_clone(),
-									len: recv_data_slice.len(),
+									len: recv_data.len(),
 									next_write: 0,
 								}),
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: send_desc_lst.into_boxed_slice(),
 									ctrl_desc,
-									len: send_data_slice.len(),
+									len: send_data.len(),
 									next_write: 0,
 								}),
-								vq: master,
+								vq: self,
 								ret_send: false,
 								ret_recv: false,
 								reusable: false,
@@ -1820,9 +1788,8 @@ impl PackedVq {
 	}
 
 	/// See `Virtq.prep_buffer()` documentation.
-	pub fn prep_buffer(
-		&self,
-		master: Rc<Virtq>,
+	fn prep_buffer(
+		self: Rc<Self>,
 		send: Option<BuffSpec<'_>>,
 		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
@@ -1844,7 +1811,7 @@ impl PackedVq {
 								Ok(BufferToken {
 									send_buff: Some(buffer),
 									recv_buff: None,
-									vq: master,
+									vq: self.clone(),
 									ret_send: true,
 									ret_recv: false,
 									reusable: true,
@@ -1874,7 +1841,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff: Some(buffer),
 							recv_buff: None,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: false,
 							reusable: true,
@@ -1909,7 +1876,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff: Some(buffer),
 							recv_buff: None,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: false,
 							reusable: true,
@@ -1932,7 +1899,7 @@ impl PackedVq {
 								Ok(BufferToken {
 									send_buff: None,
 									recv_buff: Some(buffer),
-									vq: master,
+									vq: self.clone(),
 									ret_send: false,
 									ret_recv: true,
 									reusable: true,
@@ -1962,7 +1929,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff: None,
 							recv_buff: Some(buffer),
-							vq: master,
+							vq: self.clone(),
 							ret_send: false,
 							ret_recv: true,
 							reusable: true,
@@ -1997,7 +1964,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff: None,
 							recv_buff: Some(buffer),
-							vq: master,
+							vq: self.clone(),
 							ret_send: false,
 							ret_recv: true,
 							reusable: true,
@@ -2032,7 +1999,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff,
 							recv_buff,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: true,
 							reusable: true,
@@ -2070,7 +2037,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff,
 							recv_buff,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: true,
 							reusable: true,
@@ -2115,7 +2082,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff,
 							recv_buff,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: true,
 							reusable: true,
@@ -2153,7 +2120,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff,
 							recv_buff,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: true,
 							reusable: true,
@@ -2211,7 +2178,7 @@ impl PackedVq {
 						Ok(BufferToken {
 							send_buff,
 							recv_buff,
-							vq: master,
+							vq: self.clone(),
 							ret_send: true,
 							ret_recv: true,
 							reusable: true,
@@ -2226,7 +2193,7 @@ impl PackedVq {
 		}
 	}
 
-	pub fn size(&self) -> VqSize {
+	fn size(&self) -> VqSize {
 		self.size
 	}
 }
@@ -2324,14 +2291,5 @@ impl PackedVq {
 				Ok(ctrl_desc)
 			}
 		}
-	}
-}
-
-pub mod error {
-	pub enum VqPackedError {
-		General,
-		SizeNotAllowed(u16),
-		QueueNotExisting(u16),
-		FeatNotSupported(u64),
 	}
 }

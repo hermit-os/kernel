@@ -30,8 +30,10 @@ use crate::drivers::net::NetworkDriver;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::virtqueue::packed::PackedVq;
+use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
+	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize,
 };
 use crate::executor::device::{RxToken, TxToken};
 
@@ -77,10 +79,10 @@ impl Default for VirtioNetHdr {
 	}
 }
 
-pub struct CtrlQueue(Option<Rc<Virtq>>);
+pub struct CtrlQueue(Option<Rc<dyn Virtq>>);
 
 impl CtrlQueue {
-	pub fn new(vq: Option<Rc<Virtq>>) -> Self {
+	pub fn new(vq: Option<Rc<dyn Virtq>>) -> Self {
 		CtrlQueue(vq)
 	}
 }
@@ -153,14 +155,14 @@ enum MqCmd {
 }
 
 pub struct RxQueues {
-	vqs: Vec<Rc<Virtq>>,
+	vqs: Vec<Rc<dyn Virtq>>,
 	poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 	is_multi: bool,
 }
 
 impl RxQueues {
 	pub fn new(
-		vqs: Vec<Rc<Virtq>>,
+		vqs: Vec<Rc<dyn Virtq>>,
 		poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 		is_multi: bool,
 	) -> Self {
@@ -188,10 +190,7 @@ impl RxQueues {
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
-		// Safe virtqueue
-		let rc_vq = Rc::new(vq);
-		let vq = &rc_vq;
+	fn add(&mut self, vq: Rc<dyn Virtq>, dev_cfg: &NetDevCfg) {
 		let num_buff: u16 = vq.size().into();
 
 		let rx_size = if dev_cfg
@@ -208,7 +207,7 @@ impl RxQueues {
 		//
 		let spec = BuffSpec::Single(Bytes::new(rx_size).unwrap());
 		for _ in 0..num_buff {
-			let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+			let buff_tkn = match vq.clone().prep_buffer(None, Some(spec.clone())) {
 				Ok(tkn) => tkn,
 				Err(_vq_err) => {
 					error!("Setup of network queue failed, which should not happen!");
@@ -225,7 +224,7 @@ impl RxQueues {
 		}
 
 		// Safe virtqueue
-		self.vqs.push(rc_vq);
+		self.vqs.push(vq);
 
 		if self.vqs.len() > 1 {
 			self.is_multi = true;
@@ -277,7 +276,7 @@ impl RxQueues {
 /// Structure which handles transmission of packets and delegation
 /// to the respective queue structures.
 pub struct TxQueues {
-	vqs: Vec<Rc<Virtq>>,
+	vqs: Vec<Rc<dyn Virtq>>,
 	poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 	ready_queue: Vec<BufferToken>,
 	/// Indicates, whether the Driver/Device are using multiple
@@ -287,7 +286,7 @@ pub struct TxQueues {
 
 impl TxQueues {
 	pub fn new(
-		vqs: Vec<Rc<Virtq>>,
+		vqs: Vec<Rc<dyn Virtq>>,
 		poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 		ready_queue: Vec<BufferToken>,
 		is_multi: bool,
@@ -331,9 +330,9 @@ impl TxQueues {
 		}
 	}
 
-	fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
+	fn add(&mut self, vq: Rc<dyn Virtq>, dev_cfg: &NetDevCfg) {
 		// Safe virtqueue
-		self.vqs.push(Rc::new(vq));
+		self.vqs.push(vq.clone());
 		if self.vqs.len() == 1 {
 			// Unwrapping is safe, as one virtq will be definitely in the vector.
 			let vq = self.vqs.first().unwrap();
@@ -359,7 +358,8 @@ impl TxQueues {
 
 				for _ in 0..num_buff {
 					self.ready_queue.push(
-						vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+						vq.clone()
+							.prep_buffer(Some(spec.clone()), None)
 							.unwrap()
 							.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
 							.unwrap(),
@@ -379,7 +379,8 @@ impl TxQueues {
 
 				for _ in 0..num_buff {
 					self.ready_queue.push(
-						vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+						vq.clone()
+							.prep_buffer(Some(spec.clone()), None)
 							.unwrap()
 							.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
 							.unwrap(),
@@ -436,7 +437,7 @@ impl TxQueues {
 		// As usize is currently safe as the minimal usize is defined as 16bit in rust.
 		let spec = BuffSpec::Single(Bytes::new(len).unwrap());
 
-		match self.vqs[0].prep_buffer(Rc::clone(&self.vqs[0]), Some(spec), None) {
+		match self.vqs[0].clone().prep_buffer(Some(spec), None) {
 			Ok(tkn) => Some((tkn, 0)),
 			Err(_) => {
 				// Here it is possible if multiple queues are enabled to get another buffertoken from them!
@@ -974,23 +975,27 @@ impl VirtioNetDriver {
 				.features
 				.is_feature(Features::VIRTIO_F_RING_PACKED)
 			{
-				self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqType::Packed,
-					VqIndex::from(self.num_vqs),
-					self.dev_cfg.features.into(),
-				))));
+				self.ctrl_vq = CtrlQueue(Some(Rc::new(
+					PackedVq::new(
+						&mut self.com_cfg,
+						&self.notif_cfg,
+						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+						VqIndex::from(self.num_vqs),
+						self.dev_cfg.features.into(),
+					)
+					.unwrap(),
+				)));
 			} else {
-				self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqType::Split,
-					VqIndex::from(self.num_vqs),
-					self.dev_cfg.features.into(),
-				))));
+				self.ctrl_vq = CtrlQueue(Some(Rc::new(
+					SplitVq::new(
+						&mut self.com_cfg,
+						&self.notif_cfg,
+						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+						VqIndex::from(self.num_vqs),
+						self.dev_cfg.features.into(),
+					)
+					.unwrap(),
+				)));
 			}
 
 			self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
@@ -1037,57 +1042,57 @@ impl VirtioNetDriver {
 				.features
 				.is_feature(Features::VIRTIO_F_RING_PACKED)
 			{
-				let vq = Virtq::new(
+				let vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqType::Packed,
 					VqIndex::from(2 * i),
 					self.dev_cfg.features.into(),
-				);
+				)
+				.unwrap();
 				// Interrupt for receiving packets is wanted
 				vq.enable_notifs();
 
-				self.recv_vqs.add(vq, &self.dev_cfg);
+				self.recv_vqs.add(Rc::from(vq), &self.dev_cfg);
 
-				let vq = Virtq::new(
+				let vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqType::Packed,
 					VqIndex::from(2 * i + 1),
 					self.dev_cfg.features.into(),
-				);
+				)
+				.unwrap();
 				// Interrupt for comunicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
-				self.send_vqs.add(vq, &self.dev_cfg);
+				self.send_vqs.add(Rc::from(vq), &self.dev_cfg);
 			} else {
-				let vq = Virtq::new(
+				let vq = SplitVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqType::Split,
 					VqIndex::from(2 * i),
 					self.dev_cfg.features.into(),
-				);
+				)
+				.unwrap();
 				// Interrupt for receiving packets is wanted
 				vq.enable_notifs();
 
-				self.recv_vqs.add(vq, &self.dev_cfg);
+				self.recv_vqs.add(Rc::from(vq), &self.dev_cfg);
 
-				let vq = Virtq::new(
+				let vq = SplitVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqType::Split,
 					VqIndex::from(2 * i + 1),
 					self.dev_cfg.features.into(),
-				);
+				)
+				.unwrap();
 				// Interrupt for comunicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
-				self.send_vqs.add(vq, &self.dev_cfg);
+				self.send_vqs.add(Rc::from(vq), &self.dev_cfg);
 			}
 		}
 
