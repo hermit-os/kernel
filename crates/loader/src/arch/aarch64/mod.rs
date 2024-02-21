@@ -3,6 +3,7 @@ pub mod paging;
 pub mod serial;
 
 use core::arch::asm;
+use core::ptr;
 
 use align_address::Align;
 use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
@@ -11,6 +12,7 @@ use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo,
 use hermit_entry::elf::LoadedKernel;
 use hermit_entry::Entry;
 use log::info;
+use sptr::Strict;
 
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
@@ -79,7 +81,7 @@ pub fn output_message_byte(byte: u8) {
 }
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	(unsafe { &kernel_end } as *const u8 as u64).align_up(LargePageSize::SIZE as u64)
+	(ptr::from_ref(unsafe { &kernel_end }).addr() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub fn find_kernel() -> &'static [u8] {
@@ -153,45 +155,46 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let uart_address: u32 = unsafe { COM1.get_port() };
 	info!("Detect UART at {:#x}", uart_address);
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut u64, 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(&mut l0_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = unsafe { &l1_pgtable as *const u64 as u64 + PT_PT };
-	pgt_slice[511] = unsafe { &l0_pgtable as *const u64 as u64 + PT_PT + PT_SELF };
+	pgt_slice[0] = ptr::from_ref(unsafe { &l1_pgtable }).addr() as u64 + PT_PT;
+	pgt_slice[511] = ptr::from_ref(unsafe { &l0_pgtable }).addr() as u64 + PT_PT + PT_SELF;
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&mut l1_pgtable as *mut u64, 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(&mut l1_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = unsafe { &l2_pgtable as *const _ as u64 + PT_PT };
-	pgt_slice[1] = unsafe { &l2k_pgtable as *const _ as u64 + PT_PT };
+	pgt_slice[0] = ptr::from_ref(unsafe { &l2_pgtable }).addr() as u64 + PT_PT;
+	pgt_slice[1] = ptr::from_ref(unsafe { &l2k_pgtable }).addr() as u64 + PT_PT;
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&mut l2_pgtable as *mut u64, 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(&mut l2_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = unsafe { &l3_pgtable as *const u64 as u64 + PT_PT };
+	pgt_slice[0] = ptr::from_ref(unsafe { &l3_pgtable }).addr() as u64 + PT_PT;
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&mut l3_pgtable as *mut u64, 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(&mut l3_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
 	pgt_slice[1] = uart_address as u64 + PT_MEM_CD;
 
 	// map kernel to KERNEL_START and stack below the kernel
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&mut l2k_pgtable as *mut u64, 512) };
+	let pgt_slice =
+		unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(&mut l2k_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
 	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice = unsafe { &mut L0mib_pgtable } as *mut _ as u64
+		*pgt_slice = ptr::from_mut(unsafe { &mut L0mib_pgtable }).addr() as u64
 			+ (i * BasePageSize::SIZE) as u64
 			+ PT_PT;
 	}
 
 	let pgt_slice =
-		unsafe { core::slice::from_raw_parts_mut(&mut L0mib_pgtable as *mut u64, 10 * 512) };
+		unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(&mut L0mib_pgtable), 10 * 512) };
 	for (i, entry) in pgt_slice.iter_mut().enumerate() {
 		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
 	}
@@ -207,10 +210,10 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 				"msr ttbr0_el1, {}",
 				"dsb sy",
 				"isb",
-				in(reg) &l0_pgtable as *const _ as u64,
+				in(reg) ptr::from_ref(&l0_pgtable).addr() as u64,
 				options(nostack),
-		);
-	}
+		)
+	};
 
 	// Enable paging
 	unsafe {
