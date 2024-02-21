@@ -1454,7 +1454,7 @@ impl BufferToken {
 			match self.send_buff.as_mut() {
 				Some(buff) => {
 					if buff.len() < data.as_slice_u8().len() {
-						return Err(VirtqError::WriteToLarge(self));
+						return Err(VirtqError::WriteTooLarge);
 					} else {
 						let data_slc = data.as_slice_u8();
 						let mut from = 0usize;
@@ -1483,7 +1483,7 @@ impl BufferToken {
 					let data_slc = data.as_slice_u8();
 
 					if buff.len() < data_slc.len() {
-						return Err(VirtqError::WriteToLarge(self));
+						return Err(VirtqError::WriteTooLarge);
 					} else {
 						let mut from = 0usize;
 
@@ -1537,7 +1537,7 @@ impl BufferToken {
 						Err(_) => {
 							// Need no match here, as result is the same, but for the future one could
 							// pass on the actual BufferError wrapped inside a VirtqError, for better recovery
-							return Err(VirtqError::WriteToLarge(self));
+							return Err(VirtqError::WriteTooLarge);
 						}
 					}
 				}
@@ -1553,7 +1553,7 @@ impl BufferToken {
 						Err(_) => {
 							// Need no match here, as result is the same, but for the future one could
 							// pass on the actual BufferError wrapped inside a VirtqError, for better recovery
-							return Err(VirtqError::WriteToLarge(self));
+							return Err(VirtqError::WriteTooLarge);
 						}
 					}
 				}
@@ -2292,7 +2292,7 @@ impl From<DescrFlags> for u16 {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
-	use super::{BufferToken, Transfer};
+	use super::Transfer;
 
 	#[derive(Debug)]
 	// Internal Error Handling for Buffers
@@ -2344,7 +2344,7 @@ pub mod error {
 		NoBufferAvail,
 		/// Indicates that a write to a Buffer happened and the data to be written into
 		/// the buffer/descriptor was to large for the buffer.
-		WriteToLarge(BufferToken),
+		WriteTooLarge,
 		/// Indicates that a Bytes::new() call failed or generally that a buffer is to large to
 		/// be transferred as one. The Maximum size is u32::MAX. This also is the maximum for indirect
 		/// descriptors (both the one placed in the queue, as also the ones the indirect descriptor is
@@ -2366,7 +2366,7 @@ pub mod error {
                 VirtqError::BufferSizeWrong(_) => write!(f, "Specified Buffer is to small for write!"),
                 VirtqError::NoReuseBuffer => write!(f, "Buffer can not be reused!"),
                 VirtqError::OngoingTransfer(_) => write!(f, "Transfer is ongoging and can not be used currently!"),
-                VirtqError::WriteToLarge(_) => write!(f, "Write is to large for BufferToken!"),
+                VirtqError::WriteTooLarge => write!(f, "Write is to large for BufferToken!"),
                 VirtqError::BufferToLarge => write!(f, "Buffer to large for queue! u32::MAX exceeded."),
 				VirtqError::QueueSizeNotAllowed(_) => write!(f, "The requested queue size is not valid."),
 				VirtqError:: FeatNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
