@@ -6,6 +6,7 @@ mod physicalmem;
 use core::arch::asm;
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 use core::mem;
+use core::ptr;
 #[cfg(target_os = "none")]
 use core::ptr::write_bytes;
 #[cfg(target_os = "none")]
@@ -28,6 +29,7 @@ use log::info;
 use multiboot::information::MemoryManagement;
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 use multiboot::information::{Multiboot, PAddr};
+use sptr::Strict;
 use uart_16550::SerialPort;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
@@ -171,8 +173,9 @@ pub fn find_kernel() -> &'static [u8] {
 	let elf_start = ramdisk_address as usize;
 	let elf_len = ramdisk_size as usize;
 
-	let free_memory_address =
-		(unsafe { &kernel_end } as *const u8 as usize).align_up(Size2MiB::SIZE as usize);
+	let free_memory_address = unsafe { ptr::addr_of!(kernel_end) }
+		.addr()
+		.align_up(Size2MiB::SIZE as usize);
 	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
 	let free_memory_address = cmp::max(free_memory_address, 0x800000);
 	info!("Intialize PhysAlloc with {:#x}", free_memory_address);
@@ -282,8 +285,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	// determine boot stack address
-	let new_stack =
-		(unsafe { &kernel_end } as *const u8 as usize + 0x1000).align_up(Size4KiB::SIZE as usize);
+	let new_stack = (ptr::addr_of!(kernel_end).addr() + 0x1000).align_up(Size4KiB::SIZE as usize);
 
 	let cmdline_ptr = unsafe {
 		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_PTR_OFFSET))
@@ -441,8 +443,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap() };
 
 	// determine boot stack address
-	let mut new_stack =
-		(unsafe { &kernel_end } as *const u8 as usize).align_up(Size4KiB::SIZE as usize);
+	let mut new_stack = ptr::addr_of!(kernel_end)
+		.addr()
+		.align_up(Size4KiB::SIZE as usize);
 
 	if new_stack + KERNEL_STACK_SIZE as usize > unsafe { mb_info } {
 		new_stack = (unsafe { mb_info } + mem::size_of::<Multiboot<'_, '_>>())
