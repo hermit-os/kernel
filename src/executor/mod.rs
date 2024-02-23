@@ -74,8 +74,7 @@ impl Wake for TaskNotify {
 }
 
 pub(crate) fn run() {
-	let waker = Waker::noop();
-	let mut cx = Context::from_waker(&waker);
+	let mut cx = Context::from_waker(Waker::noop());
 
 	without_interrupts(|| {
 		async_tasks().retain_mut(|task| {
@@ -126,8 +125,7 @@ where
 	};
 
 	let start = now();
-	let waker = core::task::Waker::noop();
-	let mut cx = Context::from_waker(&waker);
+	let mut cx = Context::from_waker(Waker::noop());
 	let mut future = pin!(future);
 
 	loop {

@@ -340,7 +340,6 @@ struct PageTable<L> {
 /// This additional trait is necessary to make use of Rust's specialization feature and provide a default
 /// implementation of some methods.
 trait PageTableMethods {
-	fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry>;
 	fn map_page_in_this_table<S: PageSize>(
 		&mut self,
 		page: Page<S>,
@@ -390,21 +389,6 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		}
 	}
 
-	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
-	///
-	/// This is the default implementation called only for L0Table.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except L0Table).
-	default fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
-		assert_eq!(L::LEVEL, S::MAP_LEVEL);
-		let index = page.table_index::<L>();
-
-		if self.entries[index].is_present() {
-			Some(self.entries[index])
-		} else {
-			None
-		}
-	}
-
 	/// Maps a single page to the given physical address.
 	///
 	/// This is the default implementation that just calls the map_page_in_this_table method.
@@ -423,26 +407,6 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L>
 where
 	L::SubtableLevel: PageTableLevel,
 {
-	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
-	///
-	/// This is the implementation for all tables with subtables (L1, L2).
-	/// It overrides the default implementation above.
-	fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
-		assert!(L::LEVEL >= S::MAP_LEVEL);
-		let index = page.table_index::<L>();
-
-		if self.entries[index].is_present() {
-			if L::LEVEL > S::MAP_LEVEL {
-				let subtable = self.subtable::<S>(page);
-				subtable.get_page_table_entry::<S>(page)
-			} else {
-				Some(self.entries[index])
-			}
-		} else {
-			None
-		}
-	}
-
 	/// Maps a single page to the given physical address.
 	///
 	/// This is the implementation for all tables with subtables (L1, L2).

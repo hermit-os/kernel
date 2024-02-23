@@ -29,12 +29,6 @@ fn get_ephemeral_port() -> u16 {
 }
 
 #[derive(Debug)]
-pub struct IPv4;
-
-#[derive(Debug)]
-pub struct IPv6;
-
-#[derive(Debug)]
 pub struct Socket {
 	handle: Handle,
 	port: AtomicU16,
@@ -341,6 +335,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
+	#[allow(dead_code)]
 	fn getpeername(&self) -> Option<IpEndpoint> {
 		self.with(|socket| socket.remote_endpoint())
 	}

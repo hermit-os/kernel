@@ -209,7 +209,7 @@ pub extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
 
 extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
-		crate::fs::opendir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+		crate::fs::opendir(name).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
 		-crate::errno::EINVAL
 	}
@@ -234,7 +234,7 @@ extern "C" fn __sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescript
 
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
 		crate::fd::open(name, flags, mode)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+			.unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
 		-crate::errno::EINVAL
 	}
@@ -426,7 +426,7 @@ pub extern "C" fn sys_getdents64(fd: FileDescriptor, dirp: *mut Dirent64, count:
 }
 
 extern "C" fn __sys_dup(fd: i32) -> i32 {
-	dup_object(fd).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+	dup_object(fd).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 }
 
 #[no_mangle]
@@ -464,7 +464,7 @@ pub extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 extern "C" fn __sys_eventfd(initval: u64, flags: i16) -> i32 {
 	if let Some(flags) = EventFlags::from_bits(flags) {
 		crate::fd::eventfd(initval, flags)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+			.unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
 		-crate::errno::EINVAL
 	}

@@ -20,16 +20,20 @@ pub trait PageTableEntryFlagsExt {
 
 	fn normal(&mut self) -> &mut Self;
 
+	#[cfg(feature = "acpi")]
 	fn read_only(&mut self) -> &mut Self;
 
 	fn writable(&mut self) -> &mut Self;
 
 	fn execute_disable(&mut self) -> &mut Self;
 
+	#[cfg(feature = "common-os")]
 	fn execute_enable(&mut self) -> &mut Self;
 
+	#[cfg(feature = "common-os")]
 	fn user(&mut self) -> &mut Self;
 
+	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self;
 }
 
@@ -44,6 +48,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 		self
 	}
 
+	#[cfg(feature = "acpi")]
 	fn read_only(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::WRITABLE);
 		self
@@ -59,16 +64,19 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 		self
 	}
 
+	#[cfg(feature = "common-os")]
 	fn execute_enable(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::NO_EXECUTE);
 		self
 	}
 
+	#[cfg(feature = "common-os")]
 	fn user(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::USER_ACCESSIBLE);
 		self
 	}
 
+	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
 		self
