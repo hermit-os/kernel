@@ -142,8 +142,18 @@ impl ObjectInterface for Socket {
 				};
 
 				if ret.is_empty() {
-					socket.register_recv_waker(cx.waker());
-					socket.register_send_waker(cx.waker());
+					if event.intersects(
+						PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
+					) {
+						socket.register_recv_waker(cx.waker());
+					}
+
+					if event.intersects(
+						PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+					) {
+						socket.register_send_waker(cx.waker());
+					}
+
 					Poll::Pending
 				} else {
 					Poll::Ready(Ok(ret))
