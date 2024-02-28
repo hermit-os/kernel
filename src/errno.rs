@@ -395,3 +395,80 @@ pub const ERFKILL: i32 = 132;
 
 /// Robust mutexes: Memory page has hardware error
 pub const EHWPOISON: i32 = 133;
+
+#[cfg(all(not(feature = "common-os"), not(target_arch = "riscv64")))]
+#[thread_local]
+pub(crate) static ERRNO: core::cell::UnsafeCell<i32> = core::cell::UnsafeCell::new(0);
+
+/// Get the error number from the thread local storage
+#[no_mangle]
+pub extern "C" fn sys_get_errno() -> i32 {
+	cfg_if::cfg_if! {
+		if #[cfg(any(feature = "common-os", target_arch = "riscv64"))] {
+			0
+		} else {
+			unsafe { ERRNO.get().read() }
+		}
+	}
+}
+
+pub(crate) trait ToErrno {
+	fn to_errno(&self) -> Option<i32> {
+		None
+	}
+
+	fn set_errno(self) -> Self
+	where
+		Self: Sized,
+	{
+		if let Some(errno) = self.to_errno() {
+			cfg_if::cfg_if! {
+				if #[cfg(any(feature = "common-os", target_arch = "riscv64"))] {
+					let _ = errno;
+				} else {
+					unsafe {
+						ERRNO.get().write(errno);
+					}
+				}
+			}
+		}
+		self
+	}
+}
+
+impl ToErrno for i32 {
+	fn to_errno(&self) -> Option<i32> {
+		let errno = if *self < 0 { -self } else { 0 };
+		Some(errno)
+	}
+}
+
+impl ToErrno for i64 {
+	fn to_errno(&self) -> Option<i32> {
+		let errno = if *self < 0 {
+			i32::try_from(-self).unwrap()
+		} else {
+			0
+		};
+		Some(errno)
+	}
+}
+
+impl ToErrno for isize {
+	fn to_errno(&self) -> Option<i32> {
+		let errno = if *self < 0 {
+			i32::try_from(-self).unwrap()
+		} else {
+			0
+		};
+		Some(errno)
+	}
+}
+
+impl ToErrno for u8 {}
+impl ToErrno for u16 {}
+impl ToErrno for u32 {}
+impl ToErrno for usize {}
+impl ToErrno for *mut u8 {}
+impl ToErrno for () {}
+impl ToErrno for ! {}
