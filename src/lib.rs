@@ -18,6 +18,7 @@
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
+#![feature(never_type)]
 #![feature(new_uninit)]
 #![feature(noop_waker)]
 #![feature(pointer_is_aligned)]
@@ -27,6 +28,7 @@
 	feature(specialization)
 )]
 #![feature(strict_provenance)]
+#![feature(thread_local)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
 #![cfg_attr(all(target_os = "none", test), test_runner(crate::test_runner))]

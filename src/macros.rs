@@ -78,33 +78,41 @@ macro_rules! dbg {
 	feature = "common-os"
 )))]
 macro_rules! kernel_function {
-	($f:ident()) => {
-		$crate::arch::switch::kernel_function0($f)
-	};
+	($f:ident()) => {{
+		use $crate::errno::ToErrno;
+		$crate::arch::switch::kernel_function0($f).set_errno()
+	}};
 
-	($f:ident($arg1:expr)) => {
-		$crate::arch::switch::kernel_function1($f, $arg1)
-	};
+	($f:ident($arg1:expr)) => {{
+		use $crate::errno::ToErrno;
+		#[allow(unreachable_code)]
+		$crate::arch::switch::kernel_function1($f, $arg1).set_errno()
+	}};
 
-	($f:ident($arg1:expr, $arg2:expr)) => {
-		$crate::arch::switch::kernel_function2($f, $arg1, $arg2)
-	};
+	($f:ident($arg1:expr, $arg2:expr)) => {{
+		use $crate::errno::ToErrno;
+		$crate::arch::switch::kernel_function2($f, $arg1, $arg2).set_errno()
+	}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {
-		$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3)
-	};
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {{
+		use $crate::errno::ToErrno;
+		$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3).set_errno()
+	}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {
-		$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4)
-	};
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {{
+		use $crate::errno::ToErrno;
+		$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4).set_errno()
+	}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {
-		$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5)
-	};
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {{
+		$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5).set_errno()
+	}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {{
+		use $crate::errno::ToErrno;
 		$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
-	};
+			.set_errno()
+	}};
 }
 
 // TODO: Properly switch kernel stack with newlib
@@ -117,7 +125,9 @@ macro_rules! kernel_function {
 ))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
-		$f($($x)*)
+		use $crate::errno::ToErrno;
+		#[allow(unreachable_code)]
+		$f($($x)*).set_errno()
 	}};
 }
 
