@@ -16,7 +16,7 @@ use sptr::Strict;
 
 pub fn message_output_init() {}
 
-pub use sbi::legacy::console_putchar as output_message_byte;
+pub use sbi_rt::console_write_byte as output_message_byte;
 
 fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;

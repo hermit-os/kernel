@@ -43,7 +43,7 @@ qemu-exit = "3"
 fdt = "0.1"
 naked-function = "0.1"
 riscv = "0.11"
-sbi = "0.2"
+sbi-rt = "0.0.3"
 sptr = "0.3"
 
 [profile.release]
