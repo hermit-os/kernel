@@ -12,7 +12,9 @@ use alloc::vec::Vec;
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
-use crate::fd::{insert_object, AccessPermission, IoError, ObjectInterface, OpenOption};
+use crate::fd::{
+	insert_object, remove_object, AccessPermission, IoError, ObjectInterface, OpenOption,
+};
 use crate::io::Write;
 use crate::time::{timespec, SystemTime};
 
@@ -488,6 +490,6 @@ impl crate::io::Write for File {
 
 impl Drop for File {
 	fn drop(&mut self) {
-		fd::close(self.fd);
+		let _ = remove_object(self.fd);
 	}
 }

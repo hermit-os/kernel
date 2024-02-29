@@ -281,9 +281,6 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
-
-	// close a file descriptor
-	fn close(&self) {}
 }
 
 pub(crate) fn open(
@@ -304,10 +301,6 @@ pub(crate) fn open(
 	} else {
 		Err(IoError::EINVAL)
 	}
-}
-
-pub(crate) fn close(fd: FileDescriptor) {
-	let _ = remove_object(fd).map(|v| v.close());
 }
 
 pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError> {
