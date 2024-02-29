@@ -13,10 +13,9 @@ use crate::drivers::virtio::error::VirtioFsError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
-use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize,
-};
+use crate::drivers::virtio::virtqueue::{AsSliceU8, BuffSpec, Bytes, Virtq, VqIndex, VqSize};
 use crate::fs::fuse::{self, FuseInterface};
 
 /// A wrapper struct for the raw configuration structure.
@@ -39,7 +38,6 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
 	pub(super) vqueues: Vec<Rc<dyn Virtq>>,
-	pub(super) ready_queue: Vec<BufferToken>,
 	pub(super) irq: InterruptLine,
 }
 
@@ -138,36 +136,34 @@ impl VirtioFsDriver {
 			self.vqueues.push(Rc::new(vq));
 		}
 
-		let cmd_spec = Some(BuffSpec::Single(Bytes::new(64 * 1024 + 128).unwrap()));
-		let rsp_spec = Some(BuffSpec::Single(Bytes::new(64 * 1024 + 128).unwrap()));
-
-		if let Ok(buff_tkn) = self.vqueues[1].clone().prep_buffer(cmd_spec, rsp_spec) {
-			self.ready_queue.push(buff_tkn);
-			// At this point the device is "live"
-			self.com_cfg.drv_ok();
-		}
+		// At this point the device is "live"
+		self.com_cfg.drv_ok();
 
 		Ok(())
 	}
 }
 
 impl FuseInterface for VirtioFsDriver {
-	fn send_command<O: fuse::ops::Op>(&mut self, cmd: &fuse::Cmd<O>, rsp: &mut fuse::Rsp<O>) {
-		if let Some(mut buff_tkn) = self.ready_queue.pop() {
-			let cmd_len = Some(cmd.len());
-			let rsp_len = Some(rsp.len());
-			buff_tkn.restr_size(cmd_len, rsp_len).unwrap();
-
-			let transfer_tkn = buff_tkn.write(Some(cmd), None::<&fuse::Rsp<O>>).unwrap();
-			let transfer = transfer_tkn.dispatch_blocking().unwrap();
-			let (_, response) = transfer.ret_cpy().unwrap();
-			let tkn = transfer.reuse().unwrap();
-			self.ready_queue.push(tkn);
-
-			if let Some(response) = response {
-				rsp.as_slice_u8_mut()[..response.len()].copy_from_slice(response.as_ref());
-			}
-		}
+	fn send_command<O: fuse::ops::Op>(
+		&mut self,
+		cmd: &fuse::Cmd<O>,
+		rsp: &mut fuse::Rsp<O>,
+	) -> Result<(), VirtqError> {
+		let send = (
+			cmd.as_slice_u8(),
+			BuffSpec::Single(Bytes::new(cmd.len()).ok_or(VirtqError::BufferToLarge)?),
+		);
+		let rsp_len = rsp.len();
+		let recv = (
+			rsp.as_slice_u8_mut(),
+			BuffSpec::Single(Bytes::new(rsp_len).ok_or(VirtqError::BufferToLarge)?),
+		);
+		let transfer_tkn = self.vqueues[1]
+			.clone()
+			.prep_transfer_from_raw(Some(send), Some(recv))
+			.unwrap();
+		transfer_tkn.dispatch_blocking()?;
+		Ok(())
 	}
 
 	fn get_mount_point(&self) -> String {
