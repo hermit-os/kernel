@@ -17,7 +17,6 @@ use crate::drivers::pci::{PciCommand, PciDevice};
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
-use crate::drivers::virtio::virtqueue::Virtq;
 
 /// Virtio's network device configuration structure.
 /// See specification v1.1. - 5.1.4
@@ -147,13 +146,9 @@ impl VirtioNetDriver {
 			notif_cfg,
 
 			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs: RxQueues::new(
-				Vec::<Rc<Virtq>>::new(),
-				Rc::new(RefCell::new(VecDeque::new())),
-				false,
-			),
+			recv_vqs: RxQueues::new(Vec::new(), Rc::new(RefCell::new(VecDeque::new())), false),
 			send_vqs: TxQueues::new(
-				Vec::<Rc<Virtq>>::new(),
+				Vec::new(),
 				Rc::new(RefCell::new(VecDeque::new())),
 				Vec::new(),
 				false,

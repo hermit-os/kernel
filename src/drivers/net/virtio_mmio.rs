@@ -139,12 +139,12 @@ impl VirtioNetDriver {
 			notif_cfg,
 			ctrl_vq: CtrlQueue::new(None),
 			recv_vqs: RxQueues::new(
-				Vec::<Rc<Virtq>>::new(),
+				Vec::<Rc<dyn Virtq>>::new(),
 				Rc::new(RefCell::new(VecDeque::new())),
 				false,
 			),
 			send_vqs: TxQueues::new(
-				Vec::<Rc<Virtq>>::new(),
+				Vec::<Rc<dyn Virtq>>::new(),
 				Rc::new(RefCell::new(VecDeque::new())),
 				Vec::new(),
 				false,

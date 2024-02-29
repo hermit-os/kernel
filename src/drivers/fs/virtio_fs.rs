@@ -13,8 +13,9 @@ use crate::drivers::virtio::error::VirtioFsError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize, VqType,
+	AsSliceU8, BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize,
 };
 use crate::fs::fuse::{self, FuseInterface};
 
@@ -37,7 +38,7 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
-	pub(super) vqueues: Vec<Rc<Virtq>>,
+	pub(super) vqueues: Vec<Rc<dyn Virtq>>,
 	pub(super) ready_queue: Vec<BufferToken>,
 	pub(super) irq: InterruptLine,
 }
@@ -126,23 +127,21 @@ impl VirtioFsDriver {
 
 		// create the queues and tell device about them
 		for i in 0..vqnum as u16 {
-			let vq = Virtq::new(
+			let vq = SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
 				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-				VqType::Split,
 				VqIndex::from(i),
 				self.dev_cfg.features.into(),
-			);
+			)
+			.unwrap();
 			self.vqueues.push(Rc::new(vq));
 		}
 
 		let cmd_spec = Some(BuffSpec::Single(Bytes::new(64 * 1024 + 128).unwrap()));
 		let rsp_spec = Some(BuffSpec::Single(Bytes::new(64 * 1024 + 128).unwrap()));
 
-		if let Ok(buff_tkn) =
-			self.vqueues[1].prep_buffer(Rc::clone(&self.vqueues[1]), cmd_spec, rsp_spec)
-		{
+		if let Ok(buff_tkn) = self.vqueues[1].clone().prep_buffer(cmd_spec, rsp_spec) {
 			self.ready_queue.push(buff_tkn);
 			// At this point the device is "live"
 			self.com_cfg.drv_ok();
