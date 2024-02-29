@@ -391,7 +391,17 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, IoError> {
 /// monitored is specified in the `fds` argument, which is an array
 /// of structs of `PollFd`.
 pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, IoError> {
-	block_on(poll_fds(fds), timeout)
+	let result = block_on(poll_fds(fds), timeout);
+	if let Err(ref e) = result {
+		if timeout.is_some() {
+			// A return value of zero indicates that the system call timed out
+			if *e == IoError::EAGAIN {
+				return Ok(0);
+			}
+		}
+	}
+
+	result
 }
 
 /// `eventfd` creates an linux-like "eventfd object" that can be used
