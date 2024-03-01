@@ -944,7 +944,7 @@ pub fn seed_entropy() -> Option<[u8; 32]> {
 			// flag was incorrectly set without there actually being a random value
 			// available. Even though no bugs are known for RDSEED, we should not
 			// consider the default values random for extra security.
-			while unsafe { _rdseed64_step(&mut value) != 1 } || value == 0 || value == !0 {
+			while unsafe { _rdseed64_step(&mut value) != 1 } || value == 0 || value == u64::MAX {
 				// Spin as per the recommendation in the
 				// Intel® Digital Random Number Generator (DRNG) implementation guide
 				spin_loop();

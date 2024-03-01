@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use alloc::vec::Vec;
-use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 

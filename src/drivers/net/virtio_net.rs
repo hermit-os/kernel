@@ -8,7 +8,6 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::cmp::Ordering;
 use core::mem;
-use core::result::Result;
 
 use align_address::Align;
 use pci_types::InterruptLine;
