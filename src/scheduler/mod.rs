@@ -16,7 +16,7 @@ use core::task::Poll::Ready;
 use ahash::RandomState;
 use crossbeam_utils::Backoff;
 use hashbrown::HashMap;
-use hermit_sync::{without_interrupts, *};
+use hermit_sync::*;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 

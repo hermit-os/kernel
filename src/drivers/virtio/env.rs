@@ -179,7 +179,6 @@ pub mod memory {
 #[cfg(feature = "pci")]
 pub mod pci {
 	use alloc::vec::Vec;
-	use core::result::Result;
 
 	use pci_types::{Bar, MAX_BARS};
 

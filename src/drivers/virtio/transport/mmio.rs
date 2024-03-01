@@ -3,9 +3,7 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-use core::convert::TryInto;
 use core::ptr::{read_volatile, write_volatile};
-use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 use core::{ptr, u8};
 
