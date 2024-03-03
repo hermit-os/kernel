@@ -123,7 +123,7 @@ pub fn message_output_init() {
 
 pub fn output_message_buf(buf: &[u8]) {
 	for byte in buf {
-		sbi::legacy::console_putchar(*byte);
+		sbi_rt::console_write_byte(*byte);
 	}
 }
 
@@ -198,7 +198,7 @@ fn finish_processor_init() {
 
 		//When running bare-metal/QEMU we use the firmware to start the next hart
 		if !env::is_uhyve() {
-			sbi::hart_state_management::hart_start(
+			sbi_rt::hart_start(
 				next_hart_id as usize,
 				start::_start as usize,
 				RAW_BOOT_INFO.load(Ordering::Relaxed) as usize,
