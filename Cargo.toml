@@ -137,7 +137,7 @@ semihosting = { version = "0.1", optional = true }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = "0.11"
-sbi = "0.2"
+sbi-rt = "0.0.3"
 trapframe = "0.9"
 semihosting = { version = "0.1", optional = true }
 
