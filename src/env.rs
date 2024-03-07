@@ -87,7 +87,7 @@ impl Default for Cli {
 				}
 				"--" => args.extend(&mut words),
 				_ if image_path.is_none() => image_path = Some(word),
-				word => panic!(
+				word => warn!(
 					"Found argument '{word}' which wasn't expected, or isn't valid in this context
 			
  		If you tried to supply `{word}` as a value rather than a flag, use `-- {word}`"
