@@ -15,7 +15,7 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 	shell.commands.insert(
 		"help",
 		ShellCommand {
-			help: "print this help message",
+			help: "Print this help message",
 			func: |_, shell| {
 				shell.print_help_screen();
 				Ok(())
@@ -26,12 +26,23 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 	shell.commands.insert(
 		"interrupts",
 		ShellCommand {
-			help: "shows the number of received interrupts",
+			help: "Shows the number of received interrupts",
 			func: |_, shell| {
 				print_statistics();
 				Ok(())
 			},
 			aliases: &["i"],
+		},
+	);
+	shell.commands.insert(
+		"shutdown",
+		ShellCommand {
+			help: "Shutdown HermitOS",
+			func: |_, shell| {
+				crate::__sys_shutdown(0);
+				Ok(())
+			},
+			aliases: &["s"],
 		},
 	);
 
