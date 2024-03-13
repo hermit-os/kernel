@@ -18,6 +18,7 @@ use crate::alloc::string::ToString;
 use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
+use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::executor::block_on;
 use crate::fd::{IoError, PollEvent};
@@ -39,7 +40,11 @@ const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
 pub(crate) trait FuseInterface {
-	fn send_command<O: ops::Op>(&mut self, cmd: &Cmd<O>, rsp: &mut Rsp<O>);
+	fn send_command<O: ops::Op>(
+		&mut self,
+		cmd: &Cmd<O>,
+		rsp: &mut Rsp<O>,
+	) -> Result<(), VirtqError>;
 
 	fn get_mount_point(&self) -> String;
 }
@@ -603,7 +608,8 @@ fn lookup(name: &str) -> Option<u64> {
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command(cmd.as_ref(), rsp.as_mut());
+		.send_command(cmd.as_ref(), rsp.as_mut())
+		.ok()?;
 	if unsafe { rsp.out_header.assume_init_ref().error } == 0 {
 		Some(unsafe { rsp.op_header.assume_init_ref().nodeid })
 	} else {
@@ -617,7 +623,7 @@ fn readlink(nid: u64) -> Result<String, IoError> {
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command(cmd.as_ref(), rsp.as_mut());
+		.send_command(cmd.as_ref(), rsp.as_mut())?;
 	let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
 		- ::core::mem::size_of::<fuse_abi::OutHeader>()
 		- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
@@ -662,7 +668,7 @@ impl FuseFileHandleInner {
 				get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
-					.send_command(cmd.as_ref(), rsp.as_mut());
+					.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 				if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 					Poll::Ready(Err(IoError::EIO))
@@ -702,7 +708,7 @@ impl FuseFileHandleInner {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut())?;
 			let len: usize = if (unsafe { rsp.out_header.assume_init_ref().len } as usize)
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
@@ -743,7 +749,7 @@ impl FuseFileHandleInner {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 			if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 				return Err(IoError::EIO);
@@ -771,7 +777,7 @@ impl FuseFileHandleInner {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 			if unsafe { rsp.out_header.assume_init_ref().error } < 0 {
 				return Err(IoError::EIO);
@@ -794,7 +800,8 @@ impl Drop for FuseFileHandleInner {
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut())
+				.unwrap();
 		}
 	}
 }
@@ -871,7 +878,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 		let fuse_fh = unsafe { rsp.op_header.assume_init_ref().fh };
 
 		debug!("FUSE readdir: {}", path);
@@ -886,7 +893,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 		let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
@@ -931,7 +938,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 		Ok(entries)
 	}
@@ -954,7 +961,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 		if unsafe { rsp.out_header.assume_init_ref().error } != 0 {
 			// TODO: Correct error handling
@@ -990,7 +997,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 		let attr = unsafe { rsp.op_header.assume_init().attr };
 		Ok(FileAttr::from(attr))
@@ -1036,7 +1043,7 @@ impl VfsNode for FuseDirectory {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut())?;
 			file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init_ref().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
@@ -1045,7 +1052,7 @@ impl VfsNode for FuseDirectory {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
+				.send_command(cmd.as_ref(), rsp.as_mut())?;
 
 			let inner = unsafe { rsp.op_header.assume_init() };
 			file_guard.fuse_nid = Some(inner.entry.nodeid);
@@ -1072,7 +1079,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
@@ -1093,7 +1100,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 		trace!("rmdir answer {:?}", rsp);
 
 		Ok(())
@@ -1118,7 +1125,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
 		if unsafe { rsp.out_header.assume_init_ref().error } == 0 {
 			Ok(())
 		} else {
@@ -1135,7 +1142,10 @@ pub(crate) fn init() {
 
 	if let Some(driver) = get_filesystem_driver() {
 		let (cmd, mut rsp) = ops::Init::create();
-		driver.lock().send_command(cmd.as_ref(), rsp.as_mut());
+		driver
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut())
+			.unwrap();
 		trace!("fuse init answer: {:?}", rsp);
 
 		let mount_point = format!("/{}", driver.lock().get_mount_point());

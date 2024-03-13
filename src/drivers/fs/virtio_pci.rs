@@ -112,7 +112,6 @@ impl VirtioFsDriver {
 			isr_stat,
 			notif_cfg,
 			vqueues: Vec::new(),
-			ready_queue: Vec::new(),
 			irq: device.get_irq().unwrap(),
 		})
 	}

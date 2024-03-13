@@ -3307,6 +3307,7 @@ impl From<DescrFlags> for u16 {
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
 	use super::Transfer;
+	use crate::fd;
 
 	#[derive(Debug)]
 	// Internal Error Handling for Buffers
@@ -3385,6 +3386,12 @@ pub mod error {
 				VirtqError::QueueSizeNotAllowed(_) => write!(f, "The requested queue size is not valid."),
 				VirtqError:: FeatNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
             }
+		}
+	}
+
+	impl core::convert::From<VirtqError> for fd::IoError {
+		fn from(_: VirtqError) -> Self {
+			fd::IoError::EIO
 		}
 	}
 }

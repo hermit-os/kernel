@@ -506,7 +506,7 @@ impl PerCoreScheduler {
 					}
 				}
 
-				Ready(Ok(()))
+				Ready(Ok::<(), IoError>(()))
 			})
 		})
 		.await?;
