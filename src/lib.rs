@@ -93,6 +93,8 @@ pub mod fs;
 pub mod io;
 mod mm;
 pub mod scheduler;
+#[cfg(all(feature = "shell", target_arch = "x86_64"))]
+mod shell;
 mod synch;
 pub mod syscalls;
 pub mod time;
@@ -283,6 +285,8 @@ extern "C" fn initd(_arg: usize) {
 
 	syscalls::init();
 	fs::init();
+	#[cfg(all(feature = "shell", target_arch = "x86_64"))]
+	shell::init();
 
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]

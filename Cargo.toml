@@ -66,6 +66,7 @@ trace = []
 vga = []
 common-os = []
 semihosting = ["dep:semihosting"]
+shell = ["simple-shell"]
 
 [dependencies]
 ahash = { version = "0.8", default-features = false }
@@ -95,6 +96,7 @@ zerocopy = { version = "0.7", features = ["derive"] }
 build-time = "0.1.3"
 async-trait = "0.1.77"
 async-lock = { version = "3.3.0", default-features = false }
+simple-shell = { version = "0.0.1", optional = true }
 
 [dependencies.smoltcp]
 version = "0.11"
