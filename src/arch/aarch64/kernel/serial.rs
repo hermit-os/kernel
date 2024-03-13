@@ -34,6 +34,11 @@ impl SerialPort {
 		}
 	}
 
+	#[allow(dead_code)]
+	pub fn read(&mut self) -> Option<u8> {
+		None
+	}
+
 	pub fn init(&self, _baudrate: u32) {
 		// We don't do anything here (yet).
 	}

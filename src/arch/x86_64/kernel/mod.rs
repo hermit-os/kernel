@@ -52,7 +52,7 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 }
 
 /// Serial port to print kernel messages
-static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
+pub(crate) static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr(boot_info().hardware_info.phys_addr_range.start)
