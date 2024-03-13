@@ -195,6 +195,10 @@ jobs:
         if: ${{ matrix.arch != 'riscv64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package miotcp --features dhcpv4 --netdev rtl8139 --features rtl8139
         if: ${{ matrix.arch == 'x86_64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package poll --features dhcpv4 --netdev virtio-net-pci
+        if: ${{ matrix.arch != 'riscv64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package poll --features dhcpv4 --netdev rtl8139 --features rtl8139
+        if: ${{ matrix.arch == 'x86_64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features udp,dhcpv4 --netdev virtio-net-pci
         if: ${{ matrix.arch != 'riscv64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features udp,dhcpv4 --netdev rtl8139 --features rtl8139

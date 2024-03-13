@@ -94,6 +94,7 @@ impl Qemu {
 			"testudp" => test_testudp()?,
 			"miotcp" => test_miotcp()?,
 			"mioudp" => test_mioudp()?,
+			"poll" => test_poll()?,
 			_ => {}
 		}
 
@@ -288,6 +289,20 @@ fn test_testudp() -> Result<()> {
 }
 
 fn test_miotcp() -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+	let buf = "exit";
+	eprintln!("[CI] send {buf:?} via TCP to 127.0.0.1:9975");
+	let mut stream = TcpStream::connect("127.0.0.1:9975")?;
+	stream.write_all(buf.as_bytes())?;
+
+	let mut buf = vec![];
+	let received = stream.read_to_end(&mut buf)?;
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+
+	Ok(())
+}
+
+fn test_poll() -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let buf = "exit";
 	eprintln!("[CI] send {buf:?} via TCP to 127.0.0.1:9975");
