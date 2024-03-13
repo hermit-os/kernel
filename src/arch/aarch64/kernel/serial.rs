@@ -34,6 +34,7 @@ impl SerialPort {
 		}
 	}
 
+	#[allow(dead_code)]
 	pub fn read(&mut self) -> Option<u8> {
 		None
 	}
