@@ -82,6 +82,13 @@ pub fn get_mbinfo() -> VirtAddr {
 	}
 }
 
+pub fn get_fdt() -> Option<usize> {
+	boot_info()
+		.hardware_info
+		.device_tree
+		.map(|fdt| fdt.get() as usize)
+}
+
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	use core::cmp;

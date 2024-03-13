@@ -5,7 +5,7 @@ use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
 
-use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
+use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::mm;
@@ -18,6 +18,48 @@ static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 const KVM_32BIT_MAX_MEM_SIZE: usize = 1 << 32;
 const KVM_32BIT_GAP_SIZE: usize = 768 << 20;
 const KVM_32BIT_GAP_START: usize = KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE;
+
+fn detect_from_fdt() -> Result<(), ()> {
+	let fdt_addr = get_fdt().ok_or(())?;
+	let fdt = unsafe { fdt::Fdt::from_ptr(fdt_addr as *const u8).unwrap() };
+
+	let mems = fdt.find_all_nodes("/memory");
+	let all_regions = mems.map(|m| m.reg().unwrap().next().unwrap());
+
+	let mut found_ram = false;
+
+	for m in all_regions {
+		let start_address = m.starting_address as u64;
+		let size = m.size.unwrap() as u64;
+		let end_address = start_address + size;
+
+		if end_address <= mm::kernel_end_address().as_u64() {
+			continue;
+		}
+
+		found_ram = true;
+
+		let start_address = if start_address <= mm::kernel_start_address().as_u64() {
+			mm::kernel_end_address()
+		} else {
+			VirtAddr(start_address)
+		};
+
+		let entry = FreeListEntry::new(start_address.as_usize(), end_address as usize);
+		let _ = TOTAL_MEMORY.fetch_add(
+			(end_address - start_address.as_u64()) as usize,
+			Ordering::SeqCst,
+		);
+		PHYSICAL_FREE_LIST.lock().push(entry);
+	}
+
+	assert!(
+		found_ram,
+		"Could not find any available RAM in the Devicetree Memory Map"
+	);
+
+	Ok(())
+}
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
 	let mb_info = get_mbinfo();
@@ -91,7 +133,8 @@ fn detect_from_limits() -> Result<(), ()> {
 }
 
 pub fn init() {
-	detect_from_multiboot_info()
+	detect_from_fdt()
+		.or_else(|_e| detect_from_multiboot_info())
 		.or_else(|_e| detect_from_limits())
 		.unwrap();
 }
