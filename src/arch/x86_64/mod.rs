@@ -1,6 +1,9 @@
 pub mod kernel;
 pub mod mm;
 
+#[cfg(feature = "common-os")]
+use x86_64::registers::segmentation::SegmentSelector;
+
 use crate::arch::mm::paging::ExceptionStackFrame;
 
 /// Helper function to swap the GS register, if the user-space is
@@ -9,7 +12,7 @@ use crate::arch::mm::paging::ExceptionStackFrame;
 #[inline(always)]
 pub(crate) fn swapgs(stack_frame: &ExceptionStackFrame) {
 	use core::arch::asm;
-	if stack_frame.code_segment != 8 {
+	if stack_frame.code_segment != SegmentSelector(8) {
 		unsafe {
 			asm!("swapgs", options(nomem, nostack, preserves_flags));
 		}

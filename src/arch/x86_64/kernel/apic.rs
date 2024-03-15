@@ -477,19 +477,19 @@ pub fn init() {
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
 	unsafe {
 		let mut idt = IDT.lock();
-		idt[ERROR_INTERRUPT_NUMBER as usize]
+		idt[ERROR_INTERRUPT_NUMBER]
 			.set_handler_fn(error_interrupt_handler)
 			.set_stack_index(0);
-		idt[SPURIOUS_INTERRUPT_NUMBER as usize]
+		idt[SPURIOUS_INTERRUPT_NUMBER]
 			.set_handler_fn(spurious_interrupt_handler)
 			.set_stack_index(0);
 		#[cfg(feature = "smp")]
 		{
-			idt[TLB_FLUSH_INTERRUPT_NUMBER as usize]
+			idt[TLB_FLUSH_INTERRUPT_NUMBER]
 				.set_handler_fn(tlb_flush_handler)
 				.set_stack_index(0);
 			interrupts::add_irq_name(TLB_FLUSH_INTERRUPT_NUMBER - 32, "TLB flush");
-			idt[WAKEUP_INTERRUPT_NUMBER as usize]
+			idt[WAKEUP_INTERRUPT_NUMBER]
 				.set_handler_fn(wakeup_handler)
 				.set_stack_index(0);
 			interrupts::add_irq_name(WAKEUP_INTERRUPT_NUMBER - 32, "Wakeup");

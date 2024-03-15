@@ -40,7 +40,7 @@ pub(crate) fn install() {
 	set_general_handler!(&mut *idt, unknown, 64..);
 
 	unsafe {
-		for i in 32..256 {
+		for i in 32..=255 {
 			let addr = idt[i].handler_addr();
 			idt[i].set_handler_addr(addr).set_stack_index(0);
 		}
@@ -117,7 +117,7 @@ pub extern "C" fn irq_install_handler(
 
 	let mut idt = IDT.lock();
 	unsafe {
-		idt[(32 + irq_number) as usize]
+		idt[32 + irq_number]
 			.set_handler_addr(x86_64::VirtAddr::new(
 				u64::try_from(handler as usize).unwrap(),
 			))

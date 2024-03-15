@@ -581,7 +581,7 @@ dependencies = [
  "trapframe",
  "uart_16550",
  "x86",
- "x86_64",
+ "x86_64 0.15.0",
  "zerocopy",
 ]
 
@@ -1310,7 +1310,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f287ee70169f5bfddba441baf901b620e3655f16fa7815f48a7e100ec6d86a8f"
 dependencies = [
  "raw-cpuid",
- "x86_64",
+ "x86_64 0.14.12",
 ]
 
 [[package]]
@@ -1598,6 +1598,18 @@ name = "x86_64"
 version = "0.14.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96cb6fd45bfeab6a5055c5bffdb08768bd0c069f1d946debe585bbb380a7c062"
+dependencies = [
+ "bit_field",
+ "bitflags 2.4.2",
+ "rustversion",
+ "volatile",
+]
+
+[[package]]
+name = "x86_64"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd9b58dbbd61248db1d7d5b7068fbe91b042e889361fe79fb4fd16a12daa66d3"
 dependencies = [
  "bit_field",
  "bitflags 2.4.2",
