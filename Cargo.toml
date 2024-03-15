@@ -65,6 +65,7 @@ udp = ["smoltcp", "smoltcp/socket-udp"]
 trace = []
 vga = []
 common-os = []
+nostd = []
 semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
 
