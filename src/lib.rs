@@ -252,9 +252,9 @@ pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
-		#[cfg(all(not(test), not(feature = "common-os")))]
+		#[cfg(all(not(test), not(any(feature = "nostd", feature = "common-os"))))]
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
-		#[cfg(all(not(test), feature = "common-os"))]
+		#[cfg(all(not(test), any(feature = "nostd", feature = "common-os")))]
 		fn main(argc: i32, argv: *const *const u8, env: *const *const u8);
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
@@ -298,9 +298,9 @@ extern "C" fn initd(_arg: usize) {
 	#[cfg(not(test))]
 	unsafe {
 		// And finally start the application.
-		#[cfg(all(not(test), not(feature = "common-os")))]
+		#[cfg(all(not(test), not(any(feature = "nostd", feature = "common-os"))))]
 		runtime_entry(argc, argv, environ);
-		#[cfg(all(not(test), feature = "common-os"))]
+		#[cfg(all(not(test), any(feature = "nostd", feature = "common-os")))]
 		main(argc, argv, environ);
 	}
 	#[cfg(test)]
