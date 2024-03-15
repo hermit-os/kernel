@@ -5,6 +5,7 @@ on:
   merge_group:
 
 env:
+  GH_TOKEN: ${{ github.token }}
   RUSTFLAGS: -Dwarnings
   RUSTDOCFLAGS: -Dwarnings
 
@@ -70,6 +71,11 @@ jobs:
             lfs: true
       - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Dowload OpenSBI
+        if: matrix.target == 'riscv64'
+        run: |
+          gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
+          tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - name: Run VM (hello_world, dev)
         run: cargo xtask ci qemu --target ${{ matrix.target }}
       - name: Run VM (hello_world, release)
