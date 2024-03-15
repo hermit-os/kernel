@@ -3,6 +3,8 @@ use core::ptr;
 
 use x86_64::instructions::tlb;
 use x86_64::registers::control::Cr2;
+#[cfg(feature = "common-os")]
+use x86_64::registers::segmentation::SegmentSelector;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
@@ -268,7 +270,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	error_code: PageFaultErrorCode,
 ) {
 	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read());
+	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());
@@ -282,12 +284,12 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	error_code: PageFaultErrorCode,
 ) {
 	unsafe {
-		if stack_frame.as_mut().read().code_segment != 0x08 {
+		if stack_frame.as_mut().read().code_segment != SegmentSelector(0x08) {
 			core::arch::asm!("swapgs", options(nostack));
 		}
 	}
 	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read());
+	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());
@@ -397,7 +399,7 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 	}
 
 	// Recursive
-	let mut recursive_page_table = unsafe { recursive_page_table() };
+	let recursive_page_table = unsafe { recursive_page_table() };
 	let pt = recursive_page_table.level_4_table();
 
 	// Identity mapped

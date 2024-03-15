@@ -18,14 +18,14 @@ use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {
 	let gdt: &mut GlobalDescriptorTable = Box::leak(Box::new(GlobalDescriptorTable::new()));
-	let kernel_code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
-	let kernel_data_selector = gdt.add_entry(Descriptor::kernel_data_segment());
+	let kernel_code_selector = gdt.append(Descriptor::kernel_code_segment());
+	let kernel_data_selector = gdt.append(Descriptor::kernel_data_segment());
 	#[cfg(feature = "common-os")]
 	{
 		let _user_code32_selector =
-			gdt.add_entry(Descriptor::UserSegment(DescriptorFlags::USER_CODE32.bits()));
-		let _user_data64_selector = gdt.add_entry(Descriptor::user_data_segment());
-		let _user_code64_selector = gdt.add_entry(Descriptor::user_code_segment());
+			gdt.append(Descriptor::UserSegment(DescriptorFlags::USER_CODE32.bits()));
+		let _user_data64_selector = gdt.append(Descriptor::user_data_segment());
+		let _user_code64_selector = gdt.append(Descriptor::user_code_segment());
 	}
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
@@ -53,7 +53,7 @@ pub fn add_current_core() {
 	}
 
 	CoreLocal::get().tss.set(tss);
-	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
+	let tss_selector = gdt.append(Descriptor::tss_segment(tss));
 
 	// Load the GDT for the current core.
 	gdt.load();

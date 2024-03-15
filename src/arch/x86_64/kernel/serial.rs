@@ -92,7 +92,7 @@ extern "x86-interrupt" fn serial_interrupt(_stack_frame: crate::interrupts::Exce
 pub(crate) fn install_serial_interrupt() {
 	unsafe {
 		let mut idt = IDT.lock();
-		idt[SERIAL_IRQ.into()]
+		idt[SERIAL_IRQ]
 			.set_handler_fn(serial_interrupt)
 			.set_stack_index(0);
 	}

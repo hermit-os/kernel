@@ -34,10 +34,10 @@ pub fn init() {
 	// This is especially true for real hardware. So provide a handler for them.
 	unsafe {
 		let mut idt = IDT.lock();
-		idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
+		idt[PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER]
 			.set_handler_fn(spurious_interrupt_on_master)
 			.set_stack_index(0);
-		idt[(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
+		idt[PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER]
 			.set_handler_fn(spurious_interrupt_on_slave)
 			.set_stack_index(0);
 

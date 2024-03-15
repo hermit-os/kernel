@@ -388,7 +388,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 pub fn install_timer_handler() {
 	unsafe {
 		let mut idt = IDT.lock();
-		idt[apic::TIMER_INTERRUPT_NUMBER as usize]
+		idt[apic::TIMER_INTERRUPT_NUMBER]
 			.set_handler_fn(timer_handler)
 			.set_stack_index(0);
 	}
