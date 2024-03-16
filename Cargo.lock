@@ -616,6 +616,7 @@ dependencies = [
  "hermit-entry",
  "hermit-macro",
  "hermit-sync",
+ "interrupts",
  "llvm-tools",
  "lock_api",
  "log",

@@ -68,7 +68,7 @@ vga = []
 common-os = []
 nostd = []
 semihosting = ["dep:semihosting"]
-shell = ["simple-shell"]
+shell = []
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
@@ -106,6 +106,7 @@ talc = { version = "4" }
 time = { version = "0.3", default-features = false }
 volatile = { version = "0.5.4", features = ["unstable"] }
 zerocopy = { version = "0.7", features = ["derive"] }
+interrupts = "0.1"
 
 [dependencies.smoltcp]
 version = "0.11"
