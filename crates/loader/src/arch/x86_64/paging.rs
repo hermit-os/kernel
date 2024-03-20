@@ -28,7 +28,7 @@ where
 	log::warn!(
 		"Mapping {count} {size} pages from {from_start:p}..{from_end:p} to {to_start:p}..{to_end:p}",
 		count = (pages.end.start_address() - pages.start.start_address()) / S::SIZE,
-		size = S::SIZE_AS_DEBUG_STR,
+		size = S::DEBUG_STR,
 		from_start = pages.start.start_address(),
 		from_end = pages.end.start_address(),
 		to_start = frames.start.start_address(),
