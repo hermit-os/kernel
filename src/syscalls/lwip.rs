@@ -4,9 +4,6 @@ use lock_api::MutexGuard;
 use crate::arch::core_local::core_scheduler;
 use crate::{arch, console};
 
-/// Enables lwIP's printf to print a whole string without being interrupted by
-/// a message from the kernel.
-
 extern "C" fn __sys_lwip_get_errno() -> i32 {
 	core_scheduler().get_lwip_errno()
 }
