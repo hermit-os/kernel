@@ -51,10 +51,6 @@ extern crate std;
 #[macro_use]
 extern crate num_derive;
 
-#[cfg(not(feature = "common-os"))]
-use alloc::alloc::Layout;
-#[cfg(not(feature = "common-os"))]
-use core::alloc::GlobalAlloc;
 #[cfg(feature = "smp")]
 use core::hint::spin_loop;
 #[cfg(feature = "smp")]
@@ -131,122 +127,6 @@ fn trivial_test() {
 #[cfg(target_os = "none")]
 #[global_allocator]
 static ALLOCATOR: LockedAllocator = LockedAllocator::new();
-
-/// Interface to allocate memory from system heap
-///
-/// # Errors
-/// Returning a null pointer indicates that either memory is exhausted or
-/// `size` and `align` do not meet this allocator's size or alignment constraints.
-///
-#[cfg(all(target_os = "none", not(feature = "common-os")))]
-pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
-	let layout_res = Layout::from_size_align(size, align);
-	if layout_res.is_err() || size == 0 {
-		warn!(
-			"__sys_malloc called with size {:#x}, align {:#x} is an invalid layout!",
-			size, align
-		);
-		return core::ptr::null_mut();
-	}
-	let layout = layout_res.unwrap();
-	let ptr = unsafe { ALLOCATOR.alloc(layout) };
-
-	trace!(
-		"__sys_malloc: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr,
-		size,
-		align
-	);
-
-	ptr
-}
-
-/// Shrink or grow a block of memory to the given `new_size`. The block is described by the given
-/// ptr pointer and layout. If this returns a non-null pointer, then ownership of the memory block
-/// referenced by ptr has been transferred to this allocator. The memory may or may not have been
-/// deallocated, and should be considered unusable (unless of course it was transferred back to the
-/// caller again via the return value of this method). The new memory block is allocated with
-/// layout, but with the size updated to new_size.
-/// If this method returns null, then ownership of the memory block has not been transferred to this
-/// allocator, and the contents of the memory block are unaltered.
-///
-/// # Safety
-/// This function is unsafe because undefined behavior can result if the caller does not ensure all
-/// of the following:
-/// - `ptr` must be currently allocated via this allocator,
-/// - `size` and `align` must be the same layout that was used to allocate that block of memory.
-/// ToDO: verify if the same values for size and align always lead to the same layout
-///
-/// # Errors
-/// Returns null if the new layout does not meet the size and alignment constraints of the
-/// allocator, or if reallocation otherwise fails.
-#[cfg(all(target_os = "none", not(feature = "common-os")))]
-pub(crate) extern "C" fn __sys_realloc(
-	ptr: *mut u8,
-	size: usize,
-	align: usize,
-	new_size: usize,
-) -> *mut u8 {
-	unsafe {
-		let layout_res = Layout::from_size_align(size, align);
-		if layout_res.is_err() || size == 0 || new_size == 0 {
-			warn!(
-			"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
-			ptr, size, align, new_size
-		);
-			return core::ptr::null_mut();
-		}
-		let layout = layout_res.unwrap();
-		let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
-
-		if new_ptr.is_null() {
-			debug!(
-			"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
-			ptr, size, align, new_size
-		);
-		} else {
-			trace!(
-				"__sys_realloc: resized memory at {:p}, new address {:p}",
-				ptr,
-				new_ptr
-			);
-		}
-		new_ptr
-	}
-}
-
-/// Interface to deallocate a memory region from the system heap
-///
-/// # Safety
-/// This function is unsafe because undefined behavior can result if the caller does not ensure all of the following:
-/// - ptr must denote a block of memory currently allocated via this allocator,
-/// - `size` and `align` must be the same values that were used to allocate that block of memory
-/// ToDO: verify if the same values for size and align always lead to the same layout
-///
-/// # Errors
-/// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
-#[cfg(all(target_os = "none", not(feature = "common-os")))]
-pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
-	unsafe {
-		let layout_res = Layout::from_size_align(size, align);
-		if layout_res.is_err() || size == 0 {
-			warn!(
-				"__sys_free called with size {:#x}, align {:#x} is an invalid layout!",
-				size, align
-			);
-			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
-			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
-		} else {
-			trace!(
-				"sys_free: deallocate memory at {:p} (size {:#x})",
-				ptr,
-				size
-			);
-		}
-		let layout = layout_res.unwrap();
-		ALLOCATOR.dealloc(ptr, layout);
-	}
-}
 
 /// Entry point of a kernel thread, which initialize the libos
 #[cfg(target_os = "none")]
