@@ -9,6 +9,7 @@ use hermit_sync::Lazy;
 #[cfg(feature = "newlib")]
 use hermit_sync::OnceCell;
 
+use self::allocator::LockedAllocator;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;
 #[cfg(target_arch = "x86_64")]
@@ -21,6 +22,10 @@ use crate::arch::mm::virtualmem::kernel_heap_end;
 use crate::arch::mm::PhysAddr;
 use crate::arch::mm::VirtAddr;
 use crate::{arch, env};
+
+#[cfg(target_os = "none")]
+#[global_allocator]
+pub static ALLOCATOR: LockedAllocator = LockedAllocator::new();
 
 /// Physical and virtual address range of the 2 MiB pages that map the kernel.
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
@@ -116,7 +121,7 @@ pub(crate) fn init() {
 
 		unsafe {
 			let start = allocate(kernel_heap_size, true);
-			crate::ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
+			ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
 
 			info!("Kernel heap starts at {:#x}", start);
 		}
@@ -275,7 +280,7 @@ pub(crate) fn init() {
 
 	#[cfg(not(feature = "newlib"))]
 	unsafe {
-		crate::ALLOCATOR.init(
+		ALLOCATOR.init(
 			heap_start_addr.as_mut_ptr(),
 			(heap_end_addr - heap_start_addr).into(),
 		);

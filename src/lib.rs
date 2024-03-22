@@ -60,7 +60,6 @@ use arch::core_local::*;
 // Used for integration test status.
 #[doc(hidden)]
 pub use env::is_uhyve as _is_uhyve;
-use mm::allocator::LockedAllocator;
 
 pub(crate) use crate::arch::*;
 pub use crate::config::DEFAULT_STACK_SIZE;
@@ -123,10 +122,6 @@ fn trivial_test() {
 	println!("Test test test");
 	panic!("Test called");
 }
-
-#[cfg(target_os = "none")]
-#[global_allocator]
-static ALLOCATOR: LockedAllocator = LockedAllocator::new();
 
 /// Entry point of a kernel thread, which initialize the libos
 #[cfg(target_os = "none")]

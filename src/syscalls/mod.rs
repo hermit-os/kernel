@@ -26,9 +26,9 @@ use crate::fd::{
 	IoError, OpenOption, PollFd,
 };
 use crate::fs::{self, FileAttr};
-use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
-use crate::ALLOCATOR;
+use crate::mm::ALLOCATOR;
+use crate::syscalls::interfaces::SyscallInterface;
 
 mod condvar;
 mod entropy;
