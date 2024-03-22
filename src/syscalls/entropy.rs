@@ -17,7 +17,7 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
+unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	let Some(flags) = Flags::from_bits(flags) else {
 		return -EINVAL as isize;
 	};
@@ -44,6 +44,10 @@ unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) ->
 	}
 }
 
+unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
+	unsafe { read_entropy(buf, len, flags) }
+}
+
 /// Fill `len` bytes in `buf` with cryptographically secure random data.
 ///
 /// Returns either the number of bytes written to buf (a positive value) or
@@ -51,21 +55,45 @@ unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) ->
 /// * `-ENOSYS` if the system does not support random data generation.
 #[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
-#[cfg_attr(target_arch = "riscv64", allow(unsafe_op_in_unsafe_fn))] // FIXME
 pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	kernel_function!(__sys_read_entropy(buf, len, flags))
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
+unsafe extern "C" fn __sys_secure_rand32(value: *mut u32) -> i32 {
+	let mut buf = value.cast();
+	let mut len = size_of::<u32>();
+	while len != 0 {
+		let res = unsafe { read_entropy(buf, len, 0) };
+		if res < 0 {
+			return -1;
+		}
+
+		buf = unsafe { buf.add(res as usize) };
+		len -= res as usize;
+	}
+
+	0
 }
 
 /// Create a cryptographicly secure 32bit random number with the support of
 /// the underlying hardware. If the required hardware isn't available,
 /// the function returns `-1`.
 #[cfg(not(feature = "newlib"))]
+#[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
+	kernel_function!(__sys_secure_rand32(value))
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
+unsafe extern "C" fn __sys_secure_rand64(value: *mut u64) -> i32 {
 	let mut buf = value.cast();
-	let mut len = size_of::<u32>();
+	let mut len = size_of::<u64>();
 	while len != 0 {
-		let res = unsafe { sys_read_entropy(buf, len, 0) };
+		let res = unsafe { read_entropy(buf, len, 0) };
 		if res < 0 {
 			return -1;
 		}
@@ -81,21 +109,10 @@ pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 /// the underlying hardware. If the required hardware isn't available,
 /// the function returns -1.
 #[cfg(not(feature = "newlib"))]
+#[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
-	let mut buf = value.cast();
-	let mut len = size_of::<u64>();
-	while len != 0 {
-		let res = unsafe { sys_read_entropy(buf, len, 0) };
-		if res < 0 {
-			return -1;
-		}
-
-		buf = unsafe { buf.add(res as usize) };
-		len -= res as usize;
-	}
-
-	0
+	kernel_function!(__sys_secure_rand64(value))
 }
 
 extern "C" fn __sys_rand() -> u32 {

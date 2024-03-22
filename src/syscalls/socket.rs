@@ -15,7 +15,7 @@ use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
 use crate::fd::socket::udp;
 use crate::fd::{get_object, insert_object, replace_object, ObjectInterface, SocketOption};
-use crate::syscalls::{IoCtl, __sys_write};
+use crate::syscalls::IoCtl;
 
 pub const AF_INET: i32 = 0;
 pub const AF_INET6: i32 = 1;
@@ -565,6 +565,10 @@ extern "C" fn __sys_getaddrinfo(
 	-EINVAL
 }
 
+extern "C" fn __sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) -> isize {
+	super::write(s, mem.cast(), len)
+}
+
 extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
@@ -576,12 +580,16 @@ extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 	)
 }
 
-extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
-	crate::fd::read(fd, slice).map_or_else(
-		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| v.try_into().unwrap(),
-	)
+extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
+	if flags == 0 {
+		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+		crate::fd::read(fd, slice).map_or_else(
+			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|v| v.try_into().unwrap(),
+		)
+	} else {
+		(-crate::errno::EINVAL).try_into().unwrap()
+	}
 }
 
 extern "C" fn __sys_sendto(
@@ -734,8 +742,8 @@ pub extern "C" fn sys_getaddrinfo(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) -> isize {
-	kernel_function!(__sys_write(s, mem as *const u8, len))
+pub extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, flags: i32) -> isize {
+	kernel_function!(__sys_send(s, mem, len, flags))
 }
 
 #[no_mangle]
@@ -745,11 +753,7 @@ pub extern "C" fn sys_shutdown_socket(s: i32, how: i32) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
-	if flags == 0 {
-		kernel_function!(__sys_recv(fd, buf, len))
-	} else {
-		(-crate::errno::EINVAL).try_into().unwrap()
-	}
+	kernel_function!(__sys_recv(fd, buf, len, flags))
 }
 
 #[no_mangle]

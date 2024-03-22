@@ -212,11 +212,15 @@ pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *co
 	SYS.get_application_parameters()
 }
 
-pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
+pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
 	SYS.shutdown(arg)
+}
+
+pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
+	shutdown(arg)
 }
 
 #[no_mangle]
@@ -386,12 +390,16 @@ pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isiz
 	kernel_function!(__sys_read(fd, buf, len))
 }
 
-extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	crate::fd::write(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| v.try_into().unwrap(),
 	)
+}
+
+extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+	write(fd, buf, len)
 }
 
 #[no_mangle]

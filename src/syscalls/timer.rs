@@ -1,6 +1,6 @@
 use crate::arch;
 use crate::errno::*;
-use crate::syscalls::__sys_usleep;
+use crate::syscalls::usleep;
 use crate::time::{itimerval, timespec, timeval};
 
 pub(crate) const CLOCK_REALTIME: u64 = 1;
@@ -124,7 +124,7 @@ extern "C" fn __sys_clock_nanosleep(
 				}
 			}
 
-			__sys_usleep(microseconds);
+			usleep(microseconds);
 			0
 		}
 		_ => -EINVAL,

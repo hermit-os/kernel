@@ -14,7 +14,7 @@ use crate::mm::{task_heap_end, task_heap_start};
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::time::timespec;
-use crate::{arch, scheduler, syscalls};
+use crate::{arch, scheduler};
 
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
@@ -52,9 +52,13 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
 }
 
-extern "C" fn __sys_exit(arg: i32) -> ! {
+fn exit(arg: i32) -> ! {
 	debug!("Exit program with error code {}!", arg);
-	syscalls::__sys_shutdown(arg)
+	super::shutdown(arg)
+}
+
+extern "C" fn __sys_exit(arg: i32) -> ! {
+	exit(arg)
 }
 
 #[no_mangle]
@@ -72,9 +76,13 @@ pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
 	kernel_function!(__sys_thread_exit(arg))
 }
 
+extern "C" fn __sys_abort() -> ! {
+	exit(-1)
+}
+
 #[no_mangle]
 pub extern "C" fn sys_abort() -> ! {
-	kernel_function!(__sys_exit(-1))
+	kernel_function!(__sys_abort())
 }
 
 #[cfg(feature = "newlib")]
@@ -109,7 +117,7 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	kernel_function!(__sys_sbrk(incr))
 }
 
-pub(crate) extern "C" fn __sys_usleep(usecs: u64) {
+pub(super) fn usleep(usecs: u64) {
 	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
@@ -123,9 +131,13 @@ pub(crate) extern "C" fn __sys_usleep(usecs: u64) {
 		// Not enough time to set a wakeup timer, so just do busy-waiting.
 		let end = arch::processor::get_timestamp() + u64::from(get_frequency()) * usecs;
 		while get_timestamp() < end {
-			__sys_yield();
+			core_scheduler().reschedule();
 		}
 	}
+}
+
+pub(crate) extern "C" fn __sys_usleep(usecs: u64) {
+	usleep(usecs)
 }
 
 #[no_mangle]
@@ -133,9 +145,13 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 	kernel_function!(__sys_usleep(usecs))
 }
 
+pub(crate) extern "C" fn __sys_msleep(ms: u32) {
+	usleep(u64::from(ms) * 1000)
+}
+
 #[no_mangle]
 pub extern "C" fn sys_msleep(ms: u32) {
-	kernel_function!(__sys_usleep(u64::from(ms) * 1000))
+	kernel_function!(__sys_msleep(ms))
 }
 
 extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
@@ -154,7 +170,7 @@ extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i3
 
 	let microseconds =
 		(requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
-	__sys_usleep(microseconds);
+	usleep(microseconds);
 
 	0
 }
@@ -248,7 +264,8 @@ extern "C" fn __sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	let new_id = __sys_spawn2(func, arg, prio, USER_STACK_SIZE, selector);
+	let new_id =
+		scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into();
 
 	if !id.is_null() {
 		unsafe {
@@ -286,7 +303,7 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 static BLOCKED_TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 
-extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
+fn block_current_task(timeout: &Option<u64>) {
 	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
@@ -296,16 +313,24 @@ extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
 	core_scheduler.block_current_task(wakeup_time);
 }
 
+extern "C" fn __sys_block_current_task() {
+	block_current_task(&None)
+}
+
 /// Set the current task state to `blocked`
 #[no_mangle]
 pub extern "C" fn sys_block_current_task() {
-	kernel_function!(__sys_block_current_task(&None))
+	kernel_function!(__sys_block_current_task())
+}
+
+extern "C" fn __sys_block_current_task_with_timeout(timeout: u64) {
+	block_current_task(&Some(timeout))
 }
 
 /// Set the current task state to `blocked`
 #[no_mangle]
 pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
-	kernel_function!(__sys_block_current_task(&Some(timeout)))
+	kernel_function!(__sys_block_current_task_with_timeout(timeout))
 }
 
 extern "C" fn __sys_wakeup_task(id: Tid) {

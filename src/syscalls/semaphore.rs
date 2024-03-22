@@ -98,12 +98,7 @@ pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
 	kernel_function!(__sys_sem_trywait(sem))
 }
 
-/// Try to acquire a lock on a semaphore, blocking for a given amount of milliseconds.
-///
-/// Blocks until semaphore is acquired or until wake-up time has elapsed.
-///
-/// Returns `0` on lock acquire, `-EINVAL` if sem is null, or `-ETIME` on timeout.
-extern "C" fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -119,12 +114,25 @@ extern "C" fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	}
 }
 
+/// Try to acquire a lock on a semaphore, blocking for a given amount of milliseconds.
+///
+/// Blocks until semaphore is acquired or until wake-up time has elapsed.
+///
+/// Returns `0` on lock acquire, `-EINVAL` if sem is null, or `-ETIME` on timeout.
+extern "C" fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+	sem_timedwait(sem, ms)
+}
+
 #[no_mangle]
 pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	kernel_function!(__sys_sem_timedwait(sem, ms))
 }
 
+extern "C" fn __sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
+	sem_timedwait(sem, ms)
+}
+
 #[no_mangle]
 pub extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
-	kernel_function!(__sys_sem_timedwait(sem, ms))
+	kernel_function!(__sys_sem_cancelablewait(sem, ms))
 }
