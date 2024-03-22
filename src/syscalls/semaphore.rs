@@ -124,11 +124,7 @@ pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	kernel_function!(__sys_sem_timedwait(sem, ms))
 }
 
-extern "C" fn __sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
-	sys_sem_timedwait(sem, ms)
-}
-
 #[no_mangle]
 pub extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
-	kernel_function!(__sys_sem_cancelablewait(sem, ms))
+	kernel_function!(__sys_sem_timedwait(sem, ms))
 }
