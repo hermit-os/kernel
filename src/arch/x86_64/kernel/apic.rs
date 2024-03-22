@@ -1,9 +1,11 @@
 use alloc::vec::Vec;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
+#[cfg(feature = "acpi")]
+use core::fmt;
 use core::hint::spin_loop;
 use core::sync::atomic::Ordering;
-use core::{cmp, fmt, mem, ptr, u32};
+use core::{cmp, mem, ptr, u32};
 
 use align_address::Align;
 #[cfg(feature = "smp")]
@@ -160,6 +162,7 @@ struct AcpiMadtRecordHeader {
 	length: u8,
 }
 
+#[cfg(feature = "acpi")]
 #[repr(C, packed)]
 struct ProcessorLocalApicRecord {
 	acpi_processor_id: u8,
@@ -167,6 +170,7 @@ struct ProcessorLocalApicRecord {
 	flags: u32,
 }
 
+#[cfg(feature = "acpi")]
 impl fmt::Display for ProcessorLocalApicRecord {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{{ acpi_processor_id: {}, ", { self.acpi_processor_id })?;
@@ -179,6 +183,7 @@ impl fmt::Display for ProcessorLocalApicRecord {
 #[cfg(feature = "acpi")]
 const CPU_FLAG_ENABLED: u32 = 1 << 0;
 
+#[cfg(feature = "acpi")]
 #[repr(C, packed)]
 struct IoApicRecord {
 	id: u8,
@@ -187,6 +192,7 @@ struct IoApicRecord {
 	global_system_interrupt_base: u32,
 }
 
+#[cfg(feature = "acpi")]
 impl fmt::Display for IoApicRecord {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{{ id: {}, ", { self.id })?;
