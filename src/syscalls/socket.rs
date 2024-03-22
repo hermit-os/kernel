@@ -703,7 +703,7 @@ pub extern "C" fn sys_setsockopt(
 }
 
 #[no_mangle]
-pub extern "C" fn getsockopt(
+pub extern "C" fn sys_getsockopt(
 	s: i32,
 	level: i32,
 	optname: i32,
