@@ -1,7 +1,5 @@
-use crate::arch;
-
 extern "C" fn __sys_getpagesize() -> i32 {
-	arch::mm::paging::get_application_page_size() as i32
+	crate::arch::mm::paging::get_application_page_size() as i32
 }
 
 #[no_mangle]
