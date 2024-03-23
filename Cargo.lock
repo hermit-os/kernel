@@ -557,6 +557,7 @@ dependencies = [
  "hermit-dtb",
  "hermit-entry",
  "hermit-sync",
+ "interrupts",
  "llvm-tools",
  "lock_api",
  "log",
@@ -572,7 +573,6 @@ dependencies = [
  "sbi",
  "semihosting",
  "shell-words",
- "simple-shell",
  "smallvec",
  "smoltcp",
  "take-static",
@@ -1133,12 +1133,6 @@ name = "shell-words"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24188a676b6ae68c3b2cb3a01be17fbf7240ce009799bb56d5b1409051e78fde"
-
-[[package]]
-name = "simple-shell"
-version = "0.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e977035c0f40249ba591c6b8c03b8b5393779817b8db5f29753acf6c012d234a"
 
 [[package]]
 name = "siphasher"
