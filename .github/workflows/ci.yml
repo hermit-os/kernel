@@ -109,6 +109,8 @@ jobs:
         run: cargo test --lib
         env:
           RUSTFLAGS: -Awarnings
+      - name: Macro unit tests
+        run: cargo test --package hermit-macro
       - name: Download loader
         run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
       - run: rustup target add x86_64-unknown-none

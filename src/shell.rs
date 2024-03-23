@@ -39,7 +39,7 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 		ShellCommand {
 			help: "Shutdown HermitOS",
 			func: |_, shell| {
-				crate::__sys_shutdown(0);
+				crate::shutdown(0);
 				Ok(())
 			},
 			aliases: &["s"],

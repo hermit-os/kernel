@@ -203,7 +203,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 
 struct NewTask {
 	tid: TaskId,
-	func: extern "C" fn(usize),
+	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: Priority,
 	core_id: CoreId,
@@ -231,8 +231,8 @@ impl From<NewTask> for Task {
 
 impl PerCoreScheduler {
 	/// Spawn a new task.
-	pub fn spawn(
-		func: extern "C" fn(usize),
+	pub unsafe fn spawn(
+		func: unsafe extern "C" fn(usize),
 		arg: usize,
 		prio: Priority,
 		core_id: CoreId,
@@ -941,8 +941,8 @@ fn get_scheduler_input(core_id: CoreId) -> &'static InterruptTicketMutex<Schedul
 	SCHEDULER_INPUTS.lock()[usize::try_from(core_id).unwrap()]
 }
 
-pub fn spawn(
-	func: extern "C" fn(usize),
+pub unsafe fn spawn(
+	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: Priority,
 	stack_size: usize,
@@ -957,7 +957,7 @@ pub fn spawn(
 		selector as u32
 	};
 
-	PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size)
+	unsafe { PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size) }
 }
 
 pub fn getpid() -> TaskId {

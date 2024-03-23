@@ -1,5 +1,7 @@
 #![allow(clippy::result_unit_err)]
 
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
+use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::CStr;
 use core::marker::PhantomData;
 
@@ -24,9 +26,9 @@ use crate::fd::{
 	IoError, OpenOption, PollFd,
 };
 use crate::fs::{self, FileAttr};
-use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
-use crate::{__sys_free, __sys_malloc, __sys_realloc};
+use crate::mm::ALLOCATOR;
+use crate::syscalls::interfaces::SyscallInterface;
 
 mod condvar;
 mod entropy;
@@ -72,41 +74,143 @@ pub(crate) fn init() {
 	sbrk_init();
 }
 
+/// Interface to allocate memory from system heap
+///
+/// # Errors
+/// Returning a null pointer indicates that either memory is exhausted or
+/// `size` and `align` do not meet this allocator's size or alignment constraints.
+///
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
-	kernel_function!(__sys_malloc(size, align))
+	let layout_res = Layout::from_size_align(size, align);
+	if layout_res.is_err() || size == 0 {
+		warn!(
+			"__sys_malloc called with size {:#x}, align {:#x} is an invalid layout!",
+			size, align
+		);
+		return core::ptr::null_mut();
+	}
+	let layout = layout_res.unwrap();
+	let ptr = unsafe { ALLOCATOR.alloc(layout) };
+
+	trace!(
+		"__sys_malloc: allocate memory at {:p} (size {:#x}, align {:#x})",
+		ptr,
+		size,
+		align
+	);
+
+	ptr
 }
 
+/// Shrink or grow a block of memory to the given `new_size`. The block is described by the given
+/// ptr pointer and layout. If this returns a non-null pointer, then ownership of the memory block
+/// referenced by ptr has been transferred to this allocator. The memory may or may not have been
+/// deallocated, and should be considered unusable (unless of course it was transferred back to the
+/// caller again via the return value of this method). The new memory block is allocated with
+/// layout, but with the size updated to new_size.
+/// If this method returns null, then ownership of the memory block has not been transferred to this
+/// allocator, and the contents of the memory block are unaltered.
+///
+/// # Safety
+/// This function is unsafe because undefined behavior can result if the caller does not ensure all
+/// of the following:
+/// - `ptr` must be currently allocated via this allocator,
+/// - `size` and `align` must be the same layout that was used to allocate that block of memory.
+/// ToDO: verify if the same values for size and align always lead to the same layout
+///
+/// # Errors
+/// Returns null if the new layout does not meet the size and alignment constraints of the
+/// allocator, or if reallocation otherwise fails.
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
-#[no_mangle]
-pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	kernel_function!(__sys_realloc(ptr, size, align, new_size))
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_realloc(
+	ptr: *mut u8,
+	size: usize,
+	align: usize,
+	new_size: usize,
+) -> *mut u8 {
+	unsafe {
+		let layout_res = Layout::from_size_align(size, align);
+		if layout_res.is_err() || size == 0 || new_size == 0 {
+			warn!(
+			"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
+			ptr, size, align, new_size
+		);
+			return core::ptr::null_mut();
+		}
+		let layout = layout_res.unwrap();
+		let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
+
+		if new_ptr.is_null() {
+			debug!(
+			"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
+			ptr, size, align, new_size
+		);
+		} else {
+			trace!(
+				"__sys_realloc: resized memory at {:p}, new address {:p}",
+				ptr,
+				new_ptr
+			);
+		}
+		new_ptr
+	}
 }
 
+/// Interface to deallocate a memory region from the system heap
+///
+/// # Safety
+/// This function is unsafe because undefined behavior can result if the caller does not ensure all of the following:
+/// - ptr must denote a block of memory currently allocated via this allocator,
+/// - `size` and `align` must be the same values that were used to allocate that block of memory
+/// ToDO: verify if the same values for size and align always lead to the same layout
+///
+/// # Errors
+/// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
-#[no_mangle]
-pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-	kernel_function!(__sys_free(ptr, size, align))
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
+	unsafe {
+		let layout_res = Layout::from_size_align(size, align);
+		if layout_res.is_err() || size == 0 {
+			warn!(
+				"__sys_free called with size {:#x}, align {:#x} is an invalid layout!",
+				size, align
+			);
+			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
+			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
+		} else {
+			trace!(
+				"sys_free: deallocate memory at {:p} (size {:#x})",
+				ptr,
+				size
+			);
+		}
+		let layout = layout_res.unwrap();
+		ALLOCATOR.dealloc(ptr, layout);
+	}
 }
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	SYS.get_application_parameters()
 }
 
-pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
+pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
 	SYS.shutdown(arg)
 }
 
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_shutdown(arg: i32) -> ! {
-	kernel_function!(__sys_shutdown(arg))
+	shutdown(arg)
 }
 
-extern "C" fn __sys_unlink(name: *const u8) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	fs::FILESYSTEM
@@ -116,12 +220,8 @@ extern "C" fn __sys_unlink(name: *const u8) -> i32 {
 		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
-	kernel_function!(__sys_unlink(name))
-}
-
-extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
 		mode
@@ -136,12 +236,8 @@ extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
 		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
-	kernel_function!(__sys_mkdir(name, mode))
-}
-
-extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_rmdir(name: *const u8) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	fs::FILESYSTEM
@@ -151,12 +247,8 @@ extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
 		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_rmdir(name: *const u8) -> i32 {
-	kernel_function!(__sys_rmdir(name))
-}
-
-extern "C" fn __sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	match fs::FILESYSTEM.get().unwrap().stat(name) {
@@ -168,12 +260,8 @@ extern "C" fn __sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
-	kernel_function!(__sys_stat(name, stat))
-}
-
-extern "C" fn __sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	match fs::FILESYSTEM.get().unwrap().lstat(name) {
@@ -185,12 +273,8 @@ extern "C" fn __sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
-	kernel_function!(__sys_lstat(name, stat))
-}
-
-extern "C" fn __sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
 	let stat = unsafe { &mut *stat };
 	let obj = get_object(fd);
 	obj.map_or_else(
@@ -202,12 +286,8 @@ extern "C" fn __sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
 	)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
-	kernel_function!(__sys_fstat(fd, stat))
-}
-
-extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
@@ -215,12 +295,8 @@ extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
-	kernel_function!(__sys_opendir(name))
-}
-
-extern "C" fn __sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
 	let flags = if let Some(flags) = OpenOption::from_bits(flags) {
 		flags
 	} else {
@@ -240,22 +316,14 @@ extern "C" fn __sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescript
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
-	kernel_function!(__sys_open(name, flags, mode))
-}
-
-extern "C" fn __sys_close(fd: FileDescriptor) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 	let obj = remove_object(fd);
 	obj.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
-	kernel_function!(__sys_close(fd))
-}
-
-extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
@@ -263,12 +331,7 @@ extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize 
 	)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
-	kernel_function!(__sys_read(fd, buf, len))
-}
-
-extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	crate::fd::write(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
@@ -276,12 +339,17 @@ extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isi
 	)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
-	kernel_function!(__sys_write(fd, buf, len))
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+	unsafe { write(fd, buf, len) }
 }
 
-extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_ioctl(
+	fd: FileDescriptor,
+	cmd: i32,
+	argp: *mut core::ffi::c_void,
+) -> i32 {
 	const FIONBIO: i32 = 0x8008667eu32 as i32;
 
 	if cmd == FIONBIO {
@@ -300,12 +368,9 @@ extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
-	kernel_function!(__sys_ioctl(fd, cmd, argp))
-}
-
-extern "C" fn __sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
+/// manipulate file descriptor
+#[hermit_macro::system]
+pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 	const F_SETFD: i32 = 2;
 	const F_SETFL: i32 = 4;
 	const FD_CLOEXEC: i32 = 1;
@@ -327,13 +392,8 @@ extern "C" fn __sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 	}
 }
 
-/// manipulate file descriptor
-#[no_mangle]
-pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
-	kernel_function!(__sys_fcntl(fd, cmd, arg))
-}
-
-extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
+#[hermit_macro::system]
+pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
@@ -342,11 +402,6 @@ extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isi
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)
 		},
 	)
-}
-
-#[no_mangle]
-pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
-	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
 #[repr(C)]
@@ -364,7 +419,12 @@ pub struct Dirent64 {
 	pub d_name: PhantomData<u8>,
 }
 
-extern "C" fn __sys_getdents64(fd: FileDescriptor, dirp: *mut Dirent64, count: usize) -> i64 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_getdents64(
+	fd: FileDescriptor,
+	dirp: *mut Dirent64,
+	count: usize,
+) -> i64 {
 	if dirp.is_null() || count == 0 {
 		return -crate::errno::EINVAL as i64;
 	}
@@ -414,21 +474,13 @@ extern "C" fn __sys_getdents64(fd: FileDescriptor, dirp: *mut Dirent64, count: u
 	)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_getdents64(fd: FileDescriptor, dirp: *mut Dirent64, count: usize) -> i64 {
-	kernel_function!(__sys_getdents64(fd, dirp, count))
-}
-
-extern "C" fn __sys_dup(fd: i32) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_dup(fd: i32) -> i32 {
 	dup_object(fd).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 }
 
-#[no_mangle]
-pub extern "C" fn sys_dup(fd: i32) -> i32 {
-	kernel_function!(__sys_dup(fd))
-}
-
-extern "C" fn __sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 	let slice = unsafe { core::slice::from_raw_parts_mut(fds, nfds) };
 	let timeout = if timeout >= 0 {
 		Some(core::time::Duration::from_millis(
@@ -450,12 +502,8 @@ extern "C" fn __sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 	)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
-	kernel_function!(__sys_poll(fds, nfds, timeout))
-}
-
-extern "C" fn __sys_eventfd(initval: u64, flags: i16) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 	if let Some(flags) = EventFlags::from_bits(flags) {
 		crate::fd::eventfd(initval, flags)
 			.unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
@@ -464,16 +512,7 @@ extern "C" fn __sys_eventfd(initval: u64, flags: i16) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
-	kernel_function!(__sys_eventfd(initval, flags))
-}
-
-extern "C" fn __sys_image_start_addr() -> usize {
-	crate::mm::kernel_start_address().0.try_into().unwrap()
-}
-
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_image_start_addr() -> usize {
-	kernel_function!(__sys_image_start_addr())
+	crate::mm::kernel_start_address().0.try_into().unwrap()
 }

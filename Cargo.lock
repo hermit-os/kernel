@@ -556,6 +556,7 @@ dependencies = [
  "hashbrown",
  "hermit-dtb",
  "hermit-entry",
+ "hermit-macro",
  "hermit-sync",
  "llvm-tools",
  "lock_api",
@@ -583,6 +584,15 @@ dependencies = [
  "x86",
  "x86_64 0.15.0",
  "zerocopy",
+]
+
+[[package]]
+name = "hermit-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
 ]
 
 [[package]]

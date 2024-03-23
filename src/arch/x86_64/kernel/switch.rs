@@ -220,7 +220,7 @@ macro_rules! kernel_function_impl {
 	($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
 		/// Executes `f` on the kernel stack.
 		#[allow(dead_code)]
-		pub fn $kernel_function<R, $($A),*>(f: unsafe extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
+		pub unsafe fn $kernel_function<R, $($A),*>(f: unsafe extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
 			unsafe {
 				assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
 
@@ -229,7 +229,7 @@ macro_rules! kernel_function_impl {
 					let $arg = {
 						let mut reg = 0_usize;
 						// SAFETY: $A is smaller than usize and directly fits in a register
-						// Since f takes $A as argument via C calling convention, any opper bytes do not matter.
+						// Since f takes $A as argument via C calling convention, any upper bytes do not matter.
 						ptr::write(ptr::from_mut(&mut reg) as _, $arg);
 						reg
 					};

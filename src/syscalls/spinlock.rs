@@ -14,7 +14,8 @@ pub struct SpinlockIrqSaveContainer<'a> {
 	guard: Option<InterruptTicketMutexGuard<'a, ()>>,
 }
 
-extern "C" fn __sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -29,12 +30,8 @@ extern "C" fn __sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_init(lock))
-}
-
-extern "C" fn __sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -46,12 +43,8 @@ extern "C" fn __sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_destroy(lock))
-}
-
-extern "C" fn __sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -65,12 +58,8 @@ extern "C" fn __sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_lock(lock))
-}
-
-extern "C" fn __sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -84,12 +73,10 @@ extern "C" fn __sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_unlock(lock))
-}
-
-extern "C" fn __sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_irqsave_init(
+	lock: *mut *mut SpinlockIrqSaveContainer<'_>,
+) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -104,12 +91,10 @@ extern "C" fn __sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContain
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_irqsave_init(lock))
-}
-
-extern "C" fn __sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_irqsave_destroy(
+	lock: *mut SpinlockIrqSaveContainer<'_>,
+) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -121,12 +106,8 @@ extern "C" fn __sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContainer
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_irqsave_destroy(lock))
-}
-
-extern "C" fn __sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -140,12 +121,10 @@ extern "C" fn __sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer<'_
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_irqsave_lock(lock))
-}
-
-extern "C" fn __sys_spinlock_irqsave_unlock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spinlock_irqsave_unlock(
+	lock: *mut SpinlockIrqSaveContainer<'_>,
+) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -157,9 +136,4 @@ extern "C" fn __sys_spinlock_irqsave_unlock(lock: *mut SpinlockIrqSaveContainer<
 	);
 	container.guard = None;
 	0
-}
-
-#[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_unlock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
-	kernel_function!(__sys_spinlock_irqsave_unlock(lock))
 }

@@ -23,7 +23,8 @@ impl CondQueue {
 	}
 }
 
-extern "C" fn __sys_destroy_queue(ptr: usize) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 	unsafe {
 		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
@@ -40,12 +41,8 @@ extern "C" fn __sys_destroy_queue(ptr: usize) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
-	kernel_function!(__sys_destroy_queue(ptr))
-}
-
-extern "C" fn __sys_notify(ptr: usize, count: i32) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 	unsafe {
 		let id = ptr::from_exposed_addr::<usize>(ptr);
 
@@ -81,12 +78,8 @@ extern "C" fn __sys_notify(ptr: usize, count: i32) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
-	kernel_function!(__sys_notify(ptr, count))
-}
-
-extern "C" fn __sys_init_queue(ptr: usize) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 	unsafe {
 		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
@@ -104,12 +97,8 @@ extern "C" fn __sys_init_queue(ptr: usize) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
-	kernel_function!(__sys_init_queue(ptr))
-}
-
-extern "C" fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	unsafe {
 		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
@@ -136,12 +125,8 @@ extern "C" fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
-	kernel_function!(__sys_add_queue(ptr, timeout_ns))
-}
-
-extern "C" fn __sys_wait(ptr: usize) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_wait(ptr: usize) -> i32 {
 	unsafe {
 		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
@@ -160,9 +145,4 @@ extern "C" fn __sys_wait(ptr: usize) -> i32 {
 
 		0
 	}
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn sys_wait(ptr: usize) -> i32 {
-	kernel_function!(__sys_wait(ptr))
 }

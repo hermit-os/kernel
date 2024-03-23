@@ -70,6 +70,7 @@ semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
 
 [dependencies]
+hermit-macro = { path = "hermit-macro" }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.1"
 bit_field = "0.10"
@@ -152,6 +153,7 @@ llvm-tools = "0.1"
 
 [workspace]
 members = [
+    "hermit-macro",
 	"xtask",
 ]
 exclude = [

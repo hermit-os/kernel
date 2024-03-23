@@ -17,7 +17,7 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
+unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	let Some(flags) = Flags::from_bits(flags) else {
 		return -EINVAL as isize;
 	};
@@ -44,28 +44,30 @@ unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) ->
 	}
 }
 
+unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
+	unsafe { read_entropy(buf, len, flags) }
+}
+
 /// Fill `len` bytes in `buf` with cryptographically secure random data.
 ///
 /// Returns either the number of bytes written to buf (a positive value) or
 /// * `-EINVAL` if `flags` contains unknown flags.
 /// * `-ENOSYS` if the system does not support random data generation.
-#[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
-#[cfg_attr(target_arch = "riscv64", allow(unsafe_op_in_unsafe_fn))] // FIXME
 pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
-	kernel_function!(__sys_read_entropy(buf, len, flags))
+	unsafe { kernel_function!(__sys_read_entropy(buf, len, flags)) }
 }
 
 /// Create a cryptographicly secure 32bit random number with the support of
 /// the underlying hardware. If the required hardware isn't available,
 /// the function returns `-1`.
 #[cfg(not(feature = "newlib"))]
-#[no_mangle]
+#[hermit_macro::system]
 pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 	let mut buf = value.cast();
 	let mut len = size_of::<u32>();
 	while len != 0 {
-		let res = unsafe { sys_read_entropy(buf, len, 0) };
+		let res = unsafe { read_entropy(buf, len, 0) };
 		if res < 0 {
 			return -1;
 		}
@@ -81,12 +83,12 @@ pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 /// the underlying hardware. If the required hardware isn't available,
 /// the function returns -1.
 #[cfg(not(feature = "newlib"))]
-#[no_mangle]
+#[hermit_macro::system]
 pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
 	let mut buf = value.cast();
 	let mut len = size_of::<u64>();
 	while len != 0 {
-		let res = unsafe { sys_read_entropy(buf, len, 0) };
+		let res = unsafe { read_entropy(buf, len, 0) };
 		if res < 0 {
 			return -1;
 		}
@@ -98,26 +100,18 @@ pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
 	0
 }
 
-extern "C" fn __sys_rand() -> u32 {
-	generate_park_miller_lehmer_random_number()
-}
-
 /// The function computes a sequence of pseudo-random integers
 /// in the range of 0 to RAND_MAX
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_rand() -> u32 {
-	kernel_function!(__sys_rand())
-}
-
-extern "C" fn __sys_srand(seed: u32) {
-	*(PARK_MILLER_LEHMER_SEED.lock()) = seed;
+	generate_park_miller_lehmer_random_number()
 }
 
 /// The function sets its argument as the seed for a new sequence
 /// of pseudo-random numbers to be returned by rand()
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_srand(seed: u32) {
-	kernel_function!(__sys_srand(seed))
+	*(PARK_MILLER_LEHMER_SEED.lock()) = seed;
 }
 
 pub(crate) fn init_entropy() {

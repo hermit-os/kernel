@@ -379,7 +379,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 }
 
 impl TaskFrame for Task {
-	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
+	fn create_stack_frame(&mut self, func: unsafe extern "C" fn(usize), arg: usize) {
 		// Check if the task (process or thread) uses Thread-Local-Storage.
 		// check is TLS is already allocated
 		if self.tls.is_none() {

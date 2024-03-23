@@ -846,7 +846,7 @@ pub fn configure() {
 	#[cfg(feature = "fsgsbase")]
 	if !supports_fsgs() {
 		error!("FSGSBASE support is enabled, but the processor doesn't support it!");
-		crate::__sys_shutdown(1);
+		crate::shutdown(1);
 	}
 
 	debug!("Set CR4 to {:#x}", cr4);
