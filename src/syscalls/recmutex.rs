@@ -3,7 +3,8 @@ use alloc::boxed::Box;
 use crate::errno::*;
 use crate::synch::recmutex::RecursiveMutex;
 
-extern "C" fn __sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -17,12 +18,8 @@ extern "C" fn __sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
-	kernel_function!(__sys_recmutex_init(recmutex))
-}
-
-extern "C" fn __sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -36,12 +33,8 @@ extern "C" fn __sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
-	kernel_function!(__sys_recmutex_destroy(recmutex))
-}
-
-extern "C" fn __sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -52,12 +45,8 @@ extern "C" fn __sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
-	kernel_function!(__sys_recmutex_lock(recmutex))
-}
-
-extern "C" fn __sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -66,9 +55,4 @@ extern "C" fn __sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
 	mutex.release();
 
 	0
-}
-
-#[no_mangle]
-pub extern "C" fn sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
-	kernel_function!(__sys_recmutex_unlock(recmutex))
 }

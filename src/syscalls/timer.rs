@@ -19,7 +19,8 @@ pub(crate) const TIMER_ABSTIME: i32 = 4;
 /// - `CLOCK_PROCESS_CPUTIME_ID`
 /// - `CLOCK_THREAD_CPUTIME_ID`
 /// - `CLOCK_MONOTONIC`
-unsafe extern "C" fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	assert!(
 		!res.is_null(),
 		"sys_clock_getres called with a zero res parameter"
@@ -39,11 +40,6 @@ unsafe extern "C" fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i3
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
-	unsafe { kernel_function!(__sys_clock_getres(clock_id, res)) }
-}
-
 /// Get the current time of a clock.
 ///
 /// Get the current time of the clock with `clock_id` and stores result in parameter `res`.
@@ -52,7 +48,8 @@ pub unsafe extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> 
 /// Supported clocks:
 /// - `CLOCK_REALTIME`
 /// - `CLOCK_MONOTONIC`
-unsafe extern "C" fn __sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 	assert!(
 		!tp.is_null(),
 		"sys_clock_gettime called with a zero tp parameter"
@@ -78,11 +75,6 @@ unsafe extern "C" fn __sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i3
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
-	unsafe { kernel_function!(__sys_clock_gettime(clock_id, tp)) }
-}
-
 /// Sleep a clock for a specified number of nanoseconds.
 ///
 /// The requested time (in nanoseconds) must be greater than 0 and less than 1,000,000.
@@ -92,7 +84,8 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> 
 /// Supported clocks:
 /// - `CLOCK_REALTIME`
 /// - `CLOCK_MONOTONIC`
-unsafe extern "C" fn __sys_clock_nanosleep(
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_clock_nanosleep(
 	clock_id: u64,
 	flags: i32,
 	rqtp: *const timespec,
@@ -131,25 +124,11 @@ unsafe extern "C" fn __sys_clock_nanosleep(
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_clock_nanosleep(
-	clock_id: u64,
-	flags: i32,
-	rqtp: *const timespec,
-	rmtp: *mut timespec,
-) -> i32 {
-	unsafe { kernel_function!(__sys_clock_nanosleep(clock_id, flags, rqtp, rmtp)) }
-}
-
-unsafe extern "C" fn __sys_clock_settime(_clock_id: u64, _tp: *const timespec) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_clock_settime(_clock_id: u64, _tp: *const timespec) -> i32 {
 	// We don't support setting any clocks yet.
 	debug!("sys_clock_settime is unimplemented, returning -EINVAL");
 	-EINVAL
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn sys_clock_settime(clock_id: u64, tp: *const timespec) -> i32 {
-	unsafe { kernel_function!(__sys_clock_settime(clock_id, tp)) }
 }
 
 /// Get the system's clock time.
@@ -158,7 +137,8 @@ pub unsafe extern "C" fn sys_clock_settime(clock_id: u64, tp: *const timespec) -
 /// Returns `0` on success, `-EINVAL` otherwise.
 ///
 /// **Parameter `tz` should be set to `0` since tz is obsolete.**
-unsafe extern "C" fn __sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
 		// Return the current time based on the wallclock time when we were booted up
 		// plus the current timer ticks.
@@ -174,26 +154,12 @@ unsafe extern "C" fn __sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	0
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
-	unsafe { kernel_function!(__sys_gettimeofday(tp, tz)) }
-}
-
-#[no_mangle]
-unsafe extern "C" fn __sys_setitimer(
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_setitimer(
 	_which: i32,
 	_value: *const itimerval,
 	_ovalue: *mut itimerval,
 ) -> i32 {
 	debug!("Called sys_setitimer, which is unimplemented and always returns 0");
 	0
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn sys_setitimer(
-	which: i32,
-	value: *const itimerval,
-	ovalue: *mut itimerval,
-) -> i32 {
-	unsafe { kernel_function!(__sys_setitimer(which, value, ovalue)) }
 }

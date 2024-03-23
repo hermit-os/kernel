@@ -20,17 +20,14 @@ use crate::{arch, scheduler};
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
 
-extern "C" fn __sys_getpid() -> Tid {
+#[hermit_macro::system]
+pub extern "C" fn sys_getpid() -> Tid {
 	core_scheduler().get_current_task_id().into()
 }
 
-#[no_mangle]
-pub extern "C" fn sys_getpid() -> Tid {
-	kernel_function!(__sys_getpid())
-}
-
 #[cfg(feature = "newlib")]
-extern "C" fn __sys_getprio(id: *const Tid) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let task = core_scheduler().get_current_task_handle();
 
 	if id.is_null() || unsafe { *id } == task.get_id().into() {
@@ -41,13 +38,7 @@ extern "C" fn __sys_getprio(id: *const Tid) -> i32 {
 }
 
 #[cfg(feature = "newlib")]
-#[no_mangle]
-pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
-	kernel_function!(__sys_getprio(id))
-}
-
-#[cfg(feature = "newlib")]
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
 }
@@ -57,32 +48,20 @@ fn exit(arg: i32) -> ! {
 	super::shutdown(arg)
 }
 
-extern "C" fn __sys_exit(arg: i32) -> ! {
+#[hermit_macro::system]
+pub extern "C" fn sys_exit(arg: i32) -> ! {
 	exit(arg)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_exit(arg: i32) -> ! {
-	kernel_function!(__sys_exit(arg))
-}
-
-extern "C" fn __sys_thread_exit(arg: i32) -> ! {
+#[hermit_macro::system]
+pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
 	debug!("Exit thread with error code {}!", arg);
 	core_scheduler().exit(arg)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
-	kernel_function!(__sys_thread_exit(arg))
-}
-
-extern "C" fn __sys_abort() -> ! {
-	exit(-1)
-}
-
-#[no_mangle]
+#[hermit_macro::system]
 pub extern "C" fn sys_abort() -> ! {
-	kernel_function!(__sys_abort())
+	exit(-1)
 }
 
 #[cfg(feature = "newlib")]
@@ -94,7 +73,8 @@ pub fn sbrk_init() {
 }
 
 #[cfg(feature = "newlib")]
-extern "C" fn __sys_sbrk(incr: isize) -> usize {
+#[hermit_macro::system]
+pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
 	let task_heap_start = task_heap_start();
 	let task_heap_end = task_heap_end();
@@ -109,12 +89,6 @@ extern "C" fn __sys_sbrk(incr: isize) -> usize {
 	}
 
 	old_end
-}
-
-#[cfg(feature = "newlib")]
-#[no_mangle]
-pub extern "C" fn sys_sbrk(incr: isize) -> usize {
-	kernel_function!(__sys_sbrk(incr))
 }
 
 pub(super) fn usleep(usecs: u64) {
@@ -136,25 +110,18 @@ pub(super) fn usleep(usecs: u64) {
 	}
 }
 
-pub(crate) extern "C" fn __sys_usleep(usecs: u64) {
+#[hermit_macro::system]
+pub extern "C" fn sys_usleep(usecs: u64) {
 	usleep(usecs)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_usleep(usecs: u64) {
-	kernel_function!(__sys_usleep(usecs))
-}
-
-pub(crate) extern "C" fn __sys_msleep(ms: u32) {
+#[hermit_macro::system]
+pub extern "C" fn sys_msleep(ms: u32) {
 	usleep(u64::from(ms) * 1000)
 }
 
-#[no_mangle]
-pub extern "C" fn sys_msleep(ms: u32) {
-	kernel_function!(__sys_msleep(ms))
-}
-
-unsafe extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
 	assert!(
 		!rqtp.is_null(),
 		"sys_nanosleep called with a zero rqtp parameter"
@@ -175,13 +142,10 @@ unsafe extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec
 	0
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, rmtp: *mut timespec) -> i32 {
-	unsafe { kernel_function!(__sys_nanosleep(rqtp, rmtp)) }
-}
-
+/// Creates a new thread based on the configuration of the current thread.
 #[cfg(feature = "newlib")]
-extern "C" fn __sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
 	let task_id = core_scheduler().clone(func, arg);
 
 	if !id.is_null() {
@@ -193,24 +157,14 @@ extern "C" fn __sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) 
 	0
 }
 
-/// Creates a new thread based on the configuration of the current thread.
-#[cfg(feature = "newlib")]
-#[no_mangle]
-pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
-	kernel_function!(__sys_clone(id, func, arg))
-}
-
-extern "C" fn __sys_yield() {
+#[hermit_macro::system]
+pub extern "C" fn sys_yield() {
 	core_scheduler().reschedule();
 }
 
-#[no_mangle]
-pub extern "C" fn sys_yield() {
-	kernel_function!(__sys_yield())
-}
-
 #[cfg(feature = "newlib")]
-extern "C" fn __sys_kill(dest: Tid, signum: i32) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 	debug!(
 		"sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}",
 		dest, signum
@@ -219,24 +173,14 @@ extern "C" fn __sys_kill(dest: Tid, signum: i32) -> i32 {
 }
 
 #[cfg(feature = "newlib")]
-#[no_mangle]
-pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
-	kernel_function!(__sys_kill(dest, signum))
-}
-
-#[cfg(feature = "newlib")]
-extern "C" fn __sys_signal(_handler: SignalHandler) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 	debug!("sys_signal is unimplemented");
 	0
 }
 
-#[cfg(feature = "newlib")]
-#[no_mangle]
-pub extern "C" fn sys_signal(handler: SignalHandler) -> i32 {
-	kernel_function!(__sys_signal(handler))
-}
-
-unsafe extern "C" fn __sys_spawn2(
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spawn2(
 	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
@@ -246,18 +190,8 @@ unsafe extern "C" fn __sys_spawn2(
 	unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_spawn2(
-	func: unsafe extern "C" fn(usize),
-	arg: usize,
-	prio: u8,
-	stack_size: usize,
-	selector: isize,
-) -> Tid {
-	unsafe { kernel_function!(__sys_spawn2(func, arg, prio, stack_size, selector)) }
-}
-
-unsafe extern "C" fn __sys_spawn(
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_spawn(
 	id: *mut Tid,
 	func: unsafe extern "C" fn(usize),
 	arg: usize,
@@ -277,27 +211,12 @@ unsafe extern "C" fn __sys_spawn(
 	0
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_spawn(
-	id: *mut Tid,
-	func: unsafe extern "C" fn(usize),
-	arg: usize,
-	prio: u8,
-	selector: isize,
-) -> i32 {
-	unsafe { kernel_function!(__sys_spawn(id, func, arg, prio, selector)) }
-}
-
-extern "C" fn __sys_join(id: Tid) -> i32 {
+#[hermit_macro::system]
+pub extern "C" fn sys_join(id: Tid) -> i32 {
 	match scheduler::join(TaskId::from(id)) {
 		Ok(()) => 0,
 		_ => -EINVAL,
 	}
-}
-
-#[no_mangle]
-pub extern "C" fn sys_join(id: Tid) -> i32 {
-	kernel_function!(__sys_join(id))
 }
 
 /// Mapping between blocked tasks and their TaskHandle
@@ -314,27 +233,21 @@ fn block_current_task(timeout: &Option<u64>) {
 	core_scheduler.block_current_task(wakeup_time);
 }
 
-extern "C" fn __sys_block_current_task() {
+/// Set the current task state to `blocked`
+#[hermit_macro::system]
+pub extern "C" fn sys_block_current_task() {
 	block_current_task(&None)
 }
 
 /// Set the current task state to `blocked`
-#[no_mangle]
-pub extern "C" fn sys_block_current_task() {
-	kernel_function!(__sys_block_current_task())
-}
-
-extern "C" fn __sys_block_current_task_with_timeout(timeout: u64) {
+#[hermit_macro::system]
+pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
 	block_current_task(&Some(timeout))
 }
 
-/// Set the current task state to `blocked`
-#[no_mangle]
-pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
-	kernel_function!(__sys_block_current_task_with_timeout(timeout))
-}
-
-extern "C" fn __sys_wakeup_task(id: Tid) {
+/// Wake up the task with the identifier `id`
+#[hermit_macro::system]
+pub extern "C" fn sys_wakeup_task(id: Tid) {
 	let task_id = TaskId::from(id);
 
 	if let Some(handle) = BLOCKED_TASKS.lock().remove(&task_id) {
@@ -342,23 +255,15 @@ extern "C" fn __sys_wakeup_task(id: Tid) {
 	}
 }
 
-/// Wake up the task with the identifier `id`
-#[no_mangle]
-pub extern "C" fn sys_wakeup_task(id: Tid) {
-	kernel_function!(__sys_wakeup_task(id))
-}
-
-extern "C" fn __sys_get_priority() -> u8 {
+/// Determine the priority of the current thread
+#[hermit_macro::system]
+pub extern "C" fn sys_get_priority() -> u8 {
 	core_scheduler().get_current_task_prio().into()
 }
 
-/// Determine the priority of the current thread
-#[no_mangle]
-pub extern "C" fn sys_get_priority() -> u8 {
-	kernel_function!(__sys_get_priority())
-}
-
-extern "C" fn __sys_set_priority(id: Tid, prio: u8) {
+/// Set priority of the thread with the identifier `id`
+#[hermit_macro::system]
+pub extern "C" fn sys_set_priority(id: Tid, prio: u8) {
 	if prio > 0 {
 		core_scheduler()
 			.set_priority(TaskId::from(id), Priority::from(prio))
@@ -368,22 +273,12 @@ extern "C" fn __sys_set_priority(id: Tid, prio: u8) {
 	}
 }
 
-/// Set priority of the thread with the identifier `id`
-#[no_mangle]
-pub extern "C" fn sys_set_priority(id: Tid, prio: u8) {
-	kernel_function!(__sys_set_priority(id, prio))
-}
-
-extern "C" fn __sys_set_current_task_priority(prio: u8) {
+/// Set priority of the current thread
+#[hermit_macro::system]
+pub extern "C" fn sys_set_current_task_priority(prio: u8) {
 	if prio > 0 {
 		core_scheduler().set_current_task_priority(Priority::from(prio));
 	} else {
 		panic!("Invalid priority {}", prio);
 	}
-}
-
-/// Set priority of the current thread
-#[no_mangle]
-pub extern "C" fn sys_set_current_task_priority(prio: u8) {
-	kernel_function!(__sys_set_current_task_priority(prio))
 }
