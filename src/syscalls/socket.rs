@@ -308,7 +308,7 @@ extern "C" fn __sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 	}
 }
 
-extern "C" fn __sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+unsafe extern "C" fn __sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
@@ -359,7 +359,7 @@ extern "C" fn __sys_listen(fd: i32, backlog: i32) -> i32 {
 	)
 }
 
-extern "C" fn __sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
+unsafe extern "C" fn __sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	let endpoint = if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
 		IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in) })
 	} else if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
@@ -378,7 +378,7 @@ extern "C" fn __sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> 
 	)
 }
 
-extern "C" fn __sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
+unsafe extern "C" fn __sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	let endpoint = if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
 		IpEndpoint::from(unsafe { *(name as *const sockaddr_in) })
 	} else if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
@@ -397,7 +397,11 @@ extern "C" fn __sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) 
 	)
 }
 
-extern "C" fn __sys_getsockname(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+unsafe extern "C" fn __sys_getsockname(
+	fd: i32,
+	addr: *mut sockaddr,
+	addrlen: *mut socklen_t,
+) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
@@ -436,7 +440,7 @@ extern "C" fn __sys_getsockname(fd: i32, addr: *mut sockaddr, addrlen: *mut sock
 	)
 }
 
-extern "C" fn __sys_setsockopt(
+unsafe extern "C" fn __sys_setsockopt(
 	fd: i32,
 	level: i32,
 	optname: i32,
@@ -472,7 +476,7 @@ extern "C" fn __sys_setsockopt(
 	}
 }
 
-extern "C" fn __sys_getsockopt(
+unsafe extern "C" fn __sys_getsockopt(
 	fd: i32,
 	level: i32,
 	optname: i32,
@@ -515,7 +519,11 @@ extern "C" fn __sys_getsockopt(
 	}
 }
 
-extern "C" fn __sys_getpeername(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+unsafe extern "C" fn __sys_getpeername(
+	fd: i32,
+	addr: *mut sockaddr,
+	addrlen: *mut socklen_t,
+) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
@@ -554,9 +562,9 @@ extern "C" fn __sys_getpeername(fd: i32, addr: *mut sockaddr, addrlen: *mut sock
 	)
 }
 
-extern "C" fn __sys_freeaddrinfo(_ai: *mut addrinfo) {}
+unsafe extern "C" fn __sys_freeaddrinfo(_ai: *mut addrinfo) {}
 
-extern "C" fn __sys_getaddrinfo(
+unsafe extern "C" fn __sys_getaddrinfo(
 	_nodename: *const u8,
 	_servname: *const u8,
 	_hints: *const addrinfo,
@@ -565,8 +573,8 @@ extern "C" fn __sys_getaddrinfo(
 	-EINVAL
 }
 
-extern "C" fn __sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) -> isize {
-	super::write(s, mem.cast(), len)
+unsafe extern "C" fn __sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) -> isize {
+	unsafe { super::write(s, mem.cast(), len) }
 }
 
 extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
@@ -580,7 +588,7 @@ extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 	)
 }
 
-extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
+unsafe extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
 	if flags == 0 {
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 		crate::fd::read(fd, slice).map_or_else(
@@ -592,7 +600,7 @@ extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize
 	}
 }
 
-extern "C" fn __sys_sendto(
+unsafe extern "C" fn __sys_sendto(
 	fd: i32,
 	buf: *const u8,
 	len: usize,
@@ -621,7 +629,7 @@ extern "C" fn __sys_sendto(
 	)
 }
 
-extern "C" fn __sys_recvfrom(
+unsafe extern "C" fn __sys_recvfrom(
 	fd: i32,
 	buf: *mut u8,
 	len: usize,
@@ -675,8 +683,8 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 }
 
 #[no_mangle]
-pub extern "C" fn sys_accept(s: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
-	kernel_function!(__sys_accept(s, addr, addrlen))
+pub unsafe extern "C" fn sys_accept(s: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+	unsafe { kernel_function!(__sys_accept(s, addr, addrlen)) }
 }
 
 #[no_mangle]
@@ -685,65 +693,73 @@ pub extern "C" fn sys_listen(s: i32, backlog: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_bind(s: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
-	kernel_function!(__sys_bind(s, name, namelen))
+pub unsafe extern "C" fn sys_bind(s: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
+	unsafe { kernel_function!(__sys_bind(s, name, namelen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_connect(s: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
-	kernel_function!(__sys_connect(s, name, namelen))
+pub unsafe extern "C" fn sys_connect(s: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
+	unsafe { kernel_function!(__sys_connect(s, name, namelen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_getsockname(s: i32, name: *mut sockaddr, namelen: *mut socklen_t) -> i32 {
-	kernel_function!(__sys_getsockname(s, name, namelen))
+pub unsafe extern "C" fn sys_getsockname(
+	s: i32,
+	name: *mut sockaddr,
+	namelen: *mut socklen_t,
+) -> i32 {
+	unsafe { kernel_function!(__sys_getsockname(s, name, namelen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_setsockopt(
+pub unsafe extern "C" fn sys_setsockopt(
 	s: i32,
 	level: i32,
 	optname: i32,
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	kernel_function!(__sys_setsockopt(s, level, optname, optval, optlen))
+	unsafe { kernel_function!(__sys_setsockopt(s, level, optname, optval, optlen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_getsockopt(
+pub unsafe extern "C" fn sys_getsockopt(
 	s: i32,
 	level: i32,
 	optname: i32,
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	kernel_function!(__sys_getsockopt(s, level, optname, optval, optlen))
+	unsafe { kernel_function!(__sys_getsockopt(s, level, optname, optval, optlen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_getpeername(s: i32, name: *mut sockaddr, namelen: *mut socklen_t) -> i32 {
-	kernel_function!(__sys_getpeername(s, name, namelen))
+pub unsafe extern "C" fn sys_getpeername(
+	s: i32,
+	name: *mut sockaddr,
+	namelen: *mut socklen_t,
+) -> i32 {
+	unsafe { kernel_function!(__sys_getpeername(s, name, namelen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_freeaddrinfo(ai: *mut addrinfo) {
-	kernel_function!(__sys_freeaddrinfo(ai))
+pub unsafe extern "C" fn sys_freeaddrinfo(ai: *mut addrinfo) {
+	unsafe { kernel_function!(__sys_freeaddrinfo(ai)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_getaddrinfo(
+pub unsafe extern "C" fn sys_getaddrinfo(
 	nodename: *const u8,
 	servname: *const u8,
 	hints: *const addrinfo,
 	res: *mut *mut addrinfo,
 ) -> i32 {
-	kernel_function!(__sys_getaddrinfo(nodename, servname, hints, res))
+	unsafe { kernel_function!(__sys_getaddrinfo(nodename, servname, hints, res)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, flags: i32) -> isize {
-	kernel_function!(__sys_send(s, mem, len, flags))
+pub unsafe extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, flags: i32) -> isize {
+	unsafe { kernel_function!(__sys_send(s, mem, len, flags)) }
 }
 
 #[no_mangle]
@@ -752,12 +768,12 @@ pub extern "C" fn sys_shutdown_socket(s: i32, how: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
-	kernel_function!(__sys_recv(fd, buf, len, flags))
+pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
+	unsafe { kernel_function!(__sys_recv(fd, buf, len, flags)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sendto(
+pub unsafe extern "C" fn sys_sendto(
 	socket: i32,
 	buf: *const u8,
 	len: usize,
@@ -765,11 +781,11 @@ pub extern "C" fn sys_sendto(
 	addr: *const sockaddr,
 	addrlen: socklen_t,
 ) -> isize {
-	kernel_function!(__sys_sendto(socket, buf, len, flags, addr, addrlen))
+	unsafe { kernel_function!(__sys_sendto(socket, buf, len, flags, addr, addrlen)) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_recvfrom(
+pub unsafe extern "C" fn sys_recvfrom(
 	socket: i32,
 	buf: *mut u8,
 	len: usize,
@@ -777,5 +793,5 @@ pub extern "C" fn sys_recvfrom(
 	addr: *mut sockaddr,
 	addrlen: *mut socklen_t,
 ) -> isize {
-	kernel_function!(__sys_recvfrom(socket, buf, len, flags, addr, addrlen))
+	unsafe { kernel_function!(__sys_recvfrom(socket, buf, len, flags, addr, addrlen)) }
 }

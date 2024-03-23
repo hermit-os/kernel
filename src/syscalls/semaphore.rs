@@ -9,7 +9,7 @@ use crate::synch::semaphore::Semaphore;
 ///
 /// Stores the raw memory location of the new semaphore in parameter `sem`.
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
-extern "C" fn __sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
+unsafe extern "C" fn __sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -23,8 +23,8 @@ extern "C" fn __sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
-	kernel_function!(__sys_sem_init(sem, value))
+pub unsafe extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
+	unsafe { kernel_function!(__sys_sem_init(sem, value)) }
 }
 
 /// Destroy and deallocate a semaphore.
@@ -32,7 +32,7 @@ pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 /// This function can be used to manually deallocate a semaphore via a reference.
 ///
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
-extern "C" fn __sys_sem_destroy(sem: *mut Semaphore) -> i32 {
+unsafe extern "C" fn __sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -46,8 +46,8 @@ extern "C" fn __sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
-	kernel_function!(__sys_sem_destroy(sem))
+pub unsafe extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
+	unsafe { kernel_function!(__sys_sem_destroy(sem)) }
 }
 
 /// Release a semaphore.
@@ -57,7 +57,7 @@ pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 /// The semaphore is not deallocated after being released.
 ///
 /// Returns `0` on success, or `-EINVAL` if `sem` is null.
-extern "C" fn __sys_sem_post(sem: *const Semaphore) -> i32 {
+unsafe extern "C" fn __sys_sem_post(sem: *const Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -69,8 +69,8 @@ extern "C" fn __sys_sem_post(sem: *const Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
-	kernel_function!(__sys_sem_post(sem))
+pub unsafe extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
+	unsafe { kernel_function!(__sys_sem_post(sem)) }
 }
 
 /// Try to acquire a lock on a semaphore.
@@ -79,7 +79,7 @@ pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
 /// If the acquire fails (i.e. the semaphore's count is already 0), the function returns immediately.
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if `sem` is null, or `-ECANCELED` if the decrement fails.
-extern "C" fn __sys_sem_trywait(sem: *const Semaphore) -> i32 {
+unsafe extern "C" fn __sys_sem_trywait(sem: *const Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -94,11 +94,11 @@ extern "C" fn __sys_sem_trywait(sem: *const Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
-	kernel_function!(__sys_sem_trywait(sem))
+pub unsafe extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
+	unsafe { kernel_function!(__sys_sem_trywait(sem)) }
 }
 
-fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+unsafe fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -119,20 +119,20 @@ fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 /// Blocks until semaphore is acquired or until wake-up time has elapsed.
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if sem is null, or `-ETIME` on timeout.
-extern "C" fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
-	sem_timedwait(sem, ms)
+unsafe extern "C" fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+	unsafe { sem_timedwait(sem, ms) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
-	kernel_function!(__sys_sem_timedwait(sem, ms))
+pub unsafe extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+	unsafe { kernel_function!(__sys_sem_timedwait(sem, ms)) }
 }
 
-extern "C" fn __sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
-	sem_timedwait(sem, ms)
+unsafe extern "C" fn __sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
+	unsafe { sem_timedwait(sem, ms) }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
-	kernel_function!(__sys_sem_cancelablewait(sem, ms))
+pub unsafe extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
+	unsafe { kernel_function!(__sys_sem_cancelablewait(sem, ms)) }
 }

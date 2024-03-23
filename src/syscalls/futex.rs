@@ -10,7 +10,7 @@ use crate::time::timespec;
 /// * `address` is null
 /// * `timeout` is negative
 /// * `flags` contains unknown flags
-extern "C" fn __sys_futex_wait(
+unsafe extern "C" fn __sys_futex_wait(
 	address: *mut u32,
 	expected: u32,
 	timeout: *const timespec,
@@ -38,19 +38,19 @@ extern "C" fn __sys_futex_wait(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_futex_wait(
+pub unsafe extern "C" fn sys_futex_wait(
 	address: *mut u32,
 	expected: u32,
 	timeout: *const timespec,
 	flags: u32,
 ) -> i32 {
-	kernel_function!(__sys_futex_wait(address, expected, timeout, flags))
+	unsafe { kernel_function!(__sys_futex_wait(address, expected, timeout, flags)) }
 }
 
 /// Like `synch::futex_wake`, but does extra sanity checks.
 ///
 /// Returns -EINVAL if `address` is null.
-extern "C" fn __sys_futex_wake(address: *mut u32, count: i32) -> i32 {
+unsafe extern "C" fn __sys_futex_wake(address: *mut u32, count: i32) -> i32 {
 	if address.is_null() {
 		return -EINVAL;
 	}
@@ -60,6 +60,6 @@ extern "C" fn __sys_futex_wake(address: *mut u32, count: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_futex_wake(address: *mut u32, count: i32) -> i32 {
-	kernel_function!(__sys_futex_wake(address, count))
+pub unsafe extern "C" fn sys_futex_wake(address: *mut u32, count: i32) -> i32 {
+	unsafe { kernel_function!(__sys_futex_wake(address, count)) }
 }

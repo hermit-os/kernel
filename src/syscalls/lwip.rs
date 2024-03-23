@@ -42,13 +42,13 @@ pub extern "C" fn sys_putchar(character: u8) {
 	kernel_function!(__sys_putchar(character))
 }
 
-extern "C" fn __sys_release_putchar_lock() {
+unsafe extern "C" fn __sys_release_putchar_lock() {
 	unsafe {
 		console::CONSOLE.force_unlock();
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn sys_release_putchar_lock() {
-	kernel_function!(__sys_release_putchar_lock())
+pub unsafe extern "C" fn sys_release_putchar_lock() {
+	unsafe { kernel_function!(__sys_release_putchar_lock()) }
 }

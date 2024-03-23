@@ -80,45 +80,109 @@ macro_rules! dbg {
 macro_rules! kernel_function {
 	($f:ident()) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f();
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function0($f).set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function0($f).set_errno()
+		}
 	}};
 
 	($f:ident($arg1:expr)) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f($arg1);
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function1($f, $arg1).set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function1($f, $arg1).set_errno()
+		}
 	}};
 
 	($f:ident($arg1:expr, $arg2:expr)) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f($arg1, $arg2);
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function2($f, $arg1, $arg2).set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function2($f, $arg1, $arg2).set_errno()
+		}
 	}};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f($arg1, $arg2, $arg3);
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3).set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3).set_errno()
+		}
 	}};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f($arg1, $arg2, $arg3, $arg4);
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4).set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4).set_errno()
+		}
 	}};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f($arg1, $arg2, $arg3, $arg4, $arg5);
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5).set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5)
+				.set_errno()
+		}
 	}};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {{
 		use $crate::errno::ToErrno;
+
+		// This propagates any unsafety requirements of `f` to the caller.
+		if false {
+			$f($arg1, $arg2, $arg3, $arg4, $arg5, $arg6);
+		}
+
 		#[allow(unreachable_code)]
-		$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
-			.set_errno()
+		#[allow(unused_unsafe)]
+		unsafe {
+			$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
+				.set_errno()
+		}
 	}};
 }
 

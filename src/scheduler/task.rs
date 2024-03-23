@@ -406,7 +406,7 @@ pub(crate) struct Task {
 
 pub(crate) trait TaskFrame {
 	/// Create the initial stack frame for a new task
-	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize);
+	fn create_stack_frame(&mut self, func: unsafe extern "C" fn(usize), arg: usize);
 }
 
 impl Task {

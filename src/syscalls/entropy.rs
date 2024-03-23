@@ -53,10 +53,9 @@ unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) ->
 /// Returns either the number of bytes written to buf (a positive value) or
 /// * `-EINVAL` if `flags` contains unknown flags.
 /// * `-ENOSYS` if the system does not support random data generation.
-#[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
-	kernel_function!(__sys_read_entropy(buf, len, flags))
+	unsafe { kernel_function!(__sys_read_entropy(buf, len, flags)) }
 }
 
 #[cfg(not(feature = "newlib"))]
@@ -81,10 +80,9 @@ unsafe extern "C" fn __sys_secure_rand32(value: *mut u32) -> i32 {
 /// the underlying hardware. If the required hardware isn't available,
 /// the function returns `-1`.
 #[cfg(not(feature = "newlib"))]
-#[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
-	kernel_function!(__sys_secure_rand32(value))
+	unsafe { kernel_function!(__sys_secure_rand32(value)) }
 }
 
 #[cfg(not(feature = "newlib"))]
@@ -109,10 +107,9 @@ unsafe extern "C" fn __sys_secure_rand64(value: *mut u64) -> i32 {
 /// the underlying hardware. If the required hardware isn't available,
 /// the function returns -1.
 #[cfg(not(feature = "newlib"))]
-#[allow(unsafe_op_in_unsafe_fn)]
 #[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
-	kernel_function!(__sys_secure_rand64(value))
+	unsafe { kernel_function!(__sys_secure_rand64(value)) }
 }
 
 extern "C" fn __sys_rand() -> u32 {

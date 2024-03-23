@@ -37,7 +37,7 @@ pub fn thread_test() {
 	let threadnum = 5;
 	for i in 0..threadnum {
 		println!("SPAWNING THREAD {}", i);
-		let id = sys_spawn2(thread_func, i, NORMAL_PRIO, USER_STACK_SIZE, -1);
+		let id = unsafe { sys_spawn2(thread_func, i, NORMAL_PRIO, USER_STACK_SIZE, -1) };
 		children.push(id);
 	}
 	println!("SPAWNED THREADS");
@@ -47,13 +47,13 @@ pub fn thread_test() {
 	}
 }
 
-extern "C" fn waker_func(futex: usize) {
+unsafe extern "C" fn waker_func(futex: usize) {
 	let futex = unsafe { &*(futex as *const AtomicU32) };
 
 	sys_usleep(100_000);
 
 	futex.store(1, Relaxed);
-	let ret = sys_futex_wake(futex as *const AtomicU32 as *mut u32, i32::MAX);
+	let ret = unsafe { sys_futex_wake(futex as *const AtomicU32 as *mut u32, i32::MAX) };
 	assert_eq!(ret, 1);
 }
 
@@ -62,26 +62,28 @@ pub fn test_futex() {
 	let futex = AtomicU32::new(0);
 	let futex_ptr = &futex as *const AtomicU32 as *mut u32;
 
-	let ret = sys_futex_wait(futex_ptr, 1, ptr::null(), 0);
+	let ret = unsafe { sys_futex_wait(futex_ptr, 1, ptr::null(), 0) };
 	assert_eq!(ret, -EAGAIN);
 
 	let timeout = timespec {
 		tv_sec: 0,
 		tv_nsec: 100_000_000,
 	};
-	let ret = sys_futex_wait(futex_ptr, 0, &timeout, 1);
+	let ret = unsafe { sys_futex_wait(futex_ptr, 0, &timeout, 1) };
 	assert_eq!(ret, -ETIMEDOUT);
 
-	let waker = sys_spawn2(
-		waker_func,
-		futex_ptr as usize,
-		NORMAL_PRIO,
-		USER_STACK_SIZE,
-		-1,
-	);
+	let waker = unsafe {
+		sys_spawn2(
+			waker_func,
+			futex_ptr as usize,
+			NORMAL_PRIO,
+			USER_STACK_SIZE,
+			-1,
+		)
+	};
 	assert!(waker >= 0);
 
-	let ret = sys_futex_wait(futex_ptr, 0, ptr::null(), 0);
+	let ret = unsafe { sys_futex_wait(futex_ptr, 0, ptr::null(), 0) };
 	assert_eq!(ret, 0);
 	assert_eq!(futex.load(Relaxed), 1);
 

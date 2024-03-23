@@ -5,7 +5,7 @@ macro_rules! kernel_function_impl {
 	($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
 		/// Executes `f` on the kernel stack.
 		#[allow(dead_code)]
-		pub fn $kernel_function<R, $($A),*>(f: unsafe extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
+		pub unsafe fn $kernel_function<R, $($A),*>(f: unsafe extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
 			unsafe {
 				assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
 

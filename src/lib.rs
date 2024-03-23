@@ -239,7 +239,15 @@ fn boot_processor_main() -> ! {
 	}
 
 	// Start the initd task.
-	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
+	unsafe {
+		scheduler::PerCoreScheduler::spawn(
+			initd,
+			0,
+			scheduler::task::NORMAL_PRIO,
+			0,
+			USER_STACK_SIZE,
+		)
+	};
 
 	// Run the scheduler loop.
 	PerCoreScheduler::run();

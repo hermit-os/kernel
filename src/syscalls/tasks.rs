@@ -154,7 +154,7 @@ pub extern "C" fn sys_msleep(ms: u32) {
 	kernel_function!(__sys_msleep(ms))
 }
 
-extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
+unsafe extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
 	assert!(
 		!rqtp.is_null(),
 		"sys_nanosleep called with a zero rqtp parameter"
@@ -176,8 +176,8 @@ extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i3
 }
 
 #[no_mangle]
-pub extern "C" fn sys_nanosleep(rqtp: *const timespec, rmtp: *mut timespec) -> i32 {
-	kernel_function!(__sys_nanosleep(rqtp, rmtp))
+pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, rmtp: *mut timespec) -> i32 {
+	unsafe { kernel_function!(__sys_nanosleep(rqtp, rmtp)) }
 }
 
 #[cfg(feature = "newlib")]
@@ -236,36 +236,37 @@ pub extern "C" fn sys_signal(handler: SignalHandler) -> i32 {
 	kernel_function!(__sys_signal(handler))
 }
 
-extern "C" fn __sys_spawn2(
-	func: extern "C" fn(usize),
+unsafe extern "C" fn __sys_spawn2(
+	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into()
+	unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn2(
-	func: extern "C" fn(usize),
+pub unsafe extern "C" fn sys_spawn2(
+	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	kernel_function!(__sys_spawn2(func, arg, prio, stack_size, selector))
+	unsafe { kernel_function!(__sys_spawn2(func, arg, prio, stack_size, selector)) }
 }
 
-extern "C" fn __sys_spawn(
+unsafe extern "C" fn __sys_spawn(
 	id: *mut Tid,
-	func: extern "C" fn(usize),
+	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	let new_id =
-		scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into();
+	let new_id = unsafe {
+		scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+	};
 
 	if !id.is_null() {
 		unsafe {
@@ -277,14 +278,14 @@ extern "C" fn __sys_spawn(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn(
+pub unsafe extern "C" fn sys_spawn(
 	id: *mut Tid,
-	func: extern "C" fn(usize),
+	func: unsafe extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	kernel_function!(__sys_spawn(id, func, arg, prio, selector))
+	unsafe { kernel_function!(__sys_spawn(id, func, arg, prio, selector)) }
 }
 
 extern "C" fn __sys_join(id: Tid) -> i32 {
