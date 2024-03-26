@@ -45,6 +45,11 @@ unsafe impl GlobalAlloc for LockedAllocator {
 		let layout = Self::align_layout(layout);
 		unsafe { self.0.dealloc(ptr, layout) }
 	}
+
+	unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+		let layout = Self::align_layout(layout);
+		unsafe { self.0.realloc(ptr, layout, new_size) }
+	}
 }
 
 #[cfg(all(test, not(target_os = "none")))]
