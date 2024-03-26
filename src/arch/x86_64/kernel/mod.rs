@@ -80,6 +80,7 @@ pub fn is_uefi() -> bool {
 	}
 }
 
+// RSDP has to be located in the bootloader for UEFI systems, so we can retrieve the address from boot info
 pub fn get_rsdp_addr() -> u64 {
 	match boot_info().platform_info {
 		PlatformInfo::Uefi { rsdp_addr } => rsdp_addr,

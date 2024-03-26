@@ -313,10 +313,10 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
-	// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
+	// For UEFI Systems, RSDP detection takes place in the bootloader and the tables are already mapped so we only need to return a proper reference to the table
 	if crate::arch::kernel::is_uefi() {
 		let rsdp = crate::arch::kernel::get_rsdp_addr();
-		trace!("rsdp detected successfully at {rsdp:#x?}");
+		trace!("RSDP detected successfully at {rsdp:#x?}");
 		let rsdp = unsafe { &*(rsdp as *const AcpiRsdp) };
 		if &rsdp.signature != b"RSD PTR " {
 			panic!("RSDP Address not valid!");
@@ -562,7 +562,7 @@ pub fn init() {
 }
 
 pub fn init_uefi() {
-	// Detect the RSDP and get a pointer to either the XSDT (64-bit) or RSDT (32-bit), whichever is available.
+	// Retrieve the RSDP and get a pointer to either the XSDT (64-bit) or RSDT (32-bit), whichever is available.
 	// Both are called RSDT in the following.
 	let rsdp = detect_acpi().expect("Hermit requires an ACPI-compliant system");
 	let rsdt_physical_address = if rsdp.revision >= 2 {
@@ -573,7 +573,6 @@ pub fn init_uefi() {
 
 	//Load RSDT
 	let rsdt = &unsafe { *(rsdt_physical_address.0 as *const AcpiSdtHeader) };
-	trace!("RSDT: {rsdt:#x?}");
 
 	// The RSDT contains pointers to all available ACPI tables.
 	// Iterate through them.
@@ -598,15 +597,11 @@ pub fn init_uefi() {
 			address
 		};
 
-		trace!("table_physical_address: {table_physical_address:#x}");
-
 		let table = unsafe {
 			(table_physical_address.0 as *const AcpiSdtHeader)
 				.as_ref()
 				.unwrap()
 		};
-
-		trace!("table: {table:#x?}");
 
 		let signature = table.signature();
 
@@ -632,7 +627,6 @@ pub fn init_uefi() {
 				allocated_length: length as usize,
 			};
 			MADT.set(madt).unwrap();
-			trace!("setting MADT successful");
 		} else if signature == "FACP" {
 			// This is the "Fixed ACPI Description Table" (FADT) aka "Fixed ACPI Control Pointer" (FACP)
 			// Check and parse this table for the poweroff() call
@@ -646,18 +640,16 @@ pub fn init_uefi() {
 			if length < 0x1000 {
 				length = 0x1000;
 			}
-			trace!("length of FACP: {length:x?}");
 			let fadt: AcpiTable<'static> = AcpiTable {
 				header: table,
 				allocated_virtual_address: VirtAddr(table_physical_address.0),
 				allocated_length: length as usize,
 			};
 
-			trace!("fadt: {fadt:#?}");
 			parse_fadt(fadt);
-		} else if table.header.signature() == "SSDT" {
+		} else if signature == "SSDT" {
 			assert!(
-				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
+				verify_checksum(table.header_start_address(), table.length as usize).is_ok(),
 				"SSDT at {table_physical_address:p} has invalid checksum"
 			);
 
@@ -669,9 +661,9 @@ pub fn init_uefi() {
 			let ssdt: AcpiTable<'static> = AcpiTable {
 				header: table,
 				allocated_virtual_address: VirtAddr(table_physical_address.0),
-				allocated_length = length as usize,
+				allocated_length: length as usize,
 			};
-			parse_ssdt(table);
+			parse_ssdt(ssdt);
 		}
 	}
 }

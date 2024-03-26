@@ -424,9 +424,6 @@ where
 	let pde = unsafe { &mut *pde_ptr };
 	let pte_entry = &mut pde[page.page_table_index(PageTableLevel::Two)];
 	let pte_entry_start = pte_entry.addr().as_u64(); //start of HUGE PAGE
-												 //allocate new 4KiB frame for pte
-												 //let allocator = &mut physicalmem::FrameAlloc;
-												 //make sure that this frame is NOT inside the page that is to be recast -> TODO: adapt Allocator
 	let pte_frame: PhysFrame<BasePageSize> =
 		physicalmem::allocate_outside_of(S::SIZE as usize, S::SIZE as usize, forbidden_range)
 			.unwrap();

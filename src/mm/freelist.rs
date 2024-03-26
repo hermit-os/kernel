@@ -49,47 +49,27 @@ impl FreeList {
 
 		// Find a region in the Free List that has at least the requested size.
 		for (i, node) in self.list.iter_mut().enumerate() {
-			//let (region_start, region_size) = (node.start, node.end - node.start);
 			let (region_start, region_size) = if let Some(forbidden_range) = forbidden_range {
-				// println!("forbidden range: {forbidden_range:?}");
-				// let region_size = node.end - node.start;
-				// println!("region size: {region_size:?}");
-				// let forbidden_range_size = (forbidden_range.end - forbidden_range.start) as usize;
-				// println!("forbidden size: {forbidden_range_size:?}");
-				// let free_size = region_size - forbidden_range_size;
-				// println!("forbidden range: {forbidden_range:?}");
-				println!("forbidden range detected");
 				if node.start >= forbidden_range.start.start_address().as_u64() as usize
 					&& node.start <= forbidden_range.end.start_address().as_u64() as usize
 				{
-					println!("inside first if!");
 					if node.end >= forbidden_range.start.start_address().as_u64() as usize
 						&& node.end <= forbidden_range.end.start_address().as_u64() as usize
 					{
-						println!("inside forbidden range, look elsewhere");
 						continue; //node is entirely inside forbidden zone, look elsewhere
 					}
 					//return the chunk from the end of the forbidden zone onwards
-					println!(
-						"rangestart at {:#x?}, size: {:#x?}",
-						forbidden_range.end.start_address().as_u64() as usize,
-						node.end - forbidden_range.end.start_address().as_u64() as usize
-					);
+
 					node.start = forbidden_range.end.start_address().as_u64() as usize;
 					(node.start, node.end - node.start)
 				} else if node.end >= forbidden_range.start.start_address().as_u64() as usize
 					&& node.end <= forbidden_range.end.start_address().as_u64() as usize
 				{
 					//return the chunk up to the forbidden zone
-					println!(
-						"rangestart at {:#x?}, size: {:#x?}",
-						node.start,
-						forbidden_range.end.start_address().as_u64() as usize - node.start
-					);
+
 					node.end = forbidden_range.end.start_address().as_u64() as usize;
 					(node.start, node.end - node.start)
 				} else {
-					println!("no collision detected");
 					(node.start, node.end - node.start)
 				}
 			} else {
