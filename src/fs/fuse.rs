@@ -558,7 +558,7 @@ impl<O: ops::Op> Cmd<O> {
 						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
 						.pad_to_align(),
 				),
-				0,
+				len,
 			) as *mut UninitCmd<O>)
 		}
 	}
@@ -597,7 +597,7 @@ where
 						.0 // We don't need the offset of `data_header` inside the type (the second element of the tuple)
 						.pad_to_align(),
 				),
-				0,
+				len,
 			) as *mut Rsp<O>)
 		}
 	}
