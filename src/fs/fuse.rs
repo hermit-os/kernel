@@ -482,7 +482,9 @@ where
 	fn new(nodeid: u64, op_header: O::InStruct) -> Box<Self> {
 		Box::new(Cmd {
 			in_header: fuse_abi::InHeader {
-				len: Layout::new::<Self>().size() as u32,
+				// The length we need the provide in the header is not the same as the size of the struct because of padding, so we need to calculate it manually.
+				len: (core::mem::size_of::<fuse_abi::InHeader>()
+					+ core::mem::size_of::<O::InStruct>()) as u32,
 				opcode: O::OP_CODE as u32,
 				nodeid,
 				unique: 1,
@@ -498,7 +500,10 @@ impl<O: ops::Op> Cmd<O> {
 	fn with_capacity(nodeid: u64, op_header: O::InStruct, len: usize) -> Box<UninitCmd<O>> {
 		let mut cmd = unsafe { Self::new_uninit(len) };
 		cmd.in_header = MaybeUninit::new(fuse_abi::InHeader {
-			len: core::mem::size_of_val(cmd.as_ref())
+			// The length we need the provide in the header is not the same as the size of the struct because of padding, so we need to calculate it manually.
+			len: (core::mem::size_of::<fuse_abi::InHeader>()
+				+ core::mem::size_of::<O::InStruct>()
+				+ len)
 				.try_into()
 				.expect("The command is too large"),
 			opcode: O::OP_CODE as u32,
