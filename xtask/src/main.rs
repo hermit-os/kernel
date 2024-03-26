@@ -3,6 +3,7 @@
 mod arch;
 mod archive;
 mod artifact;
+mod binutil;
 mod build;
 mod cargo_build;
 mod ci;
@@ -11,6 +12,7 @@ mod clippy;
 use std::path::Path;
 
 use anyhow::Result;
+pub(crate) use binutil::binutil;
 use clap::Parser;
 use xshell::Shell;
 

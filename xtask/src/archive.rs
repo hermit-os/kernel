@@ -1,12 +1,10 @@
 use std::collections::HashSet;
-use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use goblin::archive::Archive as GoblinArchive;
 use goblin::elf64::header;
-use llvm_tools::LlvmTools;
 use xshell::cmd;
 
 pub struct Archive(PathBuf);
@@ -51,7 +49,7 @@ impl Archive {
 		};
 
 		let all_symbols = {
-			let nm = binutil("nm")?;
+			let nm = crate::binutil("nm")?;
 			let stdout = cmd!(sh, "{nm} --export-symbols {archive}").output()?.stdout;
 			String::from_utf8(stdout)?
 		};
@@ -75,7 +73,7 @@ impl Archive {
 		let rename_path = archive.with_extension("redefine-syms");
 		sh.write_file(&rename_path, symbol_renames)?;
 
-		let objcopy = binutil("objcopy")?;
+		let objcopy = crate::binutil("objcopy")?;
 		cmd!(sh, "{objcopy} --redefine-syms={rename_path} {archive}").run()?;
 
 		sh.remove_path(&rename_path)?;
@@ -88,7 +86,7 @@ impl Archive {
 		let archive = self.as_ref();
 		let file = file.as_ref();
 
-		let ar = binutil("ar")?;
+		let ar = crate::binutil("ar")?;
 		cmd!(sh, "{ar} qL {archive} {file}").run()?;
 
 		Ok(())
@@ -114,23 +112,4 @@ impl Archive {
 
 		Ok(())
 	}
-}
-
-fn binutil(name: &str) -> Result<PathBuf> {
-	let exe_suffix = env::consts::EXE_SUFFIX;
-	let exe = format!("llvm-{name}{exe_suffix}");
-
-	let path = LlvmTools::new()
-		.map_err(|err| match err {
-			llvm_tools::Error::NotFound => anyhow!(
-				"Could not find llvm-tools component\n\
-				\n\
-				Maybe the rustup component `llvm-tools` is missing? Install it through: `rustup component add llvm-tools`"
-			),
-			err => anyhow!("{err:?}"),
-		})?
-		.tool(&exe)
-		.ok_or_else(|| anyhow!("could not find {exe}"))?;
-
-	Ok(path)
 }
