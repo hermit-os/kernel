@@ -1,9 +1,10 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, UdpSocket};
+use std::path::Path;
 use std::process::{Child, Command, ExitStatus};
 use std::str::from_utf8;
 use std::time::Duration;
-use std::{env, thread};
+use std::{env, fs, thread};
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::{Args, ValueEnum};
@@ -63,6 +64,10 @@ impl Qemu {
 		let virtiofsd = self.virtiofsd.then(spawn_virtiofsd).transpose()?;
 		thread::sleep(Duration::from_millis(100));
 
+		if self.build.package.contains("rftrace") {
+			sh.create_dir("shared/tracedir")?;
+		}
+
 		let arch = self.build.cargo_build.artifact.arch.name();
 		let qemu = env::var_os("QEMU").unwrap_or_else(|| format!("qemu-system-{arch}").into());
 
@@ -107,6 +112,10 @@ impl Qemu {
 		if let Some(mut virtiofsd) = virtiofsd {
 			let status = virtiofsd.0.wait()?;
 			assert!(status.success());
+		}
+
+		if self.build.package.contains("rftrace") {
+			check_rftrace(&self.build.image())?;
 		}
 
 		Ok(())
@@ -328,6 +337,32 @@ fn test_mioudp() -> Result<()> {
 	let mut buf = [0; 128];
 	let received = socket.recv(&mut buf)?;
 	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+
+	Ok(())
+}
+
+fn check_rftrace(image: &Path) -> Result<()> {
+	let sh = crate::sh()?;
+	let image_name = image.file_name().unwrap().to_str().unwrap();
+
+	let nm = crate::binutil("nm")?;
+	let symbols = cmd!(sh, "{nm} --numeric-sort {image}").output()?.stdout;
+	sh.write_file(format!("shared/tracedir/{image_name}.sym"), symbols)?;
+
+	let replay = cmd!(
+		sh,
+		"uftrace replay --data=shared/tracedir --output-fields=tid"
+	)
+	.read()?;
+	eprintln!("[CI] replay: {replay}");
+
+	let expected = fs::read_to_string("xtask/src/ci/rftrace.snap")?;
+	if !replay.starts_with(&expected) {
+		eprintln!("[CI] expected: {expected}");
+		bail!("rftrace output does not match snapshot");
+	}
+
+	eprintln!("[CI] replay matches snapshot");
 
 	Ok(())
 }

@@ -1,0 +1,4 @@
+#   TID     FUNCTION
+ [     1] | rftrace_example::f1() {
+ [     1] |   rftrace_example::f2() {
+ [     1] |     rftrace_example::f3()

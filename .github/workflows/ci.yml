@@ -131,11 +131,11 @@ jobs:
         profile: [dev, release]
         include:
           - arch: x86_64
-            packages: qemu-system-x86 libcap-ng-dev libseccomp-dev
-            flags: --features pci-ids
+            packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
+            flags: --features hermit/pci-ids
           - arch: aarch64
             packages: qemu-system-aarch64
-            flags: --features pci-ids
+            flags: --features hermit/pci-ids
           - arch: riscv64
             packages: qemu-system-misc
             flags: --no-default-features
@@ -157,6 +157,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install ${{ matrix.packages }}
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
       - uses: mkroening/rust-toolchain-toml@main
       - uses: mkroening/rust-toolchain-toml@main
         with:
@@ -185,6 +188,8 @@ jobs:
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --smp 4
         # https://github.com/hermit-os/kernel/issues/737
         if: ${{ matrix.arch != 'aarch64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rftrace-example --virtiofsd
+        if: ${{ matrix.arch == 'x86_64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,dhcpv4 --netdev virtio-net-pci
         if: ${{ matrix.arch != 'riscv64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,dhcpv4 --netdev rtl8139 --features rtl8139
