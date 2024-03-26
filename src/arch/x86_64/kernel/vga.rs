@@ -53,13 +53,28 @@ impl VgaScreen {
 		// Identity map the VGA buffer. We only need the first page.
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(
-			VirtAddr(VGA_BUFFER_ADDRESS),
-			PhysAddr(VGA_BUFFER_ADDRESS),
-			1,
-			flags,
-		);
-
+		if crate::kernel::is_uefi() {
+			unsafe {
+				use x86_64::structures::paging::Translate;
+				let pt = crate::arch::mm::paging::identity_mapped_page_table();
+				let virt_addr = 0xb8000 as u64;
+				let phys_addr = pt
+					.translate_addr(x86_64::VirtAddr::new(virt_addr))
+					.unwrap()
+					.as_u64();
+				assert_eq!(
+					phys_addr, virt_addr,
+					"0xb8000 is not identity-mapped for VGA"
+				)
+			}
+		} else {
+			paging::map::<BasePageSize>(
+				VirtAddr(VGA_BUFFER_ADDRESS),
+				PhysAddr(VGA_BUFFER_ADDRESS),
+				1,
+				flags,
+			);
+		}
 		// Disable the cursor.
 		unsafe {
 			outb(CRT_CONTROLLER_ADDRESS_PORT, CURSOR_START_REGISTER);
