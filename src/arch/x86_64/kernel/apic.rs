@@ -695,6 +695,8 @@ pub fn init_next_processor_variables() {
 pub fn boot_application_processors() {
 	use core::hint;
 
+	use x86_64::structures::paging::Translate;
+
 	use super::{raw_boot_info, start};
 
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
@@ -708,18 +710,19 @@ pub fn boot_application_processors() {
 	// We can only allocate full pages of physmem
 
 	if crate::kernel::is_uefi() {
-		// Currently, this does NOT work as intended, this only supports one core
-		let length = BasePageSize::SIZE as usize;
-		let phys_addr: PhysAddr = crate::arch::mm::physicalmem::allocate(length).unwrap();
-
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable();
-		debug!(
-			"Mapping SMP boot code from physical address {phys_addr:x} to virtual address {:p}",
-			SMP_BOOT_CODE_ADDRESS
-		);
-		//map physical memory to SMP_BOOT_CODE_ADDRESS in virtual memory
-		paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, phys_addr, 1, flags);
+		// Since UEFI already provides identity-mapped pagetables, we only have to check whether the physical address 0x8000 really is mapped to the virtual address 0x8000
+		unsafe {
+			let pt = crate::arch::mm::paging::identity_mapped_page_table();
+			let virt_addr = 0x8000 as u64;
+			let phys_addr = pt
+				.translate_addr(x86_64::VirtAddr::new(virt_addr))
+				.unwrap()
+				.as_u64();
+			assert_eq!(
+				phys_addr, virt_addr,
+				"0x8000 is not identity-mapped for SMP boot code!"
+			)
+		}
 	} else {
 		// Identity-map the boot code page and copy over the code.
 		debug!(
