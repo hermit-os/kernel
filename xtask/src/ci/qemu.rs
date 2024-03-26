@@ -246,9 +246,9 @@ impl Qemu {
 fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
 	let sh = crate::sh()?;
 
-	sh.create_dir("foo")?;
+	sh.create_dir("shared")?;
 
-	let cmd = cmd!(sh, "virtiofsd --socket-path=./vhostqemu --shared-dir ./foo --announce-submounts --sandbox none --seccomp none --inode-file-handles=never");
+	let cmd = cmd!(sh, "virtiofsd --socket-path=./vhostqemu --shared-dir ./shared --announce-submounts --sandbox none --seccomp none --inode-file-handles=never");
 
 	eprintln!("$ {cmd}");
 
