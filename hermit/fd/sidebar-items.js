@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["IoError"],"fn":["eventfd","poll"],"struct":["AccessPermission","EventFlags","PollEvent","PollFd"]};

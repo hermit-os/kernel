@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"hermit_sync":[["impl <a class=\"trait\" href=\"lock_api/rwlock/trait.RawRwLockUpgradeDowngrade.html\" title=\"trait lock_api::rwlock::RawRwLockUpgradeDowngrade\">RawRwLockUpgradeDowngrade</a> for <a class=\"struct\" href=\"hermit_sync/struct.RawRwSpinLock.html\" title=\"struct hermit_sync::RawRwSpinLock\">RawRwSpinLock</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BREAKPOINT_REGS"],"enum":["BreakCondition","BreakSize","Breakpoint"],"fn":["dr0","dr0_write","dr1","dr1_write","dr2","dr2_write","dr3","dr3_write","dr6","dr6_write","dr7","dr7_write"],"struct":["Dr6","Dr7"]};

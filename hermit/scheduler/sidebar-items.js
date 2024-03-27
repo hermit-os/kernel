@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["getpid","join","spawn"],"mod":["task"],"type":["CoreId"]};
