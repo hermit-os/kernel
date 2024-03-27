@@ -26,6 +26,15 @@ impl Build {
 
 		let sh = crate::sh()?;
 
+		let _push_env = if self.package.contains("rftrace") {
+			Some(sh.push_env(
+				"RUSTFLAGS",
+				"-Zinstrument-mcount -Cpasses=ee-instrument<post-inline>",
+			))
+		} else {
+			None
+		};
+
 		cmd!(sh, "cargo build --manifest-path ../Cargo.toml")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.cargo_build_args(&self.cargo_build)
