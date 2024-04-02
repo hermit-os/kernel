@@ -55,8 +55,6 @@ static mut COM1: SerialPort = unsafe { SerialPort::new(SERIAL_IO_PORT) };
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 struct Mem;
-#[cfg(all(target_os = "none", not(feature = "fc")))]
-static mut MEM: Mem = Mem;
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 impl MemoryManagement for Mem {
@@ -213,8 +211,9 @@ pub fn find_kernel() -> &'static [u8] {
 	let page_address = unsafe { mb_info.align_down(Size4KiB::SIZE as usize) };
 	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
+	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
-	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap() };
+	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 	let modules_address = multiboot
 		.modules()
 		.expect("Could not find a memory map in the Multiboot information")
@@ -440,7 +439,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point,
 	} = kernel_info;
 
-	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap() };
+	let mut mem = Mem;
+	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
 	let mut new_stack = ptr::addr_of!(kernel_end)

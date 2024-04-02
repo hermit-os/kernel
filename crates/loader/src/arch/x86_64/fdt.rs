@@ -3,14 +3,15 @@ use alloc::format;
 use multiboot::information::{MemoryType, Multiboot};
 use vm_fdt::{Error as FdtError, FdtWriter};
 
-use super::{mb_info, MEM};
+use super::{mb_info, Mem};
 
 pub struct DeviceTree;
 
 impl DeviceTree {
 	#[cfg(all(target_os = "none", not(feature = "fc")))]
 	pub fn create() -> Result<&'static [u8], FdtError> {
-		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap() };
+		let mut mem = Mem;
+		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 		let all_regions = multiboot
 			.memory_regions()
