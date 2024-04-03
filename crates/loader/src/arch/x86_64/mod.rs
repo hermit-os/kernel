@@ -284,7 +284,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	// determine boot stack address
-	let new_stack = (ptr::addr_of!(kernel_end).addr() + 0x1000).align_up(Size4KiB::SIZE as usize);
+	let new_stack =
+		(unsafe { ptr::addr_of!(kernel_end) }.addr() + 0x1000).align_up(Size4KiB::SIZE as usize);
 
 	let cmdline_ptr = unsafe {
 		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_PTR_OFFSET))
@@ -443,7 +444,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
-	let mut new_stack = ptr::addr_of!(kernel_end)
+	let mut new_stack = unsafe { ptr::addr_of!(kernel_end) }
 		.addr()
 		.align_up(Size4KiB::SIZE as usize);
 

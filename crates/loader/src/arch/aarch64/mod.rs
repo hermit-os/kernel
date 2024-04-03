@@ -81,7 +81,7 @@ pub fn output_message_byte(byte: u8) {
 }
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	(ptr::addr_of!(kernel_end).addr() as u64).align_up(LargePageSize::SIZE as u64)
+	(unsafe { ptr::addr_of!(kernel_end) }.addr() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub fn find_kernel() -> &'static [u8] {
@@ -159,21 +159,21 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of!(l1_pgtable).addr() as u64 + PT_PT;
-	pgt_slice[511] = ptr::addr_of!(l0_pgtable).addr() as u64 + PT_PT + PT_SELF;
+	pgt_slice[0] = unsafe { ptr::addr_of!(l1_pgtable) }.addr() as u64 + PT_PT;
+	pgt_slice[511] = unsafe { ptr::addr_of!(l0_pgtable) }.addr() as u64 + PT_PT + PT_SELF;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l1_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of!(l2_pgtable).addr() as u64 + PT_PT;
-	pgt_slice[1] = ptr::addr_of!(l2k_pgtable).addr() as u64 + PT_PT;
+	pgt_slice[0] = unsafe { ptr::addr_of!(l2_pgtable) }.addr() as u64 + PT_PT;
+	pgt_slice[1] = unsafe { ptr::addr_of!(l2k_pgtable) }.addr() as u64 + PT_PT;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of!(l3_pgtable).addr() as u64 + PT_PT;
+	pgt_slice[0] = unsafe { ptr::addr_of!(l3_pgtable) }.addr() as u64 + PT_PT;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l3_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
@@ -187,8 +187,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		*i = 0;
 	}
 	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice =
-			ptr::addr_of!(L0mib_pgtable).addr() as u64 + (i * BasePageSize::SIZE) as u64 + PT_PT;
+		*pgt_slice = unsafe { ptr::addr_of!(L0mib_pgtable) }.addr() as u64
+			+ (i * BasePageSize::SIZE) as u64
+			+ PT_PT;
 	}
 
 	let pgt_slice =
