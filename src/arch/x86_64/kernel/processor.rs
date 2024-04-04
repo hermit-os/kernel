@@ -1030,7 +1030,6 @@ fn triple_fault() -> ! {
 
 /// Shutdown the system
 pub fn shutdown(error_code: i32) -> ! {
-	info!("Shutting down system");
 	let acpi_result: Result<Infallible, ()> = {
 		#[cfg(feature = "acpi")]
 		{
