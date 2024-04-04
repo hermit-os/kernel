@@ -381,27 +381,28 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		start_address, end_address
 	);
 
-	static mut BOOT_INFO: Option<RawBootInfo> = None;
+	take_static::take_static! {
+		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
+	}
 
-	let boot_info = {
-		let boot_info = BootInfo {
-			hardware_info: HardwareInfo {
-				phys_addr_range: start_address as u64..end_address as u64,
-				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-				device_tree: None,
-			},
-			load_info,
-			platform_info: PlatformInfo::LinuxBootParams {
-				command_line,
-				boot_params_addr: (unsafe { boot_params } as u64).try_into().unwrap(),
-			},
-		};
-		RawBootInfo::from(boot_info)
+	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
+
+	let boot_info = BootInfo {
+		hardware_info: HardwareInfo {
+			phys_addr_range: start_address as u64..end_address as u64,
+			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
+			device_tree: None,
+		},
+		load_info,
+		platform_info: PlatformInfo::LinuxBootParams {
+			command_line,
+			boot_params_addr: (unsafe { boot_params } as u64).try_into().unwrap(),
+		},
 	};
-	unsafe {
-		BOOT_INFO = Some(boot_info);
-		info!("BootInfo located at {:p}", &BOOT_INFO);
-	};
+
+	info!("boot_info = {boot_info:#?}");
+	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	info!("boot_info at {boot_info_ptr:p}");
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
@@ -426,7 +427,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			"jmp {entry}",
 			stack_address = in(reg) current_stack_address,
 			entry = in(reg) entry_point,
-			in("rdi") BOOT_INFO.as_ref().unwrap(),
+			in("rdi") boot_info_ptr,
 			in("rsi") 0,
 			options(noreturn)
 		)
@@ -484,27 +485,28 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
 
-	static mut BOOT_INFO: Option<RawBootInfo> = None;
-
-	let boot_info = {
-		let boot_info = BootInfo {
-			hardware_info: HardwareInfo {
-				phys_addr_range: 0..0,
-				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-				device_tree: DeviceTreeAddress::new(device_tree.as_ptr() as u64),
-			},
-			load_info,
-			platform_info: PlatformInfo::Multiboot {
-				command_line,
-				multiboot_info_addr: (unsafe { mb_info } as u64).try_into().unwrap(),
-			},
-		};
-		RawBootInfo::from(boot_info)
-	};
-	unsafe {
-		BOOT_INFO = Some(boot_info);
-		info!("BootInfo located at {:p}", &BOOT_INFO);
+	take_static::take_static! {
+		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
 	}
+
+	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
+
+	let boot_info = BootInfo {
+		hardware_info: HardwareInfo {
+			phys_addr_range: 0..0,
+			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
+			device_tree: DeviceTreeAddress::new(device_tree.as_ptr() as u64),
+		},
+		load_info,
+		platform_info: PlatformInfo::Multiboot {
+			command_line,
+			multiboot_info_addr: (unsafe { mb_info } as u64).try_into().unwrap(),
+		},
+	};
+
+	info!("boot_info = {boot_info:#?}");
+	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	info!("boot_info at {boot_info_ptr:p}");
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
@@ -529,7 +531,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			"jmp {entry}",
 			stack_address = in(reg) current_stack_address,
 			entry = in(reg) entry_point,
-			in("rdi") BOOT_INFO.as_ref().unwrap(),
+			in("rdi") boot_info_ptr,
 			in("rsi") 0,
 			options(noreturn)
 		)

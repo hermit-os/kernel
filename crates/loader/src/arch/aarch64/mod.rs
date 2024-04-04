@@ -228,7 +228,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	}
 
 	let current_stack_address = load_info.kernel_image_addr_range.start - KERNEL_STACK_SIZE as u64;
-	pub static mut BOOT_INFO: Option<RawBootInfo> = None;
+
+	take_static::take_static! {
+		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
+	}
+
+	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
 
 	let dtb = unsafe {
 		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
@@ -247,22 +252,19 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let ram_start = u64::from_be_bytes(start_slice.try_into().unwrap());
 	let ram_size = u64::from_be_bytes(size_slice.try_into().unwrap());
 
-	let boot_info = {
-		let boot_info = BootInfo {
-			hardware_info: HardwareInfo {
-				phys_addr_range: ram_start..ram_start + ram_size,
-				serial_port_base: SerialPortBase::new(0x1000),
-				device_tree: core::num::NonZeroU64::new(DEVICE_TREE),
-			},
-			load_info,
-			platform_info: PlatformInfo::LinuxBoot,
-		};
-		RawBootInfo::from(boot_info)
+	let boot_info = BootInfo {
+		hardware_info: HardwareInfo {
+			phys_addr_range: ram_start..ram_start + ram_size,
+			serial_port_base: SerialPortBase::new(0x1000),
+			device_tree: core::num::NonZeroU64::new(DEVICE_TREE),
+		},
+		load_info,
+		platform_info: PlatformInfo::LinuxBoot,
 	};
 
-	unsafe {
-		BOOT_INFO = Some(boot_info);
-	}
+	info!("boot_info = {boot_info:#?}");
+	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	info!("boot_info at {boot_info_ptr:p}");
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
@@ -292,7 +294,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			"br {entry}",
 			stack_address = in(reg) current_stack_address,
 			entry = in(reg) entry_point,
-			in("x0") BOOT_INFO.as_ref().unwrap(),
+			in("x0") boot_info_ptr,
 			in("x1") 0,
 			options(noreturn)
 		)
