@@ -1057,7 +1057,7 @@ pub fn shutdown(error_code: i32) -> ! {
 						exit_handler.exit_failure()
 					}
 				}
-				PlatformInfo::Uhyve { .. } => todo!(),
+				PlatformInfo::Uhyve { .. } => unreachable!(),
 			}
 		}
 	}
