@@ -100,47 +100,45 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	info!("hart_id = {}", start::get_hart_id());
 
-	static mut BOOT_INFO: Option<RawBootInfo> = None;
+	take_static::take_static! {
+		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
+	}
 
-	let boot_info = {
-		let phys_addr_range = {
-			let memory = fdt.memory();
-			let mut regions = memory.regions();
+	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
 
-			let mem_region = regions.next().unwrap();
-			assert!(
-				regions.next().is_none(),
-				"hermit-loader can only handle one memory region yet"
-			);
+	let phys_addr_range = {
+		let memory = fdt.memory();
+		let mut regions = memory.regions();
 
-			let mem_base = u64::try_from(mem_region.starting_address.addr()).unwrap();
-			let mem_size = u64::try_from(mem_region.size.unwrap()).unwrap();
-			mem_base..mem_base + mem_size
-		};
+		let mem_region = regions.next().unwrap();
+		assert!(
+			regions.next().is_none(),
+			"hermit-loader can only handle one memory region yet"
+		);
 
-		let device_tree = {
-			let fdt_addr = start::get_fdt_ptr().expose_addr();
-			DeviceTreeAddress::new(fdt_addr.try_into().unwrap())
-		};
-
-		let boot_info = BootInfo {
-			hardware_info: HardwareInfo {
-				phys_addr_range,
-				serial_port_base: None,
-				device_tree,
-			},
-			load_info,
-			platform_info: PlatformInfo::LinuxBoot,
-		};
-
-		info!("boot_info = {boot_info:#?}");
-
-		RawBootInfo::from(boot_info)
+		let mem_base = u64::try_from(mem_region.starting_address.addr()).unwrap();
+		let mem_size = u64::try_from(mem_region.size.unwrap()).unwrap();
+		mem_base..mem_base + mem_size
 	};
 
-	unsafe {
-		BOOT_INFO = Some(boot_info);
-	}
+	let device_tree = {
+		let fdt_addr = start::get_fdt_ptr().expose_addr();
+		DeviceTreeAddress::new(fdt_addr.try_into().unwrap())
+	};
+
+	let boot_info = BootInfo {
+		hardware_info: HardwareInfo {
+			phys_addr_range,
+			serial_port_base: None,
+			device_tree,
+		},
+		load_info,
+		platform_info: PlatformInfo::LinuxBoot,
+	};
+
+	info!("boot_info = {boot_info:#?}");
+	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	info!("boot_info at {boot_info_ptr:p}");
 
 	// Check expected signature of entry function
 	let entry: Entry = {
@@ -158,7 +156,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			entry = in(reg) entry,
 			stack = in(reg) start::get_stack_ptr(),
 			in("a0") start::get_hart_id(),
-			in("a1") BOOT_INFO.as_ref().unwrap(),
+			in("a1") boot_info_ptr,
 			options(noreturn)
 		)
 	}

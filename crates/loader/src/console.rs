@@ -1,5 +1,7 @@
 use core::fmt;
 
+use one_shot_mutex::OneShotMutex;
+
 pub struct Console(());
 
 impl fmt::Write for Console {
@@ -11,4 +13,4 @@ impl fmt::Write for Console {
 	}
 }
 
-pub static mut CONSOLE: Console = Console(());
+pub static CONSOLE: OneShotMutex<Console> = OneShotMutex::new(Console(()));

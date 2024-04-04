@@ -114,6 +114,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed570934406eb16438a4e976b1b4500774099c13b8cb96eec99f620f05090ddf"
 
 [[package]]
+name = "call-once"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a57a50948117a233b27f9bf73ab74709ab90d245216c4707cc16eea067a50bb"
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,11 +301,13 @@ dependencies = [
  "log",
  "multiboot",
  "naked-function",
+ "one-shot-mutex",
  "qemu-exit",
  "riscv",
  "sbi-rt",
  "spinning_top",
  "sptr",
+ "take-static",
  "uart_16550",
  "uefi",
  "uefi-services",
@@ -385,6 +393,15 @@ name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+
+[[package]]
+name = "one-shot-mutex"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab252a69210b0deb4dc8d8695c257d718b058c69a7c3ac6d83cf78310eb6ece"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "paste"
@@ -576,6 +593,15 @@ dependencies = [
  "once_cell",
  "rayon",
  "windows",
+]
+
+[[package]]
+name = "take-static"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf67eb0a80961fdb5df5e14b75c5b9fc93bdbf88b00d0260b7eec55041c4fe01"
+dependencies = [
+ "call-once",
 ]
 
 [[package]]

@@ -31,7 +31,5 @@ extern crate alloc;
 fn _print(args: core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
 
-	unsafe {
-		console::CONSOLE.write_fmt(args).unwrap();
-	}
+	console::CONSOLE.lock().write_fmt(args).unwrap();
 }
