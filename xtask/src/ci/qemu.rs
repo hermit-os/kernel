@@ -91,7 +91,11 @@ impl Qemu {
 
 		thread::sleep(Duration::from_millis(100));
 		if let Some(status) = qemu.0.try_wait()? {
-			ensure!(status.qemu_success(), "QEMU exit code: {:?}", status.code());
+			ensure!(
+				self.qemu_success(status),
+				"QEMU exit code: {:?}",
+				status.code()
+			);
 		}
 
 		match self.build.package.as_str() {
@@ -107,7 +111,11 @@ impl Qemu {
 		let Some(status) = status else {
 			bail!("QEMU timeout")
 		};
-		ensure!(status.qemu_success(), "QEMU exit code: {:?}", status.code());
+		ensure!(
+			self.qemu_success(status),
+			"QEMU exit code: {:?}",
+			status.code()
+		);
 
 		if let Some(mut virtiofsd) = virtiofsd {
 			let status = virtiofsd.0.wait()?;
@@ -250,6 +258,14 @@ impl Qemu {
 			vec![]
 		}
 	}
+
+	fn qemu_success(&self, status: ExitStatus) -> bool {
+		if self.build.cargo_build.artifact.arch == Arch::X86_64 {
+			status.code() == Some(3)
+		} else {
+			status.success()
+		}
+	}
 }
 
 fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
@@ -372,15 +388,5 @@ struct KillChildOnDrop(Child);
 impl Drop for KillChildOnDrop {
 	fn drop(&mut self) {
 		self.0.kill().ok();
-	}
-}
-
-trait ExitStatusExt {
-	fn qemu_success(&self) -> bool;
-}
-
-impl ExitStatusExt for ExitStatus {
-	fn qemu_success(&self) -> bool {
-		self.success() || self.code() == Some(3)
 	}
 }

@@ -567,7 +567,6 @@ dependencies = [
  "num-traits",
  "pci-ids",
  "pci_types",
- "qemu-exit",
  "rand_chacha",
  "riscv",
  "sbi",
@@ -968,12 +967,6 @@ checksum = "e835ff2298f5721608eb1a980ecaee1aef2c132bf95ecc026a11b7bf3c01c02e"
 dependencies = [
  "unicode-ident",
 ]
-
-[[package]]
-name = "qemu-exit"
-version = "3.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bb0fd6580eeed0103c054e3fba2c2618ff476943762f28a645b63b8692b21c9"
 
 [[package]]
 name = "quote"

@@ -4,7 +4,6 @@ use core::arch::asm;
 use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdseed64_step, _rdtsc, _xrstor, _xsave,
 };
-use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -12,12 +11,12 @@ use core::{fmt, ptr, u32};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
-use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 use x86::controlregs::*;
 use x86::cpuid::*;
 use x86::msr::*;
 use x86_64::instructions::interrupts::int3;
+use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
 use x86_64::structures::DescriptorTablePointer;
 use x86_64::VirtAddr;
@@ -1028,38 +1027,30 @@ fn triple_fault() -> ! {
 	unreachable!()
 }
 
+fn qemu_exit(success: bool) {
+	let code = if success { 3 >> 1 } else { 0 };
+	unsafe {
+		Port::<u32>::new(0xf4).write(code);
+	}
+}
+
 /// Shutdown the system
 pub fn shutdown(error_code: i32) -> ! {
-	info!("Shutting down system");
-	let acpi_result: Result<Infallible, ()> = {
-		#[cfg(feature = "acpi")]
-		{
-			acpi::poweroff()
-		}
+	match boot_info().platform_info {
+		PlatformInfo::LinuxBootParams { .. } => triple_fault(),
+		PlatformInfo::Multiboot { .. } => {
+			qemu_exit(error_code == 0);
 
-		#[cfg(not(feature = "acpi"))]
-		{
-			Err(())
-		}
-	};
+			#[cfg(feature = "acpi")]
+			{
+				acpi::poweroff();
+			}
 
-	match acpi_result {
-		Ok(_never) => unreachable!(),
-		Err(()) => {
-			match boot_info().platform_info {
-				PlatformInfo::LinuxBootParams { .. } => triple_fault(),
-				PlatformInfo::Multiboot { .. } => {
-					// Try QEMU's debug exit
-					let exit_handler = qemu_exit::X86::new(0xf4, 3);
-					if error_code == 0 {
-						exit_handler.exit_success()
-					} else {
-						exit_handler.exit_failure()
-					}
-				}
-				PlatformInfo::Uhyve { .. } => todo!(),
+			loop {
+				halt();
 			}
 		}
+		PlatformInfo::Uhyve { .. } => unreachable!(),
 	}
 }
 
