@@ -26,16 +26,6 @@ impl Target {
 		Ok(())
 	}
 
-	pub fn name(&self) -> &'static str {
-		match self {
-			Self::X86_64 => "x86_64",
-			Self::X86_64Fc => "x86_64-fc",
-			Self::X86_64Uefi => "x86_64-uefi",
-			Self::Aarch64 => "aarch64",
-			Self::Riscv64 => "riscv64",
-		}
-	}
-
 	pub fn arch(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64",
@@ -93,6 +83,16 @@ impl Target {
 		match self {
 			Self::X86_64Uefi => "hermit-loader.efi",
 			_ => "hermit-loader",
+		}
+	}
+
+	pub fn dist_name(&self) -> &'static str {
+		match self {
+			Self::X86_64 => "hermit-loader-x86_64",
+			Self::X86_64Fc => "hermit-loader-x86_64-fc",
+			Self::X86_64Uefi => "hermit-loader.efi",
+			Self::Aarch64 => "hermit-loader-aarch64",
+			Self::Riscv64 => "hermit-loader-riscv64",
 		}
 	}
 }
