@@ -59,9 +59,8 @@ impl Artifact {
 	pub fn dist_object(&self) -> Object {
 		[
 			self.target_dir(),
-			self.target.name().as_ref(),
 			self.profile_path_component().as_ref(),
-			self.target.image_name().as_ref(),
+			self.target.dist_name().as_ref(),
 		]
 		.iter()
 		.collect::<PathBuf>()
