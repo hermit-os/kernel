@@ -3,6 +3,7 @@ mod console;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use log::info;
 use qemu_exit::QEMUExit;
 use uefi::fs::{FileSystem, Path};
 use uefi::prelude::*;
@@ -21,7 +22,7 @@ fn read_app(bt: &BootServices) -> Vec<u8> {
 		.expect("should read file content");
 
 	let len = data.len();
-	log::info!("Read Hermit application from \"{path}\" (size = {len} B)");
+	info!("Read Hermit application from \"{path}\" (size = {len} B)");
 
 	data
 }

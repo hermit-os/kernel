@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 
+use log::warn;
 use x86_64::structures::paging::mapper::CleanUp;
 use x86_64::structures::paging::{
 	Mapper, Page, PageSize, PageTableFlags, PhysFrame, RecursivePageTable,
@@ -25,7 +26,7 @@ where
 		PhysFrame::range(start, end)
 	};
 
-	log::warn!(
+	warn!(
 		"Mapping {count} {size} pages from {from_start:p}..{from_end:p} to {to_start:p}..{to_end:p}",
 		count = (pages.end.start_address() - pages.start.start_address()) / S::SIZE,
 		size = S::DEBUG_STR,
