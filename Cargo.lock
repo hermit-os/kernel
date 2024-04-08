@@ -596,14 +596,17 @@ dependencies = [
 
 [[package]]
 name = "hermit-sync"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c19aafa397bb46155c020076b61af57dcaa8ff10583dba7a797b3c9860193dac"
+checksum = "3111d3f7c7088383182bb9807ecbcd2ed2be4a3c967d740b287b520d8cb8be75"
 dependencies = [
  "exclusive_cell",
  "generic_once_cell",
+ "interrupt-mutex",
  "interrupts",
  "lock_api",
+ "one-shot-mutex",
+ "spinning_top",
 ]
 
 [[package]]
@@ -637,6 +640,16 @@ checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
 dependencies = [
  "unicode-bidi",
  "unicode-normalization",
+]
+
+[[package]]
+name = "interrupt-mutex"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3257a88802f4c0857934e5c0bedd80f755a5a08afb1294c5188ca97e4a7f76c0"
+dependencies = [
+ "interrupts",
+ "lock_api",
 ]
 
 [[package]]
@@ -837,6 +850,15 @@ name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+
+[[package]]
+name = "one-shot-mutex"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c32f39cf70e43cb1488b67fd6adbc9c0ccaac00fe751ee0d02f82fcfe6267e2"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "paste"
@@ -1174,6 +1196,15 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+
+[[package]]
+name = "spinning_top"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d96d2d1d716fb500937168cc09353ffdc7a012be8475ac7308e1bdf0e3923300"
+dependencies = [
+ "lock_api",
+]
 
 [[package]]
 name = "stable_deref_trait"
