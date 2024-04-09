@@ -9,14 +9,19 @@ cfg_if::cfg_if! {
 }
 
 mod console;
+#[cfg(target_os = "none")]
 mod paging;
+#[cfg(target_os = "none")]
 mod physicalmem;
 
 pub use console::Console;
 
+#[cfg(target_os = "none")]
 const KERNEL_STACK_SIZE: u64 = 32_768;
+#[cfg(target_os = "none")]
 const SERIAL_IO_PORT: u16 = 0x3F8;
 
+#[cfg(target_os = "none")]
 unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
 	use align_address::Align;
 	use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB};
@@ -29,6 +34,7 @@ unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
 	address
 }
 
+#[cfg(target_os = "none")]
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
 	use align_address::Align;
 	use x86_64::structures::paging::{PageSize, Size2MiB};
