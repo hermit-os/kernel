@@ -4,7 +4,7 @@ phys = 0x000000100000;
 
 SECTIONS
 {
-  kernel_start = phys;
+  loader_start = phys;
   .mboot phys : AT(ADDR(.mboot)) {
     *(.mboot)
   }
@@ -24,5 +24,5 @@ SECTIONS
     *(.bss)
     *(.bss.*)
   }
-  kernel_end = .;
+  loader_end = .;
 }

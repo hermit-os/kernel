@@ -7,8 +7,8 @@
 
 .set BOOT_STACK_SIZE, 4096
 
-.extern kernel_start		# defined in linker script
-.extern kernel_end
+.extern loader_start		# defined in linker script
+.extern loader_end
 
 # We use a special name to map this section at the begin of our kernel
 # =>  Multiboot expects its magic number at the beginning of the kernel.
@@ -82,8 +82,8 @@ cpu_init:
     push edi
     push ebx
     push ecx
-    mov ecx, OFFSET kernel_start
-    mov ebx, OFFSET kernel_end
+    mov ecx, OFFSET loader_start
+    mov ebx, OFFSET loader_end
     add ebx, 0x1000
 L0: cmp ecx, ebx
     jae L1

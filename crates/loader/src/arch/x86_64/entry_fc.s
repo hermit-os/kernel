@@ -5,8 +5,8 @@
 
 .set BOOT_STACK_SIZE, 4096
 
-.extern kernel_start		# defined in linker script
-.extern kernel_end
+.extern loader_start		# defined in linker script
+.extern loader_end
 
 # Move entry point at the beginning of the elf file
 .section .mboot, "a"
@@ -26,8 +26,8 @@ _start:
     push rdi
     push rbx
     push rcx
-    movabs rcx, OFFSET kernel_start
-    movabs rbx, OFFSET kernel_end
+    movabs rcx, OFFSET loader_start
+    movabs rbx, OFFSET loader_end
     add rbx, 0x1000
  L0: cmp rcx, rbx
     jae L1
