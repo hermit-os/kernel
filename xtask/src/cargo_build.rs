@@ -1,7 +1,4 @@
-use std::ffi::OsStr;
-
 use clap::Args;
-use xshell::Cmd;
 
 use crate::artifact::Artifact;
 
@@ -19,36 +16,35 @@ pub struct CargoBuild {
 	pub features: Vec<String>,
 }
 
-pub trait CmdExt {
-	fn cargo_build_args(self, cargo_build: &CargoBuild) -> Self;
-	fn target_dir_args(self, cargo_build: &CargoBuild) -> Self;
-}
-
-impl CmdExt for Cmd<'_> {
-	fn cargo_build_args(self, cargo_build: &CargoBuild) -> Self {
-		let cmd = self
-			.target_dir_args(cargo_build)
-			.args(cargo_build.no_default_features_args())
-			.args(cargo_build.features_args())
-			.args(cargo_build.release_args());
-
-		if let Some(profile) = &cargo_build.artifact.profile {
-			cmd.args(&["--profile", profile])
-		} else {
-			cmd
-		}
-	}
-
-	fn target_dir_args(self, cargo_build: &CargoBuild) -> Self {
-		if let Some(target_dir) = &cargo_build.artifact.target_dir {
-			self.args::<&[&OsStr]>(&["--target-dir".as_ref(), target_dir.as_ref()])
-		} else {
-			self
-		}
-	}
-}
-
 impl CargoBuild {
+	pub fn cargo_build_args(&self) -> Vec<String> {
+		let mut args = vec![];
+		args.extend(self.target_dir_args());
+		args.extend(
+			self.no_default_features_args()
+				.iter()
+				.map(|s| s.to_string()),
+		);
+		args.extend(self.features_args().map(|s| s.to_string()));
+		args.extend(self.release_args().iter().map(|s| s.to_string()));
+		if let Some(profile) = &self.artifact.profile {
+			args.push("--profile".to_string());
+			args.push(profile.to_string());
+		}
+		args
+	}
+
+	pub fn target_dir_args(&self) -> Vec<String> {
+		if let Some(target_dir) = &self.artifact.target_dir {
+			vec![
+				"--target-dir".to_string(),
+				target_dir.to_str().unwrap().to_string(),
+			]
+		} else {
+			vec![]
+		}
+	}
+
 	fn release_args(&self) -> &'static [&'static str] {
 		if self.artifact.release {
 			&["--release"]

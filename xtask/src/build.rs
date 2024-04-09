@@ -5,7 +5,7 @@ use anyhow::Result;
 use clap::Args;
 use xshell::cmd;
 
-use crate::cargo_build::{CargoBuild, CmdExt};
+use crate::cargo_build::CargoBuild;
 
 /// Build the kernel.
 #[derive(Args)]
@@ -32,7 +32,7 @@ impl Build {
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.arch.cargo_args())
-			.cargo_build_args(&self.cargo_build)
+			.args(self.cargo_build.cargo_build_args())
 			.run()?;
 
 		let build_archive = self.cargo_build.artifact.build_archive();
@@ -52,7 +52,7 @@ impl Build {
 		cmd!(sh, "cargo build --release")
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
-			.target_dir_args(&self.cargo_build)
+			.args(self.cargo_build.target_dir_args())
 			.run()?;
 
 		eprintln!("Exporting hermit-builtins symbols");

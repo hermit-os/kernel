@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Args;
 use xshell::cmd;
 
-use crate::cargo_build::{CargoBuild, CmdExt};
+use crate::cargo_build::CargoBuild;
 
 /// Build hermit-rs images.
 #[derive(Args)]
@@ -38,7 +38,7 @@ impl Build {
 		sh.change_dir("..");
 		cmd!(sh, "cargo build")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
-			.cargo_build_args(&self.cargo_build)
+			.args(self.cargo_build.cargo_build_args())
 			.args(&["--package", self.package.as_str()])
 			.run()?;
 
