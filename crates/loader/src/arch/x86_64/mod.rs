@@ -95,21 +95,6 @@ pub fn write_to_console(bytes: &[u8]) {
 	}
 }
 
-#[cfg(target_os = "uefi")]
-pub unsafe fn find_kernel() -> &'static [u8] {
-	&[1, 2, 3]
-}
-
-#[cfg(target_os = "uefi")]
-pub unsafe fn boot_kernel(
-	_elf_address: Option<u64>,
-	_virtual_address: u64,
-	_mem_size: u64,
-	_entry_point: u64,
-) -> ! {
-	loop {}
-}
-
 #[cfg(all(target_os = "none", feature = "fc"))]
 pub fn find_kernel() -> &'static [u8] {
 	use core::cmp;
