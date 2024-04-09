@@ -14,10 +14,7 @@ mod arch;
 mod console;
 #[cfg(target_os = "none")]
 mod log;
-#[cfg(target_os = "none")]
-mod none;
-#[cfg(target_os = "uefi")]
-mod uefi;
+mod os;
 
 #[cfg(any(
 	target_os = "uefi",

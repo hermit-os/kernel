@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 align-address = "0.1"
+cfg-if = "1"
 hermit-entry = { version = "0.9", features = ["loader"] }
 log = "0.4"
 one-shot-mutex = "0.1"
