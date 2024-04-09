@@ -74,9 +74,11 @@ pub fn message_output_init() {
 	}
 }
 
-pub fn output_message_byte(byte: u8) {
-	unsafe {
-		COM1.write_byte(byte);
+pub fn write_to_console(bytes: &[u8]) {
+	for byte in bytes.iter().copied() {
+		unsafe {
+			COM1.write_byte(byte);
+		}
 	}
 }
 
