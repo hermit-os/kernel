@@ -1,6 +1,8 @@
+mod console;
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 mod fdt;
 mod paging;
+pub use console::Console;
 mod physicalmem;
 
 use core::arch::asm;
@@ -30,7 +32,6 @@ use multiboot::information::MemoryManagement;
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 use multiboot::information::{Multiboot, PAddr};
 use sptr::Strict;
-use uart_16550::SerialPort;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
@@ -49,9 +50,6 @@ extern "C" {
 // CONSTANTS
 const KERNEL_STACK_SIZE: u64 = 32_768;
 const SERIAL_IO_PORT: u16 = 0x3F8;
-
-// VARIABLES
-static mut COM1: SerialPort = unsafe { SerialPort::new(SERIAL_IO_PORT) };
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 struct Mem;
@@ -82,17 +80,6 @@ mod entry {
 
 	#[cfg(feature = "fc")]
 	core::arch::global_asm!(include_str!("entry_fc.s"));
-}
-
-// FUNCTIONS
-pub fn message_output_init() {
-	unsafe { COM1.init() };
-}
-
-pub fn write_to_console(bytes: &[u8]) {
-	for byte in bytes.iter().copied() {
-		unsafe { COM1.send(byte) };
-	}
 }
 
 #[cfg(all(target_os = "none", feature = "fc"))]

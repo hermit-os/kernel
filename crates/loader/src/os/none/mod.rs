@@ -19,7 +19,6 @@ extern "C" {
 /// (called from entry.asm or entry.rs)
 #[no_mangle]
 pub(crate) unsafe extern "C" fn loader_main() -> ! {
-	arch::message_output_init();
 	crate::log::init();
 
 	unsafe {
