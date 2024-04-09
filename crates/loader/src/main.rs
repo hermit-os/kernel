@@ -11,7 +11,6 @@ mod macros;
 #[cfg(target_os = "none")]
 mod allocator;
 mod arch;
-#[cfg(target_os = "none")]
 mod log;
 mod os;
 
