@@ -161,6 +161,8 @@ jobs:
         with:
           components: rust-src
       - uses: mkroening/rust-toolchain-toml@main
+      - run: rustup component add llvm-tools
+        working-directory: .
       - uses: mkroening/rust-toolchain-toml@main
         with:
           toolchain-file: 'kernel/rust-toolchain.toml'
