@@ -39,7 +39,7 @@ use self::physicalmem::PhysAlloc;
 
 #[cfg(target_os = "none")]
 extern "C" {
-	static kernel_end: u8;
+	static loader_end: u8;
 	#[cfg(not(feature = "fc"))]
 	static mb_info: usize;
 	#[cfg(feature = "fc")]
@@ -171,7 +171,7 @@ pub fn find_kernel() -> &'static [u8] {
 	let elf_start = ramdisk_address as usize;
 	let elf_len = ramdisk_size as usize;
 
-	let free_memory_address = unsafe { ptr::addr_of!(kernel_end) }
+	let free_memory_address = unsafe { ptr::addr_of!(loader_end) }
 		.addr()
 		.align_up(Size2MiB::SIZE as usize);
 	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
@@ -285,7 +285,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	// determine boot stack address
 	let new_stack =
-		(unsafe { ptr::addr_of!(kernel_end) }.addr() + 0x1000).align_up(Size4KiB::SIZE as usize);
+		(unsafe { ptr::addr_of!(loader_end) }.addr() + 0x1000).align_up(Size4KiB::SIZE as usize);
 
 	let cmdline_ptr = unsafe {
 		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_PTR_OFFSET))
@@ -445,7 +445,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
-	let mut new_stack = unsafe { ptr::addr_of!(kernel_end) }
+	let mut new_stack = unsafe { ptr::addr_of!(loader_end) }
 		.addr()
 		.align_up(Size4KiB::SIZE as usize);
 

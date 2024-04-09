@@ -17,7 +17,7 @@ PHDRS
 SECTIONS
 {
   . = phys;
-  kernel_start = .;
+  loader_start = .;
   .text : {
     KEEP(*(.text._start))
     *(.text)
@@ -48,5 +48,5 @@ SECTIONS
   . += 16K;                            /*   | growth      */
                                        /*   | direction   */
   __boot_core_stack_end_exclusive = .; /*   |             */
-  kernel_end = .;
+  loader_end = .;
 }

@@ -8,8 +8,8 @@ use log::info;
 use crate::{arch, console};
 
 extern "C" {
-	static kernel_end: u8;
-	static kernel_start: u8;
+	static loader_end: u8;
+	static loader_start: u8;
 }
 
 /// Entry Point of the BIOS Loader
@@ -20,7 +20,7 @@ pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	crate::log::init();
 
 	unsafe {
-		info!("Loader: [{:p} - {:p}]", &kernel_start, &kernel_end);
+		info!("Loader: [{:p} - {:p}]", &loader_start, &loader_end);
 	}
 
 	let kernel = arch::find_kernel();

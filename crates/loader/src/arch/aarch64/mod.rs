@@ -18,7 +18,7 @@ use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
 
 extern "C" {
-	static kernel_end: u8;
+	static loader_end: u8;
 	static mut l0_pgtable: u64;
 	static mut l1_pgtable: u64;
 	static mut l2_pgtable: u64;
@@ -81,7 +81,7 @@ pub fn output_message_byte(byte: u8) {
 }
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	(unsafe { ptr::addr_of!(kernel_end) }.addr() as u64).align_up(LargePageSize::SIZE as u64)
+	(unsafe { ptr::addr_of!(loader_end) }.addr() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub fn find_kernel() -> &'static [u8] {
@@ -181,7 +181,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	}
 	pgt_slice[1] = uart_address as u64 + PT_MEM_CD;
 
-	// map kernel to KERNEL_START and stack below the kernel
+	// map kernel to loader_start and stack below the kernel
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2k_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;

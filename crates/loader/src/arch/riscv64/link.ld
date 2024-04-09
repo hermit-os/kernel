@@ -1,5 +1,5 @@
 SECTIONS {
-  kernel_start = ADDR (.text.start);
+  loader_start = ADDR (.text.start);
   
   .text.start 0x80200000 : { *(.text._start) }
   .text : { *(.text.*) }
@@ -7,5 +7,5 @@ SECTIONS {
   .data : { *(.data.*) }
   .bss : { *(.bss.*) }
 
-  kernel_end = .;
+  loader_end = .;
 }
