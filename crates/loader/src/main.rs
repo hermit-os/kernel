@@ -11,7 +11,6 @@ mod macros;
 #[cfg(target_os = "none")]
 mod allocator;
 mod arch;
-#[cfg(target_os = "none")]
 mod console;
 #[cfg(target_os = "none")]
 mod log;
@@ -26,7 +25,6 @@ mod uefi;
 ))]
 extern crate alloc;
 
-#[cfg(target_os = "none")]
 #[doc(hidden)]
 fn _print(args: core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
