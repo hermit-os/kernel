@@ -1,15 +1,12 @@
-#[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::*;
-#[cfg(target_arch = "riscv64")]
-pub use crate::arch::riscv64::*;
-#[cfg(all(target_arch = "x86_64", target_os = "none"))]
-pub use crate::arch::x86_64::*;
-
-#[cfg(target_arch = "aarch64")]
-pub mod aarch64;
-
-#[cfg(target_arch = "riscv64")]
-pub mod riscv64;
-
-#[cfg(all(target_arch = "x86_64", target_os = "none"))]
-pub mod x86_64;
+cfg_if::cfg_if! {
+	if #[cfg(target_arch = "aarch64")] {
+		mod aarch64;
+		pub use self::aarch64::*;
+	} else if #[cfg(target_arch = "riscv64")] {
+		mod riscv64;
+		pub use self::riscv64::*;
+	} else if #[cfg(all(target_arch = "x86_64", target_os = "none"))] {
+		mod x86_64;
+		pub use self::x86_64::*;
+	}
+}
