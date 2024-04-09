@@ -1,3 +1,4 @@
+mod allocator;
 mod console;
 
 use core::fmt::Write;

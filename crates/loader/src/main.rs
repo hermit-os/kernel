@@ -8,8 +8,6 @@
 #[macro_use]
 mod macros;
 
-#[cfg(target_os = "none")]
-mod allocator;
 mod arch;
 mod log;
 mod os;
