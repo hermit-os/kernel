@@ -1,9 +1,10 @@
+mod console;
+pub use self::console::Console;
 pub mod entry;
 pub mod paging;
-pub mod serial;
 
 use core::arch::asm;
-use core::ptr;
+use core::ptr::{self, NonNull};
 
 use align_address::Align;
 use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
@@ -15,7 +16,7 @@ use log::info;
 use sptr::Strict;
 
 use crate::arch::paging::*;
-use crate::arch::serial::SerialPort;
+use crate::os::CONSOLE;
 
 extern "C" {
 	static loader_end: u8;
@@ -29,8 +30,6 @@ extern "C" {
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
-/// Physical address of UART0 at Qemu's virt emulation
-const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 /// Default stack size of the kernel
 const KERNEL_STACK_SIZE: usize = 32_768;
 /// Qemu assumes for ELF kernel that the DTB is located at
@@ -44,41 +43,6 @@ const PT_PT: u64 = 0x713;
 const PT_MEM: u64 = 0x713;
 const PT_MEM_CD: u64 = 0x70F;
 const PT_SELF: u64 = 1 << 55;
-
-// VARIABLES
-static mut COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
-
-pub fn message_output_init() {
-	let dtb = unsafe {
-		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
-			.expect(".dtb file has invalid header")
-	};
-
-	let property = dtb.get_property("/chosen", "stdout-path");
-	let uart_address = if let Some(stdout) = property {
-		let stdout = core::str::from_utf8(stdout)
-			.unwrap()
-			.trim_matches(char::from(0));
-		if let Some(pos) = stdout.find('@') {
-			let len = stdout.len();
-			u32::from_str_radix(&stdout[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
-		} else {
-			SERIAL_PORT_ADDRESS
-		}
-	} else {
-		SERIAL_PORT_ADDRESS
-	};
-
-	unsafe {
-		COM1.set_port(uart_address);
-	}
-}
-
-pub fn output_message_byte(byte: u8) {
-	unsafe {
-		COM1.write_byte(byte);
-	}
-}
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	(unsafe { ptr::addr_of!(loader_end) }.addr() as u64).align_up(LargePageSize::SIZE as u64)
@@ -152,7 +116,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		.count();
 	info!("Detect {} CPU(s)", cpus);
 
-	let uart_address: u32 = unsafe { COM1.get_port() };
+	let uart_address: u32 = CONSOLE.lock().get().get_stdout().as_ptr() as u32;
 	info!("Detect UART at {:#x}", uart_address);
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l0_pgtable), 512) };
@@ -198,9 +162,10 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
 	}
 
-	unsafe {
-		COM1.set_port(0x1000);
-	}
+	CONSOLE
+		.lock()
+		.get()
+		.set_stdout(NonNull::new(0x1000 as *mut u8).unwrap());
 
 	// Load TTBRx
 	unsafe {

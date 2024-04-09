@@ -52,7 +52,7 @@ extern "C" fn start(hart_id: usize, fdt: *const u8) -> ! {
 	HART_ID.store(hart_id, Ordering::Relaxed);
 	FDT.store(fdt.cast_mut(), Ordering::Relaxed);
 
-	unsafe { crate::none::loader_main() }
+	unsafe { crate::os::loader_main() }
 }
 
 // Align to page size

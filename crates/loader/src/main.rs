@@ -8,17 +8,9 @@
 #[macro_use]
 mod macros;
 
-#[cfg(target_os = "none")]
-mod allocator;
 mod arch;
-#[cfg(target_os = "none")]
-mod console;
-#[cfg(target_os = "none")]
 mod log;
-#[cfg(target_os = "none")]
-mod none;
-#[cfg(target_os = "uefi")]
-mod uefi;
+mod os;
 
 #[cfg(any(
 	target_os = "uefi",
@@ -26,10 +18,9 @@ mod uefi;
 ))]
 extern crate alloc;
 
-#[cfg(target_os = "none")]
 #[doc(hidden)]
 fn _print(args: core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
 
-	console::CONSOLE.lock().write_fmt(args).unwrap();
+	self::os::CONSOLE.lock().write_fmt(args).unwrap();
 }

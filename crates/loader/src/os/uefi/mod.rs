@@ -1,9 +1,14 @@
+mod console;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use log::info;
 use qemu_exit::QEMUExit;
 use uefi::fs::{FileSystem, Path};
 use uefi::prelude::*;
+
+pub use self::console::CONSOLE;
 
 fn read_app(bt: &BootServices) -> Vec<u8> {
 	let fs = bt
@@ -17,7 +22,7 @@ fn read_app(bt: &BootServices) -> Vec<u8> {
 		.expect("should read file content");
 
 	let len = data.len();
-	log::info!("Read Hermit application from \"{path}\" (size = {len} B)");
+	info!("Read Hermit application from \"{path}\" (size = {len} B)");
 
 	data
 }
@@ -26,6 +31,7 @@ fn read_app(bt: &BootServices) -> Vec<u8> {
 #[entry]
 fn loader_main(_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 	uefi_services::init(&mut system_table).unwrap();
+	crate::log::init();
 
 	let app = read_app(system_table.boot_services());
 

@@ -1,3 +1,5 @@
+mod console;
+pub use self::console::Console;
 mod address_range;
 mod start;
 
@@ -13,10 +15,6 @@ use hermit_entry::elf::LoadedKernel;
 use hermit_entry::Entry;
 use log::info;
 use sptr::Strict;
-
-pub fn message_output_init() {}
-
-pub use sbi_rt::console_write_byte as output_message_byte;
 
 fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
