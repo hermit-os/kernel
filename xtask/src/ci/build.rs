@@ -35,7 +35,8 @@ impl Build {
 			None
 		};
 
-		cmd!(sh, "cargo build --manifest-path ../Cargo.toml")
+		sh.change_dir("..");
+		cmd!(sh, "cargo build")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.cargo_build_args(&self.cargo_build)
 			.args(&["--package", self.package.as_str()])
