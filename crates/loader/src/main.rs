@@ -11,7 +11,6 @@ mod macros;
 #[cfg(target_os = "none")]
 mod allocator;
 mod arch;
-mod console;
 #[cfg(target_os = "none")]
 mod log;
 mod os;
@@ -26,5 +25,5 @@ extern crate alloc;
 fn _print(args: core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
 
-	console::CONSOLE.lock().write_fmt(args).unwrap();
+	self::os::CONSOLE.lock().write_fmt(args).unwrap();
 }

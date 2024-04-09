@@ -1,9 +1,13 @@
+mod console;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 
 use qemu_exit::QEMUExit;
 use uefi::fs::{FileSystem, Path};
 use uefi::prelude::*;
+
+pub use self::console::CONSOLE;
 
 fn read_app(bt: &BootServices) -> Vec<u8> {
 	let fs = bt

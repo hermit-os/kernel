@@ -1,3 +1,5 @@
+mod console;
+
 use core::fmt::Write;
 use core::mem::MaybeUninit;
 use core::slice;
@@ -5,7 +7,8 @@ use core::slice;
 use hermit_entry::elf::KernelObject;
 use log::info;
 
-use crate::{arch, console};
+pub use self::console::CONSOLE;
+use crate::arch;
 
 extern "C" {
 	static loader_end: u8;
@@ -44,7 +47,7 @@ pub(crate) unsafe extern "C" fn loader_main() -> ! {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 	// We can't use `println!` or related macros, because `_print` unwraps a result and might panic again
-	writeln!(console::CONSOLE.lock(), "[LOADER] {info}").ok();
+	writeln!(crate::os::CONSOLE.lock(), "[LOADER] {info}").ok();
 
 	loop {}
 }
