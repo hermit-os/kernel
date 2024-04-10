@@ -12,7 +12,7 @@ use hermit_entry::Entry;
 use log::info;
 use multiboot::information::{MemoryManagement, MemoryType, Multiboot, PAddr};
 use sptr::Strict;
-use vm_fdt::{Error as FdtError, FdtWriter};
+use vm_fdt::{FdtWriter, FdtWriterResult};
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 use super::paging;
@@ -52,7 +52,7 @@ impl MemoryManagement for Mem {
 pub struct DeviceTree;
 
 impl DeviceTree {
-	pub fn create() -> Result<&'static [u8], FdtError> {
+	pub fn create() -> FdtWriterResult<&'static [u8]> {
 		let mut mem = Mem;
 		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
