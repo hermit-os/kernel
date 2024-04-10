@@ -1,5 +1,6 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
+use core::num::NonZeroU64;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -71,14 +72,13 @@ pub fn get_limit() -> usize {
 	boot_info().hardware_info.phys_addr_range.end as usize
 }
 
-pub fn get_mbinfo() -> VirtAddr {
+pub fn get_mbinfo() -> Option<NonZeroU64> {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot {
 			multiboot_info_addr,
 			..
-		} => VirtAddr(multiboot_info_addr.get()),
-		PlatformInfo::LinuxBootParams { .. } => VirtAddr(0),
-		PlatformInfo::Uhyve { .. } => VirtAddr(0),
+		} => Some(multiboot_info_addr),
+		_ => None,
 	}
 }
 
@@ -94,13 +94,12 @@ pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
 
 	match boot_info().platform_info {
-		PlatformInfo::LinuxBootParams { .. } => apic::local_apic_id_count(),
-		PlatformInfo::Multiboot { .. } => apic::local_apic_id_count(),
 		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
 		PlatformInfo::Uhyve { num_cpus, .. } => cmp::max(
 			u32::try_from(num_cpus.get()).unwrap(),
 			get_processor_count(),
 		),
+		_ => apic::local_apic_id_count(),
 	}
 }
 
@@ -115,18 +114,17 @@ pub fn get_processor_count() -> u32 {
 }
 
 pub fn is_uhyve_with_pci() -> bool {
-	match boot_info().platform_info {
-		PlatformInfo::Multiboot { .. } => false,
-		PlatformInfo::LinuxBootParams { .. } => false,
-		PlatformInfo::Uhyve { has_pci, .. } => has_pci,
-	}
+	matches!(
+		boot_info().platform_info,
+		PlatformInfo::Uhyve { has_pci: true, .. }
+	)
 }
 
 pub fn args() -> Option<&'static str> {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { command_line, .. } => command_line,
 		PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
-		PlatformInfo::Uhyve { .. } => None,
+		_ => None,
 	}
 }
 

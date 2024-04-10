@@ -371,12 +371,11 @@ impl CpuFrequency {
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			match boot_info().platform_info {
-				PlatformInfo::Multiboot { .. } => Err(()),
-				PlatformInfo::LinuxBootParams { .. } => Err(()),
 				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
 					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
 				)
 				.unwrap()),
+				_ => Err(()),
 			}
 		}
 		// future implementations could add support for different hypervisors
@@ -1038,7 +1037,8 @@ fn qemu_exit(success: bool) {
 pub fn shutdown(error_code: i32) -> ! {
 	match boot_info().platform_info {
 		PlatformInfo::LinuxBootParams { .. } => triple_fault(),
-		PlatformInfo::Multiboot { .. } => {
+		PlatformInfo::Uhyve { .. } => unreachable!(),
+		_ => {
 			qemu_exit(error_code == 0);
 
 			#[cfg(feature = "acpi")]
@@ -1050,7 +1050,6 @@ pub fn shutdown(error_code: i32) -> ! {
 				halt();
 			}
 		}
-		PlatformInfo::Uhyve { .. } => unreachable!(),
 	}
 }
 
