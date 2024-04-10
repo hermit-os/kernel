@@ -1,6 +1,6 @@
 # The Hermit Loader
 
-This project is a loader to run the [Hermit kernel](https://github.com/hermitcore/kernel) within [QEMU](https://www.qemu.org).
+This project is a bootloader to run the [Hermit kernel](https://github.com/hermitcore/kernel) in different environments.
 
 ## Requirements
 
