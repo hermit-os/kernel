@@ -62,13 +62,10 @@ fn detect_from_fdt() -> Result<(), ()> {
 }
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
-	let mb_info = get_mbinfo();
-	if mb_info.is_zero() {
-		return Err(());
-	}
+	let mb_info = get_mbinfo().ok_or(())?.get();
 
 	let mut mem = MultibootMemory;
-	let mb = unsafe { Multiboot::from_ptr(mb_info.as_u64(), &mut mem).unwrap() };
+	let mb = unsafe { Multiboot::from_ptr(mb_info, &mut mem).unwrap() };
 	let all_regions = mb
 		.memory_regions()
 		.expect("Could not find a memory map in the Multiboot information");
