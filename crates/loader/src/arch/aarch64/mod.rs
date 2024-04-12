@@ -192,8 +192,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
-	let current_stack_address = load_info.kernel_image_addr_range.start - KERNEL_STACK_SIZE as u64;
-
 	take_static::take_static! {
 		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
 	}
@@ -228,38 +226,36 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	};
 
 	info!("boot_info = {boot_info:#?}");
+	let stack = boot_info.load_info.kernel_image_addr_range.start as usize - KERNEL_STACK_SIZE;
+	let stack = sptr::from_exposed_addr_mut(stack);
+	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
 	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
-	info!("boot_info at {boot_info_ptr:p}");
 
-	// Jump to the kernel entry point and provide the Multiboot information to it.
-	info!(
-		"Jumping to HermitCore Application Entry Point at {:#x}",
-		entry_point
-	);
+	unsafe { enter_kernel(stack, entry, boot_info_ptr) }
+}
 
-	/* Memory barrier */
+unsafe fn enter_kernel(stack: *mut u8, entry: *const (), raw_boot_info: &'static RawBootInfo) -> ! {
+	// Check expected signature of entry function
+	let entry: Entry = {
+		let entry: unsafe extern "C" fn(raw_boot_info: &'static RawBootInfo, cpu_id: u32) -> ! =
+			unsafe { core::mem::transmute(entry) };
+		entry
+	};
+
+	info!("Entering kernel at {entry:p}, stack at {stack:p}, raw_boot_info at {raw_boot_info:p}");
+
+	// Memory barrier
 	unsafe {
 		asm!("dsb sy", options(nostack));
 	}
 
-	#[allow(dead_code)]
-	const ENTRY_TYPE_CHECK: Entry = {
-		unsafe extern "C" fn entry_signature(
-			_raw_boot_info: &'static RawBootInfo,
-			_cpu_id: u32,
-		) -> ! {
-			unimplemented!()
-		}
-		entry_signature
-	};
-
 	unsafe {
 		asm!(
-			"mov sp, {stack_address}",
+			"mov sp, {stack}",
 			"br {entry}",
-			stack_address = in(reg) current_stack_address,
-			entry = in(reg) entry_point,
-			in("x0") boot_info_ptr,
+			stack = in(reg) stack,
+			entry = in(reg) entry,
+			in("x0") raw_boot_info,
 			in("x1") 0,
 			options(noreturn)
 		)

@@ -44,3 +44,37 @@ pub unsafe fn get_memory(memory_size: u64) -> u64 {
 	let address = PhysAlloc::allocate((memory_size as usize).align_up(Size2MiB::SIZE as usize));
 	unsafe { map_memory(address, memory_size as usize) as u64 }
 }
+
+#[cfg(target_os = "none")]
+unsafe fn enter_kernel(
+	stack: *mut u8,
+	entry: *const (),
+	raw_boot_info: &'static hermit_entry::boot_info::RawBootInfo,
+) -> ! {
+	use core::arch::asm;
+
+	use hermit_entry::boot_info::RawBootInfo;
+	use hermit_entry::Entry;
+	use log::info;
+
+	// Check expected signature of entry function
+	let entry: Entry = {
+		let entry: unsafe extern "C" fn(raw_boot_info: &'static RawBootInfo, cpu_id: u32) -> ! =
+			unsafe { core::mem::transmute(entry) };
+		entry
+	};
+
+	info!("Entering kernel at {entry:p}, stack at {stack:p}, raw_boot_info at {raw_boot_info:p}");
+
+	unsafe {
+		asm!(
+			"mov rsp, {stack_address}",
+			"jmp {entry}",
+			stack_address = in(reg) stack,
+			entry = in(reg) entry,
+			in("rdi") raw_boot_info,
+			in("rsi") 0,
+			options(noreturn)
+		)
+	}
+}

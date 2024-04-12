@@ -1,4 +1,3 @@
-use core::arch::asm;
 use core::ptr::write_bytes;
 use core::{ptr, slice};
 
@@ -10,7 +9,6 @@ use hermit_entry::fc::{
 	E820_TABLE_OFFSET, HDR_MAGIC_OFFSET, LINUX_KERNEL_BOOT_FLAG_MAGIC, LINUX_KERNEL_HRD_MAGIC,
 	LINUX_SETUP_HEADER_OFFSET, RAMDISK_IMAGE_OFFSET, RAMDISK_SIZE_OFFSET,
 };
-use hermit_entry::Entry;
 use log::info;
 use sptr::Strict;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
@@ -151,13 +149,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		None
 	};
 
-	let current_stack_address = new_stack as u64;
-	info!(
-		"Use kernel stack:  [{:#x} - {:#x}]",
-		current_stack_address,
-		current_stack_address + KERNEL_STACK_SIZE
-	);
-
 	// map stack in the address space
 	paging::map::<Size4KiB>(
 		new_stack,
@@ -240,35 +231,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	};
 
 	info!("boot_info = {boot_info:#?}");
+	let stack = sptr::from_exposed_addr_mut(new_stack);
+	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
 	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
-	info!("boot_info at {boot_info_ptr:p}");
 
-	// Jump to the kernel entry point and provide the Multiboot information to it.
-	info!(
-		"Jumping to HermitCore Application Entry Point at {:#x}",
-		entry_point
-	);
-
-	#[allow(dead_code)]
-	const ENTRY_TYPE_CHECK: Entry = {
-		unsafe extern "C" fn entry_signature(
-			_raw_boot_info: &'static RawBootInfo,
-			_cpu_id: u32,
-		) -> ! {
-			unimplemented!()
-		}
-		entry_signature
-	};
-
-	unsafe {
-		asm!(
-			"mov rsp, {stack_address}",
-			"jmp {entry}",
-			stack_address = in(reg) current_stack_address,
-			entry = in(reg) entry_point,
-			in("rdi") boot_info_ptr,
-			in("rsi") 0,
-			options(noreturn)
-		)
-	}
+	unsafe { super::enter_kernel(stack, entry, boot_info_ptr) }
 }
