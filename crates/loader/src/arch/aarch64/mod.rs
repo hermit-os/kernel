@@ -17,6 +17,7 @@ use sptr::Strict;
 
 use crate::arch::paging::*;
 use crate::os::CONSOLE;
+use crate::BootInfoExt;
 
 extern "C" {
 	static loader_end: u8;
@@ -192,12 +193,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
-	take_static::take_static! {
-		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
-	}
-
-	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
-
 	let dtb = unsafe {
 		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
@@ -225,13 +220,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		platform_info: PlatformInfo::LinuxBoot,
 	};
 
-	info!("boot_info = {boot_info:#?}");
 	let stack = boot_info.load_info.kernel_image_addr_range.start as usize - KERNEL_STACK_SIZE;
 	let stack = sptr::from_exposed_addr_mut(stack);
 	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
-	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	let raw_boot_info = boot_info.write();
 
-	unsafe { enter_kernel(stack, entry, boot_info_ptr) }
+	unsafe { enter_kernel(stack, entry, raw_boot_info) }
 }
 
 unsafe fn enter_kernel(stack: *mut u8, entry: *const (), raw_boot_info: &'static RawBootInfo) -> ! {

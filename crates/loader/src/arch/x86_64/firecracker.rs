@@ -2,7 +2,7 @@ use core::ptr::write_bytes;
 use core::{ptr, slice};
 
 use align_address::Align;
-use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
+use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, SerialPortBase};
 use hermit_entry::elf::LoadedKernel;
 use hermit_entry::fc::{
 	BOOT_FLAG_OFFSET, CMD_LINE_PTR_OFFSET, CMD_LINE_SIZE_OFFSET, E820_ENTRIES_OFFSET,
@@ -15,6 +15,7 @@ use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 use super::physicalmem::PhysAlloc;
 use super::{paging, KERNEL_STACK_SIZE, SERIAL_IO_PORT};
+use crate::BootInfoExt;
 
 extern "C" {
 	static loader_end: u8;
@@ -211,12 +212,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		start_address, end_address
 	);
 
-	take_static::take_static! {
-		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
-	}
-
-	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
-
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: start_address as u64..end_address as u64,
@@ -230,10 +225,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		},
 	};
 
-	info!("boot_info = {boot_info:#?}");
 	let stack = sptr::from_exposed_addr_mut(new_stack);
 	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
-	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	let raw_boot_info = boot_info.write();
 
-	unsafe { super::enter_kernel(stack, entry, boot_info_ptr) }
+	unsafe { super::enter_kernel(stack, entry, raw_boot_info) }
 }

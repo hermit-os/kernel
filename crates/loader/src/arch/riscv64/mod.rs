@@ -16,6 +16,8 @@ use hermit_entry::Entry;
 use log::info;
 use sptr::Strict;
 
+use crate::BootInfoExt;
+
 fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
 	let initrd_start = sptr::from_exposed_addr_mut::<u8>(initrd_start);
@@ -96,12 +98,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let fdt = start::get_fdt();
 
-	take_static::take_static! {
-		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
-	}
-
-	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
-
 	let phys_addr_range = {
 		let memory = fdt.memory();
 		let mut regions = memory.regions();
@@ -132,13 +128,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		platform_info: PlatformInfo::LinuxBoot,
 	};
 
-	info!("boot_info = {boot_info:#?}");
 	let stack = start::get_stack_ptr();
 	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
 	let hart_id = start::get_hart_id();
-	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	let raw_boot_info = boot_info.write();
 
-	unsafe { enter_kernel(stack, entry, hart_id, boot_info_ptr) }
+	unsafe { enter_kernel(stack, entry, hart_id, raw_boot_info) }
 }
 
 unsafe fn enter_kernel(

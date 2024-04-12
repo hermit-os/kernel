@@ -4,7 +4,7 @@ use core::{mem, ptr, slice};
 
 use align_address::Align;
 use hermit_entry::boot_info::{
-	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase,
+	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
 };
 use hermit_entry::elf::LoadedKernel;
 use log::info;
@@ -16,6 +16,7 @@ use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 use super::paging;
 use super::physicalmem::PhysAlloc;
 use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT};
+use crate::BootInfoExt;
 
 extern "C" {
 	static loader_end: u8;
@@ -214,12 +215,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
 
-	take_static::take_static! {
-		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
-	}
-
-	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
-
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: 0..0,
@@ -233,10 +228,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		},
 	};
 
-	info!("boot_info = {boot_info:#?}");
 	let stack = sptr::from_exposed_addr_mut(new_stack);
 	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
-	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
+	let raw_boot_info = boot_info.write();
 
-	unsafe { super::enter_kernel(stack, entry, boot_info_ptr) }
+	unsafe { super::enter_kernel(stack, entry, raw_boot_info) }
 }
