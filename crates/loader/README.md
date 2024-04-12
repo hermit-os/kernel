@@ -12,9 +12,9 @@ This project is a bootloader to run the [Hermit kernel](https://github.com/hermi
 cargo xtask build --target <TARGET> --release
 ```
 
-With `<TARGET>` being either `x86_64`, `x86_64-uefi`, or `aarch64`.
+With `<TARGET>` being either `x86_64`, `x86_64-uefi`, `aarch64`, or `riscv64`.
 
-Afterward, the loader is located at `target/<TARGET>/release/hermit-loader`.
+Afterward, the loader is located in `target/release`.
 
 ## Running
 
