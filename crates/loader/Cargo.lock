@@ -296,7 +296,6 @@ dependencies = [
  "multiboot",
  "naked-function",
  "one-shot-mutex",
- "qemu-exit",
  "sbi-rt",
  "sptr",
  "take-static",
