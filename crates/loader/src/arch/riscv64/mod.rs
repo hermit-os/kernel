@@ -16,6 +16,8 @@ use hermit_entry::Entry;
 use log::info;
 use sptr::Strict;
 
+use crate::BootInfoExt;
+
 fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
 	let initrd_start = sptr::from_exposed_addr_mut::<u8>(initrd_start);
@@ -96,14 +98,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let fdt = start::get_fdt();
 
-	info!("hart_id = {}", start::get_hart_id());
-
-	take_static::take_static! {
-		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
-	}
-
-	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
-
 	let phys_addr_range = {
 		let memory = fdt.memory();
 		let mut regions = memory.regions();
@@ -134,27 +128,37 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		platform_info: PlatformInfo::LinuxBoot,
 	};
 
-	info!("boot_info = {boot_info:#?}");
-	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
-	info!("boot_info at {boot_info_ptr:p}");
+	let stack = start::get_stack_ptr();
+	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
+	let hart_id = start::get_hart_id();
+	let raw_boot_info = boot_info.write();
 
+	unsafe { enter_kernel(stack, entry, hart_id, raw_boot_info) }
+}
+
+unsafe fn enter_kernel(
+	stack: *mut u8,
+	entry: *const (),
+	hart_id: usize,
+	raw_boot_info: &'static RawBootInfo,
+) -> ! {
 	// Check expected signature of entry function
 	let entry: Entry = {
 		let entry: unsafe extern "C" fn(hart_id: usize, boot_info: &'static RawBootInfo) -> ! =
-			unsafe { core::mem::transmute(entry_point) };
+			unsafe { core::mem::transmute(entry) };
 		entry
 	};
 
-	info!("Jumping into kernel at {entry:p}");
+	info!("Entering kernel at {entry:p}, stack at {stack:p}, raw_boot_info at {raw_boot_info:p}");
 
 	unsafe {
 		asm!(
 			"mv sp, {stack}",
 			"jr {entry}",
 			entry = in(reg) entry,
-			stack = in(reg) start::get_stack_ptr(),
-			in("a0") start::get_hart_id(),
-			in("a1") boot_info_ptr,
+			stack = in(reg) stack,
+			in("a0") hart_id,
+			in("a1") raw_boot_info,
 			options(noreturn)
 		)
 	}

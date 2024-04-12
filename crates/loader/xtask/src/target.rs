@@ -90,7 +90,7 @@ impl Target {
 		match self {
 			Self::X86_64 => "hermit-loader-x86_64",
 			Self::X86_64Fc => "hermit-loader-x86_64-fc",
-			Self::X86_64Uefi => "hermit-loader.efi",
+			Self::X86_64Uefi => "hermit-loader-x86_64.efi",
 			Self::Aarch64 => "hermit-loader-aarch64",
 			Self::Riscv64 => "hermit-loader-riscv64",
 		}

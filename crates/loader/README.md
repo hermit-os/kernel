@@ -1,6 +1,6 @@
 # The Hermit Loader
 
-This project is a loader to run the [Hermit kernel](https://github.com/hermitcore/kernel) within [QEMU](https://www.qemu.org).
+This project is a bootloader to run the [Hermit kernel](https://github.com/hermitcore/kernel) in different environments.
 
 ## Requirements
 
@@ -9,12 +9,12 @@ This project is a loader to run the [Hermit kernel](https://github.com/hermitcor
 ## Building
 
 ```bash
-$ cargo xtask build --target <TARGET> --release
+cargo xtask build --target <TARGET> --release
 ```
 
-With `<TARGET>` being either `x86_64`, `x86_64-uefi`, or `aarch64`.
+With `<TARGET>` being either `x86_64`, `x86_64-uefi`, `aarch64`, or `riscv64`.
 
-Afterward, the loader is located at `target/<TARGET>/release/hermit-loader`.
+Afterward, the loader is located in `target/release`.
 
 ## Running
 
@@ -22,8 +22,8 @@ Afterward, the loader is located at `target/<TARGET>/release/hermit-loader`.
 
 On x86-64 Linux with KVM, you can boot Hermit like this:
 
-```
-$ qemu-system-x86_64 \
+```bash
+qemu-system-x86_64 \
     -enable-kvm \
     -cpu host \
     -smp 1 \
@@ -46,8 +46,8 @@ If you want to benchmark Hermit, make sure to enable the _invariant TSC_ (`invts
 
 Unikernel arguments can be provided like this:
 
-```
-$ qemu-system-x86_64 ... \
+```bash
+qemu-system-x86_64 ... \
     -append "[KERNEL_ARGS] [--] [APP_ARGS]"
 ```
 
@@ -55,8 +55,8 @@ $ qemu-system-x86_64 ... \
 
 On AArch64, the base command is as follows:
 
-```
-$ qemu-system-aarch64 \
+```bash
+qemu-system-aarch64 \
                   -machine virt,gic-version=3 \
                   -cpu cortex-a76 \
                   -smp 1 \
@@ -126,8 +126,8 @@ Microvms have a smaller memory footprint and a faster boot time.
 
 To use this VM type, PCI and ACPI support have to be disabled for your app (using `no-default-features`).
 
-```
-$ qemu-system-x86_64 ... \
+```bash
+qemu-system-x86_64 ... \
     -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off \
     -nodefaults -no-user-config \
     -append "-freq 2800"
@@ -140,16 +140,16 @@ Depending on the virtualized processor, the processor frequency has to be passed
 To enable an Ethernet device, we have to set up a tap device on the host system.
 The following commands establish the tap device `tap10` on Linux:
 
-```
-# ip tuntap add tap10 mode tap
-# ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap10
-# ip link set dev tap10 up
-# echo 1 > /proc/sys/net/ipv4/conf/tap10/proxy_arp
+```bash
+ip tuntap add tap10 mode tap
+ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap10
+ip link set dev tap10 up
+echo 1 > /proc/sys/net/ipv4/conf/tap10/proxy_arp
 ```
 
 If you want Hermit to be accessible from outside the host, you have to enable IP forwarding:
-```
-# sysctl -w net.ipv4.ip_forward=1
+```bash
+sysctl -w net.ipv4.ip_forward=1
 ```
 
 You need to enable the `tcp` feature of the kernel.
@@ -157,7 +157,7 @@ You need to enable the `tcp` feature of the kernel.
 The network configuration can be set via environment variables during compile time.
 By default, it is:
 
-```
+```bash
 HERMIT_IP="10.0.5.3"
 HERMIT_GATEWAY="10.0.5.1"
 HERMIT_MASK="255.255.255.0"
@@ -167,8 +167,8 @@ Currently, Hermit only supports [Virtio]:
 
 [Virtio]: https://www.redhat.com/en/blog/introduction-virtio-networking-and-vhost-net
 
-```
-$ qemu-system-x86_64 ... \
+```bash
+qemu-system-x86_64 ... \
     -netdev tap,id=net0,ifname=tap10,script=no,downscript=no,vhost=on \
     -device virtio-net-pci,netdev=net0,disable-legacy=on
 ```

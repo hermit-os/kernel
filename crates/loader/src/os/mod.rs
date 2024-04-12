@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 cfg_if::cfg_if! {
 	if #[cfg(target_os = "none")] {
 		mod none;

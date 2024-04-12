@@ -1,11 +1,9 @@
 use core::ffi::c_void;
 use core::fmt;
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 use one_shot_mutex::OneShotMutex;
 use uefi::table::boot::{EventType, Tpl};
-use uefi::table::{Boot, SystemTable};
 use uefi::Event;
 
 use crate::arch;

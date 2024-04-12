@@ -1,23 +1,22 @@
 use alloc::format;
-use core::arch::asm;
 use core::ptr::write_bytes;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
 use hermit_entry::boot_info::{
-	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase,
+	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
 };
 use hermit_entry::elf::LoadedKernel;
-use hermit_entry::Entry;
 use log::info;
 use multiboot::information::{MemoryManagement, MemoryType, Multiboot, PAddr};
 use sptr::Strict;
-use vm_fdt::{Error as FdtError, FdtWriter};
+use vm_fdt::{FdtWriter, FdtWriterResult};
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 use super::paging;
 use super::physicalmem::PhysAlloc;
 use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT};
+use crate::BootInfoExt;
 
 extern "C" {
 	static loader_end: u8;
@@ -52,7 +51,7 @@ impl MemoryManagement for Mem {
 pub struct DeviceTree;
 
 impl DeviceTree {
-	pub fn create() -> Result<&'static [u8], FdtError> {
+	pub fn create() -> FdtWriterResult<&'static [u8]> {
 		let mut mem = Mem;
 		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
@@ -197,9 +196,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		}
 	}
 
-	let current_stack_address = new_stack as u64;
-	info!("Use stack address {:#x}", current_stack_address);
-
 	// map stack in the address space
 	paging::map::<Size4KiB>(
 		new_stack,
@@ -219,12 +215,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
 
-	take_static::take_static! {
-		static RAW_BOOT_INFO: Option<RawBootInfo> = None;
-	}
-
-	let raw_boot_info = RAW_BOOT_INFO.take().unwrap();
-
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: 0..0,
@@ -238,36 +228,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		},
 	};
 
-	info!("boot_info = {boot_info:#?}");
-	let boot_info_ptr = raw_boot_info.insert(RawBootInfo::from(boot_info));
-	info!("boot_info at {boot_info_ptr:p}");
+	let stack = sptr::from_exposed_addr_mut(new_stack);
+	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
+	let raw_boot_info = boot_info.write();
 
-	// Jump to the kernel entry point and provide the Multiboot information to it.
-	info!(
-		"Jumping to HermitCore Application Entry Point at {:#x}",
-		entry_point
-	);
-
-	#[allow(dead_code)]
-	const ENTRY_TYPE_CHECK: Entry = {
-		unsafe extern "C" fn entry_signature(
-			_raw_boot_info: &'static RawBootInfo,
-			_cpu_id: u32,
-		) -> ! {
-			unimplemented!()
-		}
-		entry_signature
-	};
-
-	unsafe {
-		asm!(
-			"mov rsp, {stack_address}",
-			"jmp {entry}",
-			stack_address = in(reg) current_stack_address,
-			entry = in(reg) entry_point,
-			in("rdi") boot_info_ptr,
-			in("rsi") 0,
-			options(noreturn)
-		)
-	}
+	unsafe { super::enter_kernel(stack, entry, raw_boot_info) }
 }
