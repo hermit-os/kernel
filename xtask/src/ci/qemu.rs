@@ -145,7 +145,12 @@ impl Qemu {
 		} else if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
-			vec!["-machine".to_string(), "virt".to_string()]
+			vec![
+				"-machine".to_string(),
+				"virt".to_string(),
+				"-bios".to_string(),
+				"opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
+			]
 		} else {
 			vec![]
 		}
@@ -203,7 +208,7 @@ impl Qemu {
 	fn memory(&self) -> usize {
 		let mut memory = 32usize;
 		if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
-			memory *= 2;
+			memory *= 4;
 		}
 		if self.build.cargo_build.artifact.profile() == "dev" {
 			memory *= 4;
