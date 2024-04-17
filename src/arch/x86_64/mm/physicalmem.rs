@@ -46,7 +46,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(end_address - start_address.as_u64()) as usize,
-			Ordering::SeqCst,
+			Ordering::Relaxed,
 		);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -91,7 +91,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		.unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(m.base_address() + m.length() - start_address.as_u64()) as usize,
-			Ordering::SeqCst,
+			Ordering::Relaxed,
 		);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -124,16 +124,16 @@ fn detect_from_limits() -> Result<(), ()> {
 			unsafe {
 				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 			}
-			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::SeqCst);
+			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::Relaxed);
 		} else {
-			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::SeqCst);
+			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::Relaxed);
 		}
 	} else {
 		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 		}
-		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+		TOTAL_MEMORY.store(limit, Ordering::Relaxed);
 	}
 
 	Ok(())
@@ -147,7 +147,7 @@ pub fn init() {
 }
 
 pub fn total_memory_size() -> usize {
-	TOTAL_MEMORY.load(Ordering::SeqCst)
+	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
