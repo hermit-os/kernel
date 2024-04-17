@@ -234,7 +234,10 @@ pub fn shutdown(error_code: i32) -> ! {
 			semihosting::process::exit(error_code)
 		} else {
 			// use SBI shutdown
-			sbi::legacy::shutdown()
+			sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason);
+			loop {
+				core::hint::spin_loop();
+			}
 		}
 	}
 }
@@ -270,16 +273,16 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 		}
 		let next_time = wt * u64::from(get_frequency());
 
-		sbi::legacy::set_timer(next_time);
+		sbi_rt::set_timer(next_time);
 	} else {
 		// Disable the Timer (and clear a pending interrupt)
 		debug!("Stopping Timer");
-		sbi::legacy::set_timer(u64::MAX);
+		sbi_rt::set_timer(u64::MAX);
 	}
 }
 
 pub fn wakeup_core(core_to_wakeup: CoreId) {
 	let hart_id = unsafe { HARTS_AVAILABLE[core_to_wakeup as usize] };
 	debug!("Wakeup core: {} , hart_id: {}", core_to_wakeup, hart_id);
-	sbi::legacy::send_ipi(&[1 << hart_id]);
+	sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
 }
