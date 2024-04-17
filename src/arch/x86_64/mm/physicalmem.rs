@@ -112,6 +112,7 @@ fn detect_from_limits() -> Result<(), ()> {
 		return Err(());
 	}
 
+	let mut free_list = PHYSICAL_FREE_LIST.lock();
 	let total_memory;
 
 	// add gap for the APIC
@@ -119,12 +120,12 @@ fn detect_from_limits() -> Result<(), ()> {
 		let range =
 			PageRange::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			free_list.deallocate(range).unwrap();
 		}
 		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
 			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
 			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				free_list.deallocate(range).unwrap();
 			}
 			total_memory = limit - KVM_32BIT_GAP_SIZE;
 		} else {
@@ -133,7 +134,7 @@ fn detect_from_limits() -> Result<(), ()> {
 	} else {
 		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			free_list.deallocate(range).unwrap();
 		}
 		total_memory = limit;
 	}
