@@ -45,6 +45,11 @@ unsafe impl GlobalAlloc for LockedAllocator {
 		let layout = Self::align_layout(layout);
 		unsafe { self.0.dealloc(ptr, layout) }
 	}
+
+	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+		let layout = Self::align_layout(layout);
+		unsafe { self.0.alloc_zeroed(layout) }
+	}
 }
 
 #[cfg(all(test, not(target_os = "none")))]
