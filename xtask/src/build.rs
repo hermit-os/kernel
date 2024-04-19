@@ -28,8 +28,15 @@ impl Build {
 
 		self.cargo_build.artifact.arch.install_for_build()?;
 
+		let careful = match env::var_os("HERMIT_CAREFUL") {
+			Some(val) if val == "1" => &["careful"][..],
+			_ => &[],
+		};
+
 		eprintln!("Building kernel");
-		cmd!(sh, "cargo build")
+		cmd!(sh, "cargo")
+			.args(careful)
+			.arg("build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.arch.cargo_args())
 			.args(self.cargo_build.cargo_build_args())

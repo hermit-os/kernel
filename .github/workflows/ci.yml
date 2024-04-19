@@ -122,6 +122,8 @@ jobs:
   run-hermit:
     name: Run
     runs-on: ubuntu-latest
+    env:
+      HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
     defaults:
       run:
         working-directory: kernel
@@ -130,6 +132,8 @@ jobs:
         arch: [x86_64, aarch64, riscv64]
         profile: [dev, release]
         include:
+          - profile: dev
+            hermit-careful: 1
           - arch: x86_64
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
             flags: --features hermit/pci-ids
@@ -157,6 +161,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install ${{ matrix.packages }}
+      - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src
@@ -181,9 +186,10 @@ jobs:
         run: |
           gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-      - name: Install virtiofsd
-        run: cargo install --locked virtiofsd
+      - run: cargo +stable install --locked virtiofsd
         if: matrix.arch == 'x86_64'
+      - run: cargo +stable install cargo-careful
+        if: matrix.profile == 'dev'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
         if: matrix.arch == 'x86_64'
@@ -265,7 +271,7 @@ jobs:
 
         ./firecracker --version
     - uses: dtolnay/rust-toolchain@stable
-    - run: cargo install uhyve
+    - run: cargo +stable install --locked uhyve
     - uses: mkroening/rust-toolchain-toml@main
     - uses: mkroening/rust-toolchain-toml@main
       with:
