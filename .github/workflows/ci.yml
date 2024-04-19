@@ -157,6 +157,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install ${{ matrix.packages }}
+      - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src
@@ -182,7 +183,7 @@ jobs:
           gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - name: Install virtiofsd
-        run: cargo install --locked virtiofsd
+        run: cargo +stable install --locked virtiofsd
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
@@ -265,7 +266,7 @@ jobs:
 
         ./firecracker --version
     - uses: dtolnay/rust-toolchain@stable
-    - run: cargo install uhyve
+    - run: cargo +stable install --locked uhyve
     - uses: mkroening/rust-toolchain-toml@main
     - uses: mkroening/rust-toolchain-toml@main
       with:
