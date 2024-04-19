@@ -35,7 +35,7 @@ impl CoreLocal {
 			asm!("mv {}, gp", out(reg) raw);
 			debug_assert_eq!(raw, ptr::null());
 
-			let core_id = dbg!(CPU_ONLINE.load(Ordering::Relaxed));
+			let core_id = CPU_ONLINE.load(Ordering::Relaxed);
 
 			let this = Self {
 				core_id,
