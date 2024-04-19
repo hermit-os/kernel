@@ -122,6 +122,8 @@ jobs:
   run-hermit:
     name: Run
     runs-on: ubuntu-latest
+    env:
+      HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
     defaults:
       run:
         working-directory: kernel
@@ -130,6 +132,8 @@ jobs:
         arch: [x86_64, aarch64, riscv64]
         profile: [dev, release]
         include:
+          - profile: dev
+            hermit-careful: 1
           - arch: x86_64
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
             flags: --features hermit/pci-ids
@@ -184,6 +188,8 @@ jobs:
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - run: cargo +stable install --locked virtiofsd
         if: matrix.arch == 'x86_64'
+      - run: cargo +stable install cargo-careful
+        if: matrix.profile == 'dev'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
         if: matrix.arch == 'x86_64'
