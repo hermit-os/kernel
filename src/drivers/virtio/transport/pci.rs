@@ -525,22 +525,24 @@ impl ComCfg {
 
 	/// Returns the features offered by the device. Coded in a 64bit value.
 	pub fn dev_features(&mut self) -> u64 {
+		let device_feature_select = ptr::from_mut(&mut self.com_cfg.device_feature_select);
+		let device_feature = ptr::from_mut(&mut self.com_cfg.device_feature);
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
 		memory_barrier();
-		self.com_cfg.device_feature_select = 1;
+		unsafe { device_feature_select.write_volatile(1) };
 		memory_barrier();
 
 		// read high 32 bits of device features
-		let mut dev_feat = u64::from(self.com_cfg.device_feature) << 32;
+		let mut dev_feat = u64::from(unsafe { device_feature.read_volatile() }) << 32;
 
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
-		self.com_cfg.device_feature_select = 0;
+		unsafe { device_feature_select.write_volatile(0) };
 		memory_barrier();
 
 		// read low 32 bits of device features
-		dev_feat |= u64::from(self.com_cfg.device_feature);
+		dev_feat |= u64::from(unsafe { device_feature.read_volatile() });
 
 		dev_feat
 	}
