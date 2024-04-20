@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{Abi, Attribute, Item, ItemFn, Pat, Result, Signature, Visibility};
+use syn::{parse_quote, Abi, Attribute, Item, ItemFn, Pat, Result, Signature, Visibility};
 
 fn validate_vis(vis: &Visibility) -> Result<()> {
 	if !matches!(vis, Visibility::Public(_)) {
@@ -94,7 +94,7 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 		func_call
 	};
 
-	let func = syn::parse2(quote! {
+	let func = parse_quote! {
 		#(#attrs)*
 		#[no_mangle]
 		#vis #sig {
@@ -102,7 +102,7 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 
 			#func_call
 		}
-	})?;
+	};
 
 	Ok(func)
 }
@@ -123,7 +123,7 @@ mod tests {
 
 	#[test]
 	fn test_safe() -> Result<()> {
-		let input = syn::parse2(quote! {
+		let input = parse_quote! {
 			/// Adds two numbers together.
 			///
 			/// This is very important.
@@ -132,7 +132,7 @@ mod tests {
 				let c = i16::from(a) + b;
 				i32::from(c)
 			}
-		})?;
+		};
 
 		let expected = quote! {
 			/// Adds two numbers together.
@@ -159,7 +159,7 @@ mod tests {
 
 	#[test]
 	fn test_unsafe() -> Result<()> {
-		let input = syn::parse2(quote! {
+		let input = parse_quote! {
 			/// Adds two numbers together.
 			///
 			/// This is very important.
@@ -168,7 +168,7 @@ mod tests {
 				let c = i16::from(a) + b;
 				i32::from(c)
 			}
-		})?;
+		};
 
 		let expected = quote! {
 			/// Adds two numbers together.
