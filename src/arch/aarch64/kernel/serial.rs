@@ -10,7 +10,7 @@ impl SerialPort {
 	}
 
 	pub fn write_byte(&self, byte: u8) {
-		let port = core::ptr::from_exposed_addr_mut::<u8>(self.port_address as usize);
+		let port = core::ptr::with_exposed_provenance_mut::<u8>(self.port_address as usize);
 
 		// LF newline characters need to be extended to CRLF over a real serial port.
 		if byte == b'\n' {

@@ -105,7 +105,7 @@ impl DescriptorRing {
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len =
 			(size * core::mem::size_of::<Descriptor>()).align_up(BasePageSize::SIZE as usize);
-		let ptr = ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+		let ptr = ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		let ring: &'static mut [Descriptor] = unsafe { core::slice::from_raw_parts_mut(ptr, size) };
 
@@ -1138,9 +1138,9 @@ impl Virtq for PackedVq {
 		let _mem_len = core::mem::size_of::<EventSuppr>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event_ptr =
-			ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 		let dev_event_ptr =
-			ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		// Provide memory areas of the queues data structures to the device
 		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
@@ -1164,7 +1164,7 @@ impl Virtq for PackedVq {
 			raw: dev_event,
 		};
 
-		let mut notif_ctrl = NotifCtrl::new(ptr::from_exposed_addr_mut(
+		let mut notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
 			notif_cfg.base()
 				+ usize::from(vq_handler.notif_off())
 				+ usize::try_from(notif_cfg.multiplier()).unwrap(),

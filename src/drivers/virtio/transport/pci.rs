@@ -165,7 +165,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 
 	// Create mutable reference to the PCI structure in PCI memory
 	let dev_cfg: &'static mut T =
-		unsafe { &mut *(ptr::from_exposed_addr_mut(virt_addr_raw.into())) };
+		unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
 
 	Some(dev_cfg)
 }
@@ -624,7 +624,7 @@ impl ComCfgRaw {
 
 		// Create mutable reference to the PCI structure in PCI memory
 		let com_cfg_raw: &mut ComCfgRaw =
-			unsafe { &mut *(ptr::from_exposed_addr_mut(virt_addr_raw.into())) };
+			unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
 
 		Some(com_cfg_raw)
 	}
@@ -811,7 +811,7 @@ impl IsrStatusRaw {
 
 		// Create mutable reference to the PCI structure in the devices memory area
 		let isr_stat_raw: &mut IsrStatusRaw =
-			unsafe { &mut *(ptr::from_exposed_addr_mut(virt_addr_raw.into())) };
+			unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
 
 		Some(isr_stat_raw)
 	}
@@ -920,7 +920,7 @@ impl ShMemCfg {
 			MemLen::from((u64::from(length_high) << 32) ^ u64::from(cap.origin.cap_struct.length));
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
-		let raw_ptr = ptr::from_exposed_addr_mut::<u8>(virt_addr_raw.into());
+		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
 
 		// Zero initialize shared memory area
 		unsafe {

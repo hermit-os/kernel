@@ -68,7 +68,7 @@ fn check_linux_args(
 
 				// Verify the first register value to find out if this is really an MMIO magic-value.
 				let mmio = unsafe {
-					&mut *(ptr::from_exposed_addr_mut::<MmioRegisterLayout>(
+					&mut *(ptr::with_exposed_provenance_mut::<MmioRegisterLayout>(
 						virtual_address.as_usize()
 							| (current_address & (BasePageSize::SIZE as usize - 1)),
 					))
@@ -146,7 +146,7 @@ fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str>
 
 		// Verify the first register value to find out if this is really an MMIO magic-value.
 		let mmio = unsafe {
-			&mut *(ptr::from_exposed_addr_mut::<MmioRegisterLayout>(
+			&mut *(ptr::with_exposed_provenance_mut::<MmioRegisterLayout>(
 				virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1)),
 			))
 		};

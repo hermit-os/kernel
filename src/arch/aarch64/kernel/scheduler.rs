@@ -269,7 +269,7 @@ impl TaskTLS {
 
 		// Get TLS initialization image
 		let tls_init_image = {
-			let tls_init_data = ptr::from_exposed_addr(tls_info.start.try_into().unwrap());
+			let tls_init_data = ptr::with_exposed_provenance(tls_info.start.try_into().unwrap());
 			let tls_init_len = tls_info.filesz.try_into().unwrap();
 
 			// SAFETY: We will have to trust the environment here.

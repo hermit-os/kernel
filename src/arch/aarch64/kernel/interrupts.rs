@@ -232,7 +232,7 @@ pub(crate) fn init() {
 	info!("Intialize generic interrupt controller");
 
 	let dtb = unsafe {
-		Dtb::from_raw(ptr::from_exposed_addr(
+		Dtb::from_raw(ptr::with_exposed_provenance(
 			boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")

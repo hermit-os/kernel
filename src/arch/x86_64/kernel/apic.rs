@@ -279,21 +279,22 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
 	let madt = acpi::get_madt().ok_or(())?;
 	let madt_header =
-		unsafe { &*(ptr::from_exposed_addr::<AcpiMadtHeader>(madt.table_start_address())) };
+		unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtHeader>(madt.table_start_address())) };
 
 	// Jump to the actual table entries (after the table header).
 	let mut current_address = madt.table_start_address() + mem::size_of::<AcpiMadtHeader>();
 
 	// Loop through all table entries.
 	while current_address < madt.table_end_address() {
-		let record = unsafe { &*(ptr::from_exposed_addr::<AcpiMadtRecordHeader>(current_address)) };
+		let record =
+			unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtRecordHeader>(current_address)) };
 		current_address += mem::size_of::<AcpiMadtRecordHeader>();
 
 		match record.entry_type {
 			0 => {
 				// Processor Local APIC
 				let processor_local_apic_record = unsafe {
-					&*(ptr::from_exposed_addr::<ProcessorLocalApicRecord>(current_address))
+					&*(ptr::with_exposed_provenance::<ProcessorLocalApicRecord>(current_address))
 				};
 				debug!(
 					"Found Processor Local APIC record: {}",
@@ -307,7 +308,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 			1 => {
 				// I/O APIC
 				let ioapic_record =
-					unsafe { &*(ptr::from_exposed_addr::<IoApicRecord>(current_address)) };
+					unsafe { &*(ptr::with_exposed_provenance::<IoApicRecord>(current_address)) };
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				init_ioapic_address(PhysAddr(ioapic_record.address.into()));
@@ -393,7 +394,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 
 	let mut addr: usize = virtual_address.as_usize()
 		| (mp_float.mp_config as usize & (BasePageSize::SIZE as usize - 1));
-	let mp_config: &ApicConfigTable = unsafe { &*(ptr::from_exposed_addr(addr)) };
+	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("Invalid MP config table");
 		virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
@@ -409,11 +410,11 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		// entries starts directly after the config table
 		addr += mem::size_of::<ApicConfigTable>();
 		for _i in 0..mp_config.entry_count {
-			match unsafe { *(ptr::from_exposed_addr(addr)) } {
+			match unsafe { *(ptr::with_exposed_provenance(addr)) } {
 				// CPU entry
 				0 => {
 					let cpu_entry: &ApicProcessorEntry =
-						unsafe { &*(ptr::from_exposed_addr(addr)) };
+						unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					if cpu_entry.cpu_flags & 0x01 == 0x01 {
 						add_local_apic_id(cpu_entry.id);
 					}
@@ -421,7 +422,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				}
 				// IO-APIC entry
 				2 => {
-					let io_entry: &ApicIoEntry = unsafe { &*(ptr::from_exposed_addr(addr)) };
+					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr(io_entry.addr.into());
 					info!("Found IOAPIC at 0x{:p}", ioapic);
 

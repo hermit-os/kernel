@@ -46,13 +46,13 @@ impl ConfigRegionAccess for PciConfigRegion {
 
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, offset: u16) -> u32 {
-		let ptr = core::ptr::from_exposed_addr(self.addr_from_offset(pci_addr, offset));
+		let ptr = core::ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
 		unsafe { crate::drivers::pci::from_pci_endian(core::ptr::read_volatile(ptr)) }
 	}
 
 	#[inline]
 	unsafe fn write(&self, pci_addr: PciAddress, offset: u16, value: u32) {
-		let ptr = core::ptr::from_exposed_addr_mut(self.addr_from_offset(pci_addr, offset));
+		let ptr = core::ptr::with_exposed_provenance_mut(self.addr_from_offset(pci_addr, offset));
 		unsafe {
 			core::ptr::write_volatile(ptr, value.to_le());
 		}
@@ -228,7 +228,7 @@ fn detect_interrupt(
 
 pub fn init() {
 	let dtb = unsafe {
-		Dtb::from_raw(core::ptr::from_exposed_addr(
+		Dtb::from_raw(core::ptr::with_exposed_provenance(
 			boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")

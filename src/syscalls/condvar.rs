@@ -26,14 +26,14 @@ impl CondQueue {
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 	unsafe {
-		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
+		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_wait: invalid address to condition variable");
 			return -1;
 		}
 
 		if *id != 0 {
-			let cond = Box::from_raw(ptr::from_exposed_addr_mut::<CondQueue>(*id));
+			let cond = Box::from_raw(ptr::with_exposed_provenance_mut::<CondQueue>(*id));
 			mem::drop(cond);
 		}
 
@@ -44,7 +44,7 @@ pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 	unsafe {
-		let id = ptr::from_exposed_addr::<usize>(ptr);
+		let id = ptr::with_exposed_provenance::<usize>(ptr);
 
 		if id.is_null() {
 			// invalid argument
@@ -57,7 +57,7 @@ pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 			return -1;
 		}
 
-		let cond = &mut *(ptr::from_exposed_addr_mut::<CondQueue>(*id));
+		let cond = &mut *(ptr::with_exposed_provenance_mut::<CondQueue>(*id));
 
 		if count < 0 {
 			// Wake up all task that has been waiting for this condition variable
@@ -81,7 +81,7 @@ pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 	unsafe {
-		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
+		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_init_queue: invalid address to condition variable");
 			return -1;
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	unsafe {
-		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
+		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_add_queue: invalid address to condition variable");
 			return -1;
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 		}
 
 		if timeout_ns <= 0 {
-			let cond = &mut *(ptr::from_exposed_addr_mut::<CondQueue>(*id));
+			let cond = &mut *(ptr::with_exposed_provenance_mut::<CondQueue>(*id));
 			cond.counter.fetch_add(1, Ordering::SeqCst);
 
 			0
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_wait(ptr: usize) -> i32 {
 	unsafe {
-		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
+		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_wait: invalid address to condition variable");
 			return -1;
@@ -139,7 +139,7 @@ pub unsafe extern "C" fn sys_wait(ptr: usize) -> i32 {
 			return -1;
 		}
 
-		let cond = &mut *(ptr::from_exposed_addr_mut::<CondQueue>(*id));
+		let cond = &mut *(ptr::with_exposed_provenance_mut::<CondQueue>(*id));
 		cond.sem1.acquire(None);
 		cond.sem2.release();
 
