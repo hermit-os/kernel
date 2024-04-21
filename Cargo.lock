@@ -1436,6 +1436,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
+name = "virtio-def"
+version = "0.0.0"
+dependencies = [
+ "bitflags 2.5.0",
+ "volatile 0.5.4",
+]
+
+[[package]]
 name = "volatile"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1446,6 +1454,20 @@ name = "volatile"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f05a5337d258c4ef40d920ffcc5a729278951d57e6596f8b62ca7d4827613e77"
+dependencies = [
+ "volatile-macro",
+]
+
+[[package]]
+name = "volatile-macro"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0503c38e8d76a80ae2ab71fae739510bb959b683b3a82e742e257c5f1c81845"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.60",
+]
 
 [[package]]
 name = "wait-timeout"

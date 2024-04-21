@@ -154,6 +154,7 @@ llvm-tools = "0.1"
 [workspace]
 members = [
     "hermit-macro",
+    "virtio-def",
 	"xtask",
 ]
 exclude = [
