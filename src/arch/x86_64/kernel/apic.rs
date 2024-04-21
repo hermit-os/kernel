@@ -5,7 +5,7 @@ use core::arch::x86_64::_mm_mfence;
 use core::fmt;
 use core::hint::spin_loop;
 use core::sync::atomic::Ordering;
-use core::{cmp, mem, ptr, u32};
+use core::{cmp, mem, ptr};
 
 use align_address::Align;
 #[cfg(feature = "smp")]

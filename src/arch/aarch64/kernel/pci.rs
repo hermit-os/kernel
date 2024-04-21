@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::{str, u32, u64, u8};
+use core::str;
 
 use arm_gic::gicv3::{IntId, Trigger};
 use bit_field::BitField;

@@ -3,9 +3,9 @@
 //! The module contains ...
 #![allow(dead_code)]
 
+use core::ptr;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{fence, Ordering};
-use core::{ptr, u8};
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::arch::kernel::interrupts::*;

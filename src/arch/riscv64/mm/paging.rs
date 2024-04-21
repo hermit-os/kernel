@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use core::{ptr, usize};
+use core::ptr;
 
 use align_address::Align;
 use hermit_sync::SpinMutex;

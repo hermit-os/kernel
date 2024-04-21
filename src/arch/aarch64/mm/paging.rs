@@ -2,7 +2,7 @@
 
 use core::arch::asm;
 use core::marker::PhantomData;
-use core::{fmt, mem, ptr, usize};
+use core::{fmt, mem, ptr};
 
 use align_address::Align;
 

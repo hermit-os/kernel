@@ -1,5 +1,4 @@
 use alloc::collections::BTreeMap;
-use core::isize;
 #[cfg(feature = "newlib")]
 use core::sync::atomic::{AtomicUsize, Ordering};
 

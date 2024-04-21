@@ -5,10 +5,10 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ffi::CStr;
+use core::future;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, u32, u8};
 
 use async_lock::Mutex;
 use async_trait::async_trait;
