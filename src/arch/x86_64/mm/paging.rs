@@ -91,7 +91,7 @@ pub use x86_64::structures::paging::{
 
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000;
-	let level_4_table_ptr = ptr::from_exposed_addr_mut(level_4_table_addr);
+	let level_4_table_ptr = ptr::with_exposed_provenance_mut(level_4_table_addr);
 	unsafe {
 		let level_4_table = &mut *(level_4_table_ptr);
 		RecursivePageTable::new(level_4_table).unwrap()
@@ -405,7 +405,7 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 	// Identity mapped
 	//let level_4_table_addr = Cr3::read().0.start_address().as_u64();
 	//let level_4_table_ptr =
-	//	ptr::from_exposed_addr::<PageTable>(level_4_table_addr.try_into().unwrap());
+	//	ptr::with_exposed_provenance::<PageTable>(level_4_table_addr.try_into().unwrap());
 	//let pt = unsafe { &*level_4_table_ptr };
 
 	print(pt, 4, 5 - levels);

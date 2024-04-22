@@ -7,7 +7,7 @@ use core::arch::x86_64::{
 use core::hint::spin_loop;
 use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicU64, Ordering};
-use core::{fmt, ptr, u32};
+use core::{fmt, ptr};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;

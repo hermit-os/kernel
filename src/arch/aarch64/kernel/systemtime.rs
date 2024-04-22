@@ -46,7 +46,7 @@ fn rtc_read(off: usize) -> u32 {
 
 pub fn init() {
 	let dtb = unsafe {
-		Dtb::from_raw(core::ptr::from_exposed_addr(
+		Dtb::from_raw(core::ptr::with_exposed_provenance(
 			boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")

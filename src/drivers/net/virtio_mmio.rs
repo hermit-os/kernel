@@ -116,7 +116,7 @@ impl VirtioNetDriver {
 		irq: u8,
 	) -> Result<Self, VirtioNetError> {
 		let dev_cfg_raw: &'static NetDevCfgRaw =
-			unsafe { &*(ptr::from_exposed_addr(ptr::from_ref(registers).addr() + 0xFC)) };
+			unsafe { &*(ptr::with_exposed_provenance(ptr::from_ref(registers).addr() + 0xFC)) };
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,

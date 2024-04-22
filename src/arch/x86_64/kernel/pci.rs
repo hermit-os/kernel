@@ -1,5 +1,3 @@
-use core::{u32, u8};
-
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
 use x86::io::*;
 

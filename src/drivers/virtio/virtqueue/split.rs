@@ -325,7 +325,8 @@ impl Virtq for SplitVq {
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = (size as usize * core::mem::size_of::<Descriptor>())
 			.align_up(BasePageSize::SIZE as usize);
-		let table_raw = ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+		let table_raw =
+			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		let descr_table = DescrTable {
 			raw: unsafe { core::slice::from_raw_parts_mut(table_raw, size as usize) },
@@ -333,10 +334,10 @@ impl Virtq for SplitVq {
 
 		let _mem_len = (6 + (size as usize * 2)).align_up(BasePageSize::SIZE as usize);
 		let avail_raw =
-			ptr::from_exposed_addr_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
+			ptr::with_exposed_provenance_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
 		let _mem_len = (6 + (size as usize * 8)).align_up(BasePageSize::SIZE as usize);
 		let used_raw =
-			ptr::from_exposed_addr_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
+			ptr::with_exposed_provenance_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		let avail_ring = unsafe {
 			AvailRing {
@@ -391,7 +392,7 @@ impl Virtq for SplitVq {
 			used_ring,
 		};
 
-		let notif_ctrl = NotifCtrl::new(ptr::from_exposed_addr_mut(
+		let notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
 			notif_cfg.base()
 				+ usize::from(vq_handler.notif_off())
 				+ usize::try_from(notif_cfg.multiplier()).unwrap(),

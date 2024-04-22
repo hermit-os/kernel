@@ -2,7 +2,7 @@
 
 use core::arch::asm;
 use core::marker::PhantomData;
-use core::{fmt, mem, ptr, usize};
+use core::{fmt, mem, ptr};
 
 use align_address::Align;
 
@@ -520,7 +520,7 @@ where
 		let table_address = core::ptr::from_ref(self).addr();
 		let subtable_address =
 			(table_address << PAGE_MAP_BITS) & !(usize::MAX << 48) | (index << PAGE_BITS);
-		unsafe { &mut *(ptr::from_exposed_addr_mut(subtable_address)) }
+		unsafe { &mut *(ptr::with_exposed_provenance_mut(subtable_address)) }
 	}
 
 	/// Maps a continuous range of pages.
