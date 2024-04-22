@@ -406,13 +406,19 @@ pub struct VqCfgHandler<'a> {
 }
 
 impl<'a> VqCfgHandler<'a> {
+	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
+	fn select_queue(&mut self) {
+		let raw = self.raw.as_mut_ptr();
+		map_field!(raw.queue_select).write(self.vq_index);
+	}
+
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed
 	/// size, the size is set to this maximum instead. Else size is set to the provided value.
 	///
 	/// Returns the set size in form of a `u16`.
 	pub fn set_vq_size(&mut self, size: u16) -> u16 {
+		self.select_queue();
 		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
 		let queue_size = map_field!(raw.queue_size);
 
 		if queue_size.read() >= size {
@@ -423,32 +429,32 @@ impl<'a> VqCfgHandler<'a> {
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
+		self.select_queue();
 		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
 		map_field!(raw.queue_desc).write(addr.as_u64());
 	}
 
 	pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
+		self.select_queue();
 		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
 		map_field!(raw.queue_driver).write(addr.as_u64());
 	}
 
 	pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
+		self.select_queue();
 		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
 		map_field!(raw.queue_device).write(addr.as_u64());
 	}
 
 	pub fn notif_off(&mut self) -> u16 {
+		self.select_queue();
 		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
 		map_field!(raw.queue_notify_off).read()
 	}
 
 	pub fn enable_queue(&mut self) {
+		self.select_queue();
 		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
 		map_field!(raw.queue_enable).write(1);
 	}
 }
