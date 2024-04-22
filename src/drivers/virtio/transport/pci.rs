@@ -219,6 +219,36 @@ impl PciCap {
 	pub fn dev_id(&self) -> u16 {
 		self.origin.dev_id
 	}
+
+	/// Returns a reference to the actual structure inside the PCI devices memory space.
+	fn map_common_cfg(&self) -> Option<VolatileRef<'static, ComCfgRaw>> {
+		if self.bar.length < u64::from(self.length + self.offset) {
+			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
+			self.id,
+			self.origin.dev_id,
+			self.bar.index
+            );
+			return None;
+		}
+
+		// Using "as u32" is safe here as ComCfgRaw has a defined size smaller 2^31-1
+		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
+		if self.length < MemLen::from(mem::size_of::<ComCfgRaw>() * 8) {
+			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.id);
+			return None;
+		}
+
+		let virt_addr_raw = self.bar.mem_addr + self.offset;
+		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<ComCfgRaw>(
+			virt_addr_raw.into(),
+		))
+		.unwrap();
+
+		// Create mutable reference to the PCI structure in PCI memory
+		let com_cfg_raw = unsafe { VolatileRef::new(ptr) };
+
+		Some(com_cfg_raw)
+	}
 }
 
 /// Virtio's PCI capabilities structure.
@@ -628,40 +658,6 @@ struct ComCfgRaw {
 	queue_desc: u64,        // read-write
 	queue_driver: u64,      // read-write
 	queue_device: u64,      // read-write
-}
-
-// Common configuration raw does NOT provide a PUBLIC
-// interface.
-impl ComCfgRaw {
-	/// Returns a reference to the actual structure inside the PCI devices memory space.
-	fn map(cap: &PciCap) -> Option<VolatileRef<'static, ComCfgRaw>> {
-		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
-                cap.id,
-                cap.origin.dev_id,
-                cap.bar.index
-            );
-			return None;
-		}
-
-		// Using "as u32" is safe here as ComCfgRaw has a defined size smaller 2^31-1
-		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if cap.length < MemLen::from(mem::size_of::<ComCfgRaw>() * 8) {
-			error!("Common config of with id {}, does not represent actual structure specified by the standard!", cap.id);
-			return None;
-		}
-
-		let virt_addr_raw = cap.bar.mem_addr + cap.offset;
-		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<ComCfgRaw>(
-			virt_addr_raw.into(),
-		))
-		.unwrap();
-
-		// Create mutable reference to the PCI structure in PCI memory
-		let com_cfg_raw = unsafe { VolatileRef::new(ptr) };
-
-		Some(com_cfg_raw)
-	}
 }
 
 /// Notification Structure to handle virtqueue notification settings.
@@ -1222,7 +1218,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
 		match pci_cap.cfg_type {
-			CfgType::VIRTIO_PCI_CAP_COMMON_CFG => match ComCfgRaw::map(&pci_cap) {
+			CfgType::VIRTIO_PCI_CAP_COMMON_CFG => match pci_cap.map_common_cfg() {
 				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.id)),
 				None => error!(
 					"Common config capability with id {}, of device {:x}, could not be mapped!",
