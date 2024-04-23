@@ -11,6 +11,7 @@ use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
 use align_address::Align;
+use zerocopy::little_endian;
 
 use super::super::features::Features;
 #[cfg(not(feature = "pci"))]
@@ -281,7 +282,7 @@ impl DescriptorRing {
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.ring[first_ctrl_settings.0].flags |= first_ctrl_settings.2.as_flags_avail();
+		self.ring[first_ctrl_settings.0].flags |= first_ctrl_settings.2.as_flags_avail().into();
 
 		// Converting a boolean as u8 is fine
 		(first_ctrl_settings.0, first_ctrl_settings.2 .0 as u8)
@@ -448,7 +449,7 @@ impl<'a> ReadCtrl<'a> {
 	/// updating the queue and returns the respective TransferToken.
 	fn poll_next(&mut self) -> Option<Box<TransferToken>> {
 		// Check if descriptor has been marked used.
-		if self.desc_ring.ring[self.position].flags & WrapCount::flag_mask()
+		if self.desc_ring.ring[self.position].flags.get() & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
 			let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
@@ -489,10 +490,10 @@ impl<'a> ReadCtrl<'a> {
 					// Need to only check for either send or receive buff to contain
 					// a ctrl_desc as, both carry the same if they carry one.
 					if send_buff.is_indirect() {
-						self.update_indirect(Some(send_buff), Some((recv_buff, write_len)));
+						self.update_indirect(Some(send_buff), Some((recv_buff, write_len.into())));
 					} else {
 						self.update_send(send_buff);
-						self.update_recv((recv_buff, write_len));
+						self.update_recv((recv_buff, write_len.into()));
 					}
 				}
 				(Some(send_buff), None) => {
@@ -504,9 +505,9 @@ impl<'a> ReadCtrl<'a> {
 				}
 				(None, Some(recv_buff)) => {
 					if recv_buff.is_indirect() {
-						self.update_indirect(None, Some((recv_buff, write_len)));
+						self.update_indirect(None, Some((recv_buff, write_len.into())));
 					} else {
-						self.update_recv((recv_buff, write_len));
+						self.update_recv((recv_buff, write_len.into()));
 					}
 				}
 				(None, None) => unreachable!("Empty Transfers are not allowed..."),
@@ -555,13 +556,13 @@ impl<'a> ReadCtrl<'a> {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
 					let ring_desc = desc_iter.next().unwrap();
 
-					if write_len >= ring_desc.len {
+					if write_len >= ring_desc.len.into() {
 						// Complete length has been written but reduce len_written for next one
-						write_len -= ring_desc.len;
+						write_len -= ring_desc.len.get();
 					} else {
-						ring_desc.len = write_len;
+						ring_desc.len = (write_len).into();
 						desc.len = write_len as usize;
-						write_len -= ring_desc.len;
+						write_len -= ring_desc.len.get();
 						assert_eq!(write_len, 0);
 					}
 				}
@@ -607,13 +608,13 @@ impl<'a> ReadCtrl<'a> {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
 					let ring_desc = desc_iter.next().unwrap();
 
-					if write_len >= ring_desc.len {
+					if write_len >= ring_desc.len.into() {
 						// Complete length has been written but reduce len_written for next one
-						write_len -= ring_desc.len;
+						write_len -= ring_desc.len.get();
 					} else {
-						ring_desc.len = write_len;
+						ring_desc.len = write_len.into();
 						desc.len = write_len as usize;
-						write_len -= ring_desc.len;
+						write_len -= ring_desc.len.get();
 						assert_eq!(write_len, 0);
 					}
 				}
@@ -634,7 +635,7 @@ impl<'a> ReadCtrl<'a> {
 		// self.desc_ring.ring[self.position].address = 0;
 		// self.desc_ring.ring[self.position].len = 0;
 		// self.desc_ring.ring[self.position].buff_id = 0;
-		self.desc_ring.ring[self.position].flags = self.desc_ring.dev_wc.as_flags_used();
+		self.desc_ring.ring[self.position].flags = self.desc_ring.dev_wc.as_flags_used().into();
 	}
 
 	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
@@ -744,25 +745,31 @@ impl<'a> WriteCtrl<'a> {
 		// descriptor.
 		if self.start == self.position {
 			let desc_ref = &mut self.desc_ring.ring[self.position];
-			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
-			desc_ref.len = mem_desc.len as u32;
-			desc_ref.buff_id = mem_desc.id.as_ref().unwrap().0;
+			desc_ref
+				.address
+				.set(paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into());
+			desc_ref.len = (mem_desc.len as u32).into();
+			desc_ref.buff_id = (mem_desc.id.as_ref().unwrap().0).into();
 			// Remove possibly set avail and used flags
 			desc_ref.flags =
-				flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED);
+				(flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED))
+					.into();
 
 			self.buff_id = mem_desc.id.as_ref().unwrap().0;
 			self.incrmt();
 		} else {
 			let desc_ref = &mut self.desc_ring.ring[self.position];
-			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
-			desc_ref.len = mem_desc.len as u32;
-			desc_ref.buff_id = self.buff_id;
+			desc_ref
+				.address
+				.set(paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into());
+			desc_ref.len = (mem_desc.len as u32).into();
+			desc_ref.buff_id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
 			// according to the current WrapCount.
 			desc_ref.flags =
-				(flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED))
-					| self.desc_ring.drv_wc.as_flags_avail();
+				((flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED))
+					| self.desc_ring.drv_wc.as_flags_avail())
+				.into();
 
 			self.incrmt()
 		}
@@ -779,53 +786,27 @@ impl<'a> WriteCtrl<'a> {
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.desc_ring.ring[self.start].flags |= self.wrap_at_init.as_flags_avail();
+		self.desc_ring.ring[self.start].flags |= self.wrap_at_init.as_flags_avail().into();
 	}
 }
 
 #[derive(Clone, Copy)]
 #[repr(C, align(16))]
 struct Descriptor {
-	address: u64,
-	len: u32,
-	buff_id: u16,
-	flags: u16,
+	address: little_endian::U64,
+	len: little_endian::U32,
+	buff_id: little_endian::U16,
+	flags: little_endian::U16,
 }
 
 impl Descriptor {
 	fn new(add: u64, len: u32, id: u16, flags: u16) -> Self {
 		Descriptor {
-			address: add,
-			len,
-			buff_id: id,
-			flags,
+			address: add.into(),
+			len: len.into(),
+			buff_id: id.into(),
+			flags: flags.into(),
 		}
-	}
-
-	fn to_le_bytes(self) -> [u8; 16] {
-		// 128 bits long raw descriptor bytes
-		let mut desc_bytes: [u8; 16] = [0; 16];
-
-		// Call to little endian, as device will read this and
-		// Virtio devices are inherently little endian coded.
-		let mem_addr: [u8; 8] = self.address.to_le_bytes();
-		desc_bytes[0..8].copy_from_slice(&mem_addr);
-
-		// Must be 32 bit in order to fulfill specification.
-		// MemPool.pull and .pull_untracked ensure this automatically
-		// which makes this cast safe.
-		let mem_len: [u8; 4] = self.len.to_le_bytes();
-		desc_bytes[8..12].copy_from_slice(&mem_len);
-
-		// Write BuffID as bytes in raw.
-		let id: [u8; 2] = self.buff_id.to_le_bytes();
-		desc_bytes[12..14].copy_from_slice(&id);
-
-		// Write flags as bytes in raw.
-		let flags: [u8; 2] = self.flags.to_le_bytes();
-		desc_bytes[14..16].copy_from_slice(&flags);
-
-		desc_bytes
 	}
 }
 

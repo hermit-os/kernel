@@ -10,6 +10,7 @@ use core::cell::RefCell;
 use core::ptr;
 
 use align_address::Align;
+use zerocopy::little_endian;
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -27,19 +28,19 @@ use crate::arch::mm::{paging, VirtAddr};
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct Descriptor {
-	address: u64,
-	len: u32,
-	flags: u16,
-	next: u16,
+	address: little_endian::U64,
+	len: little_endian::U32,
+	flags: little_endian::U16,
+	next: little_endian::U16,
 }
 
 impl Descriptor {
 	fn new(addr: u64, len: u32, flags: u16, next: u16) -> Self {
 		Descriptor {
-			address: addr,
-			len,
-			flags,
-			next,
+			address: addr.into(),
+			len: len.into(),
+			flags: flags.into(),
+			next: next.into(),
 		}
 	}
 }
@@ -49,24 +50,24 @@ struct DescrTable {
 }
 
 struct AvailRing {
-	flags: &'static mut u16,
-	index: &'static mut u16,
-	ring: &'static mut [u16],
-	event: &'static mut u16,
+	flags: &'static mut little_endian::U16,
+	index: &'static mut little_endian::U16,
+	ring: &'static mut [little_endian::U16],
+	event: &'static mut little_endian::U16,
 }
 
 struct UsedRing {
-	flags: &'static mut u16,
-	index: *mut u16,
+	flags: &'static mut little_endian::U16,
+	index: *mut little_endian::U16,
 	ring: &'static mut [UsedElem],
-	event: &'static mut u16,
+	event: &'static mut little_endian::U16,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct UsedElem {
-	id: u32,
-	len: u32,
+	id: little_endian::U32,
+	len: little_endian::U32,
 }
 
 struct DescrRing {
@@ -188,21 +189,21 @@ impl DescrRing {
 		}
 
 		self.ref_ring[index] = Some(Box::new(tkn));
-		self.avail_ring.ring[*self.avail_ring.index as usize % self.avail_ring.ring.len()] =
-			index as u16;
+		self.avail_ring.ring[self.avail_ring.index.get() as usize % self.avail_ring.ring.len()] =
+			(index as u16).into();
 
 		memory_barrier();
-		*self.avail_ring.index = self.avail_ring.index.wrapping_add(1);
+		*self.avail_ring.index = (self.avail_ring.index.get().wrapping_add(1)).into();
 
 		(0, 0)
 	}
 
 	fn poll(&mut self) {
-		while self.read_idx != unsafe { ptr::read_volatile(self.used_ring.index) } {
+		while self.read_idx != unsafe { ptr::read_volatile(self.used_ring.index).get() } {
 			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
 			let used_elem = unsafe { ptr::read_volatile(&self.used_ring.ring[cur_ring_index]) };
 
-			let mut tkn = self.ref_ring[used_elem.id as usize].take().expect(
+			let mut tkn = self.ref_ring[used_elem.id.get() as usize].take().expect(
 				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 			);
 
@@ -210,7 +211,7 @@ impl DescrRing {
 				tkn.buff_tkn
 					.as_mut()
 					.unwrap()
-					.restr_size(None, Some(used_elem.len as usize))
+					.restr_size(None, Some(used_elem.len.get() as usize))
 					.unwrap();
 			}
 			tkn.state = TransferState::Finished;
@@ -225,15 +226,15 @@ impl DescrRing {
 	}
 
 	fn drv_enable_notif(&mut self) {
-		*self.avail_ring.flags = 0;
+		*self.avail_ring.flags = 0.into();
 	}
 
 	fn drv_disable_notif(&mut self) {
-		*self.avail_ring.flags = 1;
+		*self.avail_ring.flags = 1.into();
 	}
 
 	fn dev_is_notif(&self) -> bool {
-		*self.used_ring.flags & 1 == 0
+		*self.used_ring.flags & 1.into() == little_endian::U16::new(0)
 	}
 }
 
@@ -341,13 +342,13 @@ impl Virtq for SplitVq {
 
 		let avail_ring = unsafe {
 			AvailRing {
-				flags: &mut *(avail_raw as *mut u16),
-				index: &mut *(avail_raw.offset(2) as *mut u16),
+				flags: &mut *(avail_raw as *mut little_endian::U16),
+				index: &mut *(avail_raw.offset(2) as *mut little_endian::U16),
 				ring: core::slice::from_raw_parts_mut(
-					avail_raw.offset(4) as *mut u16,
+					avail_raw.offset(4) as *mut little_endian::U16,
 					size as usize,
 				),
-				event: &mut *(avail_raw.offset(4 + 2 * (size as isize)) as *mut u16),
+				event: &mut *(avail_raw.offset(4 + 2 * (size as isize)) as *mut little_endian::U16),
 			}
 		};
 
@@ -359,13 +360,13 @@ impl Virtq for SplitVq {
 
 		let used_ring = unsafe {
 			UsedRing {
-				flags: &mut *(used_raw as *mut u16),
-				index: used_raw.offset(2) as *mut u16,
+				flags: &mut *(used_raw as *mut little_endian::U16),
+				index: used_raw.offset(2) as *mut little_endian::U16,
 				ring: core::slice::from_raw_parts_mut(
 					used_raw.offset(4) as *mut UsedElem,
 					size as usize,
 				),
-				event: &mut *(used_raw.offset(4 + 8 * (size as isize)) as *mut u16),
+				event: &mut *(used_raw.offset(4 + 8 * (size as isize)) as *mut little_endian::U16),
 			}
 		};
 
