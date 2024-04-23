@@ -847,11 +847,13 @@ impl Clone for FuseFileHandle {
 }
 
 #[derive(Debug)]
-pub(crate) struct FuseDirectory;
+pub(crate) struct FuseDirectory {
+	prefix: Option<String>,
+}
 
 impl FuseDirectory {
-	pub const fn new() -> Self {
-		FuseDirectory {}
+	pub const fn new(prefix: Option<String>) -> Self {
+		FuseDirectory { prefix }
 	}
 }
 
@@ -863,13 +865,23 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 
 		debug!("FUSE opendir: {}", path);
@@ -925,7 +937,7 @@ impl VfsNode for FuseDirectory {
 				unsafe { &*(rsp.payload.as_ptr().byte_add(offset) as *const fuse_abi::Dirent) };
 
 			offset += core::mem::size_of::<fuse_abi::Dirent>() + dirent.d_namelen as usize;
-			// Allign to dirent struct
+			// Align to dirent struct
 			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
 			let name: &'static [u8] = unsafe {
@@ -950,13 +962,23 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 
 		debug!("FUSE stat: {}", path);
@@ -987,13 +1009,23 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 
 		debug!("FUSE lstat: {}", path);
@@ -1015,13 +1047,23 @@ impl VfsNode for FuseDirectory {
 		mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 
 		debug!("FUSE open: {}, {:?} {:?}", path, opt, mode);
@@ -1071,13 +1113,23 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 
 		let (cmd, mut rsp) = ops::Unlink::create(&path);
@@ -1092,13 +1144,23 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 
 		let (cmd, mut rsp) = ops::Rmdir::create(&path);
@@ -1117,13 +1179,23 @@ impl VfsNode for FuseDirectory {
 		mode: AccessPermission,
 	) -> Result<(), IoError> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			if let Some(prefix) = &self.prefix {
+				"/".to_string() + prefix
+			} else {
+				"/".to_string()
+			}
 		} else {
-			components
+			let path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+
+			if let Some(prefix) = &self.prefix {
+				"/".to_owned() + &prefix.to_owned() + &path
+			} else {
+				path
+			}
 		};
 		let (cmd, mut rsp) = ops::Mkdir::create(&path, mode.bits());
 
@@ -1153,12 +1225,121 @@ pub(crate) fn init() {
 			.unwrap();
 		trace!("fuse init answer: {:?}", rsp);
 
-		let mount_point = format!("/{}", driver.lock().get_mount_point());
-		info!("Mounting virtio-fs at {}", mount_point);
-		fs::FILESYSTEM
-			.get()
-			.unwrap()
-			.mount(mount_point.as_str(), Box::new(FuseDirectory::new()))
-			.expect("Mount failed. Duplicate mount_point?");
+		let mount_point = driver.lock().get_mount_point().to_string();
+		if mount_point == "/" {
+			let fuse_nid = lookup("/").unwrap();
+			// Opendir
+			// Flag 0x10000 for O_DIRECTORY might not be necessary
+			let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+			cmd.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
+			get_filesystem_driver()
+				.unwrap()
+				.lock()
+				.send_command(cmd.as_ref(), rsp.as_mut())
+				.unwrap();
+			let fuse_fh = unsafe { rsp.op_header.assume_init_ref().fh };
+
+			// Linux seems to allocate a single page to store the dirfile
+			let len = MAX_READ_LEN as u32;
+			let mut offset: usize = 0;
+
+			// read content of the directory
+			let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+			cmd.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
+			get_filesystem_driver()
+				.unwrap()
+				.lock()
+				.send_command(cmd.as_ref(), rsp.as_mut())
+				.unwrap();
+
+			let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
+				- ::core::mem::size_of::<fuse_abi::OutHeader>()
+				- ::core::mem::size_of::<fuse_abi::ReadOut>()
+				>= len.try_into().unwrap()
+			{
+				len.try_into().unwrap()
+			} else {
+				(unsafe { rsp.out_header.assume_init_ref().len } as usize)
+					- ::core::mem::size_of::<fuse_abi::OutHeader>()
+					- ::core::mem::size_of::<fuse_abi::ReadOut>()
+			};
+
+			if len <= core::mem::size_of::<fuse_abi::Dirent>() {
+				panic!("FUSE no new dirs");
+			}
+
+			let mut entries: Vec<String> = Vec::new();
+			while (unsafe { rsp.out_header.assume_init_ref().len } as usize) - offset
+				> core::mem::size_of::<fuse_abi::Dirent>()
+			{
+				let dirent =
+					unsafe { &*(rsp.payload.as_ptr().byte_add(offset) as *const fuse_abi::Dirent) };
+
+				offset += core::mem::size_of::<fuse_abi::Dirent>() + dirent.d_namelen as usize;
+				// Allign to dirent struct
+				offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
+
+				let name: &'static [u8] = unsafe {
+					core::slice::from_raw_parts(
+						dirent.d_name.as_ptr(),
+						dirent.d_namelen.try_into().unwrap(),
+					)
+				};
+				entries.push(unsafe { core::str::from_utf8_unchecked(name).to_string() });
+			}
+
+			let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
+			get_filesystem_driver()
+				.unwrap()
+				.lock()
+				.send_command(cmd.as_ref(), rsp.as_mut())
+				.unwrap();
+
+			// remove predefined directories
+			entries.retain(|x| x != ".");
+			entries.retain(|x| x != "..");
+			entries.retain(|x| x != "tmp");
+			entries.retain(|x| x != "proc");
+			warn!("Fuse don't mount the host directories 'tmp' and 'proc' into the guest file system!");
+
+			for i in entries {
+				let (cmd, mut rsp) = ops::Lookup::create(&i);
+				get_filesystem_driver()
+					.unwrap()
+					.lock()
+					.send_command(cmd.as_ref(), rsp.as_mut())
+					.unwrap();
+
+				let attr = unsafe { rsp.op_header.assume_init().attr };
+				let attr = FileAttr::from(attr);
+
+				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
+					info!("Fuse mount {} to /{}", i, i);
+					fs::FILESYSTEM
+						.get()
+						.unwrap()
+						.mount(
+							&("/".to_owned() + i.as_str()),
+							Box::new(FuseDirectory::new(Some(i))),
+						)
+						.expect("Mount failed. Invalid mount_point?");
+				} else {
+					warn!("Fuse don't mount {}. It isn't a directory!", i);
+				}
+			}
+		} else {
+			let mount_point = if mount_point.starts_with('/') {
+				mount_point
+			} else {
+				"/".to_owned() + &mount_point
+			};
+
+			info!("Mounting virtio-fs at {}", mount_point);
+			fs::FILESYSTEM
+				.get()
+				.unwrap()
+				.mount(mount_point.as_str(), Box::new(FuseDirectory::new(None)))
+				.expect("Mount failed. Invalid mount_point?");
+		}
 	}
 }
