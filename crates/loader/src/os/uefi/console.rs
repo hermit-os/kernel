@@ -29,7 +29,7 @@ impl Console {
 	fn init(&mut self) {
 		assert!(matches!(self, Console::None));
 		unsafe {
-			uefi_services::system_table()
+			uefi::helpers::system_table()
 				.boot_services()
 				.create_event(
 					EventType::SIGNAL_EXIT_BOOT_SERVICES,
@@ -50,7 +50,7 @@ impl fmt::Write for Console {
 				self.init();
 				self.write_str(s)?;
 			}
-			Console::BootServices => uefi_services::system_table().stdout().write_str(s)?,
+			Console::BootServices => uefi::helpers::system_table().stdout().write_str(s)?,
 			Console::Native { console } => console.write_bytes(s.as_bytes()),
 		}
 		Ok(())

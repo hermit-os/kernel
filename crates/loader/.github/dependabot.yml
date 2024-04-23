@@ -8,10 +8,6 @@ updates:
     schedule:
       interval: "weekly"
       timezone: "Europe/Berlin"
-    groups:
-      uefi:
-        patterns:
-          - "uefi*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
