@@ -430,7 +430,7 @@ pub unsafe extern "C" fn sys_getdents64(
 		return -crate::errno::EINVAL as i64;
 	}
 
-	let limit = dirp as usize + count;
+	const ALIGN_DIRENT: usize = core::mem::align_of::<Dirent64>();
 	let mut dirp: *mut Dirent64 = dirp;
 	let mut offset: i64 = 0;
 	let obj = get_object(fd);
@@ -442,7 +442,9 @@ pub unsafe extern "C" fn sys_getdents64(
 				|v| {
 					for i in v.iter() {
 						let len = i.name.len();
-						if dirp as usize + core::mem::size_of::<Dirent64>() + len + 1 >= limit {
+						let aligned_len = ((core::mem::size_of::<Dirent64>() + len + 1)
+							+ (ALIGN_DIRENT - 1)) & (!(ALIGN_DIRENT - 1));
+						if offset as usize + aligned_len >= count {
 							return -crate::errno::EINVAL as i64;
 						}
 
@@ -450,10 +452,8 @@ pub unsafe extern "C" fn sys_getdents64(
 
 						dir.d_ino = 0;
 						dir.d_type = 0;
-						dir.d_reclen = (core::mem::size_of::<Dirent64>() + len + 1)
-							.try_into()
-							.unwrap();
-						offset += i64::from(dir.d_reclen);
+						dir.d_reclen = aligned_len.try_into().unwrap();
+						offset += i64::try_from(aligned_len).unwrap();
 						dir.d_off = offset;
 
 						// copy null-terminated filename
@@ -463,9 +463,7 @@ pub unsafe extern "C" fn sys_getdents64(
 							s.add(len).write_bytes(0, 1);
 						}
 
-						dirp = unsafe {
-							(dirp as *mut u8).add(dir.d_reclen as usize) as *mut Dirent64
-						};
+						dirp = unsafe { (dirp as *mut u8).add(aligned_len) as *mut Dirent64 };
 					}
 
 					offset
