@@ -278,7 +278,7 @@ impl TaskTLS {
 
 		let off = core::cmp::max(16, usize::try_from(tls_info.align).unwrap()) - 16;
 		let block_len = usize::try_from(tls_info.memsz).unwrap() + off;
-		let len = block_len + mem::size_of::<Box<[Dtv; 2]>>();
+		let len = mem::size_of::<Box<[Dtv; 2]>>() + mem::size_of::<usize>() + block_len;
 
 		let layout = Layout::from_size_align(len, 16).unwrap();
 		let mut this = unsafe {
