@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
+use virtio_def::DeviceStatus;
 use volatile::{map_field, VolatileRef};
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
@@ -24,7 +25,6 @@ use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
-use crate::drivers::virtio::device;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
@@ -513,14 +513,14 @@ impl ComCfg {
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
 		let com_cfg = self.com_cfg.as_ptr();
-		map_field!(com_cfg.device_status).read()
+		map_field!(com_cfg.device_status).read().bits()
 	}
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).write(0);
+		map_field!(com_cfg.device_status).write(DeviceStatus::empty());
 	}
 
 	/// Sets the device status field to FAILED.
@@ -529,7 +529,7 @@ impl ComCfg {
 	pub fn set_failed(&mut self) {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).write(u8::from(device::Status::FAILED));
+		map_field!(com_cfg.device_status).write(DeviceStatus::FAILED);
 	}
 
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
@@ -537,7 +537,7 @@ impl ComCfg {
 	pub fn ack_dev(&mut self) {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::ACKNOWLEDGE));
+		map_field!(com_cfg.device_status).update(|s| s | DeviceStatus::ACKNOWLEDGE);
 	}
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
@@ -545,7 +545,7 @@ impl ComCfg {
 	pub fn set_drv(&mut self) {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::DRIVER));
+		map_field!(com_cfg.device_status).update(|s| s | DeviceStatus::DRIVER);
 	}
 
 	/// Sets the FEATURES_OK bit in the device status field.
@@ -554,7 +554,7 @@ impl ComCfg {
 	pub fn features_ok(&mut self) {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::FEATURES_OK));
+		map_field!(com_cfg.device_status).update(|s| s | DeviceStatus::FEATURES_OK);
 	}
 
 	/// In order to correctly check feature negotiaten, this function
@@ -566,8 +566,9 @@ impl ComCfg {
 	pub fn check_features(&self) -> bool {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_ptr();
-		map_field!(com_cfg.device_status).read() & u8::from(device::Status::FEATURES_OK)
-			== u8::from(device::Status::FEATURES_OK)
+		map_field!(com_cfg.device_status)
+			.read()
+			.contains(DeviceStatus::FEATURES_OK)
 	}
 
 	/// Sets the DRIVER_OK bit in the device status field.
@@ -576,7 +577,7 @@ impl ComCfg {
 	pub fn drv_ok(&mut self) {
 		memory_barrier();
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::DRIVER_OK));
+		map_field!(com_cfg.device_status).update(|s| s | DeviceStatus::DRIVER_OK);
 	}
 
 	/// Returns the features offered by the device. Coded in a 64bit value.
@@ -640,14 +641,14 @@ impl ComCfg {
 #[repr(C)]
 struct ComCfgRaw {
 	// About whole device
-	device_feature_select: u32, // read-write
-	device_feature: u32,        // read-only for driver
-	driver_feature_select: u32, // read-write
-	driver_feature: u32,        // read-write
-	config_msix_vector: u16,    // read-write
-	num_queues: u16,            // read-only for driver
-	device_status: u8,          // read-write
-	config_generation: u8,      // read-only for driver
+	device_feature_select: u32,  // read-write
+	device_feature: u32,         // read-only for driver
+	driver_feature_select: u32,  // read-write
+	driver_feature: u32,         // read-write
+	config_msix_vector: u16,     // read-write
+	num_queues: u16,             // read-only for driver
+	device_status: DeviceStatus, // read-write
+	config_generation: u8,       // read-only for driver
 
 	// About a specific virtqueue
 	queue_select: u16,      // read-write

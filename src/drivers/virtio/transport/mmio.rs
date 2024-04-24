@@ -7,6 +7,8 @@ use core::ptr;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{fence, Ordering};
 
+use virtio_def::DeviceStatus;
+
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::PhysAddr;
@@ -15,7 +17,6 @@ use crate::drivers::error::DriverError;
 use crate::drivers::net::network_irqhandler;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
-use crate::drivers::virtio::device;
 use crate::drivers::virtio::error::VirtioError;
 
 /// Virtio device ID's
@@ -141,13 +142,13 @@ impl ComCfg {
 
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
-		unsafe { read_volatile(&self.com_cfg.status) }
+		unsafe { read_volatile(&self.com_cfg.status).bits() }
 	}
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		unsafe {
-			write_volatile(&mut self.com_cfg.status, 0u8);
+			write_volatile(&mut self.com_cfg.status, DeviceStatus::empty());
 		}
 	}
 
@@ -156,7 +157,7 @@ impl ComCfg {
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
 		unsafe {
-			write_volatile(&mut self.com_cfg.status, u8::from(device::Status::FAILED));
+			write_volatile(&mut self.com_cfg.status, DeviceStatus::FAILED);
 		}
 	}
 
@@ -165,10 +166,7 @@ impl ComCfg {
 	pub fn ack_dev(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(
-				&mut self.com_cfg.status,
-				status | u8::from(device::Status::ACKNOWLEDGE),
-			);
+			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::ACKNOWLEDGE);
 		}
 	}
 
@@ -177,10 +175,7 @@ impl ComCfg {
 	pub fn set_drv(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(
-				&mut self.com_cfg.status,
-				status | u8::from(device::Status::DRIVER),
-			);
+			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::DRIVER);
 		}
 	}
 
@@ -190,10 +185,7 @@ impl ComCfg {
 	pub fn features_ok(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(
-				&mut self.com_cfg.status,
-				status | u8::from(device::Status::FEATURES_OK),
-			);
+			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::FEATURES_OK);
 		}
 	}
 
@@ -206,7 +198,7 @@ impl ComCfg {
 	pub fn check_features(&self) -> bool {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			status & u8::from(device::Status::FEATURES_OK) == u8::from(device::Status::FEATURES_OK)
+			status.contains(DeviceStatus::FEATURES_OK)
 		}
 	}
 
@@ -216,10 +208,7 @@ impl ComCfg {
 	pub fn drv_ok(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(
-				&mut self.com_cfg.status,
-				status | u8::from(device::Status::DRIVER_OK),
-			);
+			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::DRIVER_OK);
 		}
 	}
 
@@ -439,7 +428,7 @@ pub struct MmioRegisterLayout {
 	interrupt_ack: u32,
 	_reserved4: [u32; 2],
 
-	status: u8,
+	status: DeviceStatus,
 	_reserved5: [u8; 15],
 
 	queue_desc_low: u32,  // non-legacy only

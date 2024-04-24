@@ -580,6 +580,7 @@ dependencies = [
  "time",
  "trapframe",
  "uart_16550",
+ "virtio-def",
  "volatile 0.5.4",
  "x86",
  "x86_64 0.15.1",

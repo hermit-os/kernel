@@ -71,6 +71,7 @@ shell = ["simple-shell"]
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
+virtio-def = { path = "virtio-def" }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.1"
 bit_field = "0.10"
