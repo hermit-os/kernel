@@ -141,13 +141,13 @@ impl ComCfg {
 
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
-		unsafe { read_volatile(&self.com_cfg.status).try_into().unwrap() }
+		unsafe { read_volatile(&self.com_cfg.status) }
 	}
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		unsafe {
-			write_volatile(&mut self.com_cfg.status, 0u32);
+			write_volatile(&mut self.com_cfg.status, 0u8);
 		}
 	}
 
@@ -156,7 +156,7 @@ impl ComCfg {
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
 		unsafe {
-			write_volatile(&mut self.com_cfg.status, u32::from(device::Status::FAILED));
+			write_volatile(&mut self.com_cfg.status, u8::from(device::Status::FAILED));
 		}
 	}
 
@@ -167,7 +167,7 @@ impl ComCfg {
 			let status = read_volatile(&self.com_cfg.status);
 			write_volatile(
 				&mut self.com_cfg.status,
-				status | u32::from(device::Status::ACKNOWLEDGE),
+				status | u8::from(device::Status::ACKNOWLEDGE),
 			);
 		}
 	}
@@ -179,7 +179,7 @@ impl ComCfg {
 			let status = read_volatile(&self.com_cfg.status);
 			write_volatile(
 				&mut self.com_cfg.status,
-				status | u32::from(device::Status::DRIVER),
+				status | u8::from(device::Status::DRIVER),
 			);
 		}
 	}
@@ -192,7 +192,7 @@ impl ComCfg {
 			let status = read_volatile(&self.com_cfg.status);
 			write_volatile(
 				&mut self.com_cfg.status,
-				status | u32::from(device::Status::FEATURES_OK),
+				status | u8::from(device::Status::FEATURES_OK),
 			);
 		}
 	}
@@ -206,8 +206,7 @@ impl ComCfg {
 	pub fn check_features(&self) -> bool {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			status & u32::from(device::Status::FEATURES_OK)
-				== u32::from(device::Status::FEATURES_OK)
+			status & u8::from(device::Status::FEATURES_OK) == u8::from(device::Status::FEATURES_OK)
 		}
 	}
 
@@ -219,7 +218,7 @@ impl ComCfg {
 			let status = read_volatile(&self.com_cfg.status);
 			write_volatile(
 				&mut self.com_cfg.status,
-				status | u32::from(device::Status::DRIVER_OK),
+				status | u8::from(device::Status::DRIVER_OK),
 			);
 		}
 	}
@@ -440,8 +439,8 @@ pub struct MmioRegisterLayout {
 	interrupt_ack: u32,
 	_reserved4: [u32; 2],
 
-	status: u32,
-	_reserved5: [u32; 3],
+	status: u8,
+	_reserved5: [u8; 15],
 
 	queue_desc_low: u32,  // non-legacy only
 	queue_desc_high: u32, // non-legacy only
