@@ -224,7 +224,7 @@ impl PciCap {
 	/// Returns a reference to the actual structure inside the PCI devices memory space.
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
 		if self.bar.length < u64::from(self.length + self.offset) {
-			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
+			error!("Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!", 
 			self.id,
 			self.origin.dev_id,
 			self.bar.index
