@@ -1,5 +1,6 @@
 pub mod allocator;
 pub mod device_alloc;
+#[cfg(not(target_arch = "x86_64"))]
 pub mod freelist;
 
 use core::mem;
