@@ -171,26 +171,26 @@ unsafe impl<S: x86_64::structures::paging::PageSize> FrameAllocator<S> for Frame
 	}
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, AllocError> {
+pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
 	assert!(size > 0);
-	assert!(alignment > 0);
+	assert!(align > 0);
 	assert_eq!(
-		size % alignment,
+		size % align,
 		0,
-		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
+		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
 	);
 	assert_eq!(
-		alignment % BasePageSize::SIZE as usize,
+		align % BasePageSize::SIZE as usize,
 		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
-		alignment,
+		align,
 		BasePageSize::SIZE
 	);
 
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(size, Some(align))?
 			.try_into()
 			.unwrap(),
 	))
