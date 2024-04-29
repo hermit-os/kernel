@@ -1442,6 +1442,8 @@ version = "0.0.0"
 dependencies = [
  "bitflags 2.5.0",
  "volatile 0.5.4",
+ "zerocopy",
+ "zerocopy-derive",
 ]
 
 [[package]]

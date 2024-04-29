@@ -10,22 +10,33 @@ pub mod pci;
 
 use bitflags::bitflags;
 
+/// Device Status Field
+///
+/// During device initialization by a driver,
+/// the driver follows the sequence of steps specified in
+/// _General Initialization And Device Operation / Device
+/// Initialization_.
+///
+/// The `device status` field provides a simple low-level
+/// indication of the completed steps of this sequence.
+/// It's most useful to imagine it hooked up to traffic
+/// lights on the console indicating the status of each device.  The
+/// following bits are defined (listed below in the order in which
+/// they would be typically set):
+#[cfg_attr(
+    feature = "zerocopy",
+    derive(
+        zerocopy_derive::FromZeroes,
+        zerocopy_derive::FromBytes,
+        zerocopy_derive::AsBytes
+    )
+)]
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub struct DeviceStatus(u8);
+
 bitflags! {
-    /// Device Status Field
-    ///
-    /// During device initialization by a driver,
-    /// the driver follows the sequence of steps specified in
-    /// _General Initialization And Device Operation / Device
-    /// Initialization_.
-    ///
-    /// The `device status` field provides a simple low-level
-    /// indication of the completed steps of this sequence.
-    /// It's most useful to imagine it hooked up to traffic
-    /// lights on the console indicating the status of each device.  The
-    /// following bits are defined (listed below in the order in which
-    /// they would be typically set):
-    #[derive(Clone, Copy, Debug)]
-    pub struct DeviceStatus: u8 {
+    impl DeviceStatus: u8 {
         /// Indicates that the guest OS has found the
         /// device and recognized it as a valid virtio device.
         const ACKNOWLEDGE = 1;

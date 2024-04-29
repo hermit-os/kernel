@@ -11,3 +11,8 @@ categories = ["no-std", "no-std::no-alloc"]
 [dependencies]
 bitflags = "2"
 volatile = { version = "0.5.3", features = ["derive"] }
+zerocopy = { version = "0.7", optional = true, default-features = false }
+zerocopy-derive = { version = "0.7", optional = true }
+
+[features]
+zerocopy = ["dep:zerocopy", "dep:zerocopy-derive"]

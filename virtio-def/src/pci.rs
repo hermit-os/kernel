@@ -10,6 +10,10 @@ use crate::DeviceStatus;
 ///
 /// The common configuration structure is found at the bar and offset within the [`VIRTIO_PCI_CAP_COMMON_CFG`] capability.
 #[doc(alias = "virtio_pci_common_cfg")]
+#[cfg_attr(
+    feature = "zerocopy",
+    derive(zerocopy_derive::FromZeroes, zerocopy_derive::FromBytes)
+)]
 #[derive(VolatileFieldAccess)]
 #[allow(non_camel_case_types)]
 #[repr(C)]
