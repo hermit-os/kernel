@@ -1453,8 +1453,7 @@ checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
 [[package]]
 name = "volatile"
 version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f05a5337d258c4ef40d920ffcc5a729278951d57e6596f8b62ca7d4827613e77"
+source = "git+https://github.com/rust-osdev/volatile.git#ac3a01640f0d93283a9e8def75038bbea85164b6"
 dependencies = [
  "volatile-macro",
 ]
@@ -1462,8 +1461,7 @@ dependencies = [
 [[package]]
 name = "volatile-macro"
 version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0503c38e8d76a80ae2ab71fae739510bb959b683b3a82e742e257c5f1c81845"
+source = "git+https://github.com/rust-osdev/volatile.git#ac3a01640f0d93283a9e8def75038bbea85164b6"
 dependencies = [
  "proc-macro2",
  "quote",

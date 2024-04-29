@@ -161,3 +161,7 @@ members = [
 exclude = [
 	"hermit-builtins",
 ]
+
+[patch.crates-io]
+# We need https://github.com/rust-osdev/volatile/pull/61
+volatile = { git = "https://github.com/rust-osdev/volatile.git" }
