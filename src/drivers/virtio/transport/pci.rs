@@ -232,7 +232,6 @@ impl PciCap {
 			return None;
 		}
 
-		// Using "as u32" is safe here as CommonCfg has a defined size smaller 2^31-1
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
 		if self.length < MemLen::from(mem::size_of::<CommonCfg>() * 8) {
 			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.id);
