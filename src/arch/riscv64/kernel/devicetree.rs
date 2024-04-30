@@ -7,7 +7,7 @@ use crate::arch::riscv64::kernel::mmio::{self, MmioDriver};
 use crate::arch::riscv64::mm::{paging, PhysAddr};
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
-#[cfg(all(feature = "tcp", not(feature = "gem-net")))]
+#[cfg(all(feature = "tcp", not(feature = "pci")))]
 use crate::drivers::virtio::transport::mmio::{
 	self as mmio_virtio, DevId, MmioRegisterLayout, VirtioDriver,
 };
@@ -154,7 +154,7 @@ pub fn init_drivers() {
 			}
 
 			// Init virtio-mmio
-			#[cfg(all(feature = "tcp", not(feature = "gem-net")))]
+			#[cfg(all(feature = "tcp", not(feature = "pci")))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
 				debug!("Found virtio mmio device");
 				let virtio_region = virtio_node

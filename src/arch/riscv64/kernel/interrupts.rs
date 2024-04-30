@@ -44,6 +44,11 @@ pub fn enable() {
 	}
 }
 
+#[cfg(all(feature = "pci", feature = "tcp"))]
+pub fn add_irq_name(irq_number: u8, name: &'static str) {
+	warn!("add_irq_name({irq_number}, {name}) called but not implemented");
+}
+
 /// Waits for the next interrupt (Only Supervisor-level software/timer interrupt for now)
 /// and calls the specific handler
 #[inline]

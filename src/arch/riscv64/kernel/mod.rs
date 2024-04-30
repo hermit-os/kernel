@@ -3,6 +3,8 @@ mod devicetree;
 pub mod interrupts;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 pub mod mmio;
+#[cfg(feature = "pci")]
+pub mod pci;
 pub mod processor;
 pub mod scheduler;
 mod start;
