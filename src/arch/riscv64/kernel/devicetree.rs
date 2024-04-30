@@ -1,5 +1,7 @@
 use fdt::Fdt;
 
+#[cfg(feature = "gem-net")]
+use crate::arch::mm::VirtAddr;
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
