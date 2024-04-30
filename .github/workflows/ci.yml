@@ -142,7 +142,6 @@ jobs:
             flags: --features hermit/pci-ids
           - arch: riscv64
             packages: qemu-system-misc
-            flags: --no-default-features
 
     steps:
       - name: Checkout hermit-rs

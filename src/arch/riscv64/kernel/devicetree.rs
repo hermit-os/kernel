@@ -11,6 +11,8 @@ use crate::drivers::net::gem;
 use crate::drivers::virtio::transport::mmio::{
 	self as mmio_virtio, DevId, MmioRegisterLayout, VirtioDriver,
 };
+#[cfg(all(feature = "tcp", not(feature = "pci")))]
+use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
 
