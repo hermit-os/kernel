@@ -1,4 +1,5 @@
 pub mod allocator;
+pub mod device_alloc;
 pub mod freelist;
 
 use core::mem;
@@ -312,7 +313,7 @@ pub(crate) fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
-#[allow(dead_code)]
+/// Soft-deprecated in favor of `DeviceAlloc`
 pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
@@ -329,7 +330,7 @@ pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	virtual_address
 }
 
-#[allow(dead_code)]
+/// Soft-deprecated in favor of `DeviceAlloc`
 pub(crate) fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 
