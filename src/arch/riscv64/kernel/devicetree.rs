@@ -8,9 +8,9 @@ use crate::arch::riscv64::mm::{paging, PhysAddr};
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
 #[cfg(all(feature = "tcp", not(feature = "gem-net")))]
-use crate::drivers::virtio::transport::mmio as mmio_virtio;
-#[cfg(all(feature = "tcp", not(feature = "gem-net")))]
-use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout, VirtioDriver};
+use crate::drivers::virtio::transport::mmio::{
+	self as mmio_virtio, DevId, MmioRegisterLayout, VirtioDriver,
+};
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
 
