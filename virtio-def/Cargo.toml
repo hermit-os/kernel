@@ -1,0 +1,18 @@
+[package]
+name = "virtio-def"
+authors = ["Martin Kröning <mkroening@posteo.net>"]
+edition = "2021"
+description = "Definitions from the Virtual I/O Device (VIRTIO) specification."
+repository = "https://github.com/hermit-os/kernel"
+license = "MIT OR Apache-2.0"
+keywords = ["virtio", "driver", "volatile"]
+categories = ["no-std", "no-std::no-alloc"]
+
+[dependencies]
+bitflags = "2"
+volatile = { version = "0.5.3", features = ["derive"] }
+zerocopy = { version = "0.7", optional = true, default-features = false }
+zerocopy-derive = { version = "0.7", optional = true }
+
+[features]
+zerocopy = ["dep:zerocopy", "dep:zerocopy-derive"]

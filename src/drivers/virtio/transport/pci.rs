@@ -8,7 +8,9 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
-use volatile::{map_field, VolatileRef};
+use virtio_def::pci::{CommonCfg, CommonCfgVolatileFieldAccess};
+use virtio_def::DeviceStatus;
+use volatile::VolatileRef;
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::arch::kernel::interrupts::*;
@@ -24,7 +26,6 @@ use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
-use crate::drivers::virtio::device;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
@@ -219,6 +220,35 @@ impl PciCap {
 	pub fn dev_id(&self) -> u16 {
 		self.origin.dev_id
 	}
+
+	/// Returns a reference to the actual structure inside the PCI devices memory space.
+	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
+		if self.bar.length < u64::from(self.length + self.offset) {
+			error!("Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!", 
+			self.id,
+			self.origin.dev_id,
+			self.bar.index
+            );
+			return None;
+		}
+
+		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
+		if self.length < MemLen::from(mem::size_of::<CommonCfg>() * 8) {
+			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.id);
+			return None;
+		}
+
+		let virt_addr_raw = self.bar.mem_addr + self.offset;
+		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<CommonCfg>(
+			virt_addr_raw.into(),
+		))
+		.unwrap();
+
+		// Create mutable reference to the PCI structure in PCI memory
+		let com_cfg_raw = unsafe { VolatileRef::new(ptr) };
+
+		Some(com_cfg_raw)
+	}
 }
 
 /// Virtio's PCI capabilities structure.
@@ -380,7 +410,7 @@ impl UniCapsColl {
 	}
 }
 
-/// Wraps a [ComCfgRaw] in order to preserve
+/// Wraps a [`CommonCfg`] in order to preserve
 /// the original structure.
 ///
 /// Provides a safe API for Raw structure and allows interaction with the device via
@@ -388,28 +418,30 @@ impl UniCapsColl {
 pub struct ComCfg {
 	/// References the raw structure in PCI memory space. Is static as
 	/// long as the device is present, which is mandatory in order to let this code work.
-	com_cfg: VolatileRef<'static, ComCfgRaw>,
+	com_cfg: VolatileRef<'static, CommonCfg>,
 	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
 	rank: u8,
 }
 
 // Private interface of ComCfg
 impl ComCfg {
-	fn new(raw: VolatileRef<'static, ComCfgRaw>, rank: u8) -> Self {
+	fn new(raw: VolatileRef<'static, CommonCfg>, rank: u8) -> Self {
 		ComCfg { com_cfg: raw, rank }
 	}
 }
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
-	raw: VolatileRef<'a, ComCfgRaw>,
+	raw: VolatileRef<'a, CommonCfg>,
 }
 
 impl<'a> VqCfgHandler<'a> {
 	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
 	fn select_queue(&mut self) {
-		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_select).write(self.vq_index);
+		self.raw
+			.as_mut_ptr()
+			.queue_select()
+			.write(self.vq_index.into());
 	}
 
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed
@@ -418,44 +450,47 @@ impl<'a> VqCfgHandler<'a> {
 	/// Returns the set size in form of a `u16`.
 	pub fn set_vq_size(&mut self, size: u16) -> u16 {
 		self.select_queue();
-		let raw = self.raw.as_mut_ptr();
-		let queue_size = map_field!(raw.queue_size);
+		let queue_size = self.raw.as_mut_ptr().queue_size();
 
-		if queue_size.read() >= size {
-			queue_size.write(size);
+		if queue_size.read().get() >= size {
+			queue_size.write(size.into());
 		}
 
-		queue_size.read()
+		queue_size.read().get()
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
-		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_desc).write(addr.as_u64());
+		self.raw
+			.as_mut_ptr()
+			.queue_desc()
+			.write(addr.as_u64().into());
 	}
 
 	pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
-		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_driver).write(addr.as_u64());
+		self.raw
+			.as_mut_ptr()
+			.queue_driver()
+			.write(addr.as_u64().into());
 	}
 
 	pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
-		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_device).write(addr.as_u64());
+		self.raw
+			.as_mut_ptr()
+			.queue_device()
+			.write(addr.as_u64().into());
 	}
 
 	pub fn notif_off(&mut self) -> u16 {
 		self.select_queue();
-		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_notify_off).read()
+		self.raw.as_mut_ptr().queue_notify_off().read().get()
 	}
 
 	pub fn enable_queue(&mut self) {
 		self.select_queue();
-		let raw = self.raw.as_mut_ptr();
-		map_field!(raw.queue_enable).write(1);
+		self.raw.as_mut_ptr().queue_enable().write(1.into());
 	}
 }
 
@@ -466,11 +501,9 @@ impl ComCfg {
 	///
 	/// INFO: The queue size is automatically bounded by constant `src::config:VIRTIO_MAX_QUEUE_SIZE`.
 	pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler<'_>> {
-		let com_cfg = self.com_cfg.as_mut_ptr();
+		self.com_cfg.as_mut_ptr().queue_select().write(index.into());
 
-		map_field!(com_cfg.queue_select).write(index);
-
-		if map_field!(com_cfg.queue_size).read() == 0 {
+		if self.com_cfg.as_mut_ptr().queue_size().read().get() == 0 {
 			None
 		} else {
 			Some(VqCfgHandler {
@@ -482,15 +515,16 @@ impl ComCfg {
 
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
-		let com_cfg = self.com_cfg.as_ptr();
-		map_field!(com_cfg.device_status).read()
+		self.com_cfg.as_ptr().device_status().read().bits()
 	}
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).write(0);
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.write(DeviceStatus::empty());
 	}
 
 	/// Sets the device status field to FAILED.
@@ -498,24 +532,30 @@ impl ComCfg {
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).write(u8::from(device::Status::FAILED));
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.write(DeviceStatus::FAILED);
 	}
 
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::ACKNOWLEDGE));
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::ACKNOWLEDGE);
 	}
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::DRIVER));
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::DRIVER);
 	}
 
 	/// Sets the FEATURES_OK bit in the device status field.
@@ -523,8 +563,10 @@ impl ComCfg {
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::FEATURES_OK));
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::FEATURES_OK);
 	}
 
 	/// In order to correctly check feature negotiaten, this function
@@ -535,9 +577,11 @@ impl ComCfg {
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_ptr();
-		map_field!(com_cfg.device_status).read() & u8::from(device::Status::FEATURES_OK)
-			== u8::from(device::Status::FEATURES_OK)
+		self.com_cfg
+			.as_ptr()
+			.device_status()
+			.read()
+			.contains(DeviceStatus::FEATURES_OK)
 	}
 
 	/// Sets the DRIVER_OK bit in the device status field.
@@ -545,32 +589,34 @@ impl ComCfg {
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
 		memory_barrier();
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		map_field!(com_cfg.device_status).update(|s| s | u8::from(device::Status::DRIVER_OK));
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::DRIVER_OK);
 	}
 
 	/// Returns the features offered by the device. Coded in a 64bit value.
 	pub fn dev_features(&mut self) -> u64 {
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		let device_feature_select = map_field!(com_cfg.device_feature_select);
-		let device_feature = map_field!(com_cfg.device_feature);
+		let device_feature_select = com_cfg.device_feature_select();
+		let device_feature = com_cfg.device_feature();
 
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
 		memory_barrier();
-		device_feature_select.write(1);
+		device_feature_select.write(1.into());
 		memory_barrier();
 
 		// read high 32 bits of device features
-		let mut dev_feat = u64::from(device_feature.read()) << 32;
+		let mut dev_feat = u64::from(device_feature.read().get()) << 32;
 
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
-		device_feature_select.write(0);
+		device_feature_select.write(0.into());
 		memory_barrier();
 
 		// read low 32 bits of device features
-		dev_feat |= u64::from(device_feature.read());
+		dev_feat |= u64::from(device_feature.read().get());
 
 		dev_feat
 	}
@@ -578,8 +624,8 @@ impl ComCfg {
 	/// Write selected features into driver_select field.
 	pub fn set_drv_features(&mut self, feats: u64) {
 		let com_cfg = self.com_cfg.as_mut_ptr();
-		let driver_feature_select = map_field!(com_cfg.driver_feature_select);
-		let driver_feature = map_field!(com_cfg.driver_feature);
+		let driver_feature_select = com_cfg.driver_feature_select();
+		let driver_feature = com_cfg.driver_feature();
 
 		let high: u32 = (feats >> 32) as u32;
 		let low: u32 = feats as u32;
@@ -587,19 +633,19 @@ impl ComCfg {
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
 		memory_barrier();
-		driver_feature_select.write(0);
+		driver_feature_select.write(0.into());
 		memory_barrier();
 
 		// write low 32 bits of device features
-		driver_feature.write(low);
+		driver_feature.write(low.into());
 
 		// Indicate to device that driver_features field shows high 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
-		driver_feature_select.write(1);
+		driver_feature_select.write(1.into());
 		memory_barrier();
 
 		// write high 32 bits of device features
-		driver_feature.write(high);
+		driver_feature.write(high.into());
 	}
 }
 
@@ -610,14 +656,14 @@ impl ComCfg {
 #[repr(C)]
 struct ComCfgRaw {
 	// About whole device
-	device_feature_select: u32, // read-write
-	device_feature: u32,        // read-only for driver
-	driver_feature_select: u32, // read-write
-	driver_feature: u32,        // read-write
-	config_msix_vector: u16,    // read-write
-	num_queues: u16,            // read-only for driver
-	device_status: u8,          // read-write
-	config_generation: u8,      // read-only for driver
+	device_feature_select: u32,  // read-write
+	device_feature: u32,         // read-only for driver
+	driver_feature_select: u32,  // read-write
+	driver_feature: u32,         // read-write
+	config_msix_vector: u16,     // read-write
+	num_queues: u16,             // read-only for driver
+	device_status: DeviceStatus, // read-write
+	config_generation: u8,       // read-only for driver
 
 	// About a specific virtqueue
 	queue_select: u16,      // read-write
@@ -628,40 +674,6 @@ struct ComCfgRaw {
 	queue_desc: u64,        // read-write
 	queue_driver: u64,      // read-write
 	queue_device: u64,      // read-write
-}
-
-// Common configuration raw does NOT provide a PUBLIC
-// interface.
-impl ComCfgRaw {
-	/// Returns a reference to the actual structure inside the PCI devices memory space.
-	fn map(cap: &PciCap) -> Option<VolatileRef<'static, ComCfgRaw>> {
-		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
-                cap.id,
-                cap.origin.dev_id,
-                cap.bar.index
-            );
-			return None;
-		}
-
-		// Using "as u32" is safe here as ComCfgRaw has a defined size smaller 2^31-1
-		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if cap.length < MemLen::from(mem::size_of::<ComCfgRaw>() * 8) {
-			error!("Common config of with id {}, does not represent actual structure specified by the standard!", cap.id);
-			return None;
-		}
-
-		let virt_addr_raw = cap.bar.mem_addr + cap.offset;
-		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<ComCfgRaw>(
-			virt_addr_raw.into(),
-		))
-		.unwrap();
-
-		// Create mutable reference to the PCI structure in PCI memory
-		let com_cfg_raw = unsafe { VolatileRef::new(ptr) };
-
-		Some(com_cfg_raw)
-	}
 }
 
 /// Notification Structure to handle virtqueue notification settings.
@@ -1222,7 +1234,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
 		match pci_cap.cfg_type {
-			CfgType::VIRTIO_PCI_CAP_COMMON_CFG => match ComCfgRaw::map(&pci_cap) {
+			CfgType::VIRTIO_PCI_CAP_COMMON_CFG => match pci_cap.map_common_cfg() {
 				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.id)),
 				None => error!(
 					"Common config capability with id {}, of device {:x}, could not be mapped!",
