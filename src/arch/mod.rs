@@ -64,6 +64,8 @@ cfg_if::cfg_if! {
 
 		#[cfg(feature = "smp")]
 		pub(crate) use self::riscv64::kernel::application_processor_init;
+		#[cfg(feature = "pci")]
+		pub(crate) use self::riscv64::kernel::pci;
 		pub(crate) use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
 		pub(crate) use self::riscv64::kernel::{
 			boot_application_processors,

@@ -16,7 +16,6 @@ use tock_registers::{register_bitfields, register_structs};
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::interrupts::*;
-use crate::arch::kernel::pci;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
@@ -226,6 +225,7 @@ impl NetworkDriver for GEMDriver {
 		self.mtu
 	}
 
+	#[allow(clippy::modulo_one)]
 	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
