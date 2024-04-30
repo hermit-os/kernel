@@ -24,6 +24,16 @@ impl Clippy {
 				.arg("--no-default-features")
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
+
+			if target == Arch::Riscv64 {
+				cmd!(sh, "cargo clippy --target={triple}")
+					.arg("--no-default-features")
+					.arg("--features=gem-net,tcp")
+					.arg("--")
+					.arg("-Wwarnings")
+					.run()?;
+			}
+
 			// TODO: Enable clippy for newlib
 			// https://github.com/hermit-os/kernel/issues/470
 			// cmd!(sh, "cargo clippy --target={triple}")
