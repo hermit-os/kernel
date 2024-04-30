@@ -684,7 +684,6 @@ pub fn init_x2apic() {
 /// Initialize the required _start variables for the next CPU to be booted.
 pub fn init_next_processor_variables() {
 	// Allocate stack for the CPU and pass the addresses.
-	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
 	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
 }
