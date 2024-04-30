@@ -470,6 +470,7 @@ checksum = "d140bfddcc22e1f83bbc5d6930ec5713c62489cdd94b86c92852edfc1db96f2b"
 dependencies = [
  "align-address 0.3.0",
  "smallvec",
+ "x86_64 0.15.1",
 ]
 
 [[package]]

@@ -1,6 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
@@ -10,7 +9,7 @@ use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::mm;
 
-static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -171,16 +170,6 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 			.try_into()
 			.unwrap(),
 	))
-}
-
-pub struct FrameAlloc;
-
-unsafe impl<S: x86_64::structures::paging::PageSize> FrameAllocator<S> for FrameAlloc {
-	fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
-		let layout = PageLayout::from_size_align(S::SIZE as usize, S::SIZE as usize).unwrap();
-		let addr = PHYSICAL_FREE_LIST.lock().allocate(layout).ok()?.start() as u64;
-		Some(PhysFrame::from_start_address(x86_64::PhysAddr::new(addr)).unwrap())
-	}
 }
 
 pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
