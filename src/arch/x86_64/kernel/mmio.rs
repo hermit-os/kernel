@@ -221,8 +221,11 @@ pub(crate) fn init_drivers() {
 				"Found MMIO device, but we guess the interrupt number {}!",
 				irq
 			);
-			if let Ok(VirtioDriver::Network(drv)) = mmio_virtio::init_device(mmio, irq) {
-				register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+			match mmio_virtio::init_device(mmio, irq) {
+				Ok(VirtioDriver::Network(drv)) => {
+					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+				}
+				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}
 		} else {
 			warn!("Unable to find mmio device");
