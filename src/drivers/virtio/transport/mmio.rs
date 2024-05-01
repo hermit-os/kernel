@@ -142,13 +142,16 @@ impl ComCfg {
 
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
-		unsafe { read_volatile(&self.com_cfg.status).bits() }
+		unsafe { read_volatile(&self.com_cfg.status).try_into().unwrap() }
 	}
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		unsafe {
-			write_volatile(&mut self.com_cfg.status, DeviceStatus::empty());
+			write_volatile(
+				&mut self.com_cfg.status,
+				DeviceStatus::empty().bits().into(),
+			);
 		}
 	}
 
@@ -157,7 +160,7 @@ impl ComCfg {
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
 		unsafe {
-			write_volatile(&mut self.com_cfg.status, DeviceStatus::FAILED);
+			write_volatile(&mut self.com_cfg.status, DeviceStatus::FAILED.bits().into());
 		}
 	}
 
@@ -165,8 +168,12 @@ impl ComCfg {
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
 		unsafe {
-			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::ACKNOWLEDGE);
+			let status =
+				DeviceStatus::from_bits(read_volatile(&self.com_cfg.status) as u8).unwrap();
+			write_volatile(
+				&mut self.com_cfg.status,
+				(status | DeviceStatus::ACKNOWLEDGE).bits().into(),
+			);
 		}
 	}
 
@@ -174,8 +181,12 @@ impl ComCfg {
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
 		unsafe {
-			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::DRIVER);
+			let status =
+				DeviceStatus::from_bits(read_volatile(&self.com_cfg.status) as u8).unwrap();
+			write_volatile(
+				&mut self.com_cfg.status,
+				(status | DeviceStatus::DRIVER).bits().into(),
+			);
 		}
 	}
 
@@ -184,8 +195,12 @@ impl ComCfg {
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
 		unsafe {
-			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::FEATURES_OK);
+			let status =
+				DeviceStatus::from_bits(read_volatile(&self.com_cfg.status) as u8).unwrap();
+			write_volatile(
+				&mut self.com_cfg.status,
+				(status | DeviceStatus::FEATURES_OK).bits().into(),
+			);
 		}
 	}
 
@@ -197,7 +212,8 @@ impl ComCfg {
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
 		unsafe {
-			let status = read_volatile(&self.com_cfg.status);
+			let status =
+				DeviceStatus::from_bits(read_volatile(&self.com_cfg.status) as u8).unwrap();
 			status.contains(DeviceStatus::FEATURES_OK)
 		}
 	}
@@ -207,8 +223,12 @@ impl ComCfg {
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
 		unsafe {
-			let status = read_volatile(&self.com_cfg.status);
-			write_volatile(&mut self.com_cfg.status, status | DeviceStatus::DRIVER_OK);
+			let status =
+				DeviceStatus::from_bits(read_volatile(&self.com_cfg.status) as u8).unwrap();
+			write_volatile(
+				&mut self.com_cfg.status,
+				(status | DeviceStatus::DRIVER_OK).bits().into(),
+			);
 		}
 	}
 
@@ -428,8 +448,8 @@ pub struct MmioRegisterLayout {
 	interrupt_ack: u32,
 	_reserved4: [u32; 2],
 
-	status: DeviceStatus,
-	_reserved5: [u8; 15],
+	status: u32,
+	_reserved5: [u32; 3],
 
 	queue_desc_low: u32,  // non-legacy only
 	queue_desc_high: u32, // non-legacy only
