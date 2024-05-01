@@ -507,8 +507,8 @@ pub fn init_device(
 		let bottom: u32 = ((mac[3] as u32) << 24)
 			+ ((mac[2] as u32) << 16)
 			+ ((mac[1] as u32) << 8)
-			+ ((mac[0] as u32) << 0);
-		let top: u32 = ((mac[5] as u32) << 8) + ((mac[4] as u32) << 0);
+			+ (mac[0] as u32);
+		let top: u32 = ((mac[5] as u32) << 8) + (mac[4] as u32);
 		(*gem).spec_add1_bottom.set(bottom);
 		(*gem).spec_add1_top.set(top);
 
