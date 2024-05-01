@@ -299,10 +299,7 @@ impl NetworkDriver for GEMDriver {
 	fn has_packet(&self) -> bool {
 		debug!("has_packet");
 
-		match self.next_rx_index() {
-			Some(_) => true,
-			None => false,
-		}
+		self.next_rx_index().is_some()
 	}
 
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
