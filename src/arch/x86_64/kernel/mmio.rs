@@ -182,8 +182,6 @@ fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str>
 			BasePageSize::SIZE as usize,
 		);
 
-		//mmio.print_information();
-
 		return Ok((mmio, IRQ_NUMBER));
 	}
 
