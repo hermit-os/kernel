@@ -691,16 +691,16 @@ pub fn init_device(
 	);
 
 	Ok(GEMDriver {
-		gem: gem,
+		gem,
 		mtu: 1500,
-		irq: irq,
-		mac: mac,
+		irq,
+		mac,
 		rx_counter: 0,
-		rxbuffer: rxbuffer,
-		rxbuffer_list: rxbuffer_list,
+		rxbuffer,
+		rxbuffer_list,
 		tx_counter: 0,
-		txbuffer: txbuffer,
-		txbuffer_list: txbuffer_list,
+		txbuffer,
+		txbuffer_list,
 	})
 }
 
