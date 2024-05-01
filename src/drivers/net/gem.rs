@@ -151,6 +151,7 @@ enum PhyReg {
 }
 
 ///  PHY Status reg mask and offset
+#[allow(clippy::enum_variant_names)]
 enum PhyStatus {
 	ANCompleteOffset = 5,
 	ANCompleteMask = 0x20,
