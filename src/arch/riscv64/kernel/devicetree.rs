@@ -143,7 +143,6 @@ pub fn init_drivers() {
 							as u64,
 					),
 				);
-				#[cfg(feature = "gem-net")]
 				match gem::init_device(
 					VirtAddr(gem_region.starting_address as u64),
 					irq.try_into().unwrap(),
@@ -153,7 +152,7 @@ pub fn init_drivers() {
 					Ok(drv) => register_driver(MmioDriver::GEMNet(
 						hermit_sync::InterruptSpinMutex::new(drv),
 					)),
-					Err(_) => (), // could have information on error
+					Err(err) => error!("Could not initialize GEM driver: {err}"),
 				}
 			}
 
