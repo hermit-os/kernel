@@ -5,14 +5,14 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
-use crate::arch::riscv64::kernel::mmio::{self, MmioDriver};
+use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::{paging, PhysAddr};
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
+#[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
+use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
-use crate::drivers::virtio::transport::mmio::{
-	self as mmio_virtio, DevId, MmioRegisterLayout, VirtioDriver,
-};
+use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use crate::kernel::mmio::register_driver;
 
