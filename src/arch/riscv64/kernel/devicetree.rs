@@ -147,7 +147,7 @@ pub fn init_drivers() {
 				match gem::init_device(
 					VirtAddr(gem_region.starting_address as u64),
 					irq.try_into().unwrap(),
-					phy_addr.into(),
+					phy_addr,
 					<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
 				) {
 					Ok(drv) => register_driver(MmioDriver::GEMNet(
