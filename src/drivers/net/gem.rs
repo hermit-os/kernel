@@ -151,6 +151,7 @@ enum PhyReg {
 }
 
 ///  PHY Status reg mask and offset
+#[allow(clippy::enum_variant_names)]
 enum PhyStatus {
 	ANCompleteOffset = 5,
 	ANCompleteMask = 0x20,
@@ -299,10 +300,7 @@ impl NetworkDriver for GEMDriver {
 	fn has_packet(&self) -> bool {
 		debug!("has_packet");
 
-		match self.next_rx_index() {
-			Some(_) => true,
-			None => false,
-		}
+		self.next_rx_index().is_some()
 	}
 
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
@@ -406,7 +404,7 @@ impl GEMDriver {
 		debug!("rx_buffer_consumed: handle: {}", handle);
 
 		let word0_addr = (self.rxbuffer_list + (handle * 8) as u64);
-		let word1_addr = word0_addr + 4 as u64;
+		let word1_addr = word0_addr + 4_u64;
 
 		unsafe {
 			// Clear word1 (is this really necessary?)
@@ -507,8 +505,8 @@ pub fn init_device(
 		let bottom: u32 = ((mac[3] as u32) << 24)
 			+ ((mac[2] as u32) << 16)
 			+ ((mac[1] as u32) << 8)
-			+ ((mac[0] as u32) << 0);
-		let top: u32 = ((mac[5] as u32) << 8) + ((mac[4] as u32) << 0);
+			+ (mac[0] as u32);
+		let top: u32 = ((mac[5] as u32) << 8) + (mac[4] as u32);
 		(*gem).spec_add1_bottom.set(bottom);
 		(*gem).spec_add1_top.set(top);
 
@@ -694,50 +692,56 @@ pub fn init_device(
 	);
 
 	Ok(GEMDriver {
-		gem: gem,
+		gem,
 		mtu: 1500,
-		irq: irq,
-		mac: mac,
+		irq,
+		mac,
 		rx_counter: 0,
-		rxbuffer: rxbuffer,
-		rxbuffer_list: rxbuffer_list,
+		rxbuffer,
+		rxbuffer_list,
 		tx_counter: 0,
-		txbuffer: txbuffer,
-		txbuffer_list: txbuffer_list,
+		txbuffer,
+		txbuffer_list,
 	})
 }
 
 unsafe fn phy_read(gem: *mut Registers, addr: u32, reg: PhyReg) -> u16 {
-	// Check that no MDIO operation is in progress
-	wait_for_mdio(gem);
-	// Initiate the data shift operation over MDIO
-	(*gem).phy_maintenance.write(
-		PHYMaintenance::CLAUSE_22::SET
-			+ PHYMaintenance::OP::READ
-			+ PHYMaintenance::ADDR.val(addr)
-			+ PHYMaintenance::REG.val(reg as u32)
-			+ PHYMaintenance::MUST_10::MUST_BE_10,
-	);
-	wait_for_mdio(gem);
-	(*gem).phy_maintenance.read(PHYMaintenance::DATA) as u16
+	unsafe {
+		// Check that no MDIO operation is in progress
+		wait_for_mdio(gem);
+		// Initiate the data shift operation over MDIO
+		(*gem).phy_maintenance.write(
+			PHYMaintenance::CLAUSE_22::SET
+				+ PHYMaintenance::OP::READ
+				+ PHYMaintenance::ADDR.val(addr)
+				+ PHYMaintenance::REG.val(reg as u32)
+				+ PHYMaintenance::MUST_10::MUST_BE_10,
+		);
+		wait_for_mdio(gem);
+		(*gem).phy_maintenance.read(PHYMaintenance::DATA) as u16
+	}
 }
 
 unsafe fn phy_write(gem: *mut Registers, addr: u32, reg: PhyReg, data: u16) {
-	// Check that no MDIO operation is in progress
-	wait_for_mdio(gem);
-	// Initiate the data shift operation over MDIO
-	(*gem).phy_maintenance.write(
-		PHYMaintenance::CLAUSE_22::SET
-			+ PHYMaintenance::OP::WRITE
-			+ PHYMaintenance::ADDR.val(addr)
-			+ PHYMaintenance::REG.val(reg as u32)
-			+ PHYMaintenance::MUST_10::MUST_BE_10
-			+ PHYMaintenance::DATA.val(data as u32),
-	);
-	wait_for_mdio(gem);
+	unsafe {
+		// Check that no MDIO operation is in progress
+		wait_for_mdio(gem);
+		// Initiate the data shift operation over MDIO
+		(*gem).phy_maintenance.write(
+			PHYMaintenance::CLAUSE_22::SET
+				+ PHYMaintenance::OP::WRITE
+				+ PHYMaintenance::ADDR.val(addr)
+				+ PHYMaintenance::REG.val(reg as u32)
+				+ PHYMaintenance::MUST_10::MUST_BE_10
+				+ PHYMaintenance::DATA.val(data as u32),
+		);
+		wait_for_mdio(gem);
+	}
 }
 
 unsafe fn wait_for_mdio(gem: *mut Registers) {
-	// Check that no MDIO operation is in progress
-	while !(*gem).network_status.is_set(NetworkStatus::PHY_MGMT_IDLE) {}
+	unsafe {
+		// Check that no MDIO operation is in progress
+		while !(*gem).network_status.is_set(NetworkStatus::PHY_MGMT_IDLE) {}
+	}
 }

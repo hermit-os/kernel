@@ -5,14 +5,14 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
-use crate::arch::riscv64::kernel::mmio::{self, MmioDriver};
+use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::{paging, PhysAddr};
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
+#[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
+use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
-use crate::drivers::virtio::transport::mmio::{
-	self as mmio_virtio, DevId, MmioRegisterLayout, VirtioDriver,
-};
+use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use crate::kernel::mmio::register_driver;
 
@@ -143,17 +143,16 @@ pub fn init_drivers() {
 							as u64,
 					),
 				);
-				#[cfg(feature = "gem-net")]
 				match gem::init_device(
 					VirtAddr(gem_region.starting_address as u64),
 					irq.try_into().unwrap(),
-					phy_addr.into(),
+					phy_addr,
 					<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
 				) {
 					Ok(drv) => register_driver(MmioDriver::GEMNet(
 						hermit_sync::InterruptSpinMutex::new(drv),
 					)),
-					Err(_) => (), // could have information on error
+					Err(err) => error!("Could not initialize GEM driver: {err}"),
 				}
 			}
 

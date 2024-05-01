@@ -29,8 +29,6 @@ impl Clippy {
 				cmd!(sh, "cargo clippy --target={triple}")
 					.arg("--no-default-features")
 					.arg("--features=gem-net,tcp")
-					.arg("--")
-					.arg("-Wwarnings")
 					.run()?;
 			}
 
