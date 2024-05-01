@@ -16,9 +16,9 @@ use crate::env;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 
-pub const MMIO_START: usize = 0x00000000c0000000;
-pub const MMIO_END: usize = 0x00000000c0000fff;
-const IRQ_NUMBER: u8 = 12;
+pub const MMIO_START: usize = 0x00000000feb00000;
+pub const MMIO_END: usize = 0x00000000feb0ffff;
+const IRQ_NUMBER: u8 = 23;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
 
