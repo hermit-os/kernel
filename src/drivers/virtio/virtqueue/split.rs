@@ -7,12 +7,13 @@ use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
-use core::cell::RefCell;
+use core::cell::{RefCell, UnsafeCell};
 use core::mem::{size_of, MaybeUninit};
-use core::ptr;
+use core::ptr::{self, NonNull};
 
 use virtio_def::num::{le16, le32, le64};
-use zerocopy::{FromBytes, FromZeroes};
+use volatile::access::ReadOnly;
+use volatile::{map_field, VolatilePtr, VolatileRef};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -67,26 +68,18 @@ const RING_AND_EVENT_ERROR: &str = "ring_and_event should have at least enough e
 type AvailRing = GenericRing<[MaybeUninit<le16>]>;
 
 impl AvailRing {
-	fn ring_ref(&self) -> &[MaybeUninit<le16>] {
-		self.ring_and_event
-			.split_last()
-			.expect(RING_AND_EVENT_ERROR)
-			.1
+	fn ring_ptr<A: volatile::access::Access>(
+		volatile_self: VolatilePtr<'_, Self, A>,
+	) -> VolatilePtr<'_, [MaybeUninit<le16>], A> {
+		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
+		ring_and_event_ptr.split_at(ring_and_event_ptr.len()).0
 	}
 
-	fn ring_mut(&mut self) -> &mut [MaybeUninit<le16>] {
-		self.ring_and_event
-			.split_last_mut()
-			.expect(RING_AND_EVENT_ERROR)
-			.1
-	}
-
-	fn event_ref(&self) -> &MaybeUninit<le16> {
-		self.ring_and_event.last().expect(RING_AND_EVENT_ERROR)
-	}
-
-	fn event_mut(&mut self) -> &MaybeUninit<le16> {
-		self.ring_and_event.last_mut().expect(RING_AND_EVENT_ERROR)
+	fn event_ptr<A: volatile::access::Access>(
+		volatile_self: VolatilePtr<'_, Self, A>,
+	) -> VolatilePtr<'_, MaybeUninit<le16>, A> {
+		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
+		ring_and_event_ptr.index(ring_and_event_ptr.len() - 1)
 	}
 }
 
@@ -96,21 +89,34 @@ type UsedRing = GenericRing<[u8]>;
 
 // Used ring is not supposed to be modified by the driver. Thus, we only have _ref methods (and not _mut methods).
 impl UsedRing {
-	fn ring_ref(&self) -> &[UsedElem] {
-		// The last two bytes belong to the event field
-		UsedElem::slice_from(
-			&self.ring_and_event[..(self.ring_and_event.len() - size_of::<le16>())],
-		)
-		.expect(RING_AND_EVENT_ERROR)
+	fn ring_ptr<A: volatile::access::Access>(
+		volatile_self: VolatilePtr<'_, Self, A>,
+	) -> VolatilePtr<'_, [UsedElem], A> {
+		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
+		let ring_len = (ring_and_event_ptr.len() - size_of::<le16>()) / size_of::<UsedElem>();
+
+		unsafe {
+			ring_and_event_ptr.map(|ring_and_event_ptr| {
+				NonNull::slice_from_raw_parts(ring_and_event_ptr.cast::<UsedElem>(), ring_len)
+			})
+		}
 	}
 
-	fn event_ref(&self) -> &le16 {
-		le16::ref_from_suffix(&self.ring_and_event).expect(RING_AND_EVENT_ERROR)
+	fn event_ptr<A: volatile::access::Access>(
+		volatile_self: VolatilePtr<'_, Self, A>,
+	) -> VolatilePtr<'_, le16, A> {
+		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
+		let ring_and_event_len = ring_and_event_ptr.len();
+		let event_bytes_ptr = ring_and_event_ptr
+			.split_at(ring_and_event_len - size_of::<le16>())
+			.1;
+
+		unsafe { event_bytes_ptr.map(|event_bytes| event_bytes.cast::<le16>()) }
 	}
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, FromZeroes, FromBytes)]
+#[derive(Copy, Clone)]
 struct UsedElem {
 	id: le32,
 	len: le32,
@@ -118,13 +124,30 @@ struct UsedElem {
 
 struct DescrRing {
 	read_idx: u16,
-	descr_table: Box<[MaybeUninit<Descriptor>], DeviceAlloc>,
-	ref_ring: Box<[Option<Box<TransferToken>>]>,
-	avail_ring: Box<AvailRing, DeviceAlloc>,
-	used_ring: Box<UsedRing, DeviceAlloc>,
+	token_ring: Box<[Option<Box<TransferToken>>]>,
+
+	/// Descriptor Tables
+	///
+	/// # Safety
+	///
+	/// These tables may only be accessed via volatile operations.
+	/// See the corresponding method for a safe wrapper.
+	descr_table_cell: Box<UnsafeCell<[MaybeUninit<Descriptor>]>, DeviceAlloc>,
+	avail_ring_cell: Box<UnsafeCell<AvailRing>, DeviceAlloc>,
+	used_ring_cell: Box<UnsafeCell<UsedRing>, DeviceAlloc>,
 }
 
 impl DescrRing {
+	fn descr_table_ref(&mut self) -> VolatileRef<'_, [MaybeUninit<Descriptor>]> {
+		unsafe { VolatileRef::new(NonNull::new(self.descr_table_cell.get_mut()).unwrap()) }
+	}
+	fn avail_ring_ref(&mut self) -> VolatileRef<'_, AvailRing> {
+		unsafe { VolatileRef::new(NonNull::new(self.avail_ring_cell.get_mut()).unwrap()) }
+	}
+	fn used_ring_ref(&self) -> VolatileRef<'_, UsedRing, ReadOnly> {
+		unsafe { VolatileRef::new_read_only(NonNull::new(self.used_ring_cell.get()).unwrap()) }
+	}
+
 	fn push(&mut self, tkn: TransferToken) -> (u16, u16) {
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
@@ -228,32 +251,49 @@ impl DescrRing {
 				)
 			};
 
-			self.descr_table[write_indx] = MaybeUninit::new(descriptor);
+			self.descr_table_ref()
+				.as_mut_ptr()
+				.index(write_indx)
+				.write(MaybeUninit::new(descriptor));
 
 			desc_cnt += 1;
 			len -= 1;
 		}
 
-		self.ref_ring[index] = Some(Box::new(tkn));
-		let idx = self.avail_ring.index.get();
-		let len = self.avail_ring.ring_ref().len();
-		self.avail_ring.ring_mut()[idx as usize % len] = MaybeUninit::new((index as u16).into());
+		self.token_ring[index] = Some(Box::new(tkn));
+
+		let len = self.token_ring.len();
+		let mut avail_ring_ref = self.avail_ring_ref();
+		let avail_ring = avail_ring_ref.as_mut_ptr();
+		let idx = map_field!(avail_ring.index).read().get();
+		AvailRing::ring_ptr(avail_ring)
+			.index(idx as usize % len)
+			.write(MaybeUninit::new((index as u16).into()));
 
 		memory_barrier();
-		self.avail_ring.index = (self.avail_ring.index.get().wrapping_add(1)).into();
+		map_field!(avail_ring.index).update(|val| (val.get().wrapping_add(1)).into());
 
 		(0, 0)
 	}
 
 	fn poll(&mut self) {
-		while self.read_idx
-			!= unsafe { ptr::read_volatile(ptr::addr_of!(self.used_ring.index)).get() }
-		{
-			let cur_ring_index = self.read_idx as usize % self.used_ring.ring_ref().len();
-			let used_elem =
-				unsafe { ptr::read_volatile(&self.used_ring.ring_ref()[cur_ring_index]) };
+		// We cannot use a simple while loop here because Rust cannot tell that [Self::used_ring_ref],
+		// [Self::read_idx] and [Self::token_ring] access separate fields of `self`. For this reason we
+		// need to move [Self::used_ring_ref] lines into a separate scope.
+		loop {
+			let used_elem;
+			{
+				let used_ring_ref = self.used_ring_ref();
+				let used_ring = used_ring_ref.as_ptr();
+				if self.read_idx == map_field!(used_ring.index).read().get() {
+					break;
+				} else {
+					let cur_ring_index = self.read_idx as usize % self.token_ring.len();
+					used_elem = UsedRing::ring_ptr(used_ring).index(cur_ring_index).read();
+				}
+			}
 
-			let mut tkn = self.ref_ring[used_elem.id.get() as usize].take().expect(
+			let mut tkn = self.token_ring[used_elem.id.get() as usize].take().expect(
 				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 			);
 
@@ -276,15 +316,21 @@ impl DescrRing {
 	}
 
 	fn drv_enable_notif(&mut self) {
-		self.avail_ring.flags = 0.into();
+		let mut avail_ring_ref = self.avail_ring_ref();
+		let avail_ring = avail_ring_ref.as_mut_ptr();
+		map_field!(avail_ring.flags).write(0.into());
 	}
 
 	fn drv_disable_notif(&mut self) {
-		self.avail_ring.flags = 1.into();
+		let mut avail_ring_ref = self.avail_ring_ref();
+		let avail_ring = avail_ring_ref.as_mut_ptr();
+		map_field!(avail_ring.flags).write(1.into());
 	}
 
 	fn dev_is_notif(&self) -> bool {
-		self.used_ring.flags.get() & 1 == 0
+		let used_ring_ref = self.used_ring_ref();
+		let used_ring = used_ring_ref.as_ptr();
+		map_field!(used_ring.flags).read().get() & 1 == 0
 	}
 }
 
@@ -374,10 +420,14 @@ impl Virtq for SplitVq {
 		let size = vq_handler.set_vq_size(size.0);
 		const ALLOCATOR: DeviceAlloc = DeviceAlloc;
 
-		// Allocate heap memory via a vec, leak and cast
-		let descr_table = Box::new_uninit_slice_in(size.into(), ALLOCATOR);
+		let descr_table_cell = unsafe {
+			core::mem::transmute::<
+				Box<[MaybeUninit<Descriptor>], DeviceAlloc>,
+				Box<UnsafeCell<[MaybeUninit<Descriptor>]>, DeviceAlloc>,
+			>(Box::new_uninit_slice_in(size.into(), ALLOCATOR))
+		};
 
-		let avail_ring = {
+		let avail_ring_cell = {
 			let ring_and_event_len = usize::from(size) + 1;
 			let allocation = ALLOCATOR
 				.allocate(
@@ -391,13 +441,13 @@ impl Virtq for SplitVq {
 			unsafe {
 				Box::from_raw_in(
 					core::ptr::slice_from_raw_parts_mut(allocation.as_mut_ptr(), ring_and_event_len)
-						as *mut AvailRing,
+						as *mut UnsafeCell<AvailRing>,
 					ALLOCATOR,
 				)
 			}
 		};
 
-		let used_ring = {
+		let used_ring_cell = {
 			let ring_and_event_layout = Layout::array::<UsedElem>(size.into())
 				.unwrap()
 				.extend(Layout::new::<le16>()) // for event
@@ -417,7 +467,7 @@ impl Virtq for SplitVq {
 					core::ptr::slice_from_raw_parts_mut(
 						allocation.as_mut_ptr(),
 						ring_and_event_layout.size(),
-					) as *mut UsedRing,
+					) as *mut UnsafeCell<UsedRing>,
 					ALLOCATOR,
 				)
 			}
@@ -425,25 +475,26 @@ impl Virtq for SplitVq {
 
 		// Provide memory areas of the queues data structures to the device
 		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
-			descr_table.as_ptr().expose_provenance(),
+			ptr::from_ref(descr_table_cell.as_ref()).expose_provenance(),
 		)));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
 		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
-			ptr::from_ref(avail_ring.as_ref()).expose_provenance(),
+			ptr::from_ref(avail_ring_cell.as_ref()).expose_provenance(),
 		)));
 		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
-			ptr::from_ref(used_ring.as_ref()).expose_provenance(),
+			ptr::from_ref(used_ring_cell.as_ref()).expose_provenance(),
 		)));
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
-			ref_ring: core::iter::repeat_with(|| None)
+			token_ring: core::iter::repeat_with(|| None)
 				.take(size.into())
 				.collect::<Vec<_>>()
 				.into_boxed_slice(),
-			descr_table,
-			avail_ring,
-			used_ring,
+
+			descr_table_cell,
+			avail_ring_cell,
+			used_ring_cell,
 		};
 
 		let notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
