@@ -685,7 +685,7 @@ pub fn init_x2apic() {
 pub fn init_next_processor_variables() {
 	// Allocate stack for the CPU and pass the addresses.
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
+	CURRENT_STACK_ADDRESS.store(stack.as_mut_ptr(), Ordering::Relaxed);
 }
 
 /// Boot all Application Processors

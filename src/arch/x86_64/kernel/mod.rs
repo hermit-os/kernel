@@ -1,9 +1,10 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
 use core::num::NonZeroU64;
+use core::ptr;
 #[cfg(feature = "newlib")]
 use core::slice;
-use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::InterruptSpinMutex;
@@ -246,7 +247,7 @@ pub fn print_statistics() {
 /// It also synchronizes initialization of CPU cores.
 pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 
-pub static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
+pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "none")]
 #[inline(never)]

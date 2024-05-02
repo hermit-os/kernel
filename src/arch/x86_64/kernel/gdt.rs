@@ -33,10 +33,10 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
-		- TaskStacks::MARKER_SIZE as u64;
-	tss.privilege_stack_table[0] = VirtAddr::new(rsp);
-	CoreLocal::get().kernel_stack.set(rsp as *mut u8);
+	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed);
+	let rsp = unsafe { rsp.add(KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE) };
+	tss.privilege_stack_table[0] = VirtAddr::from_ptr(rsp);
+	CoreLocal::get().kernel_stack.set(rsp);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST, so the IST allocated here is only used by the Idle task.
