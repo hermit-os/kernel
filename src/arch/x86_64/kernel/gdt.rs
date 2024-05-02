@@ -36,7 +36,7 @@ pub fn add_current_core() {
 	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
 		- TaskStacks::MARKER_SIZE as u64;
 	tss.privilege_stack_table[0] = VirtAddr::new(rsp);
-	CoreLocal::get().kernel_stack.set(rsp);
+	CoreLocal::get().kernel_stack.set(rsp as *mut u8);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST, so the IST allocated here is only used by the Idle task.

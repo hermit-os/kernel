@@ -637,8 +637,8 @@ impl PerCoreScheduler {
 		let rsp = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()
 			- TaskStacks::MARKER_SIZE)
-			.as_u64();
-		tss.privilege_stack_table[0] = VirtAddr::new(rsp);
+			.as_mut_ptr();
+		tss.privilege_stack_table[0] = VirtAddr::from_ptr(rsp);
 		CoreLocal::get().kernel_stack.set(rsp);
 		let ist_start = (current_task_borrowed.stacks.get_interrupt_stack()
 			+ current_task_borrowed.stacks.get_interrupt_stack_size()

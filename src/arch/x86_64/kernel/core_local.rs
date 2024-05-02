@@ -28,7 +28,7 @@ pub(crate) struct CoreLocal {
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: Cell<*mut TaskStateSegment>,
 	/// start address of the kernel stack
-	pub kernel_stack: Cell<u64>,
+	pub kernel_stack: Cell<*mut u8>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 	/// Queue of async tasks
@@ -56,7 +56,7 @@ impl CoreLocal {
 			core_id,
 			scheduler: Cell::new(ptr::null_mut()),
 			tss: Cell::new(ptr::null_mut()),
-			kernel_stack: Cell::new(0),
+			kernel_stack: Cell::new(ptr::null_mut()),
 			irq_statistics,
 			async_tasks: RefCell::new(Vec::new()),
 			#[cfg(feature = "smp")]
