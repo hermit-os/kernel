@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::future::{self, Future};
 use core::ptr;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use core::task::ready;
 use core::task::Poll::Ready;
 
@@ -873,7 +873,7 @@ impl PerCoreScheduler {
 }
 
 fn get_tid() -> TaskId {
-	static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
+	static TID_COUNTER: AtomicI32 = AtomicI32::new(0);
 	let guard = TASKS.lock();
 
 	loop {

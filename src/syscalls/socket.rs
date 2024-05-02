@@ -54,7 +54,6 @@ pub type sa_family_t = u8;
 pub type socklen_t = u32;
 pub type in_addr_t = u32;
 pub type in_port_t = u16;
-pub type time_t = i64;
 
 bitflags! {
 	#[derive(Debug, Copy, Clone)]
@@ -70,10 +69,10 @@ bitflags! {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct in_addr {
-	pub s_addr: [u8; 4],
+	pub s_addr: in_addr_t,
 }
 
-#[repr(C)]
+#[repr(C, align(4))]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct in6_addr {
 	pub s6_addr: [u8; 16],
@@ -101,15 +100,12 @@ pub struct sockaddr_in {
 impl From<sockaddr_in> for IpListenEndpoint {
 	fn from(addr: sockaddr_in) -> IpListenEndpoint {
 		let port = u16::from_be(addr.sin_port);
-		if addr.sin_addr.s_addr.into_iter().all(|b| b == 0) {
+		if addr.sin_addr.s_addr == 0 {
 			IpListenEndpoint { addr: None, port }
 		} else {
-			let address = IpAddress::v4(
-				addr.sin_addr.s_addr[0],
-				addr.sin_addr.s_addr[1],
-				addr.sin_addr.s_addr[2],
-				addr.sin_addr.s_addr[3],
-			);
+			let s_addr = addr.sin_addr.s_addr.to_be_bytes();
+
+			let address = IpAddress::v4(s_addr[0], s_addr[1], s_addr[2], s_addr[3]);
 
 			IpListenEndpoint::from((address, port))
 		}
@@ -120,12 +116,8 @@ impl From<sockaddr_in> for IpListenEndpoint {
 impl From<sockaddr_in> for IpEndpoint {
 	fn from(addr: sockaddr_in) -> IpEndpoint {
 		let port = u16::from_be(addr.sin_port);
-		let address = IpAddress::v4(
-			addr.sin_addr.s_addr[0],
-			addr.sin_addr.s_addr[1],
-			addr.sin_addr.s_addr[2],
-			addr.sin_addr.s_addr[3],
-		);
+		let s_addr = addr.sin_addr.s_addr.to_be_bytes();
+		let address = IpAddress::v4(s_addr[0], s_addr[1], s_addr[2], s_addr[3]);
 
 		IpEndpoint::from((address, port))
 	}
@@ -136,14 +128,15 @@ impl From<IpEndpoint> for sockaddr_in {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {
 			IpAddress::Ipv4(ip) => {
-				let mut in_addr: in_addr = Default::default();
-				in_addr.s_addr.copy_from_slice(ip.as_bytes());
+				let sin_addr = in_addr {
+					s_addr: u32::from_be_bytes(ip.as_bytes().try_into().unwrap()),
+				};
 
 				Self {
 					sin_len: core::mem::size_of::<sockaddr_in>().try_into().unwrap(),
 					sin_port: endpoint.port.to_be(),
 					sin_family: AF_INET.try_into().unwrap(),
-					sin_addr: in_addr,
+					sin_addr,
 					..Default::default()
 				}
 			}
@@ -155,10 +148,11 @@ impl From<IpEndpoint> for sockaddr_in {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct sockaddr_in6 {
+	pub sin6_len: u8,
 	pub sin6_family: sa_family_t,
 	pub sin6_port: in_port_t,
-	pub sin6_addr: in6_addr,
 	pub sin6_flowinfo: u32,
+	pub sin6_addr: in6_addr,
 	pub sin6_scope_id: u32,
 }
 
@@ -211,6 +205,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 				in6_addr.s6_addr.copy_from_slice(ip.as_bytes());
 
 				Self {
+					sin6_len: core::mem::size_of::<sockaddr_in6>().try_into().unwrap(),
 					sin6_port: endpoint.port.to_be(),
 					sin6_family: AF_INET6.try_into().unwrap(),
 					sin6_addr: in6_addr,
@@ -244,8 +239,8 @@ pub struct addrinfo {
 	pub ai_socktype: i32,
 	pub ai_protocol: i32,
 	pub ai_addrlen: socklen_t,
-	pub ai_addr: *mut sockaddr,
 	pub ai_canonname: *mut u8,
+	pub ai_addr: *mut sockaddr,
 	pub ai_next: *mut addrinfo,
 }
 

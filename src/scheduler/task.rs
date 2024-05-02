@@ -56,14 +56,14 @@ pub(crate) enum TaskStatus {
 
 /// Unique identifier for a task (i.e. `pid`).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub struct TaskId(u32);
+pub struct TaskId(i32);
 
 impl TaskId {
-	pub const fn into(self) -> u32 {
+	pub const fn into(self) -> i32 {
 		self.0
 	}
 
-	pub const fn from(x: u32) -> Self {
+	pub const fn from(x: i32) -> Self {
 		TaskId(x)
 	}
 }

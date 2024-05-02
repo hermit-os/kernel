@@ -2,6 +2,10 @@ use alloc::boxed::Box;
 
 use crate::errno::*;
 use crate::synch::semaphore::Semaphore;
+use crate::time::timespec;
+
+#[allow(non_camel_case_types)]
+pub type sem_t = *const Semaphore;
 
 /// Create a new, unnamed semaphore.
 ///
@@ -10,8 +14,8 @@ use crate::synch::semaphore::Semaphore;
 /// Stores the raw memory location of the new semaphore in parameter `sem`.
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
-	if sem.is_null() {
+pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32) -> i32 {
+	if sem.is_null() || pshared != 0 {
 		return -EINVAL;
 	}
 
@@ -29,7 +33,7 @@ pub unsafe extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i
 ///
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
+pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -50,13 +54,13 @@ pub unsafe extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 ///
 /// Returns `0` on success, or `-EINVAL` if `sem` is null.
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
+pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
 
 	// Get a reference to the given semaphore and release it.
-	let semaphore = unsafe { &*sem };
+	let semaphore = unsafe { &**sem };
 	semaphore.release();
 	0
 }
@@ -68,13 +72,13 @@ pub unsafe extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if `sem` is null, or `-ECANCELED` if the decrement fails.
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
+pub unsafe extern "C" fn sys_sem_trywait(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
 
 	// Get a reference to the given semaphore and acquire it in a non-blocking fashion.
-	let semaphore = unsafe { &*sem };
+	let semaphore = unsafe { &**sem };
 	if semaphore.try_acquire() {
 		0
 	} else {
@@ -82,7 +86,7 @@ pub unsafe extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
 	}
 }
 
-unsafe fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+unsafe fn sem_timedwait(sem: *mut sem_t, ms: u32) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -90,7 +94,7 @@ unsafe fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	let delay = if ms > 0 { Some(u64::from(ms)) } else { None };
 
 	// Get a reference to the given semaphore and wait until we have acquired it or the wakeup time has elapsed.
-	let semaphore = unsafe { &*sem };
+	let semaphore = unsafe { &**sem };
 	if semaphore.acquire(delay) {
 		0
 	} else {
@@ -98,17 +102,30 @@ unsafe fn sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	}
 }
 
-/// Try to acquire a lock on a semaphore, blocking for a given amount of milliseconds.
+/// Try to acquire a lock on a semaphore.
 ///
-/// Blocks until semaphore is acquired or until wake-up time has elapsed.
+/// Blocks until semaphore is acquired or until specified time passed
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if sem is null, or `-ETIME` on timeout.
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
-	unsafe { sem_timedwait(sem, ms) }
-}
+pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec) -> i32 {
+	if ts.is_null() {
+		unsafe { sem_timedwait(sem, 0) }
+	} else {
+		let mut current_ts: timespec = Default::default();
 
-#[hermit_macro::system]
-pub unsafe extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
-	unsafe { sem_timedwait(sem, ms) }
+		unsafe {
+			crate::sys_clock_gettime(crate::CLOCK_REALTIME, &mut current_ts as *mut _);
+
+			let ts = &*ts;
+			let ms: i64 = (ts.tv_sec - current_ts.tv_sec) * 1000
+				+ (ts.tv_nsec as i64 - current_ts.tv_nsec as i64) / 1000000;
+
+			if ms > 0 {
+				sem_timedwait(sem, ms.try_into().unwrap())
+			} else {
+				0
+			}
+		}
+	}
 }

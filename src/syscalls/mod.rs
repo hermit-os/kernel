@@ -2,7 +2,7 @@
 
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use core::alloc::{GlobalAlloc, Layout};
-use core::ffi::CStr;
+use core::ffi::{c_char, CStr};
 use core::marker::PhantomData;
 
 #[cfg(feature = "newlib")]
@@ -80,6 +80,54 @@ pub(crate) fn init() {
 /// Returning a null pointer indicates that either memory is exhausted or
 /// `size` and `align` do not meet this allocator's size or alignment constraints.
 ///
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
+#[hermit_macro::system]
+pub extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
+	let layout_res = Layout::from_size_align(size, align);
+	if layout_res.is_err() || size == 0 {
+		warn!(
+			"__sys_alloc called with size {:#x}, align {:#x} is an invalid layout!",
+			size, align
+		);
+		return core::ptr::null_mut();
+	}
+	let layout = layout_res.unwrap();
+	let ptr = unsafe { ALLOCATOR.alloc(layout) };
+
+	trace!(
+		"__sys_alloc: allocate memory at {:p} (size {:#x}, align {:#x})",
+		ptr,
+		size,
+		align
+	);
+
+	ptr
+}
+
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
+#[hermit_macro::system]
+pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
+	let layout_res = Layout::from_size_align(size, align);
+	if layout_res.is_err() || size == 0 {
+		warn!(
+			"__sys_alloc_zeroed called with size {:#x}, align {:#x} is an invalid layout!",
+			size, align
+		);
+		return core::ptr::null_mut();
+	}
+	let layout = layout_res.unwrap();
+	let ptr = unsafe { ALLOCATOR.alloc_zeroed(layout) };
+
+	trace!(
+		"__sys_alloc_zeroed: allocate memory at {:p} (size {:#x}, align {:#x})",
+		ptr,
+		size,
+		align
+	);
+
+	ptr
+}
+
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 #[hermit_macro::system]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
@@ -171,6 +219,30 @@ pub unsafe extern "C" fn sys_realloc(
 /// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 #[hermit_macro::system]
+pub unsafe extern "C" fn sys_dealloc(ptr: *mut u8, size: usize, align: usize) {
+	unsafe {
+		let layout_res = Layout::from_size_align(size, align);
+		if layout_res.is_err() || size == 0 {
+			warn!(
+				"__sys_dealloc called with size {:#x}, align {:#x} is an invalid layout!",
+				size, align
+			);
+			debug_assert!(layout_res.is_err(), "__sys_dealloc error: Invalid layout");
+			debug_assert_ne!(size, 0, "__sys_dealloc error: size cannot be 0");
+		} else {
+			trace!(
+				"sys_free: deallocate memory at {:p} (size {:#x})",
+				ptr,
+				size
+			);
+		}
+		let layout = layout_res.unwrap();
+		ALLOCATOR.dealloc(ptr, layout);
+	}
+}
+
+#[cfg(all(target_os = "none", not(feature = "common-os")))]
+#[hermit_macro::system]
 pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	unsafe {
 		let layout_res = Layout::from_size_align(size, align);
@@ -238,7 +310,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_rmdir(name: *const u8) -> i32 {
+pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	fs::FILESYSTEM
@@ -249,7 +321,7 @@ pub unsafe extern "C" fn sys_rmdir(name: *const u8) -> i32 {
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
+pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	match fs::FILESYSTEM.get().unwrap().stat(name) {
@@ -262,7 +334,7 @@ pub unsafe extern "C" fn sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
+pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	match fs::FILESYSTEM.get().unwrap().lstat(name) {
@@ -288,7 +360,7 @@ pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
+pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
@@ -297,7 +369,7 @@ pub unsafe extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
+pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) -> FileDescriptor {
 	let flags = if let Some(flags) = OpenOption::from_bits(flags) {
 		flags
 	} else {

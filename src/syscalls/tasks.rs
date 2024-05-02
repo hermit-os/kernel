@@ -17,7 +17,7 @@ use crate::{arch, scheduler};
 
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
-pub type Tid = u32;
+pub type Tid = i32;
 
 #[hermit_macro::system]
 pub extern "C" fn sys_getpid() -> Tid {
@@ -48,14 +48,14 @@ fn exit(arg: i32) -> ! {
 }
 
 #[hermit_macro::system]
-pub extern "C" fn sys_exit(arg: i32) -> ! {
-	exit(arg)
+pub extern "C" fn sys_exit(status: i32) -> ! {
+	exit(status)
 }
 
 #[hermit_macro::system]
-pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
-	debug!("Exit thread with error code {}!", arg);
-	core_scheduler().exit(arg)
+pub extern "C" fn sys_thread_exit(status: i32) -> ! {
+	debug!("Exit thread with error code {}!", status);
+	core_scheduler().exit(status)
 }
 
 #[hermit_macro::system]
@@ -110,13 +110,13 @@ pub(super) fn usleep(usecs: u64) {
 }
 
 #[hermit_macro::system]
-pub extern "C" fn sys_usleep(usecs: u64) {
-	usleep(usecs)
+pub extern "C" fn sys_msleep(ms: u32) {
+	usleep(u64::from(ms) * 1000)
 }
 
 #[hermit_macro::system]
-pub extern "C" fn sys_msleep(ms: u32) {
-	usleep(u64::from(ms) * 1000)
+pub extern "C" fn sys_usleep(usecs: u64) {
+	usleep(usecs)
 }
 
 #[hermit_macro::system]
@@ -126,10 +126,7 @@ pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timesp
 		"sys_nanosleep called with a zero rqtp parameter"
 	);
 	let requested_time = unsafe { &*rqtp };
-	if requested_time.tv_sec < 0
-		|| requested_time.tv_nsec < 0
-		|| requested_time.tv_nsec > 999_999_999
-	{
+	if requested_time.tv_sec < 0 || requested_time.tv_nsec > 999_999_999 {
 		debug!("sys_nanosleep called with an invalid requested time, returning -EINVAL");
 		return -EINVAL;
 	}
@@ -149,7 +146,7 @@ pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 
 	if !id.is_null() {
 		unsafe {
-			*id = task_id.into() as u32;
+			*id = task_id.into();
 		}
 	}
 
