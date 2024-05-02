@@ -1,4 +1,6 @@
+use alloc::alloc::alloc;
 use alloc::boxed::Box;
+use core::alloc::Layout;
 use core::sync::atomic::Ordering;
 
 use x86_64::instructions::tables;
@@ -33,9 +35,9 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
-		- TaskStacks::MARKER_SIZE as u64;
-	tss.privilege_stack_table[0] = VirtAddr::new(rsp);
+	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed);
+	let rsp = unsafe { rsp.add(KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE) };
+	tss.privilege_stack_table[0] = VirtAddr::from_ptr(rsp);
 	CoreLocal::get().kernel_stack.set(rsp);
 
 	// Allocate all ISTs for this core.
@@ -47,9 +49,11 @@ pub fn add_current_core() {
 			BasePageSize::SIZE as usize
 		};
 
-		let ist = crate::mm::allocate(sz, true);
-		let ist_start = ist.as_u64() + sz as u64 - TaskStacks::MARKER_SIZE as u64;
-		tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
+		let layout = Layout::from_size_align(sz, BasePageSize::SIZE as usize).unwrap();
+		let ist = unsafe { alloc(layout) };
+		assert!(!ist.is_null());
+		let ist_start = unsafe { ist.add(sz - TaskStacks::MARKER_SIZE) };
+		tss.interrupt_stack_table[i] = VirtAddr::from_ptr(ist_start);
 	}
 
 	CoreLocal::get().tss.set(tss);

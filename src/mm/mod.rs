@@ -1,4 +1,5 @@
 pub mod allocator;
+pub mod device_alloc;
 pub mod freelist;
 
 use core::mem;
@@ -120,7 +121,22 @@ pub(crate) fn init() {
 		let kernel_heap_size = 10 * LargePageSize::SIZE as usize;
 
 		unsafe {
-			let start = allocate(kernel_heap_size, true);
+			let start = {
+				let physical_address = arch::mm::physicalmem::allocate(kernel_heap_size).unwrap();
+				let virtual_address = arch::mm::virtualmem::allocate(kernel_heap_size).unwrap();
+
+				let count = kernel_heap_size / BasePageSize::SIZE as usize;
+				let mut flags = PageTableEntryFlags::empty();
+				flags.normal().writable().execute_disable();
+				arch::mm::paging::map::<BasePageSize>(
+					virtual_address,
+					physical_address,
+					count,
+					flags,
+				);
+
+				virtual_address
+			};
 			ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
 
 			info!("Kernel heap starts at {:#x}", start);
@@ -297,7 +313,7 @@ pub(crate) fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
-#[allow(dead_code)]
+/// Soft-deprecated in favor of `DeviceAlloc`
 pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
@@ -314,7 +330,7 @@ pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	virtual_address
 }
 
-#[allow(dead_code)]
+/// Soft-deprecated in favor of `DeviceAlloc`
 pub(crate) fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 
