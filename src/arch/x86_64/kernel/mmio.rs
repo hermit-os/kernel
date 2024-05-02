@@ -16,9 +16,9 @@ use crate::env;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 
-pub const MMIO_START: usize = 0x00000000c0000000;
-pub const MMIO_END: usize = 0x00000000c0000fff;
-const IRQ_NUMBER: u8 = 12;
+pub const MMIO_START: usize = 0x00000000feb00000;
+pub const MMIO_END: usize = 0x00000000feb0ffff;
+const IRQ_NUMBER: u8 = 23;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
 
@@ -182,8 +182,6 @@ fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str>
 			BasePageSize::SIZE as usize,
 		);
 
-		//mmio.print_information();
-
 		return Ok((mmio, IRQ_NUMBER));
 	}
 
@@ -223,8 +221,11 @@ pub(crate) fn init_drivers() {
 				"Found MMIO device, but we guess the interrupt number {}!",
 				irq
 			);
-			if let Ok(VirtioDriver::Network(drv)) = mmio_virtio::init_device(mmio, irq) {
-				register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+			match mmio_virtio::init_device(mmio, irq) {
+				Ok(VirtioDriver::Network(drv)) => {
+					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+				}
+				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}
 		} else {
 			warn!("Unable to find mmio device");
