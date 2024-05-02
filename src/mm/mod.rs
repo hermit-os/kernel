@@ -120,7 +120,22 @@ pub(crate) fn init() {
 		let kernel_heap_size = 10 * LargePageSize::SIZE as usize;
 
 		unsafe {
-			let start = allocate(kernel_heap_size, true);
+			let start = {
+				let physical_address = arch::mm::physicalmem::allocate(kernel_heap_size).unwrap();
+				let virtual_address = arch::mm::virtualmem::allocate(kernel_heap_size).unwrap();
+
+				let count = kernel_heap_size / BasePageSize::SIZE as usize;
+				let mut flags = PageTableEntryFlags::empty();
+				flags.normal().writable().execute_disable();
+				arch::mm::paging::map::<BasePageSize>(
+					virtual_address,
+					physical_address,
+					count,
+					flags,
+				);
+
+				virtual_address
+			};
 			ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
 
 			info!("Kernel heap starts at {:#x}", start);
