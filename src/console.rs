@@ -21,9 +21,6 @@ impl fmt::Write for Console {
 	}
 }
 
-#[cfg(feature = "newlib")]
-pub static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
-#[cfg(not(feature = "newlib"))]
 static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
 
 #[doc(hidden)]

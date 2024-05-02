@@ -442,18 +442,6 @@ impl PerCoreScheduler {
 		})
 	}
 
-	#[cfg(feature = "newlib")]
-	#[inline]
-	pub fn set_lwip_errno(&self, errno: i32) {
-		without_interrupts(|| self.current_task.borrow_mut().lwip_errno = errno);
-	}
-
-	#[cfg(feature = "newlib")]
-	#[inline]
-	pub fn get_lwip_errno(&self) -> i32 {
-		without_interrupts(|| self.current_task.borrow().lwip_errno)
-	}
-
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
 		without_interrupts(|| self.current_task.borrow().id)

@@ -109,22 +109,7 @@ impl Build {
 		let archive = self.cargo_build.artifact.dist_archive();
 
 		let syscall_symbols = archive.syscall_symbols()?;
-		let explicit_exports = [
-			"_start",
-			"__bss_start",
-			"mcount",
-			"runtime_entry",
-			// lwIP functions (C runtime)
-			"init_lwip",
-			"lwip_read",
-			"lwip_write",
-			// lwIP rtl8139 driver
-			"init_rtl8139_netif",
-			"irq_install_handler",
-			"virt_to_phys",
-			"eoi",
-		]
-		.into_iter();
+		let explicit_exports = ["_start", "__bss_start", "mcount", "runtime_entry"].into_iter();
 
 		let symbols = explicit_exports.chain(syscall_symbols.iter().map(String::as_str));
 

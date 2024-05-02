@@ -34,8 +34,6 @@ mod condvar;
 mod entropy;
 mod futex;
 mod interfaces;
-#[cfg(feature = "newlib")]
-mod lwip;
 mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
@@ -48,12 +46,6 @@ mod system;
 pub(crate) mod table;
 mod tasks;
 mod timer;
-
-#[cfg(feature = "newlib")]
-const LWIP_FD_BIT: i32 = 1 << 30;
-
-#[cfg(feature = "newlib")]
-pub(crate) static LWIP_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
 
 pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
 	if env::is_uhyve() {

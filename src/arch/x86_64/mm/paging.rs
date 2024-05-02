@@ -118,8 +118,8 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
+#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
+pub fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 	virtual_to_physical(virtual_address).unwrap()
 }
 

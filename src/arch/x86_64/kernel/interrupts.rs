@@ -7,8 +7,10 @@ use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
 pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
 use x86_64::set_general_handler;
+#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
+use x86_64::structures::idt;
+use x86_64::structures::idt::InterruptDescriptorTable;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
-use x86_64::structures::idt::{self, InterruptDescriptorTable};
 
 use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
@@ -108,8 +110,8 @@ pub(crate) fn install() {
 	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
-#[no_mangle]
-pub extern "C" fn irq_install_handler(irq_number: u8, handler: idt::HandlerFunc) {
+#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
+pub fn irq_install_handler(irq_number: u8, handler: idt::HandlerFunc) {
 	debug!("Install handler for interrupt {}", irq_number);
 
 	let mut idt = IDT.lock();
