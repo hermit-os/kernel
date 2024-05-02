@@ -11,7 +11,8 @@ use core::cell::RefCell;
 use core::mem::{size_of, MaybeUninit};
 use core::ptr;
 
-use zerocopy::{little_endian, FromBytes, FromZeroes};
+use virtio_def::num::{le16, le32, le64};
+use zerocopy::{FromBytes, FromZeroes};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -29,10 +30,10 @@ use crate::mm::device_alloc::DeviceAlloc;
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct Descriptor {
-	address: little_endian::U64,
-	len: little_endian::U32,
-	flags: little_endian::U16,
-	next: little_endian::U16,
+	address: le64,
+	len: le32,
+	flags: le16,
+	next: le16,
 }
 
 impl Descriptor {
@@ -51,8 +52,8 @@ impl Descriptor {
 // only need to be extended with the dynamic portion.
 #[repr(C)]
 struct GenericRing<T: ?Sized> {
-	flags: little_endian::U16,
-	index: little_endian::U16,
+	flags: le16,
+	index: le16,
 
 	// Rust does not allow a field other than the last one to be unsized.
 	// Unfortunately, this is not the case with the layout in the specification.
@@ -63,28 +64,28 @@ struct GenericRing<T: ?Sized> {
 
 const RING_AND_EVENT_ERROR: &str = "ring_and_event should have at least enough elements for the event. It seems to be allocated incorrectly.";
 
-type AvailRing = GenericRing<[MaybeUninit<little_endian::U16>]>;
+type AvailRing = GenericRing<[MaybeUninit<le16>]>;
 
 impl AvailRing {
-	fn ring_ref(&self) -> &[MaybeUninit<little_endian::U16>] {
+	fn ring_ref(&self) -> &[MaybeUninit<le16>] {
 		self.ring_and_event
 			.split_last()
 			.expect(RING_AND_EVENT_ERROR)
 			.1
 	}
 
-	fn ring_mut(&mut self) -> &mut [MaybeUninit<little_endian::U16>] {
+	fn ring_mut(&mut self) -> &mut [MaybeUninit<le16>] {
 		self.ring_and_event
 			.split_last_mut()
 			.expect(RING_AND_EVENT_ERROR)
 			.1
 	}
 
-	fn event_ref(&self) -> &MaybeUninit<little_endian::U16> {
+	fn event_ref(&self) -> &MaybeUninit<le16> {
 		self.ring_and_event.last().expect(RING_AND_EVENT_ERROR)
 	}
 
-	fn event_mut(&mut self) -> &MaybeUninit<little_endian::U16> {
+	fn event_mut(&mut self) -> &MaybeUninit<le16> {
 		self.ring_and_event.last_mut().expect(RING_AND_EVENT_ERROR)
 	}
 }
@@ -98,21 +99,21 @@ impl UsedRing {
 	fn ring_ref(&self) -> &[UsedElem] {
 		// The last two bytes belong to the event field
 		UsedElem::slice_from(
-			&self.ring_and_event[..(self.ring_and_event.len() - size_of::<little_endian::U16>())],
+			&self.ring_and_event[..(self.ring_and_event.len() - size_of::<le16>())],
 		)
 		.expect(RING_AND_EVENT_ERROR)
 	}
 
-	fn event_ref(&self) -> &little_endian::U16 {
-		little_endian::U16::ref_from_suffix(&self.ring_and_event).expect(RING_AND_EVENT_ERROR)
+	fn event_ref(&self) -> &le16 {
+		le16::ref_from_suffix(&self.ring_and_event).expect(RING_AND_EVENT_ERROR)
 	}
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, FromZeroes, FromBytes)]
 struct UsedElem {
-	id: little_endian::U32,
-	len: little_endian::U32,
+	id: le32,
+	len: le32,
 }
 
 struct DescrRing {
@@ -283,7 +284,7 @@ impl DescrRing {
 	}
 
 	fn dev_is_notif(&self) -> bool {
-		self.used_ring.flags & 1.into() == little_endian::U16::new(0)
+		self.used_ring.flags.get() & 1 == 0
 	}
 }
 
@@ -381,7 +382,7 @@ impl Virtq for SplitVq {
 			let allocation = ALLOCATOR
 				.allocate(
 					Layout::new::<GenericRing<()>>() // flags
-						.extend(Layout::array::<little_endian::U16>(ring_and_event_len).unwrap()) // +1 for event
+						.extend(Layout::array::<le16>(ring_and_event_len).unwrap()) // +1 for event
 						.unwrap()
 						.0
 						.pad_to_align(),
@@ -399,7 +400,7 @@ impl Virtq for SplitVq {
 		let used_ring = {
 			let ring_and_event_layout = Layout::array::<UsedElem>(size.into())
 				.unwrap()
-				.extend(Layout::new::<little_endian::U16>()) // for event
+				.extend(Layout::new::<le16>()) // for event
 				.unwrap()
 				.0;
 			let allocation = ALLOCATOR
