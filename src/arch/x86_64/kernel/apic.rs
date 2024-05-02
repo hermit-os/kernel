@@ -1,4 +1,6 @@
+use alloc::alloc::alloc;
 use alloc::vec::Vec;
+use core::alloc::Layout;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
 #[cfg(feature = "acpi")]
@@ -27,7 +29,7 @@ use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::scheduler::CoreId;
-use crate::{arch, env, mm, scheduler};
+use crate::{arch, env, scheduler};
 
 const MP_FLT_SIGNATURE: u32 = 0x5f504d5f;
 const MP_CONFIG_SIGNATURE: u32 = 0x504d4350;
@@ -684,8 +686,10 @@ pub fn init_x2apic() {
 /// Initialize the required _start variables for the next CPU to be booted.
 pub fn init_next_processor_variables() {
 	// Allocate stack for the CPU and pass the addresses.
-	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	CURRENT_STACK_ADDRESS.store(stack.as_mut_ptr(), Ordering::Relaxed);
+	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
+	let stack = unsafe { alloc(layout) };
+	assert!(!stack.is_null());
+	CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
 }
 
 /// Boot all Application Processors
