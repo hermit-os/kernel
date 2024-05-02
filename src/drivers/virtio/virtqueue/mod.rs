@@ -3367,6 +3367,7 @@ pub mod error {
 		BufferToLarge,
 		QueueSizeNotAllowed(u16),
 		FeatNotSupported(u64),
+		AllocationError,
 	}
 
 	impl core::fmt::Debug for VirtqError {
@@ -3385,6 +3386,7 @@ pub mod error {
                 VirtqError::BufferToLarge => write!(f, "Buffer to large for queue! u32::MAX exceeded."),
 				VirtqError::QueueSizeNotAllowed(_) => write!(f, "The requested queue size is not valid."),
 				VirtqError:: FeatNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
+				VirtqError::AllocationError => write!(f, "An error was encountered during the allocation of the queue structures.")
             }
 		}
 	}

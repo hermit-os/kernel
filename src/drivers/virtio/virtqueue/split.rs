@@ -6,11 +6,12 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use core::alloc::{Allocator, Layout};
 use core::cell::RefCell;
+use core::mem::{size_of, MaybeUninit};
 use core::ptr;
 
-use align_address::Align;
-use zerocopy::little_endian;
+use zerocopy::{little_endian, FromBytes, FromZeroes};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -22,8 +23,8 @@ use super::{
 	TransferToken, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
-use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
+use crate::mm::device_alloc::DeviceAlloc;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -45,26 +46,70 @@ impl Descriptor {
 	}
 }
 
-struct DescrTable {
-	raw: &'static mut [Descriptor],
+// The generic structure eases the creation of the layout for the statically
+// sized portion of [AvailRing] and [UsedRing]. This way, to be allocated they
+// only need to be extended with the dynamic portion.
+#[repr(C)]
+struct GenericRing<T: ?Sized> {
+	flags: little_endian::U16,
+	index: little_endian::U16,
+
+	// Rust does not allow a field other than the last one to be unsized.
+	// Unfortunately, this is not the case with the layout in the specification.
+	// For this reason, we merge the last two fields and provide appropriate
+	// accessor methods.
+	ring_and_event: T,
 }
 
-struct AvailRing {
-	flags: &'static mut little_endian::U16,
-	index: &'static mut little_endian::U16,
-	ring: &'static mut [little_endian::U16],
-	event: &'static mut little_endian::U16,
+const RING_AND_EVENT_ERROR: &str = "ring_and_event should have at least enough elements for the event. It seems to be allocated incorrectly.";
+
+type AvailRing = GenericRing<[MaybeUninit<little_endian::U16>]>;
+
+impl AvailRing {
+	fn ring_ref(&self) -> &[MaybeUninit<little_endian::U16>] {
+		self.ring_and_event
+			.split_last()
+			.expect(RING_AND_EVENT_ERROR)
+			.1
+	}
+
+	fn ring_mut(&mut self) -> &mut [MaybeUninit<little_endian::U16>] {
+		self.ring_and_event
+			.split_last_mut()
+			.expect(RING_AND_EVENT_ERROR)
+			.1
+	}
+
+	fn event_ref(&self) -> &MaybeUninit<little_endian::U16> {
+		self.ring_and_event.last().expect(RING_AND_EVENT_ERROR)
+	}
+
+	fn event_mut(&mut self) -> &MaybeUninit<little_endian::U16> {
+		self.ring_and_event.last_mut().expect(RING_AND_EVENT_ERROR)
+	}
 }
 
-struct UsedRing {
-	flags: &'static mut little_endian::U16,
-	index: *mut little_endian::U16,
-	ring: &'static mut [UsedElem],
-	event: &'static mut little_endian::U16,
+// The elements of the unsized field and the last field are not of the same type.
+// For this reason, the field stores raw bytes and we have typed accessors.
+type UsedRing = GenericRing<[u8]>;
+
+// Used ring is not supposed to be modified by the driver. Thus, we only have _ref methods (and not _mut methods).
+impl UsedRing {
+	fn ring_ref(&self) -> &[UsedElem] {
+		// The last two bytes belong to the event field
+		UsedElem::slice_from(
+			&self.ring_and_event[..(self.ring_and_event.len() - size_of::<little_endian::U16>())],
+		)
+		.expect(RING_AND_EVENT_ERROR)
+	}
+
+	fn event_ref(&self) -> &little_endian::U16 {
+		little_endian::U16::ref_from_suffix(&self.ring_and_event).expect(RING_AND_EVENT_ERROR)
+	}
 }
 
 #[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, FromZeroes, FromBytes)]
 struct UsedElem {
 	id: little_endian::U32,
 	len: little_endian::U32,
@@ -72,10 +117,10 @@ struct UsedElem {
 
 struct DescrRing {
 	read_idx: u16,
-	descr_table: DescrTable,
+	descr_table: Box<[MaybeUninit<Descriptor>], DeviceAlloc>,
 	ref_ring: Box<[Option<Box<TransferToken>>]>,
-	avail_ring: AvailRing,
-	used_ring: UsedRing,
+	avail_ring: Box<AvailRing, DeviceAlloc>,
+	used_ring: Box<UsedRing, DeviceAlloc>,
 }
 
 impl DescrRing {
@@ -182,26 +227,30 @@ impl DescrRing {
 				)
 			};
 
-			self.descr_table.raw[write_indx] = descriptor;
+			self.descr_table[write_indx] = MaybeUninit::new(descriptor);
 
 			desc_cnt += 1;
 			len -= 1;
 		}
 
 		self.ref_ring[index] = Some(Box::new(tkn));
-		self.avail_ring.ring[self.avail_ring.index.get() as usize % self.avail_ring.ring.len()] =
-			(index as u16).into();
+		let idx = self.avail_ring.index.get();
+		let len = self.avail_ring.ring_ref().len();
+		self.avail_ring.ring_mut()[idx as usize % len] = MaybeUninit::new((index as u16).into());
 
 		memory_barrier();
-		*self.avail_ring.index = (self.avail_ring.index.get().wrapping_add(1)).into();
+		self.avail_ring.index = (self.avail_ring.index.get().wrapping_add(1)).into();
 
 		(0, 0)
 	}
 
 	fn poll(&mut self) {
-		while self.read_idx != unsafe { ptr::read_volatile(self.used_ring.index).get() } {
-			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
-			let used_elem = unsafe { ptr::read_volatile(&self.used_ring.ring[cur_ring_index]) };
+		while self.read_idx
+			!= unsafe { ptr::read_volatile(ptr::addr_of!(self.used_ring.index)).get() }
+		{
+			let cur_ring_index = self.read_idx as usize % self.used_ring.ring_ref().len();
+			let used_elem =
+				unsafe { ptr::read_volatile(&self.used_ring.ring_ref()[cur_ring_index]) };
 
 			let mut tkn = self.ref_ring[used_elem.id.get() as usize].take().expect(
 				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
@@ -226,15 +275,15 @@ impl DescrRing {
 	}
 
 	fn drv_enable_notif(&mut self) {
-		*self.avail_ring.flags = 0.into();
+		self.avail_ring.flags = 0.into();
 	}
 
 	fn drv_disable_notif(&mut self) {
-		*self.avail_ring.flags = 1.into();
+		self.avail_ring.flags = 1.into();
 	}
 
 	fn dev_is_notif(&self) -> bool {
-		*self.used_ring.flags & 1.into() == little_endian::U16::new(0)
+		self.used_ring.flags & 1.into() == little_endian::U16::new(0)
 	}
 }
 
@@ -322,65 +371,68 @@ impl Virtq for SplitVq {
 		};
 
 		let size = vq_handler.set_vq_size(size.0);
+		const ALLOCATOR: DeviceAlloc = DeviceAlloc;
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = (size as usize * core::mem::size_of::<Descriptor>())
-			.align_up(BasePageSize::SIZE as usize);
-		let table_raw =
-			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+		let descr_table = Box::new_uninit_slice_in(size.into(), ALLOCATOR);
 
-		let descr_table = DescrTable {
-			raw: unsafe { core::slice::from_raw_parts_mut(table_raw, size as usize) },
-		};
-
-		let _mem_len = (6 + (size as usize * 2)).align_up(BasePageSize::SIZE as usize);
-		let avail_raw =
-			ptr::with_exposed_provenance_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
-		let _mem_len = (6 + (size as usize * 8)).align_up(BasePageSize::SIZE as usize);
-		let used_raw =
-			ptr::with_exposed_provenance_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
-
-		let avail_ring = unsafe {
-			AvailRing {
-				flags: &mut *(avail_raw as *mut little_endian::U16),
-				index: &mut *(avail_raw.offset(2) as *mut little_endian::U16),
-				ring: core::slice::from_raw_parts_mut(
-					avail_raw.offset(4) as *mut little_endian::U16,
-					size as usize,
-				),
-				event: &mut *(avail_raw.offset(4 + 2 * (size as isize)) as *mut little_endian::U16),
+		let avail_ring = {
+			let ring_and_event_len = usize::from(size) + 1;
+			let allocation = ALLOCATOR
+				.allocate(
+					Layout::new::<GenericRing<()>>() // flags
+						.extend(Layout::array::<little_endian::U16>(ring_and_event_len).unwrap()) // +1 for event
+						.unwrap()
+						.0
+						.pad_to_align(),
+				)
+				.map_err(|_| VirtqError::AllocationError)?;
+			unsafe {
+				Box::from_raw_in(
+					core::ptr::slice_from_raw_parts_mut(allocation.as_mut_ptr(), ring_and_event_len)
+						as *mut AvailRing,
+					ALLOCATOR,
+				)
 			}
 		};
 
-		unsafe {
-			let _index = avail_raw.offset(2) as usize - avail_raw as usize;
-			let _ring = avail_raw.offset(4) as usize - avail_raw as usize;
-			let _event = avail_raw.offset(4 + 2 * (size as isize)) as usize - avail_raw as usize;
-		}
-
-		let used_ring = unsafe {
-			UsedRing {
-				flags: &mut *(used_raw as *mut little_endian::U16),
-				index: used_raw.offset(2) as *mut little_endian::U16,
-				ring: core::slice::from_raw_parts_mut(
-					used_raw.offset(4) as *mut UsedElem,
-					size as usize,
-				),
-				event: &mut *(used_raw.offset(4 + 8 * (size as isize)) as *mut little_endian::U16),
+		let used_ring = {
+			let ring_and_event_layout = Layout::array::<UsedElem>(size.into())
+				.unwrap()
+				.extend(Layout::new::<little_endian::U16>()) // for event
+				.unwrap()
+				.0;
+			let allocation = ALLOCATOR
+				.allocate(
+					Layout::new::<GenericRing<()>>()
+						.extend(ring_and_event_layout)
+						.unwrap()
+						.0
+						.pad_to_align(),
+				)
+				.map_err(|_| VirtqError::AllocationError)?;
+			unsafe {
+				Box::from_raw_in(
+					core::ptr::slice_from_raw_parts_mut(
+						allocation.as_mut_ptr(),
+						ring_and_event_layout.size(),
+					) as *mut UsedRing,
+					ALLOCATOR,
+				)
 			}
 		};
-
-		unsafe {
-			let _index = used_raw.offset(2) as usize - used_raw as usize;
-			let _ring = used_raw.offset(4) as usize - used_raw as usize;
-			let _event = used_raw.offset(4 + 8 * (size as isize)) as usize - used_raw as usize;
-		}
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(table_raw as u64)));
+		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
+			descr_table.as_ptr().expose_provenance(),
+		)));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(avail_raw as u64)));
-		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(used_raw as u64)));
+		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
+			ptr::from_ref(avail_ring.as_ref()).expose_provenance(),
+		)));
+		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
+			ptr::from_ref(used_ring.as_ref()).expose_provenance(),
+		)));
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
