@@ -1,4 +1,6 @@
+use alloc::alloc::alloc;
 use alloc::boxed::Box;
+use core::alloc::Layout;
 use core::sync::atomic::Ordering;
 
 use x86_64::instructions::tables;
@@ -47,9 +49,11 @@ pub fn add_current_core() {
 			BasePageSize::SIZE as usize
 		};
 
-		let ist = crate::mm::allocate(sz, true);
-		let ist_start = ist.as_u64() + sz as u64 - TaskStacks::MARKER_SIZE as u64;
-		tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
+		let layout = Layout::from_size_align(sz, BasePageSize::SIZE as usize).unwrap();
+		let ist = unsafe { alloc(layout) };
+		assert!(!ist.is_null());
+		let ist_start = unsafe { ist.add(sz - TaskStacks::MARKER_SIZE) };
+		tss.interrupt_stack_table[i] = VirtAddr::from_ptr(ist_start);
 	}
 
 	CoreLocal::get().tss.set(tss);
