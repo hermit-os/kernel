@@ -14,7 +14,6 @@ pub mod packed;
 pub mod split;
 
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
@@ -22,6 +21,7 @@ use core::ops::{BitAnd, Deref, DerefMut};
 use core::ptr;
 
 use align_address::Align;
+use async_channel::TryRecvError;
 use zerocopy::AsBytes;
 
 use self::error::{BufferError, VirtqError};
@@ -99,6 +99,8 @@ struct Descriptor {
 	flags: u16,
 }
 
+type BufferTokenSender = async_channel::Sender<Box<BufferToken>>;
+
 // Public interface of Virtq
 
 /// The Virtq trait unifies access to the two different Virtqueue types
@@ -155,7 +157,7 @@ pub trait Virtq: VirtqPrivate {
 	fn dispatch_batch_await(
 		&self,
 		tkns: Vec<TransferToken>,
-		await_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
+		await_queue: BufferTokenSender,
 		notif: bool,
 	);
 
@@ -1385,11 +1387,7 @@ pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) {
 /// The `notif` parameter indicates if the driver wants to have a notification for this specific
 /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 /// updated notification flags before finishing transfers!
-pub fn dispatch_batch_await(
-	tkns: Vec<TransferToken>,
-	await_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
-	notif: bool,
-) {
+pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: BufferTokenSender, notif: bool) {
 	let mut used_vqs: Vec<(Rc<dyn Virtq>, Vec<TransferToken>)> = Vec::new();
 
 	// Sort the TransferTokens depending in the queue their coming from.
@@ -1420,7 +1418,7 @@ pub fn dispatch_batch_await(
 	}
 
 	for (vq, tkn_lst) in used_vqs {
-		vq.dispatch_batch_await(tkn_lst, Rc::clone(&await_queue), notif);
+		vq.dispatch_batch_await(tkn_lst, await_queue.clone(), notif);
 	}
 }
 
@@ -1476,7 +1474,7 @@ pub struct TransferToken {
 	/// If Some, finished TransferTokens will be placed here
 	/// as finished `Transfers`. If None, only the state
 	/// of the Token will be changed.
-	await_queue: Option<Rc<RefCell<VecDeque<Box<BufferToken>>>>>,
+	await_queue: Option<BufferTokenSender>,
 }
 
 /// Public Interface for TransferToken
@@ -1492,12 +1490,8 @@ impl TransferToken {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_await(
-		mut self,
-		await_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
-		notif: bool,
-	) {
-		self.await_queue = Some(Rc::clone(&await_queue));
+	pub fn dispatch_await(mut self, await_queue: BufferTokenSender, notif: bool) {
+		self.await_queue = Some(await_queue.clone());
 
 		self.get_vq().dispatch(self, notif);
 	}
@@ -1522,20 +1516,27 @@ impl TransferToken {
 	/// Upon finish notifications are enabled again.
 	pub fn dispatch_blocking(self) -> Result<Box<BufferToken>, VirtqError> {
 		let vq = self.get_vq();
-		let rcv_queue = Rc::new(RefCell::new(VecDeque::with_capacity(1)));
-		self.dispatch_await(rcv_queue.clone(), false);
+		let (sender, receiver) = async_channel::bounded(1);
+		self.dispatch_await(sender, false);
 
 		vq.disable_notifs();
 
-		while rcv_queue.borrow().is_empty() {
-			// Keep Spinning until the receive queue is filled
-			vq.poll()
+		let result: Box<BufferToken>;
+		// Keep Spinning until the receive queue is filled
+		loop {
+			match receiver.try_recv() {
+				Ok(buffer_tkn) => {
+					result = buffer_tkn;
+					break;
+				}
+				Err(TryRecvError::Closed) => return Err(VirtqError::General),
+				Err(TryRecvError::Empty) => vq.poll(),
+			}
 		}
 
 		vq.enable_notifs();
 
-		let result = Ok(rcv_queue.borrow_mut().pop_front().unwrap());
-		result
+		Ok(result)
 	}
 }
 

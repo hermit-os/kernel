@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
@@ -138,9 +137,7 @@ impl DescriptorRing {
 		if let Some(mut tkn) = ctrl.poll_next() {
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue
-					.borrow_mut()
-					.push_back(Box::new(tkn.buff_tkn.unwrap()));
+				queue.try_send(Box::new(tkn.buff_tkn.unwrap())).unwrap();
 			}
 		}
 	}
@@ -996,7 +993,7 @@ impl Virtq for PackedVq {
 	fn dispatch_batch_await(
 		&self,
 		mut tkns: Vec<TransferToken>,
-		await_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
+		await_queue: super::BufferTokenSender,
 		notif: bool,
 	) {
 		// Zero transfers are not allowed
@@ -1004,7 +1001,7 @@ impl Virtq for PackedVq {
 
 		// We have to iterate here too, in order to ensure, tokens are placed into the await_queue
 		for tkn in tkns.iter_mut() {
-			tkn.await_queue = Some(Rc::clone(&await_queue));
+			tkn.await_queue = Some(await_queue.clone());
 		}
 
 		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);

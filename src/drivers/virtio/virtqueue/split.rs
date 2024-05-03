@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
@@ -305,9 +304,7 @@ impl DescrRing {
 					.unwrap();
 			}
 			if let Some(queue) = tkn.await_queue.take() {
-				queue
-					.borrow_mut()
-					.push_back(Box::new(tkn.buff_tkn.unwrap()))
+				queue.try_send(Box::new(tkn.buff_tkn.unwrap())).unwrap()
 			}
 			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
@@ -363,7 +360,7 @@ impl Virtq for SplitVq {
 	fn dispatch_batch_await(
 		&self,
 		_tkns: Vec<TransferToken>,
-		_await_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
+		_await_queue: super::BufferTokenSender,
 		_notif: bool,
 	) {
 		unimplemented!()
