@@ -129,7 +129,6 @@ pub trait Virtq: VirtqPrivate {
 	///
 	/// * `TransferTokens` which hold an `await_queue` will be placed into
 	/// these queues.
-	/// * All finished `TransferTokens` will have a state of `TransferState::Finished`.
 	fn poll(&self);
 
 	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
@@ -280,7 +279,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Single {
 									desc_lst: vec![desc].into_boxed_slice(),
@@ -320,7 +318,6 @@ pub trait Virtq: VirtqPrivate {
 						}
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Multiple {
 									desc_lst: desc_lst.into_boxed_slice(),
@@ -364,7 +361,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
@@ -400,7 +396,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: None,
 								recv_buff: Some(Buffer::Single {
@@ -440,7 +435,6 @@ pub trait Virtq: VirtqPrivate {
 						}
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: None,
 								recv_buff: Some(Buffer::Multiple {
@@ -484,7 +478,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: None,
 								recv_buff: Some(Buffer::Indirect {
@@ -533,7 +526,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Single {
 									desc_lst: vec![send_desc].into_boxed_slice(),
@@ -591,7 +583,6 @@ pub trait Virtq: VirtqPrivate {
 						}
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Single {
 									desc_lst: vec![send_desc].into_boxed_slice(),
@@ -659,7 +650,6 @@ pub trait Virtq: VirtqPrivate {
 						}
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Multiple {
 									desc_lst: send_desc_lst.into_boxed_slice(),
@@ -717,7 +707,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Multiple {
 									desc_lst: send_desc_lst.into_boxed_slice(),
@@ -790,7 +779,6 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						Ok(TransferToken {
-							state: TransferState::Ready,
 							buff_tkn: Some(BufferToken {
 								recv_buff: Some(Buffer::Indirect {
 									desc_lst: recv_desc_lst.into_boxed_slice(),
@@ -1478,21 +1466,9 @@ pub trait AsSliceU8 {
 	}
 }
 
-/// Enum indicates the current state of a transfer.
-#[derive(PartialEq, Copy, Clone, Debug)]
-enum TransferState {
-	/// Queue finished transfer
-	Finished,
-	/// Transfer is ongoing and still processed by queue
-	Processing,
-	/// Transfer is ready to be sended
-	Ready,
-}
-
 /// The struct represents buffers which are ready to be send via the
 /// virtqueue. Buffers can no longer be written or retrieved.
 pub struct TransferToken {
-	state: TransferState,
 	/// Must be some in order to prevent drop
 	/// upon reuse.
 	buff_tkn: Option<BufferToken>,
@@ -1538,8 +1514,7 @@ impl TransferToken {
 	/// Dispatches the provided TransferToken to the respectuve queue and does
 	/// return when, the queue finished the transfer.
 	///
-	/// The resultaing [TransferState] in this case is of course
-	/// finished and the returned [BufferToken] can be reused, copied from
+	/// The returned [BufferToken] can be reused, copied from
 	/// or return the underlying buffers.
 	///
 	/// **INFO:**
@@ -2223,7 +2198,6 @@ impl BufferToken {
 		}
 
 		Ok(TransferToken {
-			state: TransferState::Ready,
 			buff_tkn: Some(self),
 			await_queue: None,
 		})
@@ -2286,7 +2260,6 @@ impl BufferToken {
 	/// After this call, the buffers are no longer writable.
 	pub fn provide(self) -> TransferToken {
 		TransferToken {
-			state: TransferState::Ready,
 			buff_tkn: Some(self),
 			await_queue: None,
 		}

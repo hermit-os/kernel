@@ -20,8 +20,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferState,
-	TransferToken, Virtq, VirtqPrivate, VqIndex, VqSize,
+	BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
+	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -136,7 +136,6 @@ impl DescriptorRing {
 		let mut ctrl = self.get_read_ctrler();
 
 		if let Some(mut tkn) = ctrl.poll_next() {
-			tkn.state = TransferState::Finished;
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
 				queue
@@ -154,7 +153,7 @@ impl DescriptorRing {
 		let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
 		let mut first_buffer = None;
 
-		for (i, mut tkn) in tkn_lst.into_iter().enumerate() {
+		for (i, tkn) in tkn_lst.into_iter().enumerate() {
 			// Check length and if its fits. This should always be true due to the restriction of
 			// the memory pool, but to be sure.
 			assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
@@ -264,8 +263,6 @@ impl DescriptorRing {
 				(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 			}
 
-			tkn.state = TransferState::Processing;
-
 			if i == 0 {
 				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
 				first_buffer = Some(Box::new(tkn));
@@ -288,7 +285,7 @@ impl DescriptorRing {
 		(first_ctrl_settings.0, first_ctrl_settings.2 .0 as u8)
 	}
 
-	fn push(&mut self, mut tkn: TransferToken) -> (usize, u8) {
+	fn push(&mut self, tkn: TransferToken) -> (usize, u8) {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
 		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
@@ -390,10 +387,6 @@ impl DescriptorRing {
 			}
 			(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 		}
-
-		fence(Ordering::SeqCst);
-		// Update the state of the actual Token
-		tkn.state = TransferState::Processing;
 
 		fence(Ordering::SeqCst);
 		// Update flags of the first descriptor and set new write_index

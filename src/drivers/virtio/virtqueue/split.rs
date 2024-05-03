@@ -21,8 +21,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferState, TransferToken,
-	Virtq, VirtqPrivate, VqIndex, VqSize,
+	BuffSpec, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
+	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
@@ -304,7 +304,6 @@ impl DescrRing {
 					.restr_size(None, Some(used_elem.len.get() as usize))
 					.unwrap();
 			}
-			tkn.state = TransferState::Finished;
 			if let Some(queue) = tkn.await_queue.take() {
 				queue
 					.borrow_mut()
