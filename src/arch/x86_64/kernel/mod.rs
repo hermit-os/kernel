@@ -2,8 +2,6 @@
 use core::arch::asm;
 use core::num::NonZeroU64;
 use core::ptr;
-#[cfg(feature = "newlib")]
-use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
