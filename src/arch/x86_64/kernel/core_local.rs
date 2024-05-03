@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::cell::{Cell, RefCell, RefMut};
-use core::ptr;
 use core::sync::atomic::Ordering;
+use core::{mem, ptr};
 
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
@@ -18,7 +18,6 @@ use crate::executor::task::AsyncTask;
 use crate::scheduler::SchedulerInput;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
-#[repr(C)]
 pub(crate) struct CoreLocal {
 	this: *const Self,
 	/// Sequential ID of this CPU Core.
@@ -73,7 +72,9 @@ impl CoreLocal {
 		};
 		this.this = &*this;
 
-		GsBase::write(VirtAddr::from_ptr(this));
+		GsBase::write(VirtAddr::from_ptr(unsafe {
+			ptr::from_ref(this).add(mem::offset_of!(CoreLocal, this))
+		}));
 	}
 
 	#[inline]
