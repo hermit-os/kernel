@@ -2,6 +2,7 @@
 //!
 //! The module contains ...
 
+use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -31,9 +32,7 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
-use crate::drivers::virtio::virtqueue::{
-	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize,
-};
+use crate::drivers::virtio::virtqueue::{BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize};
 use crate::executor::device::{RxToken, TxToken};
 
 /// A wrapper struct for the raw configuration structure.
@@ -155,14 +154,14 @@ enum MqCmd {
 
 pub struct RxQueues {
 	vqs: Vec<Rc<dyn Virtq>>,
-	poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+	poll_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
 	is_multi: bool,
 }
 
 impl RxQueues {
 	pub fn new(
 		vqs: Vec<Rc<dyn Virtq>>,
-		poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		poll_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
 		is_multi: bool,
 	) -> Self {
 		Self {
@@ -176,14 +175,8 @@ impl RxQueues {
 	/// This currently include nothing. But in the future it might include among others::
 	/// * Calculating missing checksums
 	/// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
-	fn post_processing(transfer: Transfer) -> Result<Transfer, VirtioNetError> {
-		if transfer.poll() {
-			// Here we could implement all features.
-			Ok(transfer)
-		} else {
-			warn!("Unfinished transfer in post processing. Returning buffer to queue. This will need explicit cleanup.");
-			Err(VirtioNetError::ProcessOngoing)
-		}
+	fn post_processing(buffer_tkn: Box<BufferToken>) -> Result<Box<BufferToken>, VirtioNetError> {
+		Ok(buffer_tkn)
 	}
 
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
@@ -230,7 +223,7 @@ impl RxQueues {
 		}
 	}
 
-	fn get_next(&mut self) -> Option<Transfer> {
+	fn get_next(&mut self) -> Option<Box<BufferToken>> {
 		let transfer = self.poll_queue.borrow_mut().pop_front();
 
 		transfer.or_else(|| {
@@ -276,7 +269,7 @@ impl RxQueues {
 /// to the respective queue structures.
 pub struct TxQueues {
 	vqs: Vec<Rc<dyn Virtq>>,
-	poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+	poll_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
 	ready_queue: Vec<BufferToken>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
@@ -286,7 +279,7 @@ pub struct TxQueues {
 impl TxQueues {
 	pub fn new(
 		vqs: Vec<Rc<dyn Virtq>>,
-		poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		poll_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
 		ready_queue: Vec<BufferToken>,
 		is_multi: bool,
 	) -> Self {
@@ -419,8 +412,8 @@ impl TxQueues {
 			self.poll();
 		}
 
-		while let Some(transfer) = self.poll_queue.borrow_mut().pop_back() {
-			let mut tkn = transfer.reuse().unwrap();
+		while let Some(buffer_token) = self.poll_queue.borrow_mut().pop_back() {
+			let mut tkn = buffer_token.reset();
 			let (send_len, _) = tkn.len();
 
 			match send_len.cmp(&len) {
@@ -586,8 +579,7 @@ impl NetworkDriver for VirtioNetDriver {
 						// drop packets with invalid packet size
 						if packet.len() < HEADER_SIZE {
 							transfer
-								.reuse()
-								.unwrap()
+								.reset()
 								.provide()
 								.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
@@ -604,8 +596,7 @@ impl NetworkDriver for VirtioNetDriver {
 
 						vec_data.extend_from_slice(&packet[mem::size_of::<VirtioNetHdr>()..]);
 						transfer
-							.reuse()
-							.unwrap()
+							.reset()
 							.provide()
 							.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
@@ -627,8 +618,7 @@ impl NetworkDriver for VirtioNetDriver {
 						let packet = recv_data.pop().unwrap();
 						vec_data.extend_from_slice(packet);
 						transfer
-							.reuse()
-							.unwrap()
+							.reset()
 							.provide()
 							.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 					}
@@ -637,8 +627,7 @@ impl NetworkDriver for VirtioNetDriver {
 				} else {
 					error!("Empty transfer, or with wrong buffer layout. Reusing and returning error to user-space network driver...");
 					transfer
-						.reuse()
-						.unwrap()
+						.reset()
 						.write_seq(None::<&VirtioNetHdr>, Some(&VirtioNetHdr::default()))
 						.unwrap()
 						.provide()

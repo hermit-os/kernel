@@ -20,7 +20,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer, TransferState,
+	BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferState,
 	TransferToken, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
@@ -131,7 +131,7 @@ impl DescriptorRing {
 	}
 
 	/// Polls poll index and sets the state of any finished TransferTokens.
-	/// If [TransferToken::await_queue] is available, the Transfer will be moved to the queue.
+	/// If [TransferToken::await_queue] is available, the [BufferToken] will be moved to the queue.
 	fn poll(&mut self) {
 		let mut ctrl = self.get_read_ctrler();
 
@@ -139,9 +139,9 @@ impl DescriptorRing {
 			tkn.state = TransferState::Finished;
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue.borrow_mut().push_back(Transfer {
-					transfer_tkn: Some(tkn),
-				});
+				queue
+					.borrow_mut()
+					.push_back(Box::new(tkn.buff_tkn.unwrap()));
 			}
 		}
 	}
@@ -1003,7 +1003,7 @@ impl Virtq for PackedVq {
 	fn dispatch_batch_await(
 		&self,
 		mut tkns: Vec<TransferToken>,
-		await_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		await_queue: Rc<RefCell<VecDeque<Box<BufferToken>>>>,
 		notif: bool,
 	) {
 		// Zero transfers are not allowed
