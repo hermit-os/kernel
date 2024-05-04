@@ -541,6 +541,7 @@ dependencies = [
  "aarch64",
  "ahash",
  "align-address",
+ "anstyle",
  "anyhow",
  "arm-gic",
  "async-lock",

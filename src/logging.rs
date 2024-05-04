@@ -1,4 +1,7 @@
-use log::{LevelFilter, Metadata, Record};
+use core::fmt;
+
+use anstyle::AnsiColor;
+use log::{Level, LevelFilter, Metadata, Record};
 
 /// Data structure to filter kernel messages
 struct KernelLogger;
@@ -17,11 +20,38 @@ impl log::Log for KernelLogger {
 			println!(
 				"[{}][{}] {}",
 				crate::arch::core_local::core_id(),
-				record.level(),
+				ColorLevel(record.level()),
 				record.args()
 			);
 		}
 	}
+}
+
+struct ColorLevel(Level);
+
+impl fmt::Display for ColorLevel {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let level = self.0;
+
+		if no_color() {
+			write!(f, "{level}")
+		} else {
+			let color = match level {
+				Level::Trace => AnsiColor::Magenta,
+				Level::Debug => AnsiColor::Blue,
+				Level::Info => AnsiColor::Green,
+				Level::Warn => AnsiColor::Yellow,
+				Level::Error => AnsiColor::Red,
+			};
+
+			let style = anstyle::Style::new().fg_color(Some(color.into()));
+			write!(f, "{style}{level}{style:#}")
+		}
+	}
+}
+
+fn no_color() -> bool {
+	option_env!("NO_COLOR").is_some_and(|val| !val.is_empty())
 }
 
 pub unsafe fn init() {
