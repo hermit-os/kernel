@@ -38,9 +38,9 @@ impl fmt::Display for ColorLevel {
 		} else {
 			let color = match level {
 				Level::Trace => AnsiColor::Magenta,
-				Level::Debug => AnsiColor::Yellow,
+				Level::Debug => AnsiColor::Blue,
 				Level::Info => AnsiColor::Green,
-				Level::Warn => AnsiColor::Blue,
+				Level::Warn => AnsiColor::Yellow,
 				Level::Error => AnsiColor::Red,
 			};
 
