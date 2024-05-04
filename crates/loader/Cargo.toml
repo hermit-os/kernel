@@ -15,6 +15,7 @@ one-shot-mutex = "0.1"
 sptr = "0.3"
 take-static = "0.1"
 vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
+anstyle = { version = "1", default-features = false }
 
 [features]
 default = []

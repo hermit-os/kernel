@@ -293,6 +293,7 @@ dependencies = [
  "aarch64-cpu",
  "align-address",
  "allocator-api2",
+ "anstyle",
  "cfg-if",
  "exclusive_cell",
  "fdt",
