@@ -5,7 +5,9 @@
 #![allow(unstable_name_collisions)]
 #![allow(clippy::missing_safety_doc)]
 
+#[cfg(not(target_os = "uefi"))]
 use ::log::info;
+#[cfg(not(target_os = "uefi"))]
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 
 #[macro_use]
@@ -21,10 +23,12 @@ mod os;
 ))]
 extern crate alloc;
 
+#[cfg(not(target_os = "uefi"))]
 trait BootInfoExt {
 	fn write(self) -> &'static RawBootInfo;
 }
 
+#[cfg(not(target_os = "uefi"))]
 impl BootInfoExt for BootInfo {
 	fn write(self) -> &'static RawBootInfo {
 		info!("boot_info = {self:#x?}");
