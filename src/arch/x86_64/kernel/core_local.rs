@@ -2,8 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::cell::{Cell, RefCell, RefMut};
-use core::ptr;
 use core::sync::atomic::Ordering;
+use core::{mem, ptr};
 
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
@@ -81,7 +81,7 @@ impl CoreLocal {
 		debug_assert_ne!(VirtAddr::zero(), GsBase::read());
 		unsafe {
 			let raw: *const Self;
-			asm!("mov {}, gs:0", out(reg) raw, options(nomem, nostack, preserves_flags));
+			asm!("mov {}, gs:{}", out(reg) raw, const mem::offset_of!(Self, this), options(nomem, nostack, preserves_flags));
 			&*raw
 		}
 	}

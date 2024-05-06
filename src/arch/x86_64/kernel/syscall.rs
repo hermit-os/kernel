@@ -1,5 +1,7 @@
 use core::arch::asm;
+use core::mem;
 
+use super::core_local::CoreLocal;
 use crate::syscalls::table::SYSHANDLER_TABLE;
 
 #[no_mangle]
@@ -19,7 +21,7 @@ pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 			// switch to kernel stack
 			"swapgs",
 			"mov rcx, rsp",
-			"mov rsp, gs:32",
+			"mov rsp, gs:{core_local_kernel_stack}",
 			// save user stack pointer
 			"push rcx",
 			// copy 4th argument to rcx to adhere x86_64 ABI
@@ -42,6 +44,7 @@ pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 			"pop rdx",
 			"pop rcx",
 			"sysretq",
+			core_local_kernel_stack = const mem::offset_of!(CoreLocal, kernel_stack),
 			table = sym SYSHANDLER_TABLE,
 			options(noreturn)
 		);
