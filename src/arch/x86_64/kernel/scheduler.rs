@@ -273,7 +273,7 @@ impl TaskTLS {
 		let mut block = {
 			// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
 			// So the thread pointer needs to be `block_ptr + tls_offset`.
-			// GNU style TLS requires `gs:0` to represent the same address as the thread pointer.
+			// GNU style TLS requires `fs:0` to represent the same address as the thread pointer.
 			// Since the thread pointer points to the end of the TLS blocks, we need to store it there.
 			let tcb_size = mem::size_of::<*mut ()>();
 
