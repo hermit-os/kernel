@@ -18,7 +18,6 @@ use crate::executor::task::AsyncTask;
 use crate::scheduler::SchedulerInput;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
-#[repr(C)]
 pub(crate) struct CoreLocal {
 	this: *const Self,
 	/// Sequential ID of this CPU Core.
