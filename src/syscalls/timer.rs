@@ -96,10 +96,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 		"sys_clock_nanosleep called with a zero rqtp parameter"
 	);
 	let requested_time = unsafe { &*rqtp };
-	if requested_time.tv_sec < 0
-		|| requested_time.tv_nsec < 0
-		|| requested_time.tv_nsec > 999_999_999
-	{
+	if requested_time.tv_sec < 0 || requested_time.tv_nsec > 999_999_999 {
 		debug!("sys_clock_nanosleep called with an invalid requested time, returning -EINVAL");
 		return -EINVAL;
 	}

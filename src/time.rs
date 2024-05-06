@@ -1,21 +1,26 @@
 use crate::arch;
 
+#[allow(non_camel_case_types)]
+pub type time_t = i64;
+#[allow(non_camel_case_types)]
+pub type suseconds_t = u32;
+
 /// Represent the number of seconds and microseconds since
 /// the Epoch (1970-01-01 00:00:00 +0000 (UTC))
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct timeval {
 	/// seconds
-	pub tv_sec: i64,
+	pub tv_sec: time_t,
 	/// microseconds
-	pub tv_usec: i64,
+	pub tv_usec: suseconds_t,
 }
 
 impl timeval {
 	pub fn from_usec(microseconds: u64) -> Self {
 		Self {
 			tv_sec: (microseconds / 1_000_000) as i64,
-			tv_usec: (microseconds % 1_000_000) as i64,
+			tv_usec: (microseconds % 1_000_000) as u32,
 		}
 	}
 
@@ -23,7 +28,7 @@ impl timeval {
 		u64::try_from(self.tv_sec)
 			.ok()
 			.and_then(|secs| secs.checked_mul(1_000_000))
-			.and_then(|millions| millions.checked_add(u64::try_from(self.tv_usec).ok()?))
+			.and_then(|millions| millions.checked_add(u64::from(self.tv_usec)))
 	}
 }
 
@@ -36,20 +41,20 @@ pub struct itimerval {
 
 /// Represent the number of seconds and nanoseconds since
 /// the Epoch (1970-01-01 00:00:00 +0000 (UTC))
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(C)]
 pub struct timespec {
 	/// seconds
-	pub tv_sec: i64,
+	pub tv_sec: time_t,
 	/// nanoseconds
-	pub tv_nsec: i64,
+	pub tv_nsec: u32,
 }
 
 impl timespec {
 	pub fn from_usec(microseconds: u64) -> Self {
 		Self {
 			tv_sec: (microseconds / 1_000_000) as i64,
-			tv_nsec: ((microseconds % 1_000_000) * 1000) as i64,
+			tv_nsec: ((microseconds % 1_000_000) * 1000) as u32,
 		}
 	}
 
@@ -57,11 +62,11 @@ impl timespec {
 		u64::try_from(self.tv_sec)
 			.ok()
 			.and_then(|secs| secs.checked_mul(1_000_000))
-			.and_then(|millions| millions.checked_add(u64::try_from(self.tv_nsec).ok()? / 1000))
+			.and_then(|millions| millions.checked_add(u64::from(self.tv_nsec) / 1000))
 	}
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct SystemTime(timespec);
 
 impl SystemTime {
