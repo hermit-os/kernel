@@ -128,7 +128,7 @@ To use this VM type, PCI and ACPI support have to be disabled for your app (usin
 
 ```bash
 qemu-system-x86_64 ... \
-    -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off \
+    -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off \
     -nodefaults -no-user-config \
     -append "-freq 2800"
 ```
