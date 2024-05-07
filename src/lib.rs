@@ -22,6 +22,7 @@
 #![feature(new_uninit)]
 #![feature(noop_waker)]
 #![feature(slice_from_ptr_range)]
+#![feature(slice_ptr_get)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
 	feature(specialization)
