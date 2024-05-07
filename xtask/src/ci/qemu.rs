@@ -134,7 +134,8 @@ impl Qemu {
 			let frequency = get_frequency();
 			vec![
 				"-M".to_string(),
-				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on".to_string(),
+				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off"
+					.to_string(),
 				"-global".to_string(),
 				"virtio-mmio.force-legacy=on".to_string(),
 				"-nodefaults".to_string(),
