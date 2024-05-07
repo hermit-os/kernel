@@ -3,10 +3,13 @@ use crate::errno::*;
 use crate::syscalls::usleep;
 use crate::time::{itimerval, timespec, timeval};
 
-pub(crate) const CLOCK_REALTIME: u64 = 1;
-pub(crate) const CLOCK_PROCESS_CPUTIME_ID: u64 = 2;
-pub(crate) const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
-pub(crate) const CLOCK_MONOTONIC: u64 = 4;
+#[allow(non_camel_case_types)]
+pub type clockid_t = i32;
+
+pub(crate) const CLOCK_REALTIME: clockid_t = 1;
+pub(crate) const CLOCK_PROCESS_CPUTIME_ID: clockid_t = 2;
+pub(crate) const CLOCK_THREAD_CPUTIME_ID: clockid_t = 3;
+pub(crate) const CLOCK_MONOTONIC: clockid_t = 4;
 pub(crate) const TIMER_ABSTIME: i32 = 4;
 
 /// Finds the resolution (or precision) of a clock.
@@ -20,7 +23,7 @@ pub(crate) const TIMER_ABSTIME: i32 = 4;
 /// - `CLOCK_THREAD_CPUTIME_ID`
 /// - `CLOCK_MONOTONIC`
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
+pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespec) -> i32 {
 	assert!(
 		!res.is_null(),
 		"sys_clock_getres called with a zero res parameter"
@@ -49,7 +52,7 @@ pub unsafe extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> 
 /// - `CLOCK_REALTIME`
 /// - `CLOCK_MONOTONIC`
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
+pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespec) -> i32 {
 	assert!(
 		!tp.is_null(),
 		"sys_clock_gettime called with a zero tp parameter"
@@ -86,7 +89,7 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> 
 /// - `CLOCK_MONOTONIC`
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_clock_nanosleep(
-	clock_id: u64,
+	clock_id: clockid_t,
 	flags: i32,
 	rqtp: *const timespec,
 	_rmtp: *mut timespec,
@@ -122,7 +125,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_clock_settime(_clock_id: u64, _tp: *const timespec) -> i32 {
+pub unsafe extern "C" fn sys_clock_settime(_clock_id: clockid_t, _tp: *const timespec) -> i32 {
 	// We don't support setting any clocks yet.
 	debug!("sys_clock_settime is unimplemented, returning -EINVAL");
 	-EINVAL
