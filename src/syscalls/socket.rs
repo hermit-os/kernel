@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(nonstandard_style)]
 use alloc::sync::Arc;
-use core::ffi::c_void;
+use core::ffi::{c_char, c_void};
 use core::mem::size_of;
 use core::ops::DerefMut;
 
@@ -83,7 +83,7 @@ pub struct in6_addr {
 pub struct sockaddr {
 	pub sa_len: u8,
 	pub sa_family: sa_family_t,
-	pub sa_data: [u8; 14],
+	pub sa_data: [c_char; 14],
 }
 
 #[repr(C)]
@@ -93,7 +93,7 @@ pub struct sockaddr_in {
 	pub sin_family: sa_family_t,
 	pub sin_port: in_port_t,
 	pub sin_addr: in_addr,
-	pub sin_zero: [u8; 8],
+	pub sin_zero: [c_char; 8],
 }
 
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
@@ -239,7 +239,7 @@ pub struct addrinfo {
 	pub ai_socktype: i32,
 	pub ai_protocol: i32,
 	pub ai_addrlen: socklen_t,
-	pub ai_canonname: *mut u8,
+	pub ai_canonname: *mut c_char,
 	pub ai_addr: *mut sockaddr,
 	pub ai_next: *mut addrinfo,
 }
@@ -571,8 +571,8 @@ pub unsafe extern "C" fn sys_freeaddrinfo(_ai: *mut addrinfo) {}
 
 #[hermit_macro::system]
 pub unsafe extern "C" fn sys_getaddrinfo(
-	_nodename: *const u8,
-	_servname: *const u8,
+	_nodename: *const c_char,
+	_servname: *const c_char,
 	_hints: *const addrinfo,
 	_res: *mut *mut addrinfo,
 ) -> i32 {
