@@ -667,7 +667,7 @@ impl NetworkDriver for VirtioNetDriver {
 			true
 		} else if self.isr_stat.is_cfg_change() {
 			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibiity to change config on the fly...")
+			todo!("Implement possibility to change config on the fly...")
 		} else {
 			false
 		};
