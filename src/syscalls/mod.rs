@@ -489,7 +489,7 @@ pub struct Dirent64 {
 	/// File type
 	pub d_type: u8,
 	/// Filename (null-terminated)
-	pub d_name: PhantomData<u8>,
+	pub d_name: PhantomData<c_char>,
 }
 
 #[hermit_macro::system]
