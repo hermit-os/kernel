@@ -1,16 +1,16 @@
-use core::alloc::AllocError;
 use core::convert::TryInto;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptSpinMutex;
 
 use crate::arch::riscv64::kernel::{get_limit, get_ram_address};
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::riscv64::mm::PhysAddr;
 use crate::mm;
-use crate::mm::freelist::{FreeList, FreeListEntry};
 
-static PHYSICAL_FREE_LIST: InterruptSpinMutex<FreeList> = InterruptSpinMutex::new(FreeList::new());
+static PHYSICAL_FREE_LIST: InterruptSpinMutex<FreeList<16>> =
+	InterruptSpinMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 fn detect_from_limits() -> Result<(), ()> {
@@ -19,11 +19,14 @@ fn detect_from_limits() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let entry = FreeListEntry::new(
+	let range = PageRange::new(
 		mm::kernel_end_address().as_usize(),
 		get_ram_address().as_usize() + limit,
-	);
-	PHYSICAL_FREE_LIST.lock().push(entry);
+	)
+	.unwrap();
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
 
 	Ok(())
@@ -47,10 +50,13 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 		BasePageSize::SIZE as usize
 	);
 
+	let layout = PageLayout::from_size(size).unwrap();
+
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
@@ -72,10 +78,13 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocErro
 		BasePageSize::SIZE as usize
 	);
 
+	let layout = PageLayout::from_size_align(size, align).unwrap();
+
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, Some(align))?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
@@ -97,13 +106,14 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		BasePageSize::SIZE as usize
 	);
 
-	PHYSICAL_FREE_LIST
-		.lock()
-		.deallocate(physical_address.as_usize(), size);
+	let range = PageRange::from_start_len(physical_address.as_usize(), size).unwrap();
+
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 }
 
 pub fn print_information() {
-	PHYSICAL_FREE_LIST
-		.lock()
-		.print_information(" PHYSICAL MEMORY FREE LIST ");
+	let free_list = PHYSICAL_FREE_LIST.lock();
+	info!("Physical memory free list:\n{free_list}");
 }
