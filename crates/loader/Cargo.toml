@@ -7,7 +7,7 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-align-address = "0.1"
+align-address = "0.3"
 cfg-if = "1"
 hermit-entry = { version = "0.10", features = ["loader"] }
 log = "0.4"
