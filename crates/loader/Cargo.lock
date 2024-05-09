@@ -30,6 +30,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d39c09fbfba977f4842e1f6bdc48b979112b64f8886993a34e051bc5f3c5c288"
 
 [[package]]
+name = "align-address"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ac6c08a67736554282858203cd9b7ff53cf55f54c34e85689962748a350cbf0"
+
+[[package]]
 name = "allocator-api2"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -279,7 +285,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa8da8546263459c84a24582eacf3b7b6d818a12f606e920bcfe5485235dac63"
 dependencies = [
- "align-address",
+ "align-address 0.1.0",
  "goblin",
  "log",
  "plain",
@@ -291,7 +297,7 @@ name = "hermit-loader"
 version = "0.5.0"
 dependencies = [
  "aarch64-cpu",
- "align-address",
+ "align-address 0.3.0",
  "allocator-api2",
  "cfg-if",
  "exclusive_cell",
