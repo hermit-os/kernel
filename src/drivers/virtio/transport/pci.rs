@@ -233,7 +233,7 @@ impl PciCap {
 		}
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if self.length < MemLen::from(mem::size_of::<CommonCfg>() * 8) {
+		if self.length < MemLen::from(mem::size_of::<CommonCfg>()) {
 			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.id);
 			return None;
 		}
