@@ -464,9 +464,9 @@ dependencies = [
 
 [[package]]
 name = "free-list"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d140bfddcc22e1f83bbc5d6930ec5713c62489cdd94b86c92852edfc1db96f2b"
+checksum = "810f338a4ef98f319a279c9199f35d7ec366c6002ca6a8f18fdcc94cfef9afab"
 dependencies = [
  "align-address 0.3.0",
  "smallvec",
