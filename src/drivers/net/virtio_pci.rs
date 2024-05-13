@@ -63,7 +63,7 @@ impl VirtioNetDriver {
 		}
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if cap.len() < MemLen::from(mem::size_of::<NetDevCfg>()*8) {
+		if cap.len() < MemLen::from(mem::size_of::<NetDevCfg>()) {
 			error!("Network config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
 			return None
 		}
