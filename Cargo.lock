@@ -557,7 +557,7 @@ version = "0.7.0"
 dependencies = [
  "aarch64",
  "ahash",
- "align-address 0.1.0",
+ "align-address 0.3.0",
  "anstyle",
  "anyhow",
  "arm-gic",
