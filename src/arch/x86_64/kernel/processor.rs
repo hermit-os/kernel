@@ -1013,7 +1013,7 @@ pub fn halt() {
 ///
 /// Triple faults cause CPU resets.
 /// On KVM, this results in `KVM_EXIT_SHUTDOWN`.
-/// This is the preferred way of shutting down the CPU on firecracker.
+/// This is the preferred way of shutting down the CPU on firecracker and in QEMU's `microvm` virtual platform.
 ///
 /// See [Triple Faulting the CPU](http://www.rcollins.org/Productivity/TripleFault.html).
 fn triple_fault() -> ! {
@@ -1035,22 +1035,14 @@ fn qemu_exit(success: bool) {
 
 /// Shutdown the system
 pub fn shutdown(error_code: i32) -> ! {
-	match boot_info().platform_info {
-		PlatformInfo::LinuxBootParams { .. } => triple_fault(),
-		PlatformInfo::Uhyve { .. } => unreachable!(),
-		_ => {
-			qemu_exit(error_code == 0);
+	qemu_exit(error_code == 0);
 
-			#[cfg(feature = "acpi")]
-			{
-				acpi::poweroff();
-			}
-
-			loop {
-				halt();
-			}
-		}
+	#[cfg(feature = "acpi")]
+	{
+		acpi::poweroff();
 	}
+
+	triple_fault()
 }
 
 pub fn get_timer_ticks() -> u64 {
