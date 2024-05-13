@@ -1,6 +1,5 @@
 pub mod allocator;
 pub mod device_alloc;
-pub mod freelist;
 
 use core::mem;
 use core::ops::Range;
@@ -314,8 +313,8 @@ pub(crate) fn print_information() {
 }
 
 /// Soft-deprecated in favor of `DeviceAlloc`
-pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
-	let size = sz.align_up(BasePageSize::SIZE as usize);
+pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
+	let size = size.align_up(BasePageSize::SIZE as usize);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
 	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
@@ -331,8 +330,8 @@ pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 }
 
 /// Soft-deprecated in favor of `DeviceAlloc`
-pub(crate) fn deallocate(virtual_address: VirtAddr, sz: usize) {
-	let size = sz.align_up(BasePageSize::SIZE as usize);
+pub(crate) fn deallocate(virtual_address: VirtAddr, size: usize) {
+	let size = size.align_up(BasePageSize::SIZE as usize);
 
 	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::unmap::<BasePageSize>(
@@ -353,12 +352,12 @@ pub(crate) fn deallocate(virtual_address: VirtAddr, sz: usize) {
 #[cfg(feature = "pci")]
 pub(crate) fn map(
 	physical_address: PhysAddr,
-	sz: usize,
+	size: usize,
 	writable: bool,
 	no_execution: bool,
 	no_cache: bool,
 ) -> VirtAddr {
-	let size = sz.align_up(BasePageSize::SIZE as usize);
+	let size = size.align_up(BasePageSize::SIZE as usize);
 	let count = size / BasePageSize::SIZE as usize;
 
 	let mut flags = PageTableEntryFlags::empty();
@@ -381,8 +380,8 @@ pub(crate) fn map(
 
 #[allow(dead_code)]
 /// unmaps virtual address, without 'freeing' physical memory it is mapped to!
-pub(crate) fn unmap(virtual_address: VirtAddr, sz: usize) {
-	let size = sz.align_up(BasePageSize::SIZE as usize);
+pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
+	let size = size.align_up(BasePageSize::SIZE as usize);
 
 	if arch::mm::paging::virtual_to_physical(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(

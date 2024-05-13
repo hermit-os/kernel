@@ -80,6 +80,7 @@ cfg-if = "1"
 crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
 fdt = "0.1"
+free-list = "0.3"
 hashbrown = { version = "0.14", default-features = false }
 hermit-entry = { version = "0.10", features = ["kernel"] }
 hermit-sync = "0.1"
@@ -127,6 +128,7 @@ features = [
 ]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
+free-list = { version = "0.3", features = ["x86_64"] }
 multiboot = "0.8"
 uart_16550 = "0.3"
 x86 = { version = "0.52", default-features = false }

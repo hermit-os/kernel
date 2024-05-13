@@ -1,7 +1,6 @@
-use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
+use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
 
@@ -9,9 +8,8 @@ use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::mm;
-use crate::mm::freelist::{FreeList, FreeListEntry};
 
-static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList> =
+pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -45,12 +43,14 @@ fn detect_from_fdt() -> Result<(), ()> {
 			VirtAddr(start_address)
 		};
 
-		let entry = FreeListEntry::new(start_address.as_usize(), end_address as usize);
+		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(end_address - start_address.as_u64()) as usize,
 			Ordering::SeqCst,
 		);
-		PHYSICAL_FREE_LIST.lock().push(entry);
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 	}
 
 	assert!(
@@ -84,15 +84,18 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			VirtAddr(m.base_address())
 		};
 
-		let entry = FreeListEntry::new(
+		let range = PageRange::new(
 			start_address.as_usize(),
 			(m.base_address() + m.length()) as usize,
-		);
+		)
+		.unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(m.base_address() + m.length() - start_address.as_u64()) as usize,
 			Ordering::SeqCst,
 		);
-		PHYSICAL_FREE_LIST.lock().push(entry);
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 	}
 
 	assert!(
@@ -111,18 +114,25 @@ fn detect_from_limits() -> Result<(), ()> {
 
 	// add gap for the APIC
 	if limit > KVM_32BIT_GAP_START {
-		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START);
-		PHYSICAL_FREE_LIST.lock().push(entry);
+		let range =
+			PageRange::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START).unwrap();
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
-			let entry = FreeListEntry::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit);
-			PHYSICAL_FREE_LIST.lock().push(entry);
+			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
+			unsafe {
+				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			}
 			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::SeqCst);
 		} else {
 			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::SeqCst);
 		}
 	} else {
-		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
-		PHYSICAL_FREE_LIST.lock().push(entry);
+		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
 	}
 
@@ -150,47 +160,41 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 		BasePageSize::SIZE
 	);
 
+	let layout = PageLayout::from_size(size).unwrap();
+
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
 }
 
-pub struct FrameAlloc;
-
-unsafe impl<S: x86_64::structures::paging::PageSize> FrameAllocator<S> for FrameAlloc {
-	fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
-		let addr = PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(S::SIZE as usize, Some(S::SIZE as usize))
-			.ok()? as u64;
-		Some(PhysFrame::from_start_address(x86_64::PhysAddr::new(addr)).unwrap())
-	}
-}
-
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, AllocError> {
+pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
 	assert!(size > 0);
-	assert!(alignment > 0);
+	assert!(align > 0);
 	assert_eq!(
-		size % alignment,
+		size % align,
 		0,
-		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
+		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
 	);
 	assert_eq!(
-		alignment % BasePageSize::SIZE as usize,
+		align % BasePageSize::SIZE as usize,
 		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
-		alignment,
+		align,
 		BasePageSize::SIZE
 	);
+
+	let layout = PageLayout::from_size_align(size, align).unwrap();
 
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
@@ -212,9 +216,11 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	PHYSICAL_FREE_LIST
-		.lock()
-		.deallocate(physical_address.as_usize(), size);
+	let range = PageRange::from_start_len(physical_address.as_usize(), size).unwrap();
+
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 }
 
 #[allow(dead_code)]
@@ -236,14 +242,13 @@ pub fn reserve(physical_address: PhysAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	// we are able to ignore errors because it could be already reserved
-	let _ = PHYSICAL_FREE_LIST
-		.lock()
-		.reserve(physical_address.as_usize(), size);
+	let range = PageRange::from_start_len(physical_address.as_usize(), size).unwrap();
+
+	// FIXME: Don't ignore errors anymore
+	PHYSICAL_FREE_LIST.lock().allocate_at(range).ok();
 }
 
 pub fn print_information() {
-	PHYSICAL_FREE_LIST
-		.lock()
-		.print_information(" PHYSICAL MEMORY FREE LIST ");
+	let free_list = PHYSICAL_FREE_LIST.lock();
+	info!("Physical memory free list:\n{free_list}");
 }

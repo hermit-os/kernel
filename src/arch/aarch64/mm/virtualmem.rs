@@ -1,13 +1,11 @@
-use core::alloc::AllocError;
-
+use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::VirtAddr;
 use crate::mm;
-use crate::mm::freelist::{FreeList, FreeListEntry};
 
-static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
+static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 
 /// End of the virtual memory address space reserved for kernel memory (4 GiB).
@@ -15,11 +13,14 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
 const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x1_0000_0000);
 
 pub fn init() {
-	let entry = FreeListEntry {
-		start: mm::kernel_end_address().as_usize(),
-		end: KERNEL_VIRTUAL_MEMORY_END.as_usize(),
-	};
-	KERNEL_FREE_LIST.lock().push(entry);
+	let range = PageRange::new(
+		mm::kernel_end_address().as_usize(),
+		KERNEL_VIRTUAL_MEMORY_END.as_usize(),
+	)
+	.unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 }
 
 pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
@@ -32,35 +33,41 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 		BasePageSize::SIZE
 	);
 
+	let layout = PageLayout::from_size(size).unwrap();
+
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, AllocError> {
+pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocError> {
 	assert!(size > 0);
-	assert!(alignment > 0);
+	assert!(align > 0);
 	assert_eq!(
-		size % alignment,
+		size % align,
 		0,
-		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
+		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
 	);
 	assert_eq!(
-		alignment % BasePageSize::SIZE as usize,
+		align % BasePageSize::SIZE as usize,
 		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
-		alignment,
+		align,
 		BasePageSize::SIZE
 	);
+
+	let layout = PageLayout::from_size_align(size, align).unwrap();
 
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
@@ -91,9 +98,11 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	KERNEL_FREE_LIST
-		.lock()
-		.deallocate(virtual_address.as_usize(), size);
+	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 }
 
 /*pub fn reserve(virtual_address: VirtAddr, size: usize) {
@@ -133,7 +142,6 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 }*/
 
 pub fn print_information() {
-	KERNEL_FREE_LIST
-		.lock()
-		.print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
+	let free_list = KERNEL_FREE_LIST.lock();
+	info!("Virtual memory free list:\n{free_list}");
 }

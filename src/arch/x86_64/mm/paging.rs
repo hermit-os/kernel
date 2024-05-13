@@ -158,6 +158,7 @@ pub fn map<S>(
 	#[cfg(feature = "smp")]
 	let mut ipi_tlb_flush = false;
 
+	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
 	for (page, frame) in pages.zip(frames) {
 		unsafe {
 			// TODO: Require explicit unmaps
@@ -170,11 +171,12 @@ pub fn map<S>(
 				debug!("Had to unmap page {page:?} before mapping.");
 			}
 			recursive_page_table()
-				.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+				.map_to(page, frame, flags, &mut *frame_allocator)
 				.unwrap()
 				.flush();
 		}
 	}
+	drop(frame_allocator);
 
 	#[cfg(feature = "smp")]
 	if ipi_tlb_flush {
@@ -218,12 +220,13 @@ where
 		frame.start_address()
 	);
 
+	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
 	unsafe {
 		recursive_page_table()
 			.identity_map(
 				frame,
 				PageTableEntryFlags::PRESENT | PageTableEntryFlags::NO_EXECUTE,
-				&mut physicalmem::FrameAlloc,
+				&mut *frame_allocator,
 			)
 			.unwrap()
 			.flush();

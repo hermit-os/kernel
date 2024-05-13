@@ -21,9 +21,9 @@ impl multiboot::information::MemoryManagement for MultibootMemory {
 	unsafe fn paddr_to_slice(
 		&self,
 		p: multiboot::information::PAddr,
-		sz: usize,
+		size: usize,
 	) -> Option<&'static [u8]> {
-		unsafe { Some(slice::from_raw_parts(p as _, sz)) }
+		unsafe { Some(slice::from_raw_parts(p as _, size)) }
 	}
 
 	unsafe fn allocate(

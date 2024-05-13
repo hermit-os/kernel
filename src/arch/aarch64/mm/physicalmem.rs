@@ -1,15 +1,14 @@
-use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::aarch64::kernel::get_limit;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::PhysAddr;
 use crate::mm;
-use crate::mm::freelist::{FreeList, FreeListEntry};
 
-static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList> =
+static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -19,15 +18,14 @@ fn detect_from_limits() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let entry = FreeListEntry {
-		start: mm::kernel_end_address().as_usize(),
-		end: limit,
-	};
+	let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
 	TOTAL_MEMORY.store(
 		limit - mm::kernel_end_address().as_usize(),
 		Ordering::SeqCst,
 	);
-	PHYSICAL_FREE_LIST.lock().push(entry);
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	Ok(())
 }
@@ -52,35 +50,41 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 		BasePageSize::SIZE
 	);
 
+	let layout = PageLayout::from_size(size).unwrap();
+
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, AllocError> {
+pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
 	assert!(size > 0);
-	assert!(alignment > 0);
+	assert!(align > 0);
 	assert_eq!(
-		size % alignment,
+		size % align,
 		0,
-		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
+		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
 	);
 	assert_eq!(
-		alignment % BasePageSize::SIZE as usize,
+		align % BasePageSize::SIZE as usize,
 		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
-		alignment,
+		align,
 		BasePageSize::SIZE
 	);
+
+	let layout = PageLayout::from_size_align(size, align).unwrap();
 
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(layout)?
+			.start()
 			.try_into()
 			.unwrap(),
 	))
@@ -102,13 +106,14 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	PHYSICAL_FREE_LIST
-		.lock()
-		.deallocate(physical_address.as_usize(), size);
+	let range = PageRange::from_start_len(physical_address.as_usize(), size).unwrap();
+
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 }
 
 pub fn print_information() {
-	PHYSICAL_FREE_LIST
-		.lock()
-		.print_information(" PHYSICAL MEMORY FREE LIST ");
+	let free_list = PHYSICAL_FREE_LIST.lock();
+	info!("Physical memory free list:\n{free_list}");
 }
