@@ -61,11 +61,11 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespe
 
 	match clock_id {
 		CLOCK_REALTIME => {
-			*result = timespec::from_usec(arch::kernel::systemtime::now_micros());
+			*result = timespec::from_usec(arch::kernel::systemtime::now_micros() as i64);
 			0
 		}
 		CLOCK_MONOTONIC => {
-			*result = timespec::from_usec(arch::processor::get_timer_ticks());
+			*result = timespec::from_usec(arch::processor::get_timer_ticks() as i64);
 			0
 		}
 		_ => {
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 		// Return the current time based on the wallclock time when we were booted up
 		// plus the current timer ticks.
 		let microseconds = arch::kernel::systemtime::now_micros();
-		*result = timeval::from_usec(microseconds);
+		*result = timeval::from_usec(microseconds as i64);
 	}
 
 	if tz > 0 {

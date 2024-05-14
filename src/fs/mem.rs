@@ -23,6 +23,7 @@ use crate::arch;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
+use crate::time::timespec;
 
 #[derive(Debug)]
 pub(crate) struct RomFileInner {
@@ -65,9 +66,9 @@ impl ObjectInterface for RomFileInterface {
 	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
+			let t = timespec::from_usec(microseconds as i64);
 			let mut guard = self.inner.write().await;
-			guard.attr.st_atime = microseconds / 1_000_000;
-			guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
+			guard.attr.st_atim = t;
 		}
 
 		let vec = self.inner.read().await.data;
@@ -145,9 +146,9 @@ impl ObjectInterface for RamFileInterface {
 	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
+			let t = timespec::from_usec(microseconds as i64);
 			let mut guard = self.inner.write().await;
-			guard.attr.st_atime = microseconds / 1_000_000;
-			guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
+			guard.attr.st_atim = t;
 		}
 
 		let guard = self.inner.read().await;
@@ -172,6 +173,7 @@ impl ObjectInterface for RamFileInterface {
 
 	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
 		let mut guard = self.inner.write().await;
 		let mut pos_guard = self.pos.lock().await;
 		let pos = *pos_guard;
@@ -180,12 +182,10 @@ impl ObjectInterface for RamFileInterface {
 			guard.data.resize(pos + buf.len(), 0);
 			guard.attr.st_size = guard.data.len().try_into().unwrap();
 		}
-		guard.attr.st_atime = microseconds / 1_000_000;
-		guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
-		guard.attr.st_mtime = guard.attr.st_atime;
-		guard.attr.st_mtime_nsec = guard.attr.st_atime_nsec;
-		guard.attr.st_ctime = guard.attr.st_atime;
-		guard.attr.st_ctime_nsec = guard.attr.st_atime_nsec;
+
+		guard.attr.st_atim = t;
+		guard.attr.st_mtim = t;
+		guard.attr.st_ctim = t;
 
 		guard.data[pos..pos + buf.len()].clone_from_slice(buf);
 		*pos_guard = pos + buf.len();
@@ -245,15 +245,13 @@ impl VfsNode for RomFile {
 impl RomFile {
 	pub unsafe fn new(ptr: *const u8, length: usize, mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
 		let attr = FileAttr {
 			st_size: length.try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
-			st_atime: microseconds / 1_000_000,
-			st_atime_nsec: (microseconds % 1_000_000) * 1000,
-			st_mtime: microseconds / 1_000_000,
-			st_mtime_nsec: (microseconds % 1_000_000) * 1000,
-			st_ctime: microseconds / 1_000_000,
-			st_ctime_nsec: (microseconds % 1_000_000) * 1000,
+			st_atim: t,
+			st_mtim: t,
+			st_ctim: t,
 			..Default::default()
 		};
 
@@ -301,14 +299,12 @@ impl VfsNode for RamFile {
 impl RamFile {
 	pub fn new(mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
 		let attr = FileAttr {
 			st_mode: mode | AccessPermission::S_IFREG,
-			st_atime: microseconds / 1_000_000,
-			st_atime_nsec: (microseconds % 1_000_000) * 1000,
-			st_mtime: microseconds / 1_000_000,
-			st_mtime_nsec: (microseconds % 1_000_000) * 1000,
-			st_ctime: microseconds / 1_000_000,
-			st_ctime_nsec: (microseconds % 1_000_000) * 1000,
+			st_atim: t,
+			st_mtim: t,
+			st_ctim: t,
 			..Default::default()
 		};
 
@@ -328,17 +324,15 @@ pub(crate) struct MemDirectory {
 impl MemDirectory {
 	pub fn new(mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
 
 		Self {
 			inner: Arc::new(RwLock::new(BTreeMap::new())),
 			attr: FileAttr {
 				st_mode: mode | AccessPermission::S_IFDIR,
-				st_atime: microseconds / 1_000_000,
-				st_atime_nsec: (microseconds % 1_000_000) * 1000,
-				st_mtime: microseconds / 1_000_000,
-				st_mtime_nsec: (microseconds % 1_000_000) * 1000,
-				st_ctime: microseconds / 1_000_000,
-				st_ctime_nsec: (microseconds % 1_000_000) * 1000,
+				st_atim: t,
+				st_mtim: t,
+				st_ctim: t,
 				..Default::default()
 			},
 		}

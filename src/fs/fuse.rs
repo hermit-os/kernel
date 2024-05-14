@@ -26,6 +26,7 @@ use crate::fs::{
 	self, fuse_abi, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface,
 	OpenOption, SeekWhence, VfsNode,
 };
+use crate::time::{time_t, timespec};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
@@ -439,12 +440,18 @@ impl From<fuse_abi::Attr> for FileAttr {
 			st_size: attr.size,
 			st_blksize: attr.blksize as i64,
 			st_blocks: attr.blocks.try_into().unwrap(),
-			st_atime: attr.atime,
-			st_atime_nsec: attr.atimensec as u64,
-			st_mtime: attr.mtime,
-			st_mtime_nsec: attr.atimensec as u64,
-			st_ctime: attr.ctime,
-			st_ctime_nsec: attr.ctimensec as u64,
+			st_atim: timespec {
+				tv_sec: attr.atime as time_t,
+				tv_nsec: attr.atimensec as i32,
+			},
+			st_mtim: timespec {
+				tv_sec: attr.mtime as time_t,
+				tv_nsec: attr.mtimensec as i32,
+			},
+			st_ctim: timespec {
+				tv_sec: attr.ctime as time_t,
+				tv_nsec: attr.ctimensec as i32,
+			},
 			..Default::default()
 		}
 	}

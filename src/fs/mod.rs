@@ -298,14 +298,11 @@ pub struct FileAttr {
 	/// size in blocks
 	pub st_blocks: i64,
 	/// time of last access
-	pub st_atime: u64,
-	pub st_atime_nsec: u64,
+	pub st_atim: timespec,
 	/// time of last modification
-	pub st_mtime: u64,
-	pub st_mtime_nsec: u64,
+	pub st_mtim: timespec,
 	/// time of last status change
-	pub st_ctime: u64,
-	pub st_ctime_nsec: u64,
+	pub st_ctim: timespec,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -414,16 +411,12 @@ impl Metadata {
 
 	/// Returns the last modification time listed in this metadata.
 	pub fn modified(&self) -> Result<SystemTime, IoError> {
-		Ok(SystemTime::from(timespec::from_usec(
-			self.0.st_mtime * 1_000_000 + self.0.st_mtime_nsec / 1000,
-		)))
+		Ok(SystemTime::from(self.0.st_mtim))
 	}
 
 	/// Returns the last modification time listed in this metadata.
 	pub fn accessed(&self) -> Result<SystemTime, IoError> {
-		Ok(SystemTime::from(timespec::from_usec(
-			self.0.st_atime * 1_000_000 + self.0.st_atime_nsec / 1000,
-		)))
+		Ok(SystemTime::from(self.0.st_atim))
 	}
 }
 
