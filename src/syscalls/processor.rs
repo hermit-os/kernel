@@ -6,6 +6,11 @@ pub extern "C" fn sys_get_processor_count() -> usize {
 	get_processor_count().try_into().unwrap()
 }
 
+#[hermit_macro::system]
+pub extern "C" fn sys_available_parallelism() -> usize {
+	get_processor_count().try_into().unwrap()
+}
+
 /// Returns the processor frequency in MHz.
 #[hermit_macro::system]
 pub extern "C" fn sys_get_processor_frequency() -> u16 {
