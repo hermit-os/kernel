@@ -42,11 +42,6 @@ impl Qemu {
 		let sh = crate::sh()?;
 
 		if self.build.target() == Target::X86_64Uefi {
-			if super::in_ci() {
-				sh.copy_file("/usr/share/OVMF/OVMF_CODE.fd", "OVMF_CODE.fd")?;
-				sh.copy_file("/usr/share/OVMF/OVMF_VARS.fd", "OVMF_VARS.fd")?;
-			}
-
 			sh.create_dir("target/esp/efi/boot")?;
 			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
 			sh.write_file("target/esp/efi/boot/hermit-app", "Hello, UEFI!\n")?;
@@ -139,10 +134,10 @@ impl Qemu {
 					Target::X86_64Uefi => {
 						cpu_args.push("-drive".to_string());
 						cpu_args
-							.push("if=pflash,format=raw,readonly=on,file=OVMF_CODE.fd".to_string());
+							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202402-r1-bin/x64/code.fd".to_string());
 						cpu_args.push("-drive".to_string());
 						cpu_args
-							.push("if=pflash,format=raw,readonly=on,file=OVMF_VARS.fd".to_string());
+							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202402-r1-bin/x64/vars.fd".to_string());
 						cpu_args.push("-drive".to_string());
 						cpu_args.push("format=raw,file=fat:rw:target/esp".to_string());
 					}

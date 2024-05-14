@@ -42,20 +42,15 @@ jobs:
     name: Run
     strategy:
       matrix:
-        target: [x86_64, x86_64-uefi, aarch64, riscv64]
+        target: [x86_64, aarch64, riscv64]
         os: [ubuntu-latest, macos-latest, windows-latest]
-        exclude:
-          - target: x86_64-uefi
-            os: macos-latest
-          - target: x86_64-uefi
-            os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install QEMU (ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 qemu-system-arm qemu-system-misc ovmf
+          sudo apt-get install qemu-system-x86 qemu-system-arm qemu-system-misc
       - name: Install QEMU (macos)
         if: matrix.os == 'macos-latest'
         run: |
@@ -76,10 +71,29 @@ jobs:
         run: |
           gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+      - name: Download OVMF (prebuilt)
+        run: |
+          gh release download edk2-stable202402-r1 --repo rust-osdev/ovmf-prebuilt --pattern 'edk2-stable*-bin.tar.xz'
+          tar -xvf edk2-stable*-bin.tar.xz edk2-stable202402-r1-bin/x64
+        if: matrix.os != 'ubuntu-latest'
+      - name: Download OVMF (ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install ovmf
+          mkdir -p edk2-stable202402-r1-bin/x64
+          cp /usr/share/OVMF/OVMF_CODE.fd edk2-stable202402-r1-bin/x64/code.fd
+          cp /usr/share/OVMF/OVMF_VARS.fd edk2-stable202402-r1-bin/x64/vars.fd
+        if: matrix.os == 'ubuntu-latest'
       - name: Run VM (hello_world, dev)
         run: cargo xtask ci qemu --target ${{ matrix.target }}
       - name: Run VM (hello_world, release)
         run: cargo xtask ci qemu --target ${{ matrix.target }} --release
+      - name: Run VM (hello_world, uefi, dev)
+        run: cargo xtask ci qemu --target ${{ matrix.target }}-uefi
+        if: matrix.target == 'x86_64'
+      - name: Run VM (hello_world, uefi, release)
+        run: cargo xtask ci qemu --target ${{ matrix.target }}-uefi --release
+        if: matrix.target == 'x86_64'
       - name: Run VM (hello_world-microvm, dev)
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
         run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_world-microvm --microvm
@@ -100,7 +114,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
       - uses: actions/checkout@v4
         with:
             lfs: true
@@ -118,6 +132,10 @@ jobs:
           echo "$PWD" >> $GITHUB_PATH
   
           ./firecracker --version
+      - name: Download OVMF
+        run: |
+          gh release download edk2-stable202402-r1 --repo rust-osdev/ovmf-prebuilt --pattern 'edk2-stable*-bin.tar.xz'
+          tar -xvf edk2-stable*-bin.tar.xz edk2-stable202402-r1-bin/x64
       - uses: dtolnay/rust-toolchain@stable
       - name: Run QEMU (hello_world, dev)
         run: cargo xtask ci qemu --target x86_64 --accel
