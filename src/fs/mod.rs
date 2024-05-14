@@ -414,16 +414,20 @@ impl Metadata {
 
 	/// Returns the last modification time listed in this metadata.
 	pub fn modified(&self) -> Result<SystemTime, IoError> {
-		Ok(SystemTime::from(timespec::from_usec(
-			self.0.st_mtime * 1_000_000 + self.0.st_mtime_nsec / 1000,
-		)))
+		let t = timespec {
+			tv_sec: self.0.st_mtime as i64,
+			tv_nsec: self.0.st_mtime_nsec as i32,
+		};
+		Ok(SystemTime::from(t))
 	}
 
 	/// Returns the last modification time listed in this metadata.
 	pub fn accessed(&self) -> Result<SystemTime, IoError> {
-		Ok(SystemTime::from(timespec::from_usec(
-			self.0.st_atime * 1_000_000 + self.0.st_atime_nsec / 1000,
-		)))
+		let t = timespec {
+			tv_sec: self.0.st_atime as i64,
+			tv_nsec: self.0.st_atime_nsec as i32,
+		};
+		Ok(SystemTime::from(t))
 	}
 }
 

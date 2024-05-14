@@ -26,8 +26,8 @@ pub unsafe extern "C" fn sys_futex_wait(
 		None
 	} else {
 		match unsafe { timeout.read().into_usec() } {
-			t @ Some(_) => t,
-			None => return -EINVAL,
+			Some(usec) if usec >= 0 => Some(usec as u64),
+			_ => return -EINVAL,
 		}
 	};
 	let flags = match Flags::from_bits(flags) {

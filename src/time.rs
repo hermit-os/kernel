@@ -3,7 +3,9 @@ use crate::arch;
 #[allow(non_camel_case_types)]
 pub type time_t = i64;
 #[allow(non_camel_case_types)]
-pub type suseconds_t = u32;
+pub type useconds_t = u32;
+#[allow(non_camel_case_types)]
+pub type suseconds_t = i32;
 
 /// Represent the number of seconds and microseconds since
 /// the Epoch (1970-01-01 00:00:00 +0000 (UTC))
@@ -17,18 +19,17 @@ pub struct timeval {
 }
 
 impl timeval {
-	pub fn from_usec(microseconds: u64) -> Self {
+	pub fn from_usec(microseconds: i64) -> Self {
 		Self {
-			tv_sec: (microseconds / 1_000_000) as i64,
-			tv_usec: (microseconds % 1_000_000) as u32,
+			tv_sec: (microseconds / 1_000_000),
+			tv_usec: (microseconds % 1_000_000) as i32,
 		}
 	}
 
-	pub fn into_usec(&self) -> Option<u64> {
-		u64::try_from(self.tv_sec)
-			.ok()
-			.and_then(|secs| secs.checked_mul(1_000_000))
-			.and_then(|millions| millions.checked_add(u64::from(self.tv_usec)))
+	pub fn into_usec(&self) -> Option<i64> {
+		self.tv_sec
+			.checked_mul(1_000_000)
+			.and_then(|usec| usec.checked_add(self.tv_usec.into()))
 	}
 }
 
@@ -47,22 +48,21 @@ pub struct timespec {
 	/// seconds
 	pub tv_sec: time_t,
 	/// nanoseconds
-	pub tv_nsec: u32,
+	pub tv_nsec: i32,
 }
 
 impl timespec {
-	pub fn from_usec(microseconds: u64) -> Self {
+	pub fn from_usec(microseconds: i64) -> Self {
 		Self {
-			tv_sec: (microseconds / 1_000_000) as i64,
-			tv_nsec: ((microseconds % 1_000_000) * 1000) as u32,
+			tv_sec: (microseconds / 1_000_000),
+			tv_nsec: ((microseconds % 1_000_000) * 1000) as i32,
 		}
 	}
 
-	pub fn into_usec(&self) -> Option<u64> {
-		u64::try_from(self.tv_sec)
-			.ok()
-			.and_then(|secs| secs.checked_mul(1_000_000))
-			.and_then(|millions| millions.checked_add(u64::from(self.tv_nsec) / 1000))
+	pub fn into_usec(&self) -> Option<i64> {
+		self.tv_sec
+			.checked_mul(1_000_000)
+			.and_then(|usec| usec.checked_add((self.tv_nsec / 1000).into()))
 	}
 }
 
@@ -72,7 +72,9 @@ pub struct SystemTime(timespec);
 impl SystemTime {
 	/// Returns the system time corresponding to "now".
 	pub fn now() -> Self {
-		Self(timespec::from_usec(arch::kernel::systemtime::now_micros()))
+		Self(timespec::from_usec(
+			arch::kernel::systemtime::now_micros() as i64
+		))
 	}
 }
 
