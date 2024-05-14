@@ -6,6 +6,11 @@ This project is a bootloader to run the [Hermit kernel](https://github.com/hermi
 
 * [`rustup`](https://www.rust-lang.org/tools/install)
 
+### UEFI Boot in x86-64 QEMU
+
+As QEMU does not include a UEFI implementation, you have to download the Open Virtual Machine Firmware (OVMF) UEFI implementation separately.
+You can download prebuilt OVMF images from [rust-osdev/ovmf-prebuilt](https://github.com/rust-osdev/ovmf-prebuilt).
+
 ## Building
 
 ```bash
@@ -32,6 +37,34 @@ qemu-system-x86_64 \
     -display none -serial stdio \
     -kernel <LOADER> \
     -initrd <APP>
+```
+
+#### UEFI Boot
+
+For booting from UEFI, we have to set up an EFI system partition (ESP).
+OVMF will automatically load and execute the loader if placed at `\efi\boot\bootx64.efi` in the ESP.
+The Hermit application has to be next to the loader with the filename `hermit-app`.
+You can set the ESP up with the following commands:
+
+```bash
+$ mkdir -p esp/efi/boot
+$ cp <LOADER> esp/efi/boot/bootx64.efi
+$ cp <APP> esp/efi/boot/hermit-app
+```
+
+Then, you can boot Hermit like this:
+
+```bash
+qemu-system-x86_64 \
+    -enable-kvm \
+    -cpu host \
+    -smp 1 \
+    -m 512M \
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    -display none -serial stdio \
+    -drive if=pflash,format=raw,readonly=on,file=<OVMF_CODE.fd> \
+    -drive if=pflash,format=raw,readonly=on,file=<OVMF_VARS.fd> \
+    -drive format=raw,file=fat:rw:esp
 ```
 
 #### No KVM
