@@ -57,8 +57,8 @@ jobs:
       - run: rustup component add rustfmt
       - run: cargo fmt -- --check
 
-  check-docs:
-    name: Check docs
+  doc:
+    name: Doc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
