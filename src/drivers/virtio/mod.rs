@@ -54,8 +54,8 @@ pub mod error {
 					#[cfg(feature = "pci")]
                     VirtioNetError::NoNotifCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed notification config!"),
                     VirtioNetError::FailFeatureNeg(id) => write!(f, "Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
-                    VirtioNetError::FeatureRequirementsNotMet(features) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feature set: {:x}", u64::from(*features)),
-                    VirtioNetError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*driver_features), u64::from(*device_features)),
+                    VirtioNetError::FeatureRequirementsNotMet(features) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"),
+                    VirtioNetError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"),
                 },
 				#[cfg(feature = "fuse")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
