@@ -22,6 +22,10 @@ impl Clippy {
 				.run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
+				.arg("--features=fs,tcp")
+				.run()?;
+			cmd!(sh, "cargo clippy --target={triple}")
+				.arg("--no-default-features")
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 
