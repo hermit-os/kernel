@@ -5,6 +5,30 @@
 
 #![no_std]
 
+macro_rules! bitflags_debug {
+    ($SelfT:ty) => {
+        impl ::core::fmt::Debug for $SelfT {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                struct Inner<'a>(&'a $SelfT);
+
+                impl<'a> ::core::fmt::Debug for Inner<'a> {
+                    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                        if self.0.is_empty() {
+                            f.write_str("0x0")
+                        } else {
+                            ::bitflags::parser::to_writer(self.0, f)
+                        }
+                    }
+                }
+
+                f.debug_tuple(::core::stringify!($SelfT))
+                    .field(&Inner(self))
+                    .finish()
+            }
+        }
+    };
+}
+
 pub mod num;
 pub mod pci;
 
@@ -31,9 +55,11 @@ use bitflags::bitflags;
         zerocopy_derive::AsBytes
     )
 )]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DeviceStatus(u8);
+
+bitflags_debug!(DeviceStatus);
 
 bitflags! {
     impl DeviceStatus: u8 {
