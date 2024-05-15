@@ -137,3 +137,226 @@ bitflags! {
         const _ = !0;
     }
 }
+
+/// Network Device Feature Bits
+#[doc(alias = "VIRTIO_NET_F")]
+#[cfg_attr(
+    feature = "zerocopy",
+    derive(
+        zerocopy_derive::FromZeroes,
+        zerocopy_derive::FromBytes,
+        zerocopy_derive::AsBytes
+    )
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct VirtioNetF(u128);
+
+bitflags_debug!(VirtioNetF);
+
+bitflags! {
+    impl VirtioNetF: u128 {
+        /// Device handles packets with partial checksum.   This
+        /// “checksum offload” is a common feature on modern network cards.
+        #[doc(alias = "VIRTIO_NET_F_CSUM")]
+        const CSUM = 1 << 0;
+
+        /// Driver handles packets with partial checksum.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_CSUM")]
+        const GUEST_CSUM = 1 << 1;
+
+        /// Control channel offloads
+        /// reconfiguration support.
+        #[doc(alias = "VIRTIO_NET_F_CTRL_GUEST_OFFLOADS")]
+        const CTRL_GUEST_OFFLOADS = 1 << 2;
+
+        /// Device maximum MTU reporting is supported. If
+        /// offered by the device, device advises driver about the value of
+        /// its maximum MTU. If negotiated, the driver uses _mtu_ as
+        /// the maximum MTU value.
+        #[doc(alias = "VIRTIO_NET_F_MTU")]
+        const MTU = 1 << 3;
+
+        /// Device has given MAC address.
+        #[doc(alias = "VIRTIO_NET_F_MAC")]
+        const MAC = 1 << 5;
+
+        /// Driver can receive TSOv4.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_TSO4")]
+        const GUEST_TSO4 = 1 << 7;
+
+        /// Driver can receive TSOv6.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_TSO6")]
+        const GUEST_TSO6 = 1 << 8;
+
+        /// Driver can receive TSO with ECN.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_ECN")]
+        const GUEST_ECN = 1 << 9;
+
+        /// Driver can receive UFO.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_UFO")]
+        const GUEST_UFO = 1 << 10;
+
+        /// Device can receive TSOv4.
+        #[doc(alias = "VIRTIO_NET_F_HOST_TSO4")]
+        const HOST_TSO4 = 1 << 11;
+
+        /// Device can receive TSOv6.
+        #[doc(alias = "VIRTIO_NET_F_HOST_TSO6")]
+        const HOST_TSO6 = 1 << 12;
+
+        /// Device can receive TSO with ECN.
+        #[doc(alias = "VIRTIO_NET_F_HOST_ECN")]
+        const HOST_ECN = 1 << 13;
+
+        /// Device can receive UFO.
+        #[doc(alias = "VIRTIO_NET_F_HOST_UFO")]
+        const HOST_UFO = 1 << 14;
+
+        /// Driver can merge receive buffers.
+        #[doc(alias = "VIRTIO_NET_F_MRG_RXBUF")]
+        const MRG_RXBUF = 1 << 15;
+
+        /// Configuration status field is
+        /// available.
+        #[doc(alias = "VIRTIO_NET_F_STATUS")]
+        const STATUS = 1 << 16;
+
+        /// Control channel is available.
+        #[doc(alias = "VIRTIO_NET_F_CTRL_VQ")]
+        const CTRL_VQ = 1 << 17;
+
+        /// Control channel RX mode support.
+        #[doc(alias = "VIRTIO_NET_F_CTRL_RX")]
+        const CTRL_RX = 1 << 18;
+
+        /// Control channel VLAN filtering.
+        #[doc(alias = "VIRTIO_NET_F_CTRL_VLAN")]
+        const CTRL_VLAN = 1 << 19;
+
+        /// Driver can send gratuitous
+        /// packets.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_ANNOUNCE")]
+        const GUEST_ANNOUNCE = 1 << 21;
+
+        /// Device supports multiqueue with automatic
+        /// receive steering.
+        #[doc(alias = "VIRTIO_NET_F_MQ")]
+        const MQ = 1 << 22;
+
+        /// Set MAC address through control
+        /// channel.
+        #[doc(alias = "VIRTIO_NET_F_CTRL_MAC_ADDR")]
+        const CTRL_MAC_ADDR = 1 << 23;
+
+        /// Device can receive USO packets. Unlike UFO
+        /// (fragmenting the packet) the USO splits large UDP packet
+        /// to several segments when each of these smaller packets has UDP header.
+        #[doc(alias = "VIRTIO_NET_F_HOST_USO")]
+        const HOST_USO = 1 << 56;
+
+        /// Device can report per-packet hash
+        /// value and a type of calculated hash.
+        #[doc(alias = "VIRTIO_NET_F_HASH_REPORT")]
+        const HASH_REPORT = 1 << 57;
+
+        /// Driver can provide the exact _hdr_len_
+        /// value. Device benefits from knowing the exact header length.
+        #[doc(alias = "VIRTIO_NET_F_GUEST_HDRLEN")]
+        const GUEST_HDRLEN = 1 << 59;
+
+        /// Device supports RSS (receive-side scaling)
+        /// with Toeplitz hash calculation and configurable hash
+        /// parameters for receive steering.
+        #[doc(alias = "VIRTIO_NET_F_RSS")]
+        const RSS = 1 << 60;
+
+        /// Device can process duplicated ACKs
+        /// and report number of coalesced segments and duplicated ACKs.
+        #[doc(alias = "VIRTIO_NET_F_RSC_EXT")]
+        const RSC_EXT = 1 << 61;
+
+        /// Device may act as a standby for a primary
+        /// device with the same MAC address.
+        #[doc(alias = "VIRTIO_NET_F_STANDBY")]
+        const STANDBY = 1 << 62;
+
+        /// Device reports speed and duplex.
+        #[doc(alias = "VIRTIO_NET_F_SPEED_DUPLEX")]
+        const SPEED_DUPLEX = 1 << 63;
+
+        /// Device-independent Bit. See [`VirtioF::INDIRECT_DESC`].
+        const INDIRECT_DESC = VirtioF::INDIRECT_DESC.bits();
+
+        /// Device-independent Bit. See [`VirtioF::EVENT_IDX`].
+        const EVENT_IDX = VirtioF::EVENT_IDX.bits();
+
+        /// Device-independent Bit. See [`VirtioF::VERSION_1`].
+        const VERSION_1 = VirtioF::VERSION_1.bits();
+
+        /// Device-independent Bit. See [`VirtioF::ACCESS_PLATFORM`].
+        const ACCESS_PLATFORM = VirtioF::ACCESS_PLATFORM.bits();
+
+        /// Device-independent Bit. See [`VirtioF::RING_PACKED`].
+        const RING_PACKED = VirtioF::RING_PACKED.bits();
+
+        /// Device-independent Bit. See [`VirtioF::IN_ORDER`].
+        const IN_ORDER = VirtioF::IN_ORDER.bits();
+
+        /// Device-independent Bit. See [`VirtioF::ORDER_PLATFORM`].
+        const ORDER_PLATFORM = VirtioF::ORDER_PLATFORM.bits();
+
+        /// Device-independent Bit. See [`VirtioF::SR_IOV`].
+        const SR_IOV = VirtioF::SR_IOV.bits();
+
+        /// Device-independent Bit. See [`VirtioF::NOTIFICATION_DATA`].
+        const NOTIFICATION_DATA = VirtioF::NOTIFICATION_DATA.bits();
+
+        /// Device-independent Bit. See [`VirtioF::NOTIF_CONFIG_DATA`].
+        const NOTIF_CONFIG_DATA = VirtioF::NOTIF_CONFIG_DATA.bits();
+
+        /// Device-independent Bit. See [`VirtioF::RING_RESET`].
+        const RING_RESET = VirtioF::RING_RESET.bits();
+
+        const _ = !0;
+    }
+}
+
+impl From<VirtioF> for VirtioNetF {
+    fn from(value: VirtioF) -> Self {
+        Self::from_bits_retain(value.bits())
+    }
+}
+
+impl AsRef<VirtioNetF> for VirtioF {
+    fn as_ref(&self) -> &VirtioNetF {
+        unsafe { &*(self as *const Self as *const VirtioNetF) }
+    }
+}
+
+impl AsMut<VirtioNetF> for VirtioF {
+    fn as_mut(&mut self) -> &mut VirtioNetF {
+        unsafe { &mut *(self as *mut Self as *mut VirtioNetF) }
+    }
+}
+
+impl From<VirtioNetF> for VirtioF {
+    /// Returns the device-independent feature bits while retaining device-specific feature bits.
+    fn from(value: VirtioNetF) -> Self {
+        VirtioF::from_bits_retain(value.bits())
+    }
+}
+
+impl AsRef<VirtioF> for VirtioNetF {
+    /// Returns a shared reference to the device-independent features while retaining device-specific feature bits.
+    fn as_ref(&self) -> &VirtioF {
+        unsafe { &*(self as *const Self as *const VirtioF) }
+    }
+}
+
+impl AsMut<VirtioF> for VirtioNetF {
+    /// Returns a mutable reference to the device-independent features while retaining device-specific feature bits.
+    fn as_mut(&mut self) -> &mut VirtioF {
+        unsafe { &mut *(self as *mut Self as *mut VirtioF) }
+    }
+}
