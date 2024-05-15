@@ -3,6 +3,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use pci_types::InterruptLine;
+use virtio_def::features::VirtioF;
 
 use self::constants::{FeatureSet, Features};
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
@@ -133,7 +134,7 @@ impl VirtioFsDriver {
 				&self.notif_cfg,
 				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 				VqIndex::from(i),
-				self.dev_cfg.features.into(),
+				VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 			)
 			.unwrap();
 			self.vqueues.push(Rc::new(vq));

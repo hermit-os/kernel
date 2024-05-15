@@ -12,6 +12,7 @@ use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
+use virtio_def::features::VirtioF;
 use zerocopy::AsBytes;
 
 use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -968,7 +969,7 @@ impl VirtioNetDriver {
 						&self.notif_cfg,
 						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 						VqIndex::from(self.num_vqs),
-						self.dev_cfg.features.into(),
+						VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 					)
 					.unwrap(),
 				)));
@@ -979,7 +980,7 @@ impl VirtioNetDriver {
 						&self.notif_cfg,
 						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 						VqIndex::from(self.num_vqs),
-						self.dev_cfg.features.into(),
+						VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 					)
 					.unwrap(),
 				)));
@@ -1034,7 +1035,7 @@ impl VirtioNetDriver {
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i),
-					self.dev_cfg.features.into(),
+					VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 				)
 				.unwrap();
 				// Interrupt for receiving packets is wanted
@@ -1047,7 +1048,7 @@ impl VirtioNetDriver {
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i + 1),
-					self.dev_cfg.features.into(),
+					VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 				)
 				.unwrap();
 				// Interrupt for comunicating that a sended packet left, is not needed
@@ -1060,7 +1061,7 @@ impl VirtioNetDriver {
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i),
-					self.dev_cfg.features.into(),
+					VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 				)
 				.unwrap();
 				// Interrupt for receiving packets is wanted
@@ -1073,7 +1074,7 @@ impl VirtioNetDriver {
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i + 1),
-					self.dev_cfg.features.into(),
+					VirtioF::from_bits_retain(u64::from(self.dev_cfg.features).into()),
 				)
 				.unwrap();
 				// Interrupt for comunicating that a sended packet left, is not needed
