@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
+use virtio_def::features::VirtioF;
 use virtio_def::pci::{CommonCfg, CommonCfgVolatileFieldAccess};
 use virtio_def::DeviceStatus;
 use volatile::VolatileRef;
@@ -595,8 +596,8 @@ impl ComCfg {
 			.update(|s| s | DeviceStatus::DRIVER_OK);
 	}
 
-	/// Returns the features offered by the device. Coded in a 64bit value.
-	pub fn dev_features(&mut self) -> u64 {
+	/// Returns the features offered by the device.
+	pub fn dev_features(&mut self) -> VirtioF {
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let device_feature_select = com_cfg.device_feature_select();
 		let device_feature = com_cfg.device_feature();
@@ -618,11 +619,12 @@ impl ComCfg {
 		// read low 32 bits of device features
 		device_features |= u64::from(device_feature.read().get());
 
-		device_features
+		VirtioF::from_bits_retain(device_features.into())
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: u64) {
+	pub fn set_drv_features(&mut self, features: VirtioF) {
+		let features = features.bits() as u64;
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let driver_feature_select = com_cfg.driver_feature_select();
 		let driver_feature = com_cfg.driver_feature();

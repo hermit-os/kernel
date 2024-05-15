@@ -63,7 +63,7 @@ impl VirtioFsDriver {
 			driver_features |= *feature;
 		}
 
-		let device_features = FeatureSet::new(self.com_cfg.dev_features());
+		let device_features = FeatureSet::new(self.com_cfg.dev_features().bits() as u64);
 
 		// Checks if the selected feature set is compatible with requirements for
 		// features according to Virtio spec. v1.1 - 5.11.3.
@@ -76,7 +76,8 @@ impl VirtioFsDriver {
 
 		if (device_features & driver_features) == driver_features {
 			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(driver_features.into());
+			self.com_cfg
+				.set_drv_features(VirtioF::from_bits_retain(u64::from(driver_features).into()));
 			Ok(())
 		} else {
 			Err(VirtioFsError::IncompatibleFeatureSets(
