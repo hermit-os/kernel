@@ -1728,7 +1728,6 @@ pub mod error {
 	/// Network drivers error enum.
 	#[derive(Debug, Copy, Clone)]
 	pub enum VirtioNetError {
-		General,
 		NoDevCfg(u16),
 		NoComCfg(u16),
 		NoIsrCfg(u16),
@@ -1740,9 +1739,5 @@ pub mod error {
 		/// The first u64 contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second u64.
 		IncompFeatsSet(FeatureSet, FeatureSet),
-		/// Indicates that an operation for finished Transfers, was performed on
-		/// an ongoing transfer
-		ProcessOngoing,
-		Unknown,
 	}
 }

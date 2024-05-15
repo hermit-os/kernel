@@ -45,7 +45,6 @@ pub mod error {
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {id:#x} not supported."),
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
                 VirtioError::NetDriver(net_error) => match net_error {
-                    VirtioNetError::General => write!(f, "Virtio network driver failed due to unknown reasons!"),
                     VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),
                     VirtioNetError::NoComCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed common config!"),
                     VirtioNetError::NoIsrCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
@@ -53,8 +52,6 @@ pub mod error {
                     VirtioNetError::FailFeatureNeg(id) => write!(f, "Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
                     VirtioNetError::FeatReqNotMet(feats) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
                     VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
-                    VirtioNetError::ProcessOngoing => write!(f, "Virtio network performed an unsuitable operation upon an ongoging transfer."),
-					VirtioNetError::Unknown => write!(f, "Virtio network driver failed due unknown reason!"),
                 },
 				#[cfg(feature = "fuse")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
