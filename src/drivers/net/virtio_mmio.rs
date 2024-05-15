@@ -2,10 +2,8 @@
 //!
 //! The module contains ...
 
-use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::ptr;
 use core::ptr::read_volatile;
 use core::str::FromStr;
@@ -138,17 +136,8 @@ impl VirtioNetDriver {
 			isr_stat,
 			notif_cfg,
 			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs: RxQueues::new(
-				Vec::<Rc<dyn Virtq>>::new(),
-				Rc::new(RefCell::new(VecDeque::new())),
-				false,
-			),
-			send_vqs: TxQueues::new(
-				Vec::<Rc<dyn Virtq>>::new(),
-				Rc::new(RefCell::new(VecDeque::new())),
-				Vec::new(),
-				false,
-			),
+			recv_vqs: RxQueues::new(Vec::<Rc<dyn Virtq>>::new(), false),
+			send_vqs: TxQueues::new(Vec::<Rc<dyn Virtq>>::new(), Vec::new(), false),
 			num_vqs: 0,
 			irq,
 			mtu,

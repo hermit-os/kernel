@@ -2,10 +2,7 @@
 //!
 //! The module contains ...
 
-use alloc::collections::VecDeque;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::str::FromStr;
 
 use smoltcp::phy::ChecksumCapabilities;
@@ -146,13 +143,8 @@ impl VirtioNetDriver {
 			notif_cfg,
 
 			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs: RxQueues::new(Vec::new(), Rc::new(RefCell::new(VecDeque::new())), false),
-			send_vqs: TxQueues::new(
-				Vec::new(),
-				Rc::new(RefCell::new(VecDeque::new())),
-				Vec::new(),
-				false,
-			),
+			recv_vqs: RxQueues::new(Vec::new(), false),
+			send_vqs: TxQueues::new(Vec::new(), Vec::new(), false),
 			num_vqs: 0,
 			irq: device.get_irq().unwrap(),
 			mtu,

@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
@@ -21,8 +20,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer, TransferState,
-	TransferToken, Virtq, VirtqPrivate, VqIndex, VqSize,
+	BuffSpec, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
+	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
@@ -304,11 +303,8 @@ impl DescrRing {
 					.restr_size(None, Some(used_elem.len.get() as usize))
 					.unwrap();
 			}
-			tkn.state = TransferState::Finished;
 			if let Some(queue) = tkn.await_queue.take() {
-				queue.borrow_mut().push_back(Transfer {
-					transfer_tkn: Some(tkn),
-				})
+				queue.try_send(Box::new(tkn.buff_tkn.unwrap())).unwrap()
 			}
 			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
@@ -364,7 +360,7 @@ impl Virtq for SplitVq {
 	fn dispatch_batch_await(
 		&self,
 		_tkns: Vec<TransferToken>,
-		_await_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		_await_queue: super::BufferTokenSender,
 		_notif: bool,
 	) {
 		unimplemented!()
