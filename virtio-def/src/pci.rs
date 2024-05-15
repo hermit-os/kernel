@@ -103,11 +103,15 @@ pub struct CommonCfg {
     /// identifier, or an internal offset related to the virtqueue number.
     ///
     /// </div>
+    ///
+    /// [`VIRTIO_F_NOTIF_CONFIG_DATA`]: crate::features::VirtioF::NOTIF_CONFIG_DATA
     #[access(ReadOnly)]
     queue_notify_data: le16,
 
     /// The driver uses this to selectively reset the queue.
     /// This field exists only if [`VIRTIO_F_RING_RESET`] has been
     /// negotiated. (see _Basic Facilities of a Virtio Device / Virtqueues / Virtqueue Reset_).
+    ///
+    /// [`VIRTIO_F_RING_RESET`]: crate::features::VirtioF::RING_RESET
     queue_reset: le16,
 }

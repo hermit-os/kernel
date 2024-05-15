@@ -29,6 +29,7 @@ macro_rules! bitflags_debug {
     };
 }
 
+pub mod features;
 pub mod num;
 pub mod pci;
 
