@@ -171,7 +171,7 @@ pub trait Virtq: VirtqPrivate {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		feats: u64,
+		features: u64,
 	) -> Result<Self, VirtqError>
 	where
 		Self: Sized;
@@ -3035,7 +3035,7 @@ pub mod error {
 		/// referring to).
 		BufferToLarge,
 		QueueSizeNotAllowed(u16),
-		FeatNotSupported(u64),
+		FeatureNotSupported(u64),
 		AllocationError,
 	}
 
@@ -3053,7 +3053,7 @@ pub mod error {
                 VirtqError::WriteTooLarge => write!(f, "Write is to large for BufferToken!"),
                 VirtqError::BufferToLarge => write!(f, "Buffer to large for queue! u32::MAX exceeded."),
 				VirtqError::QueueSizeNotAllowed(_) => write!(f, "The requested queue size is not valid."),
-				VirtqError:: FeatNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
+				VirtqError::FeatureNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
 				VirtqError::AllocationError => write!(f, "An error was encountered during the allocation of the queue structures.")
             }
 		}

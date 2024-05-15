@@ -55,30 +55,33 @@ impl VirtioFsDriver {
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
-	fn negotiate_features(&mut self, wanted_feats: &[Features]) -> Result<(), VirtioFsError> {
-		let mut drv_feats = FeatureSet::new(0);
+	fn negotiate_features(&mut self, wanted_features: &[Features]) -> Result<(), VirtioFsError> {
+		let mut driver_features = FeatureSet::new(0);
 
-		for feat in wanted_feats.iter() {
-			drv_feats |= *feat;
+		for feature in wanted_features.iter() {
+			driver_features |= *feature;
 		}
 
-		let dev_feats = FeatureSet::new(self.com_cfg.dev_features());
+		let device_features = FeatureSet::new(self.com_cfg.dev_features());
 
 		// Checks if the selected feature set is compatible with requirements for
 		// features according to Virtio spec. v1.1 - 5.11.3.
-		match FeatureSet::check_features(wanted_feats) {
+		match FeatureSet::check_features(wanted_features) {
 			Ok(_) => {
 				debug!("Feature set wanted by filesystem driver are in conformance with specification.")
 			}
 			Err(fs_err) => return Err(fs_err),
 		}
 
-		if (dev_feats & drv_feats) == drv_feats {
+		if (device_features & driver_features) == driver_features {
 			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(drv_feats.into());
+			self.com_cfg.set_drv_features(driver_features.into());
 			Ok(())
 		} else {
-			Err(VirtioFsError::IncompFeatsSet(drv_feats, dev_feats))
+			Err(VirtioFsError::IncompatibleFeatureSets(
+				driver_features,
+				device_features,
+			))
 		}
 	}
 
@@ -97,8 +100,8 @@ impl VirtioFsDriver {
 		// Indicate device, that driver is able to handle it
 		self.com_cfg.set_drv();
 
-		let feats: Vec<Features> = vec![Features::VIRTIO_F_VERSION_1];
-		self.negotiate_features(&feats)?;
+		let features: Vec<Features> = vec![Features::VIRTIO_F_VERSION_1];
+		self.negotiate_features(&features)?;
 
 		// Indicates the device, that the current feature set is final for the driver
 		// and will not be changed.
@@ -111,7 +114,7 @@ impl VirtioFsDriver {
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
-			self.dev_cfg.features.set_features(&feats);
+			self.dev_cfg.features.set_features(&features);
 		} else {
 			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
@@ -183,7 +186,7 @@ pub mod constants {
 	///
 	/// See Virtio specification v1.1. - 6
 	//
-	// WARN: In case the enum is changed, the static function of features `into_features(feat: u64) ->
+	// WARN: In case the enum is changed, the static function of features `into_features(feature: u64) ->
 	// Option<Vec<Features>>` must also be adjusted to return a correct vector of features.
 	#[allow(dead_code, non_camel_case_types)]
 	#[derive(Copy, Clone, Debug)]
@@ -282,42 +285,42 @@ pub mod constants {
 		/// INFO: In case the FEATURES enum is changed, this function MUST also be adjusted to the new set!
 		//
 		// Really UGLY function, but currently the most convenienvt one to reduce the set of features for the driver easily!
-		pub fn from_set(feat_set: FeatureSet) -> Option<Vec<Features>> {
-			let mut vec_of_feats: Vec<Features> = Vec::new();
-			let feats = feat_set.0;
+		pub fn from_set(feature_set: FeatureSet) -> Option<Vec<Features>> {
+			let mut features_vec: Vec<Features> = Vec::new();
+			let features = feature_set.0;
 
-			if feats & (1 << 28) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC)
+			if features & (1 << 28) != 0 {
+				features_vec.push(Features::VIRTIO_F_RING_INDIRECT_DESC)
 			}
-			if feats & (1 << 29) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_RING_EVENT_IDX)
+			if features & (1 << 29) != 0 {
+				features_vec.push(Features::VIRTIO_F_RING_EVENT_IDX)
 			}
-			if feats & (1 << 32) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_VERSION_1)
+			if features & (1 << 32) != 0 {
+				features_vec.push(Features::VIRTIO_F_VERSION_1)
 			}
-			if feats & (1 << 33) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_ACCESS_PLATFORM)
+			if features & (1 << 33) != 0 {
+				features_vec.push(Features::VIRTIO_F_ACCESS_PLATFORM)
 			}
-			if feats & (1 << 34) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_RING_PACKED)
+			if features & (1 << 34) != 0 {
+				features_vec.push(Features::VIRTIO_F_RING_PACKED)
 			}
-			if feats & (1 << 35) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_IN_ORDER)
+			if features & (1 << 35) != 0 {
+				features_vec.push(Features::VIRTIO_F_IN_ORDER)
 			}
-			if feats & (1 << 36) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_ORDER_PLATFORM)
+			if features & (1 << 36) != 0 {
+				features_vec.push(Features::VIRTIO_F_ORDER_PLATFORM)
 			}
-			if feats & (1 << 37) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_SR_IOV)
+			if features & (1 << 37) != 0 {
+				features_vec.push(Features::VIRTIO_F_SR_IOV)
 			}
-			if feats & (1 << 38) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_NOTIFICATION_DATA)
+			if features & (1 << 38) != 0 {
+				features_vec.push(Features::VIRTIO_F_NOTIFICATION_DATA)
 			}
 
-			if vec_of_feats.is_empty() {
+			if features_vec.is_empty() {
 				None
 			} else {
-				Some(vec_of_feats)
+				Some(features_vec)
 			}
 		}
 	}
@@ -390,19 +393,19 @@ pub mod constants {
 		/// Checks if a given set of features is compatible and adheres to the
 		/// specfification v1.1. - 5.11.3
 		/// Upon an error returns the incompatible set of features by the
-		/// [FeatReqNotMet](super::error::VirtioFsError) error value, which
+		/// [FeatureRequirementsNotMet](super::error::VirtioFsError) error value, which
 		/// wraps the u64 indicating the feature set.
 		///
 		/// INFO: Iterates twice over the vector of features.
-		pub fn check_features(feats: &[Features]) -> Result<(), VirtioFsError> {
-			let mut feat_bits = 0u64;
+		pub fn check_features(features: &[Features]) -> Result<(), VirtioFsError> {
+			let mut feature_bits = 0u64;
 
-			for feat in feats.iter() {
-				feat_bits |= *feat;
+			for feature in features.iter() {
+				feature_bits |= *feature;
 			}
 
-			for feat in feats {
-				match feat {
+			for feature in features {
+				match feature {
 					Features::VIRTIO_F_RING_INDIRECT_DESC => continue,
 					Features::VIRTIO_F_RING_EVENT_IDX => continue,
 					Features::VIRTIO_F_VERSION_1 => continue,
@@ -419,16 +422,16 @@ pub mod constants {
 		}
 
 		/// Checks if a given feature is set.
-		pub fn is_feature(self, feat: Features) -> bool {
-			self.0 & feat != 0
+		pub fn is_feature(self, feature: Features) -> bool {
+			self.0 & feature != 0
 		}
 
-		/// Sets features contained in feats to true.
+		/// Sets features contained in features to true.
 		///
 		/// WARN: Features should be checked before using this function via the [`FeatureSet::check_features`] function.
-		pub fn set_features(&mut self, feats: &[Features]) {
-			for feat in feats {
-				self.0 |= *feat;
+		pub fn set_features(&mut self, features: &[Features]) {
+			for feature in features {
+				self.0 |= *feature;
 			}
 		}
 
@@ -458,7 +461,7 @@ pub mod error {
 		FailFeatureNeg(u16),
 		/// The first u64 contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second u64.
-		IncompFeatsSet(FeatureSet, FeatureSet),
+		IncompatibleFeatureSets(FeatureSet, FeatureSet),
 		Unknown,
 	}
 }

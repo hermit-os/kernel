@@ -54,8 +54,8 @@ pub mod error {
 					#[cfg(feature = "pci")]
                     VirtioNetError::NoNotifCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed notification config!"),
                     VirtioNetError::FailFeatureNeg(id) => write!(f, "Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
-                    VirtioNetError::FeatReqNotMet(feats) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
-                    VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
+                    VirtioNetError::FeatureRequirementsNotMet(features) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feature set: {:x}", u64::from(*features)),
+                    VirtioNetError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*driver_features), u64::from(*device_features)),
                 },
 				#[cfg(feature = "fuse")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
@@ -68,7 +68,7 @@ pub mod error {
 					#[cfg(feature = "pci")]
                     VirtioFsError::NoNotifCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed notification config!"),
 					VirtioFsError::FailFeatureNeg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
-					VirtioFsError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
+					VirtioFsError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*driver_features), u64::from(*device_features)),
 					VirtioFsError::Unknown => write!(f, "Virtio filesystem failed, driver failed due unknown reason!"),
 				},
             }

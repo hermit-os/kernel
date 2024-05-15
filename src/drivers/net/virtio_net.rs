@@ -763,58 +763,58 @@ impl VirtioNetDriver {
 		self.com_cfg.set_drv();
 
 		// Define minimal feature set
-		let min_feats: Vec<Features> =
+		let minimal_features: Vec<Features> =
 			vec![Features::VIRTIO_F_VERSION_1, Features::VIRTIO_NET_F_MAC];
 
-		let mut min_feat_set = FeatureSet::new(0);
-		min_feat_set.set_features(&min_feats);
-		let mut feats: Vec<Features> = min_feats;
+		let mut minimal_feature_set = FeatureSet::new(0);
+		minimal_feature_set.set_features(&minimal_features);
+		let mut features: Vec<Features> = minimal_features;
 
-		// If wanted, push new features into feats here:
+		// If wanted, push new features into features here:
 		//
 		// the link status can be announced
-		feats.push(Features::VIRTIO_NET_F_STATUS);
+		features.push(Features::VIRTIO_NET_F_STATUS);
 		// Indirect descriptors can be used
-		feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
+		features.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
 		// MTU setting can be used
-		feats.push(Features::VIRTIO_NET_F_MTU);
+		features.push(Features::VIRTIO_NET_F_MTU);
 		// Packed Vq can be used
-		feats.push(Features::VIRTIO_F_RING_PACKED);
+		features.push(Features::VIRTIO_F_RING_PACKED);
 		// Guest avoids the creation of checksums
-		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
+		features.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 		// Host should avoid the creation of checksums
-		feats.push(Features::VIRTIO_NET_F_CSUM);
+		features.push(Features::VIRTIO_NET_F_CSUM);
 		// Driver can merge receive buffers
-		feats.push(Features::VIRTIO_NET_F_MRG_RXBUF);
+		features.push(Features::VIRTIO_NET_F_MRG_RXBUF);
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
 		// needs to take care of calculating checksum in
 		// RxQueues.post_processing()
-		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
-		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
+		// features.push(Features::VIRTIO_NET_F_GUEST_TSO4);
+		// features.push(Features::VIRTIO_NET_F_GUEST_TSO6);
 
-		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
-		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
-		match self.negotiate_features(&feats) {
+		// Negotiate features with device. Automatically reduces selected features in order to meet device capabilities.
+		// Aborts in case incompatible features are selected by the driver or the device does not support minimal_feature_set.
+		match self.negotiate_features(&features) {
 			Ok(_) => info!(
 				"Driver found a subset of features for virtio device {:x}. Features are: {:?}",
-				self.dev_cfg.dev_id, &feats
+				self.dev_cfg.dev_id, &features
 			),
 			Err(vnet_err) => {
 				match vnet_err {
-					VirtioNetError::FeatReqNotMet(feat_set) => {
-						error!("Network drivers feature set {:x} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feat_set));
+					VirtioNetError::FeatureRequirementsNotMet(feature_set) => {
+						error!("Network drivers feature set {:x} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feature_set));
 						return Err(vnet_err);
 					}
-					VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => {
+					VirtioNetError::IncompatibleFeatureSets(driver_features, device_features) => {
 						// Create a new matching feature set for device and driver if the minimal set is met!
-						if (min_feat_set & dev_feats) != min_feat_set {
+						if (minimal_feature_set & device_features) != minimal_feature_set {
 							error!("Device features set, does not satisfy minimal features needed. Aborting!");
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 						} else {
-							feats = match Features::from_set(dev_feats & drv_feats) {
-								Some(feats) => feats,
+							features = match Features::from_set(device_features & driver_features) {
+								Some(features) => features,
 								None => {
 									error!("Feature negotiation failed with minimal feature set. Aborting!");
 									return Err(VirtioNetError::FailFeatureNeg(
@@ -823,16 +823,16 @@ impl VirtioNetDriver {
 								}
 							};
 
-							match self.negotiate_features(&feats) {
-                                Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {:?}", self.dev_cfg.dev_id, &feats),
+							match self.negotiate_features(&features) {
+                                Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {:?}", self.dev_cfg.dev_id, &features),
                                 Err(vnet_err) => {
                                     match vnet_err {
-                                        VirtioNetError::FeatReqNotMet(feat_set) => {
-                                            error!("Network device offers a feature set {:x} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feat_set));
+                                        VirtioNetError::FeatureRequirementsNotMet(feature_set) => {
+                                            error!("Network device offers a feature set {:x} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feature_set));
                                             return Err(vnet_err);
                                         },
                                         _ => {
-                                            error!("Feature Set after reduction still not usable. Set: {:?}. Aborting!", feats);
+                                            error!("Feature Set after reduction still not usable. Set: {:?}. Aborting!", features);
                                             return Err(vnet_err);
                                         }
                                     }
@@ -843,7 +843,7 @@ impl VirtioNetDriver {
 					_ => {
 						error!(
 							"Wanted set of features is NOT supported by device. Set: {:?}",
-							feats
+							features
 						);
 						return Err(vnet_err);
 					}
@@ -862,7 +862,7 @@ impl VirtioNetDriver {
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
-			self.dev_cfg.features.set_features(&feats);
+			self.dev_cfg.features.set_features(&features);
 		} else {
 			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
@@ -914,30 +914,33 @@ impl VirtioNetDriver {
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
-	fn negotiate_features(&mut self, wanted_feats: &[Features]) -> Result<(), VirtioNetError> {
-		let mut drv_feats = FeatureSet::new(0);
+	fn negotiate_features(&mut self, wanted_features: &[Features]) -> Result<(), VirtioNetError> {
+		let mut driver_features = FeatureSet::new(0);
 
-		for feat in wanted_feats.iter() {
-			drv_feats |= *feat;
+		for feature in wanted_features.iter() {
+			driver_features |= *feature;
 		}
 
-		let dev_feats = FeatureSet::new(self.com_cfg.dev_features());
+		let device_features = FeatureSet::new(self.com_cfg.dev_features());
 
 		// Checks if the selected feature set is compatible with requirements for
 		// features according to Virtio spec. v1.1 - 5.1.3.1.
-		match FeatureSet::check_features(wanted_feats) {
+		match FeatureSet::check_features(wanted_features) {
 			Ok(_) => {
 				info!("Feature set wanted by network driver are in conformance with specification.")
 			}
 			Err(vnet_err) => return Err(vnet_err),
 		}
 
-		if (dev_feats & drv_feats) == drv_feats {
+		if (device_features & driver_features) == driver_features {
 			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(drv_feats.into());
+			self.com_cfg.set_drv_features(driver_features.into());
 			Ok(())
 		} else {
-			Err(VirtioNetError::IncompFeatsSet(drv_feats, dev_feats))
+			Err(VirtioNetError::IncompatibleFeatureSets(
+				driver_features,
+				device_features,
+			))
 		}
 	}
 
@@ -1160,7 +1163,7 @@ pub mod constants {
 	///
 	/// See Virtio specification v1.1. - 6
 	//
-	// WARN: In case the enum is changed, the static function of features `into_features(feat: u64) ->
+	// WARN: In case the enum is changed, the static function of features `into_features(feature: u64) ->
 	// Option<Vec<Features>>` must also be adjusted to return a correct vector of features.
 	#[allow(dead_code, non_camel_case_types)]
 	#[derive(Copy, Clone, Debug)]
@@ -1351,114 +1354,114 @@ pub mod constants {
 		/// INFO: In case the FEATURES enum is changed, this function MUST also be adjusted to the new set!
 		//
 		// Really UGLY function, but currently the most convenienvt one to reduce the set of features for the driver easily!
-		pub fn from_set(feat_set: FeatureSet) -> Option<Vec<Features>> {
-			let mut vec_of_feats: Vec<Features> = Vec::new();
-			let feats = feat_set.0;
+		pub fn from_set(feature_set: FeatureSet) -> Option<Vec<Features>> {
+			let mut features_vec: Vec<Features> = Vec::new();
+			let features = feature_set.0;
 
-			if feats & (1 << 0) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_CSUM)
+			if features & (1 << 0) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_CSUM)
 			}
-			if feats & (1 << 1) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_CSUM)
+			if features & (1 << 1) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_CSUM)
 			}
-			if feats & (1 << 2) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_CTRL_GUEST_OFFLOADS)
+			if features & (1 << 2) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_CTRL_GUEST_OFFLOADS)
 			}
-			if feats & (1 << 3) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_MTU)
+			if features & (1 << 3) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_MTU)
 			}
-			if feats & (1 << 5) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_MAC)
+			if features & (1 << 5) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_MAC)
 			}
-			if feats & (1 << 7) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_TSO4)
+			if features & (1 << 7) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_TSO4)
 			}
-			if feats & (1 << 8) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_TSO6)
+			if features & (1 << 8) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_TSO6)
 			}
-			if feats & (1 << 9) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_ECN)
+			if features & (1 << 9) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_ECN)
 			}
-			if feats & (1 << 10) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_UFO)
+			if features & (1 << 10) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_UFO)
 			}
-			if feats & (1 << 11) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_HOST_TSO4)
+			if features & (1 << 11) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_HOST_TSO4)
 			}
-			if feats & (1 << 12) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_HOST_TSO6)
+			if features & (1 << 12) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_HOST_TSO6)
 			}
-			if feats & (1 << 13) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_HOST_ECN)
+			if features & (1 << 13) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_HOST_ECN)
 			}
-			if feats & (1 << 14) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_HOST_UFO)
+			if features & (1 << 14) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_HOST_UFO)
 			}
-			if feats & (1 << 15) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_MRG_RXBUF)
+			if features & (1 << 15) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_MRG_RXBUF)
 			}
-			if feats & (1 << 16) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_STATUS)
+			if features & (1 << 16) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_STATUS)
 			}
-			if feats & (1 << 17) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_CTRL_VQ)
+			if features & (1 << 17) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_CTRL_VQ)
 			}
-			if feats & (1 << 18) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_CTRL_RX)
+			if features & (1 << 18) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_CTRL_RX)
 			}
-			if feats & (1 << 19) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_CTRL_VLAN)
+			if features & (1 << 19) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_CTRL_VLAN)
 			}
-			if feats & (1 << 21) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_ANNOUNCE)
+			if features & (1 << 21) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_ANNOUNCE)
 			}
-			if feats & (1 << 22) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_MQ)
+			if features & (1 << 22) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_MQ)
 			}
-			if feats & (1 << 23) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_CTRL_MAC_ADDR)
+			if features & (1 << 23) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_CTRL_MAC_ADDR)
 			}
-			if feats & (1 << 28) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC)
+			if features & (1 << 28) != 0 {
+				features_vec.push(Features::VIRTIO_F_RING_INDIRECT_DESC)
 			}
-			if feats & (1 << 29) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_RING_EVENT_IDX)
+			if features & (1 << 29) != 0 {
+				features_vec.push(Features::VIRTIO_F_RING_EVENT_IDX)
 			}
-			if feats & (1 << 32) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_VERSION_1)
+			if features & (1 << 32) != 0 {
+				features_vec.push(Features::VIRTIO_F_VERSION_1)
 			}
-			if feats & (1 << 33) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_ACCESS_PLATFORM)
+			if features & (1 << 33) != 0 {
+				features_vec.push(Features::VIRTIO_F_ACCESS_PLATFORM)
 			}
-			if feats & (1 << 34) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_RING_PACKED)
+			if features & (1 << 34) != 0 {
+				features_vec.push(Features::VIRTIO_F_RING_PACKED)
 			}
-			if feats & (1 << 35) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_IN_ORDER)
+			if features & (1 << 35) != 0 {
+				features_vec.push(Features::VIRTIO_F_IN_ORDER)
 			}
-			if feats & (1 << 36) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_ORDER_PLATFORM)
+			if features & (1 << 36) != 0 {
+				features_vec.push(Features::VIRTIO_F_ORDER_PLATFORM)
 			}
-			if feats & (1 << 37) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_SR_IOV)
+			if features & (1 << 37) != 0 {
+				features_vec.push(Features::VIRTIO_F_SR_IOV)
 			}
-			if feats & (1 << 38) != 0 {
-				vec_of_feats.push(Features::VIRTIO_F_NOTIFICATION_DATA)
+			if features & (1 << 38) != 0 {
+				features_vec.push(Features::VIRTIO_F_NOTIFICATION_DATA)
 			}
-			if feats & (1 << 59) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_GUEST_HDRLEN)
+			if features & (1 << 59) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_GUEST_HDRLEN)
 			}
-			if feats & (1 << 61) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_RSC_EXT)
+			if features & (1 << 61) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_RSC_EXT)
 			}
-			if feats & (1 << 62) != 0 {
-				vec_of_feats.push(Features::VIRTIO_NET_F_STANDBY)
+			if features & (1 << 62) != 0 {
+				features_vec.push(Features::VIRTIO_NET_F_STANDBY)
 			}
 
-			if vec_of_feats.is_empty() {
+			if features_vec.is_empty() {
 				None
 			} else {
-				Some(vec_of_feats)
+				Some(features_vec)
 			}
 		}
 	}
@@ -1553,134 +1556,162 @@ pub mod constants {
 		/// Checks if a given set of features is compatible and adheres to the
 		/// specfification v1.1. - 5.1.3.1
 		/// Upon an error returns the incompatible set of features by the
-		/// [FeatReqNotMet](super::error::VirtioNetError) error value, which
+		/// [FeatureRequirementsNotMet](super::error::VirtioNetError) error value, which
 		/// wraps the u64 indicating the feature set.
 		///
 		/// INFO: Iterates twice over the vector of features.
-		pub fn check_features(feats: &[Features]) -> Result<(), VirtioNetError> {
-			let mut feat_bits = 0u64;
+		pub fn check_features(features: &[Features]) -> Result<(), VirtioNetError> {
+			let mut feature_bits = 0u64;
 
-			for feat in feats.iter() {
-				feat_bits |= *feat;
+			for feature in features.iter() {
+				feature_bits |= *feature;
 			}
 
-			for feat in feats {
-				match feat {
+			for feature in features {
+				match feature {
 					Features::VIRTIO_NET_F_CSUM => continue,
 					Features::VIRTIO_NET_F_GUEST_CSUM => continue,
 					Features::VIRTIO_NET_F_CTRL_GUEST_OFFLOADS => continue,
 					Features::VIRTIO_NET_F_MTU => continue,
 					Features::VIRTIO_NET_F_MAC => continue,
 					Features::VIRTIO_NET_F_GUEST_TSO4 => {
-						if feat_bits & Features::VIRTIO_NET_F_GUEST_CSUM != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_GUEST_CSUM != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_GUEST_TSO6 => {
-						if feat_bits & Features::VIRTIO_NET_F_GUEST_CSUM != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_GUEST_CSUM != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_GUEST_ECN => {
-						if feat_bits
+						if feature_bits
 							& (Features::VIRTIO_NET_F_GUEST_TSO4
 								| Features::VIRTIO_NET_F_GUEST_TSO6)
 							!= 0
 						{
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_GUEST_UFO => {
-						if feat_bits & Features::VIRTIO_NET_F_GUEST_CSUM != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_GUEST_CSUM != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_HOST_TSO4 => {
-						if feat_bits & Features::VIRTIO_NET_F_CSUM != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CSUM != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_HOST_TSO6 => {
-						if feat_bits & Features::VIRTIO_NET_F_CSUM != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CSUM != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_HOST_ECN => {
-						if feat_bits
+						if feature_bits
 							& (Features::VIRTIO_NET_F_HOST_TSO4 | Features::VIRTIO_NET_F_HOST_TSO6)
 							!= 0
 						{
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_HOST_UFO => {
-						if feat_bits & Features::VIRTIO_NET_F_CSUM != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CSUM != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_MRG_RXBUF => continue,
 					Features::VIRTIO_NET_F_STATUS => continue,
 					Features::VIRTIO_NET_F_CTRL_VQ => continue,
 					Features::VIRTIO_NET_F_CTRL_RX => {
-						if feat_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_CTRL_VLAN => {
-						if feat_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_GUEST_ANNOUNCE => {
-						if feat_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_MQ => {
-						if feat_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_CTRL_MAC_ADDR => {
-						if feat_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
+						if feature_bits & Features::VIRTIO_NET_F_CTRL_VQ != 0 {
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_GUEST_HDRLEN => continue,
 					Features::VIRTIO_NET_F_RSC_EXT => {
-						if feat_bits
+						if feature_bits
 							& (Features::VIRTIO_NET_F_HOST_TSO4 | Features::VIRTIO_NET_F_HOST_TSO6)
 							!= 0
 						{
 							continue;
 						} else {
-							return Err(VirtioNetError::FeatReqNotMet(FeatureSet(feat_bits)));
+							return Err(VirtioNetError::FeatureRequirementsNotMet(FeatureSet(
+								feature_bits,
+							)));
 						}
 					}
 					Features::VIRTIO_NET_F_STANDBY => continue,
@@ -1700,16 +1731,16 @@ pub mod constants {
 		}
 
 		/// Checks if a given feature is set.
-		pub fn is_feature(self, feat: Features) -> bool {
-			self.0 & feat != 0
+		pub fn is_feature(self, feature: Features) -> bool {
+			self.0 & feature != 0
 		}
 
-		/// Sets features contained in feats to true.
+		/// Sets features contained in features to true.
 		///
 		/// WARN: Features should be checked before using this function via the [`FeatureSet::check_features`] function.
-		pub fn set_features(&mut self, feats: &[Features]) {
-			for feat in feats {
-				self.0 |= *feat;
+		pub fn set_features(&mut self, features: &[Features]) {
+			for feature in features {
+				self.0 |= *feature;
 			}
 		}
 
@@ -1739,9 +1770,9 @@ pub mod error {
 		FailFeatureNeg(u16),
 		/// Set of features does not adhere to the requirements of features
 		/// indicated by the specification
-		FeatReqNotMet(FeatureSet),
+		FeatureRequirementsNotMet(FeatureSet),
 		/// The first u64 contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second u64.
-		IncompFeatsSet(FeatureSet, FeatureSet),
+		IncompatibleFeatureSets(FeatureSet, FeatureSet),
 	}
 }

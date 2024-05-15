@@ -1072,7 +1072,7 @@ impl Virtq for PackedVq {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		feats: u64,
+		features: u64,
 	) -> Result<Self, VirtqError> {
 		// Currently we do not have support for in order use.
 		// This steems from the fact, that the packedVq ReadCtrl currently is not
@@ -1081,10 +1081,10 @@ impl Virtq for PackedVq {
 		// TransferTokens are inserted into the queue. Furthermore the Queue should
 		// carry a feature u64 in order to check which features are used currently
 		// and adjust its ReadCtrl accordingly.
-		if feats & Features::VIRTIO_F_IN_ORDER == Features::VIRTIO_F_IN_ORDER {
+		if features & Features::VIRTIO_F_IN_ORDER == Features::VIRTIO_F_IN_ORDER {
 			info!("PackedVq has no support for VIRTIO_F_IN_ORDER. Aborting...");
-			return Err(VirtqError::FeatNotSupported(
-				feats & Features::VIRTIO_F_IN_ORDER,
+			return Err(VirtqError::FeatureNotSupported(
+				features & Features::VIRTIO_F_IN_ORDER,
 			));
 		}
 
@@ -1141,11 +1141,11 @@ impl Virtq for PackedVq {
 				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
 		));
 
-		if feats & Features::VIRTIO_F_NOTIFICATION_DATA == Features::VIRTIO_F_NOTIFICATION_DATA {
+		if features & Features::VIRTIO_F_NOTIFICATION_DATA == Features::VIRTIO_F_NOTIFICATION_DATA {
 			notif_ctrl.enable_notif_data();
 		}
 
-		if feats & Features::VIRTIO_F_RING_EVENT_IDX == Features::VIRTIO_F_RING_EVENT_IDX {
+		if features & Features::VIRTIO_F_RING_EVENT_IDX == Features::VIRTIO_F_RING_EVENT_IDX {
 			drv_event.borrow_mut().f_notif_idx = true;
 		}
 

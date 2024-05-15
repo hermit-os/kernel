@@ -608,7 +608,7 @@ impl ComCfg {
 		memory_barrier();
 
 		// read high 32 bits of device features
-		let mut dev_feat = u64::from(device_feature.read().get()) << 32;
+		let mut device_features = u64::from(device_feature.read().get()) << 32;
 
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
@@ -616,19 +616,19 @@ impl ComCfg {
 		memory_barrier();
 
 		// read low 32 bits of device features
-		dev_feat |= u64::from(device_feature.read().get());
+		device_features |= u64::from(device_feature.read().get());
 
-		dev_feat
+		device_features
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, feats: u64) {
+	pub fn set_drv_features(&mut self, features: u64) {
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let driver_feature_select = com_cfg.driver_feature_select();
 		let driver_feature = com_cfg.driver_feature();
 
-		let high: u32 = (feats >> 32) as u32;
-		let low: u32 = feats as u32;
+		let high: u32 = (features >> 32) as u32;
+		let low: u32 = features as u32;
 
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3

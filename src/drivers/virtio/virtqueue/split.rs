@@ -405,7 +405,7 @@ impl Virtq for SplitVq {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		_feats: u64,
+		_features: u64,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
 		let mut vq_handler = match com_cfg.select_vq(index.into()) {
