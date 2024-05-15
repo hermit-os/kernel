@@ -220,7 +220,7 @@ pub fn init_drivers() {
 						if let Ok(VirtioDriver::Network(drv)) =
 							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 						{
-							mmio::register_driver(MmioDriver::VirtioNet(
+							register_driver(MmioDriver::VirtioNet(
 								hermit_sync::InterruptSpinMutex::new(drv),
 							))
 						}
