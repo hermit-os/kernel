@@ -122,7 +122,108 @@ virtio_bitflags! {
     }
 }
 
-virtio_bitflags! {
+macro_rules! feature_bits {
+    (
+        $(#[$outer:meta])*
+        $vis:vis struct $BitFlags:ident: $T:ty {
+            $(
+                $(#[$inner:ident $($args:tt)*])*
+                const $Flag:tt = $value:expr;
+            )*
+        }
+
+        $($t:tt)*
+    ) => {
+        virtio_bitflags! {
+            $(#[$outer])*
+            $vis struct $BitFlags: $T {
+                $(
+                    $(#[$inner $($args)*])*
+                    const $Flag = $value;
+                )*
+
+                /// Device-independent Bit. See [`VirtioF::INDIRECT_DESC`].
+                const INDIRECT_DESC = VirtioF::INDIRECT_DESC.bits();
+
+                /// Device-independent Bit. See [`VirtioF::EVENT_IDX`].
+                const EVENT_IDX = VirtioF::EVENT_IDX.bits();
+
+                /// Device-independent Bit. See [`VirtioF::VERSION_1`].
+                const VERSION_1 = VirtioF::VERSION_1.bits();
+
+                /// Device-independent Bit. See [`VirtioF::ACCESS_PLATFORM`].
+                const ACCESS_PLATFORM = VirtioF::ACCESS_PLATFORM.bits();
+
+                /// Device-independent Bit. See [`VirtioF::RING_PACKED`].
+                const RING_PACKED = VirtioF::RING_PACKED.bits();
+
+                /// Device-independent Bit. See [`VirtioF::IN_ORDER`].
+                const IN_ORDER = VirtioF::IN_ORDER.bits();
+
+                /// Device-independent Bit. See [`VirtioF::ORDER_PLATFORM`].
+                const ORDER_PLATFORM = VirtioF::ORDER_PLATFORM.bits();
+
+                /// Device-independent Bit. See [`VirtioF::SR_IOV`].
+                const SR_IOV = VirtioF::SR_IOV.bits();
+
+                /// Device-independent Bit. See [`VirtioF::NOTIFICATION_DATA`].
+                const NOTIFICATION_DATA = VirtioF::NOTIFICATION_DATA.bits();
+
+                /// Device-independent Bit. See [`VirtioF::NOTIF_CONFIG_DATA`].
+                const NOTIF_CONFIG_DATA = VirtioF::NOTIF_CONFIG_DATA.bits();
+
+                /// Device-independent Bit. See [`VirtioF::RING_RESET`].
+                const RING_RESET = VirtioF::RING_RESET.bits();
+            }
+        }
+
+        impl From<VirtioF> for $BitFlags {
+            fn from(value: VirtioF) -> Self {
+                Self::from_bits_retain(value.bits())
+            }
+        }
+
+        impl AsRef<$BitFlags> for VirtioF {
+            fn as_ref(&self) -> &$BitFlags {
+                unsafe { &*(self as *const Self as *const $BitFlags) }
+            }
+        }
+
+        impl AsMut<$BitFlags> for VirtioF {
+            fn as_mut(&mut self) -> &mut $BitFlags {
+                unsafe { &mut *(self as *mut Self as *mut $BitFlags) }
+            }
+        }
+
+        impl From<$BitFlags> for VirtioF {
+            /// Returns the device-independent feature bits while retaining device-specific feature bits.
+            fn from(value: $BitFlags) -> Self {
+                VirtioF::from_bits_retain(value.bits())
+            }
+        }
+
+        impl AsRef<VirtioF> for $BitFlags {
+            /// Returns a shared reference to the device-independent features while retaining device-specific feature bits.
+            fn as_ref(&self) -> &VirtioF {
+                unsafe { &*(self as *const Self as *const VirtioF) }
+            }
+        }
+
+        impl AsMut<VirtioF> for $BitFlags {
+            /// Returns a mutable reference to the device-independent features while retaining device-specific feature bits.
+            fn as_mut(&mut self) -> &mut VirtioF {
+                unsafe { &mut *(self as *mut Self as *mut VirtioF) }
+            }
+        }
+
+        feature_bits! {
+            $($t)*
+        }
+    };
+    () => {};
+}
+
+feature_bits! {
     /// Network Device Feature Bits
     #[doc(alias = "VIRTIO_NET_F")]
     pub struct VirtioNetF: u128 {
@@ -255,78 +356,6 @@ virtio_bitflags! {
         #[doc(alias = "VIRTIO_NET_F_SPEED_DUPLEX")]
         const SPEED_DUPLEX = 1 << 63;
 
-        /// Device-independent Bit. See [`VirtioF::INDIRECT_DESC`].
-        const INDIRECT_DESC = VirtioF::INDIRECT_DESC.bits();
-
-        /// Device-independent Bit. See [`VirtioF::EVENT_IDX`].
-        const EVENT_IDX = VirtioF::EVENT_IDX.bits();
-
-        /// Device-independent Bit. See [`VirtioF::VERSION_1`].
-        const VERSION_1 = VirtioF::VERSION_1.bits();
-
-        /// Device-independent Bit. See [`VirtioF::ACCESS_PLATFORM`].
-        const ACCESS_PLATFORM = VirtioF::ACCESS_PLATFORM.bits();
-
-        /// Device-independent Bit. See [`VirtioF::RING_PACKED`].
-        const RING_PACKED = VirtioF::RING_PACKED.bits();
-
-        /// Device-independent Bit. See [`VirtioF::IN_ORDER`].
-        const IN_ORDER = VirtioF::IN_ORDER.bits();
-
-        /// Device-independent Bit. See [`VirtioF::ORDER_PLATFORM`].
-        const ORDER_PLATFORM = VirtioF::ORDER_PLATFORM.bits();
-
-        /// Device-independent Bit. See [`VirtioF::SR_IOV`].
-        const SR_IOV = VirtioF::SR_IOV.bits();
-
-        /// Device-independent Bit. See [`VirtioF::NOTIFICATION_DATA`].
-        const NOTIFICATION_DATA = VirtioF::NOTIFICATION_DATA.bits();
-
-        /// Device-independent Bit. See [`VirtioF::NOTIF_CONFIG_DATA`].
-        const NOTIF_CONFIG_DATA = VirtioF::NOTIF_CONFIG_DATA.bits();
-
-        /// Device-independent Bit. See [`VirtioF::RING_RESET`].
-        const RING_RESET = VirtioF::RING_RESET.bits();
-
         const _ = !0;
-    }
-}
-
-impl From<VirtioF> for VirtioNetF {
-    fn from(value: VirtioF) -> Self {
-        Self::from_bits_retain(value.bits())
-    }
-}
-
-impl AsRef<VirtioNetF> for VirtioF {
-    fn as_ref(&self) -> &VirtioNetF {
-        unsafe { &*(self as *const Self as *const VirtioNetF) }
-    }
-}
-
-impl AsMut<VirtioNetF> for VirtioF {
-    fn as_mut(&mut self) -> &mut VirtioNetF {
-        unsafe { &mut *(self as *mut Self as *mut VirtioNetF) }
-    }
-}
-
-impl From<VirtioNetF> for VirtioF {
-    /// Returns the device-independent feature bits while retaining device-specific feature bits.
-    fn from(value: VirtioNetF) -> Self {
-        VirtioF::from_bits_retain(value.bits())
-    }
-}
-
-impl AsRef<VirtioF> for VirtioNetF {
-    /// Returns a shared reference to the device-independent features while retaining device-specific feature bits.
-    fn as_ref(&self) -> &VirtioF {
-        unsafe { &*(self as *const Self as *const VirtioF) }
-    }
-}
-
-impl AsMut<VirtioF> for VirtioNetF {
-    /// Returns a mutable reference to the device-independent features while retaining device-specific feature bits.
-    fn as_mut(&mut self) -> &mut VirtioF {
-        unsafe { &mut *(self as *mut Self as *mut VirtioF) }
     }
 }
