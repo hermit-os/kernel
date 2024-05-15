@@ -59,9 +59,13 @@ pub mod error {
                 },
 				#[cfg(feature = "fuse")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
+					#[cfg(feature = "pci")]
 					VirtioFsError::NoDevCfg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed device config!"),
+					#[cfg(feature = "pci")]
 					VirtioFsError::NoComCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed common config!"),
+					#[cfg(feature = "pci")]
 					VirtioFsError::NoIsrCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
+					#[cfg(feature = "pci")]
                     VirtioFsError::NoNotifCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed notification config!"),
 					VirtioFsError::FailFeatureNeg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
 					VirtioFsError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),

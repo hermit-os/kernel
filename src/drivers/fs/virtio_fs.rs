@@ -447,9 +447,13 @@ pub mod error {
 	/// Network filesystem error enum.
 	#[derive(Debug, Copy, Clone)]
 	pub enum VirtioFsError {
+		#[cfg(feature = "pci")]
 		NoDevCfg(u16),
+		#[cfg(feature = "pci")]
 		NoComCfg(u16),
+		#[cfg(feature = "pci")]
 		NoIsrCfg(u16),
+		#[cfg(feature = "pci")]
 		NoNotifCfg(u16),
 		FailFeatureNeg(u16),
 		/// The first u64 contains the feature bits wanted by the driver.
