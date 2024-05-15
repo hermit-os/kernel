@@ -68,7 +68,7 @@ pub mod error {
 					#[cfg(feature = "pci")]
                     VirtioFsError::NoNotifCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed notification config!"),
 					VirtioFsError::FailFeatureNeg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
-					VirtioFsError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*driver_features), u64::from(*device_features)),
+					VirtioFsError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}", ),
 					VirtioFsError::Unknown => write!(f, "Virtio filesystem failed, driver failed due unknown reason!"),
 				},
             }
