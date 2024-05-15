@@ -1,25 +1,9 @@
 //! Feature Bits
 
-use bitflags::bitflags;
-
-/// Device-independent Feature Bits
-#[doc(alias = "VIRTIO_F")]
-#[cfg_attr(
-    feature = "zerocopy",
-    derive(
-        zerocopy_derive::FromZeroes,
-        zerocopy_derive::FromBytes,
-        zerocopy_derive::AsBytes
-    )
-)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct VirtioF(u128);
-
-bitflags_debug!(VirtioF);
-
-bitflags! {
-    impl VirtioF: u128 {
+virtio_bitflags! {
+    /// Device-independent Feature Bits
+    #[doc(alias = "VIRTIO_F")]
+    pub struct VirtioF: u128 {
         /// Negotiating this feature indicates
         /// that the driver can use descriptors with the VIRTQ_DESC_F_INDIRECT
         /// flag set, as described in _Basic Facilities of a Virtio
@@ -138,24 +122,10 @@ bitflags! {
     }
 }
 
-/// Network Device Feature Bits
-#[doc(alias = "VIRTIO_NET_F")]
-#[cfg_attr(
-    feature = "zerocopy",
-    derive(
-        zerocopy_derive::FromZeroes,
-        zerocopy_derive::FromBytes,
-        zerocopy_derive::AsBytes
-    )
-)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct VirtioNetF(u128);
-
-bitflags_debug!(VirtioNetF);
-
-bitflags! {
-    impl VirtioNetF: u128 {
+virtio_bitflags! {
+    /// Network Device Feature Bits
+    #[doc(alias = "VIRTIO_NET_F")]
+    pub struct VirtioNetF: u128 {
         /// Device handles packets with partial checksum.   This
         /// “checksum offload” is a common feature on modern network cards.
         #[doc(alias = "VIRTIO_NET_F_CSUM")]

@@ -5,11 +5,43 @@
 
 #![no_std]
 
-macro_rules! bitflags_debug {
-    ($SelfT:ty) => {
-        impl ::core::fmt::Debug for $SelfT {
+macro_rules! virtio_bitflags {
+    (
+        $(#[$outer:meta])*
+        $vis:vis struct $BitFlags:ident: $T:ty {
+            $(
+                $(#[$inner:ident $($args:tt)*])*
+                const $Flag:tt = $value:expr;
+            )*
+        }
+
+        $($t:tt)*
+    ) => {
+        #[cfg_attr(
+            feature = "zerocopy",
+            derive(
+                zerocopy_derive::FromZeroes,
+                zerocopy_derive::FromBytes,
+                zerocopy_derive::AsBytes
+            )
+        )]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[repr(transparent)]
+        $(#[$outer])*
+        $vis struct $BitFlags($T);
+
+        ::bitflags::bitflags! {
+            impl $BitFlags: $T {
+                $(
+                    $(#[$inner $($args)*])*
+                    const $Flag = $value;
+                )*
+            }
+        }
+
+        impl ::core::fmt::Debug for $BitFlags {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                struct Inner<'a>(&'a $SelfT);
+                struct Inner<'a>(&'a $BitFlags);
 
                 impl<'a> ::core::fmt::Debug for Inner<'a> {
                     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
@@ -21,49 +53,38 @@ macro_rules! bitflags_debug {
                     }
                 }
 
-                f.debug_tuple(::core::stringify!($SelfT))
+                f.debug_tuple(::core::stringify!($BitFlags))
                     .field(&Inner(self))
                     .finish()
             }
         }
+
+        virtio_bitflags! {
+            $($t)*
+        }
     };
+    () => {};
 }
 
 pub mod features;
 pub mod num;
 pub mod pci;
 
-use bitflags::bitflags;
-
-/// Device Status Field
-///
-/// During device initialization by a driver,
-/// the driver follows the sequence of steps specified in
-/// _General Initialization And Device Operation / Device
-/// Initialization_.
-///
-/// The `device status` field provides a simple low-level
-/// indication of the completed steps of this sequence.
-/// It's most useful to imagine it hooked up to traffic
-/// lights on the console indicating the status of each device.  The
-/// following bits are defined (listed below in the order in which
-/// they would be typically set):
-#[cfg_attr(
-    feature = "zerocopy",
-    derive(
-        zerocopy_derive::FromZeroes,
-        zerocopy_derive::FromBytes,
-        zerocopy_derive::AsBytes
-    )
-)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(transparent)]
-pub struct DeviceStatus(u8);
-
-bitflags_debug!(DeviceStatus);
-
-bitflags! {
-    impl DeviceStatus: u8 {
+virtio_bitflags! {
+    /// Device Status Field
+    ///
+    /// During device initialization by a driver,
+    /// the driver follows the sequence of steps specified in
+    /// _General Initialization And Device Operation / Device
+    /// Initialization_.
+    ///
+    /// The `device status` field provides a simple low-level
+    /// indication of the completed steps of this sequence.
+    /// It's most useful to imagine it hooked up to traffic
+    /// lights on the console indicating the status of each device.  The
+    /// following bits are defined (listed below in the order in which
+    /// they would be typically set):
+    pub struct DeviceStatus: u8 {
         /// Indicates that the guest OS has found the
         /// device and recognized it as a valid virtio device.
         const ACKNOWLEDGE = 1;
