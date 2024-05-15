@@ -57,20 +57,16 @@ jobs:
       - run: rustup component add rustfmt
       - run: cargo fmt -- --check
 
-  check-docs:
-    name: Check docs
+  doc:
+    name: Doc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Check docs
-        run: |
-          cargo doc --package hermit-kernel --no-deps --document-private-items --target x86_64-unknown-none
-          cargo doc --package hermit-kernel --no-deps --document-private-items --target aarch64-unknown-none-softfloat --no-default-features
+      - run: cargo xtask doc
 
   build:
     name: Build

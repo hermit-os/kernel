@@ -8,6 +8,7 @@ mod build;
 mod cargo_build;
 mod ci;
 mod clippy;
+mod doc;
 
 use std::path::Path;
 
@@ -22,6 +23,7 @@ enum Cli {
 	#[command(subcommand)]
 	Ci(ci::Ci),
 	Clippy(clippy::Clippy),
+	Doc(doc::Doc),
 }
 
 impl Cli {
@@ -30,6 +32,7 @@ impl Cli {
 			Self::Build(build) => build.run(),
 			Self::Ci(ci) => ci.run(),
 			Self::Clippy(clippy) => clippy.run(),
+			Self::Doc(doc) => doc.run(),
 		}
 	}
 }
