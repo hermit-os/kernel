@@ -12,10 +12,10 @@ impl Clippy {
 	pub fn run(self) -> Result<()> {
 		let sh = crate::sh()?;
 
-		for target in Arch::all() {
-			target.install()?;
+		for arch in Arch::all() {
+			arch.install()?;
 
-			let triple = target.triple();
+			let triple = arch.triple();
 			cmd!(sh, "cargo clippy --target={triple}").run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
@@ -29,7 +29,7 @@ impl Clippy {
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 
-			if *target == Arch::Riscv64 {
+			if *arch == Arch::Riscv64 {
 				cmd!(sh, "cargo clippy --target={triple}")
 					.arg("--no-default-features")
 					.arg("--features=gem-net,tcp")
