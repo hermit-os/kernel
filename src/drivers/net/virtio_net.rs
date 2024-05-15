@@ -1728,9 +1728,13 @@ pub mod error {
 	/// Network drivers error enum.
 	#[derive(Debug, Copy, Clone)]
 	pub enum VirtioNetError {
+		#[cfg(feature = "pci")]
 		NoDevCfg(u16),
+		#[cfg(feature = "pci")]
 		NoComCfg(u16),
+		#[cfg(feature = "pci")]
 		NoIsrCfg(u16),
+		#[cfg(feature = "pci")]
 		NoNotifCfg(u16),
 		FailFeatureNeg(u16),
 		/// Set of features does not adhere to the requirements of features

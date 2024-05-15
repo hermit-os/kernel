@@ -45,9 +45,13 @@ pub mod error {
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {id:#x} not supported."),
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
                 VirtioError::NetDriver(net_error) => match net_error {
-                    VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),
+					#[cfg(feature = "pci")]
+					VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),
+					#[cfg(feature = "pci")]
                     VirtioNetError::NoComCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed common config!"),
+					#[cfg(feature = "pci")]
                     VirtioNetError::NoIsrCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
+					#[cfg(feature = "pci")]
                     VirtioNetError::NoNotifCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed notification config!"),
                     VirtioNetError::FailFeatureNeg(id) => write!(f, "Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
                     VirtioNetError::FeatReqNotMet(feats) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
