@@ -359,3 +359,16 @@ feature_bits! {
         const _ = !0;
     }
 }
+
+feature_bits! {
+    /// File System Device Feature Bits
+    #[doc(alias = "VIRTIO_FS_F")]
+    pub struct VirtioFsF: u128 {
+        /// Device has support for FUSE notify
+        /// messages.  The notification queue is virtqueue 1.
+        #[doc(alias = "VIRTIO_FS_F_NOTIFICATION")]
+        const NOTIFICATION = 1 << 0;
+
+        const _ = !0;
+    }
+}
