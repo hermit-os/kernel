@@ -15,6 +15,10 @@ pub enum Arch {
 }
 
 impl Arch {
+	pub fn all() -> &'static [Self] {
+		&[Self::X86_64, Self::Aarch64, Self::Riscv64]
+	}
+
 	pub fn install(&self) -> Result<()> {
 		let sh = crate::sh()?;
 		let triple = self.triple();
