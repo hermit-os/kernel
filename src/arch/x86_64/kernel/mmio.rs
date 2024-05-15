@@ -196,7 +196,7 @@ fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str>
 fn detect_network() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
 	let linux_mmio = env::mmio();
 
-	if linux_mmio.len() > 0 {
+	if !linux_mmio.is_empty() {
 		check_linux_args(linux_mmio)
 	} else {
 		guess_device()
