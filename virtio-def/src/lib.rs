@@ -31,7 +31,7 @@ use bitflags::bitflags;
         zerocopy_derive::AsBytes
     )
 )]
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct DeviceStatus(u8);
 
