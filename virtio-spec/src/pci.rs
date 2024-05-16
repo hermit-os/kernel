@@ -15,7 +15,6 @@ use crate::DeviceStatus;
     derive(zerocopy_derive::FromZeroes, zerocopy_derive::FromBytes)
 )]
 #[derive(VolatileFieldAccess)]
-#[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct CommonCfg {
     /// The driver uses this to select which feature bits `device_feature` shows.
