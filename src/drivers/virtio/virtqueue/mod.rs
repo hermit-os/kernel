@@ -22,6 +22,7 @@ use core::ptr;
 
 use align_address::Align;
 use async_channel::TryRecvError;
+use virtio_def::features::VirtioF;
 use zerocopy::AsBytes;
 
 use self::error::{BufferError, VirtqError};
@@ -171,7 +172,7 @@ pub trait Virtq: VirtqPrivate {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		feats: u64,
+		features: VirtioF,
 	) -> Result<Self, VirtqError>
 	where
 		Self: Sized;
@@ -2983,6 +2984,8 @@ impl From<DescrFlags> for u16 {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
+	use virtio_def::features::VirtioF;
+
 	use crate::fd;
 
 	#[derive(Debug)]
@@ -3035,7 +3038,7 @@ pub mod error {
 		/// referring to).
 		BufferToLarge,
 		QueueSizeNotAllowed(u16),
-		FeatNotSupported(u64),
+		FeatureNotSupported(VirtioF),
 		AllocationError,
 	}
 
@@ -3053,7 +3056,7 @@ pub mod error {
                 VirtqError::WriteTooLarge => write!(f, "Write is to large for BufferToken!"),
                 VirtqError::BufferToLarge => write!(f, "Buffer to large for queue! u32::MAX exceeded."),
 				VirtqError::QueueSizeNotAllowed(_) => write!(f, "The requested queue size is not valid."),
-				VirtqError:: FeatNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
+				VirtqError::FeatureNotSupported(_) => write!(f, "An unsupported feature was requested from the queue."),
 				VirtqError::AllocationError => write!(f, "An error was encountered during the allocation of the queue structures.")
             }
 		}

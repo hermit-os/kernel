@@ -6,9 +6,9 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use smoltcp::phy::ChecksumCapabilities;
+use virtio_def::features::VirtioNetF;
 
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio_net::constants::FeatureSet;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::pci::{PciCommand, PciDevice};
 use crate::drivers::virtio::error::{self, VirtioError};
@@ -80,7 +80,7 @@ impl VirtioNetDriver {
 		Some(NetDevCfg {
 			raw: dev_cfg,
 			dev_id: cap.dev_id(),
-			features: FeatureSet::new(0),
+			features: VirtioNetF::empty(),
 		})
 	}
 

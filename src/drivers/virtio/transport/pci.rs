@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
+use virtio_def::features::VirtioF;
 use virtio_def::pci::{CommonCfg, CommonCfgVolatileFieldAccess};
 use virtio_def::DeviceStatus;
 use volatile::VolatileRef;
@@ -595,8 +596,8 @@ impl ComCfg {
 			.update(|s| s | DeviceStatus::DRIVER_OK);
 	}
 
-	/// Returns the features offered by the device. Coded in a 64bit value.
-	pub fn dev_features(&mut self) -> u64 {
+	/// Returns the features offered by the device.
+	pub fn dev_features(&mut self) -> VirtioF {
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let device_feature_select = com_cfg.device_feature_select();
 		let device_feature = com_cfg.device_feature();
@@ -608,7 +609,7 @@ impl ComCfg {
 		memory_barrier();
 
 		// read high 32 bits of device features
-		let mut dev_feat = u64::from(device_feature.read().get()) << 32;
+		let mut device_features = u64::from(device_feature.read().get()) << 32;
 
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
@@ -616,19 +617,20 @@ impl ComCfg {
 		memory_barrier();
 
 		// read low 32 bits of device features
-		dev_feat |= u64::from(device_feature.read().get());
+		device_features |= u64::from(device_feature.read().get());
 
-		dev_feat
+		VirtioF::from_bits_retain(device_features.into())
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, feats: u64) {
+	pub fn set_drv_features(&mut self, features: VirtioF) {
+		let features = features.bits() as u64;
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let driver_feature_select = com_cfg.driver_feature_select();
 		let driver_feature = com_cfg.driver_feature();
 
-		let high: u32 = (feats >> 32) as u32;
-		let low: u32 = feats as u32;
+		let high: u32 = (features >> 32) as u32;
+		let low: u32 = features as u32;
 
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
