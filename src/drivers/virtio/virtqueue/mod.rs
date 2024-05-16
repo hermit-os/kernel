@@ -264,174 +264,93 @@ pub trait Virtq: VirtqPrivate {
 	where
 		Self: Sized + 'static,
 	{
-		match (send, recv) {
-			(None, None) => Err(VirtqError::BufferNotSpecified),
-			(Some(send_data), None) => match buffer_type {
-				BufferType::Direct => {
-					let desc = match self.mem_pool().pull_from_raw(send_data) {
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					Ok(TransferToken {
-						buff_tkn: Some(BufferToken {
-							send_buff: Some(Buffer::Single {
-								desc_lst: vec![desc].into_boxed_slice(),
-								len: send_data.len(),
-								next_write: 0,
-							}),
-							recv_buff: None,
-							vq: self,
-							ret_send: false,
-							ret_recv: false,
-							reusable: false,
-						}),
-						await_queue: None,
-					})
-				}
-				BufferType::Indirect => {
-					let desc_lst = vec![self.mem_pool().pull_from_raw_untracked(send_data)];
-
-					let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					Ok(TransferToken {
-						buff_tkn: Some(BufferToken {
-							send_buff: Some(Buffer::Indirect {
-								desc_lst: desc_lst.into_boxed_slice(),
-								ctrl_desc,
-								len: send_data.len(),
-								next_write: 0,
-							}),
-							recv_buff: None,
-							vq: self,
-							ret_send: false,
-							ret_recv: false,
-							reusable: false,
-						}),
-						await_queue: None,
-					})
-				}
-			},
-			(None, Some(recv_data)) => match buffer_type {
-				BufferType::Direct => {
-					let desc = match self.mem_pool().pull_from_raw(recv_data) {
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					Ok(TransferToken {
-						buff_tkn: Some(BufferToken {
-							send_buff: None,
-							recv_buff: Some(Buffer::Single {
-								desc_lst: vec![desc].into_boxed_slice(),
-								len: recv_data.len(),
-								next_write: 0,
-							}),
-							vq: self,
-							ret_send: false,
-							ret_recv: false,
-							reusable: false,
-						}),
-						await_queue: None,
-					})
-				}
-				BufferType::Indirect => {
-					let desc_lst = vec![self.mem_pool().pull_from_raw_untracked(recv_data)];
-
-					let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					Ok(TransferToken {
-						buff_tkn: Some(BufferToken {
-							send_buff: None,
-							recv_buff: Some(Buffer::Indirect {
-								desc_lst: desc_lst.into_boxed_slice(),
-								ctrl_desc,
-								len: recv_data.len(),
-								next_write: 0,
-							}),
-							vq: self,
-							ret_send: false,
-							ret_recv: false,
-							reusable: false,
-						}),
-						await_queue: None,
-					})
-				}
-			},
-			(Some(send_data), Some(recv_data)) => match buffer_type {
-				BufferType::Direct => {
-					let send_desc = match self.mem_pool().pull_from_raw(send_data) {
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					let recv_desc = match self.mem_pool().pull_from_raw(recv_data) {
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					Ok(TransferToken {
-						buff_tkn: Some(BufferToken {
-							send_buff: Some(Buffer::Single {
-								desc_lst: vec![send_desc].into_boxed_slice(),
-								len: send_data.len(),
-								next_write: 0,
-							}),
-							recv_buff: Some(Buffer::Single {
-								desc_lst: vec![recv_desc].into_boxed_slice(),
-								len: recv_data.len(),
-								next_write: 0,
-							}),
-							vq: self,
-							ret_send: false,
-							ret_recv: false,
-							reusable: false,
-						}),
-						await_queue: None,
-					})
-				}
-				BufferType::Indirect => {
-					let send_desc_lst = vec![self.mem_pool().pull_from_raw_untracked(send_data)];
-
-					let recv_desc_lst = vec![self.mem_pool().pull_from_raw_untracked(recv_data)];
-
-					let ctrl_desc = match self
-						.create_indirect_ctrl(Some(&send_desc_lst), Some(&recv_desc_lst))
-					{
-						Ok(desc) => desc,
-						Err(vq_err) => return Err(vq_err),
-					};
-
-					Ok(TransferToken {
-						buff_tkn: Some(BufferToken {
-							recv_buff: Some(Buffer::Indirect {
-								desc_lst: recv_desc_lst.into_boxed_slice(),
-								ctrl_desc: ctrl_desc.no_dealloc_clone(),
-								len: recv_data.len(),
-								next_write: 0,
-							}),
-							send_buff: Some(Buffer::Indirect {
-								desc_lst: send_desc_lst.into_boxed_slice(),
-								ctrl_desc,
-								len: send_data.len(),
-								next_write: 0,
-							}),
-							vq: self,
-							ret_send: false,
-							ret_recv: false,
-							reusable: false,
-						}),
-						await_queue: None,
-					})
-				}
-			},
+		if let (None, None) = (&send, &recv) {
+			return Err(VirtqError::BufferNotSpecified);
 		}
+
+		let send_buff;
+		let recv_buff;
+		match buffer_type {
+			BufferType::Direct => {
+				send_buff = if let Some(send_data) = send {
+					Some(Buffer::Single {
+						desc_lst: vec![self.mem_pool().pull_from_raw(send_data)?]
+							.into_boxed_slice(),
+						len: send_data.len(),
+						next_write: 0,
+					})
+				} else {
+					None
+				};
+
+				recv_buff = if let Some(recv_data) = recv {
+					Some(Buffer::Single {
+						desc_lst: vec![self.mem_pool().pull_from_raw(recv_data)?]
+							.into_boxed_slice(),
+						len: recv_data.len(),
+						next_write: 0,
+					})
+				} else {
+					None
+				}
+			}
+			BufferType::Indirect => {
+				let send_desc_lst = send
+					.as_ref()
+					.map(|send_data| vec![self.mem_pool().pull_from_raw_untracked(send_data)]);
+				let recv_desc_lst = recv
+					.as_ref()
+					.map(|recv_data| vec![self.mem_pool().pull_from_raw_untracked(recv_data)]);
+
+				let ctrl_desc =
+					self.create_indirect_ctrl(send_desc_lst.as_ref(), recv_desc_lst.as_ref())?;
+
+				let mut send_ctrl_desc = None;
+				let mut recv_ctrl_desc = None;
+				match (&send, &recv) {
+					(Some(_), None) => {
+						send_ctrl_desc = Some(ctrl_desc);
+					}
+					(None, Some(_)) => {
+						recv_ctrl_desc = Some(ctrl_desc);
+					}
+					(Some(_), Some(_)) => {
+						send_ctrl_desc = Some(ctrl_desc.no_dealloc_clone());
+						recv_ctrl_desc = Some(ctrl_desc);
+					}
+					// We have already checked at the beginning of the function
+					(None, None) => unreachable!(),
+				}
+
+				send_buff = send.map(|send_data| Buffer::Indirect {
+					// If send is Some, so is send_desc_lst
+					desc_lst: send_desc_lst.unwrap().into_boxed_slice(),
+					ctrl_desc: send_ctrl_desc.unwrap(),
+					len: send_data.len(),
+					next_write: 0,
+				});
+
+				recv_buff = recv.map(|recv_data| Buffer::Indirect {
+					// If recv is Some, so is recv_desc_lst
+					desc_lst: recv_desc_lst.unwrap().into_boxed_slice(),
+					ctrl_desc: recv_ctrl_desc.unwrap(),
+					len: recv_data.len(),
+					next_write: 0,
+				});
+			}
+		};
+
+		Ok(TransferToken {
+			buff_tkn: Some(BufferToken {
+				recv_buff,
+				send_buff,
+				vq: self,
+				ret_send: false,
+				ret_recv: false,
+				reusable: false,
+			}),
+			await_queue: None,
+		})
 	}
 
 	/// Provides the calley with empty buffers as specified via the `send` and `recv` function parameters, (see [BuffSpec]), in form of
