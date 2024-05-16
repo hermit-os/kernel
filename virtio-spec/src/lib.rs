@@ -66,9 +66,23 @@ macro_rules! virtio_bitflags {
     () => {};
 }
 
-pub mod features;
+mod features;
 pub mod num;
 pub mod pci;
+
+pub use features::F;
+
+pub mod net {
+    //! Network Device
+
+    pub use super::features::net::F;
+}
+
+pub mod fs {
+    //! File System Device
+
+    pub use super::features::fs::F;
+}
 
 virtio_bitflags! {
     /// Device Status Field

@@ -12,7 +12,6 @@ use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
-use virtio_spec::features::VirtioNetF;
 use zerocopy::AsBytes;
 
 use self::constants::{NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -40,7 +39,7 @@ use crate::executor::device::{RxToken, TxToken};
 pub(crate) struct NetDevCfg {
 	pub raw: &'static NetDevCfgRaw,
 	pub dev_id: u16,
-	pub features: VirtioNetF,
+	pub features: virtio_spec::net::F,
 }
 
 #[derive(AsBytes, Debug)]
@@ -181,7 +180,7 @@ impl RxQueues {
 	fn add(&mut self, vq: Rc<dyn Virtq>, dev_cfg: &NetDevCfg) {
 		let num_buff: u16 = vq.size().into();
 
-		let rx_size = if dev_cfg.features.contains(VirtioNetF::MRG_RXBUF) {
+		let rx_size = if dev_cfg.features.contains(virtio_spec::net::F::MRG_RXBUF) {
 			(1514 + mem::size_of::<VirtioNetHdr>())
 				.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>())
 		} else {
@@ -322,9 +321,9 @@ impl TxQueues {
 			// Unwrapping is safe, as one virtq will be definitely in the vector.
 			let vq = self.vqs.first().unwrap();
 
-			if dev_cfg.features.contains(VirtioNetF::GUEST_TSO4)
-				| dev_cfg.features.contains(VirtioNetF::GUEST_TSO6)
-				| dev_cfg.features.contains(VirtioNetF::GUEST_UFO)
+			if dev_cfg.features.contains(virtio_spec::net::F::GUEST_TSO4)
+				| dev_cfg.features.contains(virtio_spec::net::F::GUEST_TSO6)
+				| dev_cfg.features.contains(virtio_spec::net::F::GUEST_UFO)
 			{
 				// Virtio specification v1.1. - 5.1.6.2 point 5.
 				//      Header and data are added as ONE output descriptor to the transmitvq.
@@ -452,7 +451,7 @@ impl NetworkDriver for VirtioNetDriver {
 	/// Returns the mac address of the device.
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
-		if self.dev_cfg.features.contains(VirtioNetF::MAC) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::MAC) {
 			self.dev_cfg.raw.get_mac()
 		} else {
 			unreachable!("Currently VIRTIO_NET_F_MAC must be negotiated!")
@@ -670,7 +669,7 @@ impl VirtioNetDriver {
 	/// has been negotiated. Otherwise assumes an active device.
 	#[cfg(not(feature = "pci"))]
 	pub fn dev_status(&self) -> u16 {
-		if self.dev_cfg.features.contains(VirtioNetF::STATUS) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
 			self.dev_cfg.raw.get_status()
 		} else {
 			u16::from(Status::VIRTIO_NET_S_LINK_UP)
@@ -681,7 +680,7 @@ impl VirtioNetDriver {
 	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
 	#[cfg(feature = "pci")]
 	pub fn is_link_up(&self) -> bool {
-		if self.dev_cfg.features.contains(VirtioNetF::STATUS) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
 			self.dev_cfg.raw.get_status() & u16::from(Status::VIRTIO_NET_S_LINK_UP)
 				== u16::from(Status::VIRTIO_NET_S_LINK_UP)
 		} else {
@@ -691,7 +690,7 @@ impl VirtioNetDriver {
 
 	#[allow(dead_code)]
 	pub fn is_announce(&self) -> bool {
-		if self.dev_cfg.features.contains(VirtioNetF::STATUS) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
 			self.dev_cfg.raw.get_status() & u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
 				== u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
 		} else {
@@ -706,7 +705,7 @@ impl VirtioNetDriver {
 	/// Returns 1 (i.e. minimum number of pairs) if VIRTIO_NET_F_MQ is not set.
 	#[allow(dead_code)]
 	pub fn get_max_vq_pairs(&self) -> u16 {
-		if self.dev_cfg.features.contains(VirtioNetF::MQ) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::MQ) {
 			self.dev_cfg.raw.get_max_virtqueue_pairs()
 		} else {
 			1
@@ -740,31 +739,31 @@ impl VirtioNetDriver {
 		// Indicate device, that driver is able to handle it
 		self.com_cfg.set_drv();
 
-		let minimal_features = VirtioNetF::VERSION_1 | VirtioNetF::MAC;
+		let minimal_features = virtio_spec::net::F::VERSION_1 | virtio_spec::net::F::MAC;
 
 		// If wanted, push new features into feats here:
 		let mut features = minimal_features
 			// Indirect descriptors can be used
-			| VirtioNetF::INDIRECT_DESC
+			| virtio_spec::net::F::INDIRECT_DESC
 			// Packed Vq can be used
-			| VirtioNetF::RING_PACKED
+			| virtio_spec::net::F::RING_PACKED
 			// Host should avoid the creation of checksums
-			| VirtioNetF::CSUM
+			| virtio_spec::net::F::CSUM
 			// Guest avoids the creation of checksums
-			| VirtioNetF::GUEST_CSUM
+			| virtio_spec::net::F::GUEST_CSUM
 			// MTU setting can be used
-			| VirtioNetF::MTU
+			| virtio_spec::net::F::MTU
 			// Driver can merge receive buffers
-			| VirtioNetF::MRG_RXBUF
+			| virtio_spec::net::F::MRG_RXBUF
 			// the link status can be announced
-			| VirtioNetF::STATUS;
+			| virtio_spec::net::F::STATUS;
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
 		// needs to take care of calculating checksum in
 		// RxQueues.post_processing()
-		// | VirtioNetF::GUEST_TSO4
-		// | VirtioNetF::GUEST_TSO6
+		// | virtio_spec::net::F::GUEST_TSO4
+		// | virtio_spec::net::F::GUEST_TSO6
 
 		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
 		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
@@ -845,21 +844,28 @@ impl VirtioNetDriver {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
-		if self.dev_cfg.features.contains(VirtioNetF::CSUM)
-			&& self.dev_cfg.features.contains(VirtioNetF::GUEST_CSUM)
+		if self.dev_cfg.features.contains(virtio_spec::net::F::CSUM)
+			&& self
+				.dev_cfg
+				.features
+				.contains(virtio_spec::net::F::GUEST_CSUM)
 		{
 			self.checksums.udp = Checksum::None;
 			self.checksums.tcp = Checksum::None;
-		} else if self.dev_cfg.features.contains(VirtioNetF::CSUM) {
+		} else if self.dev_cfg.features.contains(virtio_spec::net::F::CSUM) {
 			self.checksums.udp = Checksum::Rx;
 			self.checksums.tcp = Checksum::Rx;
-		} else if self.dev_cfg.features.contains(VirtioNetF::GUEST_CSUM) {
+		} else if self
+			.dev_cfg
+			.features
+			.contains(virtio_spec::net::F::GUEST_CSUM)
+		{
 			self.checksums.udp = Checksum::Tx;
 			self.checksums.tcp = Checksum::Tx;
 		}
 		debug!("{:?}", self.checksums);
 
-		if self.dev_cfg.features.contains(VirtioNetF::MTU) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::MTU) {
 			self.mtu = self.dev_cfg.raw.get_mtu();
 		}
 
@@ -868,8 +874,11 @@ impl VirtioNetDriver {
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
-	fn negotiate_features(&mut self, driver_features: VirtioNetF) -> Result<(), VirtioNetError> {
-		let device_features = VirtioNetF::from(self.com_cfg.dev_features());
+	fn negotiate_features(
+		&mut self,
+		driver_features: virtio_spec::net::F,
+	) -> Result<(), VirtioNetError> {
+		let device_features = virtio_spec::net::F::from(self.com_cfg.dev_features());
 
 		// Checks if the selected feature set is compatible with requirements for
 		// features according to Virtio spec. v1.1 - 5.1.3.1.
@@ -900,8 +909,12 @@ impl VirtioNetDriver {
 		}
 
 		// Add a control if feature is negotiated
-		if self.dev_cfg.features.contains(VirtioNetF::CTRL_VQ) {
-			if self.dev_cfg.features.contains(VirtioNetF::RING_PACKED) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::CTRL_VQ) {
+			if self
+				.dev_cfg
+				.features
+				.contains(virtio_spec::net::F::RING_PACKED)
+			{
 				self.ctrl_vq = CtrlQueue(Some(Rc::new(
 					PackedVq::new(
 						&mut self.com_cfg,
@@ -941,7 +954,7 @@ impl VirtioNetDriver {
 		// - the plus 1 is due to the possibility of an existing control queue
 		// - the num_queues is found in the ComCfg struct of the device and defines the maximal number
 		// of supported queues.
-		if self.dev_cfg.features.contains(VirtioNetF::MQ) {
+		if self.dev_cfg.features.contains(virtio_spec::net::F::MQ) {
 			if self.dev_cfg.raw.get_max_virtqueue_pairs() * 2 >= MAX_NUM_VQ {
 				self.num_vqs = MAX_NUM_VQ;
 			} else {
@@ -964,7 +977,11 @@ impl VirtioNetDriver {
 		assert_eq!(self.num_vqs % 2, 0);
 
 		for i in 0..(self.num_vqs / 2) {
-			if self.dev_cfg.features.contains(VirtioNetF::RING_PACKED) {
+			if self
+				.dev_cfg
+				.features
+				.contains(virtio_spec::net::F::RING_PACKED)
+			{
 				let vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
@@ -1116,39 +1133,43 @@ pub mod constants {
 /// Upon an error returns the incompatible set of features by the
 /// [`VirtioNetError::FeatureRequirementsNotMet`] error value, which
 /// wraps the u64 indicating the feature set.
-pub fn check_features(features: VirtioNetF) -> Result<(), VirtioNetError> {
+pub fn check_features(features: virtio_spec::net::F) -> Result<(), VirtioNetError> {
 	for feature in features.iter() {
 		match feature {
-			VirtioNetF::GUEST_TSO4 | VirtioNetF::GUEST_TSO6 | VirtioNetF::GUEST_UFO => {
-				if !features.contains(VirtioNetF::GUEST_CSUM) {
+			virtio_spec::net::F::GUEST_TSO4
+			| virtio_spec::net::F::GUEST_TSO6
+			| virtio_spec::net::F::GUEST_UFO => {
+				if !features.contains(virtio_spec::net::F::GUEST_CSUM) {
 					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
 				}
 			}
-			VirtioNetF::GUEST_ECN => {
-				if !(features.contains(VirtioNetF::GUEST_TSO4)
-					|| features.contains(VirtioNetF::GUEST_TSO6))
+			virtio_spec::net::F::GUEST_ECN => {
+				if !(features.contains(virtio_spec::net::F::GUEST_TSO4)
+					|| features.contains(virtio_spec::net::F::GUEST_TSO6))
 				{
 					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
 				}
 			}
-			VirtioNetF::HOST_TSO4 | VirtioNetF::HOST_TSO6 | VirtioNetF::HOST_UFO => {
-				if !features.contains(VirtioNetF::CSUM) {
+			virtio_spec::net::F::HOST_TSO4
+			| virtio_spec::net::F::HOST_TSO6
+			| virtio_spec::net::F::HOST_UFO => {
+				if !features.contains(virtio_spec::net::F::CSUM) {
 					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
 				}
 			}
-			VirtioNetF::HOST_ECN | VirtioNetF::RSC_EXT => {
-				if !(features.contains(VirtioNetF::HOST_TSO4)
-					|| features.contains(VirtioNetF::HOST_TSO6))
+			virtio_spec::net::F::HOST_ECN | virtio_spec::net::F::RSC_EXT => {
+				if !(features.contains(virtio_spec::net::F::HOST_TSO4)
+					|| features.contains(virtio_spec::net::F::HOST_TSO6))
 				{
 					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
 				}
 			}
-			VirtioNetF::CTRL_RX
-			| VirtioNetF::CTRL_VLAN
-			| VirtioNetF::GUEST_ANNOUNCE
-			| VirtioNetF::MQ
-			| VirtioNetF::CTRL_MAC_ADDR => {
-				if !features.contains(VirtioNetF::CTRL_VQ) {
+			virtio_spec::net::F::CTRL_RX
+			| virtio_spec::net::F::CTRL_VLAN
+			| virtio_spec::net::F::GUEST_ANNOUNCE
+			| virtio_spec::net::F::MQ
+			| virtio_spec::net::F::CTRL_MAC_ADDR => {
+				if !features.contains(virtio_spec::net::F::CTRL_VQ) {
 					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
 				}
 			}
@@ -1162,8 +1183,6 @@ pub fn check_features(features: VirtioNetF) -> Result<(), VirtioNetError> {
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]
 /// enum.
 pub mod error {
-	use virtio_spec::features::VirtioNetF;
-
 	/// Network drivers error enum.
 	#[derive(Debug, Copy, Clone)]
 	pub enum VirtioNetError {
@@ -1178,9 +1197,9 @@ pub mod error {
 		FailFeatureNeg(u16),
 		/// Set of features does not adhere to the requirements of features
 		/// indicated by the specification
-		FeatureRequirementsNotMet(VirtioNetF),
+		FeatureRequirementsNotMet(virtio_spec::net::F),
 		/// The first field contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second field.
-		IncompatibleFeatureSets(VirtioNetF, VirtioNetF),
+		IncompatibleFeatureSets(virtio_spec::net::F, virtio_spec::net::F),
 	}
 }
