@@ -10,7 +10,6 @@ use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
 
 use smoltcp::phy::ChecksumCapabilities;
-use virtio_spec::features::VirtioNetF;
 
 use crate::drivers::net::virtio_net::constants::Status;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
@@ -119,7 +118,7 @@ impl VirtioNetDriver {
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,
-			features: VirtioNetF::empty(),
+			features: virtio_spec::net::F::empty(),
 		};
 		let isr_stat = IsrStatus::new(registers);
 		let notif_cfg = NotifCfg::new(registers);

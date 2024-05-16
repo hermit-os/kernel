@@ -22,7 +22,6 @@ use core::ptr;
 
 use align_address::Align;
 use async_channel::TryRecvError;
-use virtio_spec::features::VirtioF;
 use zerocopy::AsBytes;
 
 use self::error::{BufferError, VirtqError};
@@ -172,7 +171,7 @@ pub trait Virtq: VirtqPrivate {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		features: VirtioF,
+		features: virtio_spec::F,
 	) -> Result<Self, VirtqError>
 	where
 		Self: Sized;
@@ -2984,8 +2983,6 @@ impl From<DescrFlags> for u16 {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
-	use virtio_spec::features::VirtioF;
-
 	use crate::fd;
 
 	#[derive(Debug)]
@@ -3038,7 +3035,7 @@ pub mod error {
 		/// referring to).
 		BufferToLarge,
 		QueueSizeNotAllowed(u16),
-		FeatureNotSupported(VirtioF),
+		FeatureNotSupported(virtio_spec::F),
 		AllocationError,
 	}
 

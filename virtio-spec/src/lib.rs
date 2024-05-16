@@ -25,7 +25,7 @@ macro_rules! virtio_bitflags {
                 zerocopy_derive::AsBytes
             )
         )]
-        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
         #[repr(transparent)]
         $(#[$outer])*
         $vis struct $BitFlags($T);
@@ -66,9 +66,21 @@ macro_rules! virtio_bitflags {
     () => {};
 }
 
-pub mod features;
+#[macro_use]
+mod volatile;
+mod features;
+pub mod net;
 pub mod num;
 pub mod pci;
+
+pub use features::F;
+pub use volatile::WideVolatilePtr;
+
+pub mod fs {
+    //! File System Device
+
+    pub use super::features::fs::F;
+}
 
 virtio_bitflags! {
     /// Device Status Field

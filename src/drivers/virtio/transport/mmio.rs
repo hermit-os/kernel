@@ -7,7 +7,6 @@ use core::ptr;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{fence, Ordering};
 
-use virtio_spec::features::VirtioF;
 use virtio_spec::DeviceStatus;
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -234,12 +233,12 @@ impl ComCfg {
 	}
 
 	/// Returns the features offered by the device.
-	pub fn dev_features(&mut self) -> VirtioF {
+	pub fn dev_features(&mut self) -> virtio_spec::F {
 		self.com_cfg.dev_features()
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: VirtioF) {
+	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
 		self.com_cfg.set_drv_features(features);
 	}
 
@@ -540,7 +539,7 @@ impl MmioRegisterLayout {
 		}
 	}
 
-	pub fn dev_features(&mut self) -> VirtioF {
+	pub fn dev_features(&mut self) -> virtio_spec::F {
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
 		unsafe {
@@ -556,12 +555,12 @@ impl MmioRegisterLayout {
 			// read low 32 bits of device features
 			device_features |= u64::from(read_volatile(&self.device_features));
 
-			VirtioF::from_bits_retain(device_features.into())
+			virtio_spec::F::from_bits_retain(device_features.into())
 		}
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: VirtioF) {
+	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
 		let features = features.bits() as u64;
 		let high: u32 = (features >> 32) as u32;
 		let low: u32 = features as u32;

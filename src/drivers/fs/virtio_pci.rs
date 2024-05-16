@@ -1,7 +1,5 @@
 use alloc::vec::Vec;
 
-use virtio_spec::features::VirtioFsF;
-
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::fs::virtio_fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::pci::PciDevice;
@@ -57,7 +55,7 @@ impl VirtioFsDriver {
 		Some(FsDevCfg {
 			raw: dev_cfg,
 			dev_id: cap.dev_id(),
-			features: VirtioFsF::empty(),
+			features: virtio_spec::fs::F::empty(),
 		})
 	}
 

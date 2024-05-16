@@ -3,7 +3,6 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use pci_types::InterruptLine;
-use virtio_spec::features::VirtioFsF;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(feature = "pci")]
@@ -24,7 +23,7 @@ use crate::fs::fuse::{self, FuseInterface};
 pub(crate) struct FsDevCfg {
 	pub raw: &'static FsDevCfgRaw,
 	pub dev_id: u16,
-	pub features: VirtioFsF,
+	pub features: virtio_spec::fs::F,
 }
 
 /// Virtio file system driver struct.
@@ -55,8 +54,11 @@ impl VirtioFsDriver {
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
-	fn negotiate_features(&mut self, driver_features: VirtioFsF) -> Result<(), VirtioFsError> {
-		let device_features = VirtioFsF::from(self.com_cfg.dev_features());
+	fn negotiate_features(
+		&mut self,
+		driver_features: virtio_spec::fs::F,
+	) -> Result<(), VirtioFsError> {
+		let device_features = virtio_spec::fs::F::from(self.com_cfg.dev_features());
 
 		if device_features.contains(driver_features) {
 			// If device supports subset of features write feature set to common config
@@ -85,7 +87,7 @@ impl VirtioFsDriver {
 		// Indicate device, that driver is able to handle it
 		self.com_cfg.set_drv();
 
-		let features = VirtioFsF::VERSION_1;
+		let features = virtio_spec::fs::F::VERSION_1;
 		self.negotiate_features(features)?;
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -161,8 +163,6 @@ impl FuseInterface for VirtioFsDriver {
 
 /// Error module of virtios filesystem driver.
 pub mod error {
-	use virtio_spec::features::VirtioFsF;
-
 	/// Network filesystem error enum.
 	#[derive(Debug, Copy, Clone)]
 	pub enum VirtioFsError {
@@ -177,7 +177,7 @@ pub mod error {
 		FailFeatureNeg(u16),
 		/// The first field contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second field.
-		IncompatibleFeatureSets(VirtioFsF, VirtioFsF),
+		IncompatibleFeatureSets(virtio_spec::fs::F, virtio_spec::fs::F),
 		Unknown,
 	}
 }
