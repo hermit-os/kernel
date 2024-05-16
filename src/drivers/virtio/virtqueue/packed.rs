@@ -1208,7 +1208,7 @@ impl VirtqPrivate for PackedVq {
 			None => return Err(VirtqError::BufferToLarge),
 		};
 
-		let ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
+		let ctrl_desc = match self.mem_pool.clone().pull(sz_indrct_lst) {
 			Ok(desc) => desc,
 			Err(vq_err) => return Err(vq_err),
 		};
