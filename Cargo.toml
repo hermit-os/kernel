@@ -71,7 +71,7 @@ shell = ["simple-shell"]
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
-virtio-def = { path = "virtio-def" }
+virtio-spec = { path = "virtio-spec" }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }
@@ -160,7 +160,7 @@ llvm-tools = "0.1"
 [workspace]
 members = [
     "hermit-macro",
-    "virtio-def",
+    "virtio-spec",
 	"xtask",
 ]
 exclude = [

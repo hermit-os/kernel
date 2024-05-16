@@ -12,7 +12,7 @@ use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
-use virtio_def::features::VirtioNetF;
+use virtio_spec::features::VirtioNetF;
 use zerocopy::AsBytes;
 
 use self::constants::{NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -1162,7 +1162,7 @@ pub fn check_features(features: VirtioNetF) -> Result<(), VirtioNetError> {
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]
 /// enum.
 pub mod error {
-	use virtio_def::features::VirtioNetF;
+	use virtio_spec::features::VirtioNetF;
 
 	/// Network drivers error enum.
 	#[derive(Debug, Copy, Clone)]

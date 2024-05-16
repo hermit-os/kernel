@@ -8,9 +8,9 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
-use virtio_def::features::VirtioF;
-use virtio_def::pci::{CommonCfg, CommonCfgVolatileFieldAccess};
-use virtio_def::DeviceStatus;
+use virtio_spec::features::VirtioF;
+use virtio_spec::pci::{CommonCfg, CommonCfgVolatileFieldAccess};
+use virtio_spec::DeviceStatus;
 use volatile::VolatileRef;
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]

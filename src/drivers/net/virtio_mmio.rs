@@ -10,7 +10,7 @@ use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
 
 use smoltcp::phy::ChecksumCapabilities;
-use virtio_def::features::VirtioNetF;
+use virtio_spec::features::VirtioNetF;
 
 use crate::drivers::net::virtio_net::constants::Status;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
