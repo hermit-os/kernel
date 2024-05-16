@@ -67,16 +67,11 @@ macro_rules! virtio_bitflags {
 }
 
 mod features;
+pub mod net;
 pub mod num;
 pub mod pci;
 
 pub use features::F;
-
-pub mod net {
-    //! Network Device
-
-    pub use super::features::net::F;
-}
 
 pub mod fs {
     //! File System Device
