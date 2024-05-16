@@ -22,7 +22,7 @@ impl Clippy {
 				.run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
-				.arg("--features=fs,tcp")
+				.arg("--features=tcp")
 				.run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
