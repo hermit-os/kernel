@@ -1,5 +1,7 @@
 //! Byte order-aware numeric primitives.
 
+use core::mem;
+
 macro_rules! le_impl {
     ($SelfT:ident, $ActualT:ty, $to:ident, $from:ident, $bits:expr, $order:expr) => {
         #[doc = concat!("A ", stringify!($bits), "-bit unsigned integer stored in ", $order, " byte order.")]
@@ -38,6 +40,30 @@ macro_rules! le_impl {
             }
         }
     };
+}
+
+impl be64 {
+    /// Create an integer from its representation as a [`be32`] array in big endian.
+    pub const fn from_be_parts(parts: [be32; 2]) -> Self {
+        unsafe { mem::transmute(parts) }
+    }
+
+    /// Return the memory representation of this integer as a [`be32`] array in big-endian (network) byte order.
+    pub const fn to_be_parts(self) -> [be32; 2] {
+        unsafe { mem::transmute(self) }
+    }
+}
+
+impl le64 {
+    /// Create an integer from its representation as a [`le32`] array in little endian.
+    pub const fn from_le_parts(parts: [le32; 2]) -> Self {
+        unsafe { mem::transmute(parts) }
+    }
+
+    /// Return the memory representation of this integer as a [`le32`] array in little-endian byte order.
+    pub const fn to_le_parts(self) -> [le32; 2] {
+        unsafe { mem::transmute(self) }
+    }
 }
 
 le_impl!(be16, u16, to_be, from_be, 16, "big-endian");

@@ -66,12 +66,15 @@ macro_rules! virtio_bitflags {
     () => {};
 }
 
+#[macro_use]
+mod volatile;
 mod features;
 pub mod net;
 pub mod num;
 pub mod pci;
 
 pub use features::F;
+pub use volatile::WideVolatilePtr;
 
 pub mod fs {
     //! File System Device

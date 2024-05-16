@@ -8,7 +8,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
-use virtio_spec::pci::{CommonCfg, CommonCfgVolatileFieldAccess};
+use virtio_spec::pci::{CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess};
 use virtio_spec::DeviceStatus;
 use volatile::VolatileRef;
 

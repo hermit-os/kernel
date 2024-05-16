@@ -1,10 +1,10 @@
 //! Definitions for Virtio over PCI bus.
 
-use volatile::access::ReadOnly;
-use volatile::VolatileFieldAccess;
+use volatile::access::{ReadOnly, ReadWrite, RestrictAccess};
+use volatile::{VolatileFieldAccess, VolatilePtr};
 
 use crate::num::*;
-use crate::DeviceStatus;
+use crate::{DeviceStatus, WideVolatilePtr};
 
 /// Common configuration structure
 ///
@@ -80,13 +80,22 @@ pub struct CommonCfg {
     queue_notify_off: le16,
 
     /// The driver writes the physical address of Descriptor Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
-    queue_desc: le64,
+    queue_desc_low: le32,
+
+    /// The driver writes the physical address of Descriptor Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+    queue_desc_high: le32,
 
     /// The driver writes the physical address of Driver Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
-    queue_driver: le64,
+    queue_driver_low: le32,
+
+    /// The driver writes the physical address of Driver Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+    queue_driver_high: le32,
 
     /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
-    queue_device: le64,
+    queue_device_low: le32,
+
+    /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+    queue_device_high: le32,
 
     /// This field exists only if [`VIRTIO_F_NOTIF_CONFIG_DATA`] has been negotiated.
     /// The driver will use this value to put it in the 'virtqueue number' field
@@ -113,4 +122,18 @@ pub struct CommonCfg {
     ///
     /// [`VIRTIO_F_RING_RESET`]: crate::F::RING_RESET
     queue_reset: le16,
+}
+
+impl_wide_field_access! {
+    /// Common configuration structure
+    pub trait CommonCfgVolatileWideFieldAccess<'a, A>: CommonCfg {
+        /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+        queue_desc: queue_desc_low, queue_desc_high;
+
+        /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+        queue_driver: queue_driver_low, queue_driver_high;
+
+        /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+        queue_device: queue_device_low, queue_device_high;
+    }
 }
