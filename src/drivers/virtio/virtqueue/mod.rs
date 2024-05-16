@@ -247,8 +247,9 @@ pub trait Virtq: VirtqPrivate {
 	/// part via the recv argument.
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
-		send: Option<(&[u8], BuffSpec<'_>)>,
-		recv: Option<(&mut [u8], BuffSpec<'_>)>,
+		send: Option<&[u8]>,
+		recv: Option<&mut [u8]>,
+		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>;
 
 	/// The implementation of the method requires constraints that are incompatible with a trait object.
@@ -256,502 +257,180 @@ pub trait Virtq: VirtqPrivate {
 	/// of [Self::prep_buffer] inside the implementor.
 	fn prep_transfer_from_raw_static(
 		self: Rc<Self>,
-		send: Option<(&[u8], BuffSpec<'_>)>,
-		recv: Option<(&mut [u8], BuffSpec<'_>)>,
+		send: Option<&[u8]>,
+		recv: Option<&mut [u8]>,
+		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>
 	where
 		Self: Sized + 'static,
 	{
 		match (send, recv) {
 			(None, None) => Err(VirtqError::BufferNotSpecified),
-			(Some((send_data, send_spec)), None) => {
-				match send_spec {
-					BuffSpec::Single(size) => {
-						// Buffer must have the right size
-						if send_data.len() != size.into() {
-							return Err(VirtqError::BufferSizeWrong(send_data.len()));
-						}
+			(Some(send_data), None) => match buffer_type {
+				BufferType::Direct => {
+					let desc = match self.mem_pool().pull_from_raw(send_data) {
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
 
-						let desc = match self.mem_pool().pull_from_raw(send_data) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Single {
-									desc_lst: vec![desc].into_boxed_slice(),
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: None,
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
+					Ok(TransferToken {
+						buff_tkn: Some(BufferToken {
+							send_buff: Some(Buffer::Single {
+								desc_lst: vec![desc].into_boxed_slice(),
+								len: send_data.len(),
+								next_write: 0,
 							}),
-							await_queue: None,
-						})
-					}
-					BuffSpec::Multiple(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut index = 0usize;
-
-						for byte in size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
-							};
-
-							match self.mem_pool().pull_from_raw(next_slice) {
-								Ok(desc) => desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							};
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Multiple {
-									desc_lst: desc_lst.into_boxed_slice(),
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: None,
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
-					BuffSpec::Indirect(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut index = 0usize;
-
-						for byte in size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
-							};
-
-							desc_lst.push(self.mem_pool().pull_from_raw_untracked(next_slice));
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Indirect {
-									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc,
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: None,
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
+							recv_buff: None,
+							vq: self,
+							ret_send: false,
+							ret_recv: false,
+							reusable: false,
+						}),
+						await_queue: None,
+					})
 				}
-			}
-			(None, Some((recv_data, recv_spec))) => {
-				match recv_spec {
-					BuffSpec::Single(size) => {
-						// Buffer must have the right size
-						if recv_data.len() != size.into() {
-							return Err(VirtqError::BufferSizeWrong(recv_data.len()));
-						}
+				BufferType::Indirect => {
+					let desc_lst = vec![self.mem_pool().pull_from_raw_untracked(send_data)];
 
-						let desc = match self.mem_pool().pull_from_raw(recv_data) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
+					let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
 
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: None,
-								recv_buff: Some(Buffer::Single {
-									desc_lst: vec![desc].into_boxed_slice(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
+					Ok(TransferToken {
+						buff_tkn: Some(BufferToken {
+							send_buff: Some(Buffer::Indirect {
+								desc_lst: desc_lst.into_boxed_slice(),
+								ctrl_desc,
+								len: send_data.len(),
+								next_write: 0,
 							}),
-							await_queue: None,
-						})
-					}
-					BuffSpec::Multiple(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut index = 0usize;
-
-						for byte in size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
-							};
-
-							match self.mem_pool().pull_from_raw(next_slice) {
-								Ok(desc) => desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							};
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: None,
-								recv_buff: Some(Buffer::Multiple {
-									desc_lst: desc_lst.into_boxed_slice(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
-					BuffSpec::Indirect(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut index = 0usize;
-
-						for byte in size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
-							};
-
-							desc_lst.push(self.mem_pool().pull_from_raw_untracked(next_slice));
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: None,
-								recv_buff: Some(Buffer::Indirect {
-									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc,
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
+							recv_buff: None,
+							vq: self,
+							ret_send: false,
+							ret_recv: false,
+							reusable: false,
+						}),
+						await_queue: None,
+					})
 				}
-			}
-			(Some((send_data, send_spec)), Some((recv_data, recv_spec))) => {
-				match (send_spec, recv_spec) {
-					(BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
-						// Buffer must have the right size
-						if send_data.len() != send_size.into() {
-							return Err(VirtqError::BufferSizeWrong(send_data.len()));
-						}
+			},
+			(None, Some(recv_data)) => match buffer_type {
+				BufferType::Direct => {
+					let desc = match self.mem_pool().pull_from_raw(recv_data) {
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
 
-						let send_desc = match self.mem_pool().pull_from_raw(send_data) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						// Buffer must have the right size
-						if recv_data.len() != recv_size.into() {
-							return Err(VirtqError::BufferSizeWrong(recv_data.len()));
-						}
-
-						let recv_desc = match self.mem_pool().pull_from_raw(recv_data) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Single {
-									desc_lst: vec![send_desc].into_boxed_slice(),
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: Some(Buffer::Single {
-									desc_lst: vec![recv_desc].into_boxed_slice(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
+					Ok(TransferToken {
+						buff_tkn: Some(BufferToken {
+							send_buff: None,
+							recv_buff: Some(Buffer::Single {
+								desc_lst: vec![desc].into_boxed_slice(),
+								len: recv_data.len(),
+								next_write: 0,
 							}),
-							await_queue: None,
-						})
-					}
-					(BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
-						// Buffer must have the right size
-						if send_data.len() != send_size.into() {
-							return Err(VirtqError::BufferSizeWrong(send_data.len()));
-						}
-
-						let send_desc = match self.mem_pool().pull_from_raw(send_data) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						let mut recv_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(recv_size_lst.len());
-						let mut index = 0usize;
-
-						for byte in recv_size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
-							};
-
-							match self.mem_pool().pull_from_raw(next_slice) {
-								Ok(desc) => recv_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							};
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Single {
-									desc_lst: vec![send_desc].into_boxed_slice(),
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: Some(Buffer::Multiple {
-									desc_lst: recv_desc_lst.into_boxed_slice(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
-					(BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
-						let mut send_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(send_size_lst.len());
-						let mut index = 0usize;
-
-						for byte in send_size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
-							};
-
-							match self.mem_pool().pull_from_raw(next_slice) {
-								Ok(desc) => send_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							};
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						let mut recv_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(recv_size_lst.len());
-						let mut index = 0usize;
-
-						for byte in recv_size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
-							};
-
-							match self.mem_pool().pull_from_raw(next_slice) {
-								Ok(desc) => recv_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							};
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Multiple {
-									desc_lst: send_desc_lst.into_boxed_slice(),
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: Some(Buffer::Multiple {
-									desc_lst: recv_desc_lst.into_boxed_slice(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
-					(BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
-						let mut send_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(send_size_lst.len());
-						let mut index = 0usize;
-
-						for byte in send_size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
-							};
-
-							match self.mem_pool().pull_from_raw(next_slice) {
-								Ok(desc) => send_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							};
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						// Buffer must have the right size
-						if recv_data.len() != recv_size.into() {
-							return Err(VirtqError::BufferSizeWrong(recv_data.len()));
-						}
-
-						let recv_desc = match self.mem_pool().pull_from_raw(recv_data) {
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								send_buff: Some(Buffer::Multiple {
-									desc_lst: send_desc_lst.into_boxed_slice(),
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								recv_buff: Some(Buffer::Single {
-									desc_lst: vec![recv_desc].into_boxed_slice(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
-					(BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
-						let mut send_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(send_size_lst.len());
-						let mut index = 0usize;
-
-						for byte in send_size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match send_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(send_data.len())),
-							};
-
-							send_desc_lst.push(self.mem_pool().pull_from_raw_untracked(next_slice));
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						let mut recv_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(recv_size_lst.len());
-						let mut index = 0usize;
-
-						for byte in recv_size_lst {
-							let end_index = index + usize::from(*byte);
-							let next_slice = match recv_data.get(index..end_index) {
-								Some(slice) => slice,
-								None => return Err(VirtqError::BufferSizeWrong(recv_data.len())),
-							};
-
-							recv_desc_lst.push(self.mem_pool().pull_from_raw_untracked(next_slice));
-
-							// update the starting index for the next iteration
-							index += usize::from(*byte);
-						}
-
-						let ctrl_desc = match self
-							.create_indirect_ctrl(Some(&send_desc_lst), Some(&recv_desc_lst))
-						{
-							Ok(desc) => desc,
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(TransferToken {
-							buff_tkn: Some(BufferToken {
-								recv_buff: Some(Buffer::Indirect {
-									desc_lst: recv_desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc.no_dealloc_clone(),
-									len: recv_data.len(),
-									next_write: 0,
-								}),
-								send_buff: Some(Buffer::Indirect {
-									desc_lst: send_desc_lst.into_boxed_slice(),
-									ctrl_desc,
-									len: send_data.len(),
-									next_write: 0,
-								}),
-								vq: self,
-								ret_send: false,
-								ret_recv: false,
-								reusable: false,
-							}),
-							await_queue: None,
-						})
-					}
-					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
-					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
+							vq: self,
+							ret_send: false,
+							ret_recv: false,
+							reusable: false,
+						}),
+						await_queue: None,
+					})
 				}
-			}
+				BufferType::Indirect => {
+					let desc_lst = vec![self.mem_pool().pull_from_raw_untracked(recv_data)];
+
+					let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
+
+					Ok(TransferToken {
+						buff_tkn: Some(BufferToken {
+							send_buff: None,
+							recv_buff: Some(Buffer::Indirect {
+								desc_lst: desc_lst.into_boxed_slice(),
+								ctrl_desc,
+								len: recv_data.len(),
+								next_write: 0,
+							}),
+							vq: self,
+							ret_send: false,
+							ret_recv: false,
+							reusable: false,
+						}),
+						await_queue: None,
+					})
+				}
+			},
+			(Some(send_data), Some(recv_data)) => match buffer_type {
+				BufferType::Direct => {
+					let send_desc = match self.mem_pool().pull_from_raw(send_data) {
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
+
+					let recv_desc = match self.mem_pool().pull_from_raw(recv_data) {
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
+
+					Ok(TransferToken {
+						buff_tkn: Some(BufferToken {
+							send_buff: Some(Buffer::Single {
+								desc_lst: vec![send_desc].into_boxed_slice(),
+								len: send_data.len(),
+								next_write: 0,
+							}),
+							recv_buff: Some(Buffer::Single {
+								desc_lst: vec![recv_desc].into_boxed_slice(),
+								len: recv_data.len(),
+								next_write: 0,
+							}),
+							vq: self,
+							ret_send: false,
+							ret_recv: false,
+							reusable: false,
+						}),
+						await_queue: None,
+					})
+				}
+				BufferType::Indirect => {
+					let send_desc_lst = vec![self.mem_pool().pull_from_raw_untracked(send_data)];
+
+					let recv_desc_lst = vec![self.mem_pool().pull_from_raw_untracked(recv_data)];
+
+					let ctrl_desc = match self
+						.create_indirect_ctrl(Some(&send_desc_lst), Some(&recv_desc_lst))
+					{
+						Ok(desc) => desc,
+						Err(vq_err) => return Err(vq_err),
+					};
+
+					Ok(TransferToken {
+						buff_tkn: Some(BufferToken {
+							recv_buff: Some(Buffer::Indirect {
+								desc_lst: recv_desc_lst.into_boxed_slice(),
+								ctrl_desc: ctrl_desc.no_dealloc_clone(),
+								len: recv_data.len(),
+								next_write: 0,
+							}),
+							send_buff: Some(Buffer::Indirect {
+								desc_lst: send_desc_lst.into_boxed_slice(),
+								ctrl_desc,
+								len: send_data.len(),
+								next_write: 0,
+							}),
+							vq: self,
+							ret_send: false,
+							ret_recv: false,
+							reusable: false,
+						}),
+						await_queue: None,
+					})
+				}
+			},
 		}
 	}
 
@@ -2189,6 +1868,11 @@ impl BufferToken {
 			await_queue: None,
 		}
 	}
+}
+
+pub enum BufferType {
+	Direct,
+	Indirect,
 }
 
 /// Describes the type of a buffer and unifies them.

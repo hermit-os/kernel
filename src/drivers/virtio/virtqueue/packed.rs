@@ -18,8 +18,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
-	VirtqPrivate, VqIndex, VqSize,
+	BuffSpec, Buffer, BufferToken, BufferType, Bytes, DescrFlags, MemDescr, MemPool, TransferToken,
+	Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -1166,10 +1166,11 @@ impl Virtq for PackedVq {
 
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
-		send: Option<(&[u8], BuffSpec<'_>)>,
-		recv: Option<(&mut [u8], BuffSpec<'_>)>,
+		send: Option<&[u8]>,
+		recv: Option<&mut [u8]>,
+		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError> {
-		self.prep_transfer_from_raw_static(send, recv)
+		self.prep_transfer_from_raw_static(send, recv, buffer_type)
 	}
 
 	fn prep_buffer(
