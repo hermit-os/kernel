@@ -22,7 +22,7 @@ use core::ptr;
 
 use align_address::Align;
 use async_channel::TryRecvError;
-use virtio_def::features::VirtioF;
+use virtio_spec::features::VirtioF;
 use zerocopy::AsBytes;
 
 use self::error::{BufferError, VirtqError};
@@ -2984,7 +2984,7 @@ impl From<DescrFlags> for u16 {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
-	use virtio_def::features::VirtioF;
+	use virtio_spec::features::VirtioF;
 
 	use crate::fd;
 

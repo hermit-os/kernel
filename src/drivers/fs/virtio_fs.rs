@@ -3,7 +3,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use pci_types::InterruptLine;
-use virtio_def::features::VirtioFsF;
+use virtio_spec::features::VirtioFsF;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(feature = "pci")]
@@ -161,7 +161,7 @@ impl FuseInterface for VirtioFsDriver {
 
 /// Error module of virtios filesystem driver.
 pub mod error {
-	use virtio_def::features::VirtioFsF;
+	use virtio_spec::features::VirtioFsF;
 
 	/// Network filesystem error enum.
 	#[derive(Debug, Copy, Clone)]

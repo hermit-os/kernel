@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use smoltcp::phy::ChecksumCapabilities;
-use virtio_def::features::VirtioNetF;
+use virtio_spec::features::VirtioNetF;
 
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};

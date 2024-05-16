@@ -640,7 +640,7 @@ dependencies = [
  "tock-registers 0.9.0",
  "trapframe",
  "uart_16550",
- "virtio-def",
+ "virtio-spec",
  "volatile 0.5.4",
  "x86",
  "x86_64 0.15.1",
@@ -1502,7 +1502,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
-name = "virtio-def"
+name = "virtio-spec"
 version = "0.0.0"
 dependencies = [
  "bitflags 2.5.0",

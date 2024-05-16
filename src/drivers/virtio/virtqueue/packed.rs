@@ -10,7 +10,7 @@ use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
 use align_address::Align;
-use virtio_def::features::VirtioF;
+use virtio_spec::features::VirtioF;
 use zerocopy::little_endian;
 
 #[cfg(not(feature = "pci"))]

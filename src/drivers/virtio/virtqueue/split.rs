@@ -10,8 +10,8 @@ use core::cell::{RefCell, UnsafeCell};
 use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
-use virtio_def::features::VirtioF;
-use virtio_def::num::{le16, le32, le64};
+use virtio_spec::features::VirtioF;
+use virtio_spec::num::{le16, le32, le64};
 use volatile::access::ReadOnly;
 use volatile::{map_field, VolatilePtr, VolatileRef};
 

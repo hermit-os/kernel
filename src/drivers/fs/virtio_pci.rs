@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use virtio_def::features::VirtioFsF;
+use virtio_spec::features::VirtioFsF;
 
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::fs::virtio_fs::{FsDevCfg, VirtioFsDriver};

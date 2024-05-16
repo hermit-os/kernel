@@ -7,8 +7,8 @@ use core::ptr;
 use core::ptr::{read_volatile, write_volatile};
 use core::sync::atomic::{fence, Ordering};
 
-use virtio_def::features::VirtioF;
-use virtio_def::DeviceStatus;
+use virtio_spec::features::VirtioF;
+use virtio_spec::DeviceStatus;
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::arch::kernel::interrupts::*;
