@@ -12,10 +12,10 @@ use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
-use virtio_spec::net::HdrF;
+use virtio_spec::net::{HdrF, HdrGso};
 use zerocopy::AsBytes;
 
-use self::constants::{NetHdrGSO, Status, MAX_NUM_VQ};
+use self::constants::{Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::arch::kernel::core_local::increment_irq_counter;
@@ -47,7 +47,7 @@ pub(crate) struct NetDevCfg {
 #[repr(C)]
 pub struct VirtioNetHdr {
 	flags: HdrF,
-	gso_type: NetHdrGSO,
+	gso_type: HdrGso,
 	/// Ethernet + IP + tcp/udp hdrs
 	hdr_len: u16,
 	/// Bytes to append to hdr_len per frame
@@ -64,7 +64,7 @@ impl Default for VirtioNetHdr {
 	fn default() -> Self {
 		Self {
 			flags: HdrF::empty(),
-			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE,
+			gso_type: HdrGso::empty(),
 			hdr_len: 0,
 			gso_size: 0,
 			csum_start: 0,
@@ -1042,41 +1042,8 @@ impl VirtioNetDriver {
 }
 
 pub mod constants {
-	use zerocopy::AsBytes;
-
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
-
-	/// Enum containing Virtios netword GSO types
-	///
-	/// See Virtio specification v1.1. - 5.1.6
-	#[allow(dead_code, non_camel_case_types)]
-	#[derive(AsBytes, Copy, Clone, Debug)]
-	#[repr(u8)]
-	pub enum NetHdrGSO {
-		/// not a GSO frame
-		VIRTIO_NET_HDR_GSO_NONE = 0,
-		/// GSO frame, IPv4 TCP (TSO)
-		VIRTIO_NET_HDR_GSO_TCPV4 = 1,
-		/// GSO frame, IPv4 UDP (UFO)
-		VIRTIO_NET_HDR_GSO_UDP = 3,
-		/// GSO frame, IPv6 TCP
-		VIRTIO_NET_HDR_GSO_TCPV6 = 4,
-		/// TCP has ECN set
-		VIRTIO_NET_HDR_GSO_ECN = 0x80,
-	}
-
-	impl From<NetHdrGSO> for u8 {
-		fn from(val: NetHdrGSO) -> Self {
-			match val {
-				NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE => 0,
-				NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV4 => 1,
-				NetHdrGSO::VIRTIO_NET_HDR_GSO_UDP => 3,
-				NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV6 => 4,
-				NetHdrGSO::VIRTIO_NET_HDR_GSO_ECN => 0x80,
-			}
-		}
-	}
 
 	/// Enum contains virtio's network device status
 	/// indiacted in the status field of the device's
