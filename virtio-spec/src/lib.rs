@@ -25,7 +25,7 @@ macro_rules! virtio_bitflags {
                 zerocopy_derive::AsBytes
             )
         )]
-        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
         #[repr(transparent)]
         $(#[$outer])*
         $vis struct $BitFlags($T);

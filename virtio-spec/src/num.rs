@@ -6,7 +6,7 @@ macro_rules! le_impl {
         #[allow(non_camel_case_types)]
         #[must_use]
         #[cfg_attr(feature = "zerocopy", derive(zerocopy_derive::FromZeroes, zerocopy_derive::FromBytes, zerocopy_derive::AsBytes))]
-        #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+        #[derive(Default, Hash, PartialEq, Eq, Clone, Copy, Debug)]
         #[repr(transparent)]
         pub struct $SelfT($ActualT);
 
