@@ -12,9 +12,10 @@ use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
+use virtio_spec::net::HdrF;
 use zerocopy::AsBytes;
 
-use self::constants::{NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
+use self::constants::{NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::arch::kernel::core_local::increment_irq_counter;
@@ -45,7 +46,7 @@ pub(crate) struct NetDevCfg {
 #[derive(AsBytes, Debug)]
 #[repr(C)]
 pub struct VirtioNetHdr {
-	flags: NetHdrFlag,
+	flags: HdrF,
 	gso_type: NetHdrGSO,
 	/// Ethernet + IP + tcp/udp hdrs
 	hdr_len: u16,
@@ -62,7 +63,7 @@ pub struct VirtioNetHdr {
 impl Default for VirtioNetHdr {
 	fn default() -> Self {
 		Self {
-			flags: NetHdrFlag::VIRTIO_NET_HDR_F_NONE,
+			flags: HdrF::empty(),
 			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE,
 			hdr_len: 0,
 			gso_size: 0,
@@ -502,7 +503,7 @@ impl NetworkDriver for VirtioNetDriver {
 			// If a checksum isn't necessary, we have inform the host within the header
 			// see Virtio specification 5.1.6.2
 			if !self.checksums.tcp.tx() || !self.checksums.udp.tx() {
-				header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+				header.flags = HdrF::NEEDS_CSUM;
 				let ethernet_frame: smoltcp::wire::EthernetFrame<&[u8]> =
 					EthernetFrame::new_unchecked(buf_slice);
 				let packet_header_len: u16;
@@ -1045,34 +1046,6 @@ pub mod constants {
 
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
-
-	/// Enum containing Virtios netword header flags
-	///
-	/// See Virtio specification v1.1. - 5.1.6
-	#[allow(dead_code, non_camel_case_types)]
-	#[derive(AsBytes, Copy, Clone, Debug)]
-	#[repr(u8)]
-	pub enum NetHdrFlag {
-		/// No further information
-		VIRTIO_NET_HDR_F_NONE = 0,
-		/// use csum_start, csum_offset
-		VIRTIO_NET_HDR_F_NEEDS_CSUM = 1,
-		/// csum is valid
-		VIRTIO_NET_HDR_F_DATA_VALID = 2,
-		/// reports number of coalesced TCP segments
-		VIRTIO_NET_HDR_F_RSC_INFO = 4,
-	}
-
-	impl From<NetHdrFlag> for u8 {
-		fn from(val: NetHdrFlag) -> Self {
-			match val {
-				NetHdrFlag::VIRTIO_NET_HDR_F_NONE => 0,
-				NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM => 1,
-				NetHdrFlag::VIRTIO_NET_HDR_F_DATA_VALID => 2,
-				NetHdrFlag::VIRTIO_NET_HDR_F_RSC_INFO => 4,
-			}
-		}
-	}
 
 	/// Enum containing Virtios netword GSO types
 	///
