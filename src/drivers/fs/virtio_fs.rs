@@ -3,6 +3,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use pci_types::InterruptLine;
+use virtio_spec::FeatureBits;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(feature = "pci")]
@@ -59,6 +60,12 @@ impl VirtioFsDriver {
 		driver_features: virtio_spec::fs::F,
 	) -> Result<(), VirtioFsError> {
 		let device_features = virtio_spec::fs::F::from(self.com_cfg.dev_features());
+
+		if device_features.requirements_satisfied() {
+			debug!("Feature set wanted by filesystem driver are in conformance with specification.")
+		} else {
+			return Err(VirtioFsError::FeatureRequirementsNotMet(device_features));
+		}
 
 		if device_features.contains(driver_features) {
 			// If device supports subset of features write feature set to common config
@@ -178,6 +185,9 @@ pub mod error {
 		/// The first field contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second field.
 		IncompatibleFeatureSets(virtio_spec::fs::F, virtio_spec::fs::F),
+		/// Set of features does not adhere to the requirements of features
+		/// indicated by the specification
+		FeatureRequirementsNotMet(virtio_spec::fs::F),
 		Unknown,
 	}
 }

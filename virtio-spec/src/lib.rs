@@ -36,6 +36,8 @@ macro_rules! virtio_bitflags {
                     $(#[$inner $($args)*])*
                     const $Flag = $value;
                 )*
+
+                const _ = !0;
             }
         }
 
@@ -73,7 +75,7 @@ pub mod net;
 pub mod num;
 pub mod pci;
 
-pub use features::F;
+pub use features::{FeatureBits, F};
 pub use volatile::WideVolatilePtr;
 
 pub mod fs {

@@ -13,6 +13,7 @@ use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
 use virtio_spec::net::{Hdr, HdrF};
+use virtio_spec::FeatureBits;
 
 use self::constants::{Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
@@ -848,13 +849,10 @@ impl VirtioNetDriver {
 	) -> Result<(), VirtioNetError> {
 		let device_features = virtio_spec::net::F::from(self.com_cfg.dev_features());
 
-		// Checks if the selected feature set is compatible with requirements for
-		// features according to Virtio spec. v1.1 - 5.1.3.1.
-		match check_features(driver_features) {
-			Ok(_) => {
-				info!("Feature set wanted by network driver are in conformance with specification.")
-			}
-			Err(vnet_err) => return Err(vnet_err),
+		if device_features.requirements_satisfied() {
+			info!("Feature set wanted by network driver are in conformance with specification.");
+		} else {
+			return Err(VirtioNetError::FeatureRequirementsNotMet(device_features));
 		}
 
 		if device_features.contains(driver_features) {
@@ -1033,58 +1031,6 @@ pub mod constants {
 			}
 		}
 	}
-}
-
-/// Checks if a given set of features is compatible and adheres to the
-/// specfification v1.1. - 5.1.3.1
-/// Upon an error returns the incompatible set of features by the
-/// [`VirtioNetError::FeatureRequirementsNotMet`] error value, which
-/// wraps the u64 indicating the feature set.
-pub fn check_features(features: virtio_spec::net::F) -> Result<(), VirtioNetError> {
-	for feature in features.iter() {
-		match feature {
-			virtio_spec::net::F::GUEST_TSO4
-			| virtio_spec::net::F::GUEST_TSO6
-			| virtio_spec::net::F::GUEST_UFO => {
-				if !features.contains(virtio_spec::net::F::GUEST_CSUM) {
-					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
-				}
-			}
-			virtio_spec::net::F::GUEST_ECN => {
-				if !(features.contains(virtio_spec::net::F::GUEST_TSO4)
-					|| features.contains(virtio_spec::net::F::GUEST_TSO6))
-				{
-					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
-				}
-			}
-			virtio_spec::net::F::HOST_TSO4
-			| virtio_spec::net::F::HOST_TSO6
-			| virtio_spec::net::F::HOST_UFO => {
-				if !features.contains(virtio_spec::net::F::CSUM) {
-					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
-				}
-			}
-			virtio_spec::net::F::HOST_ECN | virtio_spec::net::F::RSC_EXT => {
-				if !(features.contains(virtio_spec::net::F::HOST_TSO4)
-					|| features.contains(virtio_spec::net::F::HOST_TSO6))
-				{
-					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
-				}
-			}
-			virtio_spec::net::F::CTRL_RX
-			| virtio_spec::net::F::CTRL_VLAN
-			| virtio_spec::net::F::GUEST_ANNOUNCE
-			| virtio_spec::net::F::MQ
-			| virtio_spec::net::F::CTRL_MAC_ADDR => {
-				if !features.contains(virtio_spec::net::F::CTRL_VQ) {
-					return Err(VirtioNetError::FeatureRequirementsNotMet(features));
-				}
-			}
-			_ => {}
-		}
-	}
-
-	Ok(())
 }
 
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]
