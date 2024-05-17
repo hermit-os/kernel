@@ -7,6 +7,49 @@ where
     Self: From<F> + AsRef<F> + AsMut<F>,
     F: From<Self> + AsRef<Self> + AsMut<Self>,
 {
+    /// Returns the feature that this feature requires.
+    ///
+    /// If `self` is a single feature and multiple features are returned, `self` requires only one of them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use virtio_spec::FeatureBits;
+    ///
+    /// assert_eq!(
+    ///     virtio_spec::net::F::GUEST_TSO4.requirements(),
+    ///     virtio_spec::net::F::GUEST_CSUM
+    /// );
+    /// assert_eq!(
+    ///     virtio_spec::net::F::GUEST_ECN.requirements(),
+    ///     virtio_spec::net::F::GUEST_TSO4 | virtio_spec::net::F::GUEST_TSO6
+    /// );
+    /// ```
+    fn requirements(&self) -> Self {
+        Self::empty()
+    }
+
+    /// Returns `true` if all internal feature requirements are satisfied.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use virtio_spec::FeatureBits;
+    ///
+    /// assert!((virtio_spec::net::F::GUEST_TSO4
+    ///     | virtio_spec::net::F::GUEST_CSUM)
+    ///         .requirements_satisfied());
+    /// assert!((virtio_spec::net::F::GUEST_ECN
+    ///     | virtio_spec::net::F::GUEST_TSO4
+    ///     | virtio_spec::net::F::GUEST_CSUM)
+    ///     .requirements_satisfied());
+    /// ```
+    fn requirements_satisfied(&self) -> bool {
+        self.iter()
+            .map(|feature| feature.requirements())
+            .filter(|requirements| !requirements.is_empty())
+            .all(|requirements| self.intersects(requirements))
+    }
 }
 
 virtio_bitflags! {
@@ -237,8 +280,6 @@ macro_rules! feature_bits {
             }
         }
 
-        impl crate::FeatureBits for $BitFlags {}
-
         feature_bits! {
             $($t)*
         }
@@ -381,6 +422,37 @@ pub mod net {
             const SPEED_DUPLEX = 1 << 63;
         }
     }
+
+    impl crate::FeatureBits for F {
+        fn requirements(&self) -> Self {
+            let mut requirements = Self::empty();
+
+            for feature in self.iter() {
+                let requirement = match feature {
+                    Self::GUEST_TSO4 => Self::GUEST_CSUM,
+                    Self::GUEST_TSO6 => Self::GUEST_CSUM,
+                    Self::GUEST_ECN => Self::GUEST_TSO4 | Self::GUEST_TSO6,
+                    Self::GUEST_UFO => Self::GUEST_CSUM,
+                    Self::HOST_TSO4 => Self::CSUM,
+                    Self::HOST_TSO6 => Self::CSUM,
+                    Self::HOST_ECN => Self::HOST_TSO4 | Self::HOST_TSO6,
+                    Self::HOST_UFO => Self::CSUM,
+                    Self::HOST_USO => Self::CSUM,
+                    Self::CTRL_RX => Self::CTRL_VQ,
+                    Self::CTRL_VLAN => Self::CTRL_VQ,
+                    Self::GUEST_ANNOUNCE => Self::CTRL_VQ,
+                    Self::MQ => Self::CTRL_VQ,
+                    Self::CTRL_MAC_ADDR => Self::CTRL_VQ,
+                    Self::RSC_EXT => Self::HOST_TSO4 | Self::HOST_TSO6,
+                    Self::RSS => Self::CTRL_VQ,
+                    _ => Self::empty(),
+                };
+                requirements.insert(requirement);
+            }
+
+            requirements
+        }
+    }
 }
 
 pub mod fs {
@@ -393,5 +465,33 @@ pub mod fs {
             #[doc(alias = "VIRTIO_FS_F_NOTIFICATION")]
             const NOTIFICATION = 1 << 0;
         }
+    }
+
+    impl crate::FeatureBits for F {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[rustfmt::skip]
+    #[test]
+    fn requirements_satisfied() {
+        assert!(F::INDIRECT_DESC.requirements_satisfied());
+
+        assert!(net::F::CSUM.requirements_satisfied());
+
+        assert!(!net::F::MQ.requirements_satisfied());
+        assert!((net::F::MQ | net::F::CTRL_VQ).requirements_satisfied());
+
+        assert!(!net::F::HOST_TSO4.requirements_satisfied());
+        assert!((net::F::HOST_TSO4 | net::F::CSUM).requirements_satisfied());
+        assert!((net::F::HOST_TSO4 | net::F::HOST_TSO6 | net::F::CSUM).requirements_satisfied());
+
+        assert!(!net::F::HOST_ECN.requirements_satisfied());
+        assert!(!(net::F::HOST_ECN | net::F::CSUM).requirements_satisfied());
+        assert!(!(net::F::HOST_ECN | net::F::HOST_TSO4).requirements_satisfied());
+        assert!((net::F::HOST_ECN | net::F::HOST_TSO4 | net::F::CSUM).requirements_satisfied());
+        assert!((net::F::HOST_ECN | net::F::HOST_TSO4 | net::F::HOST_TSO6 | net::F::CSUM).requirements_satisfied());
     }
 }
