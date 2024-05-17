@@ -36,6 +36,8 @@ macro_rules! virtio_bitflags {
                     $(#[$inner $($args)*])*
                     const $Flag = $value;
                 )*
+
+                const _ = !0;
             }
         }
 

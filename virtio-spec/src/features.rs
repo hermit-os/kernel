@@ -126,8 +126,6 @@ virtio_bitflags! {
         /// See _Basic Facilities of a Virtio Device / Virtqueues / Virtqueue Reset_.
         #[doc(alias = "VIRTIO_F_RING_RESET")]
         const RING_RESET = 1 << 40;
-
-        const _ = !0;
     }
 }
 
@@ -381,8 +379,6 @@ pub mod net {
             /// Device reports speed and duplex.
             #[doc(alias = "VIRTIO_NET_F_SPEED_DUPLEX")]
             const SPEED_DUPLEX = 1 << 63;
-
-            const _ = !0;
         }
     }
 }
@@ -396,8 +392,6 @@ pub mod fs {
             /// messages.  The notification queue is virtqueue 1.
             #[doc(alias = "VIRTIO_FS_F_NOTIFICATION")]
             const NOTIFICATION = 1 << 0;
-
-            const _ = !0;
         }
     }
 }
