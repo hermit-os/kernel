@@ -555,13 +555,13 @@ impl MmioRegisterLayout {
 			// read low 32 bits of device features
 			device_features |= u64::from(read_volatile(&self.device_features));
 
-			virtio_spec::F::from_bits_retain(device_features.into())
+			virtio_spec::F::from_bits_retain(u128::from(device_features).into())
 		}
 	}
 
 	/// Write selected features into driver_select field.
 	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
-		let features = features.bits() as u64;
+		let features = features.bits().get() as u64;
 		let high: u32 = (features >> 32) as u32;
 		let low: u32 = features as u32;
 
