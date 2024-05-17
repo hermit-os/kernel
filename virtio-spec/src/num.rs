@@ -1,6 +1,10 @@
 //! Byte order-aware numeric primitives.
 
-use core::mem;
+use core::ops::{BitAnd, BitOr, BitXor, Not};
+use core::{fmt, mem};
+
+use bitflags::parser::{ParseError, ParseHex, WriteHex};
+use bitflags::Bits;
 
 macro_rules! le_impl {
     ($SelfT:ident, $ActualT:ty, $to:ident, $from:ident, $bits:expr, $order:expr) => {
@@ -37,6 +41,56 @@ macro_rules! le_impl {
             #[inline]
             fn from(value: $SelfT) -> Self {
                 value.get()
+            }
+        }
+
+        impl Bits for $SelfT {
+            const EMPTY: Self = Self::new(0);
+
+            const ALL: Self = Self::new(<$ActualT>::MAX);
+        }
+
+        impl ParseHex for $SelfT {
+            fn parse_hex(input: &str) -> Result<Self, ParseError> {
+                <$ActualT>::parse_hex(input).map(Self::from)
+            }
+        }
+
+        impl WriteHex for $SelfT {
+            fn write_hex<W: fmt::Write>(&self, writer: W) -> fmt::Result {
+                self.get().write_hex(writer)
+            }
+        }
+
+        impl BitAnd for $SelfT {
+            type Output = Self;
+
+            fn bitand(self, rhs: Self) -> Self::Output {
+                Self::new(self.get().bitand(rhs.get()))
+            }
+        }
+
+        impl BitOr for $SelfT {
+            type Output = Self;
+
+            fn bitor(self, rhs: Self) -> Self::Output {
+                Self::new(self.get().bitor(rhs.get()))
+            }
+        }
+
+        impl BitXor for $SelfT {
+            type Output = Self;
+
+            fn bitxor(self, rhs: Self) -> Self::Output {
+                Self::new(self.get().bitxor(rhs.get()))
+            }
+        }
+
+        impl Not for $SelfT {
+            type Output = Self;
+
+            fn not(self) -> Self::Output {
+                Self::new(self.get().not())
             }
         }
     };
