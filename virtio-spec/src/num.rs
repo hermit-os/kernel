@@ -71,50 +71,6 @@ macro_rules! endian_impl {
 
             const ALL: Self = Self::new(<$ActualT>::MAX);
         }
-
-        impl ParseHex for $SelfT<$ActualT> {
-            fn parse_hex(input: &str) -> Result<Self, ParseError> {
-                <$ActualT>::parse_hex(input).map(Self::from)
-            }
-        }
-
-        impl WriteHex for $SelfT<$ActualT> {
-            fn write_hex<W: fmt::Write>(&self, writer: W) -> fmt::Result {
-                self.get().write_hex(writer)
-            }
-        }
-
-        impl BitAnd for $SelfT<$ActualT> {
-            type Output = Self;
-
-            fn bitand(self, rhs: Self) -> Self::Output {
-                Self::new(self.get().bitand(rhs.get()))
-            }
-        }
-
-        impl BitOr for $SelfT<$ActualT> {
-            type Output = Self;
-
-            fn bitor(self, rhs: Self) -> Self::Output {
-                Self::new(self.get().bitor(rhs.get()))
-            }
-        }
-
-        impl BitXor for $SelfT<$ActualT> {
-            type Output = Self;
-
-            fn bitxor(self, rhs: Self) -> Self::Output {
-                Self::new(self.get().bitxor(rhs.get()))
-            }
-        }
-
-        impl Not for $SelfT<$ActualT> {
-            type Output = Self;
-
-            fn not(self) -> Self::Output {
-                Self::new(self.get().not())
-            }
-        }
     };
 }
 
@@ -126,6 +82,80 @@ endian_impl!(Le, u16, le16, to_le, from_le, 16, "little-endian");
 endian_impl!(Le, u32, le32, to_le, from_le, 32, "little-endian");
 endian_impl!(Le, u64, le64, to_le, from_le, 64, "little-endian");
 endian_impl!(Le, u128, le128, to_le, from_le, 128, "little-endian");
+
+macro_rules! impl_traits {
+    ($SelfT:ident) => {
+        impl<T> ParseHex for $SelfT<T>
+        where
+            T: ParseHex + Into<Self>,
+        {
+            fn parse_hex(input: &str) -> Result<Self, ParseError> {
+                T::parse_hex(input).map(Into::into)
+            }
+        }
+
+        impl<T> WriteHex for $SelfT<T>
+        where
+            Self: Copy + Into<T>,
+            T: WriteHex,
+        {
+            fn write_hex<W: fmt::Write>(&self, writer: W) -> fmt::Result {
+                (*self).into().write_hex(writer)
+            }
+        }
+
+        impl<T> BitAnd for $SelfT<T>
+        where
+            Self: Into<T>,
+            T: BitAnd<Output = T> + Into<Self>,
+        {
+            type Output = Self;
+
+            fn bitand(self, rhs: Self) -> Self::Output {
+                self.into().bitand(rhs.into()).into()
+            }
+        }
+
+        impl<T> BitOr for $SelfT<T>
+        where
+            Self: Into<T>,
+            T: BitOr<Output = T> + Into<Self>,
+        {
+            type Output = Self;
+
+            fn bitor(self, rhs: Self) -> Self::Output {
+                self.into().bitor(rhs.into()).into()
+            }
+        }
+
+        impl<T> BitXor for $SelfT<T>
+        where
+            Self: Into<T>,
+            T: BitXor<Output = T> + Into<Self>,
+        {
+            type Output = Self;
+
+            fn bitxor(self, rhs: Self) -> Self::Output {
+                self.into().bitxor(rhs.into()).into()
+            }
+        }
+
+        impl<T> Not for $SelfT<T>
+        where
+            Self: Into<T>,
+            T: Not<Output = T> + Into<Self>,
+        {
+            type Output = Self;
+
+            fn not(self) -> Self::Output {
+                self.into().not().into()
+            }
+        }
+    };
+}
+
+impl_traits!(Be);
+impl_traits!(Le);
 
 impl Be<u64> {
     /// Create an integer from its representation as a [`Be<u32>`] array in big endian.
