@@ -42,6 +42,13 @@ macro_rules! le_impl {
     };
 }
 
+le_impl!(be16, u16, to_be, from_be, 16, "big-endian");
+le_impl!(be32, u32, to_be, from_be, 32, "big-endian");
+le_impl!(be64, u64, to_be, from_be, 64, "big-endian");
+le_impl!(le16, u16, to_le, from_le, 16, "little-endian");
+le_impl!(le32, u32, to_le, from_le, 32, "little-endian");
+le_impl!(le64, u64, to_le, from_le, 64, "little-endian");
+
 impl be64 {
     /// Create an integer from its representation as a [`be32`] array in big endian.
     pub const fn from_be_parts(parts: [be32; 2]) -> Self {
@@ -65,10 +72,3 @@ impl le64 {
         unsafe { mem::transmute(self) }
     }
 }
-
-le_impl!(be16, u16, to_be, from_be, 16, "big-endian");
-le_impl!(be32, u32, to_be, from_be, 32, "big-endian");
-le_impl!(be64, u64, to_be, from_be, 64, "big-endian");
-le_impl!(le16, u16, to_le, from_le, 16, "little-endian");
-le_impl!(le32, u32, to_le, from_le, 32, "little-endian");
-le_impl!(le64, u64, to_le, from_le, 64, "little-endian");
