@@ -1,8 +1,10 @@
 //! Feature Bits
 
+use crate::num::le128;
+
 /// Feature Bits
 #[doc(alias = "VIRTIO_F")]
-pub trait FeatureBits: bitflags::Flags<Bits = u128>
+pub trait FeatureBits: bitflags::Flags<Bits = le128>
 where
     Self: From<F> + AsRef<F> + AsMut<F>,
     F: From<Self> + AsRef<Self> + AsMut<Self>,
@@ -52,10 +54,10 @@ where
     }
 }
 
-virtio_bitflags! {
+endian_bitflags! {
     /// Device-independent Feature Bits
     #[doc(alias = "VIRTIO_F")]
-    pub struct F: u128 {
+    pub struct F: le128 {
         /// Negotiating this feature indicates
         /// that the driver can use descriptors with the VIRTQ_DESC_F_INDIRECT
         /// flag set, as described in _Basic Facilities of a Virtio
@@ -198,7 +200,7 @@ macro_rules! feature_bits {
 
         $($t:tt)*
     ) => {
-        virtio_bitflags! {
+        endian_bitflags! {
             $(#[$outer])*
             $vis struct $BitFlags: $T {
                 $(
@@ -207,37 +209,37 @@ macro_rules! feature_bits {
                 )*
 
                 /// Device-independent Bit. See [`virtio_spec::F::INDIRECT_DESC`](crate::F::INDIRECT_DESC).
-                const INDIRECT_DESC = $crate::F::INDIRECT_DESC.bits();
+                const INDIRECT_DESC = $crate::F::INDIRECT_DESC.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::EVENT_IDX`](crate::F::EVENT_IDX).
-                const EVENT_IDX = $crate::F::EVENT_IDX.bits();
+                const EVENT_IDX = $crate::F::EVENT_IDX.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::VERSION_1`](crate::F::VERSION_1).
-                const VERSION_1 = $crate::F::VERSION_1.bits();
+                const VERSION_1 = $crate::F::VERSION_1.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::ACCESS_PLATFORM`](crate::F::ACCESS_PLATFORM).
-                const ACCESS_PLATFORM = $crate::F::ACCESS_PLATFORM.bits();
+                const ACCESS_PLATFORM = $crate::F::ACCESS_PLATFORM.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::RING_PACKED`](crate::F::RING_PACKED).
-                const RING_PACKED = $crate::F::RING_PACKED.bits();
+                const RING_PACKED = $crate::F::RING_PACKED.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::IN_ORDER`](crate::F::IN_ORDER).
-                const IN_ORDER = $crate::F::IN_ORDER.bits();
+                const IN_ORDER = $crate::F::IN_ORDER.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::ORDER_PLATFORM`](crate::F::ORDER_PLATFORM).
-                const ORDER_PLATFORM = $crate::F::ORDER_PLATFORM.bits();
+                const ORDER_PLATFORM = $crate::F::ORDER_PLATFORM.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::SR_IOV`](crate::F::SR_IOV).
-                const SR_IOV = $crate::F::SR_IOV.bits();
+                const SR_IOV = $crate::F::SR_IOV.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::NOTIFICATION_DATA`](crate::F::NOTIFICATION_DATA).
-                const NOTIFICATION_DATA = $crate::F::NOTIFICATION_DATA.bits();
+                const NOTIFICATION_DATA = $crate::F::NOTIFICATION_DATA.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::NOTIF_CONFIG_DATA`](crate::F::NOTIF_CONFIG_DATA).
-                const NOTIF_CONFIG_DATA = $crate::F::NOTIF_CONFIG_DATA.bits();
+                const NOTIF_CONFIG_DATA = $crate::F::NOTIF_CONFIG_DATA.bits().get();
 
                 /// Device-independent Bit. See [`virtio_spec::F::RING_RESET`](crate::F::RING_RESET).
-                const RING_RESET = $crate::F::RING_RESET.bits();
+                const RING_RESET = $crate::F::RING_RESET.bits().get();
             }
         }
 
@@ -288,10 +290,12 @@ macro_rules! feature_bits {
 }
 
 pub mod net {
+    use crate::num::le128;
+
     feature_bits! {
         /// Network Device Feature Bits
         #[doc(alias = "VIRTIO_NET_F")]
-        pub struct F: u128 {
+        pub struct F: le128 {
             /// Device handles packets with partial checksum.   This
             /// “checksum offload” is a common feature on modern network cards.
             #[doc(alias = "VIRTIO_NET_F_CSUM")]
@@ -456,10 +460,12 @@ pub mod net {
 }
 
 pub mod fs {
+    use crate::num::le128;
+
     feature_bits! {
         /// File System Device Feature Bits
         #[doc(alias = "VIRTIO_FS_F")]
-        pub struct F: u128 {
+        pub struct F: le128 {
             /// Device has support for FUSE notify
             /// messages.  The notification queue is virtqueue 1.
             #[doc(alias = "VIRTIO_FS_F_NOTIFICATION")]

@@ -618,12 +618,12 @@ impl ComCfg {
 		// read low 32 bits of device features
 		device_features |= u64::from(device_feature.read().get());
 
-		virtio_spec::F::from_bits_retain(device_features.into())
+		virtio_spec::F::from_bits_retain(u128::from(device_features).into())
 	}
 
 	/// Write selected features into driver_select field.
 	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
-		let features = features.bits() as u64;
+		let features = features.bits().get() as u64;
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let driver_feature_select = com_cfg.driver_feature_select();
 		let driver_feature = com_cfg.driver_feature();
