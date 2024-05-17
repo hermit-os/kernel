@@ -973,6 +973,19 @@ impl FuseDirectory {
 			},
 		}
 	}
+
+	fn traversal_path(&self, components: &[&str]) -> String {
+		let prefix_deref = self.prefix.as_deref();
+		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
+		let path: String = components_with_prefix
+			.flat_map(|component| ["/", component])
+			.collect();
+		if path.is_empty() {
+			String::from("/")
+		} else {
+			path
+		}
+	}
 }
 
 impl VfsNode for FuseDirectory {
@@ -990,25 +1003,7 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
-		let path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let path: String = self.traversal_path(components);
 
 		debug!("FUSE opendir: {}", path);
 
@@ -1087,25 +1082,7 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
-		let path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let path: String = self.traversal_path(components);
 
 		debug!("FUSE stat: {}", path);
 
@@ -1134,25 +1111,7 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
-		let path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let path: String = self.traversal_path(components);
 
 		debug!("FUSE lstat: {}", path);
 
@@ -1172,25 +1131,7 @@ impl VfsNode for FuseDirectory {
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		let mut path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let mut path: String = self.traversal_path(components);
 
 		debug!("FUSE lstat: {}", path);
 
@@ -1258,25 +1199,7 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
-		let path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let path: String = self.traversal_path(components);
 
 		let (cmd, mut rsp) = ops::Unlink::create(&path);
 		get_filesystem_driver()
@@ -1289,25 +1212,7 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
-		let path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let path: String = self.traversal_path(components);
 
 		let (cmd, mut rsp) = ops::Rmdir::create(&path);
 		get_filesystem_driver()
@@ -1324,25 +1229,7 @@ impl VfsNode for FuseDirectory {
 		components: &mut Vec<&str>,
 		mode: AccessPermission,
 	) -> Result<(), IoError> {
-		let path: String = if components.is_empty() {
-			if let Some(prefix) = &self.prefix {
-				"/".to_string() + prefix
-			} else {
-				"/".to_string()
-			}
-		} else {
-			let path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-
-			if let Some(prefix) = &self.prefix {
-				"/".to_owned() + &prefix.to_owned() + &path
-			} else {
-				path
-			}
-		};
+		let path: String = self.traversal_path(components);
 		let (cmd, mut rsp) = ops::Mkdir::create(&path, mode.bits());
 
 		get_filesystem_driver()
