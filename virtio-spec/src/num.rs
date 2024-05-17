@@ -183,6 +183,7 @@ macro_rules! impl_traits {
         {
             type Output = Self;
 
+            #[inline]
             fn not(self) -> Self::Output {
                 self.into().not().into()
             }
@@ -217,11 +218,13 @@ impl_traits!(Le);
 
 impl Be<u64> {
     /// Create an integer from its representation as a [`Be<u32>`] array in big endian.
+    #[inline]
     pub const fn from_be_parts(parts: [Be<u32>; 2]) -> Self {
         unsafe { mem::transmute(parts) }
     }
 
     /// Return the memory representation of this integer as a [`Be<u32>`] array in big-endian (network) byte order.
+    #[inline]
     pub const fn to_be_parts(self) -> [Be<u32>; 2] {
         unsafe { mem::transmute(self) }
     }
@@ -229,11 +232,13 @@ impl Be<u64> {
 
 impl Le<u64> {
     /// Create an integer from its representation as a [`Le<u32>`] array in little endian.
+    #[inline]
     pub const fn from_le_parts(parts: [Le<u32>; 2]) -> Self {
         unsafe { mem::transmute(parts) }
     }
 
     /// Return the memory representation of this integer as a [`Le<u32>`] array in little-endian byte order.
+    #[inline]
     pub const fn to_le_parts(self) -> [Le<u32>; 2] {
         unsafe { mem::transmute(self) }
     }
@@ -241,11 +246,13 @@ impl Le<u64> {
 
 impl Be<u128> {
     /// Create an integer from its representation as a [`Be<u32>`] array in big endian.
+    #[inline]
     pub const fn from_be_parts(parts: [Be<u32>; 4]) -> Self {
         unsafe { mem::transmute(parts) }
     }
 
     /// Return the memory representation of this integer as a [`Be<u32>`] array in big-endian (network) byte order.
+    #[inline]
     pub const fn to_be_parts(self) -> [Be<u32>; 4] {
         unsafe { mem::transmute(self) }
     }
@@ -253,11 +260,13 @@ impl Be<u128> {
 
 impl Le<u128> {
     /// Create an integer from its representation as a [`Le<u32>`] array in little endian.
+    #[inline]
     pub const fn from_le_parts(parts: [Le<u32>; 4]) -> Self {
         unsafe { mem::transmute(parts) }
     }
 
     /// Return the memory representation of this integer as a [`Le<u32>`] array in little-endian byte order.
+    #[inline]
     pub const fn to_le_parts(self) -> [Le<u32>; 4] {
         unsafe { mem::transmute(self) }
     }
