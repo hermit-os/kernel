@@ -1,7 +1,6 @@
 //! Byte order-aware numeric primitives.
 
-use core::ops::{BitAnd, BitOr, BitXor, Not};
-use core::{fmt, mem};
+use core::{fmt, mem, ops};
 
 use bitflags::parser::{ParseError, ParseHex, WriteHex};
 use bitflags::Bits;
@@ -98,6 +97,35 @@ macro_rules! impl_fmt {
     };
 }
 
+macro_rules! impl_binary_op {
+    ($Trait:ident, $op:ident, $TraitAssign:ident, $op_assign:ident, $SelfT:ident) => {
+        impl<T> ops::$Trait for $SelfT<T>
+        where
+            Self: Into<T>,
+            T: ops::$Trait<Output = T> + Into<Self>,
+        {
+            type Output = Self;
+
+            #[inline]
+            fn $op(self, rhs: Self) -> Self::Output {
+                self.into().$op(rhs.into()).into()
+            }
+        }
+
+        impl<T> ops::$TraitAssign for $SelfT<T>
+        where
+            Self: Copy + ops::$Trait<Output = Self>,
+        {
+            #[inline]
+            fn $op_assign(&mut self, rhs: Self) {
+                use ops::$Trait;
+
+                *self = self.$op(rhs)
+            }
+        }
+    };
+}
+
 macro_rules! impl_traits {
     ($SelfT:ident) => {
         impl_fmt!(Debug, $SelfT);
@@ -106,6 +134,17 @@ macro_rules! impl_traits {
         impl_fmt!(Octal, $SelfT);
         impl_fmt!(LowerHex, $SelfT);
         impl_fmt!(UpperHex, $SelfT);
+
+        impl_binary_op!(Add, add, AddAssign, add_assign, $SelfT);
+        impl_binary_op!(BitAnd, bitand, BitAndAssign, bitand_assign, $SelfT);
+        impl_binary_op!(BitOr, bitor, BitOrAssign, bitor_assign, $SelfT);
+        impl_binary_op!(BitXor, bitxor, BitXorAssign, bitxor_assign, $SelfT);
+        impl_binary_op!(Div, div, DivAssign, div_assign, $SelfT);
+        impl_binary_op!(Mul, mul, MulAssign, mul_assign, $SelfT);
+        impl_binary_op!(Rem, rem, RemAssign, rem_assign, $SelfT);
+        impl_binary_op!(Shl, shl, ShlAssign, shl_assign, $SelfT);
+        impl_binary_op!(Shr, shr, ShrAssign, shr_assign, $SelfT);
+        impl_binary_op!(Sub, sub, SubAssign, sub_assign, $SelfT);
 
         impl<T> ParseHex for $SelfT<T>
         where
@@ -126,46 +165,10 @@ macro_rules! impl_traits {
             }
         }
 
-        impl<T> BitAnd for $SelfT<T>
+        impl<T> ops::Not for $SelfT<T>
         where
             Self: Into<T>,
-            T: BitAnd<Output = T> + Into<Self>,
-        {
-            type Output = Self;
-
-            fn bitand(self, rhs: Self) -> Self::Output {
-                self.into().bitand(rhs.into()).into()
-            }
-        }
-
-        impl<T> BitOr for $SelfT<T>
-        where
-            Self: Into<T>,
-            T: BitOr<Output = T> + Into<Self>,
-        {
-            type Output = Self;
-
-            fn bitor(self, rhs: Self) -> Self::Output {
-                self.into().bitor(rhs.into()).into()
-            }
-        }
-
-        impl<T> BitXor for $SelfT<T>
-        where
-            Self: Into<T>,
-            T: BitXor<Output = T> + Into<Self>,
-        {
-            type Output = Self;
-
-            fn bitxor(self, rhs: Self) -> Self::Output {
-                self.into().bitxor(rhs.into()).into()
-            }
-        }
-
-        impl<T> Not for $SelfT<T>
-        where
-            Self: Into<T>,
-            T: Not<Output = T> + Into<Self>,
+            T: ops::Not<Output = T> + Into<Self>,
         {
             type Output = Self;
 
