@@ -39,6 +39,16 @@ macro_rules! endian_impl {
         pub type $alias = $SelfT<$ActualT>;
 
         impl $SelfT<$ActualT> {
+            /// The smallest value that can be represented by this integer type.
+            pub const MIN: Self = Self::new(<$ActualT>::MIN);
+
+            /// The largest value that can be represented by this integer type
+            #[doc = concat!("(2<sup>", $bits, "</sup> &minus; 1", ").")]
+            pub const MAX: Self = Self::new(<$ActualT>::MAX);
+
+            /// The size of this integer type in bits.
+            pub const BITS: u32 = $bits;
+
             #[doc = concat!("Creates a new ", $order, " integer from native-endian byte order.")]
             #[inline]
             pub const fn new(n: $ActualT) -> Self {
@@ -67,9 +77,9 @@ macro_rules! endian_impl {
         }
 
         impl Bits for $SelfT<$ActualT> {
-            const EMPTY: Self = Self::new(0);
+            const EMPTY: Self = Self::MIN;
 
-            const ALL: Self = Self::new(<$ActualT>::MAX);
+            const ALL: Self = Self::MAX;
         }
     };
 }
