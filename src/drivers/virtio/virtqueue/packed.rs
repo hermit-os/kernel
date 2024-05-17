@@ -1166,8 +1166,8 @@ impl Virtq for PackedVq {
 
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
-		send: Option<&[u8]>,
-		recv: Option<&mut [u8]>,
+		send: &[&[u8]],
+		recv: &[&mut [u8]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError> {
 		self.prep_transfer_from_raw_static(send, recv, buffer_type)

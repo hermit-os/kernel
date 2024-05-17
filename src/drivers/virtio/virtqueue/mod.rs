@@ -247,8 +247,8 @@ pub trait Virtq: VirtqPrivate {
 	/// part via the recv argument.
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
-		send: Option<&[u8]>,
-		recv: Option<&mut [u8]>,
+		send: &[&[u8]],
+		recv: &[&mut [u8]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>;
 
@@ -257,37 +257,46 @@ pub trait Virtq: VirtqPrivate {
 	/// of [Self::prep_buffer] inside the implementor.
 	fn prep_transfer_from_raw_static(
 		self: Rc<Self>,
-		send: Option<&[u8]>,
-		recv: Option<&mut [u8]>,
+		send: &[&[u8]],
+		recv: &[&mut [u8]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>
 	where
 		Self: Sized + 'static,
 	{
-		if let (None, None) = (&send, &recv) {
+		if send.is_empty() && recv.is_empty() {
 			return Err(VirtqError::BufferNotSpecified);
 		}
+
+		let total_send_len = send.iter().map(|slice| slice.len()).sum();
+		let total_recv_len = recv.iter().map(|slice| slice.len()).sum();
 
 		let send_buff;
 		let recv_buff;
 		match buffer_type {
 			BufferType::Direct => {
-				send_buff = if let Some(send_data) = send {
-					Some(Buffer::Single {
-						desc_lst: vec![self.mem_pool().pull_from_raw(send_data)?]
-							.into_boxed_slice(),
-						len: send_data.len(),
+				let send_desc_lst = send
+					.iter()
+					.map(|slice| self.mem_pool().pull_from_raw(slice))
+					.collect::<Result<Vec<_>, VirtqError>>()?;
+				send_buff = if !send.is_empty() {
+					Some(Buffer::Multiple {
+						desc_lst: send_desc_lst.into_boxed_slice(),
+						len: total_send_len,
 						next_write: 0,
 					})
 				} else {
 					None
 				};
 
-				recv_buff = if let Some(recv_data) = recv {
-					Some(Buffer::Single {
-						desc_lst: vec![self.mem_pool().pull_from_raw(recv_data)?]
-							.into_boxed_slice(),
-						len: recv_data.len(),
+				let recv_desc_lst: Vec<_> = recv
+					.iter()
+					.map(|slice| self.mem_pool().pull_from_raw(slice))
+					.collect::<Result<Vec<_>, VirtqError>>()?;
+				recv_buff = if !recv.is_empty() {
+					Some(Buffer::Multiple {
+						desc_lst: recv_desc_lst.into_boxed_slice(),
+						len: total_recv_len,
 						next_write: 0,
 					})
 				} else {
@@ -295,48 +304,67 @@ pub trait Virtq: VirtqPrivate {
 				}
 			}
 			BufferType::Indirect => {
-				let send_desc_lst = send
-					.as_ref()
-					.map(|send_data| vec![self.mem_pool().pull_from_raw_untracked(send_data)]);
-				let recv_desc_lst = recv
-					.as_ref()
-					.map(|recv_data| vec![self.mem_pool().pull_from_raw_untracked(recv_data)]);
+				let send_desc_lst: Vec<_> = send
+					.iter()
+					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
+					.collect();
+				let recv_desc_lst: Vec<_> = recv
+					.iter()
+					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
+					.collect();
 
-				let ctrl_desc =
-					self.create_indirect_ctrl(send_desc_lst.as_ref(), recv_desc_lst.as_ref())?;
+				let ctrl_desc = self.create_indirect_ctrl(
+					if !send.is_empty() {
+						Some(&send_desc_lst)
+					} else {
+						None
+					},
+					if !recv.is_empty() {
+						Some(&recv_desc_lst)
+					} else {
+						None
+					},
+				)?;
 
 				let mut send_ctrl_desc = None;
 				let mut recv_ctrl_desc = None;
-				match (&send, &recv) {
-					(Some(_), None) => {
+				match (!send.is_empty(), !recv.is_empty()) {
+					(true, false) => {
 						send_ctrl_desc = Some(ctrl_desc);
 					}
-					(None, Some(_)) => {
+					(false, true) => {
 						recv_ctrl_desc = Some(ctrl_desc);
 					}
-					(Some(_), Some(_)) => {
+					// Both send and recv have content
+					(true, true) => {
 						send_ctrl_desc = Some(ctrl_desc.no_dealloc_clone());
 						recv_ctrl_desc = Some(ctrl_desc);
 					}
-					// We have already checked at the beginning of the function
-					(None, None) => unreachable!(),
+					// We checked at the beginning of the function.
+					(false, false) => unreachable!(),
 				}
 
-				send_buff = send.map(|send_data| Buffer::Indirect {
-					// If send is Some, so is send_desc_lst
-					desc_lst: send_desc_lst.unwrap().into_boxed_slice(),
-					ctrl_desc: send_ctrl_desc.unwrap(),
-					len: send_data.len(),
-					next_write: 0,
-				});
+				send_buff = if !send.is_empty() {
+					Some(Buffer::Indirect {
+						desc_lst: send_desc_lst.into_boxed_slice(),
+						ctrl_desc: send_ctrl_desc.unwrap(),
+						len: total_send_len,
+						next_write: 0,
+					})
+				} else {
+					None
+				};
 
-				recv_buff = recv.map(|recv_data| Buffer::Indirect {
-					// If recv is Some, so is recv_desc_lst
-					desc_lst: recv_desc_lst.unwrap().into_boxed_slice(),
-					ctrl_desc: recv_ctrl_desc.unwrap(),
-					len: recv_data.len(),
-					next_write: 0,
-				});
+				recv_buff = if !recv.is_empty() {
+					Some(Buffer::Indirect {
+						desc_lst: recv_desc_lst.into_boxed_slice(),
+						ctrl_desc: recv_ctrl_desc.unwrap(),
+						len: total_recv_len,
+						next_write: 0,
+					})
+				} else {
+					None
+				};
 			}
 		};
 

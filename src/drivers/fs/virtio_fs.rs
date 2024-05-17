@@ -150,7 +150,7 @@ impl FuseInterface for VirtioFsDriver {
 		let recv = rsp.as_slice_u8_mut();
 		let transfer_tkn = self.vqueues[1]
 			.clone()
-			.prep_transfer_from_raw(Some(send), Some(recv), BufferType::Direct)
+			.prep_transfer_from_raw(&[send], &[recv], BufferType::Direct)
 			.unwrap();
 		transfer_tkn.dispatch_blocking()?;
 		Ok(())
