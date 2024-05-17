@@ -1,5 +1,14 @@
 //! Feature Bits
 
+/// Feature Bits
+#[doc(alias = "VIRTIO_F")]
+pub trait FeatureBits: bitflags::Flags<Bits = u128>
+where
+    Self: From<F> + AsRef<F> + AsMut<F>,
+    F: From<Self> + AsRef<Self> + AsMut<Self>,
+{
+}
+
 virtio_bitflags! {
     /// Device-independent Feature Bits
     #[doc(alias = "VIRTIO_F")]
@@ -122,6 +131,20 @@ virtio_bitflags! {
     }
 }
 
+impl AsRef<F> for F {
+    fn as_ref(&self) -> &F {
+        self
+    }
+}
+
+impl AsMut<F> for F {
+    fn as_mut(&mut self) -> &mut F {
+        self
+    }
+}
+
+impl FeatureBits for F {}
+
 macro_rules! feature_bits {
     (
         $(#[$outer:meta])*
@@ -215,6 +238,8 @@ macro_rules! feature_bits {
                 unsafe { &mut *(self as *mut Self as *mut $crate::F) }
             }
         }
+
+        impl crate::FeatureBits for $BitFlags {}
 
         feature_bits! {
             $($t)*
