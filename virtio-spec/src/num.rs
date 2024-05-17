@@ -1,5 +1,6 @@
 //! Byte order-aware numeric primitives.
 
+use core::cmp::Ordering;
 use core::{fmt, mem, ops};
 
 use bitflags::parser::{ParseError, ParseHex, WriteHex};
@@ -174,6 +175,28 @@ macro_rules! impl_traits {
 
             fn not(self) -> Self::Output {
                 self.into().not().into()
+            }
+        }
+
+        impl<T> PartialOrd for $SelfT<T>
+        where
+            Self: Copy + Into<T>,
+            T: Ord,
+        {
+            #[inline]
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
+            }
+        }
+
+        impl<T> Ord for $SelfT<T>
+        where
+            Self: Copy + Into<T>,
+            T: Ord,
+        {
+            #[inline]
+            fn cmp(&self, other: &Self) -> Ordering {
+                (*self).into().cmp(&(*other).into())
             }
         }
     };
