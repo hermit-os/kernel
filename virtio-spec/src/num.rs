@@ -15,7 +15,7 @@ use bitflags::Bits;
         zerocopy_derive::AsBytes
     )
 )]
-#[derive(Default, Hash, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Default, Hash, PartialEq, Eq, Clone, Copy)]
 #[repr(transparent)]
 pub struct Be<T>(T);
 
@@ -28,7 +28,7 @@ pub struct Be<T>(T);
         zerocopy_derive::AsBytes
     )
 )]
-#[derive(Default, Hash, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Default, Hash, PartialEq, Eq, Clone, Copy)]
 #[repr(transparent)]
 pub struct Le<T>(T);
 
@@ -83,8 +83,30 @@ endian_impl!(Le, u32, le32, to_le, from_le, 32, "little-endian");
 endian_impl!(Le, u64, le64, to_le, from_le, 64, "little-endian");
 endian_impl!(Le, u128, le128, to_le, from_le, 128, "little-endian");
 
+macro_rules! impl_fmt {
+    ($Trait:ident, $SelfT:ident) => {
+        impl<T> fmt::$Trait for $SelfT<T>
+        where
+            Self: Copy + Into<T>,
+            T: fmt::$Trait,
+        {
+            #[inline]
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                (*self).into().fmt(f)
+            }
+        }
+    };
+}
+
 macro_rules! impl_traits {
     ($SelfT:ident) => {
+        impl_fmt!(Debug, $SelfT);
+        impl_fmt!(Display, $SelfT);
+        impl_fmt!(Binary, $SelfT);
+        impl_fmt!(Octal, $SelfT);
+        impl_fmt!(LowerHex, $SelfT);
+        impl_fmt!(UpperHex, $SelfT);
+
         impl<T> ParseHex for $SelfT<T>
         where
             T: ParseHex + Into<Self>,
