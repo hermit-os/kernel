@@ -45,9 +45,11 @@ macro_rules! le_impl {
 le_impl!(be16, u16, to_be, from_be, 16, "big-endian");
 le_impl!(be32, u32, to_be, from_be, 32, "big-endian");
 le_impl!(be64, u64, to_be, from_be, 64, "big-endian");
+le_impl!(be128, u128, to_be, from_be, 128, "big-endian");
 le_impl!(le16, u16, to_le, from_le, 16, "little-endian");
 le_impl!(le32, u32, to_le, from_le, 32, "little-endian");
 le_impl!(le64, u64, to_le, from_le, 64, "little-endian");
+le_impl!(le128, u128, to_le, from_le, 128, "little-endian");
 
 impl be64 {
     /// Create an integer from its representation as a [`be32`] array in big endian.
@@ -69,6 +71,30 @@ impl le64 {
 
     /// Return the memory representation of this integer as a [`le32`] array in little-endian byte order.
     pub const fn to_le_parts(self) -> [le32; 2] {
+        unsafe { mem::transmute(self) }
+    }
+}
+
+impl be128 {
+    /// Create an integer from its representation as a [`be32`] array in big endian.
+    pub const fn from_be_parts(parts: [be32; 4]) -> Self {
+        unsafe { mem::transmute(parts) }
+    }
+
+    /// Return the memory representation of this integer as a [`be32`] array in big-endian (network) byte order.
+    pub const fn to_be_parts(self) -> [be32; 4] {
+        unsafe { mem::transmute(self) }
+    }
+}
+
+impl le128 {
+    /// Create an integer from its representation as a [`le32`] array in little endian.
+    pub const fn from_le_parts(parts: [le32; 4]) -> Self {
+        unsafe { mem::transmute(parts) }
+    }
+
+    /// Return the memory representation of this integer as a [`le32`] array in little-endian byte order.
+    pub const fn to_le_parts(self) -> [le32; 4] {
         unsafe { mem::transmute(self) }
     }
 }
