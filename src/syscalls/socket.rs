@@ -103,7 +103,7 @@ impl From<sockaddr_in> for IpListenEndpoint {
 		if addr.sin_addr.s_addr == 0 {
 			IpListenEndpoint { addr: None, port }
 		} else {
-			let s_addr = addr.sin_addr.s_addr.to_be_bytes();
+			let s_addr = addr.sin_addr.s_addr.to_ne_bytes();
 
 			let address = IpAddress::v4(s_addr[0], s_addr[1], s_addr[2], s_addr[3]);
 
@@ -116,7 +116,7 @@ impl From<sockaddr_in> for IpListenEndpoint {
 impl From<sockaddr_in> for IpEndpoint {
 	fn from(addr: sockaddr_in) -> IpEndpoint {
 		let port = u16::from_be(addr.sin_port);
-		let s_addr = addr.sin_addr.s_addr.to_be_bytes();
+		let s_addr = addr.sin_addr.s_addr.to_ne_bytes();
 		let address = IpAddress::v4(s_addr[0], s_addr[1], s_addr[2], s_addr[3]);
 
 		IpEndpoint::from((address, port))
@@ -129,7 +129,7 @@ impl From<IpEndpoint> for sockaddr_in {
 		match endpoint.addr {
 			IpAddress::Ipv4(ip) => {
 				let sin_addr = in_addr {
-					s_addr: u32::from_be_bytes(ip.as_bytes().try_into().unwrap()),
+					s_addr: u32::from_ne_bytes(ip.as_bytes().try_into().unwrap()),
 				};
 
 				Self {
@@ -532,7 +532,7 @@ pub unsafe extern "C" fn sys_getpeername(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			if let Some(endpoint) = (*v).getsockname() {
+			if let Some(endpoint) = (*v).getpeername() {
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 

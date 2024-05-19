@@ -345,7 +345,6 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	#[allow(dead_code)]
 	fn getpeername(&self) -> Option<IpEndpoint> {
 		self.with(|socket| socket.remote_endpoint())
 	}
