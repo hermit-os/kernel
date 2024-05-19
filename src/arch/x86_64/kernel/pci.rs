@@ -34,7 +34,7 @@ impl ConfigRegionAccess for PciConfigRegion {
 			| u32::from(register);
 		unsafe {
 			outl(PCI_CONFIG_ADDRESS_PORT, address);
-			crate::drivers::pci::from_pci_endian(inl(PCI_CONFIG_DATA_PORT))
+			u32::from_le(inl(PCI_CONFIG_DATA_PORT))
 		}
 	}
 

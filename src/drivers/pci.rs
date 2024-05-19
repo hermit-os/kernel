@@ -31,21 +31,6 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
-/// Converts a given little endian coded u32 to native endian coded.
-//
-// INFO: As the endianness received from the device is little endian coded
-// the given value must be swapped again on big endian machines. Which is done
-// via the u32::to_le() method as the u32::to_be() would be a no-op in big endian
-// machines. Resulting in no conversion.
-#[inline]
-pub(crate) fn from_pci_endian(val: u32) -> u32 {
-	if cfg!(target = "big_endian") {
-		val.to_le()
-	} else {
-		val
-	}
-}
-
 /// The module contains constants specific to PCI.
 #[allow(dead_code)]
 pub(crate) mod constants {
