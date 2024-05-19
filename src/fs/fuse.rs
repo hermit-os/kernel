@@ -14,6 +14,7 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 
 use crate::alloc::string::ToString;
+use crate::arch;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
@@ -856,11 +857,24 @@ impl Clone for FuseFileHandle {
 #[derive(Debug)]
 pub(crate) struct FuseDirectory {
 	prefix: Option<String>,
+	attr: FileAttr,
 }
 
 impl FuseDirectory {
-	pub const fn new(prefix: Option<String>) -> Self {
-		FuseDirectory { prefix }
+	pub fn new(prefix: Option<String>) -> Self {
+		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
+
+		FuseDirectory {
+			prefix,
+			attr: FileAttr {
+				st_mode: AccessPermission::from_bits(0o777).unwrap() | AccessPermission::S_IFDIR,
+				st_atim: t,
+				st_mtim: t,
+				st_ctim: t,
+				..Default::default()
+			},
+		}
 	}
 }
 
@@ -868,6 +882,10 @@ impl VfsNode for FuseDirectory {
 	/// Returns the node type
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
+	}
+
+	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+		Ok(self.attr)
 	}
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
