@@ -854,6 +854,103 @@ impl Clone for FuseFileHandle {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct FuseDirectoryHandle {
+	name: Option<String>,
+}
+
+impl FuseDirectoryHandle {
+	pub fn new(name: Option<String>) -> Self {
+		Self { name }
+	}
+}
+
+#[async_trait]
+impl ObjectInterface for FuseDirectoryHandle {
+	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
+		let path: String = if let Some(name) = &self.name {
+			"/".to_string() + name
+		} else {
+			"/".to_string()
+		};
+
+		debug!("FUSE opendir: {}", path);
+
+		let fuse_nid = lookup(&path).ok_or(IoError::ENOENT)?;
+
+		// Opendir
+		// Flag 0x10000 for O_DIRECTORY might not be necessary
+		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+		cmd.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
+		get_filesystem_driver()
+			.ok_or(IoError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
+		let fuse_fh = unsafe { rsp.op_header.assume_init_ref().fh };
+
+		debug!("FUSE readdir: {}", path);
+
+		// Linux seems to allocate a single page to store the dirfile
+		let len = MAX_READ_LEN as u32;
+		let mut offset: usize = 0;
+
+		// read content of the directory
+		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+		cmd.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
+		get_filesystem_driver()
+			.ok_or(IoError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
+
+		let len: usize = if unsafe { rsp.out_header.assume_init_ref().len } as usize
+			- ::core::mem::size_of::<fuse_abi::OutHeader>()
+			- ::core::mem::size_of::<fuse_abi::ReadOut>()
+			>= len.try_into().unwrap()
+		{
+			len.try_into().unwrap()
+		} else {
+			(unsafe { rsp.out_header.assume_init_ref().len } as usize)
+				- ::core::mem::size_of::<fuse_abi::OutHeader>()
+				- ::core::mem::size_of::<fuse_abi::ReadOut>()
+		};
+
+		if len <= core::mem::size_of::<fuse_abi::Dirent>() {
+			debug!("FUSE no new dirs");
+			return Err(IoError::ENOENT);
+		}
+
+		let mut entries: Vec<DirectoryEntry> = Vec::new();
+		while (unsafe { rsp.out_header.assume_init_ref().len } as usize) - offset
+			> core::mem::size_of::<fuse_abi::Dirent>()
+		{
+			let dirent =
+				unsafe { &*(rsp.payload.as_ptr().byte_add(offset) as *const fuse_abi::Dirent) };
+
+			offset += core::mem::size_of::<fuse_abi::Dirent>() + dirent.d_namelen as usize;
+			// Align to dirent struct
+			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
+
+			let name: &'static [u8] = unsafe {
+				core::slice::from_raw_parts(
+					dirent.d_name.as_ptr(),
+					dirent.d_namelen.try_into().unwrap(),
+				)
+			};
+			entries.push(DirectoryEntry::new(unsafe {
+				core::str::from_utf8_unchecked(name).to_string()
+			}));
+		}
+
+		let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
+		get_filesystem_driver()
+			.unwrap()
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
+
+		Ok(entries)
+	}
+}
+
 #[derive(Debug)]
 pub(crate) struct FuseDirectory {
 	prefix: Option<String>,
@@ -886,6 +983,10 @@ impl VfsNode for FuseDirectory {
 
 	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
 		Ok(self.attr)
+	}
+
+	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Ok(Arc::new(FuseDirectoryHandle::new(self.prefix.clone())))
 	}
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
@@ -1071,7 +1172,7 @@ impl VfsNode for FuseDirectory {
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		let path: String = if components.is_empty() {
+		let mut path: String = if components.is_empty() {
 			if let Some(prefix) = &self.prefix {
 				"/".to_string() + prefix
 			} else {
@@ -1091,49 +1192,69 @@ impl VfsNode for FuseDirectory {
 			}
 		};
 
+		debug!("FUSE lstat: {}", path);
+
+		let (cmd, mut rsp) = ops::Lookup::create(&path);
+		get_filesystem_driver()
+			.unwrap()
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut())?;
+
+		let attr = unsafe { FileAttr::from(rsp.op_header.assume_init().attr) };
+		let is_dir = attr.st_mode.contains(AccessPermission::S_IFDIR);
+
 		debug!("FUSE open: {}, {:?} {:?}", path, opt, mode);
 
-		let file = FuseFileHandle::new();
-
-		// 1.FUSE_INIT to create session
-		// Already done
-		let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
-
-		// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
-		if !opt.contains(OpenOption::O_CREAT) {
-			// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-			file_guard.fuse_nid = lookup(&path);
-
-			if file_guard.fuse_nid.is_none() {
-				warn!("Fuse lookup seems to have failed!");
-				return Err(IoError::ENOENT);
+		if is_dir {
+			path.remove(0);
+			Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
+		} else {
+			if opt.contains(OpenOption::O_DIRECTORY) {
+				return Err(IoError::ENOTDIR);
 			}
 
-			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-			let (cmd, mut rsp) =
-				ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
-			get_filesystem_driver()
-				.ok_or(IoError::ENOSYS)?
-				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut())?;
-			file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init_ref().fh });
-		} else {
-			// Create file (opens implicitly, returns results from both lookup and open calls)
-			let (cmd, mut rsp) =
-				ops::Create::create(&path, opt.bits().try_into().unwrap(), mode.bits());
-			get_filesystem_driver()
-				.ok_or(IoError::ENOSYS)?
-				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut())?;
+			let file = FuseFileHandle::new();
 
-			let inner = unsafe { rsp.op_header.assume_init() };
-			file_guard.fuse_nid = Some(inner.entry.nodeid);
-			file_guard.fuse_fh = Some(inner.open.fh);
+			// 1.FUSE_INIT to create session
+			// Already done
+			let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
+
+			// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
+			if !opt.contains(OpenOption::O_CREAT) {
+				// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
+				file_guard.fuse_nid = lookup(&path);
+
+				if file_guard.fuse_nid.is_none() {
+					warn!("Fuse lookup seems to have failed!");
+					return Err(IoError::ENOENT);
+				}
+
+				// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
+				let (cmd, mut rsp) =
+					ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
+				get_filesystem_driver()
+					.ok_or(IoError::ENOSYS)?
+					.lock()
+					.send_command(cmd.as_ref(), rsp.as_mut())?;
+				file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init_ref().fh });
+			} else {
+				// Create file (opens implicitly, returns results from both lookup and open calls)
+				let (cmd, mut rsp) =
+					ops::Create::create(&path, opt.bits().try_into().unwrap(), mode.bits());
+				get_filesystem_driver()
+					.ok_or(IoError::ENOSYS)?
+					.lock()
+					.send_command(cmd.as_ref(), rsp.as_mut())?;
+
+				let inner = unsafe { rsp.op_header.assume_init() };
+				file_guard.fuse_nid = Some(inner.entry.nodeid);
+				file_guard.fuse_fh = Some(inner.open.fh);
+			}
+
+			drop(file_guard);
+
+			Ok(Arc::new(file))
 		}
-
-		drop(file_guard);
-
-		Ok(Arc::new(file))
 	}
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
