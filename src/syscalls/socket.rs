@@ -532,7 +532,7 @@ pub unsafe extern "C" fn sys_getpeername(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			if let Some(endpoint) = (*v).getsockname() {
+			if let Some(endpoint) = (*v).getpeername() {
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
