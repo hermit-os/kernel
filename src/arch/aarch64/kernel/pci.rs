@@ -47,7 +47,7 @@ impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, offset: u16) -> u32 {
 		let ptr = core::ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
-		unsafe { crate::drivers::pci::from_pci_endian(core::ptr::read_volatile(ptr)) }
+		unsafe { u32::from_le(core::ptr::read_volatile(ptr)) }
 	}
 
 	#[inline]
