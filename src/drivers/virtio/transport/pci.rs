@@ -761,7 +761,7 @@ impl NotifCtrl {
 
 	pub fn notify_dev(&self, notif_data: &[u8]) {
 		// See Virtio specification v.1.1. - 4.1.5.2
-		// Depending in the feature negotiation, we write eitehr only the
+		// Depending in the feature negotiation, we write either only the
 		// virtqueue index or the index and the next position inside the queue.
 
 		fence(Ordering::Acquire);
