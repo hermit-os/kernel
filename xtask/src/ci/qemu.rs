@@ -45,6 +45,7 @@ pub struct Qemu {
 #[derive(ValueEnum, Clone, Copy)]
 pub enum NetworkDevice {
 	VirtioNetPci,
+	VirtioNetMmio,
 	Rtl8139,
 }
 
@@ -137,7 +138,7 @@ impl Qemu {
 				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off"
 					.to_string(),
 				"-global".to_string(),
-				"virtio-mmio.force-legacy=on".to_string(),
+				"virtio-mmio.force-legacy=off".to_string(),
 				"-nodefaults".to_string(),
 				"-no-user-config".to_string(),
 				"-append".to_string(),
@@ -214,10 +215,10 @@ impl Qemu {
 		if self.build.cargo_build.artifact.profile() == "dev" {
 			memory *= 4;
 		}
-		if self.netdev.is_some() {
-			memory *= 4;
-		}
 		memory *= self.smp;
+		if self.netdev.is_some() {
+			memory = memory.max(1024);
+		}
 		if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
 			memory = memory.max(256);
 		}
@@ -236,6 +237,12 @@ impl Qemu {
 				"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
 				"-device",
 				"virtio-net-pci,netdev=u1,disable-legacy=on"
+			],
+			Some(NetworkDevice::VirtioNetMmio) => &[
+				"-netdev",
+				"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
+				"-device",
+				"virtio-net-device,netdev=u1"
 			],
 			Some(NetworkDevice::Rtl8139) => &[
 				"-netdev",

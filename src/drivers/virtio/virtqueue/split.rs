@@ -405,7 +405,7 @@ impl Virtq for SplitVq {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		_features: virtio_spec::F,
+		features: virtio_spec::F,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
 		let mut vq_handler = match com_cfg.select_vq(index.into()) {
@@ -493,11 +493,15 @@ impl Virtq for SplitVq {
 			used_ring_cell,
 		};
 
-		let notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
+		let mut notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
 			notif_cfg.base()
 				+ usize::from(vq_handler.notif_off())
 				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
 		));
+
+		if features.contains(virtio_spec::F::NOTIFICATION_DATA) {
+			notif_ctrl.enable_notif_data();
+		}
 
 		// Initialize new memory pool.
 		let mem_pool = Rc::new(MemPool::new(size));

@@ -18,7 +18,7 @@ pub const MAGIC_VALUE: u32 = 0x74726976;
 
 pub const MMIO_START: usize = 0x00000000feb00000;
 pub const MMIO_END: usize = 0x00000000feb0ffff;
-const IRQ_NUMBER: u8 = 23;
+const IRQ_NUMBER: u8 = 44 - 32;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
 

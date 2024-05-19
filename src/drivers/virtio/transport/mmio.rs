@@ -308,10 +308,12 @@ impl NotifCtrl {
 				ptr.write_volatile(notif_data[0..4].try_into().unwrap());
 			}
 		} else {
-			let ptr = self.notif_addr as *mut [u8; 2];
+			let mut data: [u8; 4] = [0, 0, 0, 0];
+			data[0..2].copy_from_slice(&notif_data[0..2]);
+			let ptr = self.notif_addr as *mut [u8; 4];
 
 			unsafe {
-				ptr.write_volatile(notif_data[0..2].try_into().unwrap());
+				ptr.write_volatile(data[0..4].try_into().unwrap());
 			}
 		}
 
