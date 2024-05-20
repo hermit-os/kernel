@@ -251,9 +251,23 @@ pub struct linger {
 	pub l_linger: i32,
 }
 
+#[cfg(not(feature = "dns"))]
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_getaddrbyname(
+	_name: *const c_char,
+	_inaddr: *mut u8,
+	_len: usize,
+) -> i32 {
+	-ENOSYS
+}
+
 #[cfg(feature = "dns")]
 #[hermit_macro::system]
-pub extern "C" fn sys_getaddrbyname(name: *const c_char, inaddr: *mut u8, len: usize) -> i32 {
+pub unsafe extern "C" fn sys_getaddrbyname(
+	name: *const c_char,
+	inaddr: *mut u8,
+	len: usize,
+) -> i32 {
 	use alloc::borrow::ToOwned;
 
 	use smoltcp::wire::DnsQueryType;
