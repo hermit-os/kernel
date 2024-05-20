@@ -1,4 +1,6 @@
 use alloc::boxed::Box;
+#[cfg(feature = "dns")]
+use alloc::vec::Vec;
 use core::future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
@@ -8,18 +10,24 @@ use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
+#[cfg(feature = "dns")]
+use smoltcp::socket::dns::{self, GetQueryResultError, QueryHandle};
 #[cfg(feature = "tcp")]
 use smoltcp::socket::tcp;
 #[cfg(feature = "udp")]
 use smoltcp::socket::udp;
 use smoltcp::socket::AnySocket;
 use smoltcp::time::{Duration, Instant};
+#[cfg(feature = "dns")]
+use smoltcp::wire::{DnsQueryType, IpAddress};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch;
 use crate::executor::device::HermitNet;
 use crate::executor::spawn;
+#[cfg(feature = "dns")]
+use crate::fd::IoError;
 use crate::scheduler::PerCoreSchedulerExt;
 
 pub(crate) enum NetworkState<'a> {
@@ -49,6 +57,8 @@ pub(crate) struct NetworkInterface<'a> {
 	pub(super) device: HermitNet,
 	#[cfg(feature = "dhcpv4")]
 	pub(super) dhcp_handle: SocketHandle,
+	#[cfg(feature = "dns")]
+	pub(super) dns_handle: Option<SocketHandle>,
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -104,6 +114,32 @@ async fn network_run() {
 	.await
 }
 
+/*#[cfg(feature = "dns")]
+#[allow(dead_code)]
+async fn dns_test() {
+	use core::future::Future;
+	info!("Start DNS test");
+
+	let query = {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let query = nic.start_query("rust-lang.org", DnsQueryType::A).unwrap();
+		nic.poll_common(now());
+
+		query
+	};
+
+	let result = future::poll_fn(|cx| {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let future = core::pin::pin!(nic.get_query_result(query));
+		future.poll(cx)
+	})
+	.await;
+
+	info!("result {:?}", result);
+}*/
+
 pub(crate) fn init() {
 	info!("Try to initialize network!");
 
@@ -123,6 +159,8 @@ pub(crate) fn init() {
 		crate::core_scheduler().add_network_timer(wakeup_time);
 
 		spawn(network_run());
+		//#[cfg(feature = "dns")]
+		//spawn(dns_test());
 	}
 }
 
@@ -183,8 +221,18 @@ impl<'a> NetworkInterface<'a> {
 					self.iface.routes_mut().remove_default_ipv4_route();
 				}
 
+				#[cfg(feature = "dns")]
+				let mut dns_servers: Vec<IpAddress> = Vec::new();
 				for (i, s) in config.dns_servers.iter().enumerate() {
 					info!("DNS server {}:    {}", i, s);
+					#[cfg(feature = "dns")]
+					dns_servers.push(IpAddress::Ipv4(*s));
+				}
+
+				#[cfg(feature = "dns")]
+				if dns_servers.len() > 0 {
+					let dns_socket = dns::Socket::new(dns_servers.as_slice(), vec![]);
+					self.dns_handle = Some(self.sockets.add(dns_socket));
 				}
 			}
 			Some(dhcpv4::Event::Deconfigured) => {
@@ -196,6 +244,15 @@ impl<'a> NetworkInterface<'a> {
 					}
 				});
 				self.iface.routes_mut().remove_default_ipv4_route();
+
+				#[cfg(feature = "dns")]
+				{
+					if let Some(dns_handle) = self.dns_handle {
+						self.sockets.remove(dns_handle);
+					}
+
+					self.dns_handle = None;
+				}
 			}
 		};
 	}
@@ -223,6 +280,50 @@ impl<'a> NetworkInterface<'a> {
 	pub(crate) fn destroy_socket(&mut self, handle: Handle) {
 		// This deallocates the socket's buffers
 		self.sockets.remove(handle);
+	}
+
+	#[cfg(feature = "dns")]
+	#[allow(dead_code)]
+	pub(crate) fn start_query(
+		&mut self,
+		name: &str,
+		query_type: DnsQueryType,
+	) -> Result<QueryHandle, IoError> {
+		let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+		let socket: &mut dns::Socket<'a> = self.sockets.get_mut(dns_handle);
+		socket
+			.start_query(self.iface.context(), name, query_type)
+			.map_err(|_| IoError::EIO)
+	}
+
+	#[cfg(feature = "dns")]
+	#[allow(dead_code)]
+	pub(crate) async fn get_query_result(
+		&mut self,
+		query: QueryHandle,
+	) -> Result<Vec<IpAddress>, IoError> {
+		future::poll_fn(|_cx| {
+			let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+			self.poll_common(now());
+
+			let socket: &mut dns::Socket<'a> = self.sockets.get_mut(dns_handle);
+			match socket.get_query_result(query) {
+				Ok(addrs) => {
+					let mut ips = Vec::new();
+					for x in &addrs {
+						ips.push(*x);
+					}
+
+					Poll::Ready(Ok(ips))
+				}
+				Err(GetQueryResultError::Pending) => Poll::Pending,
+				Err(e) => {
+					warn!("DNS query failed: {e:?}");
+					Poll::Ready(Err(IoError::ENOENT))
+				}
+			}
+		})
+		.await
 	}
 }
 
