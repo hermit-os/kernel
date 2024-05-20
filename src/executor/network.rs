@@ -114,31 +114,35 @@ async fn network_run() {
 	.await
 }
 
-/*#[cfg(feature = "dns")]
-#[allow(dead_code)]
-async fn dns_test() {
+#[cfg(feature = "dns")]
+pub(crate) async fn get_query_result(query: QueryHandle) -> Result<Vec<IpAddress>, IoError> {
 	use core::future::Future;
-	info!("Start DNS test");
 
-	let query = {
+	future::poll_fn(|cx| {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let query = nic.start_query("rust-lang.org", DnsQueryType::A).unwrap();
-		nic.poll_common(now());
+		let socket = nic.get_mut_dns_socket()?;
+		match socket.get_query_result(query) {
+			Ok(addrs) => {
+				let mut ips = Vec::new();
+				for x in &addrs {
+					ips.push(*x);
+				}
 
-		query
-	};
-
-	let result = future::poll_fn(|cx| {
-		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().unwrap();
-		let future = core::pin::pin!(nic.get_query_result(query));
-		future.poll(cx)
+				Poll::Ready(Ok(ips))
+			}
+			Err(GetQueryResultError::Pending) => {
+				socket.register_query_waker(query, cx.waker());
+				Poll::Pending
+			}
+			Err(e) => {
+				warn!("DNS query failed: {e:?}");
+				Poll::Ready(Err(IoError::ENOENT))
+			}
+		}
 	})
-	.await;
-
-	info!("result {:?}", result);
-}*/
+	.await
+}
 
 pub(crate) fn init() {
 	info!("Try to initialize network!");
@@ -159,8 +163,6 @@ pub(crate) fn init() {
 		crate::core_scheduler().add_network_timer(wakeup_time);
 
 		spawn(network_run());
-		//#[cfg(feature = "dns")]
-		//spawn(dns_test());
 	}
 }
 
@@ -283,7 +285,6 @@ impl<'a> NetworkInterface<'a> {
 	}
 
 	#[cfg(feature = "dns")]
-	#[allow(dead_code)]
 	pub(crate) fn start_query(
 		&mut self,
 		name: &str,
@@ -296,34 +297,17 @@ impl<'a> NetworkInterface<'a> {
 			.map_err(|_| IoError::EIO)
 	}
 
-	#[cfg(feature = "dns")]
 	#[allow(dead_code)]
-	pub(crate) async fn get_query_result(
-		&mut self,
-		query: QueryHandle,
-	) -> Result<Vec<IpAddress>, IoError> {
-		future::poll_fn(|_cx| {
-			let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
-			self.poll_common(now());
+	#[cfg(feature = "dns")]
+	pub(crate) fn get_dns_socket(&self) -> Result<&dns::Socket<'a>, IoError> {
+		let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+		Ok(self.sockets.get(dns_handle))
+	}
 
-			let socket: &mut dns::Socket<'a> = self.sockets.get_mut(dns_handle);
-			match socket.get_query_result(query) {
-				Ok(addrs) => {
-					let mut ips = Vec::new();
-					for x in &addrs {
-						ips.push(*x);
-					}
-
-					Poll::Ready(Ok(ips))
-				}
-				Err(GetQueryResultError::Pending) => Poll::Pending,
-				Err(e) => {
-					warn!("DNS query failed: {e:?}");
-					Poll::Ready(Err(IoError::ENOENT))
-				}
-			}
-		})
-		.await
+	#[cfg(feature = "dns")]
+	pub(crate) fn get_mut_dns_socket(&mut self) -> Result<&mut dns::Socket<'a>, IoError> {
+		let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+		Ok(self.sockets.get_mut(dns_handle))
 	}
 }
 

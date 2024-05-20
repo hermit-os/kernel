@@ -251,6 +251,55 @@ pub struct linger {
 	pub l_linger: i32,
 }
 
+#[cfg(feature = "dns")]
+#[hermit_macro::system]
+pub extern "C" fn sys_getaddrbyname(name: *const c_char, inaddr: *mut u8, len: usize) -> i32 {
+	use alloc::borrow::ToOwned;
+
+	use smoltcp::wire::DnsQueryType;
+
+	use crate::executor::block_on;
+	use crate::executor::network::get_query_result;
+
+	if len != size_of::<in_addr>().try_into().unwrap()
+		&& len != size_of::<in6_addr>().try_into().unwrap()
+	{
+		return -EINVAL;
+	}
+
+	if inaddr.is_null() {
+		return -EINVAL;
+	}
+
+	let query_type = if len == size_of::<in6_addr>().try_into().unwrap() {
+		DnsQueryType::Aaaa
+	} else {
+		DnsQueryType::A
+	};
+
+	let name = unsafe { core::ffi::CStr::from_ptr(name) };
+	let name = name.to_str().expect("Bad encoding").to_owned();
+
+	let query = {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let query = nic.start_query(&name, query_type).unwrap();
+		nic.poll_common(crate::executor::network::now());
+
+		query
+	};
+
+	match block_on(get_query_result(query), None) {
+		Ok(addr_vec) => {
+			let slice = unsafe { core::slice::from_raw_parts_mut(inaddr, len) };
+			slice.copy_from_slice(addr_vec[0].as_bytes());
+
+			0
+		}
+		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+	}
+}
+
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
