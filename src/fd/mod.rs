@@ -7,7 +7,7 @@ use core::time::Duration;
 
 use async_trait::async_trait;
 use dyn_clone::DynClone;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::arch::kernel::core_local::core_scheduler;
@@ -15,7 +15,7 @@ use crate::executor::{block_on, poll_on};
 use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
 
 mod eventfd;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) mod socket;
 pub(crate) mod stdio;
 
@@ -207,56 +207,56 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `accept` a connection on a socket
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn accept(&self) -> Result<IpEndpoint, IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// initiate a connection on a socket
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn connect(&self, _endpoint: IpEndpoint) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `bind` a name to a socket
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn bind(&self, _name: IpListenEndpoint) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `listen` for connections on a socket
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `setsockopt` sets options on sockets
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn getsockopt(&self, _opt: SocketOption) -> Result<bool, IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `getsockname` gets socket name
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn getsockname(&self) -> Option<IpEndpoint> {
 		None
 	}
 
 	/// `getpeername` get address of connected peer
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	#[allow(dead_code)]
 	fn getpeername(&self) -> Option<IpEndpoint> {
 		None
 	}
 
 	/// receive a message from a socket
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		Err(IoError::ENOSYS)
 	}
@@ -268,13 +268,13 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// If a peer address has been prespecified, either the message shall
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
 	/// shut down part of a full-duplex connection
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	fn shutdown(&self, _how: i32) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
