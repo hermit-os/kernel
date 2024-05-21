@@ -67,6 +67,33 @@ qemu-system-aarch64 \
                   -device guest-loader,addr=0x48000000,initrd=<APP>
 ```
 
+### 64-bit RISC-V
+
+For 64-bit RISC-V, we need a recent version of [OpenSBI].
+To download the release asset with [GitHub CLI] and extract the correct binary, run:
+
+```bash
+gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
+tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+```
+
+[OpenSBI]: https://github.com/riscv-software-src/opensbi
+[GitHub CLI]: https://cli.github.com/
+
+The QEMU base command is as follows:
+
+```bash
+qemu-system-riscv64 \
+    -machine virt \
+    -cpu rv64 \
+    -smp 1 \
+    -m 128M \
+    -display none -serial stdio \
+    -bios opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+    -kernel <LOADER>
+    -initrd <APP> 
+```
+
 ### Debugging
 
 You can use QEMU to debug the loaded Hermit images:
