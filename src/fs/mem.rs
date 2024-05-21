@@ -314,6 +314,40 @@ impl RamFile {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct MemDirectoryInterface {
+	/// Directory entries
+	inner:
+		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
+}
+
+impl MemDirectoryInterface {
+	pub fn new(
+		inner: Arc<
+			RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
+		>,
+	) -> Self {
+		Self { inner }
+	}
+}
+
+#[async_trait]
+impl ObjectInterface for MemDirectoryInterface {
+	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
+		block_on(
+			async {
+				let mut entries: Vec<DirectoryEntry> = Vec::new();
+				for name in self.inner.read().await.keys() {
+					entries.push(DirectoryEntry::new(name.to_string()));
+				}
+
+				Ok(entries)
+			},
+			None,
+		)
+	}
+}
+
 #[derive(Debug)]
 pub(crate) struct MemDirectory {
 	inner:
@@ -358,7 +392,13 @@ impl MemDirectory {
 						return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
 					}
 				} else if let Some(file) = guard.get(&node_name) {
-					if file.get_kind() == NodeKind::File {
+					if opt.contains(OpenOption::O_DIRECTORY)
+						&& file.get_kind() != NodeKind::Directory
+					{
+						return Err(IoError::ENOTDIR);
+					}
+
+					if file.get_kind() == NodeKind::File || file.get_kind() == NodeKind::Directory {
 						return file.get_object();
 					} else {
 						return Err(IoError::ENOENT);
@@ -380,6 +420,10 @@ impl MemDirectory {
 impl VfsNode for MemDirectory {
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
+	}
+
+	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Ok(Arc::new(MemDirectoryInterface::new(self.inner.clone())))
 	}
 
 	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
