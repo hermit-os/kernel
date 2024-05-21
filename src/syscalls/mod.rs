@@ -63,6 +63,15 @@ pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
 	}
 });
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct iovec {
+	/// Starting address
+	pub iov_base: *mut u8,
+	/// Size of the memory pointed to by iov_base.
+	pub iov_len: usize,
+}
+
 pub(crate) fn init() {
 	Lazy::force(&SYS);
 
@@ -421,6 +430,33 @@ pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) 
 	)
 }
 
+#[hermit_macro::system]
+pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) -> isize {
+	let mut count: isize = 0;
+	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+
+	for i in slice {
+		let buf = unsafe { core::slice::from_raw_parts_mut(i.iov_base, i.iov_len) };
+
+		let len = crate::fd::read(fd, buf).map_or_else(
+			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|v| v.try_into().unwrap(),
+		);
+
+		if len < 0 {
+			return len;
+		}
+
+		count += len;
+
+		if len < i.iov_len.try_into().unwrap() {
+			return count;
+		}
+	}
+
+	count
+}
+
 unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	crate::fd::write(fd, slice).map_or_else(
@@ -433,6 +469,34 @@ unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 #[no_mangle]
 pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	unsafe { write(fd, buf, len) }
+}
+
+#[hermit_macro::system]
+#[no_mangle]
+pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: usize) -> isize {
+	let mut count: isize = 0;
+	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+
+	for i in slice {
+		let buf = unsafe { core::slice::from_raw_parts(i.iov_base, i.iov_len) };
+
+		let len = crate::fd::write(fd, buf).map_or_else(
+			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|v| v.try_into().unwrap(),
+		);
+
+		if len < 0 {
+			return len;
+		}
+
+		count += len;
+
+		if len < i.iov_len.try_into().unwrap() {
+			return count;
+		}
+	}
+
+	count
 }
 
 #[hermit_macro::system]
