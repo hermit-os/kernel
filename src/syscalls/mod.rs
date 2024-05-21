@@ -13,8 +13,6 @@ pub use self::condvar::*;
 pub use self::entropy::*;
 pub use self::futex::*;
 pub use self::processor::*;
-#[cfg(feature = "newlib")]
-pub use self::recmutex::*;
 pub use self::semaphore::*;
 pub use self::spinlock::*;
 pub use self::system::*;
@@ -37,8 +35,6 @@ mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
 mod processor;
-#[cfg(feature = "newlib")]
-mod recmutex;
 mod semaphore;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub mod socket;
