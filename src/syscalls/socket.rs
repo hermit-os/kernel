@@ -252,6 +252,7 @@ pub struct linger {
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 	debug!(
 		"sys_socket: domain {}, type {:?}, protocol {}",
@@ -305,6 +306,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
@@ -346,6 +348,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
@@ -358,6 +361,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	let endpoint = if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
 		IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in) })
@@ -378,6 +382,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	let endpoint = if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
 		IpEndpoint::from(unsafe { *(name as *const sockaddr_in) })
@@ -398,6 +403,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_getsockname(
 	fd: i32,
 	addr: *mut sockaddr,
@@ -442,6 +448,7 @@ pub unsafe extern "C" fn sys_getsockname(
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_setsockopt(
 	fd: i32,
 	level: i32,
@@ -479,6 +486,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_getsockopt(
 	fd: i32,
 	level: i32,
@@ -523,6 +531,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_getpeername(
 	fd: i32,
 	addr: *mut sockaddr,
@@ -567,9 +576,11 @@ pub unsafe extern "C" fn sys_getpeername(
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_freeaddrinfo(_ai: *mut addrinfo) {}
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_getaddrinfo(
 	_nodename: *const c_char,
 	_servname: *const c_char,
@@ -580,11 +591,13 @@ pub unsafe extern "C" fn sys_getaddrinfo(
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) -> isize {
 	unsafe { super::write(s, mem.cast(), len) }
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
@@ -597,6 +610,7 @@ pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
 	if flags == 0 {
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
@@ -610,6 +624,7 @@ pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32)
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_sendto(
 	fd: i32,
 	buf: *const u8,
@@ -640,6 +655,7 @@ pub unsafe extern "C" fn sys_sendto(
 }
 
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_recvfrom(
 	fd: i32,
 	buf: *mut u8,

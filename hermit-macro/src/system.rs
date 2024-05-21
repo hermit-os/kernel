@@ -59,13 +59,27 @@ fn parse_sig(sig: &Signature) -> Result<ParsedSig> {
 }
 
 fn validate_attrs(attrs: &[Attribute]) -> Result<()> {
+	let mut no_mangle_found = false;
 	for attr in attrs {
-		if !attr.path().is_ident("cfg") && !attr.path().is_ident("doc") {
+		if !attr.path().is_ident("cfg")
+			&& !attr.path().is_ident("doc")
+			&& !attr.path().is_ident("no_mangle")
+		{
 			bail!(
 				attr,
-				"#[system] functions may only have `#[doc]` and `#[cfg]` attributes"
+				"#[system] functions may only have `#[doc]`, `#[no_mangle]` and `#[cfg]` attributes"
 			);
 		}
+		if attr.path().is_ident("no_mangle") {
+			no_mangle_found = true;
+		}
+	}
+
+	if !no_mangle_found {
+		bail!(
+			attrs.first(),
+			"#[system] functions must have `#[no_mangle]` attribute"
+		);
 	}
 
 	Ok(())
@@ -96,7 +110,6 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 
 	let func = parse_quote! {
 		#(#attrs)*
-		#[no_mangle]
 		#vis #sig {
 			#func
 
@@ -128,6 +141,7 @@ mod tests {
 			///
 			/// This is very important.
 			#[cfg(target_os = "none")]
+			#[no_mangle]
 			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				let c = i16::from(a) + b;
 				i32::from(c)
@@ -164,6 +178,7 @@ mod tests {
 			///
 			/// This is very important.
 			#[cfg(target_os = "none")]
+			#[no_mangle]
 			pub unsafe extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				let c = i16::from(a) + b;
 				i32::from(c)

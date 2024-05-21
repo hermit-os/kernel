@@ -63,6 +63,7 @@ pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) 
 /// the function returns `-1`.
 #[cfg(not(feature = "newlib"))]
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 	let mut buf = value.cast();
 	let mut len = size_of::<u32>();
@@ -84,6 +85,7 @@ pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 /// the function returns -1.
 #[cfg(not(feature = "newlib"))]
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
 	let mut buf = value.cast();
 	let mut len = size_of::<u64>();
@@ -103,6 +105,7 @@ pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
 /// The function computes a sequence of pseudo-random integers
 /// in the range of 0 to RAND_MAX
 #[hermit_macro::system]
+#[no_mangle]
 pub extern "C" fn sys_rand() -> u32 {
 	generate_park_miller_lehmer_random_number()
 }
@@ -110,6 +113,7 @@ pub extern "C" fn sys_rand() -> u32 {
 /// The function sets its argument as the seed for a new sequence
 /// of pseudo-random numbers to be returned by rand()
 #[hermit_macro::system]
+#[no_mangle]
 pub extern "C" fn sys_srand(seed: u32) {
 	*(PARK_MILLER_LEHMER_SEED.lock()) = seed;
 }
