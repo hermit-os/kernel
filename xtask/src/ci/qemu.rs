@@ -30,6 +30,10 @@ pub struct Qemu {
 	#[arg(long)]
 	netdev: Option<NetworkDevice>,
 
+	/// Do not activate additional virtio features.
+	#[arg(long)]
+	no_default_virtio_features: bool,
+
 	/// Create multiple vCPUs.
 	#[arg(long, default_value_t = 1)]
 	smp: usize,
@@ -230,22 +234,31 @@ impl Qemu {
 		["-m".to_string(), format!("{}M", self.memory())]
 	}
 
-	fn netdev_args(&self) -> Vec<&'static str> {
+	fn netdev_args(&self) -> Vec<String> {
 		let Some(netdev) = self.netdev else {
 			return vec![];
 		};
 
 		let mut netdev_args = vec![
-			"-netdev",
-			"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
-			"-device",
+			"-netdev".to_string(),
+			"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9".to_string(),
+			"-device".to_string(),
 		];
 
-		let device_arg = match netdev {
+		let mut device_arg = match netdev {
 			NetworkDevice::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
 			NetworkDevice::VirtioNetMmio => "virtio-net-device,netdev=u1",
 			NetworkDevice::Rtl8139 => "rtl8139,netdev=u1",
-		};
+		}
+		.to_string();
+
+		if !self.no_default_virtio_features
+			&& matches!(
+				netdev,
+				NetworkDevice::VirtioNetPci | NetworkDevice::VirtioNetMmio
+			) {
+			device_arg.push_str(",packed=on,mq=on");
+		}
 
 		netdev_args.push(device_arg);
 
@@ -255,11 +268,16 @@ impl Qemu {
 	fn virtiofsd_args(&self) -> Vec<String> {
 		if self.virtiofsd {
 			let memory = self.memory();
+			let default_virtio_features = if !self.no_default_virtio_features {
+				",packed=on"
+			} else {
+				""
+			};
 			vec![
 				"-chardev".to_string(),
 				"socket,id=char0,path=./vhostqemu".to_string(),
 				"-device".to_string(),
-				"vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root".to_string(),
+				format!("vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"),
 				"-object".to_string(),
 				format!("memory-backend-file,id=mem,size={memory}M,mem-path=/dev/shm,share=on"),
 				"-numa".to_string(),
