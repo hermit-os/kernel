@@ -20,7 +20,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
+	BuffSpec, BufferToken, BufferType, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
@@ -521,10 +521,11 @@ impl Virtq for SplitVq {
 
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
-		send: Option<(&[u8], BuffSpec<'_>)>,
-		recv: Option<(&mut [u8], BuffSpec<'_>)>,
+		send: &[&[u8]],
+		recv: &[&mut [u8]],
+		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError> {
-		self.prep_transfer_from_raw_static(send, recv)
+		self.prep_transfer_from_raw_static(send, recv, buffer_type)
 	}
 
 	fn prep_buffer(
@@ -559,7 +560,7 @@ impl VirtqPrivate for SplitVq {
 			None => return Err(VirtqError::BufferToLarge),
 		};
 
-		let ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
+		let ctrl_desc = match self.mem_pool.clone().pull(sz_indrct_lst) {
 			Ok(desc) => desc,
 			Err(vq_err) => return Err(vq_err),
 		};
