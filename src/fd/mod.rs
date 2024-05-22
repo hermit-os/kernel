@@ -135,6 +135,8 @@ bitflags! {
 		const S_IWOTH = 0o002;
 		const S_IXOTH = 0o001;
 		const S_IRWXO = 0o007;
+		// Allow bits unknown to us to be set externally. See bitflags documentation for further explanation.
+		const _ = !0;
 	}
 }
 
