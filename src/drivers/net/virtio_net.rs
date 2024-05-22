@@ -725,7 +725,9 @@ impl VirtioNetDriver {
 			// Driver can merge receive buffers
 			| virtio_spec::net::F::MRG_RXBUF
 			// the link status can be announced
-			| virtio_spec::net::F::STATUS;
+			| virtio_spec::net::F::STATUS
+			// Multiqueue support
+			| virtio_spec::net::F::MQ;
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
