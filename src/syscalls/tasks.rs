@@ -22,7 +22,7 @@ pub type Tid = i32;
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_getpid() -> Tid {
-	core_scheduler().get_current_task_id().into()
+	0
 }
 
 #[cfg(feature = "newlib")]
