@@ -65,6 +65,7 @@ pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
+/// Describes  a  region  of  memory, beginning at `iov_base` address and with the size of `iov_len` bytes.
 struct iovec {
 	/// Starting address
 	pub iov_base: *mut u8,
