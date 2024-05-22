@@ -72,7 +72,7 @@ struct iovec {
 	pub iov_len: usize,
 }
 
-const IOV_MAX: usize = 1024;
+const IOV_MAX: i32 = 1024;
 
 pub(crate) fn init() {
 	Lazy::force(&SYS);
@@ -433,13 +433,14 @@ pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) 
 }
 
 #[hermit_macro::system]
-pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) -> isize {
+#[no_mangle]
+pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: i32) -> isize {
 	if iovcnt > IOV_MAX {
 		return (-crate::errno::EINVAL).try_into().unwrap();
 	}
 
 	let mut count: isize = 0;
-	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt.try_into().unwrap()) };
 
 	for i in slice {
 		let buf = unsafe { core::slice::from_raw_parts_mut(i.iov_base, i.iov_len) };
@@ -479,13 +480,13 @@ pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usiz
 
 #[hermit_macro::system]
 #[no_mangle]
-pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: usize) -> isize {
+pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: i32) -> isize {
 	if iovcnt > IOV_MAX {
 		return (-crate::errno::EINVAL).try_into().unwrap();
 	}
 
 	let mut count: isize = 0;
-	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt.try_into().unwrap()) };
 
 	for i in slice {
 		let buf = unsafe { core::slice::from_raw_parts(i.iov_base, i.iov_len) };
