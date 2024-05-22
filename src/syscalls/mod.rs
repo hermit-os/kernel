@@ -433,6 +433,21 @@ pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) 
 	)
 }
 
+/// `read()` attempts to read `nbyte` of data to the object referenced by the
+/// descriptor `fd` from a buffer. `read()` performs the same
+/// action, but scatters the input data from the `iovcnt` buffers specified by the
+/// members of the iov array: `iov[0], iov[1], ..., iov[iovcnt-1]`.
+///
+/// ```
+/// struct iovec {
+///     char   *iov_base;  /* Base address. */
+///     size_t iov_len;    /* Length. */
+/// };
+/// ```
+///
+/// Each `iovec` entry specifies the base address and length of an area in memory from
+/// which data should be written.  `readv()` will always fill an completely
+/// before proceeding to the next.
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: i32) -> isize {
@@ -479,6 +494,21 @@ pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usiz
 	unsafe { write(fd, buf, len) }
 }
 
+/// `write()` attempts to write `nbyte` of data to the object referenced by the
+/// descriptor `fd` from a buffer. `writev()` performs the same
+/// action, but gathers the output data from the `iovcnt` buffers specified by the
+/// members of the iov array: `iov[0], iov[1], ..., iov[iovcnt-1]`.
+///
+/// ```
+/// struct iovec {
+///     char   *iov_base;  /* Base address. */
+///     size_t iov_len;    /* Length. */
+/// };
+/// ```
+///
+/// Each `iovec` entry specifies the base address and length of an area in memory from
+/// which data should be written.  `writev()` will always write a
+/// complete area before proceeding to the next.
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: i32) -> isize {
