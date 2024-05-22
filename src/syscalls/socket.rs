@@ -258,6 +258,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	_inaddr: *mut u8,
 	_len: usize,
 ) -> i32 {
+	warn!("Please enable the feature 'dns' to determine the network ip by name.");
 	-ENOSYS
 }
 
@@ -292,7 +293,11 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	};
 
 	let name = unsafe { core::ffi::CStr::from_ptr(name) };
-	let name = name.to_str().expect("Bad encoding").to_owned();
+	let name = if let Ok(name) = name.to_str() {
+		name.to_owned()
+	} else {
+		return -EINVAL;
+	};
 
 	let query = {
 		let mut guard = NIC.lock();

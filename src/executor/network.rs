@@ -116,8 +116,6 @@ async fn network_run() {
 
 #[cfg(feature = "dns")]
 pub(crate) async fn get_query_result(query: QueryHandle) -> Result<Vec<IpAddress>, IoError> {
-	use core::future::Future;
-
 	future::poll_fn(|cx| {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
