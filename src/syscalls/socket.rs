@@ -257,6 +257,98 @@ pub struct linger {
 	pub l_linger: i32,
 }
 
+#[cfg(not(feature = "dns"))]
+#[hermit_macro::system]
+#[no_mangle]
+pub unsafe extern "C" fn sys_getaddrbyname(
+	_name: *const c_char,
+	_inaddr: *mut u8,
+	_len: usize,
+) -> i32 {
+	error!("Please enable the feature 'dns' to determine the network ip by name.");
+	-ENOSYS
+}
+
+/// The system call `sys_getaddrbyname` determine the network host entry.
+/// It expects an array of u8 with a size of in_addr or of in6_addr.
+/// The result of the DNS request will be stored in this array.
+///
+/// # Example
+///
+/// ```
+/// use hermit_abi::in_addr;
+/// let c_string = std::ffi::CString::new("rust-lang.org").expect("CString::new failed");
+/// let name = c_string.into_raw();
+/// let mut inaddr: in_addr = Default::default();
+/// let _ = unsafe {
+///         hermit_abi::getaddrbyname(
+///                 name,
+///                 &mut inaddr as *mut _ as *mut u8,
+///                 std::mem::size_of::<in_addr>(),
+///         )
+/// };
+///
+/// // retake pointer to free memory
+/// let _ = CString::from_raw(name);
+/// ```
+#[cfg(feature = "dns")]
+#[hermit_macro::system]
+#[no_mangle]
+pub unsafe extern "C" fn sys_getaddrbyname(
+	name: *const c_char,
+	inaddr: *mut u8,
+	len: usize,
+) -> i32 {
+	use alloc::borrow::ToOwned;
+
+	use smoltcp::wire::DnsQueryType;
+
+	use crate::executor::block_on;
+	use crate::executor::network::get_query_result;
+
+	if len != size_of::<in_addr>().try_into().unwrap()
+		&& len != size_of::<in6_addr>().try_into().unwrap()
+	{
+		return -EINVAL;
+	}
+
+	if inaddr.is_null() {
+		return -EINVAL;
+	}
+
+	let query_type = if len == size_of::<in6_addr>().try_into().unwrap() {
+		DnsQueryType::Aaaa
+	} else {
+		DnsQueryType::A
+	};
+
+	let name = unsafe { core::ffi::CStr::from_ptr(name) };
+	let name = if let Ok(name) = name.to_str() {
+		name.to_owned()
+	} else {
+		return -EINVAL;
+	};
+
+	let query = {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let query = nic.start_query(&name, query_type).unwrap();
+		nic.poll_common(crate::executor::network::now());
+
+		query
+	};
+
+	match block_on(get_query_result(query), None) {
+		Ok(addr_vec) => {
+			let slice = unsafe { core::slice::from_raw_parts_mut(inaddr, len) };
+			slice.copy_from_slice(addr_vec[0].as_bytes());
+
+			0
+		}
+		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+	}
+}
+
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {

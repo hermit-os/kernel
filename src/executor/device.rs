@@ -7,10 +7,14 @@ use smoltcp::iface::{Config, Interface, SocketSet};
 use smoltcp::phy::{self, ChecksumCapabilities, Device, DeviceCapabilities, Medium};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
+#[cfg(all(feature = "dns", not(feature = "dhcpv4")))]
+use smoltcp::socket::dns;
 use smoltcp::time::Instant;
+#[cfg(any(feature = "dns", not(feature = "dhcpv4")))]
+use smoltcp::wire::Ipv4Address;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::{IpAddress, IpCidr, Ipv4Address};
+use smoltcp::wire::{IpAddress, IpCidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
@@ -74,6 +78,8 @@ impl<'a> NetworkInterface<'a> {
 			sockets,
 			device,
 			dhcp_handle,
+			#[cfg(feature = "dns")]
+			dns_handle: None,
 		}))
 	}
 
@@ -150,10 +156,26 @@ impl<'a> NetworkInterface<'a> {
 		});
 		iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
 
+		#[allow(unused_mut)]
+		let mut sockets = SocketSet::new(vec![]);
+
+		#[cfg(feature = "dns")]
+		let dns_handle = {
+			// use Google's DNS servers
+			let servers = &[
+				Ipv4Address::new(8, 8, 4, 4).into(),
+				Ipv4Address::new(8, 8, 8, 8).into(),
+			];
+			let dns_socket = dns::Socket::new(servers, vec![]);
+			sockets.add(dns_socket)
+		};
+
 		NetworkState::Initialized(Box::new(Self {
 			iface,
-			sockets: SocketSet::new(vec![]),
+			sockets,
 			device,
+			#[cfg(feature = "dns")]
+			dns_handle: Some(dns_handle),
 		}))
 	}
 }
