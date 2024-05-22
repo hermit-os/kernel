@@ -263,6 +263,28 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	-ENOSYS
 }
 
+/// The system call `sys_getaddrbyname` determine the network host entry.
+/// It expects an array of u8 with a size of in_addr or of in6_addr.
+/// The result of the DNS request will be stored in this array.
+///
+/// # Example
+///
+/// ```
+/// use hermit_abi::in_addr;
+/// let c_string = std::ffi::CString::new("rust-lang.org").expect("CString::new failed");
+/// let name = c_string.into_raw();
+/// let mut inaddr: in_addr = Default::default();
+/// let _ = unsafe {
+///         hermit_abi::getaddrbyname(
+///                 name,
+///                 &mut inaddr as *mut _ as *mut u8,
+///                 std::mem::size_of::<in_addr>(),
+///         )
+/// };
+///
+/// // retake pointer to free memory
+/// let _ = CString::from_raw(name);
+/// ```
 #[cfg(feature = "dns")]
 #[hermit_macro::system]
 #[no_mangle]
