@@ -259,7 +259,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	_inaddr: *mut u8,
 	_len: usize,
 ) -> i32 {
-	warn!("Please enable the feature 'dns' to determine the network ip by name.");
+	error!("Please enable the feature 'dns' to determine the network ip by name.");
 	-ENOSYS
 }
 
