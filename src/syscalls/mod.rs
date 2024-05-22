@@ -63,6 +63,18 @@ pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
 	}
 });
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// Describes  a  region  of  memory, beginning at `iov_base` address and with the size of `iov_len` bytes.
+struct iovec {
+	/// Starting address
+	pub iov_base: *mut u8,
+	/// Size of the memory pointed to by iov_base.
+	pub iov_len: usize,
+}
+
+const IOV_MAX: usize = 1024;
+
 pub(crate) fn init() {
 	Lazy::force(&SYS);
 
@@ -415,6 +427,53 @@ pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) 
 	)
 }
 
+/// `read()` attempts to read `nbyte` of data to the object referenced by the
+/// descriptor `fd` from a buffer. `read()` performs the same
+/// action, but scatters the input data from the `iovcnt` buffers specified by the
+/// members of the iov array: `iov[0], iov[1], ..., iov[iovcnt-1]`.
+///
+/// ```
+/// struct iovec {
+///     char   *iov_base;  /* Base address. */
+///     size_t iov_len;    /* Length. */
+/// };
+/// ```
+///
+/// Each `iovec` entry specifies the base address and length of an area in memory from
+/// which data should be written.  `readv()` will always fill an completely
+/// before proceeding to the next.
+#[hermit_macro::system]
+#[no_mangle]
+pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) -> isize {
+	if !(0..=IOV_MAX).contains(&iovcnt) {
+		return (-crate::errno::EINVAL).try_into().unwrap();
+	}
+
+	let mut read_bytes: isize = 0;
+	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+
+	for iovec_buf in iovec_buffers {
+		let buf = unsafe { core::slice::from_raw_parts_mut(iovec_buf.iov_base, iovec_buf.iov_len) };
+
+		let len = crate::fd::read(fd, buf).map_or_else(
+			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|v| v.try_into().unwrap(),
+		);
+
+		if len < 0 {
+			return len;
+		}
+
+		read_bytes += len;
+
+		if len < iovec_buf.iov_len.try_into().unwrap() {
+			return read_bytes;
+		}
+	}
+
+	read_bytes
+}
+
 unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	crate::fd::write(fd, slice).map_or_else(
@@ -427,6 +486,53 @@ unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 #[no_mangle]
 pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	unsafe { write(fd, buf, len) }
+}
+
+/// `write()` attempts to write `nbyte` of data to the object referenced by the
+/// descriptor `fd` from a buffer. `writev()` performs the same
+/// action, but gathers the output data from the `iovcnt` buffers specified by the
+/// members of the iov array: `iov[0], iov[1], ..., iov[iovcnt-1]`.
+///
+/// ```
+/// struct iovec {
+///     char   *iov_base;  /* Base address. */
+///     size_t iov_len;    /* Length. */
+/// };
+/// ```
+///
+/// Each `iovec` entry specifies the base address and length of an area in memory from
+/// which data should be written.  `writev()` will always write a
+/// complete area before proceeding to the next.
+#[hermit_macro::system]
+#[no_mangle]
+pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: usize) -> isize {
+	if !(0..=IOV_MAX).contains(&iovcnt) {
+		return (-crate::errno::EINVAL).try_into().unwrap();
+	}
+
+	let mut written_bytes: isize = 0;
+	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+
+	for iovec_buf in iovec_buffers {
+		let buf = unsafe { core::slice::from_raw_parts(iovec_buf.iov_base, iovec_buf.iov_len) };
+
+		let len = crate::fd::write(fd, buf).map_or_else(
+			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|v| v.try_into().unwrap(),
+		);
+
+		if len < 0 {
+			return len;
+		}
+
+		written_bytes += len;
+
+		if len < iovec_buf.iov_len.try_into().unwrap() {
+			return written_bytes;
+		}
+	}
+
+	written_bytes
 }
 
 #[hermit_macro::system]
