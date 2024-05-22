@@ -455,11 +455,11 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: i32) -> i
 		return (-crate::errno::EINVAL).try_into().unwrap();
 	}
 
-	let mut count: isize = 0;
-	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt.try_into().unwrap()) };
+	let mut read_bytes: isize = 0;
+	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt.try_into().unwrap()) };
 
-	for i in slice {
-		let buf = unsafe { core::slice::from_raw_parts_mut(i.iov_base, i.iov_len) };
+	for iovec_buf in iovec_buffers {
+		let buf = unsafe { core::slice::from_raw_parts_mut(iovec_buf.iov_base, iovec_buf.iov_len) };
 
 		let len = crate::fd::read(fd, buf).map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
@@ -470,14 +470,14 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: i32) -> i
 			return len;
 		}
 
-		count += len;
+		read_bytes += len;
 
-		if len < i.iov_len.try_into().unwrap() {
-			return count;
+		if len < iovec_buf.iov_len.try_into().unwrap() {
+			return read_bytes;
 		}
 	}
 
-	count
+	read_bytes
 }
 
 unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
@@ -516,11 +516,11 @@ pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcn
 		return (-crate::errno::EINVAL).try_into().unwrap();
 	}
 
-	let mut count: isize = 0;
-	let slice = unsafe { core::slice::from_raw_parts(iov, iovcnt.try_into().unwrap()) };
+	let mut written_bytes: isize = 0;
+	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt.try_into().unwrap()) };
 
-	for i in slice {
-		let buf = unsafe { core::slice::from_raw_parts(i.iov_base, i.iov_len) };
+	for iovec_buf in iovec_buffers {
+		let buf = unsafe { core::slice::from_raw_parts(iovec_buf.iov_base, iovec_buf.iov_len) };
 
 		let len = crate::fd::write(fd, buf).map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
@@ -531,14 +531,14 @@ pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcn
 			return len;
 		}
 
-		count += len;
+		written_bytes += len;
 
-		if len < i.iov_len.try_into().unwrap() {
-			return count;
+		if len < iovec_buf.iov_len.try_into().unwrap() {
+			return written_bytes;
 		}
 	}
 
-	count
+	written_bytes
 }
 
 #[hermit_macro::system]
