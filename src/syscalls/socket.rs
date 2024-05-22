@@ -253,6 +253,7 @@ pub struct linger {
 
 #[cfg(not(feature = "dns"))]
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_getaddrbyname(
 	_name: *const c_char,
 	_inaddr: *mut u8,
@@ -264,6 +265,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 
 #[cfg(feature = "dns")]
 #[hermit_macro::system]
+#[no_mangle]
 pub unsafe extern "C" fn sys_getaddrbyname(
 	name: *const c_char,
 	inaddr: *mut u8,
