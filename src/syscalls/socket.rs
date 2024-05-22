@@ -602,10 +602,8 @@ pub unsafe extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags
 	unsafe { super::write(s, mem.cast(), len) }
 }
 
-#[hermit_macro::system]
-#[no_mangle]
-pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
-	let obj = get_object(fd);
+fn shutdown(sockfd: i32, how: i32) -> i32 {
+	let obj = get_object(sockfd);
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
@@ -613,6 +611,18 @@ pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
+}
+
+#[hermit_macro::system]
+#[no_mangle]
+pub extern "C" fn sys_shutdown(sockfd: i32, how: i32) -> i32 {
+	shutdown(sockfd, how)
+}
+
+#[hermit_macro::system]
+#[no_mangle]
+pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
+	shutdown(fd, how)
 }
 
 #[hermit_macro::system]

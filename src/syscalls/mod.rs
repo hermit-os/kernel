@@ -285,12 +285,6 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 
 #[hermit_macro::system]
 #[no_mangle]
-pub extern "C" fn sys_shutdown(arg: i32) -> ! {
-	shutdown(arg)
-}
-
-#[hermit_macro::system]
-#[no_mangle]
 pub unsafe extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
