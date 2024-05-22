@@ -960,10 +960,6 @@ pub unsafe fn spawn(
 	unsafe { PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size) }
 }
 
-pub fn getpid() -> TaskId {
-	core_scheduler().get_current_task_id()
-}
-
 #[allow(clippy::result_unit_err)]
 pub fn join(id: TaskId) -> Result<(), ()> {
 	let core_scheduler = core_scheduler();
