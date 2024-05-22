@@ -163,7 +163,7 @@ impl DescriptorRing {
 		if let Some(mut tkn) = ctrl.poll_next() {
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue.try_send(Box::new(tkn.buff_tkn.unwrap())).unwrap();
+				queue.try_send(Box::new(tkn.buff_tkn)).unwrap();
 			}
 		}
 	}
@@ -179,7 +179,7 @@ impl DescriptorRing {
 		for (i, tkn) in tkn_lst.into_iter().enumerate() {
 			// Check length and if its fits. This should always be true due to the restriction of
 			// the memory pool, but to be sure.
-			assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+			assert!(tkn.buff_tkn.num_consuming_descr() <= self.capacity);
 
 			// create an counter that wrappes to the first element
 			// after reaching a the end of the ring
@@ -193,10 +193,7 @@ impl DescriptorRing {
 			// * distinguish between Indirect and direct buffers
 			// * write descriptors in the correct order
 			// * make them available in the right order (reversed order or i.e. lastly where device polls)
-			match (
-				&tkn.buff_tkn.as_ref().unwrap().send_buff,
-				&tkn.buff_tkn.as_ref().unwrap().recv_buff,
-			) {
+			match (&tkn.buff_tkn.send_buff, &tkn.buff_tkn.recv_buff) {
 				(Some(send_buff), Some(recv_buff)) => {
 					// It is important to differentiate between indirect and direct descriptors here and if
 					// send & recv descriptors are defined or only one of them.
@@ -306,7 +303,7 @@ impl DescriptorRing {
 	fn push(&mut self, tkn: TransferToken) -> RingIdx {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
-		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+		assert!(tkn.buff_tkn.num_consuming_descr() <= self.capacity);
 
 		// create an counter that wrappes to the first element
 		// after reaching a the end of the ring
@@ -320,10 +317,7 @@ impl DescriptorRing {
 		// * distinguish between Indirect and direct buffers
 		// * write descriptors in the correct order
 		// * make them available in the right order (reversed order or i.e. lastly where device polls)
-		match (
-			&tkn.buff_tkn.as_ref().unwrap().send_buff,
-			&tkn.buff_tkn.as_ref().unwrap().recv_buff,
-		) {
+		match (&tkn.buff_tkn.send_buff, &tkn.buff_tkn.recv_buff) {
 			(Some(send_buff), Some(recv_buff)) => {
 				// It is important to differentiate between indirect and direct descriptors here and if
 				// send & recv descriptors are defined or only one of them.
@@ -469,7 +463,7 @@ impl<'a> ReadCtrl<'a> {
 					send_buff,
 					recv_buff,
 					..
-				} = tkn.buff_tkn.as_mut().unwrap();
+				} = &mut tkn.buff_tkn;
 				(recv_buff.as_mut(), send_buff.as_mut())
 			};
 

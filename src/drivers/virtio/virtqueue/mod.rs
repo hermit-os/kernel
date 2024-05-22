@@ -362,14 +362,14 @@ pub trait Virtq: VirtqPrivate {
 		};
 
 		Ok(TransferToken {
-			buff_tkn: Some(BufferToken {
+			buff_tkn: BufferToken {
 				recv_buff,
 				send_buff,
 				vq: self,
 				ret_send: false,
 				ret_recv: false,
 				reusable: false,
-			}),
+			},
 			await_queue: None,
 		})
 	}
@@ -1012,7 +1012,7 @@ pub trait AsSliceU8 {
 pub struct TransferToken {
 	/// Must be some in order to prevent drop
 	/// upon reuse.
-	buff_tkn: Option<BufferToken>,
+	buff_tkn: BufferToken,
 	/// Structure which allows to await Transfers
 	/// If Some, finished TransferTokens will be placed here
 	/// as finished `Transfers`. If None, only the state
@@ -1025,7 +1025,7 @@ impl TransferToken {
 	/// Returns a reference to the holding virtqueue
 	pub fn get_vq(&self) -> Rc<dyn Virtq> {
 		// Unwrapping is okay here, as TransferToken must hold a BufferToken
-		Rc::clone(&self.buff_tkn.as_ref().unwrap().vq)
+		Rc::clone(&self.buff_tkn.vq)
 	}
 
 	/// Dispatches a TransferToken and awaits it at the specified queue.
@@ -1742,7 +1742,7 @@ impl BufferToken {
 		}
 
 		Ok(TransferToken {
-			buff_tkn: Some(self),
+			buff_tkn: self,
 			await_queue: None,
 		})
 	}
@@ -1804,7 +1804,7 @@ impl BufferToken {
 	/// After this call, the buffers are no longer writable.
 	pub fn provide(self) -> TransferToken {
 		TransferToken {
-			buff_tkn: Some(self),
+			buff_tkn: self,
 			await_queue: None,
 		}
 	}

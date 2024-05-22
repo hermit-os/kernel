@@ -129,7 +129,7 @@ impl DescrRing {
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
 
-		if let Some(buff) = tkn.buff_tkn.as_ref().unwrap().send_buff.as_ref() {
+		if let Some(buff) = tkn.buff_tkn.send_buff.as_ref() {
 			if buff.is_indirect() {
 				desc_lst.push((buff.get_ctrl_desc().unwrap(), false));
 				is_indirect = true;
@@ -140,7 +140,7 @@ impl DescrRing {
 			}
 		}
 
-		if let Some(buff) = tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref() {
+		if let Some(buff) = tkn.buff_tkn.recv_buff.as_ref() {
 			if buff.is_indirect() {
 				if desc_lst.is_empty() {
 					desc_lst.push((buff.get_ctrl_desc().unwrap(), true));
@@ -159,7 +159,7 @@ impl DescrRing {
 			}
 		}
 
-		let mut len = tkn.buff_tkn.as_ref().unwrap().num_consuming_descr();
+		let mut len = tkn.buff_tkn.num_consuming_descr();
 
 		assert!(!desc_lst.is_empty());
 		// Minus 1, comes from  the fact that ids run from one to 255 and not from 0 to 254 for u8::MAX sized pool
@@ -289,15 +289,13 @@ impl DescrRing {
 					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 				);
 
-			if tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref().is_some() {
+			if tkn.buff_tkn.recv_buff.as_ref().is_some() {
 				tkn.buff_tkn
-					.as_mut()
-					.unwrap()
 					.restr_size(None, Some(used_elem.len.to_ne() as usize))
 					.unwrap();
 			}
 			if let Some(queue) = tkn.await_queue.take() {
-				queue.try_send(Box::new(tkn.buff_tkn.unwrap())).unwrap()
+				queue.try_send(Box::new(tkn.buff_tkn)).unwrap()
 			}
 			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
