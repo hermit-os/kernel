@@ -230,28 +230,26 @@ impl Qemu {
 		["-m".to_string(), format!("{}M", self.memory())]
 	}
 
-	fn netdev_args(&self) -> &'static [&'static str] {
-		match self.netdev {
-			Some(NetworkDevice::VirtioNetPci) => &[
-				"-netdev",
-				"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
-				"-device",
-				"virtio-net-pci,netdev=u1,disable-legacy=on"
-			],
-			Some(NetworkDevice::VirtioNetMmio) => &[
-				"-netdev",
-				"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
-				"-device",
-				"virtio-net-device,netdev=u1"
-			],
-			Some(NetworkDevice::Rtl8139) => &[
-				"-netdev",
-				"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
-				"-device",
-				"rtl8139,netdev=u1"
-			],
-			None => &[],
-		}
+	fn netdev_args(&self) -> Vec<&'static str> {
+		let Some(netdev) = self.netdev else {
+			return vec![];
+		};
+
+		let mut netdev_args = vec![
+			"-netdev",
+			"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9",
+			"-device",
+		];
+
+		let device_arg = match netdev {
+			NetworkDevice::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
+			NetworkDevice::VirtioNetMmio => "virtio-net-device,netdev=u1",
+			NetworkDevice::Rtl8139 => "rtl8139,netdev=u1",
+		};
+
+		netdev_args.push(device_arg);
+
+		netdev_args
 	}
 
 	fn virtiofsd_args(&self) -> Vec<String> {
