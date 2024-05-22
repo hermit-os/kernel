@@ -435,7 +435,7 @@ pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) 
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: i32) -> isize {
-	if iovcnt > IOV_MAX {
+	if iovcnt < 0 || iovcnt > IOV_MAX {
 		return (-crate::errno::EINVAL).try_into().unwrap();
 	}
 
@@ -481,7 +481,7 @@ pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usiz
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: i32) -> isize {
-	if iovcnt > IOV_MAX {
+	if iovcnt < 0 || iovcnt > IOV_MAX {
 		return (-crate::errno::EINVAL).try_into().unwrap();
 	}
 
