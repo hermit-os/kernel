@@ -3,8 +3,7 @@
 use volatile::access::{ReadOnly, ReadWrite, RestrictAccess};
 use volatile::{VolatileFieldAccess, VolatilePtr};
 
-use crate::num::{le16, le32};
-use crate::{DeviceStatus, WideVolatilePtr};
+use crate::{le16, le32, DeviceStatus, WideVolatilePtr};
 
 /// Common configuration structure
 ///

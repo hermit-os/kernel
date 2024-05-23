@@ -11,10 +11,11 @@ mod bitflags;
 mod volatile;
 mod features;
 pub mod net;
-pub mod num;
+mod num;
 pub mod pci;
 
 pub use self::features::{FeatureBits, F};
+pub use self::num::{be128, be16, be32, be64, le128, le16, le32, le64};
 pub use self::volatile::WideVolatilePtr;
 
 pub mod fs {

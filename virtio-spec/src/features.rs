@@ -1,6 +1,6 @@
 //! Feature Bits
 
-use crate::num::le128;
+use crate::le128;
 
 /// Feature Bits
 #[doc(alias = "VIRTIO_F")]
@@ -290,7 +290,7 @@ macro_rules! feature_bits {
 }
 
 pub mod net {
-    use crate::num::le128;
+    use crate::le128;
 
     feature_bits! {
         /// Network Device Feature Bits
@@ -460,7 +460,7 @@ pub mod net {
 }
 
 pub mod fs {
-    use crate::num::le128;
+    use crate::le128;
 
     feature_bits! {
         /// File System Device Feature Bits

@@ -3,7 +3,7 @@
 use volatile::access::{Readable, Writable};
 use volatile::VolatilePtr;
 
-use crate::num::{be32, be64, le32, le64};
+use crate::{be32, be64, le32, le64};
 
 /// A wide volatile pointer for 64-bit fields.
 ///
