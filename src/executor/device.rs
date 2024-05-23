@@ -161,10 +161,11 @@ impl<'a> NetworkInterface<'a> {
 
 		#[cfg(feature = "dns")]
 		let dns_handle = {
-			// use Google's DNS servers
 			let servers = &[
-				Ipv4Address::new(8, 8, 4, 4).into(),
-				Ipv4Address::new(8, 8, 8, 8).into(),
+				// Quad9 DNS server
+				Ipv4Address::new(9, 9, 9, 9).into(),
+				// Cloudflare DNS server
+				Ipv4Address::new(1, 1, 1, 1).into(),
 			];
 			let dns_socket = dns::Socket::new(servers, vec![]);
 			sockets.add(dns_socket)
