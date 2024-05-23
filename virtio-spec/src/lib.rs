@@ -14,8 +14,8 @@ pub mod net;
 pub mod num;
 pub mod pci;
 
-pub use features::{FeatureBits, F};
-pub use volatile::WideVolatilePtr;
+pub use self::features::{FeatureBits, F};
+pub use self::volatile::WideVolatilePtr;
 
 pub mod fs {
     //! File System Device
