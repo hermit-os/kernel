@@ -1,16 +1,17 @@
+/// This shell implementation is derived form
+/// https://github.com/explodingcamera/pogos/tree/main/crates/simple-shell
 use hermit_sync::Lazy;
-use simple_shell::*;
 
-use crate::arch::kernel::COM1;
+use self::shell::*;
 use crate::interrupts::print_statistics;
 
-fn read() -> Option<u8> {
-	COM1.lock().as_mut().map(|s| s.read())?
-}
+mod constants;
+mod shell;
+mod writer;
 
 static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
-	let (print, read) = (|s: &str| print!("{}", s), read);
-	let mut shell = Shell::new(print, read);
+	let print = |s: &str| print!("{}", s);
+	let mut shell = Shell::new(print);
 
 	shell.commands.insert(
 		"help",
@@ -27,7 +28,7 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 		"interrupts",
 		ShellCommand {
 			help: "Shows the number of received interrupts",
-			func: |_, shell| {
+			func: |_, _shell| {
 				print_statistics();
 				Ok(())
 			},
@@ -38,9 +39,8 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 		"shutdown",
 		ShellCommand {
 			help: "Shutdown HermitOS",
-			func: |_, shell| {
+			func: |_, _shell| {
 				crate::shutdown(0);
-				Ok(())
 			},
 			aliases: &["s"],
 		},
@@ -50,6 +50,5 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 });
 
 pub(crate) fn init() {
-	// Also supports async
 	crate::executor::spawn(unsafe { SHELL.run_async() });
 }
