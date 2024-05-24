@@ -101,6 +101,12 @@ impl<'a> NetworkInterface<'a> {
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
 		let mymask = Ipv4Address::from_str(hermit_var_or!("HERMIT_MASK", "255.255.255.0")).unwrap();
+		// Quad9 DNS server
+		#[cfg(feature = "dns")]
+		let mydns1 = Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS1", "9.9.9.9")).unwrap();
+		// Cloudflare DNS server
+		#[cfg(feature = "dns")]
+		let mydns2 = Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS2", "1.1.1.1")).unwrap();
 
 		// calculate the netmask length
 		// => count the number of contiguous 1 bits,
@@ -161,11 +167,7 @@ impl<'a> NetworkInterface<'a> {
 
 		#[cfg(feature = "dns")]
 		let dns_handle = {
-			// use Google's DNS servers
-			let servers = &[
-				Ipv4Address::new(8, 8, 4, 4).into(),
-				Ipv4Address::new(8, 8, 8, 8).into(),
-			];
+			let servers = &[mydns1.into(), mydns2.into()];
 			let dns_socket = dns::Socket::new(servers, vec![]);
 			sockets.add(dns_socket)
 		};
