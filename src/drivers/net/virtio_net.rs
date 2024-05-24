@@ -558,7 +558,7 @@ impl NetworkDriver for VirtioNetDriver {
 						num_buffers
 					};
 
-					for _ in 1..num_buffers.get() {
+					for _ in 1..num_buffers.to_ne() {
 						let transfer =
 							match RxQueues::post_processing(self.recv_vqs.get_next().unwrap()) {
 								Ok(trf) => trf,

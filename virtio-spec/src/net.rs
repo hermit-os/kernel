@@ -1,7 +1,7 @@
 //! Network Device
 
 pub use super::features::net::F;
-use crate::num::{le16, le32};
+use crate::{le16, le32};
 
 virtio_bitflags! {
     /// Network Device Header Flags
