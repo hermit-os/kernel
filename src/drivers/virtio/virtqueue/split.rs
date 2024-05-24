@@ -264,13 +264,13 @@ impl DescrRing {
 		let len = self.token_ring.len();
 		let mut avail_ring_ref = self.avail_ring_ref();
 		let avail_ring = avail_ring_ref.as_mut_ptr();
-		let idx = map_field!(avail_ring.index).read().get();
+		let idx = map_field!(avail_ring.index).read().to_ne();
 		AvailRing::ring_ptr(avail_ring)
 			.index(idx as usize % len)
 			.write(MaybeUninit::new((index as u16).into()));
 
 		memory_barrier();
-		map_field!(avail_ring.index).update(|val| (val.get().wrapping_add(1)).into());
+		map_field!(avail_ring.index).update(|val| (val.to_ne().wrapping_add(1)).into());
 
 		(0, 0)
 	}
@@ -284,7 +284,7 @@ impl DescrRing {
 			{
 				let used_ring_ref = self.used_ring_ref();
 				let used_ring = used_ring_ref.as_ptr();
-				if self.read_idx == map_field!(used_ring.index).read().get() {
+				if self.read_idx == map_field!(used_ring.index).read().to_ne() {
 					break;
 				} else {
 					let cur_ring_index = self.read_idx as usize % self.token_ring.len();
@@ -292,15 +292,17 @@ impl DescrRing {
 				}
 			}
 
-			let mut tkn = self.token_ring[used_elem.id.get() as usize].take().expect(
-				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
-			);
+			let mut tkn = self.token_ring[used_elem.id.to_ne() as usize]
+				.take()
+				.expect(
+					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
+				);
 
 			if tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref().is_some() {
 				tkn.buff_tkn
 					.as_mut()
 					.unwrap()
-					.restr_size(None, Some(used_elem.len.get() as usize))
+					.restr_size(None, Some(used_elem.len.to_ne() as usize))
 					.unwrap();
 			}
 			if let Some(queue) = tkn.await_queue.take() {
@@ -326,7 +328,7 @@ impl DescrRing {
 	fn dev_is_notif(&self) -> bool {
 		let used_ring_ref = self.used_ring_ref();
 		let used_ring = used_ring_ref.as_ptr();
-		map_field!(used_ring.flags).read().get() & 1 == 0
+		map_field!(used_ring.flags).read().to_ne() & 1 == 0
 	}
 }
 

@@ -110,7 +110,7 @@ macro_rules! endian_bitflags {
         impl $BitFlags {
             $(
                 $(#[$inner $($args)*])*
-                pub const $Flag: Self = Self(<$T>::new($value));
+                pub const $Flag: Self = Self(<$T>::from_ne($value));
             )*
         }
 
@@ -186,25 +186,25 @@ macro_rules! endian_bitflags {
             /// Whether all bits in this flags value are unset.
             #[inline]
             pub const fn is_empty(&self) -> bool {
-                self.bits().get() == <$T as ::bitflags::Bits>::EMPTY.get()
+                self.bits().to_ne() == <$T as ::bitflags::Bits>::EMPTY.to_ne()
             }
 
             /// Whether all known bits in this flags value are set.
             #[inline]
             pub const fn is_all(&self) -> bool {
-                Self::all().bits().get() | self.bits().get() == self.bits().get()
+                Self::all().bits().to_ne() | self.bits().to_ne() == self.bits().to_ne()
             }
 
             /// Whether any set bits in a source flags value are also set in a target flags value.
             #[inline]
             pub const fn intersects(&self, other: Self) -> bool {
-                self.bits().get() & other.bits().get() != <$T as ::bitflags::Bits>::EMPTY.get()
+                self.bits().to_ne() & other.bits().to_ne() != <$T as ::bitflags::Bits>::EMPTY.to_ne()
             }
 
             /// Whether all set bits in a source flags value are also set in a target flags value.
             #[inline]
             pub const fn contains(&self, other: Self) -> bool {
-                self.bits().get() & other.bits().get() == other.bits().get()
+                self.bits().to_ne() & other.bits().to_ne() == other.bits().to_ne()
             }
 
             /// The bitwise or (`|`) of the bits in two flags values.
@@ -242,14 +242,14 @@ macro_rules! endian_bitflags {
             #[inline]
             #[must_use]
             pub const fn intersection(self, other: Self) -> Self {
-                Self::from_bits_retain(<$T>::new(self.bits().get() & other.bits().get()))
+                Self::from_bits_retain(<$T>::from_ne(self.bits().to_ne() & other.bits().to_ne()))
             }
 
             /// The bitwise or (`|`) of the bits in two flags values.
             #[inline]
             #[must_use]
             pub const fn union(self, other: Self) -> Self {
-                Self::from_bits_retain(<$T>::new(self.bits().get() | other.bits().get()))
+                Self::from_bits_retain(<$T>::from_ne(self.bits().to_ne() | other.bits().to_ne()))
             }
 
             /// The intersection of a source flags value with the complement of a target flags value (`&!`).
@@ -259,21 +259,21 @@ macro_rules! endian_bitflags {
             #[inline]
             #[must_use]
             pub const fn difference(self, other: Self) -> Self {
-                Self::from_bits_retain(<$T>::new(self.bits().get() & !other.bits().get()))
+                Self::from_bits_retain(<$T>::from_ne(self.bits().to_ne() & !other.bits().to_ne()))
             }
 
             /// The bitwise exclusive-or (`^`) of the bits in two flags values.
             #[inline]
             #[must_use]
             pub const fn symmetric_difference(self, other: Self) -> Self {
-                Self::from_bits_retain(<$T>::new(self.bits().get() ^ other.bits().get()))
+                Self::from_bits_retain(<$T>::from_ne(self.bits().to_ne() ^ other.bits().to_ne()))
             }
 
             /// The bitwise negation (`!`) of the bits in a flags value, truncating the result.
             #[inline]
             #[must_use]
             pub const fn complement(self) -> Self {
-                Self::from_bits_truncate(<$T>::new(!self.bits().get()))
+                Self::from_bits_truncate(<$T>::from_ne(!self.bits().to_ne()))
             }
         }
 

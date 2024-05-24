@@ -31,7 +31,7 @@ impl<'a, A> WideVolatilePtr<'a, le32, A> {
     {
         let low = self.low.read();
         let high = self.high.read();
-        le64::from_le_parts([low, high])
+        le64::from([low, high])
     }
 
     /// Performs a volatile write, setting the contained value to the given `value`.
@@ -41,7 +41,7 @@ impl<'a, A> WideVolatilePtr<'a, le32, A> {
     where
         A: Writable,
     {
-        let [low, high] = value.to_le_parts();
+        let [low, high] = value.into();
         self.low.write(low);
         self.high.write(high);
     }
@@ -57,7 +57,7 @@ impl<'a, A> WideVolatilePtr<'a, be32, A> {
     {
         let low = self.low.read();
         let high = self.high.read();
-        be64::from_be_parts([low, high])
+        be64::from([low, high])
     }
 
     /// Performs a volatile write, setting the contained value to the given `value`.
@@ -67,7 +67,7 @@ impl<'a, A> WideVolatilePtr<'a, be32, A> {
     where
         A: Writable,
     {
-        let [low, high] = value.to_be_parts();
+        let [low, high] = value.into();
         self.low.write(low);
         self.high.write(high);
     }

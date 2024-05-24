@@ -563,7 +563,7 @@ impl MmioRegisterLayout {
 
 	/// Write selected features into driver_select field.
 	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
-		let features = features.bits().get() as u64;
+		let features = features.bits().to_ne() as u64;
 		let high: u32 = (features >> 32) as u32;
 		let low: u32 = features as u32;
 

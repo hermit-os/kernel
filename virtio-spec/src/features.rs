@@ -209,37 +209,37 @@ macro_rules! feature_bits {
                 )*
 
                 /// Device-independent Bit. See [`virtio_spec::F::INDIRECT_DESC`](crate::F::INDIRECT_DESC).
-                const INDIRECT_DESC = $crate::F::INDIRECT_DESC.bits().get();
+                const INDIRECT_DESC = $crate::F::INDIRECT_DESC.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::EVENT_IDX`](crate::F::EVENT_IDX).
-                const EVENT_IDX = $crate::F::EVENT_IDX.bits().get();
+                const EVENT_IDX = $crate::F::EVENT_IDX.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::VERSION_1`](crate::F::VERSION_1).
-                const VERSION_1 = $crate::F::VERSION_1.bits().get();
+                const VERSION_1 = $crate::F::VERSION_1.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::ACCESS_PLATFORM`](crate::F::ACCESS_PLATFORM).
-                const ACCESS_PLATFORM = $crate::F::ACCESS_PLATFORM.bits().get();
+                const ACCESS_PLATFORM = $crate::F::ACCESS_PLATFORM.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::RING_PACKED`](crate::F::RING_PACKED).
-                const RING_PACKED = $crate::F::RING_PACKED.bits().get();
+                const RING_PACKED = $crate::F::RING_PACKED.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::IN_ORDER`](crate::F::IN_ORDER).
-                const IN_ORDER = $crate::F::IN_ORDER.bits().get();
+                const IN_ORDER = $crate::F::IN_ORDER.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::ORDER_PLATFORM`](crate::F::ORDER_PLATFORM).
-                const ORDER_PLATFORM = $crate::F::ORDER_PLATFORM.bits().get();
+                const ORDER_PLATFORM = $crate::F::ORDER_PLATFORM.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::SR_IOV`](crate::F::SR_IOV).
-                const SR_IOV = $crate::F::SR_IOV.bits().get();
+                const SR_IOV = $crate::F::SR_IOV.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::NOTIFICATION_DATA`](crate::F::NOTIFICATION_DATA).
-                const NOTIFICATION_DATA = $crate::F::NOTIFICATION_DATA.bits().get();
+                const NOTIFICATION_DATA = $crate::F::NOTIFICATION_DATA.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::NOTIF_CONFIG_DATA`](crate::F::NOTIF_CONFIG_DATA).
-                const NOTIF_CONFIG_DATA = $crate::F::NOTIF_CONFIG_DATA.bits().get();
+                const NOTIF_CONFIG_DATA = $crate::F::NOTIF_CONFIG_DATA.bits().to_ne();
 
                 /// Device-independent Bit. See [`virtio_spec::F::RING_RESET`](crate::F::RING_RESET).
-                const RING_RESET = $crate::F::RING_RESET.bits().get();
+                const RING_RESET = $crate::F::RING_RESET.bits().to_ne();
             }
         }
 

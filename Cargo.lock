@@ -415,6 +415,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 
 [[package]]
+name = "endian-num"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0df1568147123f2170d703aada73a9f2e73a1464f93c8fb5e44ffbb7695134b9"
+dependencies = [
+ "bitflags 2.5.0",
+ "zerocopy",
+ "zerocopy-derive",
+]
+
+[[package]]
 name = "event-listener"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1505,6 +1516,7 @@ name = "virtio-spec"
 version = "0.0.0"
 dependencies = [
  "bitflags 2.5.0",
+ "endian-num",
  "volatile 0.5.4",
  "zerocopy",
  "zerocopy-derive",

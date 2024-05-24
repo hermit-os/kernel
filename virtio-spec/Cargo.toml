@@ -10,9 +10,10 @@ categories = ["no-std", "no-std::no-alloc"]
 
 [dependencies]
 bitflags = "2"
+endian-num = { version = "0.1", features = ["bitflags", "linux-types"] }
 volatile = { version = "0.5.3", features = ["derive"] }
 zerocopy = { version = "0.7", optional = true, default-features = false }
 zerocopy-derive = { version = "0.7", optional = true }
 
 [features]
-zerocopy = ["dep:zerocopy", "dep:zerocopy-derive"]
+zerocopy = ["dep:zerocopy", "dep:zerocopy-derive", "endian-num/zerocopy"]

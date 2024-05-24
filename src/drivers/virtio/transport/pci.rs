@@ -452,11 +452,11 @@ impl<'a> VqCfgHandler<'a> {
 		self.select_queue();
 		let queue_size = self.raw.as_mut_ptr().queue_size();
 
-		if queue_size.read().get() >= size {
+		if queue_size.read().to_ne() >= size {
 			queue_size.write(size.into());
 		}
 
-		queue_size.read().get()
+		queue_size.read().to_ne()
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
@@ -485,7 +485,7 @@ impl<'a> VqCfgHandler<'a> {
 
 	pub fn notif_off(&mut self) -> u16 {
 		self.select_queue();
-		self.raw.as_mut_ptr().queue_notify_off().read().get()
+		self.raw.as_mut_ptr().queue_notify_off().read().to_ne()
 	}
 
 	pub fn enable_queue(&mut self) {
@@ -503,7 +503,7 @@ impl ComCfg {
 	pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler<'_>> {
 		self.com_cfg.as_mut_ptr().queue_select().write(index.into());
 
-		if self.com_cfg.as_mut_ptr().queue_size().read().get() == 0 {
+		if self.com_cfg.as_mut_ptr().queue_size().read().to_ne() == 0 {
 			None
 		} else {
 			Some(VqCfgHandler {
@@ -608,7 +608,7 @@ impl ComCfg {
 		memory_barrier();
 
 		// read high 32 bits of device features
-		let mut device_features = u64::from(device_feature.read().get()) << 32;
+		let mut device_features = u64::from(device_feature.read().to_ne()) << 32;
 
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
@@ -616,14 +616,14 @@ impl ComCfg {
 		memory_barrier();
 
 		// read low 32 bits of device features
-		device_features |= u64::from(device_feature.read().get());
+		device_features |= u64::from(device_feature.read().to_ne());
 
 		virtio_spec::F::from_bits_retain(u128::from(device_features).into())
 	}
 
 	/// Write selected features into driver_select field.
 	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
-		let features = features.bits().get() as u64;
+		let features = features.bits().to_ne() as u64;
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let driver_feature_select = com_cfg.driver_feature_select();
 		let driver_feature = com_cfg.driver_feature();
