@@ -18,8 +18,8 @@ mod common;
 use alloc::vec;
 
 use hermit::errno::{EAGAIN, ETIMEDOUT};
+use hermit::syscalls::{sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep};
 use hermit::time::timespec;
-use hermit::{sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep};
 
 const USER_STACK_SIZE: usize = 1_048_576;
 const NORMAL_PRIO: u8 = 2;

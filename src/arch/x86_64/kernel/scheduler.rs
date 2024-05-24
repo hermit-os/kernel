@@ -332,7 +332,8 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	func(arg);
 
 	// Exit task
-	crate::sys_thread_exit(0)
+	debug!("Exit thread with error code 0!");
+	core_scheduler().exit(0)
 }
 
 impl TaskFrame for Task {

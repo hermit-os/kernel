@@ -986,6 +986,10 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	}
 }
 
+pub fn shutdown(arg: i32) -> ! {
+	crate::syscalls::shutdown(arg)
+}
+
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
 	TASKS.lock().get(&id).copied()
 }

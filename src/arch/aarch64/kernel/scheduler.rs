@@ -13,6 +13,8 @@ use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::scheduler::task::{Task, TaskFrame};
+#[cfg(target_os = "none")]
+use crate::scheduler::PerCoreSchedulerExt;
 use crate::{kernel, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
@@ -315,6 +317,12 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 }
 
 #[cfg(target_os = "none")]
+extern "C" fn thread_exit(status: i32) -> ! {
+	debug!("Exit thread with error code {}!", status);
+	core_scheduler().exit(status)
+}
+
+#[cfg(target_os = "none")]
 #[naked]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	// `f` is in the `x0` register
@@ -331,7 +339,7 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 			"add  x4, x4, #:lo12:{exit}",
 			"br x4",
 			l0 = const 0,
-			exit = sym crate::sys_thread_exit,
+			exit = sym thread_exit,
 			options(noreturn)
 		)
 	}

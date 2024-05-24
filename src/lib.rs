@@ -67,7 +67,6 @@ pub(crate) use crate::config::*;
 pub use crate::fs::create_file;
 use crate::kernel::is_uhyve_with_pci;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
-pub use crate::syscalls::*;
 
 #[macro_use]
 mod macros;
@@ -103,7 +102,7 @@ hermit_entry::define_entry_version!();
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	println!("Executing hermit unittests. Any arguments are dropped");
 	test_main();
-	sys_exit(0);
+	core_scheduler().exit(0)
 }
 
 //https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
@@ -113,7 +112,7 @@ pub fn test_runner(tests: &[&dyn Fn()]) {
 	for test in tests {
 		test();
 	}
-	sys_exit(0);
+	core_scheduler().exit(0)
 }
 
 #[cfg(target_os = "none")]
@@ -275,5 +274,5 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 	let core_id = crate::arch::core_local::core_id();
 	println!("[{core_id}][PANIC] {info}");
 
-	crate::shutdown(1);
+	crate::scheduler::shutdown(1);
 }

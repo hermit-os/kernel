@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 
 use crate::errno::*;
 use crate::synch::semaphore::Semaphore;
+use crate::syscalls::{sys_clock_gettime, CLOCK_REALTIME};
 use crate::time::timespec;
 
 #[allow(non_camel_case_types)]
@@ -120,7 +121,7 @@ pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec)
 		let mut current_ts: timespec = Default::default();
 
 		unsafe {
-			crate::sys_clock_gettime(crate::CLOCK_REALTIME, &mut current_ts as *mut _);
+			sys_clock_gettime(CLOCK_REALTIME, &mut current_ts as *mut _);
 
 			let ts = &*ts;
 			let ms: i64 = (ts.tv_sec - current_ts.tv_sec) * 1000
