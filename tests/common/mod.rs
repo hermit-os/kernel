@@ -203,8 +203,8 @@ pub fn exit(failure: bool) -> ! {
 	if hermit::_is_uhyve() {
 		match failure {
 			//ToDo: Add uhyve exit code enum
-			true => hermit::sys_exit(1),
-			false => hermit::sys_exit(0),
+			true => hermit::syscalls::sys_exit(1),
+			false => hermit::syscalls::sys_exit(0),
 		}
 	} else {
 		match failure {
@@ -223,7 +223,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
 		outl(0xf4, exit_code as u32);
 	}
 	println!("Warning - Failed to debug exit qemu - exiting via sys_exit()");
-	hermit::sys_exit(0) //sys_exit exitcode on qemu gets silently dropped
+	hermit::syscalls::sys_exit(0) //sys_exit exitcode on qemu gets silently dropped
 }
 
 // ToDo: Maybe we could add a hard limit on the length of `s` to make this slightly safer?
