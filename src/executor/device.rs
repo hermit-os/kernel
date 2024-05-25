@@ -10,7 +10,7 @@ use smoltcp::socket::dhcpv4;
 #[cfg(all(feature = "dns", not(feature = "dhcpv4")))]
 use smoltcp::socket::dns;
 use smoltcp::time::Instant;
-#[cfg(any(feature = "dns", not(feature = "dhcpv4")))]
+#[cfg(not(feature = "dhcpv4"))]
 use smoltcp::wire::Ipv4Address;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]

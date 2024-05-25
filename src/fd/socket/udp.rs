@@ -16,12 +16,6 @@ use crate::executor::{block_on, poll_on};
 use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent};
 
 #[derive(Debug)]
-pub struct IPv4;
-
-#[derive(Debug)]
-pub struct IPv6;
-
-#[derive(Debug)]
 pub struct Socket {
 	handle: Handle,
 	nonblocking: AtomicBool,
