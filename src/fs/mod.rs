@@ -372,16 +372,16 @@ pub unsafe fn create_file(
 
 /// Removes an empty directory.
 pub fn remove_dir(path: &str) -> Result<(), IoError> {
-	FILESYSTEM.get().unwrap().rmdir(path)
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.rmdir(path)
 }
 
 pub fn unlink(path: &str) -> Result<(), IoError> {
-	FILESYSTEM.get().unwrap().unlink(path)
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.unlink(path)
 }
 
 /// Creates a new, empty directory at the provided path
 pub fn create_dir(path: &str, mode: AccessPermission) -> Result<(), IoError> {
-	FILESYSTEM.get().unwrap().mkdir(path, mode)
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.mkdir(path, mode)
 }
 
 /// Returns an vector with all the entries within a directory.
@@ -392,11 +392,11 @@ pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 }
 
 pub fn read_stat(name: &str) -> Result<FileAttr, IoError> {
-	FILESYSTEM.get().unwrap().stat(name)
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.stat(name)
 }
 
 pub fn read_lstat(name: &str) -> Result<FileAttr, IoError> {
-	FILESYSTEM.get().unwrap().lstat(name)
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.lstat(name)
 }
 
 pub fn open(
@@ -410,7 +410,7 @@ pub fn open(
 
 	debug!("Open {}, {:?}, {:?}", name, flags, mode);
 
-	let fs = FILESYSTEM.get().unwrap();
+	let fs = FILESYSTEM.get().ok_or(IoError::EINVAL)?;
 	if let Ok(file) = fs.open(name, flags, mode) {
 		let fd = insert_object(file)?;
 		Ok(fd)
@@ -421,14 +421,14 @@ pub fn open(
 
 /// Open a directory to read the directory entries
 pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
-	let obj = FILESYSTEM.get().unwrap().opendir(name)?;
+	let obj = FILESYSTEM.get().ok_or(IoError::EINVAL)?.opendir(name)?;
 	insert_object(obj)
 }
 
 use crate::fd::{self, FileDescriptor};
 
 pub fn file_attributes(path: &str) -> Result<FileAttr, IoError> {
-	FILESYSTEM.get().unwrap().lstat(path)
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.lstat(path)
 }
 
 #[allow(clippy::len_without_is_empty)]
