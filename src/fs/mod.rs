@@ -18,7 +18,7 @@ use crate::fd::{
 use crate::io::Write;
 use crate::time::{timespec, SystemTime};
 
-pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
+static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 
 #[derive(Debug, Clone)]
 pub struct DirectoryEntry {
@@ -370,6 +370,15 @@ pub unsafe fn create_file(
 	}
 }
 
+/// Removes an empty directory.
+pub fn remove_dir(path: &str) -> Result<(), IoError> {
+	FILESYSTEM.get().unwrap().rmdir(path)
+}
+
+pub fn unlink(path: &str) -> Result<(), IoError> {
+	FILESYSTEM.get().unwrap().unlink(path)
+}
+
 /// Creates a new, empty directory at the provided path
 pub fn create_dir(path: &str, mode: AccessPermission) -> Result<(), IoError> {
 	FILESYSTEM.get().unwrap().mkdir(path, mode)
@@ -380,6 +389,34 @@ pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 	debug!("Read directory {}", name);
 
 	FILESYSTEM.get().ok_or(IoError::EINVAL)?.readdir(name)
+}
+
+pub fn read_stat(name: &str) -> Result<FileAttr, IoError> {
+	FILESYSTEM.get().unwrap().stat(name)
+}
+
+pub fn read_lstat(name: &str) -> Result<FileAttr, IoError> {
+	FILESYSTEM.get().unwrap().lstat(name)
+}
+
+pub fn open(
+	name: &str,
+	flags: OpenOption,
+	mode: AccessPermission,
+) -> Result<FileDescriptor, IoError> {
+	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
+	// flags is bitmask of O_DEC_* defined above.
+	// (taken from rust stdlib/sys hermit target )
+
+	debug!("Open {}, {:?}, {:?}", name, flags, mode);
+
+	let fs = FILESYSTEM.get().unwrap();
+	if let Ok(file) = fs.open(name, flags, mode) {
+		let fd = insert_object(file)?;
+		Ok(fd)
+	} else {
+		Err(IoError::EINVAL)
+	}
 }
 
 /// Open a directory to read the directory entries
@@ -443,7 +480,7 @@ impl File {
 	/// an error if it does. This way, if the call succeeds, the file
 	/// returned is guaranteed to be new.
 	pub fn create(path: &str) -> Result<Self, IoError> {
-		let fd = fd::open(
+		let fd = open(
 			path,
 			OpenOption::O_CREAT | OpenOption::O_RDWR,
 			AccessPermission::from_bits(0o666).unwrap(),
@@ -457,7 +494,7 @@ impl File {
 
 	/// Attempts to open a file in read-write mode.
 	pub fn open(path: &str) -> Result<Self, IoError> {
-		let fd = fd::open(
+		let fd = open(
 			path,
 			OpenOption::O_RDWR,
 			AccessPermission::from_bits(0o666).unwrap(),

@@ -300,11 +300,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 pub unsafe extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
-	fs::FILESYSTEM
-		.get()
-		.unwrap()
-		.unlink(name)
-		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[hermit_macro::system]
@@ -325,11 +321,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
-	fs::FILESYSTEM
-		.get()
-		.unwrap()
-		.rmdir(name)
-		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fs::remove_dir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[hermit_macro::system]
@@ -337,7 +329,7 @@ pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
 pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
-	match fs::FILESYSTEM.get().unwrap().stat(name) {
+	match fs::read_stat(name) {
 		Ok(attr) => unsafe {
 			*stat = attr;
 			0
@@ -351,7 +343,7 @@ pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i
 pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
-	match fs::FILESYSTEM.get().unwrap().lstat(name) {
+	match fs::read_lstat(name) {
 		Ok(attr) => unsafe {
 			*stat = attr;
 			0
@@ -399,7 +391,7 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 	};
 
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
-		crate::fd::open(name, flags, mode)
+		crate::fs::open(name, flags, mode)
 			.unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
 		-crate::errno::EINVAL

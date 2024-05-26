@@ -12,7 +12,7 @@ use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::executor::{block_on, poll_on};
-use crate::fs::{self, DirectoryEntry, FileAttr, SeekWhence};
+use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
 
 mod eventfd;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
@@ -62,7 +62,7 @@ pub(crate) type FileDescriptor = i32;
 bitflags! {
 	/// Options for opening files
 	#[derive(Debug, Copy, Clone, Default)]
-	pub(crate) struct OpenOption: i32 {
+	pub struct OpenOption: i32 {
 		const O_RDONLY = 0o0000;
 		const O_WRONLY = 0o0001;
 		const O_RDWR = 0o0002;
@@ -283,26 +283,6 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// files.
 	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
-	}
-}
-
-pub(crate) fn open(
-	name: &str,
-	flags: OpenOption,
-	mode: AccessPermission,
-) -> Result<FileDescriptor, IoError> {
-	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
-	// flags is bitmask of O_DEC_* defined above.
-	// (taken from rust stdlib/sys hermit target )
-
-	debug!("Open {}, {:?}, {:?}", name, flags, mode);
-
-	let fs = fs::FILESYSTEM.get().unwrap();
-	if let Ok(file) = fs.open(name, flags, mode) {
-		let fd = insert_object(file)?;
-		Ok(fd)
-	} else {
-		Err(IoError::EINVAL)
 	}
 }
 
