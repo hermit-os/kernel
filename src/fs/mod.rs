@@ -371,11 +371,8 @@ pub unsafe fn create_file(
 }
 
 /// Creates a new, empty directory at the provided path
-pub fn create_dir(path: &str) -> Result<(), IoError> {
-	FILESYSTEM
-		.get()
-		.unwrap()
-		.mkdir(path, AccessPermission::from_bits(0o777).unwrap())
+pub fn create_dir(path: &str, mode: AccessPermission) -> Result<(), IoError> {
+	FILESYSTEM.get().unwrap().mkdir(path, mode)
 }
 
 /// Returns an vector with all the entries within a directory.
