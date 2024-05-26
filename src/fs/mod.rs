@@ -370,7 +370,15 @@ pub unsafe fn create_file(
 	}
 }
 
-/// Returns an vectri with all the entries within a directory.
+/// Creates a new, empty directory at the provided path
+pub fn create_dir(path: &str) -> Result<(), IoError> {
+	FILESYSTEM
+		.get()
+		.unwrap()
+		.mkdir(path, AccessPermission::from_bits(0o777).unwrap())
+}
+
+/// Returns an vector with all the entries within a directory.
 pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 	debug!("Read directory {}", name);
 
