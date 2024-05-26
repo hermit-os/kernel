@@ -317,11 +317,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 		return -crate::errno::EINVAL;
 	};
 
-	fs::FILESYSTEM
-		.get()
-		.unwrap()
-		.mkdir(name, mode)
-		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fs::create_dir(name, mode).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[hermit_macro::system]
