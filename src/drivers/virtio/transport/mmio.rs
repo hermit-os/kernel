@@ -122,7 +122,7 @@ impl ComCfg {
 	///
 	/// INFO: The queue size is automatically bounded by constant `src::config:VIRTIO_MAX_QUEUE_SIZE`.
 	pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler<'_>> {
-		if self.com_cfg.get_max_queue_size(u32::from(index)) == 0 {
+		if self.get_max_queue_size(index) == 0 {
 			None
 		} else {
 			Some(VqCfgHandler {
@@ -132,8 +132,11 @@ impl ComCfg {
 		}
 	}
 
-	pub fn get_max_queue_size(&mut self, sel: u32) -> u32 {
-		self.com_cfg.get_max_queue_size(sel)
+	pub fn get_max_queue_size(&mut self, sel: u16) -> u16 {
+		self.com_cfg
+			.get_max_queue_size(u32::from(sel))
+			.try_into()
+			.unwrap()
 	}
 
 	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
