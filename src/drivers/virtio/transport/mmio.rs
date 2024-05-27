@@ -584,24 +584,6 @@ impl MmioRegisterLayout {
 		}
 	}
 
-	pub fn get_config(&mut self) -> [u32; 3] {
-		// see Virtio specification v1.1 -  2.4.1
-		unsafe {
-			loop {
-				let before = read_volatile(&self.config_generation);
-				fence(Ordering::SeqCst);
-				let config = read_volatile(&self.config);
-				fence(Ordering::SeqCst);
-				let after = read_volatile(&self.config_generation);
-				fence(Ordering::SeqCst);
-
-				if before == after {
-					return config;
-				}
-			}
-		}
-	}
-
 	pub fn print_information(&mut self) {
 		infoheader!(" MMIO RREGISTER LAYOUT INFORMATION ");
 
@@ -619,7 +601,6 @@ impl MmioRegisterLayout {
 		infoentry!("Device status", "{:#X}", unsafe {
 			read_volatile(&self.status)
 		});
-		infoentry!("Configuration space", "{:#X?}", self.get_config());
 
 		infofooter!();
 	}
