@@ -286,14 +286,12 @@ impl DescriptorRing {
 		// Manually make the first buffer available lastly
 		//
 		// Providing the first buffer in the list manually
-		// provide reference, in order to let TransferToken now upon finish.
-		self.tkn_ref_ring[usize::from(first_ctrl_settings.1)] = first_buffer;
-		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-		// See Virtio specfification v1.1. - 2.7.21
-		fence(Ordering::SeqCst);
-		self.ring[usize::from(first_ctrl_settings.0)].flags |=
-			first_ctrl_settings.2.as_flags_avail();
-
+		self.make_avail_with_state(
+			first_buffer.unwrap(),
+			first_ctrl_settings.0,
+			first_ctrl_settings.1,
+			first_ctrl_settings.2,
+		);
 		RingIdx {
 			off: self.write_index,
 			wrap: self.drv_wc.0.into(),
@@ -434,6 +432,24 @@ impl DescriptorRing {
 
 			desc_ring: self,
 		}
+	}
+
+	fn make_avail_with_state(
+		&mut self,
+		raw_tkn: Box<TransferToken>,
+		start: u16,
+		buff_id: u16,
+		wrap_at_init: WrapCount,
+	) {
+		// We also fail if buff_id is not set!
+		assert!(buff_id != 0);
+
+		// provide reference, in order to let TransferToken know upon finish.
+		self.tkn_ref_ring[usize::from(buff_id)] = Some(raw_tkn);
+		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+		// See Virtio specfification v1.1. - 2.7.21
+		fence(Ordering::SeqCst);
+		self.ring[usize::from(start)].flags |= wrap_at_init.as_flags_avail();
 	}
 }
 
@@ -776,15 +792,8 @@ impl<'a> WriteCtrl<'a> {
 	fn make_avail(&mut self, raw_tkn: Box<TransferToken>) {
 		// We fail if one wants to make a buffer available without inserting one element!
 		assert!(self.start != self.position);
-		// We also fail if buff_id is not set!
-		assert!(self.buff_id != 0);
-
-		// provide reference, in order to let TransferToken know upon finish.
-		self.desc_ring.tkn_ref_ring[usize::from(self.buff_id)] = Some(raw_tkn);
-		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-		// See Virtio specfification v1.1. - 2.7.21
-		fence(Ordering::SeqCst);
-		self.desc_ring.ring[usize::from(self.start)].flags |= self.wrap_at_init.as_flags_avail();
+		self.desc_ring
+			.make_avail_with_state(raw_tkn, self.start, self.buff_id, self.wrap_at_init);
 	}
 }
 
