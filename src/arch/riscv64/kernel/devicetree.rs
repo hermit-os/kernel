@@ -191,25 +191,22 @@ pub fn init_drivers() {
 
 				const MMIO_MAGIC_VALUE: u32 = 0x74726976;
 				if magic != MMIO_MAGIC_VALUE {
-					error!("It's not a MMIO-device at {:#X}", mmio as *const _ as usize);
+					error!("It's not a MMIO-device at {mmio:p}");
 				}
 
 				if version != 2 {
 					warn!("Found a leagacy device, which isn't supported");
 				} else {
 					// We found a MMIO-device (whose 512-bit address in this structure).
-					trace!("Found a MMIO-device at {:#X}", mmio as *const _ as usize);
+					trace!("Found a MMIO-device at {mmio:p}");
 
 					// Verify the device-ID to find the network card
 					let id = mmio.get_device_id();
 
 					if id != DevId::VIRTIO_DEV_ID_NET {
-						debug!(
-							"It's not a network card at {:#X}",
-							mmio as *const _ as usize
-						);
+						debug!("It's not a network card at {mmio:p}");
 					} else {
-						info!("Found network card at {:#X}", mmio as *const _ as usize);
+						info!("Found network card at {mmio:p}");
 
 						// crate::arch::mm::physicalmem::reserve(
 						// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
