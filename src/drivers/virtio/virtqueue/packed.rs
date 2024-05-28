@@ -391,11 +391,8 @@ impl DescriptorRing {
 			}
 			(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 		}
-
-		fence(Ordering::SeqCst);
 		// Update flags of the first descriptor and set new write_index
 		ctrl.make_avail(Box::new(tkn));
-		fence(Ordering::SeqCst);
 
 		RingIdx {
 			off: self.write_index,
