@@ -59,7 +59,7 @@ impl From<u32> for DevId {
 }
 
 pub struct VqCfgHandler<'a> {
-	vq_index: u32,
+	vq_index: u16,
 	raw: &'a mut MmioRegisterLayout,
 }
 
@@ -67,7 +67,7 @@ impl<'a> VqCfgHandler<'a> {
 	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
 	fn select_queue(&mut self) {
 		unsafe {
-			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+			write_volatile(&mut self.raw.queue_sel, self.vq_index.into());
 		}
 	}
 
@@ -167,7 +167,7 @@ impl ComCfg {
 			None
 		} else {
 			Some(VqCfgHandler {
-				vq_index: index as u32,
+				vq_index: index,
 				raw: self.com_cfg,
 			})
 		}
