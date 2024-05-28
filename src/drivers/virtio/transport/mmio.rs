@@ -69,22 +69,49 @@ impl<'a> VqCfgHandler<'a> {
 	///
 	/// Returns the set size in form of a `u16`.
 	pub fn set_vq_size(&mut self, size: u16) -> u16 {
-		self.raw
-			.set_queue_size(self.vq_index, size as u32)
-			.try_into()
-			.unwrap()
+		unsafe {
+			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+
+			let num_max = read_volatile(&self.raw.queue_num_max);
+
+			if num_max >= u32::from(size) {
+				write_volatile(&mut self.raw.queue_num, u32::from(size));
+				size
+			} else {
+				write_volatile(&mut self.raw.queue_num, num_max);
+				num_max.try_into().unwrap()
+			}
+		}
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
-		self.raw.set_ring_addr(self.vq_index, addr);
+		unsafe {
+			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+			write_volatile(&mut self.raw.queue_desc_low, addr.as_u64() as u32);
+			write_volatile(&mut self.raw.queue_desc_high, (addr.as_u64() >> 32) as u32);
+		}
 	}
 
 	pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
-		self.raw.set_drv_ctrl_addr(self.vq_index, addr);
+		unsafe {
+			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+			write_volatile(&mut self.raw.queue_driver_low, addr.as_u64() as u32);
+			write_volatile(
+				&mut self.raw.queue_driver_high,
+				(addr.as_u64() >> 32) as u32,
+			);
+		}
 	}
 
 	pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
-		self.raw.set_dev_ctrl_addr(self.vq_index, addr);
+		unsafe {
+			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+			write_volatile(&mut self.raw.queue_device_low, addr.as_u64() as u32);
+			write_volatile(
+				&mut self.raw.queue_device_high,
+				(addr.as_u64() >> 32) as u32,
+			);
+		}
 	}
 
 	pub fn notif_off(&mut self) -> u16 {
@@ -93,7 +120,10 @@ impl<'a> VqCfgHandler<'a> {
 	}
 
 	pub fn enable_queue(&mut self) {
-		self.raw.enable_queue(self.vq_index);
+		unsafe {
+			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+			write_volatile(&mut self.raw.queue_ready, 1u32);
+		}
 	}
 }
 
@@ -133,14 +163,19 @@ impl ComCfg {
 	}
 
 	pub fn get_max_queue_size(&mut self, sel: u16) -> u16 {
-		self.com_cfg
-			.get_max_queue_size(u32::from(sel))
-			.try_into()
-			.unwrap()
+		unsafe {
+			write_volatile(&mut self.com_cfg.queue_sel, u32::from(sel));
+			read_volatile(&self.com_cfg.queue_num_max)
+				.try_into()
+				.unwrap()
+		}
 	}
 
 	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
-		self.com_cfg.get_queue_ready(sel)
+		unsafe {
+			write_volatile(&mut self.com_cfg.queue_sel, sel);
+			read_volatile(&self.com_cfg.queue_ready) != 0
+		}
 	}
 
 	/// Returns the device status field.
@@ -237,16 +272,67 @@ impl ComCfg {
 
 	/// Returns the features offered by the device.
 	pub fn dev_features(&mut self) -> virtio_spec::F {
-		self.com_cfg.dev_features()
+		// Indicate device to show high 32 bits in device_feature field.
+		// See Virtio specification v1.1. - 4.1.4.3
+		unsafe {
+			write_volatile(&mut self.com_cfg.device_features_sel, 1u32);
+
+			// read high 32 bits of device features
+			let mut device_features = u64::from(read_volatile(&self.com_cfg.device_features)) << 32;
+
+			// Indicate device to show low 32 bits in device_feature field.
+			// See Virtio specification v1.1. - 4.1.4.3
+			write_volatile(&mut self.com_cfg.device_features_sel, 0u32);
+
+			// read low 32 bits of device features
+			device_features |= u64::from(read_volatile(&self.com_cfg.device_features));
+
+			virtio_spec::F::from_bits_retain(u128::from(device_features).into())
+		}
 	}
 
 	/// Write selected features into driver_select field.
 	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
-		self.com_cfg.set_drv_features(features);
+		let features = features.bits().to_ne() as u64;
+		let high: u32 = (features >> 32) as u32;
+		let low: u32 = features as u32;
+
+		unsafe {
+			// Indicate to device that driver_features field shows low 32 bits.
+			// See Virtio specification v1.1. - 4.1.4.3
+			write_volatile(&mut self.com_cfg.driver_features_sel, 0u32);
+
+			// write low 32 bits of device features
+			write_volatile(&mut self.com_cfg.driver_features, low);
+
+			// Indicate to device that driver_features field shows high 32 bits.
+			// See Virtio specification v1.1. - 4.1.4.3
+			write_volatile(&mut self.com_cfg.driver_features_sel, 1u32);
+
+			// write high 32 bits of device features
+			write_volatile(&mut self.com_cfg.driver_features, high);
+		}
 	}
 
 	pub fn print_information(&mut self) {
-		self.com_cfg.print_information();
+		infoheader!(" MMIO RREGISTER LAYOUT INFORMATION ");
+
+		infoentry!("Device version", "{:#X}", self.com_cfg.get_version());
+		infoentry!("Device ID", "{:?}", unsafe {
+			read_volatile(&self.com_cfg.device_id)
+		});
+		infoentry!("Vendor ID", "{:#X}", unsafe {
+			read_volatile(&self.com_cfg.vendor_id)
+		});
+		infoentry!("Device Features", "{:#X}", self.dev_features());
+		infoentry!("Interrupt status", "{:#X}", unsafe {
+			read_volatile(&self.com_cfg.interrupt_status)
+		});
+		infoentry!("Device status", "{:#X}", unsafe {
+			read_volatile(&self.com_cfg.status)
+		});
+
+		infofooter!();
 	}
 }
 
@@ -481,130 +567,5 @@ impl MmioRegisterLayout {
 
 	pub fn get_device_id(&self) -> DevId {
 		unsafe { read_volatile(&self.device_id) }
-	}
-
-	pub fn enable_queue(&mut self, sel: u32) {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-			write_volatile(&mut self.queue_ready, 1u32);
-		}
-	}
-
-	pub fn get_max_queue_size(&mut self, sel: u32) -> u32 {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-			read_volatile(&self.queue_num_max)
-		}
-	}
-
-	pub fn set_queue_size(&mut self, sel: u32, size: u32) -> u32 {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-
-			let num_max = read_volatile(&self.queue_num_max);
-
-			if num_max >= size {
-				write_volatile(&mut self.queue_num, size);
-				size
-			} else {
-				write_volatile(&mut self.queue_num, num_max);
-				num_max
-			}
-		}
-	}
-
-	pub fn set_ring_addr(&mut self, sel: u32, addr: PhysAddr) {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-			write_volatile(&mut self.queue_desc_low, addr.as_u64() as u32);
-			write_volatile(&mut self.queue_desc_high, (addr.as_u64() >> 32) as u32);
-		}
-	}
-
-	pub fn set_drv_ctrl_addr(&mut self, sel: u32, addr: PhysAddr) {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-			write_volatile(&mut self.queue_driver_low, addr.as_u64() as u32);
-			write_volatile(&mut self.queue_driver_high, (addr.as_u64() >> 32) as u32);
-		}
-	}
-
-	pub fn set_dev_ctrl_addr(&mut self, sel: u32, addr: PhysAddr) {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-			write_volatile(&mut self.queue_device_low, addr.as_u64() as u32);
-			write_volatile(&mut self.queue_device_high, (addr.as_u64() >> 32) as u32);
-		}
-	}
-
-	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
-		unsafe {
-			write_volatile(&mut self.queue_sel, sel);
-			read_volatile(&self.queue_ready) != 0
-		}
-	}
-
-	pub fn dev_features(&mut self) -> virtio_spec::F {
-		// Indicate device to show high 32 bits in device_feature field.
-		// See Virtio specification v1.1. - 4.1.4.3
-		unsafe {
-			write_volatile(&mut self.device_features_sel, 1u32);
-
-			// read high 32 bits of device features
-			let mut device_features = u64::from(read_volatile(&self.device_features)) << 32;
-
-			// Indicate device to show low 32 bits in device_feature field.
-			// See Virtio specification v1.1. - 4.1.4.3
-			write_volatile(&mut self.device_features_sel, 0u32);
-
-			// read low 32 bits of device features
-			device_features |= u64::from(read_volatile(&self.device_features));
-
-			virtio_spec::F::from_bits_retain(u128::from(device_features).into())
-		}
-	}
-
-	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
-		let features = features.bits().to_ne() as u64;
-		let high: u32 = (features >> 32) as u32;
-		let low: u32 = features as u32;
-
-		unsafe {
-			// Indicate to device that driver_features field shows low 32 bits.
-			// See Virtio specification v1.1. - 4.1.4.3
-			write_volatile(&mut self.driver_features_sel, 0u32);
-
-			// write low 32 bits of device features
-			write_volatile(&mut self.driver_features, low);
-
-			// Indicate to device that driver_features field shows high 32 bits.
-			// See Virtio specification v1.1. - 4.1.4.3
-			write_volatile(&mut self.driver_features_sel, 1u32);
-
-			// write high 32 bits of device features
-			write_volatile(&mut self.driver_features, high);
-		}
-	}
-
-	pub fn print_information(&mut self) {
-		infoheader!(" MMIO RREGISTER LAYOUT INFORMATION ");
-
-		infoentry!("Device version", "{:#X}", self.get_version());
-		infoentry!("Device ID", "{:?}", unsafe {
-			read_volatile(&self.device_id)
-		});
-		infoentry!("Vendor ID", "{:#X}", unsafe {
-			read_volatile(&self.vendor_id)
-		});
-		infoentry!("Device Features", "{:#X}", self.dev_features());
-		infoentry!("Interrupt status", "{:#X}", unsafe {
-			read_volatile(&self.interrupt_status)
-		});
-		infoentry!("Device status", "{:#X}", unsafe {
-			read_volatile(&self.status)
-		});
-
-		infofooter!();
 	}
 }
