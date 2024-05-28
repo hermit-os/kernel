@@ -183,6 +183,10 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
+      # FIXME: mio branch `v0.8.x` mio broke from `f5d912e7` to `a8a5c5bb`
+      # See https://github.com/hermit-os/kernel/actions/runs/9242628556/job/25489845418
+      - run: cargo update -p mio --precise f5d912e7
+        working-directory: .
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features --microvm
         if: matrix.arch == 'x86_64'
