@@ -506,11 +506,8 @@ pub(crate) fn init_device(
 				}
 			}
 		}
-		_ => {
-			error!(
-				"Device with id {:?} is currently not supported!",
-				registers.device_id
-			);
+		device_id => {
+			error!("Device with id {device_id:?} is currently not supported!");
 			// Return Driver error inidacting device is not supported
 			Err(DriverError::InitVirtioDevFail(
 				VirtioError::DevNotSupported(dev_id),
