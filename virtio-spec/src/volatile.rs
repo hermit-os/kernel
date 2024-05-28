@@ -78,7 +78,8 @@ macro_rules! impl_wide_field_access {
         $(#[$outer:meta])*
         $vis:vis trait $Trait:ident<'a, A>: $T:ty {
             $(
-                $(#[$inner:meta])*
+                $(#[doc = $doc:literal])*
+                #[access($Access:ty)]
                 $field:ident: $field_low:ident, $field_high:ident;
             )*
         }
@@ -86,10 +87,10 @@ macro_rules! impl_wide_field_access {
         $(#[$outer])*
         $vis trait $Trait<'a, A> {
             $(
-                $(#[$inner])*
+                $(#[doc = $doc])*
                 fn $field(self) -> WideVolatilePtr<'a, le32, A::Restricted>
                 where
-                    A: RestrictAccess<ReadWrite>;
+                    A: RestrictAccess<$Access>;
             )*
         }
 
@@ -97,7 +98,7 @@ macro_rules! impl_wide_field_access {
             $(
                 fn $field(self) -> WideVolatilePtr<'a, le32, A::Restricted>
                 where
-                    A: RestrictAccess<ReadWrite>,
+                    A: RestrictAccess<$Access>,
                 {
                     WideVolatilePtr::from_low_high(self.$field_low(), self.$field_high())
                 }

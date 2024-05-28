@@ -127,12 +127,15 @@ impl_wide_field_access! {
     /// Common configuration structure
     pub trait CommonCfgVolatileWideFieldAccess<'a, A>: CommonCfg {
         /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+        #[access(ReadWrite)]
         queue_desc: queue_desc_low, queue_desc_high;
 
         /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+        #[access(ReadWrite)]
         queue_driver: queue_driver_low, queue_driver_high;
 
         /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
+        #[access(ReadWrite)]
         queue_device: queue_device_low, queue_device_high;
     }
 }
