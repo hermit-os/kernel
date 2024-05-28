@@ -263,46 +263,28 @@ pub trait Virtq: VirtqPrivate {
 		let total_send_len = send.iter().map(|slice| slice.len()).sum();
 		let total_recv_len = recv.iter().map(|slice| slice.len()).sum();
 
-		let send_buff;
-		let recv_buff;
+		let send_desc_lst;
+		let recv_desc_lst;
 		let ctrl_desc;
 		match buffer_type {
 			BufferType::Direct => {
-				let send_desc_lst = send
+				send_desc_lst = send
 					.iter()
 					.map(|slice| self.mem_pool().pull_from_raw(slice))
 					.collect::<Result<Vec<_>, VirtqError>>()?;
-				send_buff = if !send.is_empty() {
-					Some(Buffer::Multiple {
-						desc_lst: send_desc_lst.into_boxed_slice(),
-						len: total_send_len,
-						next_write: 0,
-					})
-				} else {
-					None
-				};
 
-				let recv_desc_lst: Vec<_> = recv
+				recv_desc_lst = recv
 					.iter()
 					.map(|slice| self.mem_pool().pull_from_raw(slice))
 					.collect::<Result<Vec<_>, VirtqError>>()?;
-				recv_buff = if !recv.is_empty() {
-					Some(Buffer::Multiple {
-						desc_lst: recv_desc_lst.into_boxed_slice(),
-						len: total_recv_len,
-						next_write: 0,
-					})
-				} else {
-					None
-				};
 				ctrl_desc = None;
 			}
 			BufferType::Indirect => {
-				let send_desc_lst: Vec<_> = send
+				send_desc_lst = send
 					.iter()
 					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
 					.collect();
-				let recv_desc_lst: Vec<_> = recv
+				recv_desc_lst = recv
 					.iter()
 					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
 					.collect();
@@ -319,26 +301,27 @@ pub trait Virtq: VirtqPrivate {
 						None
 					},
 				)?);
-				send_buff = if !send.is_empty() {
-					Some(Buffer::Indirect {
-						desc_lst: send_desc_lst.into_boxed_slice(),
-						len: total_send_len,
-						next_write: 0,
-					})
-				} else {
-					None
-				};
-
-				recv_buff = if !recv.is_empty() {
-					Some(Buffer::Indirect {
-						desc_lst: recv_desc_lst.into_boxed_slice(),
-						len: total_recv_len,
-						next_write: 0,
-					})
-				} else {
-					None
-				};
 			}
+		};
+
+		let send_buff = if !send.is_empty() {
+			Some(Buffer {
+				desc_lst: send_desc_lst.into_boxed_slice(),
+				len: total_send_len,
+				next_write: 0,
+			})
+		} else {
+			None
+		};
+
+		let recv_buff = if !recv.is_empty() {
+			Some(Buffer {
+				desc_lst: recv_desc_lst.into_boxed_slice(),
+				len: total_recv_len,
+				next_write: 0,
+			})
+		} else {
+			None
 		};
 
 		Ok(TransferToken {
@@ -421,7 +404,7 @@ pub trait Virtq: VirtqPrivate {
 				match spec {
 					BuffSpec::Single(size) => match self.mem_pool().pull(size) {
 						Ok(desc) => {
-							let buffer = Buffer::Single {
+							let buffer = Buffer {
 								desc_lst: vec![desc].into_boxed_slice(),
 								len: size.into(),
 								next_write: 0,
@@ -450,7 +433,7 @@ pub trait Virtq: VirtqPrivate {
 							len += usize::from(*size);
 						}
 
-						let buffer = Buffer::Multiple {
+						let buffer = Buffer {
 							desc_lst: desc_lst.into_boxed_slice(),
 							len,
 							next_write: 0,
@@ -476,7 +459,7 @@ pub trait Virtq: VirtqPrivate {
 							len += usize::from(*size);
 						}
 
-						let buffer = Buffer::Indirect {
+						let buffer = Buffer {
 							desc_lst: desc_lst.into_boxed_slice(),
 							len,
 							next_write: 0,
@@ -498,7 +481,7 @@ pub trait Virtq: VirtqPrivate {
 				match spec {
 					BuffSpec::Single(size) => match self.mem_pool().pull(size) {
 						Ok(desc) => {
-							let buffer = Buffer::Single {
+							let buffer = Buffer {
 								desc_lst: vec![desc].into_boxed_slice(),
 								len: size.into(),
 								next_write: 0,
@@ -527,7 +510,7 @@ pub trait Virtq: VirtqPrivate {
 							len += usize::from(*size);
 						}
 
-						let buffer = Buffer::Multiple {
+						let buffer = Buffer {
 							desc_lst: desc_lst.into_boxed_slice(),
 							len,
 							next_write: 0,
@@ -553,7 +536,7 @@ pub trait Virtq: VirtqPrivate {
 							len += usize::from(*size);
 						}
 
-						let buffer = Buffer::Indirect {
+						let buffer = Buffer {
 							desc_lst: desc_lst.into_boxed_slice(),
 							len,
 							next_write: 0,
@@ -575,7 +558,7 @@ pub trait Virtq: VirtqPrivate {
 				match (send_spec, recv_spec) {
 					(BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
 						let send_buff = match self.mem_pool().pull(send_size) {
-							Ok(send_desc) => Some(Buffer::Single {
+							Ok(send_desc) => Some(Buffer {
 								desc_lst: vec![send_desc].into_boxed_slice(),
 								len: send_size.into(),
 								next_write: 0,
@@ -584,7 +567,7 @@ pub trait Virtq: VirtqPrivate {
 						};
 
 						let recv_buff = match self.mem_pool().pull(recv_size) {
-							Ok(recv_desc) => Some(Buffer::Single {
+							Ok(recv_desc) => Some(Buffer {
 								desc_lst: vec![recv_desc].into_boxed_slice(),
 								len: recv_size.into(),
 								next_write: 0,
@@ -603,7 +586,7 @@ pub trait Virtq: VirtqPrivate {
 					}
 					(BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
 						let send_buff = match self.mem_pool().pull(send_size) {
-							Ok(send_desc) => Some(Buffer::Single {
+							Ok(send_desc) => Some(Buffer {
 								desc_lst: vec![send_desc].into_boxed_slice(),
 								len: send_size.into(),
 								next_write: 0,
@@ -623,7 +606,7 @@ pub trait Virtq: VirtqPrivate {
 							recv_len += usize::from(*size);
 						}
 
-						let recv_buff = Some(Buffer::Multiple {
+						let recv_buff = Some(Buffer {
 							desc_lst: recv_desc_lst.into_boxed_slice(),
 							len: recv_len,
 							next_write: 0,
@@ -650,7 +633,7 @@ pub trait Virtq: VirtqPrivate {
 							send_len += usize::from(*size);
 						}
 
-						let send_buff = Some(Buffer::Multiple {
+						let send_buff = Some(Buffer {
 							desc_lst: send_desc_lst.into_boxed_slice(),
 							len: send_len,
 							next_write: 0,
@@ -668,7 +651,7 @@ pub trait Virtq: VirtqPrivate {
 							recv_len += usize::from(*size);
 						}
 
-						let recv_buff = Some(Buffer::Multiple {
+						let recv_buff = Some(Buffer {
 							desc_lst: recv_desc_lst.into_boxed_slice(),
 							len: recv_len,
 							next_write: 0,
@@ -696,14 +679,14 @@ pub trait Virtq: VirtqPrivate {
 							send_len += usize::from(*size);
 						}
 
-						let send_buff = Some(Buffer::Multiple {
+						let send_buff = Some(Buffer {
 							desc_lst: send_desc_lst.into_boxed_slice(),
 							len: send_len,
 							next_write: 0,
 						});
 
 						let recv_buff = match self.mem_pool().pull(recv_size) {
-							Ok(recv_desc) => Some(Buffer::Single {
+							Ok(recv_desc) => Some(Buffer {
 								desc_lst: vec![recv_desc].into_boxed_slice(),
 								len: recv_size.into(),
 								next_write: 0,
@@ -743,12 +726,12 @@ pub trait Virtq: VirtqPrivate {
 							recv_len += usize::from(*size);
 						}
 
-						let recv_buff = Some(Buffer::Indirect {
+						let recv_buff = Some(Buffer {
 							desc_lst: recv_desc_lst.into_boxed_slice(),
 							len: recv_len,
 							next_write: 0,
 						});
-						let send_buff = Some(Buffer::Indirect {
+						let send_buff = Some(Buffer {
 							desc_lst: send_desc_lst.into_boxed_slice(),
 							len: send_len,
 							next_write: 0,
@@ -1578,149 +1561,78 @@ pub enum BufferType {
 	Indirect,
 }
 
-/// Describes the type of a buffer and unifies them.
-enum Buffer {
-	/// A buffer consisting of a single [Memory Descriptor](MemDescr).
-	Single {
-		desc_lst: Box<[MemDescr]>,
-		len: usize,
-		next_write: usize,
-	},
-	/// A buffer consisting of a chain of [Memory Descriptors](MemDescr).
-	/// Especially useful if one wants to send multiple structures to a device,
-	/// as he can sequentially write (see [BufferToken] `write_seq()`)
-	/// those structs into the descriptors.
-	Multiple {
-		desc_lst: Box<[MemDescr]>,
-		len: usize,
-		next_write: usize,
-	},
-	/// A buffer consisting of a single descriptor in the actual virtqueue,
-	/// referencing a list of descriptors somewhere in memory.
-	/// Especially useful of one wants to extend the capacity of the virtqueue.
-	/// Also has the same advantages as a `Buffer::Multiple`.
-	Indirect {
-		desc_lst: Box<[MemDescr]>,
-		len: usize,
-		next_write: usize,
-	},
+struct Buffer {
+	desc_lst: Box<[MemDescr]>,
+	len: usize,
+	next_write: usize,
 }
 
 // Private Interface of Buffer
 impl Buffer {
 	/// Resets the Buffers length to the given len. This MUST be the length at initialization.
 	fn reset_len(&mut self, init_len: usize) {
-		match self {
-			Buffer::Single { len, .. }
-			| Buffer::Multiple { len, .. }
-			| Buffer::Indirect { len, .. } => *len = init_len,
-		}
+		self.len = init_len;
 	}
 
 	/// Restricts the Buffers length to the given len. This length MUST NOT be larger than the
 	/// length at initialization or smaller-equal 0.
 	fn restr_len(&mut self, new_len: usize) {
-		match self {
-			Buffer::Single { len, .. }
-			| Buffer::Multiple { len, .. }
-			| Buffer::Indirect { len, .. } => *len = new_len,
-		}
+		self.len = new_len;
 	}
 
 	/// Writes a given slice into a Descriptor element of a Buffer. Hereby the function ensures, that the
 	/// slice fits into the memory area and that not to many writes already have happened.
 	fn next_write(&mut self, slice: &[u8]) -> Result<usize, BufferError> {
-		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				..
-			}
-			| Buffer::Multiple {
-				desc_lst,
-				next_write,
-				..
-			}
-			| Buffer::Indirect {
-				desc_lst,
-				next_write,
-				..
-			} => {
-				if (desc_lst.len() - 1) < *next_write {
-					Err(BufferError::ToManyWrites)
-				} else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
-					Err(BufferError::WriteToLarge)
-				} else {
-					desc_lst[*next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
-					*next_write += 1;
+		if (self.desc_lst.len() - 1) < self.next_write {
+			Err(BufferError::ToManyWrites)
+		} else if self.desc_lst.get(self.next_write).unwrap().len() < slice.len() {
+			Err(BufferError::WriteToLarge)
+		} else {
+			self.desc_lst[self.next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
+			self.next_write += 1;
 
-					Ok(slice.len())
-				}
-			}
+			Ok(slice.len())
 		}
 	}
 
 	/// Resets the write status of a Buffertoken in order to be able to reuse a Buffertoken.
 	fn reset_write(&mut self) {
-		match self {
-			Buffer::Single { next_write, .. }
-			| Buffer::Multiple { next_write, .. }
-			| Buffer::Indirect { next_write, .. } => *next_write = 0,
-		}
+		self.next_write = 0;
 	}
 
 	/// This consumes the the given buffer and returns the raw information (i.e. a `*mut u8` and a `usize` inidacting the start and
 	/// length of the buffers memory).
 	///
 	/// After this call the users is responsible for deallocating the given memory via the [DeviceAlloc::deallocate] function.
-	fn into_raw(self) -> Vec<(*mut u8, usize)> {
-		match self {
-			Buffer::Single { mut desc_lst, .. }
-			| Buffer::Multiple { mut desc_lst, .. }
-			| Buffer::Indirect { mut desc_lst, .. } => {
-				let mut arr = Vec::with_capacity(desc_lst.len());
-
-				for desc in desc_lst.iter_mut() {
-					// Need to be a little careful here.
-					desc.dealloc = false;
-					arr.push((desc.ptr, desc._init_len));
-				}
-				arr
-			}
-		}
+	fn into_raw(mut self) -> Vec<(*mut u8, usize)> {
+		self.desc_lst
+			.iter_mut()
+			.map(|desc| {
+				desc.dealloc = false;
+				(desc.ptr, desc._init_len)
+			})
+			.collect()
 	}
 
 	/// Returns a copy of the buffer.
 	fn cpy(&self) -> Box<[u8]> {
-		match &self {
-			Buffer::Single { desc_lst, len, .. }
-			| Buffer::Multiple { desc_lst, len, .. }
-			| Buffer::Indirect { desc_lst, len, .. } => {
-				let mut arr = Vec::with_capacity(*len);
+		let mut arr = Vec::with_capacity(self.len);
 
-				for desc in desc_lst.iter() {
-					arr.append(&mut desc.cpy_into_vec());
-				}
-				arr.into_boxed_slice()
-			}
+		for desc in self.desc_lst.iter() {
+			arr.append(&mut desc.cpy_into_vec());
 		}
+		arr.into_boxed_slice()
 	}
 
 	/// Returns a scattered copy of the buffer, which preserves the structure of the
 	/// buffer being possibly split up between different descriptors.
 	fn scat_cpy(&self) -> Vec<Box<[u8]>> {
-		match &self {
-			Buffer::Single { desc_lst, .. }
-			| Buffer::Multiple { desc_lst, .. }
-			| Buffer::Indirect { desc_lst, .. } => {
-				let mut arr = Vec::with_capacity(desc_lst.len());
+		let mut arr = Vec::with_capacity(self.desc_lst.len());
 
-				for desc in desc_lst.iter() {
-					arr.push(desc.cpy_into_box());
-				}
-				arr
-			}
+		for desc in self.desc_lst.iter() {
+			arr.push(desc.cpy_into_box());
 		}
+		arr
 	}
 
 	/// Returns the number of usable descriptors inside a buffer.
@@ -1730,11 +1642,7 @@ impl Buffer {
 	/// descriptors that will be placed inside the virtqueue.
 	/// In order to retrieve this value, please use `BufferToken.num_consuming_desc()`.
 	fn num_descr(&self) -> u16 {
-		match &self {
-			Buffer::Single { desc_lst, .. }
-			| Buffer::Multiple { desc_lst, .. }
-			| Buffer::Indirect { desc_lst, .. } => u16::try_from(desc_lst.len()).unwrap(),
-		}
+		self.desc_lst.len().try_into().unwrap()
 	}
 
 	/// Returns the overall number of bytes in this Buffer.
@@ -1743,11 +1651,7 @@ impl Buffer {
 	/// inside the indirect descriptor list. NOT the length of the memory area of the indirect descriptor placed in the actual
 	/// descriptor area!
 	fn len(&self) -> usize {
-		match &self {
-			Buffer::Single { len, .. }
-			| Buffer::Multiple { len, .. }
-			| Buffer::Indirect { len, .. } => *len,
-		}
+		self.len
 	}
 
 	/// Returns the complete Buffer as a mutable slice of MemDescr, which themselves deref into a `&mut [u8]`.
@@ -1756,11 +1660,7 @@ impl Buffer {
 	/// this will return one element
 	/// (`&mut [u8]`) for each descriptor.
 	fn as_mut_slice(&mut self) -> &mut [MemDescr] {
-		match self {
-			Buffer::Single { desc_lst, .. }
-			| Buffer::Multiple { desc_lst, .. }
-			| Buffer::Indirect { desc_lst, .. } => desc_lst.as_mut(),
-		}
+		self.desc_lst.as_mut()
 	}
 
 	/// Returns the complete Buffer as a slice of MemDescr, which themselves deref into a `&[u8]`.
@@ -1769,11 +1669,7 @@ impl Buffer {
 	/// this will return one element
 	/// (`&[u8]`) for each descriptor.
 	fn as_slice(&self) -> &[MemDescr] {
-		match self {
-			Buffer::Single { desc_lst, .. } => desc_lst.as_ref(),
-			Buffer::Multiple { desc_lst, .. } => desc_lst.as_ref(),
-			Buffer::Indirect { desc_lst, .. } => desc_lst.as_ref(),
-		}
+		self.desc_lst.as_ref()
 	}
 }
 
@@ -2004,7 +1900,7 @@ impl MemPool {
 
 	/// Creates a MemDescr which refers to already existing memory.
 	/// The MemDescr does NOT consume a place in the pool and should
-	/// be used with `Buffer::Indirect`.
+	/// be used with `Buffer`.
 	///
 	/// **Info on Usage:**
 	/// * `Panics` if given `slice.len() == 0`
