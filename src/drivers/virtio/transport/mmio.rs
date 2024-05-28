@@ -79,15 +79,10 @@ impl<'a> VqCfgHandler<'a> {
 		self.select_queue();
 
 		unsafe {
-			let num_max = read_volatile(&self.raw.queue_num_max);
-
-			if num_max >= u32::from(size) {
-				write_volatile(&mut self.raw.queue_num, u32::from(size));
-				size
-			} else {
-				write_volatile(&mut self.raw.queue_num, num_max);
-				num_max.try_into().unwrap()
-			}
+			let num_max = u16::try_from(read_volatile(&self.raw.queue_num_max)).unwrap();
+			let size = size.min(num_max);
+			write_volatile(&mut self.raw.queue_num, size.into());
+			size
 		}
 	}
 
