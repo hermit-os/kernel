@@ -37,7 +37,9 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
-use crate::drivers::virtio::virtqueue::{BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize};
+use crate::drivers::virtio::virtqueue::{
+	BuffSpec, BufferToken, BufferType, Bytes, Virtq, VqIndex, VqSize,
+};
 use crate::executor::device::{RxToken, TxToken};
 
 /// A wrapper struct for the raw configuration structure.
@@ -112,7 +114,7 @@ impl RxQueues {
 			// TransferTokens are directly dispatched
 			// Transfers will be awaited at the queue
 			buff_tkn
-				.provide()
+				.provide(BufferType::Direct)
 				.dispatch_await(self.poll_sender.clone(), false);
 		}
 
@@ -449,7 +451,7 @@ impl NetworkDriver for VirtioNetDriver {
 			}
 
 			buff_tkn
-				.provide()
+				.provide(BufferType::Direct)
 				.dispatch_await(self.send_vqs.poll_sender.clone(), false);
 
 			result
@@ -483,7 +485,7 @@ impl NetworkDriver for VirtioNetDriver {
 						if packet.len() < HEADER_SIZE {
 							transfer
 								.reset()
-								.provide()
+								.provide(BufferType::Direct)
 								.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
 
 							return None;
@@ -500,7 +502,7 @@ impl NetworkDriver for VirtioNetDriver {
 						vec_data.extend_from_slice(&packet[mem::size_of::<Hdr>()..]);
 						transfer
 							.reset()
-							.provide()
+							.provide(BufferType::Direct)
 							.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
 
 						num_buffers
@@ -522,7 +524,7 @@ impl NetworkDriver for VirtioNetDriver {
 						vec_data.extend_from_slice(packet);
 						transfer
 							.reset()
-							.provide()
+							.provide(BufferType::Direct)
 							.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
 					}
 
@@ -533,7 +535,7 @@ impl NetworkDriver for VirtioNetDriver {
 						.reset()
 						.write_seq(None::<&Hdr>, Some(&Hdr::default()))
 						.unwrap()
-						.provide()
+						.provide(BufferType::Direct)
 						.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
 
 					None

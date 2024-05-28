@@ -26,6 +26,7 @@ use super::{
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
+use crate::drivers::virtio::virtqueue::Buffer;
 use crate::mm::device_alloc::DeviceAlloc;
 
 // The generic structure eases the creation of the layout for the statically
@@ -127,39 +128,30 @@ impl DescrRing {
 
 	fn push(&mut self, tkn: TransferToken) -> u16 {
 		let mut desc_lst = Vec::new();
-		let mut is_indirect = false;
 
-		if let Some(buff) = tkn.buff_tkn.send_buff.as_ref() {
-			if buff.is_indirect() {
-				desc_lst.push((buff.get_ctrl_desc().unwrap(), false));
-				is_indirect = true;
-			} else {
-				for desc in buff.as_slice() {
-					desc_lst.push((desc, false));
+		let send_desc_lst = tkn.buff_tkn.send_buff.as_ref().map(Buffer::as_slice);
+		let recv_desc_lst = tkn.buff_tkn.recv_buff.as_ref().map(Buffer::as_slice);
+		match tkn.ctrl_desc.as_ref() {
+			None => {
+				if let Some(send_desc_lst) = send_desc_lst {
+					for desc in send_desc_lst {
+						desc_lst.push((desc, false));
+					}
+				}
+				if let Some(recv_desc_lst) = recv_desc_lst {
+					for desc in recv_desc_lst {
+						desc_lst.push((desc, true));
+					}
 				}
 			}
-		}
-
-		if let Some(buff) = tkn.buff_tkn.recv_buff.as_ref() {
-			if buff.is_indirect() {
-				if desc_lst.is_empty() {
-					desc_lst.push((buff.get_ctrl_desc().unwrap(), true));
-					is_indirect = true;
-				} else if desc_lst.len() == 1 {
-					//ensure write flag is set
-					let (_, is_write) = &mut desc_lst[0];
-					*is_write = true;
-				} else {
-					panic!("Indirect descriptor should always be inserted as a single descriptor in the queue...")
-				}
-			} else {
-				for desc in buff.as_slice() {
-					desc_lst.push((desc, true));
-				}
+			Some(ctrl_desc) => {
+				// "The device MUST ignore the write-only flag (flags&VIRTQ_DESC_F_WRITE) in the descriptor that
+				// refers to an indirect table." (VIRTIO Spec. 2.7.5.3.2)
+				desc_lst.push((ctrl_desc, false));
 			}
-		}
+		};
 
-		let mut len = tkn.buff_tkn.num_consuming_descr();
+		let mut len = tkn.num_consuming_descr();
 
 		assert!(!desc_lst.is_empty());
 		// Minus 1, comes from  the fact that ids run from one to 255 and not from 0 to 254 for u8::MAX sized pool
@@ -174,26 +166,15 @@ impl DescrRing {
 			// This is due to dhe fact that i have ids from one to 255 and not from 0 to 254 for u8::MAX sized pool
 			let write_indx = (desc.id.as_ref().unwrap().0 - 1) as usize;
 
-			let descriptor = if is_indirect {
+			let descriptor = if tkn.ctrl_desc.is_some() {
 				assert!(len == 1);
-				if is_write {
-					virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-							.as_u64()
-							.into(),
-						len: (desc.len as u32).into(),
-						flags: virtq::DescF::INDIRECT | virtq::DescF::WRITE,
-						next: 0.into(),
-					}
-				} else {
-					virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-							.as_u64()
-							.into(),
-						len: (desc.len as u32).into(),
-						flags: virtq::DescF::INDIRECT,
-						next: 0.into(),
-					}
+				virtq::Desc {
+					addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+						.as_u64()
+						.into(),
+					len: (desc.len as u32).into(),
+					flags: virtq::DescF::INDIRECT,
+					next: 0.into(),
 				}
 			} else if len > 1 {
 				let next_index = {
@@ -518,8 +499,8 @@ impl Virtq for SplitVq {
 impl VirtqPrivate for SplitVq {
 	fn create_indirect_ctrl(
 		&self,
-		send: Option<&Vec<MemDescr>>,
-		recv: Option<&Vec<MemDescr>>,
+		send: Option<&[MemDescr]>,
+		recv: Option<&[MemDescr]>,
 	) -> Result<MemDescr, VirtqError> {
 		// Need to match (send, recv) twice, as the "size" of the control descriptor to be pulled must be known in advance.
 		let len: usize = match (send, recv) {
