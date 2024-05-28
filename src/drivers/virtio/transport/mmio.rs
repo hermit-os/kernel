@@ -64,14 +64,21 @@ pub struct VqCfgHandler<'a> {
 }
 
 impl<'a> VqCfgHandler<'a> {
+	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
+	fn select_queue(&mut self) {
+		unsafe {
+			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+		}
+	}
+
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed
 	/// size, the size is set to this maximum instead. Else size is set to the provided value.
 	///
 	/// Returns the set size in form of a `u16`.
 	pub fn set_vq_size(&mut self, size: u16) -> u16 {
-		unsafe {
-			write_volatile(&mut self.raw.queue_sel, self.vq_index);
+		self.select_queue();
 
+		unsafe {
 			let num_max = read_volatile(&self.raw.queue_num_max);
 
 			if num_max >= u32::from(size) {
@@ -85,16 +92,18 @@ impl<'a> VqCfgHandler<'a> {
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
+		self.select_queue();
+
 		unsafe {
-			write_volatile(&mut self.raw.queue_sel, self.vq_index);
 			write_volatile(&mut self.raw.queue_desc_low, addr.as_u64() as u32);
 			write_volatile(&mut self.raw.queue_desc_high, (addr.as_u64() >> 32) as u32);
 		}
 	}
 
 	pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
+		self.select_queue();
+
 		unsafe {
-			write_volatile(&mut self.raw.queue_sel, self.vq_index);
 			write_volatile(&mut self.raw.queue_driver_low, addr.as_u64() as u32);
 			write_volatile(
 				&mut self.raw.queue_driver_high,
@@ -104,8 +113,9 @@ impl<'a> VqCfgHandler<'a> {
 	}
 
 	pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
+		self.select_queue();
+
 		unsafe {
-			write_volatile(&mut self.raw.queue_sel, self.vq_index);
 			write_volatile(&mut self.raw.queue_device_low, addr.as_u64() as u32);
 			write_volatile(
 				&mut self.raw.queue_device_high,
@@ -120,8 +130,9 @@ impl<'a> VqCfgHandler<'a> {
 	}
 
 	pub fn enable_queue(&mut self) {
+		self.select_queue();
+
 		unsafe {
-			write_volatile(&mut self.raw.queue_sel, self.vq_index);
 			write_volatile(&mut self.raw.queue_ready, 1u32);
 		}
 	}
