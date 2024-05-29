@@ -498,7 +498,7 @@ impl Virtq for SplitVq {
 		let mut notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
 			notif_cfg.base()
 				+ usize::from(vq_handler.notif_off())
-				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
+					* usize::try_from(notif_cfg.multiplier()).unwrap(),
 		));
 
 		if features.contains(virtio_spec::F::NOTIFICATION_DATA) {
