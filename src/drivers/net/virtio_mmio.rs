@@ -4,17 +4,18 @@
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::ptr;
 use core::ptr::read_volatile;
 use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
 
 use smoltcp::phy::ChecksumCapabilities;
+use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use volatile::VolatileRef;
 
 use crate::drivers::net::virtio_net::constants::Status;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, MmioRegisterLayout, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::Virtq;
 
 /// Virtio's network device configuration structure.
@@ -110,18 +111,25 @@ impl NetDevCfgRaw {
 impl VirtioNetDriver {
 	pub fn new(
 		dev_id: u16,
-		registers: &'static mut MmioRegisterLayout,
+		mut registers: VolatileRef<'static, DeviceRegisters>,
 		irq: u8,
 	) -> Result<Self, VirtioNetError> {
-		let dev_cfg_raw: &'static NetDevCfgRaw =
-			unsafe { &*(ptr::with_exposed_provenance(ptr::from_ref(registers).addr() + 0xFC)) };
+		let dev_cfg_raw: &'static NetDevCfgRaw = unsafe {
+			&*registers
+				.borrow_mut()
+				.as_mut_ptr()
+				.config_generation()
+				.as_raw_ptr()
+				.cast::<NetDevCfgRaw>()
+				.as_ptr()
+		};
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,
 			features: virtio_spec::net::F::empty(),
 		};
-		let isr_stat = IsrStatus::new(registers);
-		let notif_cfg = NotifCfg::new(registers);
+		let isr_stat = IsrStatus::new(registers.borrow_mut());
+		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
 		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
 			u16::from_str(&my_mtu).unwrap()
@@ -159,7 +167,7 @@ impl VirtioNetDriver {
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub fn init(
 		dev_id: u16,
-		registers: &'static mut MmioRegisterLayout,
+		registers: VolatileRef<'static, DeviceRegisters>,
 		irq_no: u8,
 	) -> Result<VirtioNetDriver, VirtioError> {
 		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq_no) {

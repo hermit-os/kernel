@@ -1,9 +1,12 @@
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::ptr::NonNull;
 use core::{ptr, str};
 
 use align_address::Align;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
+use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use volatile::VolatileRef;
 
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
@@ -11,7 +14,7 @@ use crate::arch::x86_64::mm::paging::{
 use crate::arch::x86_64::mm::{paging, PhysAddr};
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
-use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout, VirtioDriver};
+use crate::drivers::virtio::transport::mmio::{DevId, VirtioDriver};
 use crate::env;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
@@ -36,9 +39,40 @@ impl MmioDriver {
 	}
 }
 
+unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters>> {
+	// Verify the first register value to find out if this is really an MMIO magic-value.
+	let mmio = unsafe { VolatileRef::new(NonNull::new(ptr.cast::<DeviceRegisters>()).unwrap()) };
+
+	let magic = mmio.as_ptr().magic_value().read().to_ne();
+	let version = mmio.as_ptr().version().read().to_ne();
+
+	if magic != MAGIC_VALUE {
+		trace!("It's not a MMIO-device at {mmio:p}");
+		return None;
+	}
+
+	if version != 2 {
+		trace!("Found a legacy device, which isn't supported");
+		return None;
+	}
+
+	// We found a MMIO-device (whose 512-bit address in this structure).
+	trace!("Found a MMIO-device at {mmio:p}");
+
+	// Verify the device-ID to find the network card
+	let id = DevId::from(mmio.as_ptr().device_id().read().to_ne());
+
+	if id != DevId::VIRTIO_DEV_ID_NET {
+		trace!("It's not a network card at {mmio:p}");
+		return None;
+	}
+
+	Some(mmio)
+}
+
 fn check_linux_args(
 	linux_mmio: &'static [String],
-) -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
+) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	let virtual_address =
 		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
@@ -66,37 +100,12 @@ fn check_linux_args(
 					flags,
 				);
 
-				// Verify the first register value to find out if this is really an MMIO magic-value.
-				let mmio = unsafe {
-					&mut *(ptr::with_exposed_provenance_mut::<MmioRegisterLayout>(
-						virtual_address.as_usize()
-							| (current_address & (BasePageSize::SIZE as usize - 1)),
-					))
+				let addr = virtual_address.as_usize()
+					| (current_address & (BasePageSize::SIZE as usize - 1));
+				let ptr = ptr::with_exposed_provenance_mut(addr);
+				let Some(mmio) = (unsafe { check_ptr(ptr) }) else {
+					continue;
 				};
-
-				let magic = mmio.get_magic_value();
-				let version = mmio.get_version();
-
-				if magic != MAGIC_VALUE {
-					trace!("It's not a MMIO-device at {mmio:p}");
-					continue;
-				}
-
-				if version != 2 {
-					trace!("Found a legacy device, which isn't supported");
-					continue;
-				}
-
-				// We found a MMIO-device (whose 512-bit address in this structure).
-				trace!("Found a MMIO-device at {mmio:p}");
-
-				// Verify the device-ID to find the network card
-				let id = mmio.get_device_id();
-
-				if id != DevId::VIRTIO_DEV_ID_NET {
-					trace!("It's not a network card at {mmio:p}");
-					continue;
-				}
 
 				crate::arch::mm::physicalmem::reserve(
 					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
@@ -117,7 +126,7 @@ fn check_linux_args(
 	Err("Network card not found!")
 }
 
-fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
+fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
 	let virtual_address =
@@ -144,36 +153,12 @@ fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str>
 			current_page = current_address / BasePageSize::SIZE as usize;
 		}
 
-		// Verify the first register value to find out if this is really an MMIO magic-value.
-		let mmio = unsafe {
-			&mut *(ptr::with_exposed_provenance_mut::<MmioRegisterLayout>(
-				virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1)),
-			))
+		let addr =
+			virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1));
+		let ptr = ptr::with_exposed_provenance_mut(addr);
+		let Some(mmio) = (unsafe { check_ptr(ptr) }) else {
+			continue;
 		};
-
-		let magic = mmio.get_magic_value();
-		let version = mmio.get_version();
-
-		if magic != MAGIC_VALUE {
-			trace!("It's not a MMIO-device at {mmio:p}");
-			continue;
-		}
-
-		if version != 2 {
-			trace!("Found a legacy device, which isn't supported");
-			continue;
-		}
-
-		// We found a MMIO-device (whose 512-bit address in this structure).
-		trace!("Found a MMIO-device at {mmio:p}");
-
-		// Verify the device-ID to find the network card
-		let id = mmio.get_device_id();
-
-		if id != DevId::VIRTIO_DEV_ID_NET {
-			trace!("It's not a network card at {mmio:p}");
-			continue;
-		}
 
 		info!("Found network card at {mmio:p}");
 
@@ -193,7 +178,7 @@ fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str>
 
 /// Tries to find the network device within the specified address range.
 /// Returns a reference to it within the Ok() if successful or an Err() on failure.
-fn detect_network() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
+fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	let linux_mmio = env::mmio();
 
 	if !linux_mmio.is_empty() {

@@ -1,4 +1,11 @@
+#[cfg(all(feature = "tcp", not(feature = "pci")))]
+use core::ptr::NonNull;
+
 use fdt::Fdt;
+#[cfg(all(feature = "tcp", not(feature = "pci")))]
+use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+#[cfg(all(feature = "tcp", not(feature = "pci")))]
+use volatile::VolatileRef;
 
 #[cfg(feature = "gem-net")]
 use crate::arch::mm::VirtAddr;
@@ -9,10 +16,10 @@ use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::{paging, PhysAddr};
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
+#[cfg(all(feature = "tcp", not(feature = "pci")))]
+use crate::drivers::virtio::transport::mmio::DevId;
 #[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
-use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use crate::kernel::mmio::register_driver;
 
@@ -184,32 +191,30 @@ pub fn init_drivers() {
 				);
 
 				// Verify the first register value to find out if this is really an MMIO magic-value.
-				let mmio = &mut *(virtio_region.starting_address as *mut MmioRegisterLayout);
+				let ptr = virtio_region.starting_address as *mut DeviceRegisters;
+				let mmio = VolatileRef::new(NonNull::new(ptr).unwrap());
 
-				let magic = mmio.get_magic_value();
-				let version = mmio.get_version();
+				let magic = mmio.as_ptr().magic_value().read().to_ne();
+				let version = mmio.as_ptr().version().read().to_ne();
 
 				const MMIO_MAGIC_VALUE: u32 = 0x74726976;
 				if magic != MMIO_MAGIC_VALUE {
-					error!("It's not a MMIO-device at {:#X}", mmio as *const _ as usize);
+					error!("It's not a MMIO-device at {mmio:p}");
 				}
 
 				if version != 2 {
 					warn!("Found a leagacy device, which isn't supported");
 				} else {
 					// We found a MMIO-device (whose 512-bit address in this structure).
-					trace!("Found a MMIO-device at {:#X}", mmio as *const _ as usize);
+					trace!("Found a MMIO-device at {mmio:p}");
 
 					// Verify the device-ID to find the network card
-					let id = mmio.get_device_id();
+					let id = DevId::from(mmio.as_ptr().device_id().read().to_ne());
 
 					if id != DevId::VIRTIO_DEV_ID_NET {
-						debug!(
-							"It's not a network card at {:#X}",
-							mmio as *const _ as usize
-						);
+						debug!("It's not a network card at {mmio:p}");
 					} else {
-						info!("Found network card at {:#X}", mmio as *const _ as usize);
+						info!("Found network card at {mmio:p}");
 
 						// crate::arch::mm::physicalmem::reserve(
 						// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
