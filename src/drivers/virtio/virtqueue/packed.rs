@@ -1131,11 +1131,7 @@ impl Virtq for PackedVq {
 			raw: dev_event,
 		};
 
-		let mut notif_ctrl = NotifCtrl::new(ptr::with_exposed_provenance_mut(
-			notif_cfg.base()
-				+ usize::from(vq_handler.notif_off())
-					* usize::try_from(notif_cfg.multiplier()).unwrap(),
-		));
+		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
 
 		if features.contains(virtio_spec::F::NOTIFICATION_DATA) {
 			notif_ctrl.enable_notif_data();

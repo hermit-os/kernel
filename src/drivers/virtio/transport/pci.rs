@@ -617,15 +617,10 @@ impl NotifCfg {
 		})
 	}
 
-	/// Returns base address of notification area as an usize
-	pub fn base(&self) -> usize {
-		usize::from(self.base_addr)
-	}
-
-	/// Returns the multiplier, needed in order to calculate the
-	/// notification address for a specific queue.
-	pub fn multiplier(&self) -> u32 {
-		self.notify_off_multiplier
+	pub fn notification_location(&self, vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
+		let addend = u32::from(vq_cfg_handler.notif_off()) * self.notify_off_multiplier;
+		let addr = usize::from(self.base_addr) + usize::try_from(addend).unwrap();
+		ptr::with_exposed_provenance_mut(addr)
 	}
 }
 
