@@ -10,6 +10,7 @@ mod bitflags;
 #[macro_use]
 pub mod volatile;
 mod features;
+pub mod mmio;
 pub mod net;
 pub mod pci;
 
