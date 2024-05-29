@@ -117,6 +117,7 @@ macro_rules! impl_wide_field_access {
         $vis:vis trait $Trait:ident<'a, A>: $T:ty {
             $(
                 $(#[doc = $doc:literal])*
+                $(#[doc(alias = $alias:literal)])?
                 #[access($Access:ty)]
                 $field:ident: $field_low:ident, $field_high:ident;
             )*
@@ -126,6 +127,7 @@ macro_rules! impl_wide_field_access {
         $vis trait $Trait<'a, A> {
             $(
                 $(#[doc = $doc])*
+                $(#[doc(alias = $alias)])?
                 fn $field(self) -> WideVolatilePtr<'a, le32, A::Restricted>
                 where
                     A: RestrictAccess<$Access>;
