@@ -59,6 +59,17 @@ impl<'a, A> WideVolatilePtr<'a, le32, A> {
         self.low.write(low);
         self.high.write(high);
     }
+
+    /// Updates the contained value using the given closure and volatile instructions.
+    ///
+    /// See [`VolatilePtr::update`].
+    pub fn update(self, f: impl FnOnce(le64) -> le64)
+    where
+        A: Readable + Writable,
+    {
+        let new = f(self.read());
+        self.write(new);
+    }
 }
 
 impl<'a, A> WideVolatilePtr<'a, be32, A> {
@@ -84,6 +95,17 @@ impl<'a, A> WideVolatilePtr<'a, be32, A> {
         let [low, high] = value.into();
         self.low.write(low);
         self.high.write(high);
+    }
+
+    /// Updates the contained value using the given closure and volatile instructions.
+    ///
+    /// See [`VolatilePtr::update`].
+    pub fn update(self, f: impl FnOnce(be64) -> be64)
+    where
+        A: Readable + Writable,
+    {
+        let new = f(self.read());
+        self.write(new);
     }
 }
 
