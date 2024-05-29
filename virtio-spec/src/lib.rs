@@ -8,7 +8,7 @@
 #[macro_use]
 mod bitflags;
 #[macro_use]
-mod volatile;
+pub mod volatile;
 mod features;
 pub mod net;
 pub mod pci;
@@ -16,7 +16,6 @@ pub mod pci;
 pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
 
 pub use self::features::{FeatureBits, F};
-pub use self::volatile::WideVolatilePtr;
 
 pub mod fs {
     //! File System Device
