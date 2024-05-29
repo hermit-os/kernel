@@ -13,7 +13,7 @@ use virtio_spec::pci::{
 	CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw,
 };
-use virtio_spec::DeviceStatus;
+use virtio_spec::{le32, DeviceStatus};
 use volatile::VolatileRef;
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
@@ -635,13 +635,13 @@ pub struct NotifCtrl {
 	/// Indicates if VIRTIO_F_NOTIFICATION_DATA has been negotiated
 	f_notif_data: bool,
 	/// Where to write notification
-	notif_addr: *mut usize,
+	notif_addr: *mut le32,
 }
 
 impl NotifCtrl {
 	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
 	/// are disabled.
-	pub fn new(notif_addr: *mut usize) -> Self {
+	pub fn new(notif_addr: *mut le32) -> Self {
 		NotifCtrl {
 			f_notif_data: false,
 			notif_addr,
