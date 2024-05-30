@@ -716,6 +716,7 @@ impl VirtioNetDriver {
 			| virtio_spec::net::F::INDIRECT_DESC
 			// Packed Vq can be used
 			| virtio_spec::net::F::RING_PACKED
+			| virtio_spec::net::F::NOTIFICATION_DATA
 			// Host should avoid the creation of checksums
 			| virtio_spec::net::F::CSUM
 			// Guest avoids the creation of checksums
