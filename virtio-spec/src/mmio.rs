@@ -272,19 +272,10 @@ device_register_impl! {
         ///
         /// Reading from this register returns a bit mask of events that
         /// caused the device interrupt to be asserted.
-        /// The following events are possible:
-        ///
-        /// - Used Buffer Notification
-        ///     - bit 0 - the interrupt was asserted
-        ///     because the device has used a buffer
-        ///     in at least one of the active virtual queues.
-        /// - Configuration Change Notification
-        ///     - bit 1 - the interrupt was
-        ///     asserted because the configuration of the device has changed.
         #[doc(alias = "InterruptStatus")]
         #[offset(0x060)]
         #[access(ReadOnly)]
-        interrupt_status: le32,
+        interrupt_status: InterruptStatus,
 
         /// Interrupt acknowledge
         ///
@@ -294,7 +285,7 @@ device_register_impl! {
         #[doc(alias = "InterruptACK")]
         #[offset(0x064)]
         #[access(WriteOnly)]
-        interrupt_ack: le32,
+        interrupt_ack: InterruptStatus,
 
         /// Device status
         ///
@@ -526,5 +517,20 @@ impl_wide_field_access! {
         #[doc(alias = "SHMBase")]
         #[access(ReadOnly)]
         shm_base: shm_base_low, shm_base_high;
+    }
+}
+
+virtio_bitflags! {
+    /// Interrupt Status
+    pub struct InterruptStatus: u8 {
+        /// Used Buffer Notification
+        ///
+        /// The interrupt was asserted because the device has used a buffer in at least one of the active virtual queues.
+        const USED_BUFFER_NOTIFICATION = 1 << 0;
+
+        /// Configuration Change Notification
+        ///
+        /// The interrupt was asserted because the configuration of the device has changed.
+        const CONFIGURATION_CHANGE_NOTIFICATION = 1 << 1;
     }
 }

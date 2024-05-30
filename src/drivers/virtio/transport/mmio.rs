@@ -3,11 +3,12 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-use core::ptr::{read_volatile, write_volatile};
+use core::mem;
 use core::sync::atomic::{fence, Ordering};
 
 use virtio_spec::mmio::{
 	DeviceRegisterVolatileFieldAccess, DeviceRegisterVolatileWideFieldAccess, DeviceRegisters,
+	InterruptStatus,
 };
 use virtio_spec::DeviceStatus;
 use volatile::VolatileRef;
@@ -380,54 +381,45 @@ impl NotifCtrl {
 	}
 }
 
-/// Wraps a [IsrStatusRaw] in order to preserve
+/// Wraps a [`DeviceRegisters`] in order to preserve
 /// the original structure and allow interaction with the device via
 /// the structure.
 ///
 /// Provides a safe API for Raw structure and allows interaction with the device via
 /// the structure.
 pub struct IsrStatus {
-	raw: &'static mut IsrStatusRaw,
+	// FIXME: integrate into device register struct
+	raw: VolatileRef<'static, DeviceRegisters>,
 }
 
 impl IsrStatus {
-	pub fn new(mut registers: VolatileRef<'_, DeviceRegisters>) -> Self {
-		let ptr = registers
-			.as_mut_ptr()
-			.interrupt_status()
-			.as_raw_ptr()
-			.as_ptr();
-		let raw: &'static mut IsrStatusRaw = unsafe { &mut *(ptr as *mut IsrStatusRaw) };
-
-		IsrStatus { raw }
+	pub fn new(registers: VolatileRef<'_, DeviceRegisters>) -> Self {
+		let raw =
+			unsafe { mem::transmute::<VolatileRef<'_, _>, VolatileRef<'static, _>>(registers) };
+		Self { raw }
 	}
 
 	pub fn is_interrupt(&self) -> bool {
-		unsafe {
-			let status = read_volatile(&self.raw.interrupt_status);
-			status & 0x1 == 0x1
-		}
+		self.raw
+			.as_ptr()
+			.interrupt_status()
+			.read()
+			.contains(InterruptStatus::USED_BUFFER_NOTIFICATION)
 	}
 
 	pub fn is_cfg_change(&self) -> bool {
-		unsafe {
-			let status = read_volatile(&self.raw.interrupt_status);
-			status & 0x2 == 0x2
-		}
+		self.raw
+			.as_ptr()
+			.interrupt_status()
+			.read()
+			.contains(InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION)
 	}
 
 	pub fn acknowledge(&mut self) {
-		unsafe {
-			let status = read_volatile(&self.raw.interrupt_status);
-			write_volatile(&mut self.raw.interrupt_ack, status);
-		}
+		let ptr = self.raw.as_mut_ptr();
+		let status = ptr.interrupt_status().read();
+		ptr.interrupt_ack().write(status);
 	}
-}
-
-#[repr(C)]
-struct IsrStatusRaw {
-	interrupt_status: u32,
-	interrupt_ack: u32,
 }
 
 pub(crate) enum VirtioDriver {
