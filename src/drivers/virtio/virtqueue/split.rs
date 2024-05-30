@@ -380,8 +380,7 @@ impl Virtq for SplitVq {
 		if self.ring.borrow().dev_is_notif() {
 			let index = self.index.0.to_le_bytes();
 			let mut index = index.iter();
-			// Even on 64bit systems this is fine, as we have a queue_size < 2^15!
-			let det_notif_data: u16 = next_off >> 1;
+			let det_notif_data: u16 = next_off & !(1 << 15);
 			let flags = (det_notif_data | (next_wrap << 15)).to_le_bytes();
 			let mut flags = flags.iter();
 			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
