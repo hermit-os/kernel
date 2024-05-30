@@ -1133,8 +1133,8 @@ pub struct BufferToken {
 // Private interface of BufferToken
 impl BufferToken {
 	/// Returns the overall number of descriptors.
-	fn num_descr(&self) -> usize {
-		let mut len = 0usize;
+	fn num_descr(&self) -> u16 {
+		let mut len = 0;
 
 		if let Some(buffer) = &self.recv_buff {
 			len += buffer.num_descr();
@@ -1150,8 +1150,8 @@ impl BufferToken {
 	/// This number can differ from the `BufferToken.num_descr()` function value
 	/// as indirect buffers only consume one descriptor in the queue, but can have
 	/// more descriptors that are accessible via the descriptor in the queue.
-	fn num_consuming_descr(&self) -> usize {
-		let mut len = 0usize;
+	fn num_consuming_descr(&self) -> u16 {
+		let mut len = 0;
 
 		if let Some(buffer) = &self.send_buff {
 			match buffer.get_ctrl_desc() {
@@ -1702,7 +1702,7 @@ impl BufferToken {
 						let data_slc = data.as_slice_u8();
 						let mut from = 0usize;
 
-						for i in 0..buff.num_descr() {
+						for i in 0..usize::from(buff.num_descr()) {
 							// Must check array boundaries, as allocated buffer might be larger
 							// than actual data to be written.
 							let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
@@ -1730,7 +1730,7 @@ impl BufferToken {
 					} else {
 						let mut from = 0usize;
 
-						for i in 0..buff.num_descr() {
+						for i in 0..usize::from(buff.num_descr()) {
 							// Must check array boundaries, as allocated buffer might be larger
 							// than actual data to be written.
 							let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
@@ -1974,11 +1974,11 @@ impl Buffer {
 	/// the return value most certainly IS NOT equall to the number of
 	/// descriptors that will be placed inside the virtqueue.
 	/// In order to retrieve this value, please use `BufferToken.num_consuming_desc()`.
-	fn num_descr(&self) -> usize {
+	fn num_descr(&self) -> u16 {
 		match &self {
 			Buffer::Single { desc_lst, .. }
 			| Buffer::Multiple { desc_lst, .. }
-			| Buffer::Indirect { desc_lst, .. } => desc_lst.len(),
+			| Buffer::Indirect { desc_lst, .. } => u16::try_from(desc_lst.len()).unwrap(),
 		}
 	}
 
