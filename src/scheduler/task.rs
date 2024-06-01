@@ -13,6 +13,7 @@ use core::ops::DerefMut;
 use core::{cmp, fmt};
 
 use ahash::RandomState;
+use crossbeam_utils::CachePadded;
 use hashbrown::HashMap;
 use hermit_sync::OnceCell;
 
@@ -160,7 +161,7 @@ impl Eq for TaskHandle {}
 #[derive(Default)]
 pub(crate) struct TaskHandlePriorityQueue {
 	queues: [Option<VecDeque<TaskHandle>>; NO_PRIORITIES],
-	prio_bitmap: u64,
+	prio_bitmap: CachePadded<u64>,
 }
 
 impl TaskHandlePriorityQueue {
@@ -172,13 +173,13 @@ impl TaskHandlePriorityQueue {
 				None, None, None, None, None, None, None, None, None, None, None, None, None, None,
 				None, None, None,
 			],
-			prio_bitmap: 0,
+			prio_bitmap: CachePadded::new(0),
 		}
 	}
 
 	/// Checks if the queue is empty.
 	pub fn is_empty(&self) -> bool {
-		self.prio_bitmap == 0
+		self.prio_bitmap.into_inner() == 0
 	}
 
 	/// Checks if the given task is in the queue. Returns `true` if the task
@@ -193,7 +194,7 @@ impl TaskHandlePriorityQueue {
 		let i = task.priority.into() as usize;
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
-		self.prio_bitmap |= (1 << i) as u64;
+		*self.prio_bitmap |= (1 << i) as u64;
 		if let Some(queue) = &mut self.queues[i] {
 			queue.push_back(task);
 		} else {
@@ -208,7 +209,7 @@ impl TaskHandlePriorityQueue {
 			let task = queue.pop_front();
 
 			if queue.is_empty() {
-				self.prio_bitmap &= !(1 << queue_index as u64);
+				*self.prio_bitmap &= !(1 << queue_index as u64);
 			}
 
 			task
@@ -219,7 +220,7 @@ impl TaskHandlePriorityQueue {
 
 	/// Pop the task handle with the highest priority from the queue
 	pub fn pop(&mut self) -> Option<TaskHandle> {
-		if let Some(i) = msb(self.prio_bitmap) {
+		if let Some(i) = msb(self.prio_bitmap.into_inner()) {
 			return self.pop_from_queue(i as usize);
 		}
 
@@ -245,7 +246,7 @@ impl TaskHandlePriorityQueue {
 			}
 
 			if queue.is_empty() {
-				self.prio_bitmap &= !(1 << queue_index as u64);
+				*self.prio_bitmap &= !(1 << queue_index as u64);
 			}
 		}
 
@@ -315,6 +316,13 @@ impl PriorityTaskQueue {
 	/// Returns true if the queue is empty.
 	pub fn is_empty(&self) -> bool {
 		self.prio_bitmap == 0
+	}
+
+	/// Returns reference to prio_bitmap
+	#[allow(dead_code)]
+	#[inline]
+	pub fn get_priority_bitmap(&self) -> &u64 {
+		&self.prio_bitmap
 	}
 
 	/// Pop the task with the highest priority from the queue

@@ -55,6 +55,8 @@ struct Features {
 	supports_tsc_deadline: bool,
 	supports_x2apic: bool,
 	supports_xsave: bool,
+	supports_mwait: bool,
+	supports_clflush: bool,
 	run_on_hypervisor: bool,
 	supports_fsgs: bool,
 	supports_rdtscp: bool,
@@ -85,6 +87,8 @@ static FEATURES: Lazy<Features> = Lazy::new(|| {
 		supports_tsc_deadline: feature_info.has_tsc_deadline(),
 		supports_x2apic: feature_info.has_x2apic(),
 		supports_xsave: feature_info.has_xsave(),
+		supports_mwait: feature_info.has_monitor_mwait(),
+		supports_clflush: feature_info.has_clflush(),
 		run_on_hypervisor: feature_info.has_hypervisor(),
 		supports_fsgs: extended_feature_info.has_fsgsbase(),
 		supports_rdtscp: extend_processor_identifiers.has_rdtscp(),
@@ -994,6 +998,16 @@ pub fn supports_x2apic() -> bool {
 #[inline]
 pub fn supports_xsave() -> bool {
 	FEATURES.supports_xsave
+}
+
+#[inline]
+pub fn supports_mwait() -> bool {
+	FEATURES.supports_mwait
+}
+
+#[inline]
+pub fn supports_clflush() -> bool {
+	FEATURES.supports_clflush
 }
 
 #[inline]

@@ -615,6 +615,13 @@ impl PerCoreScheduler {
 		without_interrupts(|| self.current_task.borrow().prio)
 	}
 
+	/// Returns reference to prio_bitmap
+	#[allow(dead_code)]
+	#[inline]
+	pub fn get_priority_bitmap(&self) -> &u64 {
+		self.ready_queue.get_priority_bitmap()
+	}
+
 	#[cfg(target_arch = "x86_64")]
 	pub fn set_current_kernel_stack(&self) {
 		use x86_64::VirtAddr;

@@ -838,7 +838,7 @@ pub fn ipi_tlb_flush() {
 #[allow(unused_variables)]
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(feature = "smp")]
-	if core_id_to_wakeup != core_id() {
+	if core_id_to_wakeup != core_id() && !crate::processor::supports_mwait() {
 		without_interrupts(|| {
 			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 			let local_apic_id = apic_ids[core_id_to_wakeup as usize];
