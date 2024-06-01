@@ -609,7 +609,6 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_hypervisor() {
 			write!(f, "HYPERVISOR ")?;
 		}
-
 		if self.extended_feature_info.has_avx2() {
 			write!(f, "AVX2 ")?;
 		}

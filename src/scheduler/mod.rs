@@ -743,6 +743,7 @@ impl PerCoreScheduler {
 			if core_scheduler.ready_queue.is_empty() {
 				if backoff.is_completed() {
 					interrupts::enable_and_wait();
+					backoff.reset();
 				} else {
 					interrupts::enable();
 					backoff.snooze();
