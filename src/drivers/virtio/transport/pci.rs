@@ -5,15 +5,14 @@
 
 use alloc::vec::Vec;
 use core::ptr::NonNull;
-use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
 use pci_types::capability::PciCapability;
 use virtio_spec::pci::{
 	CapCfgType, CapData, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
-	IsrStatus as IsrStatusRaw,
+	IsrStatus as IsrStatusRaw, NotificationData,
 };
-use virtio_spec::{le32, DeviceStatus};
+use virtio_spec::{le16, le32, DeviceStatus};
 use volatile::VolatileRef;
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
@@ -589,28 +588,28 @@ impl NotifCtrl {
 		self.f_notif_data = true;
 	}
 
-	pub fn notify_dev(&self, notif_data: &[u8]) {
+	pub fn notify_dev(&self, vqn: u16, next_off: u16, next_wrap: u8) {
 		// See Virtio specification v.1.1. - 4.1.5.2
 		// Depending in the feature negotiation, we write either only the
 		// virtqueue index or the index and the next position inside the queue.
 
-		fence(Ordering::Acquire);
+		let notification_data = NotificationData::new()
+			.with_vqn(vqn)
+			.with_next_off(next_off)
+			.with_next_wrap(next_wrap);
 
 		if self.f_notif_data {
-			let ptr = self.notif_addr as *mut [u8; 4];
-
 			unsafe {
-				ptr.write_volatile(notif_data[0..4].try_into().unwrap());
+				self.notif_addr
+					.write_volatile(notification_data.into_bits());
 			}
 		} else {
-			let ptr = self.notif_addr as *mut [u8; 2];
-
 			unsafe {
-				ptr.write_volatile(notif_data[0..2].try_into().unwrap());
+				self.notif_addr
+					.cast::<le16>()
+					.write_volatile(notification_data.vqn().into());
 			}
 		}
-
-		fence(Ordering::Release);
 	}
 }
 
