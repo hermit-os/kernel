@@ -591,6 +591,9 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_monitor_mwait() {
 			write!(f, "MWAIT ")?;
 		}
+		if self.extend_processor_identifiers.has_monitorx_mwaitx() {
+			write!(f, "MWAITX ")?;
+		}
 		if self.feature_info.has_clflush() {
 			write!(f, "CLFLUSH ")?;
 		}
