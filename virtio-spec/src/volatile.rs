@@ -6,7 +6,7 @@ use volatile::access::{Readable, Writable};
 use volatile::VolatilePtr;
 
 use crate::mmio::InterruptStatus;
-use crate::{be32, be64, le16, le32, le64, DeviceStatus};
+use crate::{be32, be64, le16, le32, le64, DeviceStatus, Id};
 
 /// A wide volatile pointer for 64-bit fields.
 ///
@@ -263,6 +263,16 @@ impl OveralignedField<le32> for u8 {
     }
 }
 
+impl OveralignedField<le32> for Id {
+    fn from_field(field: le32) -> Self {
+        Self::from(u8::from_field(field))
+    }
+
+    fn into_field(self) -> le32 {
+        u8::from(self).into_field()
+    }
+}
+
 impl OveralignedField<le32> for DeviceStatus {
     fn from_field(field: le32) -> Self {
         Self::from_bits_retain(u8::from_field(field))
@@ -285,13 +295,14 @@ impl OveralignedField<le32> for InterruptStatus {
 
 mod private {
     use crate::mmio::InterruptStatus;
-    use crate::{le16, le32, DeviceStatus};
+    use crate::{le16, le32, DeviceStatus, Id};
 
     pub trait Sealed<T> {}
 
     impl Sealed<le32> for bool {}
     impl Sealed<le32> for u8 {}
     impl Sealed<le32> for le16 {}
+    impl Sealed<le32> for Id {}
     impl Sealed<le32> for DeviceStatus {}
     impl Sealed<le32> for InterruptStatus {}
 }
