@@ -249,6 +249,25 @@ impl PciCap {
 
 		Some(com_cfg_raw)
 	}
+
+	fn map_isr_status(&self) -> Option<&'static mut IsrStatusRaw> {
+		if self.bar.length < u64::from(self.length + self.offset) {
+			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
+				self.id,
+				self.origin.dev_id,
+				self.bar.index
+            );
+			return None;
+		}
+
+		let virt_addr_raw: VirtMemAddr = self.bar.mem_addr + self.offset;
+
+		// Create mutable reference to the PCI structure in the devices memory area
+		let isr_stat_raw: &mut IsrStatusRaw =
+			unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
+
+		Some(isr_stat_raw)
+	}
 }
 
 /// Virtio's PCI capabilities structure.
@@ -842,28 +861,6 @@ struct IsrStatusRaw {
 }
 
 impl IsrStatusRaw {
-	/// Returns a mutable reference to the ISR status capability structure indicated by the
-	/// [PciCap] struct. Reference has a static lifetime as the structure is controlled by the
-	/// device and will not be moved.
-	fn map(cap: &PciCap) -> Option<&'static mut IsrStatusRaw> {
-		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
-                cap.id,
-                cap.origin.dev_id,
-                cap.bar.index
-            );
-			return None;
-		}
-
-		let virt_addr_raw: VirtMemAddr = cap.bar.mem_addr + cap.offset;
-
-		// Create mutable reference to the PCI structure in the devices memory area
-		let isr_stat_raw: &mut IsrStatusRaw =
-			unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
-
-		Some(isr_stat_raw)
-	}
-
 	// returns true if second bit, from left is 1.
 	// read DOES reset flag
 	fn cfg_event() -> bool {
@@ -1252,7 +1249,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					pci_cap.id, device_id
 				),
 			},
-			CfgType::VIRTIO_PCI_CAP_ISR_CFG => match IsrStatusRaw::map(&pci_cap) {
+			CfgType::VIRTIO_PCI_CAP_ISR_CFG => match pci_cap.map_isr_status() {
 				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.id)),
 				None => error!(
 					"ISR status config capability with id {}, of device {:x} could not be used!",
