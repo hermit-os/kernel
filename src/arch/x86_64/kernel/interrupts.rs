@@ -5,7 +5,9 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use ahash::RandomState;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
-pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt};
+#[cfg(not(feature = "idle-poll"))]
+use x86_64::instructions::interrupts::enable_and_hlt;
+pub use x86_64::instructions::interrupts::{disable, enable};
 use x86_64::set_general_handler;
 #[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
 use x86_64::structures::idt;
@@ -36,6 +38,12 @@ pub(crate) fn load_idt() {
 
 #[inline]
 pub(crate) fn enable_and_wait() {
+	#[cfg(feature = "idle-poll")]
+	unsafe {
+		asm!("pause", options(nomem, nostack, preserves_flags));
+	}
+
+	#[cfg(not(feature = "idle-poll"))]
 	if crate::processor::supports_mwait() {
 		let addr = core_scheduler().get_priority_bitmap() as *const _ as *const u8;
 
@@ -65,6 +73,8 @@ pub(crate) fn enable_and_wait() {
 			);
 		}
 	} else {
+		#[cfg(feature = "smp")]
+		crate::CoreLocal::get().hlt.store(true, Ordering::Relaxed);
 		enable_and_hlt();
 	}
 }
