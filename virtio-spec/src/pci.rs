@@ -1,5 +1,6 @@
 //! Definitions for Virtio over PCI bus.
 
+use num_enum::{FromPrimitive, IntoPrimitive};
 use volatile::access::{ReadOnly, ReadWrite, RestrictAccess};
 use volatile::{VolatileFieldAccess, VolatilePtr};
 
@@ -9,6 +10,8 @@ use crate::{le16, le32, DeviceStatus};
 /// Common configuration structure
 ///
 /// The common configuration structure is found at the bar and offset within the [`VIRTIO_PCI_CAP_COMMON_CFG`] capability.
+///
+/// [`VIRTIO_PCI_CAP_COMMON_CFG`]: Cap::CommonCfg
 #[doc(alias = "virtio_pci_common_cfg")]
 #[cfg_attr(
     feature = "zerocopy",
@@ -150,4 +153,42 @@ virtio_bitflags! {
         /// Device Configuration Interrupt
         const DEVICE_CONFIGURATION_INTERRUPT = 1 << 1;
     }
+}
+
+/// PCI Capability Configuration Type
+#[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[non_exhaustive]
+#[repr(u8)]
+pub enum Cap {
+    /// Common configuration
+    #[doc(alias = "VIRTIO_PCI_CAP_COMMON_CFG")]
+    CommonCfg = 1,
+
+    /// Notifications
+    #[doc(alias = "VIRTIO_PCI_CAP_NOTIFY_CFG")]
+    NotifyCfg = 2,
+
+    /// ISR Status
+    #[doc(alias = "VIRTIO_PCI_CAP_ISR_CFG")]
+    IsrCfg = 3,
+
+    /// Device specific configuration
+    #[doc(alias = "VIRTIO_PCI_CAP_DEVICE_CFG")]
+    DeviceCfg = 4,
+
+    /// PCI configuration access
+    #[doc(alias = "VIRTIO_PCI_CAP_PCI_CFG")]
+    PciCfg = 5,
+
+    /// Shared memory region
+    #[doc(alias = "VIRTIO_PCI_CAP_SHARED_MEMORY_CFG")]
+    SharedMemoryCfg = 8,
+
+    /// Vendor-specific data
+    #[doc(alias = "VIRTIO_PCI_CAP_VENDOR_CFG")]
+    VencodCfg = 9,
+
+    /// Unknown device
+    #[num_enum(catch_all)]
+    Unknown(u8),
 }
