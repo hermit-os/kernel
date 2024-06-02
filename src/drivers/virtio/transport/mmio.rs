@@ -23,45 +23,6 @@ use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
 
-/// Virtio device ID's
-/// See Virtio specification v1.1. - 5
-///
-// WARN: Upon changes in the set of the enum variants
-// one MUST adjust the associated From<u32>
-// implementation, in order catch all cases correctly,
-// as this function uses the catch-all "_" case!
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-#[repr(u32)]
-pub enum DevId {
-	INVALID = 0x0,
-	VIRTIO_DEV_ID_NET = 1,
-	VIRTIO_DEV_ID_BLK = 2,
-	VIRTIO_DEV_ID_CONSOLE = 3,
-}
-
-impl From<DevId> for u32 {
-	fn from(val: DevId) -> u32 {
-		match val {
-			DevId::VIRTIO_DEV_ID_NET => 1,
-			DevId::VIRTIO_DEV_ID_BLK => 2,
-			DevId::VIRTIO_DEV_ID_CONSOLE => 3,
-			DevId::INVALID => 0x0,
-		}
-	}
-}
-
-impl From<u32> for DevId {
-	fn from(val: u32) -> Self {
-		match val {
-			1 => DevId::VIRTIO_DEV_ID_NET,
-			2 => DevId::VIRTIO_DEV_ID_BLK,
-			3 => DevId::VIRTIO_DEV_ID_CONSOLE,
-			_ => DevId::INVALID,
-		}
-	}
-}
-
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
 	raw: VolatileRef<'a, DeviceRegisters>,
@@ -442,9 +403,9 @@ pub(crate) fn init_device(
 	}
 
 	// Verify the device-ID to find the network card
-	match registers.as_ptr().device_id().read().to_ne().into() {
+	match registers.as_ptr().device_id().read() {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		DevId::VIRTIO_DEV_ID_NET => {
+		virtio_spec::Id::Net => {
 			match VirtioNetDriver::init(dev_id, registers, irq_no) {
 				Ok(virt_net_drv) => {
 					info!("Virtio network driver initialized.");

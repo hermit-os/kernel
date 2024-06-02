@@ -16,8 +16,6 @@ use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::{paging, PhysAddr};
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
-use crate::drivers::virtio::transport::mmio::DevId;
 #[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
@@ -209,9 +207,9 @@ pub fn init_drivers() {
 					trace!("Found a MMIO-device at {mmio:p}");
 
 					// Verify the device-ID to find the network card
-					let id = DevId::from(mmio.as_ptr().device_id().read().to_ne());
+					let id = mmio.as_ptr().device_id().read();
 
-					if id != DevId::VIRTIO_DEV_ID_NET {
+					if id != virtio_spec::Id::Net {
 						debug!("It's not a network card at {mmio:p}");
 					} else {
 						info!("Found network card at {mmio:p}");
