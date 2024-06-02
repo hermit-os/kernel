@@ -8,7 +8,10 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
-use virtio_spec::pci::{CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess};
+use virtio_spec::pci::{
+	CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
+	IsrStatus as IsrStatusRaw,
+};
 use virtio_spec::DeviceStatus;
 use volatile::VolatileRef;
 
@@ -248,6 +251,28 @@ impl PciCap {
 		let com_cfg_raw = unsafe { VolatileRef::new(ptr) };
 
 		Some(com_cfg_raw)
+	}
+
+	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
+		if self.bar.length < u64::from(self.length + self.offset) {
+			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
+				self.id,
+				self.origin.dev_id,
+				self.bar.index
+            );
+			return None;
+		}
+
+		let virt_addr_raw: VirtMemAddr = self.bar.mem_addr + self.offset;
+		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<IsrStatusRaw>(
+			virt_addr_raw.into(),
+		))
+		.unwrap();
+
+		// Create mutable reference to the PCI structure in the devices memory area
+		let isr_stat_raw = unsafe { VolatileRef::new(ptr) };
+
+		Some(isr_stat_raw)
 	}
 }
 
@@ -794,13 +819,13 @@ impl NotifCtrl {
 pub struct IsrStatus {
 	/// References the raw structure in PCI memory space. Is static as
 	/// long as the device is present, which is mandatory in order to let this code work.
-	isr_stat: &'static mut IsrStatusRaw,
+	isr_stat: VolatileRef<'static, IsrStatusRaw>,
 	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
 	rank: u8,
 }
 
 impl IsrStatus {
-	fn new(raw: &'static mut IsrStatusRaw, rank: u8) -> Self {
+	fn new(raw: VolatileRef<'static, IsrStatusRaw>, rank: u8) -> Self {
 		IsrStatus {
 			isr_stat: raw,
 			rank,
@@ -808,72 +833,21 @@ impl IsrStatus {
 	}
 
 	pub fn is_interrupt(&self) -> bool {
-		self.isr_stat.flags & 1 << 0 == 1
+		self.isr_stat
+			.as_ptr()
+			.read()
+			.contains(IsrStatusRaw::QUEUE_INTERRUPT)
 	}
 
 	pub fn is_cfg_change(&self) -> bool {
-		self.isr_stat.flags & 1 << 1 == 1 << 1
+		self.isr_stat
+			.as_ptr()
+			.read()
+			.contains(IsrStatusRaw::DEVICE_CONFIGURATION_INTERRUPT)
 	}
 
 	pub fn acknowledge(&mut self) {
 		// nothing to do
-	}
-}
-
-/// ISR status structure of Virtio PCI devices.
-/// See Virtio specification v1.1. - 4.1.4.5
-///
-/// Contains a single byte, containing the interrupt numbers used
-/// for handling interrupts.
-/// The 8-bit field is read as an bitmap and allows to distinguish between
-/// interrupts triggered by changes in the configuration and interrupts
-/// triggered by events of a virtqueue.
-///
-/// Bitmap layout (from least to most significant bit in the byte):
-///
-/// 0 : Queue interrupt
-///
-/// 1 : Device configuration interrupt
-///
-/// 2 - 31 : Reserved
-#[repr(C)]
-struct IsrStatusRaw {
-	flags: u8,
-}
-
-impl IsrStatusRaw {
-	/// Returns a mutable reference to the ISR status capability structure indicated by the
-	/// [PciCap] struct. Reference has a static lifetime as the structure is controlled by the
-	/// device and will not be moved.
-	fn map(cap: &PciCap) -> Option<&'static mut IsrStatusRaw> {
-		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
-                cap.id,
-                cap.origin.dev_id,
-                cap.bar.index
-            );
-			return None;
-		}
-
-		let virt_addr_raw: VirtMemAddr = cap.bar.mem_addr + cap.offset;
-
-		// Create mutable reference to the PCI structure in the devices memory area
-		let isr_stat_raw: &mut IsrStatusRaw =
-			unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
-
-		Some(isr_stat_raw)
-	}
-
-	// returns true if second bit, from left is 1.
-	// read DOES reset flag
-	fn cfg_event() -> bool {
-		unimplemented!();
-	}
-
-	// returns true if first bit, from left is 1.
-	// read DOES reset flag
-	fn vqueue_event() -> bool {
-		unimplemented!();
 	}
 }
 
@@ -1252,7 +1226,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					pci_cap.id, device_id
 				),
 			},
-			CfgType::VIRTIO_PCI_CAP_ISR_CFG => match IsrStatusRaw::map(&pci_cap) {
+			CfgType::VIRTIO_PCI_CAP_ISR_CFG => match pci_cap.map_isr_status() {
 				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.id)),
 				None => error!(
 					"ISR status config capability with id {}, of device {:x} could not be used!",
