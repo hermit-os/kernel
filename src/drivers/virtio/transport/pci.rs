@@ -32,63 +32,6 @@ use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
-/// Virtio device ID's
-/// See Virtio specification v1.1. - 5
-///                      and v1.1. - 4.1.2.1
-///
-// WARN: Upon changes in the set of the enum variants
-// one MUST adjust the associated From<u16>
-// implementation, in order catch all cases correctly,
-// as this function uses the catch-all "_" case!
-#[allow(dead_code, non_camel_case_types, clippy::upper_case_acronyms)]
-#[repr(u16)]
-pub enum DevId {
-	INVALID = 0x0,
-	VIRTIO_TRANS_DEV_ID_NET = 0x1000,
-	VIRTIO_TRANS_DEV_ID_BLK = 0x1001,
-	VIRTIO_TRANS_DEV_ID_MEM_BALL = 0x1002,
-	VIRTIO_TRANS_DEV_ID_CONS = 0x1003,
-	VIRTIO_TRANS_DEV_ID_SCSI = 0x1004,
-	VIRTIO_TRANS_DEV_ID_ENTROPY = 0x1005,
-	VIRTIO_TRANS_DEV_ID_9P = 0x1009,
-	VIRTIO_DEV_ID_NET = 0x1041,
-	VIRTIO_DEV_ID_FS = 0x105A,
-}
-
-impl From<DevId> for u16 {
-	fn from(val: DevId) -> u16 {
-		match val {
-			DevId::VIRTIO_TRANS_DEV_ID_NET => 0x1000,
-			DevId::VIRTIO_TRANS_DEV_ID_BLK => 0x1001,
-			DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL => 0x1002,
-			DevId::VIRTIO_TRANS_DEV_ID_CONS => 0x1003,
-			DevId::VIRTIO_TRANS_DEV_ID_SCSI => 0x1004,
-			DevId::VIRTIO_TRANS_DEV_ID_ENTROPY => 0x1005,
-			DevId::VIRTIO_TRANS_DEV_ID_9P => 0x1009,
-			DevId::VIRTIO_DEV_ID_NET => 0x1041,
-			DevId::VIRTIO_DEV_ID_FS => 0x105A,
-			DevId::INVALID => 0x0,
-		}
-	}
-}
-
-impl From<u16> for DevId {
-	fn from(val: u16) -> Self {
-		match val {
-			0x1000 => DevId::VIRTIO_TRANS_DEV_ID_NET,
-			0x1001 => DevId::VIRTIO_TRANS_DEV_ID_BLK,
-			0x1002 => DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL,
-			0x1003 => DevId::VIRTIO_TRANS_DEV_ID_CONS,
-			0x1004 => DevId::VIRTIO_TRANS_DEV_ID_SCSI,
-			0x1005 => DevId::VIRTIO_TRANS_DEV_ID_ENTROPY,
-			0x1009 => DevId::VIRTIO_TRANS_DEV_ID_9P,
-			0x1041 => DevId::VIRTIO_DEV_ID_NET,
-			0x105A => DevId::VIRTIO_DEV_ID_FS,
-			_ => DevId::INVALID,
-		}
-	}
-}
-
 /// Virtio's cfg_type constants; indicating type of structure in capabilities list
 /// See Virtio specification v1.1 - 4.1.4
 //
@@ -1260,26 +1203,23 @@ pub(crate) fn init_device(
 ) -> Result<VirtioDriver, DriverError> {
 	let device_id = device.device_id();
 
-	let virt_drv = match DevId::from(device_id) {
-		DevId::VIRTIO_TRANS_DEV_ID_NET
-		| DevId::VIRTIO_TRANS_DEV_ID_BLK
-		| DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL
-		| DevId::VIRTIO_TRANS_DEV_ID_CONS
-		| DevId::VIRTIO_TRANS_DEV_ID_SCSI
-		| DevId::VIRTIO_TRANS_DEV_ID_ENTROPY
-		| DevId::VIRTIO_TRANS_DEV_ID_9P => {
-			warn!(
-				"Legacy/transitional Virtio device, with id: {:#x} is NOT supported, skipping!",
-				device_id
-			);
+	if device_id < 0x1040 {
+		warn!(
+			"Legacy/transitional Virtio device, with id: {:#x} is NOT supported, skipping!",
+			device_id
+		);
 
-			// Return Driver error inidacting device is not supported
-			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(device_id),
-			))
-		}
+		// Return Driver error inidacting device is not supported
+		return Err(DriverError::InitVirtioDevFail(
+			VirtioError::DevNotSupported(device_id),
+		));
+	}
+
+	let id = virtio_spec::Id::from(u8::try_from(device_id - 0x1040).unwrap());
+
+	let virt_drv = match id {
 		#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(device) {
+		virtio_spec::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Network(virt_net_drv))
@@ -1293,7 +1233,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "fuse")]
-		DevId::VIRTIO_DEV_ID_FS => {
+		virtio_spec::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
 			match VirtioFsDriver::init(device) {
@@ -1310,11 +1250,8 @@ pub(crate) fn init_device(
 				}
 			}
 		}
-		_ => {
-			warn!(
-				"Virtio device with id: {:#x} is NOT supported, skipping!",
-				device_id
-			);
+		id => {
+			warn!("Virtio device {id:?} is not supported, skipping!");
 
 			// Return Driver error inidacting device is not supported
 			Err(DriverError::InitVirtioDevFail(
