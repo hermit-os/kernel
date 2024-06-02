@@ -140,3 +140,14 @@ impl_wide_field_access! {
         queue_device: queue_device_low, queue_device_high;
     }
 }
+
+virtio_bitflags! {
+    /// ISR Status
+    pub struct IsrStatus: u8 {
+        /// Queue Interrupt
+        const QUEUE_INTERRUPT = 1 << 0;
+
+        /// Device Configuration Interrupt
+        const DEVICE_CONFIGURATION_INTERRUPT = 1 << 1;
+    }
+}
