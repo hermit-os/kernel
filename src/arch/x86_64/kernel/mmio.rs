@@ -14,7 +14,7 @@ use crate::arch::x86_64::mm::paging::{
 use crate::arch::x86_64::mm::{paging, PhysAddr};
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
-use crate::drivers::virtio::transport::mmio::{DevId, VirtioDriver};
+use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
@@ -60,9 +60,9 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 	trace!("Found a MMIO-device at {mmio:p}");
 
 	// Verify the device-ID to find the network card
-	let id = DevId::from(mmio.as_ptr().device_id().read().to_ne());
+	let id = mmio.as_ptr().device_id().read();
 
-	if id != DevId::VIRTIO_DEV_ID_NET {
+	if id != virtio_spec::Id::Net {
 		trace!("It's not a network card at {mmio:p}");
 		return None;
 	}

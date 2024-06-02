@@ -15,6 +15,7 @@ pub mod net;
 pub mod pci;
 
 pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
+use num_enum::{FromPrimitive, IntoPrimitive};
 
 pub use self::features::{FeatureBits, F};
 
@@ -72,4 +73,134 @@ virtio_bitflags! {
         /// an error from which it can't recover.
         const DEVICE_NEEDS_RESET = 64;
     }
+}
+
+/// Virtio Device IDs
+#[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[non_exhaustive]
+#[repr(u8)]
+pub enum Id {
+    /// reserved (invalid)
+    Reserved = 0,
+
+    /// network card
+    Net = 1,
+
+    /// block device
+    Block = 2,
+
+    /// console
+    Console = 3,
+
+    /// entropy source
+    Rng = 4,
+
+    /// memory ballooning (traditional)
+    Balloon = 5,
+
+    /// ioMemory
+    IoMem = 6,
+
+    /// rpmsg
+    Rpmsg = 7,
+
+    /// SCSI host
+    Scsi = 8,
+
+    /// 9P transport
+    NineP = 9,
+
+    /// mac80211 wlan
+    Mac80211Wlan = 10,
+
+    /// rproc serial
+    RprocSerial = 11,
+
+    /// virtio CAIF
+    Caif = 12,
+
+    /// memory balloon
+    MemoryBalloon = 13,
+
+    /// GPU device
+    Gpu = 16,
+
+    /// Timer/Clock device
+    Clock = 17,
+
+    /// Input device
+    Input = 18,
+
+    /// Socket device
+    Vsock = 19,
+
+    /// Crypto device
+    Crypto = 20,
+
+    /// Signal Distribution Module
+    SignalDist = 21,
+
+    /// pstore device
+    Pstore = 22,
+
+    /// IOMMU device
+    Iommu = 23,
+
+    /// Memory device
+    Mem = 24,
+
+    /// Audio device
+    Sound = 25,
+
+    /// file system device
+    Fs = 26,
+
+    /// PMEM device
+    Pmem = 27,
+
+    /// RPMB device
+    Rpmb = 28,
+
+    /// mac80211 hwsim wireless simulation device
+    Mac80211Hwsim = 29,
+
+    /// Video encoder device
+    VideoEncoder = 30,
+
+    /// Video decoder device
+    VideoDecoder = 31,
+
+    /// SCMI device
+    Scmi = 32,
+
+    /// NitroSecureModule
+    NitroSecMod = 33,
+
+    /// I2C adapter
+    I2cAdapter = 34,
+
+    /// Watchdog
+    Watchdog = 35,
+
+    /// CAN device
+    Can = 36,
+
+    /// Parameter Server
+    ParamServ = 38,
+
+    /// Audio policy device
+    AudioPolicy = 39,
+
+    /// Bluetooth device
+    Bt = 40,
+
+    /// GPIO device
+    Gpio = 41,
+
+    /// RDMA device
+    Rdma = 42,
+
+    /// Unknown device
+    #[num_enum(catch_all)]
+    Unknown(u8),
 }

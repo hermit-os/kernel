@@ -7,7 +7,7 @@ use volatile::access::{ReadOnly, ReadWrite, RestrictAccess, WriteOnly};
 use volatile::VolatilePtr;
 
 use crate::volatile::{OveralignedVolatilePtr, WideVolatilePtr};
-use crate::DeviceStatus;
+use crate::{DeviceStatus, Id};
 
 /// MMIO Device Registers
 #[repr(transparent)]
@@ -144,7 +144,7 @@ device_register_impl! {
         #[doc(alias = "DeviceID")]
         #[offset(0x008)]
         #[access(ReadOnly)]
-        device_id: le32,
+        device_id: Id,
 
         /// Virtio Subsystem Vendor ID
         #[doc(alias = "VendorID")]
