@@ -147,7 +147,7 @@ impl DescrRing {
 		unsafe { VolatileRef::new_read_only(NonNull::new(self.used_ring_cell.get()).unwrap()) }
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (u16, u16) {
+	fn push(&mut self, tkn: TransferToken) -> (u16, u8) {
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
 
@@ -381,7 +381,7 @@ impl Virtq for SplitVq {
 			let index = self.index.0.to_le_bytes();
 			let mut index = index.iter();
 			let det_notif_data: u16 = next_off & !(1 << 15);
-			let flags = (det_notif_data | (next_wrap << 15)).to_le_bytes();
+			let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
 			let mut flags = flags.iter();
 			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
 

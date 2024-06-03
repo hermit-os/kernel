@@ -87,11 +87,11 @@ struct DescriptorRing {
 	// Controlling variables for the ring
 	//
 	/// where to insert available descriptors next
-	write_index: usize,
+	write_index: u16,
 	/// How much descriptors can be inserted
-	capacity: usize,
+	capacity: u16,
 	/// Where to expect the next used descriptor by the device
-	poll_index: usize,
+	poll_index: u16,
 	/// See Virtio specification v1.1. - 2.7.1
 	drv_wc: WrapCount,
 	dev_wc: WrapCount,
@@ -99,21 +99,20 @@ struct DescriptorRing {
 
 impl DescriptorRing {
 	fn new(size: u16) -> Self {
-		let size = usize::from(size);
-
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len =
-			(size * core::mem::size_of::<Descriptor>()).align_up(BasePageSize::SIZE as usize);
+		let _mem_len = (usize::from(size) * core::mem::size_of::<Descriptor>())
+			.align_up(BasePageSize::SIZE as usize);
 		let ptr = ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
-		let ring: &'static mut [Descriptor] = unsafe { core::slice::from_raw_parts_mut(ptr, size) };
+		let ring: &'static mut [Descriptor] =
+			unsafe { core::slice::from_raw_parts_mut(ptr, size.into()) };
 
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
 		// reference ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
 		// and do not care about the first element being unused.
 		// `Box` is not Clone, so neither is `None::<Box<_>>`. Hence, we need to produce `None`s with a closure.
 		let tkn_ref_ring = core::iter::repeat_with(|| None)
-			.take(size + 1)
+			.take((size + 1).into())
 			.collect::<Vec<_>>()
 			.into_boxed_slice();
 
@@ -141,12 +140,12 @@ impl DescriptorRing {
 		}
 	}
 
-	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (usize, u8) {
+	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (u16, u8) {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
 
-		let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
+		let mut first_ctrl_settings: (u16, u16, WrapCount) = (0, 0, WrapCount::new());
 		let mut first_buffer = None;
 
 		for (i, tkn) in tkn_lst.into_iter().enumerate() {
@@ -275,13 +274,14 @@ impl DescriptorRing {
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.ring[first_ctrl_settings.0].flags |= first_ctrl_settings.2.as_flags_avail().into();
+		self.ring[usize::from(first_ctrl_settings.0)].flags |=
+			first_ctrl_settings.2.as_flags_avail().into();
 
 		// Converting a boolean as u8 is fine
 		(first_ctrl_settings.0, first_ctrl_settings.2 .0 as u8)
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (usize, u8) {
+	fn push(&mut self, tkn: TransferToken) -> (u16, u8) {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
 		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
@@ -405,7 +405,7 @@ impl DescriptorRing {
 		WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
-			modulo: self.ring.len(),
+			modulo: u16::try_from(self.ring.len()).unwrap(),
 			wrap_at_init: self.drv_wc,
 			buff_id: 0,
 
@@ -418,7 +418,7 @@ impl DescriptorRing {
 	fn get_read_ctrler(&mut self) -> ReadCtrl<'_> {
 		ReadCtrl {
 			position: self.poll_index,
-			modulo: self.ring.len(),
+			modulo: u16::try_from(self.ring.len()).unwrap(),
 
 			desc_ring: self,
 		}
@@ -427,8 +427,8 @@ impl DescriptorRing {
 
 struct ReadCtrl<'a> {
 	/// Poll index of the ring at init of ReadCtrl
-	position: usize,
-	modulo: usize,
+	position: u16,
+	modulo: u16,
 
 	desc_ring: &'a mut DescriptorRing,
 }
@@ -438,10 +438,10 @@ impl<'a> ReadCtrl<'a> {
 	/// updating the queue and returns the respective TransferToken.
 	fn poll_next(&mut self) -> Option<Box<TransferToken>> {
 		// Check if descriptor has been marked used.
-		if self.desc_ring.ring[self.position].flags.get() & WrapCount::flag_mask()
+		if self.desc_ring.ring[usize::from(self.position)].flags.get() & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
-			let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
+			let buff_id = usize::from(self.desc_ring.ring[usize::from(self.position)].buff_id);
 			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id].take().expect(
 				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 			);
@@ -472,7 +472,7 @@ impl<'a> ReadCtrl<'a> {
 			// INFO:
 			// Due to the behaviour of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
 			// flag correctly upon writes. Hence we omit it, in order to receive data.
-			let write_len = self.desc_ring.ring[self.position].len;
+			let write_len = self.desc_ring.ring[usize::from(self.position)].len;
 
 			match (send_buff, recv_buff) {
 				(Some(send_buff), Some(recv_buff)) => {
@@ -624,7 +624,8 @@ impl<'a> ReadCtrl<'a> {
 		// self.desc_ring.ring[self.position].address = 0;
 		// self.desc_ring.ring[self.position].len = 0;
 		// self.desc_ring.ring[self.position].buff_id = 0;
-		self.desc_ring.ring[self.position].flags = self.desc_ring.dev_wc.as_flags_used().into();
+		self.desc_ring.ring[usize::from(self.position)].flags =
+			self.desc_ring.dev_wc.as_flags_used().into();
 	}
 
 	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
@@ -673,7 +674,7 @@ impl<'a> ReadCtrl<'a> {
 		}
 
 		// Increment capcity as we have one more free now!
-		assert!(self.desc_ring.capacity <= self.desc_ring.ring.len());
+		assert!(self.desc_ring.capacity <= u16::try_from(self.desc_ring.ring.len()).unwrap());
 		self.desc_ring.capacity += 1;
 
 		self.desc_ring.poll_index = (self.desc_ring.poll_index + 1) % self.modulo;
@@ -688,11 +689,11 @@ struct WriteCtrl<'a> {
 	/// Where did the write of the buffer start in the descriptor ring
 	/// This is important, as we must make this descriptor available
 	/// lastly.
-	start: usize,
+	start: u16,
 	/// Where to write next. This should always be equal to the Rings
 	/// write_next field.
-	position: usize,
-	modulo: usize,
+	position: u16,
+	modulo: u16,
 	/// What was the WrapCount at the first write position
 	/// Important in order to set the right avail and used flags
 	wrap_at_init: WrapCount,
@@ -733,7 +734,7 @@ impl<'a> WriteCtrl<'a> {
 		// This also sets the buff_id for the WriteCtrl struct to the ID of the first
 		// descriptor.
 		if self.start == self.position {
-			let desc_ref = &mut self.desc_ring.ring[self.position];
+			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
 			desc_ref
 				.address
 				.set(paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into());
@@ -747,7 +748,7 @@ impl<'a> WriteCtrl<'a> {
 			self.buff_id = mem_desc.id.as_ref().unwrap().0;
 			self.incrmt();
 		} else {
-			let desc_ref = &mut self.desc_ring.ring[self.position];
+			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
 			desc_ref
 				.address
 				.set(paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into());
@@ -775,7 +776,8 @@ impl<'a> WriteCtrl<'a> {
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.desc_ring.ring[self.start].flags |= self.wrap_at_init.as_flags_avail().into();
+		self.desc_ring.ring[usize::from(self.start)].flags |=
+			self.wrap_at_init.as_flags_avail().into();
 	}
 }
 
@@ -898,7 +900,7 @@ impl DevNotif {
 		self.raw.flags & (1 << 0) == 0
 	}
 
-	fn is_notif_specfic(&self, next_off: usize, next_wrap: u8) -> bool {
+	fn is_notif_specfic(&self, next_off: u16, next_wrap: u8) -> bool {
 		if self.f_notif_idx {
 			if self.raw.flags & 1 << 1 == 2 {
 				// as u16 is okay for usize, as size of queue is restricted to 2^15
@@ -906,7 +908,7 @@ impl DevNotif {
 				let desc_event_off = self.raw.event & !(1 << 15);
 				let desc_event_wrap = (self.raw.event >> 15) as u8;
 
-				desc_event_off == next_off as u16 && desc_event_wrap == next_wrap
+				desc_event_off == next_off && desc_event_wrap == next_wrap
 			} else {
 				false
 			}
@@ -965,13 +967,13 @@ impl Virtq for PackedVq {
 		if notif {
 			self.drv_event
 				.borrow_mut()
-				.enable_specific(next_off as u16, next_wrap);
+				.enable_specific(next_off, next_wrap);
 		}
 
 		if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_off, next_wrap) {
 			let index = self.index.0.to_le_bytes();
 			let mut index = index.iter();
-			let det_notif_data: u16 = (next_off as u16) & !(1 << 15);
+			let det_notif_data: u16 = next_off & !(1 << 15);
 			let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
 			let mut flags = flags.iter();
 			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
@@ -1007,13 +1009,13 @@ impl Virtq for PackedVq {
 		if notif {
 			self.drv_event
 				.borrow_mut()
-				.enable_specific(next_off as u16, next_wrap);
+				.enable_specific(next_off, next_wrap);
 		}
 
 		if self.dev_event.is_notif() {
 			let index = self.index.0.to_le_bytes();
 			let mut index = index.iter();
-			let det_notif_data: u16 = (next_off as u16) & !(1 << 15);
+			let det_notif_data: u16 = next_off & !(1 << 15);
 			let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
 			let mut flags = flags.iter();
 			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
@@ -1036,13 +1038,13 @@ impl Virtq for PackedVq {
 		if notif {
 			self.drv_event
 				.borrow_mut()
-				.enable_specific(next_off as u16, next_wrap);
+				.enable_specific(next_off, next_wrap);
 		}
 
 		if self.dev_event.is_notif() {
 			let index = self.index.0.to_le_bytes();
 			let mut index = index.iter();
-			let det_notif_data: u16 = (next_off as u16) & !(1 << 15);
+			let det_notif_data: u16 = next_off & !(1 << 15);
 			let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
 			let mut flags = flags.iter();
 			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
