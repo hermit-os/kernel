@@ -8,6 +8,44 @@ use volatile_macro::VolatileFieldAccess;
 use crate::volatile::WideVolatilePtr;
 use crate::{le16, le32, DeviceStatus};
 
+/// PCI Capability Configuration Type
+#[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[non_exhaustive]
+#[repr(u8)]
+pub enum CapCfgType {
+    /// Common configuration
+    #[doc(alias = "VIRTIO_PCI_CAP_COMMON_CFG")]
+    Common = 1,
+
+    /// Notifications
+    #[doc(alias = "VIRTIO_PCI_CAP_NOTIFY_CFG")]
+    Notify = 2,
+
+    /// ISR Status
+    #[doc(alias = "VIRTIO_PCI_CAP_ISR_CFG")]
+    Isr = 3,
+
+    /// Device specific configuration
+    #[doc(alias = "VIRTIO_PCI_CAP_DEVICE_CFG")]
+    Device = 4,
+
+    /// PCI configuration access
+    #[doc(alias = "VIRTIO_PCI_CAP_PCI_CFG")]
+    Pci = 5,
+
+    /// Shared memory region
+    #[doc(alias = "VIRTIO_PCI_CAP_SHARED_MEMORY_CFG")]
+    SharedMemory = 8,
+
+    /// Vendor-specific data
+    #[doc(alias = "VIRTIO_PCI_CAP_VENDOR_CFG")]
+    Vendor = 9,
+
+    /// Unknown device
+    #[num_enum(catch_all)]
+    Unknown(u8),
+}
+
 /// Common configuration structure
 ///
 /// The common configuration structure is found at the bar and offset within the [`VIRTIO_PCI_CAP_COMMON_CFG`] capability.
@@ -154,42 +192,4 @@ virtio_bitflags! {
         /// Device Configuration Interrupt
         const DEVICE_CONFIGURATION_INTERRUPT = 1 << 1;
     }
-}
-
-/// PCI Capability Configuration Type
-#[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
-#[non_exhaustive]
-#[repr(u8)]
-pub enum CapCfgType {
-    /// Common configuration
-    #[doc(alias = "VIRTIO_PCI_CAP_COMMON_CFG")]
-    Common = 1,
-
-    /// Notifications
-    #[doc(alias = "VIRTIO_PCI_CAP_NOTIFY_CFG")]
-    Notify = 2,
-
-    /// ISR Status
-    #[doc(alias = "VIRTIO_PCI_CAP_ISR_CFG")]
-    Isr = 3,
-
-    /// Device specific configuration
-    #[doc(alias = "VIRTIO_PCI_CAP_DEVICE_CFG")]
-    Device = 4,
-
-    /// PCI configuration access
-    #[doc(alias = "VIRTIO_PCI_CAP_PCI_CFG")]
-    Pci = 5,
-
-    /// Shared memory region
-    #[doc(alias = "VIRTIO_PCI_CAP_SHARED_MEMORY_CFG")]
-    SharedMemory = 8,
-
-    /// Vendor-specific data
-    #[doc(alias = "VIRTIO_PCI_CAP_VENDOR_CFG")]
-    Vendor = 9,
-
-    /// Unknown device
-    #[num_enum(catch_all)]
-    Unknown(u8),
 }
