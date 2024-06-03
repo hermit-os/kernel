@@ -42,11 +42,8 @@ const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
 pub(crate) trait FuseInterface {
-	fn send_command<O: ops::Op>(
-		&mut self,
-		cmd: (Box<CmdHeader<O>>, Option<Box<[u8]>>),
-		rsp: &mut Rsp<O>,
-	) -> Result<(), VirtqError>;
+	fn send_command<O: ops::Op>(&mut self, cmd: Cmd<O>, rsp: &mut Rsp<O>)
+		-> Result<(), VirtqError>;
 
 	fn get_mount_point(&self) -> String;
 }
@@ -57,7 +54,7 @@ pub(crate) mod ops {
 	use alloc::ffi::CString;
 	use core::mem::MaybeUninit;
 
-	use super::{CmdHeader, Rsp};
+	use super::{Cmd, Rsp};
 	use crate::fd::PollEvent;
 	use crate::fs::{fuse_abi, SeekWhence};
 
@@ -82,8 +79,8 @@ pub(crate) mod ops {
 	}
 
 	impl Init {
-		pub(crate) fn create() -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(
+		pub(crate) fn create() -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(
 				fuse_abi::ROOT_ID,
 				fuse_abi::InitIn {
 					major: 7,
@@ -94,7 +91,7 @@ pub(crate) mod ops {
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -111,24 +108,19 @@ pub(crate) mod ops {
 
 	impl Create {
 		#[allow(clippy::self_named_constructors)]
-		pub(crate) fn create(
-			path: CString,
-			flags: u32,
-			mode: u32,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let path_bytes = path.into_bytes_with_nul().into_boxed_slice();
-			let cmd = CmdHeader::<Self>::with_payload_size(
+		pub(crate) fn create(path: CString, flags: u32, mode: u32) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::with_cstring(
 				fuse_abi::ROOT_ID,
 				fuse_abi::CreateIn {
 					flags,
 					mode,
 					..Default::default()
 				},
-				path_bytes.len(),
+				path,
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, Some(path_bytes)), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -144,11 +136,8 @@ pub(crate) mod ops {
 	}
 
 	impl Open {
-		pub(crate) fn create(
-			nid: u64,
-			flags: u32,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(
+		pub(crate) fn create(nid: u64, flags: u32) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(
 				nid,
 				fuse_abi::OpenIn {
 					flags,
@@ -157,7 +146,7 @@ pub(crate) mod ops {
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -178,8 +167,8 @@ pub(crate) mod ops {
 			fh: u64,
 			buf: Box<[u8]>,
 			offset: u64,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::with_payload_size(
+		) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::with_boxed_slice(
 				nid,
 				fuse_abi::WriteIn {
 					fh,
@@ -187,11 +176,11 @@ pub(crate) mod ops {
 					size: buf.len().try_into().unwrap(),
 					..Default::default()
 				},
-				buf.len(),
+				buf,
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, Some(buf)), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -215,8 +204,8 @@ pub(crate) mod ops {
 			fh: u64,
 			size: u32,
 			offset: u64,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(
+		) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(
 				nid,
 				fuse_abi::ReadIn {
 					fh,
@@ -227,7 +216,7 @@ pub(crate) mod ops {
 			);
 			let rsp = unsafe { Rsp::<Self>::new_uninit(size.try_into().unwrap()) };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -248,8 +237,8 @@ pub(crate) mod ops {
 			fh: u64,
 			offset: isize,
 			whence: SeekWhence,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(
+		) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(
 				nid,
 				fuse_abi::LseekIn {
 					fh,
@@ -260,7 +249,7 @@ pub(crate) mod ops {
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -279,14 +268,11 @@ pub(crate) mod ops {
 	}
 
 	impl Readlink {
-		pub(crate) fn create(
-			nid: u64,
-			size: u32,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(nid, fuse_abi::ReadlinkIn {});
+		pub(crate) fn create(nid: u64, size: u32) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(nid, fuse_abi::ReadlinkIn {});
 			let rsp = unsafe { Rsp::<Self>::new_uninit(size.try_into().unwrap()) };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -302,11 +288,8 @@ pub(crate) mod ops {
 	}
 
 	impl Release {
-		pub(crate) fn create(
-			nid: u64,
-			fh: u64,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(
+		pub(crate) fn create(nid: u64, fh: u64) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(
 				nid,
 				fuse_abi::ReleaseIn {
 					fh,
@@ -315,7 +298,7 @@ pub(crate) mod ops {
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -336,8 +319,8 @@ pub(crate) mod ops {
 			fh: u64,
 			kh: u64,
 			event: PollEvent,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let cmd = CmdHeader::<Self>::new(
+		) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::new(
 				nid,
 				fuse_abi::PollIn {
 					fh,
@@ -348,7 +331,7 @@ pub(crate) mod ops {
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, None), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -364,22 +347,18 @@ pub(crate) mod ops {
 	}
 
 	impl Mkdir {
-		pub(crate) fn create(
-			path: CString,
-			mode: u32,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let path_bytes = path.into_bytes_with_nul().into_boxed_slice();
-			let cmd = CmdHeader::<Self>::with_payload_size(
+		pub(crate) fn create(path: CString, mode: u32) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::with_cstring(
 				fuse_abi::ROOT_ID,
 				fuse_abi::MkdirIn {
 					mode,
 					..Default::default()
 				},
-				path_bytes.len(),
+				path,
 			);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, Some(path_bytes)), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -395,18 +374,11 @@ pub(crate) mod ops {
 	}
 
 	impl Unlink {
-		pub(crate) fn create(
-			name: CString,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let name_bytes = name.into_bytes_with_nul().into_boxed_slice();
-			let cmd = CmdHeader::<Self>::with_payload_size(
-				fuse_abi::ROOT_ID,
-				fuse_abi::UnlinkIn {},
-				name_bytes.len(),
-			);
+		pub(crate) fn create(name: CString) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::with_cstring(fuse_abi::ROOT_ID, fuse_abi::UnlinkIn {}, name);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, Some(name_bytes)), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -422,18 +394,11 @@ pub(crate) mod ops {
 	}
 
 	impl Rmdir {
-		pub(crate) fn create(
-			name: CString,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let name_bytes = name.into_bytes_with_nul().into_boxed_slice();
-			let cmd = CmdHeader::<Self>::with_payload_size(
-				fuse_abi::ROOT_ID,
-				fuse_abi::RmdirIn {},
-				name_bytes.len(),
-			);
+		pub(crate) fn create(name: CString) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::with_cstring(fuse_abi::ROOT_ID, fuse_abi::RmdirIn {}, name);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, Some(name_bytes)), rsp)
+			(cmd, rsp)
 		}
 	}
 
@@ -449,18 +414,11 @@ pub(crate) mod ops {
 	}
 
 	impl Lookup {
-		pub(crate) fn create(
-			name: CString,
-		) -> ((Box<CmdHeader<Self>>, Option<Box<[u8]>>), Box<Rsp<Self>>) {
-			let name_bytes = name.into_bytes_with_nul().into_boxed_slice();
-			let cmd = CmdHeader::<Self>::with_payload_size(
-				fuse_abi::ROOT_ID,
-				fuse_abi::LookupIn {},
-				name_bytes.len(),
-			);
+		pub(crate) fn create(name: CString) -> (Cmd<Self>, Box<Rsp<Self>>) {
+			let cmd = Cmd::with_cstring(fuse_abi::ROOT_ID, fuse_abi::LookupIn {}, name);
 			let rsp = unsafe { Box::new_uninit().assume_init() };
 
-			((cmd, Some(name_bytes)), rsp)
+			(cmd, rsp)
 		}
 	}
 }
@@ -505,14 +463,14 @@ impl<O: ops::Op> CmdHeader<O>
 where
 	O: ops::Op<InPayload = ()>,
 {
-	fn new(nodeid: u64, op_header: O::InStruct) -> Box<Self> {
+	fn new(nodeid: u64, op_header: O::InStruct) -> Self {
 		Self::with_payload_size(nodeid, op_header, 0)
 	}
 }
 
 impl<O: ops::Op> CmdHeader<O> {
-	fn with_payload_size(nodeid: u64, op_header: O::InStruct, len: usize) -> Box<CmdHeader<O>> {
-		Box::new(CmdHeader {
+	fn with_payload_size(nodeid: u64, op_header: O::InStruct, len: usize) -> CmdHeader<O> {
+		CmdHeader {
 			in_header: fuse_abi::InHeader {
 				// The length we need the provide in the header is not the same as the size of the struct because of padding, so we need to calculate it manually.
 				len: (core::mem::size_of::<fuse_abi::InHeader>()
@@ -526,11 +484,57 @@ impl<O: ops::Op> CmdHeader<O> {
 				..Default::default()
 			},
 			op_header,
-		})
+		}
 	}
 }
 
 impl<O: ops::Op> AsSliceU8 for CmdHeader<O> {}
+
+pub(crate) struct Cmd<O: ops::Op> {
+	pub headers: Box<CmdHeader<O>>,
+	pub payload: Option<Box<[u8]>>,
+}
+
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = ()>,
+{
+	fn new(nodeid: u64, op_header: O::InStruct) -> Self {
+		Self {
+			headers: Box::new(CmdHeader::new(nodeid, op_header)),
+			payload: None,
+		}
+	}
+}
+
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = CString>,
+{
+	fn with_cstring(nodeid: u64, op_header: O::InStruct, cstring: CString) -> Self {
+		let cstring_bytes = cstring.into_bytes_with_nul().into_boxed_slice();
+		Self {
+			headers: Box::new(CmdHeader::with_payload_size(
+				nodeid,
+				op_header,
+				cstring_bytes.len(),
+			)),
+			payload: Some(cstring_bytes),
+		}
+	}
+}
+
+impl<O: ops::Op> Cmd<O>
+where
+	O: ops::Op<InPayload = [u8]>,
+{
+	fn with_boxed_slice(nodeid: u64, op_header: O::InStruct, slice: Box<[u8]>) -> Self {
+		Self {
+			headers: Box::new(CmdHeader::with_payload_size(nodeid, op_header, slice.len())),
+			payload: Some(slice),
+		}
+	}
+}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -837,7 +841,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
-		cmd.0.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
+		cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -852,7 +856,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		// read content of the directory
 		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
-		cmd.0.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
+		cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -968,7 +972,7 @@ impl VfsNode for FuseDirectory {
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
-		cmd.0.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
+		cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -983,7 +987,7 @@ impl VfsNode for FuseDirectory {
 
 		// read content of the directory
 		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
-		cmd.0.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
+		cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -1218,7 +1222,7 @@ pub(crate) fn init() {
 			// Opendir
 			// Flag 0x10000 for O_DIRECTORY might not be necessary
 			let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
-			cmd.0.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
+			cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
@@ -1232,7 +1236,7 @@ pub(crate) fn init() {
 
 			// read content of the directory
 			let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
-			cmd.0.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
+			cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 			get_filesystem_driver()
 				.unwrap()
 				.lock()

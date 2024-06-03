@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -149,14 +148,17 @@ impl VirtioFsDriver {
 impl FuseInterface for VirtioFsDriver {
 	fn send_command<O: fuse::ops::Op>(
 		&mut self,
-		cmd: (Box<fuse::CmdHeader<O>>, Option<Box<[u8]>>),
+		cmd: fuse::Cmd<O>,
 		rsp: &mut fuse::Rsp<O>,
 	) -> Result<(), VirtqError> {
-		let (cmd_header, cmd_payload_opt) = cmd;
+		let fuse::Cmd {
+			headers: cmd_headers,
+			payload: cmd_payload_opt,
+		} = cmd;
 		let send: &[&[u8]] = if let Some(cmd_payload) = cmd_payload_opt.as_deref() {
-			&[cmd_header.as_slice_u8(), cmd_payload]
+			&[cmd_headers.as_slice_u8(), cmd_payload]
 		} else {
-			&[cmd_header.as_slice_u8()]
+			&[cmd_headers.as_slice_u8()]
 		};
 		let recv = &[rsp.as_slice_u8_mut()];
 		let transfer_tkn = self.vqueues[1]
