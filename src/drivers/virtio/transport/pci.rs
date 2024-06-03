@@ -10,7 +10,7 @@ use core::{mem, ptr};
 
 use pci_types::capability::PciCapability;
 use virtio_spec::pci::{
-	CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
+	CapCfgType, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw,
 };
 use virtio_spec::DeviceStatus;
@@ -45,7 +45,7 @@ pub struct Origin {
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
-	if cap.cfg_type != virtio_spec::pci::Cap::DeviceCfg {
+	if cap.cfg_type != CapCfgType::Device {
 		error!("Capability of device config has wrong id. Mapping not possible...");
 		return None;
 	};
@@ -84,10 +84,10 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 /// as it is not directly mapped into address space from PCI device
 /// configuration space.
 /// Therefore the struct only contains necessary information to map
-/// corresponding config type (`pci::Cap`) into address space.
+/// corresponding config type into address space.
 #[derive(Clone)]
 pub struct PciCap {
-	cfg_type: virtio_spec::pci::Cap,
+	cfg_type: CapCfgType,
 	bar: PciBar,
 	id: u8,
 	offset: MemOff,
@@ -215,7 +215,7 @@ impl PartialEq for PciCapRaw {
 /// a given Virtio PCI device.
 ///
 /// As Virtio's PCI devices are allowed to present multiple capability
-/// structures of the same config type (`pci::Cap`), the structure
+/// structures of the same config type, the structure
 /// provides a driver with all capabilities, sorted in descending priority,
 /// allowing the driver to choose.
 /// The structure contains a special dev_cfg_list field, a vector holding
@@ -939,9 +939,9 @@ fn read_caps(
 			_ => None,
 		})
 		.map(|capability| (capability.offset, read_cap_raw(device, capability.offset)))
-		.filter(|(_ptr, capability)| capability.cfg_type != virtio_spec::pci::Cap::PciCfg.into())
+		.filter(|(_ptr, capability)| capability.cfg_type != CapCfgType::Pci.into())
 		.map(|(ptr, capability)| PciCap {
-			cfg_type: virtio_spec::pci::Cap::from(capability.cfg_type),
+			cfg_type: CapCfgType::from(capability.cfg_type),
 			bar: *bars
 				.iter()
 				.find(|bar| bar.index == capability.bar_index)
@@ -1008,36 +1008,36 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
 		match pci_cap.cfg_type {
-			virtio_spec::pci::Cap::CommonCfg => match pci_cap.map_common_cfg() {
+			CapCfgType::Common => match pci_cap.map_common_cfg() {
 				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.id)),
 				None => error!(
 					"Common config capability with id {}, of device {:x}, could not be mapped!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::NotifyCfg => match NotifCfg::new(&pci_cap) {
+			CapCfgType::Notify => match NotifCfg::new(&pci_cap) {
 				Some(notif) => caps.add_cfg_notif(notif),
 				None => error!(
 					"Notification config capability with id {}, of device {:x} could not be used!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::IsrCfg => match pci_cap.map_isr_status() {
+			CapCfgType::Isr => match pci_cap.map_isr_status() {
 				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.id)),
 				None => error!(
 					"ISR status config capability with id {}, of device {:x} could not be used!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::PciCfg => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
-			virtio_spec::pci::Cap::SharedMemoryCfg => match ShMemCfg::new(&pci_cap) {
+			CapCfgType::Pci => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
+			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
 				Some(sh_mem) => caps.add_cfg_sh_mem(sh_mem),
 				None => error!(
 					"Shared Memory config capability with id {}, of device {:x} could not be used!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::DeviceCfg => caps.add_cfg_dev(pci_cap),
+			CapCfgType::Device => caps.add_cfg_dev(pci_cap),
 
 			// PCI's configuration space is allowed to hold other structures, which are not virtio specific and are therefore ignored
 			// in the following
