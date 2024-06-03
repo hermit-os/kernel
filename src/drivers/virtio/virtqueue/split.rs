@@ -505,7 +505,7 @@ impl Virtq for SplitVq {
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
 		send: &[&[u8]],
-		recv: &[&mut [u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError> {
 		self.prep_transfer_from_raw_static(send, recv, buffer_type)

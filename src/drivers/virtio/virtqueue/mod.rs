@@ -17,6 +17,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::mem::MaybeUninit;
 use core::ops::{BitAnd, Deref, DerefMut};
 use core::ptr;
 
@@ -248,7 +249,7 @@ pub trait Virtq: VirtqPrivate {
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
 		send: &[&[u8]],
-		recv: &[&mut [u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>;
 
@@ -258,7 +259,7 @@ pub trait Virtq: VirtqPrivate {
 	fn prep_transfer_from_raw_static(
 		self: Rc<Self>,
 		send: &[&[u8]],
-		recv: &[&mut [u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>
 	where
@@ -291,7 +292,10 @@ pub trait Virtq: VirtqPrivate {
 
 				let recv_desc_lst: Vec<_> = recv
 					.iter()
-					.map(|slice| self.mem_pool().pull_from_raw(slice))
+					.map(|slice| {
+						self.mem_pool()
+							.pull_from_raw(unsafe { MaybeUninit::slice_assume_init_ref(slice) })
+					})
 					.collect::<Result<Vec<_>, VirtqError>>()?;
 				recv_buff = if !recv.is_empty() {
 					Some(Buffer::Multiple {
@@ -310,7 +314,11 @@ pub trait Virtq: VirtqPrivate {
 					.collect();
 				let recv_desc_lst: Vec<_> = recv
 					.iter()
-					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
+					.map(|slice| {
+						self.mem_pool().pull_from_raw_untracked(unsafe {
+							MaybeUninit::slice_assume_init_ref(slice)
+						})
+					})
 					.collect();
 
 				let ctrl_desc = self.create_indirect_ctrl(

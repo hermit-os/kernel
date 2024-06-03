@@ -1,6 +1,7 @@
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 use core::str;
 
 use pci_types::InterruptLine;
@@ -149,7 +150,7 @@ impl FuseInterface for VirtioFsDriver {
 	fn send_command<O: fuse::ops::Op>(
 		&mut self,
 		cmd: fuse::Cmd<O>,
-		rsp: &mut fuse::Rsp<O>,
+		rsp: &mut fuse::UninitRsp<O>,
 	) -> Result<(), VirtqError> {
 		let fuse::Cmd {
 			headers: cmd_headers,
@@ -160,7 +161,18 @@ impl FuseInterface for VirtioFsDriver {
 		} else {
 			&[cmd_headers.as_slice_u8()]
 		};
-		let recv = &[rsp.as_slice_u8_mut()];
+
+		let fuse::UninitRsp {
+			headers: rsp_headers,
+			payload: rsp_payload_opt,
+		} = rsp;
+		let recv: &[&mut [MaybeUninit<u8>]] =
+			if let Some(rsp_payload) = rsp_payload_opt.as_deref_mut() {
+				&[rsp_headers.as_bytes_mut(), rsp_payload]
+			} else {
+				&[rsp_headers.as_bytes_mut()]
+			};
+
 		let transfer_tkn = self.vqueues[1]
 			.clone()
 			.prep_transfer_from_raw(send, recv, BufferType::Direct)
