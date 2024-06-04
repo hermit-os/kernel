@@ -146,6 +146,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		Self { address, access }
 	}
 
+	pub fn header(&self) -> PciHeader {
+		PciHeader::new(self.address)
+	}
+
 	pub fn read_register(&self, register: u16) -> u32 {
 		unsafe { self.access.read(self.address, register) }
 	}
@@ -182,7 +186,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	/// Returns the bar at bar-register `slot`.
 	pub fn get_bar(&self, slot: u8) -> Option<Bar> {
-		let header = PciHeader::new(self.address);
+		let header = self.header();
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			return endpoint.bar(slot, &self.access);
 		}
@@ -294,7 +298,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn get_irq(&self) -> Option<InterruptLine> {
-		let header = PciHeader::new(self.address);
+		let header = self.header();
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			let (_pin, line) = endpoint.interrupt(&self.access);
 			Some(line)
@@ -328,26 +332,23 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn vendor_id(&self) -> VendorId {
-		let header = PciHeader::new(self.address);
-		let (vendor_id, _device_id) = header.id(&self.access);
+		let (vendor_id, _device_id) = self.header().id(&self.access);
 		vendor_id
 	}
 
 	pub fn device_id(&self) -> DeviceId {
-		let header = PciHeader::new(self.address);
-		let (_vendor_id, device_id) = header.id(&self.access);
+		let (_vendor_id, device_id) = self.header().id(&self.access);
 		device_id
 	}
 
 	pub fn id(&self) -> (VendorId, DeviceId) {
-		let header = PciHeader::new(self.address);
-		header.id(&self.access)
+		self.header().id(&self.access)
 	}
 }
 
 impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let header = PciHeader::new(self.address);
+		let header = self.header();
 		let header_type = header.header_type(&self.access);
 		let (vendor_id, device_id) = header.id(&self.access);
 		let (_dev_rev, class_id, subclass_id, _interface) = header.revision_and_class(&self.access);
