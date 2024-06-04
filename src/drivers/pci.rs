@@ -7,6 +7,7 @@ use bitflags::bitflags;
 use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse"))]
 use hermit_sync::InterruptTicketMutex;
+use pci_types::capability::CapabilityIterator;
 use pci_types::{
 	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
 	PciHeader, StatusRegister, VendorId, MAX_BARS,
@@ -347,6 +348,11 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	pub fn status(&self) -> StatusRegister {
 		self.header().status(&self.access)
+	}
+
+	pub fn capabilities(&self) -> Option<CapabilityIterator<'_, T>> {
+		EndpointHeader::from_header(self.header(), &self.access)
+			.map(|header| header.capabilities(&self.access))
 	}
 }
 

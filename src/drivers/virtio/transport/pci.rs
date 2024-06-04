@@ -8,6 +8,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
 
+use pci_types::capability::PciCapability;
 use virtio_spec::pci::{
 	CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw,
@@ -28,7 +29,7 @@ use crate::drivers::net::network_irqhandler;
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
-use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
+use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
@@ -178,7 +179,7 @@ impl PciCap {
 /// As this structure is not meant to be used outside of this module and for
 /// ease of conversion from reading data into struct from PCI configuration
 /// space, no conversion is made for struct fields.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[repr(C)]
 struct PciCapRaw {
 	cap_vndr: u8,
@@ -956,74 +957,40 @@ fn read_caps(
 	bars: &[PciBar],
 ) -> Result<Vec<PciCap>, PciError> {
 	let device_id = device.device_id();
-	let ptr = dev_caps_ptr(device);
 
-	// Checks if pointer is well formed and does not point into config header space
-	let mut next_ptr = if ptr >= 0x40 {
-		ptr
-	} else {
-		return Err(PciError::BadCapPtr(device_id));
-	};
+	let capabilities = device
+		.capabilities()
+		.unwrap()
+		.filter_map(|capability| match capability {
+			PciCapability::Vendor(capability) => Some(capability),
+			_ => None,
+		})
+		.map(|capability| (capability.offset, read_cap_raw(device, capability.offset)))
+		.filter(|(_ptr, capability)| capability.cfg_type != virtio_spec::pci::Cap::PciCfg.into())
+		.map(|(ptr, capability)| PciCap {
+			cfg_type: virtio_spec::pci::Cap::from(capability.cfg_type),
+			bar: *bars
+				.iter()
+				.find(|bar| bar.index == capability.bar_index)
+				.unwrap(),
+			id: capability.id,
+			offset: MemOff::from(capability.offset),
+			length: MemLen::from(capability.length),
+			device: *device,
+			origin: Origin {
+				cfg_ptr: ptr,
+				dev_id: device_id,
+				cap_struct: capability,
+			},
+		})
+		.collect::<Vec<_>>();
 
-	let mut cap_list: Vec<PciCap> = Vec::new();
-	// Loop through capabilities list via next pointer
-	while next_ptr != 0 {
-		// read into raw capabilities structure
-		let cap_raw = read_cap_raw(device, next_ptr);
-
-		let cfg_ptr = next_ptr;
-		// Set next pointer for next iteration of `caplist.
-		next_ptr = cap_raw.cap_next.into();
-
-		// Virtio specification v1.1. - 4.1.4 defines virtio specific capability
-		// with virtio vendor id = 0x09
-		match cap_raw.cap_vndr {
-			0x09u8 => {
-				if cap_raw.cfg_type == virtio_spec::pci::Cap::PciCfg.into() {
-					continue;
-				}
-
-				let cap_bar = bars
-					.iter()
-					.find(|bar| bar.index == cap_raw.bar_index)
-					.unwrap();
-
-				cap_list.push(PciCap {
-					cfg_type: virtio_spec::pci::Cap::from(cap_raw.cfg_type),
-					bar: *cap_bar,
-					id: cap_raw.id,
-					offset: MemOff::from(cap_raw.offset),
-					length: MemLen::from(cap_raw.length),
-					device: *device,
-					origin: Origin {
-						cfg_ptr,
-						dev_id: device_id,
-						cap_struct: cap_raw,
-					},
-				})
-			}
-			_ => info!(
-				"Non Virtio PCI capability with id {:x} found. And NOT used.",
-				cap_raw.cap_vndr
-			),
-		}
-	}
-
-	if cap_list.is_empty() {
+	if capabilities.is_empty() {
 		error!("No virtio capability found for device {:x}", device_id);
 		Err(PciError::NoVirtioCaps(device_id))
 	} else {
-		Ok(cap_list)
+		Ok(capabilities)
 	}
-}
-
-/// Wrapper function to get a devices capabilities list pointer, which represents
-/// an offset starting from the header of the device's configuration space.
-fn dev_caps_ptr(device: &PciDevice<PciConfigRegion>) -> u16 {
-	let cap_lst_reg = device.read_register(DeviceHeader::PCI_CAPABILITY_LIST_REGISTER.into());
-	(cap_lst_reg & u32::from(Masks::PCI_MASK_CAPLIST_POINTER))
-		.try_into()
-		.unwrap()
 }
 
 /// Maps memory areas indicated by devices BAR's into virtual address space.
