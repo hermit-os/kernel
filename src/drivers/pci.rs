@@ -72,38 +72,6 @@ impl From<DeviceHeader> for u16 {
 	}
 }
 
-/// PCI masks. For convenience put into an enum and provides
-/// an `Into<u32>` method for usage.
-#[allow(dead_code, non_camel_case_types)]
-#[repr(u32)]
-pub enum Masks {
-	PCI_MASK_IS_BAR_IO_BAR = 0x0000_0001u32,
-	PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT = 0x0000_0004u32,
-	PCI_MASK_IS_MEM_BAR_PREFETCHABLE = 0x0000_0008u32,
-	PCI_MASK_STATUS_CAPABILITIES_LIST = 0x0000_0010u32,
-	PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
-	PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
-	PCI_MASK_MULTIFUNCTION = 0x0080_0000u32,
-	PCI_MASK_MEM_BASE_ADDRESS = 0xFFFF_FFF0u32,
-	PCI_MASK_IO_BASE_ADDRESS = 0xFFFF_FFFCu32,
-}
-
-impl From<Masks> for u32 {
-	fn from(val: Masks) -> u32 {
-		match val {
-			Masks::PCI_MASK_STATUS_CAPABILITIES_LIST => 0x0000_0010u32,
-			Masks::PCI_MASK_CAPLIST_POINTER => 0x0000_00FCu32,
-			Masks::PCI_MASK_HEADER_TYPE => 0x007F_0000u32,
-			Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
-			Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
-			Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
-			Masks::PCI_MASK_IS_MEM_BAR_PREFETCHABLE => 0x0000_0008u32,
-			Masks::PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT => 0x0000_0004u32,
-			Masks::PCI_MASK_IS_BAR_IO_BAR => 0x0000_0001u32,
-		}
-	}
-}
-
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
