@@ -974,18 +974,7 @@ fn read_caps(
 	// Loop through capabilities list via next pointer
 	'cap_list: while next_ptr != 0u32 {
 		// read into raw capabilities structure
-		//
-		// Devices configuration space must be read twice
-		// and only returns correct values if both reads
-		// return equal values.
-		// For clarity see Virtio specification v1.1. - 2.4.1
-		let mut before = read_cap_raw(device, next_ptr);
-		let mut cap_raw = read_cap_raw(device, next_ptr);
-
-		while before != cap_raw {
-			before = read_cap_raw(device, next_ptr);
-			cap_raw = read_cap_raw(device, next_ptr);
-		}
+		let cap_raw = read_cap_raw(device, next_ptr);
 
 		let mut iter = bars.iter();
 
