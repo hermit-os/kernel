@@ -5,7 +5,7 @@
 use alloc::boxed::Box;
 use core::mem;
 
-use pci_types::{Bar, InterruptLine, MAX_BARS};
+use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86::io::*;
 
 use crate::arch::kernel::core_local::increment_irq_counter;
@@ -15,7 +15,7 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{network_irqhandler, NetworkDriver};
-use crate::drivers::pci::{PciCommand, PciDevice};
+use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
 
 /// size of the receive buffer
@@ -438,7 +438,7 @@ pub(crate) fn init_device(
 
 	debug!("Found RTL8139 at iobase {:#x} (irq {})", iobase, irq);
 
-	device.set_command(PciCommand::PCI_COMMAND_MASTER);
+	device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
 	let mac: [u8; 6] = unsafe {
 		[

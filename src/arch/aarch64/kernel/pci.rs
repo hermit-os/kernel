@@ -5,13 +5,14 @@ use arm_gic::gicv3::{IntId, Trigger};
 use bit_field::BitField;
 use hermit_dtb::Dtb;
 use pci_types::{
-	Bar, ConfigRegionAccess, InterruptLine, InterruptPin, PciAddress, PciHeader, MAX_BARS,
+	Bar, CommandRegister, ConfigRegionAccess, InterruptLine, InterruptPin, PciAddress, PciHeader,
+	MAX_BARS,
 };
 
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
-use crate::drivers::pci::{PciCommand, PciDevice, PCI_DEVICES};
+use crate::drivers::pci::{PciDevice, PCI_DEVICES};
 use crate::kernel::boot_info;
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -287,7 +288,7 @@ pub fn init() {
 							let dev = PciDevice::new(pci_address, pci_config);
 
 							// Initializes BARs
-							let mut cmd = PciCommand::default();
+							let mut cmd = CommandRegister::empty();
 							for i in 0..MAX_BARS {
 								if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
 									match bar {
@@ -299,14 +300,14 @@ pub fn init() {
 												},
 											);
 											io_start += 0x20;
-											cmd |= PciCommand::PCI_COMMAND_IO
-												| PciCommand::PCI_COMMAND_MASTER;
+											cmd |= CommandRegister::IO_ENABLE
+												| CommandRegister::BUS_MASTER_ENABLE;
 										}
 										// Currently, we ignore 32 bit memory bars
 										/*Bar::Memory32 { address, size, prefetchable } => {
 											dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
 											mem32_start += u64::from(size);
-											cmd |= PciCommand::PCI_COMMAND_MEMORY|PciCommand::PCI_COMMAND_MASTER;
+											cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
 										}*/
 										Bar::Memory64 {
 											address: _,
@@ -322,8 +323,8 @@ pub fn init() {
 												},
 											);
 											mem64_start += size;
-											cmd |= PciCommand::PCI_COMMAND_MEMORY
-												| PciCommand::PCI_COMMAND_MASTER;
+											cmd |= CommandRegister::MEMORY_ENABLE
+												| CommandRegister::BUS_MASTER_ENABLE;
 										}
 										_ => {}
 									}

@@ -5,11 +5,12 @@
 use alloc::vec::Vec;
 use core::str::FromStr;
 
+use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
-use crate::drivers::pci::{PciCommand, PciDevice};
+use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
@@ -163,7 +164,7 @@ impl VirtioNetDriver {
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<VirtioNetDriver, VirtioError> {
 		// enable bus master mode
-		device.set_command(PciCommand::PCI_COMMAND_MASTER);
+		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioNetDriver::new(caps, device) {

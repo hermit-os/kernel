@@ -3,14 +3,13 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use bitflags::bitflags;
 use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse"))]
 use hermit_sync::InterruptTicketMutex;
 use pci_types::capability::CapabilityIterator;
 use pci_types::{
-	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
-	PciHeader, StatusRegister, VendorId, MAX_BARS,
+	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
+	InterruptPin, PciAddress, PciHeader, StatusRegister, VendorId, MAX_BARS,
 };
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -43,34 +42,6 @@ pub(crate) mod constants {
 	pub(crate) const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
 	pub(crate) const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;
 	pub(crate) const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
-}
-
-bitflags! {
-	#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-	pub struct PciCommand: u32 {
-		/// Enable response in I/O space
-		const PCI_COMMAND_IO = 0x1;
-		/// Enable response in Memory space
-		const PCI_COMMAND_MEMORY = 0x2;
-		/// Enable bus mastering
-		const PCI_COMMAND_MASTER = 0x4;
-		/// Enable response to special cycles
-		const PCI_COMMAND_SPECIAL = 0x8;
-		// Use memory write and invalidate
-		const PCI_COMMAND_INVALIDATE = 0x10;
-		/// Enable palette snooping
-		const PCI_COMMAND_VGA_PALETTE = 0x20;
-		/// Enable parity checking
-		const PCI_COMMAND_PARITY = 0x40;
-		/// Enable address/data stepping
-		const PCI_COMMAND_WAIT = 0x80;
-		/// Enable SERR
-		const PCI_COMMAND_SERR = 0x100;
-		///  Device is allowed to generate fast back-to-back transactions;
-		const PCI_COMMAND_FAST_BACK = 0x200;
-		/// INTx# signal is disabled
-		const PCI_COMMAND_INTX_DISABLE = 0x400;
-	}
 }
 
 /// PCI registers offset inside header,
@@ -160,12 +131,12 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	/// Set flag to the command register
-	pub fn set_command(&self, cmd: PciCommand) {
+	pub fn set_command(&self, cmd: CommandRegister) {
 		unsafe {
 			let mut command = self
 				.access
 				.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into());
-			command |= cmd.bits();
+			command |= cmd.bits() as u32;
 			self.access.write(
 				self.address,
 				DeviceHeader::PCI_COMMAND_REGISTER.into(),
@@ -175,11 +146,11 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	/// Get value of the command register
-	pub fn get_command(&self) -> PciCommand {
+	pub fn get_command(&self) -> CommandRegister {
 		unsafe {
-			PciCommand::from_bits(
+			CommandRegister::from_bits(
 				self.access
-					.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into()),
+					.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into()) as u16,
 			)
 			.unwrap()
 		}
