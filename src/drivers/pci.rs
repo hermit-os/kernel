@@ -9,7 +9,7 @@ use hermit_sync::without_interrupts;
 use hermit_sync::InterruptTicketMutex;
 use pci_types::{
 	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
-	PciHeader, VendorId, MAX_BARS,
+	PciHeader, StatusRegister, VendorId, MAX_BARS,
 };
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -343,6 +343,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	pub fn id(&self) -> (VendorId, DeviceId) {
 		self.header().id(&self.access)
+	}
+
+	pub fn status(&self) -> StatusRegister {
+		self.header().status(&self.access)
 	}
 }
 

@@ -1044,14 +1044,6 @@ fn read_caps(
 	}
 }
 
-/// Wrapper function to get a devices current status.
-/// As the device is not static, return value is not static.
-fn dev_status(device: &PciDevice<PciConfigRegion>) -> u32 {
-	// reads register 01 from PCU Header of type 00H. WHich is the Status(16bit) and Command(16bit) register
-	let stat_com_reg = device.read_register(DeviceHeader::PCI_COMMAND_REGISTER.into());
-	stat_com_reg >> 16
-}
-
 /// Wrapper function to get a devices capabilities list pointer, which represents
 /// an offset starting from the header of the device's configuration space.
 fn dev_caps_ptr(device: &PciDevice<PciConfigRegion>) -> u32 {
@@ -1062,12 +1054,6 @@ fn dev_caps_ptr(device: &PciDevice<PciConfigRegion>) -> u32 {
 /// Maps memory areas indicated by devices BAR's into virtual address space.
 fn map_bars(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciBar>, PciError> {
 	crate::drivers::virtio::env::pci::map_bar_mem(device)
-}
-
-/// Checks if the status of the device inidactes the device is using the
-/// capabilities pointer and therefore defines a capabiites list.
-fn no_cap_list(device: &PciDevice<PciConfigRegion>) -> bool {
-	dev_status(device) & u32::from(Masks::PCI_MASK_STATUS_CAPABILITIES_LIST) == 0
 }
 
 /// Checks if minimal set of capabilities is present.
@@ -1086,7 +1072,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	let device_id = device.device_id();
 
 	// In case caplist pointer is not used, abort as it is essential
-	if no_cap_list(device) {
+	if !device.status().has_capability_list() {
 		error!("Found virtio device without capability list. Aborting!");
 		return Err(PciError::NoCapPtr(device_id));
 	}
