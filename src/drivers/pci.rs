@@ -257,6 +257,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
+		// TODO: implement with `EndpointHeader::update_interrupt` and remove `DeviceHeader` once merged:
+		// https://github.com/rust-osdev/pci_types/pull/21
 		unsafe {
 			let mut command = self
 				.access
