@@ -958,7 +958,7 @@ fn read_cap_raw(device: &PciDevice<PciConfigRegion>, register: u32) -> PciCapRaw
 /// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
 fn read_caps(
 	device: &PciDevice<PciConfigRegion>,
-	bars: Vec<PciBar>,
+	bars: &[PciBar],
 ) -> Result<Vec<PciCap>, PciError> {
 	let device_id = device.device_id();
 	let ptr: u32 = dev_caps_ptr(device);
@@ -1073,7 +1073,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	};
 
 	// Get list of PciCaps pointing to capabilities
-	let cap_list = match read_caps(device, bar_list) {
+	let cap_list = match read_caps(device, &bar_list) {
 		Ok(list) => list,
 		Err(pci_error) => return Err(pci_error),
 	};
