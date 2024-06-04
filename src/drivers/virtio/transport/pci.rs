@@ -972,11 +972,9 @@ fn read_caps(
 
 	let mut cap_list: Vec<PciCap> = Vec::new();
 	// Loop through capabilities list via next pointer
-	'cap_list: while next_ptr != 0u32 {
+	while next_ptr != 0u32 {
 		// read into raw capabilities structure
 		let cap_raw = read_cap_raw(device, next_ptr);
-
-		let mut iter = bars.iter();
 
 		let cfg_ptr = next_ptr;
 		// Set next pointer for next iteration of `caplist.
@@ -986,27 +984,18 @@ fn read_caps(
 		// with virtio vendor id = 0x09
 		match cap_raw.cap_vndr {
 			0x09u8 => {
-				let cap_bar: PciBar = loop {
-					match iter.next() {
-						Some(bar) => {
-							// Drivers MUST ignore BAR values different then specified in Virtio spec v1.1. - 4.1.4
-							// See Virtio specification v1.1. - 4.1.4.1
-							if bar.index <= 5 && bar.index == cap_raw.bar_index {
-								break *bar;
-							}
-						}
-						None => {
-							error!("Found virtio capability whose BAR is not mapped or non existing. Capability of type {:x} and id {:x} for device {:x}, can not be used!",
-                                cap_raw.cfg_type, cap_raw.id, device_id);
+				if cap_raw.cfg_type == virtio_spec::pci::Cap::PciCfg.into() {
+					continue;
+				}
 
-							continue 'cap_list;
-						}
-					}
-				};
+				let cap_bar = bars
+					.iter()
+					.find(|bar| bar.index == cap_raw.bar_index)
+					.unwrap();
 
 				cap_list.push(PciCap {
 					cfg_type: virtio_spec::pci::Cap::from(cap_raw.cfg_type),
-					bar: cap_bar,
+					bar: *cap_bar,
 					id: cap_raw.id,
 					offset: MemOff::from(cap_raw.offset),
 					length: MemLen::from(cap_raw.length),
