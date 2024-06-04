@@ -9,20 +9,10 @@ use x86::io::*;
 use crate::arch;
 use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::syscalls::interfaces::SyscallInterface;
-#[cfg(feature = "newlib")]
-use crate::syscalls::lwip::sys_lwip_get_errno;
-#[cfg(feature = "newlib")]
-use crate::syscalls::{LWIP_FD_BIT, LWIP_LOCK};
 
 const UHYVE_PORT_EXIT: u16 = 0x540;
 const UHYVE_PORT_CMDSIZE: u16 = 0x740;
 const UHYVE_PORT_CMDVAL: u16 = 0x780;
-
-#[cfg(feature = "newlib")]
-extern "C" {
-	fn lwip_write(fd: i32, buf: *const u8, len: usize) -> i32;
-	fn lwip_read(fd: i32, buf: *mut u8, len: usize) -> i32;
-}
 
 /// forward a request to the hypervisor uhyve
 #[inline]

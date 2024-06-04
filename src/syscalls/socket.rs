@@ -5,7 +5,7 @@ use core::ffi::{c_char, c_void};
 use core::mem::size_of;
 use core::ops::DerefMut;
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::errno::*;
@@ -102,7 +102,7 @@ pub struct sockaddr_in {
 	pub sin_zero: [c_char; 8],
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 impl From<sockaddr_in> for IpListenEndpoint {
 	fn from(addr: sockaddr_in) -> IpListenEndpoint {
 		let port = u16::from_be(addr.sin_port);
@@ -118,7 +118,7 @@ impl From<sockaddr_in> for IpListenEndpoint {
 	}
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 impl From<sockaddr_in> for IpEndpoint {
 	fn from(addr: sockaddr_in) -> IpEndpoint {
 		let port = u16::from_be(addr.sin_port);
@@ -129,7 +129,7 @@ impl From<sockaddr_in> for IpEndpoint {
 	}
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 impl From<IpEndpoint> for sockaddr_in {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {
@@ -162,7 +162,7 @@ pub struct sockaddr_in6 {
 	pub sin6_scope_id: u32,
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 impl From<sockaddr_in6> for IpListenEndpoint {
 	fn from(addr: sockaddr_in6) -> IpListenEndpoint {
 		let port = u16::from_be(addr.sin6_port);
@@ -184,7 +184,7 @@ impl From<sockaddr_in6> for IpListenEndpoint {
 	}
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 impl From<sockaddr_in6> for IpEndpoint {
 	fn from(addr: sockaddr_in6) -> IpEndpoint {
 		let port = u16::from_be(addr.sin6_port);
@@ -202,7 +202,7 @@ impl From<sockaddr_in6> for IpEndpoint {
 	}
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 impl From<IpEndpoint> for sockaddr_in6 {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {

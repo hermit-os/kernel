@@ -455,8 +455,7 @@ fn default_apic() -> PhysAddr {
 	default_address
 }
 
-#[no_mangle]
-pub extern "C" fn eoi() {
+pub fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
 }
 

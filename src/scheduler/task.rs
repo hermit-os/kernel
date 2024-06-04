@@ -399,9 +399,6 @@ pub(crate) struct Task {
 	// Physical address of the 1st level page table
 	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 	pub root_page_table: usize,
-	/// lwIP error code for this task
-	#[cfg(feature = "newlib")]
-	pub lwip_errno: i32,
 }
 
 pub(crate) trait TaskFrame {
@@ -437,8 +434,6 @@ impl Task {
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			root_page_table: arch::create_new_root_page_table(),
-			#[cfg(feature = "newlib")]
-			lwip_errno: 0,
 		}
 	}
 
@@ -507,8 +502,6 @@ impl Task {
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
-			#[cfg(feature = "newlib")]
-			lwip_errno: 0,
 		}
 	}
 }

@@ -44,7 +44,7 @@ pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 	// Consume the pointer to the raw memory into a Box again
 	// and drop the Box to free the associated memory.
 	unsafe {
-		drop(Box::from_raw(sem));
+		drop(Box::from_raw((*sem).cast_mut()));
 	}
 	0
 }

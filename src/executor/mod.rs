@@ -20,25 +20,17 @@ use hermit_sync::without_interrupts;
 use smoltcp::time::Instant;
 
 use crate::arch::core_local::*;
-#[cfg(all(
-	any(feature = "tcp", feature = "udp"),
-	not(feature = "pci"),
-	not(feature = "newlib")
-))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::drivers::mmio::get_network_driver;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::NetworkDriver;
-#[cfg(all(
-	any(feature = "tcp", feature = "udp"),
-	feature = "pci",
-	not(feature = "newlib")
-))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci::get_network_driver;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::executor::network::network_delay;
 use crate::executor::task::AsyncTask;
 use crate::fd::IoError;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::synch::futex::*;
 
@@ -97,7 +89,7 @@ where
 }
 
 pub fn init() {
-	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	crate::executor::network::init();
 }
 
