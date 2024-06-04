@@ -132,28 +132,18 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	/// Set flag to the command register
 	pub fn set_command(&self, cmd: CommandRegister) {
-		unsafe {
-			let mut command = self
-				.access
-				.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into());
-			command |= cmd.bits() as u32;
-			self.access.write(
-				self.address,
-				DeviceHeader::PCI_COMMAND_REGISTER.into(),
-				command,
-			)
-		}
+		// TODO: don't convert to bits once one of the following PRs is released:
+		// - https://github.com/rust-osdev/pci_types/pull/15
+		// - https://github.com/rust-osdev/pci_types/pull/20
+		let cmd = cmd.bits();
+		self.header().update_command(&self.access, |command| {
+			command | CommandRegister::from_bits_retain(cmd)
+		});
 	}
 
 	/// Get value of the command register
 	pub fn get_command(&self) -> CommandRegister {
-		unsafe {
-			CommandRegister::from_bits(
-				self.access
-					.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into()) as u16,
-			)
-			.unwrap()
-		}
+		self.header().command(&self.access)
 	}
 
 	/// Returns the bar at bar-register `slot`.
