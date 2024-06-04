@@ -157,48 +157,35 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	/// Configure the bar at register `slot`
-	#[allow(unused_variables)]
 	pub fn set_bar(&self, slot: u8, bar: Bar) {
-		let cmd = u16::from(DeviceHeader::PCI_BAR0_REGISTER) + u16::from(slot) * 4;
-		match bar {
-			Bar::Io { port } => unsafe {
-				self.access.write(self.address, cmd, port | 1);
-			},
+		let value = match bar {
+			Bar::Io { port } => (port | 1) as usize,
 			Bar::Memory32 {
 				address,
-				size,
+				size: _,
 				prefetchable,
 			} => {
 				if prefetchable {
-					unsafe {
-						self.access.write(self.address, cmd, address | 1 << 3);
-					}
+					(address | 1 << 3) as usize
 				} else {
-					unsafe {
-						self.access.write(self.address, cmd, address);
-					}
+					address as usize
 				}
 			}
 			Bar::Memory64 {
 				address,
-				size,
+				size: _,
 				prefetchable,
 			} => {
-				let high: u32 = (address >> 32).try_into().unwrap();
-				let low: u32 = (address & 0xFFFF_FFF0u64).try_into().unwrap();
 				if prefetchable {
-					unsafe {
-						self.access.write(self.address, cmd, low | 2 << 1 | 1 << 3);
-					}
+					(address | 2 << 1 | 1 << 3) as usize
 				} else {
-					unsafe {
-						self.access.write(self.address, cmd, low | 2 << 1);
-					}
-				}
-				unsafe {
-					self.access.write(self.address, cmd + 4, high);
+					(address | 2 << 1) as usize
 				}
 			}
+		};
+		let mut header = EndpointHeader::from_header(self.header(), &self.access).unwrap();
+		unsafe {
+			header.write_bar(slot, &self.access, value).unwrap();
 		}
 	}
 
