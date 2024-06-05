@@ -248,7 +248,7 @@ fn application_processor_main() -> ! {
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
-	info!("Entering idle loop for application processor");
+	debug!("Entering idle loop for application processor");
 
 	synch_all_cores();
 	crate::executor::init();

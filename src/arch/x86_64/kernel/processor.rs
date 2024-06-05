@@ -838,8 +838,7 @@ pub fn configure() {
 
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
-		#[cfg(feature = "fsgsbase")]
-		info!("Enable FSGSBASE support");
+		debug!("Enable FSGSBASE support");
 	}
 	#[cfg(feature = "fsgsbase")]
 	if !supports_fsgs() {
