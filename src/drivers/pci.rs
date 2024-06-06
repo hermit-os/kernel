@@ -86,6 +86,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		Self { address, access }
 	}
 
+	pub fn access(&self) -> &T {
+		&self.access
+	}
+
 	pub fn header(&self) -> PciHeader {
 		PciHeader::new(self.address)
 	}
