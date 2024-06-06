@@ -3,13 +3,13 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use bitflags::bitflags;
 use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse"))]
 use hermit_sync::InterruptTicketMutex;
+use pci_types::capability::CapabilityIterator;
 use pci_types::{
-	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
-	PciHeader, VendorId, MAX_BARS,
+	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
+	InterruptPin, PciAddress, PciHeader, StatusRegister, VendorId, MAX_BARS,
 };
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -44,34 +44,6 @@ pub(crate) mod constants {
 	pub(crate) const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
 }
 
-bitflags! {
-	#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
-	pub struct PciCommand: u32 {
-		/// Enable response in I/O space
-		const PCI_COMMAND_IO = 0x1;
-		/// Enable response in Memory space
-		const PCI_COMMAND_MEMORY = 0x2;
-		/// Enable bus mastering
-		const PCI_COMMAND_MASTER = 0x4;
-		/// Enable response to special cycles
-		const PCI_COMMAND_SPECIAL = 0x8;
-		// Use memory write and invalidate
-		const PCI_COMMAND_INVALIDATE = 0x10;
-		/// Enable palette snooping
-		const PCI_COMMAND_VGA_PALETTE = 0x20;
-		/// Enable parity checking
-		const PCI_COMMAND_PARITY = 0x40;
-		/// Enable address/data stepping
-		const PCI_COMMAND_WAIT = 0x80;
-		/// Enable SERR
-		const PCI_COMMAND_SERR = 0x100;
-		///  Device is allowed to generate fast back-to-back transactions;
-		const PCI_COMMAND_FAST_BACK = 0x200;
-		/// INTx# signal is disabled
-		const PCI_COMMAND_INTX_DISABLE = 0x400;
-	}
-}
-
 /// PCI registers offset inside header,
 /// if PCI header is of type 00h (general device).
 #[allow(dead_code, non_camel_case_types)]
@@ -100,38 +72,6 @@ impl From<DeviceHeader> for u16 {
 	}
 }
 
-/// PCI masks. For convenience put into an enum and provides
-/// an `Into<u32>` method for usage.
-#[allow(dead_code, non_camel_case_types)]
-#[repr(u32)]
-pub enum Masks {
-	PCI_MASK_IS_BAR_IO_BAR = 0x0000_0001u32,
-	PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT = 0x0000_0004u32,
-	PCI_MASK_IS_MEM_BAR_PREFETCHABLE = 0x0000_0008u32,
-	PCI_MASK_STATUS_CAPABILITIES_LIST = 0x0000_0010u32,
-	PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
-	PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
-	PCI_MASK_MULTIFUNCTION = 0x0080_0000u32,
-	PCI_MASK_MEM_BASE_ADDRESS = 0xFFFF_FFF0u32,
-	PCI_MASK_IO_BASE_ADDRESS = 0xFFFF_FFFCu32,
-}
-
-impl From<Masks> for u32 {
-	fn from(val: Masks) -> u32 {
-		match val {
-			Masks::PCI_MASK_STATUS_CAPABILITIES_LIST => 0x0000_0010u32,
-			Masks::PCI_MASK_CAPLIST_POINTER => 0x0000_00FCu32,
-			Masks::PCI_MASK_HEADER_TYPE => 0x007F_0000u32,
-			Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
-			Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
-			Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
-			Masks::PCI_MASK_IS_MEM_BAR_PREFETCHABLE => 0x0000_0008u32,
-			Masks::PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT => 0x0000_0004u32,
-			Masks::PCI_MASK_IS_BAR_IO_BAR => 0x0000_0001u32,
-		}
-	}
-}
-
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
@@ -146,6 +86,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		Self { address, access }
 	}
 
+	pub fn header(&self) -> PciHeader {
+		PciHeader::new(self.address)
+	}
+
 	pub fn read_register(&self, register: u16) -> u32 {
 		unsafe { self.access.read(self.address, register) }
 	}
@@ -155,34 +99,24 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	/// Set flag to the command register
-	pub fn set_command(&self, cmd: PciCommand) {
-		unsafe {
-			let mut command = self
-				.access
-				.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into());
-			command |= cmd.bits();
-			self.access.write(
-				self.address,
-				DeviceHeader::PCI_COMMAND_REGISTER.into(),
-				command,
-			)
-		}
+	pub fn set_command(&self, cmd: CommandRegister) {
+		// TODO: don't convert to bits once one of the following PRs is released:
+		// - https://github.com/rust-osdev/pci_types/pull/15
+		// - https://github.com/rust-osdev/pci_types/pull/20
+		let cmd = cmd.bits();
+		self.header().update_command(&self.access, |command| {
+			command | CommandRegister::from_bits_retain(cmd)
+		});
 	}
 
 	/// Get value of the command register
-	pub fn get_command(&self) -> PciCommand {
-		unsafe {
-			PciCommand::from_bits(
-				self.access
-					.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into()),
-			)
-			.unwrap()
-		}
+	pub fn get_command(&self) -> CommandRegister {
+		self.header().command(&self.access)
 	}
 
 	/// Returns the bar at bar-register `slot`.
 	pub fn get_bar(&self, slot: u8) -> Option<Bar> {
-		let header = PciHeader::new(self.address);
+		let header = self.header();
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			return endpoint.bar(slot, &self.access);
 		}
@@ -191,48 +125,35 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	/// Configure the bar at register `slot`
-	#[allow(unused_variables)]
 	pub fn set_bar(&self, slot: u8, bar: Bar) {
-		let cmd = u16::from(DeviceHeader::PCI_BAR0_REGISTER) + u16::from(slot) * 4;
-		match bar {
-			Bar::Io { port } => unsafe {
-				self.access.write(self.address, cmd, port | 1);
-			},
+		let value = match bar {
+			Bar::Io { port } => (port | 1) as usize,
 			Bar::Memory32 {
 				address,
-				size,
+				size: _,
 				prefetchable,
 			} => {
 				if prefetchable {
-					unsafe {
-						self.access.write(self.address, cmd, address | 1 << 3);
-					}
+					(address | 1 << 3) as usize
 				} else {
-					unsafe {
-						self.access.write(self.address, cmd, address);
-					}
+					address as usize
 				}
 			}
 			Bar::Memory64 {
 				address,
-				size,
+				size: _,
 				prefetchable,
 			} => {
-				let high: u32 = (address >> 32).try_into().unwrap();
-				let low: u32 = (address & 0xFFFF_FFF0u64).try_into().unwrap();
 				if prefetchable {
-					unsafe {
-						self.access.write(self.address, cmd, low | 2 << 1 | 1 << 3);
-					}
+					(address | 2 << 1 | 1 << 3) as usize
 				} else {
-					unsafe {
-						self.access.write(self.address, cmd, low | 2 << 1);
-					}
-				}
-				unsafe {
-					self.access.write(self.address, cmd + 4, high);
+					(address | 2 << 1) as usize
 				}
 			}
+		};
+		let mut header = EndpointHeader::from_header(self.header(), &self.access).unwrap();
+		unsafe {
+			header.write_bar(slot, &self.access, value).unwrap();
 		}
 	}
 
@@ -294,7 +215,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn get_irq(&self) -> Option<InterruptLine> {
-		let header = PciHeader::new(self.address);
+		let header = self.header();
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			let (_pin, line) = endpoint.interrupt(&self.access);
 			Some(line)
@@ -304,6 +225,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
+		// TODO: implement with `EndpointHeader::update_interrupt` and remove `DeviceHeader` once merged:
+		// https://github.com/rust-osdev/pci_types/pull/21
 		unsafe {
 			let mut command = self
 				.access
@@ -328,26 +251,32 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn vendor_id(&self) -> VendorId {
-		let header = PciHeader::new(self.address);
-		let (vendor_id, _device_id) = header.id(&self.access);
+		let (vendor_id, _device_id) = self.header().id(&self.access);
 		vendor_id
 	}
 
 	pub fn device_id(&self) -> DeviceId {
-		let header = PciHeader::new(self.address);
-		let (_vendor_id, device_id) = header.id(&self.access);
+		let (_vendor_id, device_id) = self.header().id(&self.access);
 		device_id
 	}
 
 	pub fn id(&self) -> (VendorId, DeviceId) {
-		let header = PciHeader::new(self.address);
-		header.id(&self.access)
+		self.header().id(&self.access)
+	}
+
+	pub fn status(&self) -> StatusRegister {
+		self.header().status(&self.access)
+	}
+
+	pub fn capabilities(&self) -> Option<CapabilityIterator<'_, T>> {
+		EndpointHeader::from_header(self.header(), &self.access)
+			.map(|header| header.capabilities(&self.access))
 	}
 }
 
 impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let header = PciHeader::new(self.address);
+		let header = self.header();
 		let header_type = header.header_type(&self.access);
 		let (vendor_id, device_id) = header.id(&self.access);
 		let (_dev_rev, class_id, subclass_id, _interface) = header.revision_and_class(&self.access);
