@@ -9,6 +9,8 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::future::{self, Future};
 use core::ptr;
+#[cfg(all(target_arch = "x86_64", feature = "smp"))]
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use core::task::ready;
 use core::task::Poll::Ready;
@@ -38,6 +40,8 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 #[cfg(feature = "smp")]
 static SCHEDULER_INPUTS: SpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
 	SpinMutex::new(Vec::new());
+#[cfg(all(target_arch = "x86_64", feature = "smp"))]
+static CORE_HLT_STATE: SpinMutex<Vec<&AtomicBool>> = SpinMutex::new(Vec::new());
 /// Map between Task ID and Queue of waiting tasks
 static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
@@ -615,6 +619,13 @@ impl PerCoreScheduler {
 		without_interrupts(|| self.current_task.borrow().prio)
 	}
 
+	/// Returns reference to prio_bitmap
+	#[allow(dead_code)]
+	#[inline]
+	pub fn get_priority_bitmap(&self) -> &u64 {
+		self.ready_queue.get_priority_bitmap()
+	}
+
 	#[cfg(target_arch = "x86_64")]
 	pub fn set_current_kernel_stack(&self) {
 		use x86_64::VirtAddr;
@@ -731,11 +742,14 @@ impl PerCoreScheduler {
 			crate::executor::run();
 
 			// do housekeeping
+			#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
+			core_scheduler.check_input();
 			core_scheduler.cleanup_tasks();
 
 			if core_scheduler.ready_queue.is_empty() {
 				if backoff.is_completed() {
 					interrupts::enable_and_wait();
+					backoff.reset();
 				} else {
 					interrupts::enable();
 					backoff.snooze();
@@ -920,7 +934,17 @@ pub(crate) fn add_current_core() {
 			core_id.try_into().unwrap(),
 			&CoreLocal::get().scheduler_input,
 		);
+		#[cfg(target_arch = "x86_64")]
+		CORE_HLT_STATE
+			.lock()
+			.insert(core_id.try_into().unwrap(), &CoreLocal::get().hlt);
 	}
+}
+
+#[inline]
+#[cfg(all(target_arch = "x86_64", feature = "smp"))]
+pub(crate) fn take_core_hlt_state(core_id: CoreId) -> bool {
+	CORE_HLT_STATE.lock()[usize::try_from(core_id).unwrap()].swap(false, Ordering::Acquire)
 }
 
 #[inline]

@@ -2,6 +2,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::cell::{Cell, RefCell, RefMut};
+#[cfg(feature = "smp")]
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
@@ -32,6 +34,8 @@ pub(crate) struct CoreLocal {
 	irq_statistics: &'static IrqStatistics,
 	/// Queue of async tasks
 	async_tasks: RefCell<Vec<AsyncTask>>,
+	#[cfg(feature = "smp")]
+	pub hlt: AtomicBool,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
@@ -58,6 +62,8 @@ impl CoreLocal {
 			kernel_stack: Cell::new(ptr::null_mut()),
 			irq_statistics,
 			async_tasks: RefCell::new(Vec::new()),
+			#[cfg(feature = "smp")]
+			hlt: AtomicBool::new(false),
 			#[cfg(feature = "smp")]
 			scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 		};

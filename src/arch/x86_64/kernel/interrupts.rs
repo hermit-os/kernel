@@ -5,7 +5,9 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use ahash::RandomState;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
-pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
+#[cfg(not(feature = "idle-poll"))]
+use x86_64::instructions::interrupts::enable_and_hlt;
+pub use x86_64::instructions::interrupts::{disable, enable};
 use x86_64::set_general_handler;
 #[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
 use x86_64::structures::idt;
@@ -31,6 +33,49 @@ pub(crate) fn load_idt() {
 	// the best in regards to interrupts on other cores.
 	unsafe {
 		(*IDT.data_ptr()).load_unsafe();
+	}
+}
+
+#[inline]
+pub(crate) fn enable_and_wait() {
+	#[cfg(feature = "idle-poll")]
+	unsafe {
+		asm!("pause", options(nomem, nostack, preserves_flags));
+	}
+
+	#[cfg(not(feature = "idle-poll"))]
+	if crate::processor::supports_mwait() {
+		let addr = core_scheduler().get_priority_bitmap() as *const _ as *const u8;
+
+		unsafe {
+			if crate::processor::supports_clflush() {
+				core::arch::x86_64::_mm_clflush(addr);
+			}
+
+			asm!(
+				"monitor",
+				in("rax") addr,
+				in("rcx") 0,
+				in("rdx") 0,
+				options(readonly, nostack, preserves_flags)
+			);
+
+			// The maximum waiting time is an implicit 64-bit timestamp-counter value
+			// stored in the EDX:EBX register pair.
+			// Test timeout by changing "b" => (0xffffffff) or "d"((wakeup >> 32) + 1)
+			// ECX bit 31 indicate whether timeout feature is used
+			// EAX [0:3] indicate sub C-state; [4:7] indicate C-states e.g., 0=>C1, 1=>C2 ...
+			asm!(
+				"sti; mwait",
+				in("rax") 0x2,
+				in("rcx") 0 /* break on interrupt flag */,
+				options(readonly, nostack, preserves_flags)
+			);
+		}
+	} else {
+		#[cfg(feature = "smp")]
+		crate::CoreLocal::get().hlt.store(true, Ordering::Relaxed);
+		enable_and_hlt();
 	}
 }
 

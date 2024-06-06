@@ -69,6 +69,7 @@ common-os = []
 nostd = []
 semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
+idle-poll = []
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
