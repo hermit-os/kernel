@@ -943,7 +943,7 @@ pub(crate) fn add_current_core() {
 
 #[inline]
 #[cfg(all(target_arch = "x86_64", feature = "smp"))]
-pub(crate) fn get_core_hlt_state(core_id: CoreId) -> bool {
+pub(crate) fn take_core_hlt_state(core_id: CoreId) -> bool {
 	CORE_HLT_STATE.lock()[usize::try_from(core_id).unwrap()].swap(false, Ordering::Acquire)
 }
 

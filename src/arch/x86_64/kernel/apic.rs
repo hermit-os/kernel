@@ -840,7 +840,7 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
 	if core_id_to_wakeup != core_id()
 		&& !crate::processor::supports_mwait()
-		&& crate::scheduler::get_core_hlt_state(core_id_to_wakeup)
+		&& crate::scheduler::take_core_hlt_state(core_id_to_wakeup)
 	{
 		without_interrupts(|| {
 			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
