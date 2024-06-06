@@ -470,7 +470,7 @@ impl From<fuse_abi::Attr> for FileAttr {
 		FileAttr {
 			st_ino: attr.ino,
 			st_nlink: attr.nlink as u64,
-			st_mode: AccessPermission::from_bits(attr.mode).unwrap(),
+			st_mode: AccessPermission::from_bits_retain(attr.mode),
 			st_uid: attr.uid,
 			st_gid: attr.gid,
 			st_rdev: attr.rdev as u64,
