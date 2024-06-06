@@ -10,7 +10,7 @@ use core::{mem, ptr};
 
 use pci_types::capability::PciCapability;
 use virtio_spec::pci::{
-	CapCfgType, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
+	Cap, CapCfgType, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw,
 };
 use virtio_spec::DeviceStatus;
@@ -39,7 +39,7 @@ use crate::drivers::virtio::error::VirtioError;
 pub struct Origin {
 	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
 	dev_id: u16,
-	cap_struct: PciCapRaw,
+	cap_struct: Cap,
 }
 
 /// Maps a given device specific pci configuration structure and
@@ -169,45 +169,6 @@ impl PciCap {
 		let isr_stat_raw = unsafe { VolatileRef::new(ptr) };
 
 		Some(isr_stat_raw)
-	}
-}
-
-/// Virtio's PCI capabilities structure.
-/// See Virtio specification v.1.1 - 4.1.4
-///
-/// WARN: endianness of this structure should be seen as little endian.
-/// As this structure is not meant to be used outside of this module and for
-/// ease of conversion from reading data into struct from PCI configuration
-/// space, no conversion is made for struct fields.
-#[derive(Clone, Debug)]
-#[repr(C)]
-struct PciCapRaw {
-	cap_vndr: u8,
-	cap_next: u8,
-	cap_len: u8,
-	cfg_type: u8,
-	bar_index: u8,
-	id: u8,
-	padding: [u8; 2],
-	offset: u32,
-	length: u32,
-}
-
-// This only shows compiler, that structs are identical
-// with themselves.
-impl Eq for PciCapRaw {}
-
-// In order to compare two PciCapRaw structs PartialEq is needed
-impl PartialEq for PciCapRaw {
-	fn eq(&self, other: &Self) -> bool {
-		self.cap_vndr == other.cap_vndr
-			&& self.cap_next == other.cap_next
-			&& self.cap_len == other.cap_len
-			&& self.cfg_type == other.cfg_type
-			&& self.bar_index == other.bar_index
-			&& self.id == other.id
-			&& self.offset == other.offset
-			&& self.length == other.length
 	}
 }
 
@@ -597,7 +558,7 @@ impl NotifCfg {
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
 		let notify_off_multiplier_ptr =
-			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<PciCapRaw>()).unwrap();
+			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
 		let notify_off_multiplier = cap.device.read_register(notify_off_multiplier_ptr);
 
 		// define base memory address from which the actual Queue Notify address can be derived via
@@ -790,23 +751,24 @@ impl ShMemCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let offset_hi_ptr =
-			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<PciCapRaw>()).unwrap();
+		let offset_hi_ptr = cap.origin.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
 		let offset_hi = cap.device.read_register(offset_hi_ptr);
 
 		// Create 64 bit offset from high and low 32 bit values
-		let offset =
-			MemOff::from((u64::from(offset_hi) << 32) ^ u64::from(cap.origin.cap_struct.offset));
+		let offset = MemOff::from(
+			(u64::from(offset_hi) << 32) ^ u64::from(cap.origin.cap_struct.offset.to_ne()),
+		);
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
 		let length_hi_ptr = cap.origin.cfg_ptr
-			+ u16::try_from(mem::size_of::<PciCapRaw>() + mem::size_of::<u32>()).unwrap();
+			+ u16::try_from(mem::size_of::<Cap>() + mem::size_of::<u32>()).unwrap();
 		let length_hi = cap.device.read_register(length_hi_ptr);
 
 		// Create 64 bit length from high and low 32 bit values
-		let length =
-			MemLen::from((u64::from(length_hi) << 32) ^ u64::from(cap.origin.cap_struct.length));
+		let length = MemLen::from(
+			(u64::from(length_hi) << 32) ^ u64::from(cap.origin.cap_struct.length.to_ne()),
+		);
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
 		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
@@ -890,36 +852,6 @@ impl PciBar {
 	}
 }
 
-/// Reads a raw capability struct [PciCapRaw] out of a PCI device's configuration space.
-fn read_cap_raw(device: &PciDevice<PciConfigRegion>, register: u16) -> PciCapRaw {
-	let mut quadruple_word: [u8; 16] = [0; 16];
-
-	debug!("Converting read word from PCI device config space into native endian bytes.");
-
-	// Write words sequentially into array
-	for i in 0..4 {
-		// Read word need to be converted to little endian bytes as PCI is little endian.
-		// Interpretation of multi byte values needs to be swapped for big endian machines
-		let word: [u8; 4] = device.read_register(register + 4 * i).to_le_bytes();
-		let i = 4 * i as usize;
-		quadruple_word[i..i + 4].copy_from_slice(&word);
-	}
-
-	PciCapRaw {
-		cap_vndr: quadruple_word[0],
-		cap_next: quadruple_word[1],
-		cap_len: quadruple_word[2],
-		cfg_type: quadruple_word[3],
-		bar_index: quadruple_word[4],
-		id: quadruple_word[5],
-		// Unwrapping is okay here, as transformed array slice is always 2 * u8 long and initialized
-		padding: quadruple_word[6..8].try_into().unwrap(),
-		// Unwrapping is okay here, as transformed array slice is always 4 * u8 long and initialized
-		offset: u32::from_le_bytes(quadruple_word[8..12].try_into().unwrap()),
-		length: u32::from_le_bytes(quadruple_word[12..16].try_into().unwrap()),
-	}
-}
-
 /// Reads all PCI capabilities, starting at the capabilities list pointer from the
 /// PCI device.
 ///
@@ -938,17 +870,17 @@ fn read_caps(
 			PciCapability::Vendor(capability) => Some(capability),
 			_ => None,
 		})
-		.map(|capability| (capability.offset, read_cap_raw(device, capability.offset)))
+		.map(|addr| {
+			let cap = Cap::read(addr.clone(), device.access()).unwrap();
+			(addr.offset, cap)
+		})
 		.filter(|(_ptr, capability)| capability.cfg_type != CapCfgType::Pci.into())
 		.map(|(ptr, capability)| PciCap {
 			cfg_type: CapCfgType::from(capability.cfg_type),
-			bar: *bars
-				.iter()
-				.find(|bar| bar.index == capability.bar_index)
-				.unwrap(),
+			bar: *bars.iter().find(|bar| bar.index == capability.bar).unwrap(),
 			id: capability.id,
-			offset: MemOff::from(capability.offset),
-			length: MemLen::from(capability.length),
+			offset: MemOff::from(capability.offset.to_ne()),
+			length: MemLen::from(capability.length.to_ne()),
 			device: *device,
 			origin: Origin {
 				cfg_ptr: ptr,
