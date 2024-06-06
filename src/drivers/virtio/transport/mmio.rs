@@ -10,7 +10,7 @@ use virtio_spec::mmio::{
 	DeviceRegisterVolatileFieldAccess, DeviceRegisterVolatileWideFieldAccess, DeviceRegisters,
 	InterruptStatus,
 };
-use virtio_spec::DeviceStatus;
+use virtio_spec::{le32, DeviceStatus};
 use volatile::VolatileRef;
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -67,11 +67,6 @@ impl<'a> VqCfgHandler<'a> {
 		self.select_queue();
 
 		self.raw.as_mut_ptr().queue_device().write(addr.0.into());
-	}
-
-	pub fn notif_off(&mut self) -> u16 {
-		// we don't need an offset
-		0
 	}
 
 	pub fn enable_queue(&mut self) {
@@ -267,31 +262,18 @@ impl ComCfg {
 /// See Virtio specification v1.1 - 4.1.4.4
 pub struct NotifCfg {
 	/// Start addr, from where the notification addresses for the virtqueues are computed
-	queue_notify: *mut u32,
+	queue_notify: *mut le32,
 }
 
 impl NotifCfg {
 	pub fn new(mut registers: VolatileRef<'_, DeviceRegisters>) -> Self {
-		let raw = registers
-			.as_mut_ptr()
-			.queue_notify()
-			.as_raw_ptr()
-			.as_ptr()
-			.cast();
+		let raw = registers.as_mut_ptr().queue_notify().as_raw_ptr().as_ptr();
 
 		NotifCfg { queue_notify: raw }
 	}
 
-	/// Returns base address of notification area as an usize
-	pub fn base(&self) -> usize {
-		self.queue_notify as usize
-	}
-
-	/// Returns the multiplier, needed in order to calculate the
-	/// notification address for a specific queue.
-	pub fn multiplier(&self) -> u32 {
-		// we don't need a multiplier
-		0
+	pub fn notification_location(&self, _vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
+		self.queue_notify
 	}
 }
 
@@ -301,16 +283,16 @@ pub struct NotifCtrl {
 	/// Indicates if VIRTIO_F_NOTIFICATION_DATA has been negotiated
 	f_notif_data: bool,
 	/// Where to write notification
-	notif_addr: *mut u32,
+	notif_addr: *mut le32,
 }
 
 impl NotifCtrl {
 	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
 	/// are disabled.
-	pub fn new(notif_addr: *mut usize) -> Self {
+	pub fn new(notif_addr: *mut le32) -> Self {
 		NotifCtrl {
 			f_notif_data: false,
-			notif_addr: notif_addr as *mut u32,
+			notif_addr,
 		}
 	}
 
