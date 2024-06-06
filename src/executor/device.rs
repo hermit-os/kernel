@@ -54,6 +54,10 @@ impl<'a> NetworkInterface<'a> {
 
 		let mut device = HermitNet::new(mtu, checksums);
 
+		if hermit_var!("HERMIT_IP").is_some() {
+			warn!("A static IP address is specified with the environment variable HERMIT_IP, but the device is configured to use DHCPv4!");
+		}
+
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 
