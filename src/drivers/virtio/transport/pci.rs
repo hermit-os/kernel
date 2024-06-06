@@ -570,33 +570,6 @@ impl ComCfg {
 	}
 }
 
-/// Common configuration structure of Virtio PCI devices.
-/// See Virtio specification v1.1 - 4.1.43
-///
-/// Fields read-write-rules in source code refer to driver rights.
-#[repr(C)]
-struct ComCfgRaw {
-	// About whole device
-	device_feature_select: u32,  // read-write
-	device_feature: u32,         // read-only for driver
-	driver_feature_select: u32,  // read-write
-	driver_feature: u32,         // read-write
-	config_msix_vector: u16,     // read-write
-	num_queues: u16,             // read-only for driver
-	device_status: DeviceStatus, // read-write
-	config_generation: u8,       // read-only for driver
-
-	// About a specific virtqueue
-	queue_select: u16,      // read-write
-	queue_size: u16,        // read-write
-	queue_msix_vector: u16, // read-write
-	queue_enable: u16,      // read-write
-	queue_notify_off: u16,  // read-only for driver. Offset of the notification area.
-	queue_desc: u64,        // read-write
-	queue_driver: u64,      // read-write
-	queue_device: u64,      // read-write
-}
-
 /// Notification Structure to handle virtqueue notification settings.
 /// See Virtio specification v1.1 - 4.1.4.4
 pub struct NotifCfg {
