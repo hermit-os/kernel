@@ -130,7 +130,7 @@ pub trait Virtq: VirtqPrivate {
 	/// This activates the queue and polls the descriptor ring of the queue.
 	///
 	/// * `TransferTokens` which hold an `await_queue` will be placed into
-	/// these queues.
+	///   these queues.
 	fn poll(&self);
 
 	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
@@ -191,10 +191,10 @@ pub trait Virtq: VirtqPrivate {
 	///   * start: call of `fn prep_transfer_from_raw()`
 	///   * end: return of the [BufferToken] via [TransferToken::dispatch_blocking] or its push to the [TransferToken::await_queue].
 	///   * In case the underlying BufferToken is reused, the raw pointers MUST still be valid all the time
-	///   [BufferToken] exists.
+	///     [BufferToken] exists.
 	/// * [BufferToken] created from this TransferTokens will ONLY allow to return a copy of the data.
 	///   * This is due to the fact, that the `Transfer.ret()` returns a `Box[u8]`, which must own
-	///   the array. This would lead to unwanted frees, if not handled carefully
+	///     the array. This would lead to unwanted frees, if not handled carefully
 	/// * Drivers must take care of keeping a copy of the respective `*mut T` and `*mut K` for themselves
 	///
 	/// **Parameters**
@@ -203,13 +203,13 @@ pub trait Virtq: VirtqPrivate {
 	///     * Some:
 	///         * `T` defines the structure which will be provided to the device
 	///         * [BuffSpec] defines how this struct will be presented to the device.
-	///         See documentation on `BuffSpec` for details.
+	///           See documentation on `BuffSpec` for details.
 	/// * recv: `Option<(*mut K, BuffSpec)>`
 	///     * None: No buffers, which are writable for the device are provided to the device.
 	///     * Some:
 	///         * `K` defines the structure which will be provided to the device
 	///         * [BuffSpec] defines how this struct will be presented to the device.
-	///         See documentation on `BuffSpec` for details.
+	///           See documentation on `BuffSpec` for details.
 	///
 	/// **Reasons for Failure:**
 	/// * Queue does not have enough descriptors left, to split `T` or `K` into the desired amount of memory chunks.
@@ -220,11 +220,11 @@ pub trait Virtq: VirtqPrivate {
 	/// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements.
 	/// * `(Single, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
 	/// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
-	/// many elements in the queue.
+	///   many elements in the queue.
 	/// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
 	/// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
 	///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
-	/// descriptors, the queue will merge the send and recv structure as follows:
+	///      descriptors, the queue will merge the send and recv structure as follows:
 	/// ```text
 	/// //+++++++++++++++++++++++
 	/// //+        Queue        +
@@ -390,12 +390,12 @@ pub trait Virtq: VirtqPrivate {
 	///     * None: No send buffers are provided to the device
 	///     * Some:
 	///         * [BuffSpec] defines the size of the buffer and how the buffer is
-	///         Buffer will be structured. See documentation on `BuffSpec` for details.
+	///           Buffer will be structured. See documentation on `BuffSpec` for details.
 	/// * recv: `Option<BuffSpec>`
 	///     * None: No buffers, which are writable for the device are provided to the device.
 	///     * Some:
 	///         * [BuffSpec] defines the size of the buffer and how the buffer is
-	///         Buffer will be structured. See documentation on `BuffSpec` for details.
+	///           Buffer will be structured. See documentation on `BuffSpec` for details.
 	///
 	/// **Reasons for Failure:**
 	/// * Queue does not have enough descriptors left to create the desired amount of descriptors as indicated by the `BuffSpec`.
@@ -407,11 +407,11 @@ pub trait Virtq: VirtqPrivate {
 	/// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements.
 	/// * `(Single, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
 	/// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
-	/// many elements in the queue.
+	///   many elements in the queue.
 	/// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
 	/// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
 	///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
-	/// descriptors, the queue will merge the send and recv structure as follows:
+	///      descriptors, the queue will merge the send and recv structure as follows:
 	/// ```text
 	/// //+++++++++++++++++++++++
 	/// //+        Queue        +
@@ -998,7 +998,7 @@ pub trait AsSliceU8 {
 	/// ** WARN:**
 	/// * The slice must be little endian coded in order to be understood by the device
 	/// * The slice must serialize the actual structure the device expects, as the queue will use
-	/// the addresses of the slice in order to refer to the structure.
+	///   the addresses of the slice in order to refer to the structure.
 	fn as_slice_u8(&self) -> &[u8] {
 		unsafe { core::slice::from_raw_parts(ptr::from_ref(self) as *const u8, self.len()) }
 	}
@@ -1008,7 +1008,7 @@ pub trait AsSliceU8 {
 	/// ** WARN:**
 	/// * The slice must be little endian coded in order to be understood by the device
 	/// * The slice must serialize the actual structure the device expects, as the queue will use
-	/// the addresses of the slice in order to refer to the structure.
+	///   the addresses of the slice in order to refer to the structure.
 	fn as_slice_u8_mut(&mut self) -> &mut [u8] {
 		unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(self) as *mut u8, self.len()) }
 	}
@@ -1174,7 +1174,7 @@ impl BufferToken {
 	/// Includes:
 	/// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
 	/// * Resetting the MemDescr length at initialization. This length might be reduced upon writes
-	/// of the driver or the device.
+	///   of the driver or the device.
 	/// * Erazing all memory areas with zeros
 	fn reset_purge(mut self) -> Self {
 		let mut ctrl_desc_cnt = 0usize;
@@ -1274,7 +1274,7 @@ impl BufferToken {
 	/// Includes:
 	/// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
 	/// * Resetting the MemDescr length at initialization. This length might be reduced upon writes
-	/// of the driver or the device.
+	///   of the driver or the device.
 	pub fn reset(mut self) -> Self {
 		let mut ctrl_desc_cnt = 0usize;
 
@@ -1585,7 +1585,7 @@ impl BufferToken {
 	/// * The return tuple will be:
 	///  * `(Some(vec[50, 60]), Some(vec[10]))`
 	///  * Where 50 refers to a slice of u8 of length 50.
-	/// The other numbers follow the same principle.
+	///    The other numbers follow the same principle.
 	pub fn as_slices(&self) -> Result<(Option<Vec<&[u8]>>, Option<Vec<&[u8]>>), VirtqError> {
 		// Unwrapping is okay here, as TransferToken must hold a BufferToken
 		let send_data = match &self.send_buff {
@@ -1627,7 +1627,7 @@ impl BufferToken {
 	/// * The return tuple will be:
 	///  * `(Some(vec[50, 60]), Some(vec[10]))`
 	///  * Where 50 refers to a slice of u8 of length 50.
-	/// The other numbers follow the same principle.
+	///    The other numbers follow the same principle.
 	pub fn as_slices_mut(
 		&mut self,
 	) -> Result<(Option<Vec<&mut [u8]>>, Option<Vec<&mut [u8]>>), VirtqError> {
@@ -2050,9 +2050,9 @@ impl Buffer {
 ///
 /// **Detailed INFOS:**
 /// * Sometimes it is necessary to refer to some memory areas which are not
-/// controlled by the kernel space or rather by someone else. In these
-/// cases the `MemDesc` field `dealloc: bool` allows to prevent the deallocation
-/// during drop of the object.
+///   controlled by the kernel space or rather by someone else. In these
+///   cases the `MemDesc` field `dealloc: bool` allows to prevent the deallocation
+///   during drop of the object.
 struct MemDescr {
 	/// Points to the controlled memory area
 	ptr: *mut u8,
@@ -2071,7 +2071,7 @@ struct MemDescr {
 	_mem_len: usize,
 	/// If `id == None` this is an untracked memory descriptor
 	/// * Meaining: The descriptor does NOT count as a descriptor
-	/// taken from the [MemPool].
+	///   taken from the [MemPool].
 	id: Option<MemDescrId>,
 	/// Refers to the controlling [memory pool](MemPool)
 	pool: Rc<MemPool>,
@@ -2217,12 +2217,12 @@ enum Dealloc {
 /// MemPool allows to easily control, request and provide memory for Virtqueues.
 ///
 /// * The struct is initialized with a limit of free running "tracked" (see `fn pull_untracked`)
-/// memory descriptors. As Virtqueus do only allow a limited amount of descriptors in their queue,
-/// the independent queues, can control the number of descriptors by this.
+///   memory descriptors. As Virtqueus do only allow a limited amount of descriptors in their queue,
+///   the independent queues, can control the number of descriptors by this.
 /// * Furthermore the MemPool struct provides an interface to easily retrieve memory of a wanted size
-/// via its `fn pull()`and `fn pull_untracked()` functions.
-/// The functions return a (MemDescr)[MemDescr] which provides an interface to read and write memory safely and handles clean up of memory
-/// upon being dropped.
+///   via its `fn pull()`and `fn pull_untracked()` functions.
+///   The functions return a (MemDescr)[MemDescr] which provides an interface to read and write memory safely and handles clean up of memory
+///   upon being dropped.
 ///   * `fn pull()`: Pulls a memory descriptor which refers to a memory of a defined size. The descriptor does consume an ID from the pool
 ///      and hence reduces the amount of left descriptors in the pool. Upon drop this ID will be returned to the pool.
 ///   * `fn pull_untracked`: Pulls a memory descriptor which refers to a memory of a defined size. The descriptor does NOT consume an ID and
@@ -2342,8 +2342,8 @@ impl MemPool {
 	/// * Fails (returns VirtqError), if the pool is empty.
 	/// * ID`s of descriptor are by no means sorted. A descriptor can contain an ID between 1 and size_of_pool.
 	/// * Calleys can NOT rely on the next pulled descriptor to contain the subsequent ID after the previously
-	///  pulled descriptor.
-	///  In essence this means MemDesc can contain arbitrary ID's. E.g.:
+	///   pulled descriptor.
+	///   In essence this means MemDesc can contain arbitrary ID's. E.g.:
 	///   * First MemPool.pull -> MemDesc with id = 3
 	///   * Second MemPool.pull -> MemDesc with id = 100
 	///   * Third MemPool.pull -> MemDesc with id = 2,
@@ -2382,8 +2382,8 @@ impl MemPool {
 	/// descriptor consumes NO ID and hence DOES NOT reduce the amount of descriptors left in the pool.
 	/// * ID`s of descriptor are by no means sorted. A descriptor can contain an ID between 1 and size_of_pool.
 	/// * Calleys can NOT rely on the next pulled descriptor to contain the subsequent ID after the previously
-	///  pulled descriptor.
-	///  In essence this means MemDesc can contain arbitrary ID's. E.g.:
+	///   pulled descriptor.
+	///   In essence this means MemDesc can contain arbitrary ID's. E.g.:
 	///   * First MemPool.pull -> MemDesc with id = 3
 	///   * Second MemPool.pull -> MemDesc with id = 100
 	///   * Third MemPool.pull -> MemDesc with id = 2,
