@@ -651,7 +651,7 @@ dependencies = [
  "trapframe",
  "uart_16550",
  "virtio-spec",
- "volatile 0.5.4",
+ "volatile 0.6.1",
  "x86",
  "x86_64 0.15.1",
  "zerocopy",
@@ -1538,7 +1538,8 @@ dependencies = [
  "bitflags 2.5.0",
  "endian-num",
  "num_enum",
- "volatile 0.5.4",
+ "volatile 0.6.1",
+ "volatile-macro",
  "zerocopy",
  "zerocopy-derive",
 ]
@@ -1551,16 +1552,15 @@ checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
 
 [[package]]
 name = "volatile"
-version = "0.5.4"
-source = "git+https://github.com/rust-osdev/volatile.git#ac3a01640f0d93283a9e8def75038bbea85164b6"
-dependencies = [
- "volatile-macro",
-]
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af8ca9a5d4debca0633e697c88269395493cebf2e10db21ca2dbde37c1356452"
 
 [[package]]
 name = "volatile-macro"
-version = "0.5.4"
-source = "git+https://github.com/rust-osdev/volatile.git#ac3a01640f0d93283a9e8def75038bbea85164b6"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65c67ce935f3b4329e473ecaff7bab444fcdc3d1d19f8bae61fabfa90b84f93e"
 dependencies = [
  "proc-macro2",
  "quote",
