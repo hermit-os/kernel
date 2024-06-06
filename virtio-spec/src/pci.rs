@@ -2,7 +2,8 @@
 
 use num_enum::{FromPrimitive, IntoPrimitive};
 use volatile::access::{ReadOnly, ReadWrite, RestrictAccess};
-use volatile::{VolatileFieldAccess, VolatilePtr};
+use volatile::VolatilePtr;
+use volatile_macro::VolatileFieldAccess;
 
 use crate::volatile::WideVolatilePtr;
 use crate::{le16, le32, DeviceStatus};

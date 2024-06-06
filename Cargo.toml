@@ -104,7 +104,7 @@ smallvec = { version = "1", features = ["const_new"] }
 take-static = "0.1"
 talc = { version = "4" }
 time = { version = "0.3", default-features = false }
-volatile = { version = "0.5.4", features = ["unstable"] }
+volatile = { version = "0.6", features = ["unstable"] }
 zerocopy = { version = "0.7", features = ["derive"] }
 
 [dependencies.smoltcp]
@@ -167,7 +167,3 @@ members = [
 exclude = [
 	"hermit-builtins",
 ]
-
-[patch.crates-io]
-# We need https://github.com/rust-osdev/volatile/pull/61
-volatile = { git = "https://github.com/rust-osdev/volatile.git" }
