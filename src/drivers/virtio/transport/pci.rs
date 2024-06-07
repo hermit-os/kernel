@@ -10,7 +10,7 @@ use core::{mem, ptr};
 
 use pci_types::capability::PciCapability;
 use virtio_spec::pci::{
-	CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
+	Cap, CapCfgType, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw,
 };
 use virtio_spec::{le32, DeviceStatus};
@@ -39,13 +39,13 @@ use crate::drivers::virtio::error::VirtioError;
 pub struct Origin {
 	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
 	dev_id: u16,
-	cap_struct: PciCapRaw,
+	cap_struct: Cap,
 }
 
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
-	if cap.cfg_type != virtio_spec::pci::Cap::DeviceCfg {
+	if cap.cfg_type != CapCfgType::Device {
 		error!("Capability of device config has wrong id. Mapping not possible...");
 		return None;
 	};
@@ -84,10 +84,10 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 /// as it is not directly mapped into address space from PCI device
 /// configuration space.
 /// Therefore the struct only contains necessary information to map
-/// corresponding config type (`pci::Cap`) into address space.
+/// corresponding config type into address space.
 #[derive(Clone)]
 pub struct PciCap {
-	cfg_type: virtio_spec::pci::Cap,
+	cfg_type: CapCfgType,
 	bar: PciBar,
 	id: u8,
 	offset: MemOff,
@@ -172,50 +172,11 @@ impl PciCap {
 	}
 }
 
-/// Virtio's PCI capabilities structure.
-/// See Virtio specification v.1.1 - 4.1.4
-///
-/// WARN: endianness of this structure should be seen as little endian.
-/// As this structure is not meant to be used outside of this module and for
-/// ease of conversion from reading data into struct from PCI configuration
-/// space, no conversion is made for struct fields.
-#[derive(Clone, Debug)]
-#[repr(C)]
-struct PciCapRaw {
-	cap_vndr: u8,
-	cap_next: u8,
-	cap_len: u8,
-	cfg_type: u8,
-	bar_index: u8,
-	id: u8,
-	padding: [u8; 2],
-	offset: u32,
-	length: u32,
-}
-
-// This only shows compiler, that structs are identical
-// with themselves.
-impl Eq for PciCapRaw {}
-
-// In order to compare two PciCapRaw structs PartialEq is needed
-impl PartialEq for PciCapRaw {
-	fn eq(&self, other: &Self) -> bool {
-		self.cap_vndr == other.cap_vndr
-			&& self.cap_next == other.cap_next
-			&& self.cap_len == other.cap_len
-			&& self.cfg_type == other.cfg_type
-			&& self.bar_index == other.bar_index
-			&& self.id == other.id
-			&& self.offset == other.offset
-			&& self.length == other.length
-	}
-}
-
 /// Universal Caplist Collections holds all universal capability structures for
 /// a given Virtio PCI device.
 ///
 /// As Virtio's PCI devices are allowed to present multiple capability
-/// structures of the same config type (`pci::Cap`), the structure
+/// structures of the same config type, the structure
 /// provides a driver with all capabilities, sorted in descending priority,
 /// allowing the driver to choose.
 /// The structure contains a special dev_cfg_list field, a vector holding
@@ -597,7 +558,7 @@ impl NotifCfg {
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
 		let notify_off_multiplier_ptr =
-			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<PciCapRaw>()).unwrap();
+			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
 		let notify_off_multiplier = cap.device.read_register(notify_off_multiplier_ptr);
 
 		// define base memory address from which the actual Queue Notify address can be derived via
@@ -785,23 +746,24 @@ impl ShMemCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let offset_hi_ptr =
-			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<PciCapRaw>()).unwrap();
+		let offset_hi_ptr = cap.origin.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
 		let offset_hi = cap.device.read_register(offset_hi_ptr);
 
 		// Create 64 bit offset from high and low 32 bit values
-		let offset =
-			MemOff::from((u64::from(offset_hi) << 32) ^ u64::from(cap.origin.cap_struct.offset));
+		let offset = MemOff::from(
+			(u64::from(offset_hi) << 32) ^ u64::from(cap.origin.cap_struct.offset.to_ne()),
+		);
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
 		let length_hi_ptr = cap.origin.cfg_ptr
-			+ u16::try_from(mem::size_of::<PciCapRaw>() + mem::size_of::<u32>()).unwrap();
+			+ u16::try_from(mem::size_of::<Cap>() + mem::size_of::<u32>()).unwrap();
 		let length_hi = cap.device.read_register(length_hi_ptr);
 
 		// Create 64 bit length from high and low 32 bit values
-		let length =
-			MemLen::from((u64::from(length_hi) << 32) ^ u64::from(cap.origin.cap_struct.length));
+		let length = MemLen::from(
+			(u64::from(length_hi) << 32) ^ u64::from(cap.origin.cap_struct.length.to_ne()),
+		);
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
 		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
@@ -885,36 +847,6 @@ impl PciBar {
 	}
 }
 
-/// Reads a raw capability struct [PciCapRaw] out of a PCI device's configuration space.
-fn read_cap_raw(device: &PciDevice<PciConfigRegion>, register: u16) -> PciCapRaw {
-	let mut quadruple_word: [u8; 16] = [0; 16];
-
-	debug!("Converting read word from PCI device config space into native endian bytes.");
-
-	// Write words sequentially into array
-	for i in 0..4 {
-		// Read word need to be converted to little endian bytes as PCI is little endian.
-		// Interpretation of multi byte values needs to be swapped for big endian machines
-		let word: [u8; 4] = device.read_register(register + 4 * i).to_le_bytes();
-		let i = 4 * i as usize;
-		quadruple_word[i..i + 4].copy_from_slice(&word);
-	}
-
-	PciCapRaw {
-		cap_vndr: quadruple_word[0],
-		cap_next: quadruple_word[1],
-		cap_len: quadruple_word[2],
-		cfg_type: quadruple_word[3],
-		bar_index: quadruple_word[4],
-		id: quadruple_word[5],
-		// Unwrapping is okay here, as transformed array slice is always 2 * u8 long and initialized
-		padding: quadruple_word[6..8].try_into().unwrap(),
-		// Unwrapping is okay here, as transformed array slice is always 4 * u8 long and initialized
-		offset: u32::from_le_bytes(quadruple_word[8..12].try_into().unwrap()),
-		length: u32::from_le_bytes(quadruple_word[12..16].try_into().unwrap()),
-	}
-}
-
 /// Reads all PCI capabilities, starting at the capabilities list pointer from the
 /// PCI device.
 ///
@@ -933,17 +865,17 @@ fn read_caps(
 			PciCapability::Vendor(capability) => Some(capability),
 			_ => None,
 		})
-		.map(|capability| (capability.offset, read_cap_raw(device, capability.offset)))
-		.filter(|(_ptr, capability)| capability.cfg_type != virtio_spec::pci::Cap::PciCfg.into())
+		.map(|addr| {
+			let cap = Cap::read(addr.clone(), device.access()).unwrap();
+			(addr.offset, cap)
+		})
+		.filter(|(_ptr, capability)| capability.cfg_type != CapCfgType::Pci.into())
 		.map(|(ptr, capability)| PciCap {
-			cfg_type: virtio_spec::pci::Cap::from(capability.cfg_type),
-			bar: *bars
-				.iter()
-				.find(|bar| bar.index == capability.bar_index)
-				.unwrap(),
+			cfg_type: CapCfgType::from(capability.cfg_type),
+			bar: *bars.iter().find(|bar| bar.index == capability.bar).unwrap(),
 			id: capability.id,
-			offset: MemOff::from(capability.offset),
-			length: MemLen::from(capability.length),
+			offset: MemOff::from(capability.offset.to_ne()),
+			length: MemLen::from(capability.length.to_ne()),
 			device: *device,
 			origin: Origin {
 				cfg_ptr: ptr,
@@ -1003,36 +935,36 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
 		match pci_cap.cfg_type {
-			virtio_spec::pci::Cap::CommonCfg => match pci_cap.map_common_cfg() {
+			CapCfgType::Common => match pci_cap.map_common_cfg() {
 				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.id)),
 				None => error!(
 					"Common config capability with id {}, of device {:x}, could not be mapped!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::NotifyCfg => match NotifCfg::new(&pci_cap) {
+			CapCfgType::Notify => match NotifCfg::new(&pci_cap) {
 				Some(notif) => caps.add_cfg_notif(notif),
 				None => error!(
 					"Notification config capability with id {}, of device {:x} could not be used!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::IsrCfg => match pci_cap.map_isr_status() {
+			CapCfgType::Isr => match pci_cap.map_isr_status() {
 				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.id)),
 				None => error!(
 					"ISR status config capability with id {}, of device {:x} could not be used!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::PciCfg => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
-			virtio_spec::pci::Cap::SharedMemoryCfg => match ShMemCfg::new(&pci_cap) {
+			CapCfgType::Pci => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
+			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
 				Some(sh_mem) => caps.add_cfg_sh_mem(sh_mem),
 				None => error!(
 					"Shared Memory config capability with id {}, of device {:x} could not be used!",
 					pci_cap.id, device_id
 				),
 			},
-			virtio_spec::pci::Cap::DeviceCfg => caps.add_cfg_dev(pci_cap),
+			CapCfgType::Device => caps.add_cfg_dev(pci_cap),
 
 			// PCI's configuration space is allowed to hold other structures, which are not virtio specific and are therefore ignored
 			// in the following

@@ -1518,6 +1518,7 @@ dependencies = [
  "bitflags 2.5.0",
  "endian-num",
  "num_enum",
+ "pci_types",
  "volatile 0.6.1",
  "volatile-macro",
  "zerocopy",
