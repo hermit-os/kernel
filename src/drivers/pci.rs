@@ -272,7 +272,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		self.header().status(&self.access)
 	}
 
-	pub fn capabilities(&self) -> Option<CapabilityIterator<'_, T>> {
+	pub fn capabilities(&self) -> Option<CapabilityIterator<&T>> {
 		EndpointHeader::from_header(self.header(), &self.access)
 			.map(|header| header.capabilities(&self.access))
 	}

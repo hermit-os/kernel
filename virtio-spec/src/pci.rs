@@ -206,7 +206,7 @@ pub struct CapData {
 
 impl CapData {
     pub fn read(addr: PciCapabilityAddress, access: &impl ConfigRegionAccess) -> Option<Self> {
-        let cap = Cap::read(addr.clone(), access)?;
+        let cap = Cap::read(addr, access)?;
         let cfg_type = CapCfgType::from(cap.cfg_type);
 
         let (offset, length) = match cfg_type {
