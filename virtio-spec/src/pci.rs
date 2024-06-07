@@ -113,7 +113,7 @@ pub struct Cap {
 }
 
 impl Cap {
-    pub fn read(addr: PciCapabilityAddress, access: &impl ConfigRegionAccess) -> Option<Self> {
+    pub fn read(addr: PciCapabilityAddress, access: impl ConfigRegionAccess) -> Option<Self> {
         let data = unsafe { access.read(addr.address, addr.offset) };
         let [cap_vndr, _cap_next, cap_len, _cfg_type] = data.to_ne_bytes();
 
@@ -205,8 +205,8 @@ pub struct CapData {
 }
 
 impl CapData {
-    pub fn read(addr: PciCapabilityAddress, access: &impl ConfigRegionAccess) -> Option<Self> {
-        let cap = Cap::read(addr, access)?;
+    pub fn read(addr: PciCapabilityAddress, access: impl ConfigRegionAccess) -> Option<Self> {
+        let cap = Cap::read(addr, &access)?;
         let cfg_type = CapCfgType::from(cap.cfg_type);
 
         let (offset, length) = match cfg_type {
