@@ -45,7 +45,7 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse"]
+default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "vga"]
 acpi = []
 dhcpv4 = [
     "smoltcp",
@@ -64,7 +64,7 @@ tcp = ["smoltcp", "smoltcp/socket-tcp"]
 udp = ["smoltcp", "smoltcp/socket-udp"]
 dns = ["smoltcp", "smoltcp/socket-dns"]
 trace = []
-vga = []
+vga = ["vga-text-mode"]
 common-os = []
 nostd = []
 semihosting = ["dep:semihosting"]
@@ -134,6 +134,7 @@ features = [
 free-list = { version = "0.3", features = ["x86_64"] }
 multiboot = "0.8"
 uart_16550 = "0.3"
+vga-text-mode = { path = "../../vga-text-mode", optional = true }
 x86 = { version = "0.52", default-features = false }
 x86_64 = "0.15"
 

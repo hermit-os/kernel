@@ -140,13 +140,14 @@ pub fn message_output_init() {
 
 pub fn output_message_buf(buf: &[u8]) {
 	// Output messages to the serial port and VGA screen in unikernel mode.
+
+use alloc::string::String;
 	COM1.lock().as_mut().unwrap().send(buf);
 
 	#[cfg(feature = "vga")]
-	for &byte in buf {
-		// vga::write_byte() checks if VGA support has been initialized,
-		// so we don't need any additional if clause around it.
-		vga::write_byte(byte);
+	{
+		let s = String::from_utf8_lossy(buf);
+		vga::print(&s);
 	}
 }
 

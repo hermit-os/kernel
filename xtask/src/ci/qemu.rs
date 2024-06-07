@@ -77,8 +77,8 @@ impl Qemu {
 		let qemu = env::var_os("QEMU").unwrap_or_else(|| format!("qemu-system-{arch}").into());
 
 		let qemu = cmd!(sh, "{qemu}")
-			.args(&["-display", "none"])
-			.args(&["-serial", "stdio"])
+			// .args(&["-display", "none"])
+			// .args(&["-serial", "stdio"])
 			.args(&["-kernel", format!("hermit-loader-{arch}").as_ref()])
 			.args(self.machine_args())
 			.args(self.cpu_args())
