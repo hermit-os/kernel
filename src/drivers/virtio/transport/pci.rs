@@ -10,7 +10,7 @@ use core::{mem, ptr};
 
 use pci_types::capability::PciCapability;
 use virtio_spec::pci::{
-	Cap, CapCfgType, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
+	CapCfgType, CapData, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw,
 };
 use virtio_spec::{le32, DeviceStatus};
@@ -36,7 +36,7 @@ use crate::drivers::virtio::error::VirtioError;
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
-	if CapCfgType::from(cap.cap.cfg_type) != CapCfgType::Device {
+	if cap.cap.cfg_type != CapCfgType::Device {
 		error!("Capability of device config has wrong id. Mapping not possible...");
 		return None;
 	};
@@ -79,10 +79,8 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 #[derive(Clone)]
 pub struct PciCap {
 	bar: PciBar,
-	device: PciDevice<PciConfigRegion>,
-	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
 	dev_id: u16,
-	cap: Cap,
+	cap: CapData,
 }
 
 impl PciCap {
@@ -541,10 +539,7 @@ impl NotifCfg {
 			return None;
 		}
 
-		// Assumes the cap_len is a multiple of 8
-		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let notify_off_multiplier_ptr = cap.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
-		let notify_off_multiplier = cap.device.read_register(notify_off_multiplier_ptr);
+		let notify_off_multiplier = cap.cap.notify_off_multiplier?.to_ne();
 
 		// define base memory address from which the actual Queue Notify address can be derived via
 		// base_addr + queue_notify_off * notify_off_multiplier.
@@ -727,24 +722,8 @@ impl ShMemCfg {
 			return None;
 		}
 
-		// Read the PciCap64 fields after the PciCap structure to get the right offset and length
-
-		// Assumes the cap_len is a multiple of 8
-		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let offset_hi_ptr = cap.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
-		let offset_hi = cap.device.read_register(offset_hi_ptr);
-
-		// Create 64 bit offset from high and low 32 bit values
-		let offset = MemOff::from((u64::from(offset_hi) << 32) ^ u64::from(cap.cap.offset.to_ne()));
-
-		// Assumes the cap_len is a multiple of 8
-		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let length_hi_ptr =
-			cap.cfg_ptr + u16::try_from(mem::size_of::<Cap>() + mem::size_of::<u32>()).unwrap();
-		let length_hi = cap.device.read_register(length_hi_ptr);
-
-		// Create 64 bit length from high and low 32 bit values
-		let length = MemLen::from((u64::from(length_hi) << 32) ^ u64::from(cap.cap.length.to_ne()));
+		let offset = MemOff::from(cap.cap.offset.to_ne());
+		let length = MemLen::from(cap.cap.length.to_ne());
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
 		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
@@ -846,17 +825,12 @@ fn read_caps(
 			PciCapability::Vendor(capability) => Some(capability),
 			_ => None,
 		})
-		.map(|addr| {
-			let cap = Cap::read(addr.clone(), device.access()).unwrap();
-			(addr.offset, cap)
-		})
-		.filter(|(_ptr, capability)| capability.cfg_type != CapCfgType::Pci.into())
-		.map(|(ptr, capability)| PciCap {
-			bar: *bars.iter().find(|bar| bar.index == capability.bar).unwrap(),
-			device: *device,
-			cfg_ptr: ptr,
+		.map(|addr| CapData::read(addr.clone(), device.access()).unwrap())
+		.filter(|cap| cap.cfg_type != CapCfgType::Pci)
+		.map(|cap| PciCap {
+			bar: *bars.iter().find(|bar| bar.index == cap.bar).unwrap(),
 			dev_id: device_id,
-			cap: capability,
+			cap,
 		})
 		.collect::<Vec<_>>();
 
@@ -909,7 +883,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	let mut caps = UniCapsColl::new();
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
-		match CapCfgType::from(pci_cap.cap.cfg_type) {
+		match pci_cap.cap.cfg_type {
 			CapCfgType::Common => match pci_cap.map_common_cfg() {
 				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.cap.id)),
 				None => error!(
