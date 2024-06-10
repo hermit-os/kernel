@@ -15,9 +15,8 @@
 pub mod pci {
 	use alloc::vec::Vec;
 
-	use pci_types::{Bar, MAX_BARS};
+	use pci_types::MAX_BARS;
 
-	use crate::arch::mm::PhysAddr;
 	use crate::arch::pci::PciConfigRegion;
 	use crate::drivers::pci::error::PciError;
 	use crate::drivers::pci::PciDevice;
@@ -34,45 +33,14 @@ pub mod pci {
 	pub(crate) fn map_bar_mem(
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Vec<VirtioPciBar>, PciError> {
-		let mut mapped_bars: Vec<VirtioPciBar> = Vec::new();
-
-		for i in 0..MAX_BARS {
-			match device.get_bar(i.try_into().unwrap()) {
-				Some(Bar::Io { .. }) => {
-					warn!("Cannot map I/O BAR!");
-					continue;
-				}
-				Some(Bar::Memory64 {
-					address,
-					size,
-					prefetchable,
-				}) => {
-					if !prefetchable {
-						warn!("Currently only mapping of prefetchable BAR's is supported!");
-						continue;
-					}
-
-					let virtual_address = crate::mm::map(
-						PhysAddr::from(address),
-						size.try_into().unwrap(),
-						true,
-						true,
-						true,
-					)
-					.0;
-
-					mapped_bars.push(VirtioPciBar::new(
-						i.try_into().unwrap(),
-						virtual_address,
-						size,
-					));
-				}
-				Some(Bar::Memory32 { .. }) => {
-					warn!("Currently only mapping of 64 bit BAR's is supported!");
-				}
-				_ => {}
-			}
-		}
+		let mapped_bars: Vec<VirtioPciBar> = (0..u8::try_from(MAX_BARS).unwrap())
+			.filter_map(|i| {
+				device
+					.memory_map_bar(i, true)
+					.map(|(addr, size)| (i, addr, size))
+			})
+			.map(|(i, addr, size)| VirtioPciBar::new(i, addr.as_u64(), size.try_into().unwrap()))
+			.collect::<Vec<_>>();
 
 		if mapped_bars.is_empty() {
 			let device_id = device.device_id();
