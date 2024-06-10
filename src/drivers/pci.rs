@@ -490,7 +490,6 @@ pub(crate) mod error {
 		General(u16),
 		NoBar(u16),
 		NoCapPtr(u16),
-		BadCapPtr(u16),
 		NoVirtioCaps(u16),
 	}
 }
