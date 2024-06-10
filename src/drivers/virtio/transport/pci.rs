@@ -36,7 +36,7 @@ use crate::drivers::virtio::error::VirtioError;
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
-	if cap.cfg_type != CapCfgType::Device {
+	if CapCfgType::from(cap.cap.cfg_type) != CapCfgType::Device {
 		error!("Capability of device config has wrong id. Mapping not possible...");
 		return None;
 	};
@@ -78,9 +78,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 /// corresponding config type into address space.
 #[derive(Clone)]
 pub struct PciCap {
-	cfg_type: CapCfgType,
 	bar: PciBar,
-	id: u8,
 	device: PciDevice<PciConfigRegion>,
 	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
 	dev_id: u16,
@@ -112,7 +110,7 @@ impl PciCap {
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
 		if self.bar.length < u64::from(self.len() + self.offset()) {
 			error!("Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!", 
-			self.id,
+			self.cap.id,
 			self.dev_id,
 			self.bar.index
             );
@@ -121,7 +119,7 @@ impl PciCap {
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
 		if self.len() < MemLen::from(mem::size_of::<CommonCfg>()) {
-			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.id);
+			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.cap.id);
 			return None;
 		}
 
@@ -140,7 +138,7 @@ impl PciCap {
 	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
 		if self.bar.length < u64::from(self.len() + self.offset()) {
 			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
-				self.id,
+				self.cap.id,
 				self.dev_id,
 				self.bar.index
             );
@@ -226,7 +224,7 @@ impl UniCapsColl {
 		// This should not be to expensive, as "rational" devices will hold an
 		// acceptable amount of configuration structures.
 		self.pci_cfg_acc_list
-			.sort_by(|a, b| b.pci_cap.id.cmp(&a.pci_cap.id));
+			.sort_by(|a, b| b.pci_cap.cap.id.cmp(&a.pci_cap.cap.id));
 	}
 
 	fn add_cfg_sh_mem(&mut self, sh_mem: ShMemCfg) {
@@ -244,7 +242,7 @@ impl UniCapsColl {
 		//
 		// This should not be to expensive, as "rational" devices will hold an
 		// acceptable amount of configuration structures.
-		self.dev_cfg_list.sort_by(|a, b| b.id.cmp(&a.id));
+		self.dev_cfg_list.sort_by(|a, b| b.cap.id.cmp(&a.cap.id));
 	}
 }
 
@@ -536,7 +534,7 @@ impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < u64::from(u32::from(cap.len() + cap.offset())) {
 			error!("Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
-                cap.id,
+                cap.cap.id,
                 cap.dev_id,
                 cap.bar.index
             );
@@ -560,7 +558,7 @@ impl NotifCfg {
 		Some(NotifCfg {
 			base_addr,
 			notify_off_multiplier,
-			rank: cap.id,
+			rank: cap.cap.id,
 			length: cap.len(),
 		})
 	}
@@ -722,7 +720,7 @@ impl ShMemCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < u64::from(cap.len() + cap.offset()) {
 			error!("Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
-                cap.id,
+                cap.cap.id,
                 cap.dev_id,
                  cap.bar.index
             );
@@ -771,7 +769,7 @@ impl ShMemCfg {
 				ptr: raw_ptr,
 				len: cap.bar.length as usize,
 			},
-			id: cap.id,
+			id: cap.cap.id,
 		})
 	}
 }
@@ -854,9 +852,7 @@ fn read_caps(
 		})
 		.filter(|(_ptr, capability)| capability.cfg_type != CapCfgType::Pci.into())
 		.map(|(ptr, capability)| PciCap {
-			cfg_type: CapCfgType::from(capability.cfg_type),
 			bar: *bars.iter().find(|bar| bar.index == capability.bar).unwrap(),
-			id: capability.id,
 			device: *device,
 			cfg_ptr: ptr,
 			dev_id: device_id,
@@ -913,26 +909,26 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	let mut caps = UniCapsColl::new();
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
-		match pci_cap.cfg_type {
+		match CapCfgType::from(pci_cap.cap.cfg_type) {
 			CapCfgType::Common => match pci_cap.map_common_cfg() {
-				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.id)),
+				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.cap.id)),
 				None => error!(
 					"Common config capability with id {}, of device {:x}, could not be mapped!",
-					pci_cap.id, device_id
+					pci_cap.cap.id, device_id
 				),
 			},
 			CapCfgType::Notify => match NotifCfg::new(&pci_cap) {
 				Some(notif) => caps.add_cfg_notif(notif),
 				None => error!(
 					"Notification config capability with id {}, of device {:x} could not be used!",
-					pci_cap.id, device_id
+					pci_cap.cap.id, device_id
 				),
 			},
 			CapCfgType::Isr => match pci_cap.map_isr_status() {
-				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.id)),
+				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.cap.id)),
 				None => error!(
 					"ISR status config capability with id {}, of device {:x} could not be used!",
-					pci_cap.id, device_id
+					pci_cap.cap.id, device_id
 				),
 			},
 			CapCfgType::Pci => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
@@ -940,7 +936,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 				Some(sh_mem) => caps.add_cfg_sh_mem(sh_mem),
 				None => error!(
 					"Shared Memory config capability with id {}, of device {:x} could not be used!",
-					pci_cap.id, device_id
+					pci_cap.cap.id, device_id
 				),
 			},
 			CapCfgType::Device => caps.add_cfg_dev(pci_cap),
