@@ -104,13 +104,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	/// Set flag to the command register
 	pub fn set_command(&self, cmd: CommandRegister) {
-		// TODO: don't convert to bits once one of the following PRs is released:
-		// - https://github.com/rust-osdev/pci_types/pull/15
-		// - https://github.com/rust-osdev/pci_types/pull/20
-		let cmd = cmd.bits();
-		self.header().update_command(&self.access, |command| {
-			command | CommandRegister::from_bits_retain(cmd)
-		});
+		self.header()
+			.update_command(&self.access, |command| command | cmd);
 	}
 
 	/// Get value of the command register
@@ -229,21 +224,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
-		// TODO: implement with `EndpointHeader::update_interrupt` and remove `DeviceHeader` once merged:
-		// https://github.com/rust-osdev/pci_types/pull/21
-		unsafe {
-			let mut command = self
-				.access
-				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
-			command &= 0xFFFF_0000u32;
-			command |= u32::from(line);
-			command |= u32::from(pin) << 8;
-			self.access.write(
-				self.address,
-				DeviceHeader::PCI_INTERRUPT_REGISTER.into(),
-				command,
-			);
-		}
+		let mut header = EndpointHeader::from_header(self.header(), &self.access).unwrap();
+		header.update_interrupt(&self.access, |(_pin, _line)| (pin, line));
 	}
 
 	pub fn bus(&self) -> u8 {
@@ -272,7 +254,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		self.header().status(&self.access)
 	}
 
-	pub fn capabilities(&self) -> Option<CapabilityIterator<'_, T>> {
+	pub fn capabilities(&self) -> Option<CapabilityIterator<&T>> {
 		EndpointHeader::from_header(self.header(), &self.access)
 			.map(|header| header.capabilities(&self.access))
 	}

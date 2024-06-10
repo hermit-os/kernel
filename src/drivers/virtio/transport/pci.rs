@@ -825,7 +825,7 @@ fn read_caps(
 			PciCapability::Vendor(capability) => Some(capability),
 			_ => None,
 		})
-		.map(|addr| CapData::read(addr.clone(), device.access()).unwrap())
+		.map(|addr| CapData::read(addr, device.access()).unwrap())
 		.filter(|cap| cap.cfg_type != CapCfgType::Pci)
 		.map(|cap| PciCap {
 			bar: *bars.iter().find(|bar| bar.index == cap.bar).unwrap(),

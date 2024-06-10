@@ -12,7 +12,7 @@ categories = ["no-std", "no-std::no-alloc"]
 bitflags = "2"
 endian-num = { version = "0.1", features = ["bitflags", "linux-types"] }
 num_enum = { version = "0.7", default-features = false }
-pci_types = "0.7"
+pci_types = "0.9"
 volatile = "0.6"
 volatile-macro = "0.6"
 zerocopy = { version = "0.7", optional = true, default-features = false }
