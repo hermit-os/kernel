@@ -90,8 +90,6 @@ pub struct PciCap {
 	cfg_type: CapCfgType,
 	bar: PciBar,
 	id: u8,
-	offset: MemOff,
-	length: MemLen,
 	device: PciDevice<PciConfigRegion>,
 	// Following field can be used to retrieve original structure
 	// from the config space. Needed by some structures and f
@@ -101,11 +99,11 @@ pub struct PciCap {
 
 impl PciCap {
 	pub fn offset(&self) -> MemOff {
-		self.offset
+		self.origin.cap_struct.offset.to_ne().into()
 	}
 
 	pub fn len(&self) -> MemLen {
-		self.length
+		self.origin.cap_struct.length.to_ne().into()
 	}
 
 	pub fn bar_len(&self) -> u64 {
@@ -122,7 +120,7 @@ impl PciCap {
 
 	/// Returns a reference to the actual structure inside the PCI devices memory space.
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
-		if self.bar.length < u64::from(self.length + self.offset) {
+		if self.bar.length < u64::from(self.len() + self.offset()) {
 			error!("Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!", 
 			self.id,
 			self.origin.dev_id,
@@ -132,12 +130,12 @@ impl PciCap {
 		}
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if self.length < MemLen::from(mem::size_of::<CommonCfg>()) {
+		if self.len() < MemLen::from(mem::size_of::<CommonCfg>()) {
 			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.id);
 			return None;
 		}
 
-		let virt_addr_raw = self.bar.mem_addr + self.offset;
+		let virt_addr_raw = self.bar.mem_addr + self.offset();
 		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<CommonCfg>(
 			virt_addr_raw.into(),
 		))
@@ -150,7 +148,7 @@ impl PciCap {
 	}
 
 	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
-		if self.bar.length < u64::from(self.length + self.offset) {
+		if self.bar.length < u64::from(self.len() + self.offset()) {
 			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
 				self.id,
 				self.origin.dev_id,
@@ -159,7 +157,7 @@ impl PciCap {
 			return None;
 		}
 
-		let virt_addr_raw: VirtMemAddr = self.bar.mem_addr + self.offset;
+		let virt_addr_raw: VirtMemAddr = self.bar.mem_addr + self.offset();
 		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<IsrStatusRaw>(
 			virt_addr_raw.into(),
 		))
@@ -546,7 +544,7 @@ pub struct NotifCfg {
 
 impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
-		if cap.bar.length < u64::from(u32::from(cap.length + cap.offset)) {
+		if cap.bar.length < u64::from(u32::from(cap.len() + cap.offset())) {
 			error!("Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
@@ -568,13 +566,13 @@ impl NotifCfg {
 		// See Virtio specification v1.1. - 4.1.4.4
 		//
 		// Base address here already includes offset!
-		let base_addr = cap.bar.mem_addr + cap.offset;
+		let base_addr = cap.bar.mem_addr + cap.offset();
 
 		Some(NotifCfg {
 			base_addr,
 			notify_off_multiplier,
 			rank: cap.id,
-			length: cap.length,
+			length: cap.len(),
 		})
 	}
 
@@ -733,7 +731,7 @@ pub struct ShMemCfg {
 
 impl ShMemCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
-		if cap.bar.length < u64::from(cap.length + cap.offset) {
+		if cap.bar.length < u64::from(cap.len() + cap.offset()) {
 			error!("Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
@@ -783,7 +781,7 @@ impl ShMemCfg {
 
 		Some(ShMemCfg {
 			mem_addr: virt_addr_raw,
-			length: cap.length,
+			length: cap.len(),
 			sh_mem: ShMem {
 				ptr: raw_ptr,
 				len: cap.bar.length as usize,
@@ -874,8 +872,6 @@ fn read_caps(
 			cfg_type: CapCfgType::from(capability.cfg_type),
 			bar: *bars.iter().find(|bar| bar.index == capability.bar).unwrap(),
 			id: capability.id,
-			offset: MemOff::from(capability.offset.to_ne()),
-			length: MemLen::from(capability.length.to_ne()),
 			device: *device,
 			origin: Origin {
 				cfg_ptr: ptr,
