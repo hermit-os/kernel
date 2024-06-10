@@ -3,6 +3,18 @@
 pub use super::features::net::F;
 use crate::{le16, le32};
 
+endian_bitflags! {
+    /// Network Device Status Flags
+    #[doc(alias = "VIRTIO_NET_S")]
+    pub struct S: le16 {
+        #[doc(alias = "VIRTIO_NET_S_LINK_UP")]
+        const LINK_UP = 1;
+
+        #[doc(alias = "VIRTIO_NET_S_ANNOUNCE")]
+        const ANNOUNCE = 2;
+    }
+}
+
 virtio_bitflags! {
     /// Network Device Header Flags
     #[doc(alias = "VIRTIO_NET_HDR_F")]
