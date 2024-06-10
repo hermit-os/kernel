@@ -9,7 +9,7 @@ use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
+use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;

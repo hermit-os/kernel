@@ -19,7 +19,7 @@ use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::network_irqhandler;
 #[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
 
 pub struct VqCfgHandler<'a> {

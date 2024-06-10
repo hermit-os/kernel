@@ -12,8 +12,8 @@ use smoltcp::phy::ChecksumCapabilities;
 use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
 use volatile::VolatileRef;
 
-use crate::drivers::net::virtio_net::constants::Status;
-use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
+use crate::drivers::net::virtio::constants::Status;
+use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::Virtq;

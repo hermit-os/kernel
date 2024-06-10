@@ -2,12 +2,8 @@
 pub mod gem;
 #[cfg(feature = "rtl8139")]
 pub mod rtl8139;
-#[cfg(all(not(feature = "pci"), not(feature = "rtl8139")))]
-pub mod virtio_mmio;
 #[cfg(not(feature = "rtl8139"))]
-pub mod virtio_net;
-#[cfg(all(feature = "pci", not(feature = "rtl8139")))]
-pub mod virtio_pci;
+pub mod virtio;
 
 use smoltcp::phy::ChecksumCapabilities;
 

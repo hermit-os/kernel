@@ -2,6 +2,18 @@
 //!
 //! The module contains ...
 
+cfg_if::cfg_if! {
+	if #[cfg(feature = "pci")] {
+		mod pci;
+
+		use self::pci::NetDevCfgRaw;
+	} else {
+		mod mmio;
+
+		use self::mmio::NetDevCfgRaw;
+	}
+}
+
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -20,10 +32,6 @@ use self::error::VirtioNetError;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
-#[cfg(feature = "pci")]
-use crate::drivers::net::virtio_pci::NetDevCfgRaw;
 use crate::drivers::net::NetworkDriver;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};

@@ -12,7 +12,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::mm::{paging, PhysAddr};
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;

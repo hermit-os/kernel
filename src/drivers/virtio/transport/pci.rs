@@ -26,7 +26,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::network_irqhandler;
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::VirtioError;
