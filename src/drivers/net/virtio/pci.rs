@@ -51,27 +51,6 @@ impl NetDevCfgRaw {
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
-		/*
-		if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
-			error!("Network config of device {:x}, does not fit into memory specified by bar!",
-				cap.dev_id(),
-			);
-			return None
-		}
-
-		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if cap.len() < MemLen::from(mem::size_of::<NetDevCfg>()) {
-			error!("Network config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
-			return None
-		}
-
-		let virt_addr_raw = cap.bar_addr() + cap.offset();
-
-		// Create mutable reference to the PCI structure in PCI memory
-		let dev_cfg: &mut NetDevCfgRaw = unsafe {
-			&mut *(usize::from(virt_addr_raw) as *mut NetDevCfgRaw)
-		};
-		*/
 		let dev_cfg: &'static NetDevCfgRaw = match pci::map_dev_cfg::<NetDevCfgRaw>(cap) {
 			Some(cfg) => cfg,
 			None => return None,
