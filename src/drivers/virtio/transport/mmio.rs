@@ -4,11 +4,10 @@
 #![allow(dead_code)]
 
 use core::mem;
-use core::sync::atomic::{fence, Ordering};
 
 use virtio_spec::mmio::{
 	DeviceRegisterVolatileFieldAccess, DeviceRegisterVolatileWideFieldAccess, DeviceRegisters,
-	InterruptStatus,
+	InterruptStatus, NotificationData,
 };
 use virtio_spec::{le32, DeviceStatus};
 use volatile::VolatileRef;
@@ -301,26 +300,21 @@ impl NotifCtrl {
 		self.f_notif_data = true;
 	}
 
-	pub fn notify_dev(&self, notif_data: &[u8]) {
-		fence(Ordering::Acquire);
+	pub fn notify_dev(&self, vqn: u16, next_off: u16, next_wrap: u8) {
+		let notification_data = NotificationData::new()
+			.with_vqn(vqn)
+			.with_next_off(next_off)
+			.with_next_wrap(next_wrap);
 
-		if self.f_notif_data {
-			let ptr = self.notif_addr as *mut [u8; 4];
-
-			unsafe {
-				ptr.write_volatile(notif_data[0..4].try_into().unwrap());
-			}
+		let notification_data = if self.f_notif_data {
+			notification_data.into_bits()
 		} else {
-			let mut data: [u8; 4] = [0, 0, 0, 0];
-			data[0..2].copy_from_slice(&notif_data[0..2]);
-			let ptr = self.notif_addr as *mut [u8; 4];
+			u32::from(notification_data.vqn()).into()
+		};
 
-			unsafe {
-				ptr.write_volatile(data[0..4].try_into().unwrap());
-			}
+		unsafe {
+			self.notif_addr.write_volatile(notification_data);
 		}
-
-		fence(Ordering::Release);
 	}
 }
 

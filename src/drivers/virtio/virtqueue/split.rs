@@ -378,22 +378,8 @@ impl Virtq for SplitVq {
 		}
 
 		if self.ring.borrow().dev_is_notif() {
-			let index = self.index.0.to_le_bytes();
-			let mut index = index.iter();
-			let det_notif_data: u16 = next_off & !(1 << 15);
-			let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
-			let mut flags = flags.iter();
-			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
-
-			for (i, byte) in notif_data.iter_mut().enumerate() {
-				if i < 2 {
-					*byte = *index.next().unwrap();
-				} else {
-					*byte = *flags.next().unwrap();
-				}
-			}
-
-			self.notif_ctrl.notify_dev(&notif_data)
+			self.notif_ctrl
+				.notify_dev(self.index.0, next_off, next_wrap);
 		}
 	}
 

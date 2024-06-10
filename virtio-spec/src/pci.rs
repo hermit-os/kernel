@@ -2,6 +2,7 @@
 
 use core::mem;
 
+use bitfield_struct::bitfield;
 use endian_num::{le64, Le};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use pci_types::capability::PciCapabilityAddress;
@@ -437,4 +438,35 @@ virtio_bitflags! {
         /// Device Configuration Interrupt
         const DEVICE_CONFIGURATION_INTERRUPT = 1 << 1;
     }
+}
+
+/// Notification Data.
+#[bitfield(u32, repr = le32, from = le32::from_ne, into = le32::to_ne)]
+pub struct NotificationData {
+    /// VQ number to be notified.
+    pub vqn: u16,
+
+    /// Offset
+    /// within the ring where the next available ring entry
+    /// will be written.
+    /// When [`VIRTIO_F_RING_PACKED`] has not been negotiated this refers to the
+    /// 15 least significant bits of the available index.
+    /// When `VIRTIO_F_RING_PACKED` has been negotiated this refers to the offset
+    /// (in units of descriptor entries)
+    /// within the descriptor ring where the next available
+    /// descriptor will be written.
+    ///
+    /// [`VIRTIO_F_RING_PACKED`]: F::RING_PACKED
+    #[bits(15)]
+    pub next_off: u16,
+
+    /// Wrap Counter.
+    /// With [`VIRTIO_F_RING_PACKED`] this is the wrap counter
+    /// referring to the next available descriptor.
+    /// Without `VIRTIO_F_RING_PACKED` this is the most significant bit
+    /// (bit 15) of the available index.
+    ///
+    /// [`VIRTIO_F_RING_PACKED`]: F::RING_PACKED
+    #[bits(1)]
+    pub next_wrap: u8,
 }

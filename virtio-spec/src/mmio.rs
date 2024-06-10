@@ -6,6 +6,8 @@ use endian_num::{le16, le32};
 use volatile::access::{ReadOnly, ReadWrite, RestrictAccess, WriteOnly};
 use volatile::VolatilePtr;
 
+#[doc(inline)]
+pub use super::pci::NotificationData;
 use crate::volatile::{OveralignedVolatilePtr, WideVolatilePtr};
 use crate::{DeviceStatus, Id};
 
