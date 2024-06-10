@@ -84,16 +84,16 @@ pub struct PciCap {
 	device: PciDevice<PciConfigRegion>,
 	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
 	dev_id: u16,
-	cap_struct: Cap,
+	cap: Cap,
 }
 
 impl PciCap {
 	pub fn offset(&self) -> MemOff {
-		self.cap_struct.offset.to_ne().into()
+		self.cap.offset.to_ne().into()
 	}
 
 	pub fn len(&self) -> MemLen {
-		self.cap_struct.length.to_ne().into()
+		self.cap.length.to_ne().into()
 	}
 
 	pub fn bar_len(&self) -> u64 {
@@ -737,8 +737,7 @@ impl ShMemCfg {
 		let offset_hi = cap.device.read_register(offset_hi_ptr);
 
 		// Create 64 bit offset from high and low 32 bit values
-		let offset =
-			MemOff::from((u64::from(offset_hi) << 32) ^ u64::from(cap.cap_struct.offset.to_ne()));
+		let offset = MemOff::from((u64::from(offset_hi) << 32) ^ u64::from(cap.cap.offset.to_ne()));
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
@@ -747,8 +746,7 @@ impl ShMemCfg {
 		let length_hi = cap.device.read_register(length_hi_ptr);
 
 		// Create 64 bit length from high and low 32 bit values
-		let length =
-			MemLen::from((u64::from(length_hi) << 32) ^ u64::from(cap.cap_struct.length.to_ne()));
+		let length = MemLen::from((u64::from(length_hi) << 32) ^ u64::from(cap.cap.length.to_ne()));
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
 		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
@@ -862,7 +860,7 @@ fn read_caps(
 			device: *device,
 			cfg_ptr: ptr,
 			dev_id: device_id,
-			cap_struct: capability,
+			cap: capability,
 		})
 		.collect::<Vec<_>>();
 
