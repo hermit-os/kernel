@@ -218,16 +218,20 @@ pub mod pci {
 						continue;
 					}
 
-					let virtual_address = VirtMemAddr::from(
-						crate::mm::map(
-							PhysAddr::from(address),
-							size.try_into().unwrap(),
-							true,
-							true,
-							true,
+					let virtual_address = if !crate::kernel::is_uefi() {
+						VirtMemAddr::from(
+							crate::mm::map(
+								PhysAddr::from(address),
+								size.try_into().unwrap(),
+								true,
+								true,
+								true,
+							)
+							.0,
 						)
-						.0,
-					);
+					} else {
+						VirtMemAddr::from(address)
+					};
 
 					mapped_bars.push(VirtioPciBar::new(
 						i.try_into().unwrap(),

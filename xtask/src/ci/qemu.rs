@@ -26,6 +26,10 @@ pub struct Qemu {
 	#[arg(long)]
 	microvm: bool,
 
+	/// Enable UEFI.
+	#[arg(long)]
+	uefi: bool,
+
 	/// Enable a network device.
 	#[arg(long)]
 	netdev: Option<NetworkDevice>,
@@ -79,7 +83,7 @@ impl Qemu {
 		let qemu = cmd!(sh, "{qemu}")
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
-			.args(&["-kernel", format!("hermit-loader-{arch}").as_ref()])
+			.args(self.image_args()?)
 			.args(self.machine_args())
 			.args(self.cpu_args())
 			.args(&["-smp", &self.smp.to_string()])
@@ -134,6 +138,48 @@ impl Qemu {
 		Ok(())
 	}
 
+	fn image_args(&self) -> Result<Vec<String>> {
+		let arch = self.build.cargo_build.artifact.arch.name();
+		let exe_suffix = if self.uefi { ".efi" } else { "" };
+		let loader = format!("hermit-loader-{arch}{exe_suffix}");
+
+		let image_args = if self.uefi {
+			let sh = crate::sh()?;
+			sh.create_dir("target/esp/efi/boot")?;
+			sh.copy_file(loader, "target/esp/efi/boot/bootx64.efi")?;
+			sh.copy_file(self.build.image(), "target/esp/efi/boot/hermit-app")?;
+
+			vec![
+				"-drive".to_string(),
+				"if=pflash,format=raw,readonly=on,file=edk2-stable202402-r1-bin/x64/code.fd"
+					.to_string(),
+				"-drive".to_string(),
+				"if=pflash,format=raw,readonly=on,file=edk2-stable202402-r1-bin/x64/vars.fd"
+					.to_string(),
+				"-drive".to_string(),
+				"format=raw,file=fat:rw:target/esp".to_string(),
+			]
+		} else {
+			let mut image_args = vec!["-kernel".to_string(), loader];
+			match self.build.cargo_build.artifact.arch {
+				Arch::X86_64 | Arch::Riscv64 => {
+					image_args.push("-initrd".to_string());
+					image_args.push(self.build.image().into_os_string().into_string().unwrap());
+				}
+				Arch::Aarch64 => {
+					image_args.push("-device".to_string());
+					image_args.push(format!(
+						"guest-loader,addr=0x48000000,initrd={}",
+						self.build.image().display()
+					));
+				}
+			}
+			image_args
+		};
+
+		Ok(image_args)
+	}
+
 	fn machine_args(&self) -> Vec<String> {
 		if self.microvm {
 			let frequency = get_frequency();
@@ -180,8 +226,6 @@ impl Qemu {
 				};
 				cpu_args.push("-device".to_string());
 				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_string());
-				cpu_args.push("-initrd".to_string());
-				cpu_args.push(self.build.image().into_os_string().into_string().unwrap());
 				cpu_args
 			}
 			Arch::Aarch64 => {
@@ -191,22 +235,14 @@ impl Qemu {
 					vec!["-cpu".to_string(), "cortex-a72".to_string()]
 				};
 				cpu_args.push("-semihosting".to_string());
-				cpu_args.push("-device".to_string());
-				cpu_args.push(format!(
-					"guest-loader,addr=0x48000000,initrd={}",
-					self.build.image().display()
-				));
 				cpu_args
 			}
 			Arch::Riscv64 => {
-				let mut cpu_args = if self.accel {
+				if self.accel {
 					todo!()
 				} else {
 					vec!["-cpu".to_string(), "rv64".to_string()]
-				};
-				cpu_args.push("-initrd".to_string());
-				cpu_args.push(self.build.image().into_os_string().into_string().unwrap());
-				cpu_args
+				}
 			}
 		}
 	}

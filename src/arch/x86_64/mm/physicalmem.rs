@@ -3,11 +3,13 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
+use x86_64::structures::paging::frame::PhysFrameRange;
+use x86_64::structures::paging::PhysFrame;
 
-use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
+use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo, get_start, is_uefi};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
-use crate::mm;
+use crate::{env, mm};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -46,19 +48,18 @@ fn detect_from_fdt() -> Result<(), ()> {
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(end_address - start_address.as_u64()) as usize,
-			Ordering::SeqCst,
+			Ordering::Relaxed,
 		);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 		}
 	}
 
-	assert!(
-		found_ram,
-		"Could not find any available RAM in the Devicetree Memory Map"
-	);
-
-	Ok(())
+	if found_ram {
+		Ok(())
+	} else {
+		Err(())
+	}
 }
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
@@ -91,7 +92,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		.unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(m.base_address() + m.length() - start_address.as_u64()) as usize,
-			Ordering::SeqCst,
+			Ordering::Relaxed,
 		);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -106,35 +107,60 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 	Ok(())
 }
 
-fn detect_from_limits() -> Result<(), ()> {
-	let limit = get_limit();
-	if limit == 0 {
+fn detect_from_uhyve() -> Result<(), ()> {
+	if !env::is_uhyve() {
 		return Err(());
 	}
+
+	let limit = get_limit();
+	assert_ne!(limit, 0);
+	let mut free_list = PHYSICAL_FREE_LIST.lock();
+	let total_memory;
 
 	// add gap for the APIC
 	if limit > KVM_32BIT_GAP_START {
 		let range =
 			PageRange::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			free_list.deallocate(range).unwrap();
 		}
 		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
 			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
 			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				free_list.deallocate(range).unwrap();
 			}
-			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::SeqCst);
+			total_memory = limit - KVM_32BIT_GAP_SIZE;
 		} else {
-			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::SeqCst);
+			total_memory = KVM_32BIT_GAP_START;
 		}
 	} else {
 		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			free_list.deallocate(range).unwrap();
 		}
-		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+		total_memory = limit;
 	}
+
+	TOTAL_MEMORY.store(total_memory, Ordering::Relaxed);
+
+	Ok(())
+}
+
+/// Use the free memory provided by the UEFI memory map (rewrite as soon as entire memory map is in kernel!)
+/// Right now, all memory in the Physical Address Range of HardwareInfo is guaranteed free memory
+fn detect_from_memory_map() -> Result<(), ()> {
+	if !is_uefi() {
+		return Err(());
+	}
+
+	let start = get_start();
+	let limit = get_limit();
+
+	let range = PageRange::new(start, limit).unwrap();
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(range);
+	}
+	TOTAL_MEMORY.store(limit - start, Ordering::SeqCst);
 
 	Ok(())
 }
@@ -142,12 +168,13 @@ fn detect_from_limits() -> Result<(), ()> {
 pub fn init() {
 	detect_from_fdt()
 		.or_else(|_e| detect_from_multiboot_info())
-		.or_else(|_e| detect_from_limits())
+		.or_else(|_e| detect_from_uhyve())
+		.or_else(|_e| detect_from_memory_map())
 		.unwrap();
 }
 
 pub fn total_memory_size() -> usize {
-	TOTAL_MEMORY.load(Ordering::SeqCst)
+	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
@@ -170,6 +197,45 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 			.try_into()
 			.unwrap(),
 	))
+}
+
+pub fn allocate_outside_of(
+	size: usize,
+	align: usize,
+	forbidden_range: PhysFrameRange,
+) -> Result<PhysFrame, AllocError> {
+	//general sanity checks
+	assert!(size > 0);
+	assert!(align > 0);
+	assert_eq!(
+		size % align,
+		0,
+		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
+	);
+	assert_eq!(
+		align % BasePageSize::SIZE as usize,
+		0,
+		"Alignment {:#X} is not a multiple of {:#X}",
+		align,
+		BasePageSize::SIZE
+	);
+
+	let layout = PageLayout::from_size_align(size, align).unwrap();
+	let forbidden_range = PageRange::new(
+		forbidden_range.start.start_address().as_u64() as usize,
+		forbidden_range.end.start_address().as_u64() as usize + 4096,
+	)
+	.unwrap();
+
+	Ok(PhysFrame::from_start_address(x86_64::addr::PhysAddr::new(
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate_outside_of(layout, forbidden_range)?
+			.start()
+			.try_into()
+			.unwrap(),
+	))
+	.unwrap())
 }
 
 pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
@@ -203,10 +269,10 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocErro
 /// This function must only be called from mm::deallocate!
 /// Otherwise, it may fail due to an empty node pool (POOL.maintain() is called in virtualmem::deallocate)
 pub fn deallocate(physical_address: PhysAddr, size: usize) {
-	assert!(
-		physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
-		"Physical address {physical_address:p} is not >= KERNEL_END_ADDRESS"
-	);
+	// assert!(
+	// 	physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
+	// 	"Physical address {physical_address:p} is not >= KERNEL_END_ADDRESS"
+	// );
 	assert!(size > 0);
 	assert_eq!(
 		size % BasePageSize::SIZE as usize,

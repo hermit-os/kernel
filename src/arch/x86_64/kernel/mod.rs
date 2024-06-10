@@ -67,8 +67,30 @@ pub fn get_image_size() -> usize {
 	(range.end - range.start) as usize
 }
 
+pub fn get_start() -> usize {
+	boot_info().hardware_info.phys_addr_range.start as usize
+}
+
 pub fn get_limit() -> usize {
 	boot_info().hardware_info.phys_addr_range.end as usize
+}
+
+pub fn is_uefi() -> bool {
+	let fdt_addr = get_fdt().unwrap();
+	let fdt = unsafe { fdt::Fdt::from_ptr(fdt_addr as *const u8).unwrap() };
+	fdt.root().compatible().first() == "hermit,uefi"
+}
+
+pub fn get_rsdp_addr() -> u64 {
+	let fdt_addr = get_fdt().unwrap();
+	let fdt = unsafe { fdt::Fdt::from_ptr(fdt_addr as *const u8).unwrap() };
+	fdt.find_node("/hermit,rsdp")
+		.unwrap()
+		.reg()
+		.unwrap()
+		.next()
+		.unwrap()
+		.starting_address as u64
 }
 
 pub fn get_mbinfo() -> Option<NonZeroU64> {

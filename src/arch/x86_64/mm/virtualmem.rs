@@ -1,6 +1,7 @@
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 
+use crate::arch::x86_64::kernel::{get_limit, get_start, is_uefi};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::VirtAddr;
 use crate::mm;
@@ -9,11 +10,15 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 
 pub fn init() {
-	let range = PageRange::new(
-		mm::kernel_end_address().as_usize(),
-		kernel_heap_end().as_usize(),
-	)
-	.unwrap();
+	let range = if is_uefi() {
+		PageRange::new(get_start(), get_limit()).unwrap()
+	} else {
+		PageRange::new(
+			mm::kernel_end_address().as_usize(),
+			kernel_heap_end().as_usize(),
+		)
+		.unwrap()
+	};
 	unsafe {
 		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
 	}
@@ -71,10 +76,10 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 }
 
 pub fn deallocate(virtual_address: VirtAddr, size: usize) {
-	assert!(
-		virtual_address >= VirtAddr(mm::kernel_end_address().as_u64()),
-		"Virtual address {virtual_address:p} is not >= KERNEL_END_ADDRESS"
-	);
+	// assert!(
+	// 	virtual_address >= VirtAddr(mm::kernel_end_address().as_u64()),
+	// 	"Virtual address {virtual_address:p} is not >= KERNEL_END_ADDRESS"
+	// );
 	assert!(
 		virtual_address < kernel_heap_end(),
 		"Virtual address {virtual_address:p} is not < kernel_heap_end()"

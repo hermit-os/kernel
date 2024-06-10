@@ -92,22 +92,45 @@ pub(crate) fn init() {
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
 	//info!("reserved space {} KB", reserved_space >> 10);
-
-	if total_memory_size()
-		< kernel_end_address().as_usize() - env::get_ram_address().as_usize()
-			+ reserved_space
-			+ LargePageSize::SIZE as usize
-	{
-		panic!("No enough memory available!");
-	}
+	print_information();
 
 	let mut map_addr: VirtAddr;
 	let mut map_size: usize;
 
-	let available_memory = (total_memory_size()
-		- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
-		- reserved_space)
-		.align_down(LargePageSize::SIZE as usize);
+	//in the case of UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
+	let available_memory = if crate::arch::x86_64::kernel::is_uefi() {
+		(total_memory_size() - reserved_space).align_down(LargePageSize::SIZE as usize)
+	} else {
+		if total_memory_size()
+			< kernel_end_address().as_usize() - env::get_ram_address().as_usize()
+				+ reserved_space + LargePageSize::SIZE as usize
+		{
+			panic!("Not enough memory available!");
+		}
+
+		(total_memory_size()
+			- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
+			- reserved_space)
+			.align_down(LargePageSize::SIZE as usize)
+	};
+	// if !crate::arch::x86_64::kernel::is_uefi() {
+	// 	if total_memory_size()
+	// 		< kernel_end_address().as_usize() - env::get_ram_address().as_usize()
+	// 			+ reserved_space + LargePageSize::SIZE as usize
+	// 	{
+	// 		panic!("No enough memory available!");
+	// 	}
+
+	// 	let available_memory = (total_memory_size()
+	// 		- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
+	// 		- reserved_space)
+	// 		.align_down(LargePageSize::SIZE as usize);
+	// } else {
+	//
+
+	// 	let available_memory =
+	// 		(total_memory_size() - reserved_space).align_down(LargePageSize::SIZE as usize);
+	// }
 
 	let heap_start_addr;
 
