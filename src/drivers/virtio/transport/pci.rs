@@ -30,7 +30,6 @@ use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::PciDevice;
-use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
 /// Maps a given device specific pci configuration structure and
@@ -41,7 +40,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 		return None;
 	};
 
-	if cap.bar_len() < u64::from(cap.len() + cap.offset()) {
+	if cap.bar_len() < cap.len() + cap.offset() {
 		error!(
 			"Device config of device {:x}, does not fit into memory specified by bar!",
 			cap.dev_id(),
@@ -50,7 +49,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	}
 
 	// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-	if cap.len() < MemLen::from(mem::size_of::<T>()) {
+	if cap.len() < mem::size_of::<T>().try_into().unwrap() {
 		error!("Device specific config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
 		return None;
 	}
@@ -59,7 +58,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 
 	// Create mutable reference to the PCI structure in PCI memory
 	let dev_cfg: &'static mut T =
-		unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.into())) };
+		unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.try_into().unwrap())) };
 
 	Some(dev_cfg)
 }
@@ -84,19 +83,19 @@ pub struct PciCap {
 }
 
 impl PciCap {
-	pub fn offset(&self) -> MemOff {
-		self.cap.offset.to_ne().into()
+	pub fn offset(&self) -> u64 {
+		self.cap.offset.to_ne()
 	}
 
-	pub fn len(&self) -> MemLen {
-		self.cap.length.to_ne().into()
+	pub fn len(&self) -> u64 {
+		self.cap.length.to_ne()
 	}
 
 	pub fn bar_len(&self) -> u64 {
 		self.bar.length
 	}
 
-	pub fn bar_addr(&self) -> VirtMemAddr {
+	pub fn bar_addr(&self) -> u64 {
 		self.bar.mem_addr
 	}
 
@@ -106,7 +105,7 @@ impl PciCap {
 
 	/// Returns a reference to the actual structure inside the PCI devices memory space.
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
-		if self.bar.length < u64::from(self.len() + self.offset()) {
+		if self.bar.length < self.len() + self.offset() {
 			error!("Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!", 
 			self.cap.id,
 			self.dev_id,
@@ -116,14 +115,14 @@ impl PciCap {
 		}
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if self.len() < MemLen::from(mem::size_of::<CommonCfg>()) {
+		if self.len() < mem::size_of::<CommonCfg>().try_into().unwrap() {
 			error!("Common config of with id {}, does not represent actual structure specified by the standard!", self.cap.id);
 			return None;
 		}
 
 		let virt_addr_raw = self.bar.mem_addr + self.offset();
 		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<CommonCfg>(
-			virt_addr_raw.into(),
+			virt_addr_raw.try_into().unwrap(),
 		))
 		.unwrap();
 
@@ -134,7 +133,7 @@ impl PciCap {
 	}
 
 	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
-		if self.bar.length < u64::from(self.len() + self.offset()) {
+		if self.bar.length < self.len() + self.offset() {
 			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
 				self.cap.id,
 				self.dev_id,
@@ -143,9 +142,9 @@ impl PciCap {
 			return None;
 		}
 
-		let virt_addr_raw: VirtMemAddr = self.bar.mem_addr + self.offset();
+		let virt_addr_raw = self.bar.mem_addr + self.offset();
 		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<IsrStatusRaw>(
-			virt_addr_raw.into(),
+			virt_addr_raw.try_into().unwrap(),
 		))
 		.unwrap();
 
@@ -520,17 +519,17 @@ impl ComCfg {
 /// See Virtio specification v1.1 - 4.1.4.4
 pub struct NotifCfg {
 	/// Start addr, from where the notification addresses for the virtqueues are computed
-	base_addr: VirtMemAddr,
+	base_addr: u64,
 	notify_off_multiplier: u32,
 	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
 	rank: u8,
 	/// defines the maximum size of the notification space, starting from base_addr.
-	length: MemLen,
+	length: u64,
 }
 
 impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
-		if cap.bar.length < u64::from(u32::from(cap.len() + cap.offset())) {
+		if cap.bar.length < cap.len() + cap.offset() {
 			error!("Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.cap.id,
                 cap.dev_id,
@@ -560,8 +559,8 @@ impl NotifCfg {
 
 	pub fn notification_location(&self, vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
 		let addend = u32::from(vq_cfg_handler.notif_off()) * self.notify_off_multiplier;
-		let addr = usize::from(self.base_addr) + usize::try_from(addend).unwrap();
-		ptr::with_exposed_provenance_mut(addr)
+		let addr = self.base_addr + u64::from(addend);
+		ptr::with_exposed_provenance_mut(addr.try_into().unwrap())
 	}
 }
 
@@ -703,8 +702,8 @@ impl PciCfgAlt {
 //    offset_hi: u32,
 //    length_hi: u32
 pub struct ShMemCfg {
-	mem_addr: VirtMemAddr,
-	length: MemLen,
+	mem_addr: u64,
+	length: u64,
 	sh_mem: ShMem,
 	/// Shared memory regions are identified via an ID
 	/// See Virtio specification v1.1. - 4.1.4.7
@@ -713,7 +712,7 @@ pub struct ShMemCfg {
 
 impl ShMemCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
-		if cap.bar.length < u64::from(cap.len() + cap.offset()) {
+		if cap.bar.length < cap.len() + cap.offset() {
 			error!("Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.cap.id,
                 cap.dev_id,
@@ -722,15 +721,15 @@ impl ShMemCfg {
 			return None;
 		}
 
-		let offset = MemOff::from(cap.cap.offset.to_ne());
-		let length = MemLen::from(cap.cap.length.to_ne());
+		let offset = cap.cap.offset.to_ne();
+		let length = cap.cap.length.to_ne();
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
-		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
+		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.try_into().unwrap());
 
 		// Zero initialize shared memory area
 		unsafe {
-			for i in 0..usize::from(length) {
+			for i in 0..usize::try_from(length).unwrap() {
 				*(raw_ptr.add(i)) = 0;
 			}
 		};
@@ -793,12 +792,12 @@ impl Drop for ShMem {
 #[derive(Copy, Clone, Debug)]
 pub struct PciBar {
 	index: u8,
-	mem_addr: VirtMemAddr,
+	mem_addr: u64,
 	length: u64,
 }
 
 impl PciBar {
-	pub fn new(index: u8, mem_addr: VirtMemAddr, length: u64) -> Self {
+	pub fn new(index: u8, mem_addr: u64, length: u64) -> Self {
 		PciBar {
 			index,
 			mem_addr,
