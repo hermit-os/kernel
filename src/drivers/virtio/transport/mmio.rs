@@ -94,6 +94,10 @@ impl ComCfg {
 		ComCfg { com_cfg: raw, rank }
 	}
 
+	pub fn config_generation(&self) -> u32 {
+		self.com_cfg.as_ptr().config_generation().read().to_ne()
+	}
+
 	/// Select a queue via an index. If queue does NOT exist returns `None`, else
 	/// returns `Some(VqCfgHandler)`.
 	///

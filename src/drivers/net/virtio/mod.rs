@@ -429,7 +429,14 @@ impl NetworkDriver for VirtioNetDriver {
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::MAC) {
-			self.dev_cfg.raw.get_mac()
+			loop {
+				let before = self.com_cfg.config_generation();
+				let mac = self.dev_cfg.raw.get_mac();
+				let after = self.com_cfg.config_generation();
+				if before == after {
+					break mac;
+				}
+			}
 		} else {
 			unreachable!("Currently VIRTIO_NET_F_MAC must be negotiated!")
 		}

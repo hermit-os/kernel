@@ -6,7 +6,6 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::ptr::read_volatile;
 use core::str::FromStr;
-use core::sync::atomic::{fence, Ordering};
 
 use smoltcp::phy::ChecksumCapabilities;
 use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
@@ -23,7 +22,6 @@ use crate::drivers::virtio::virtqueue::Virtq;
 ///
 #[repr(C)]
 pub struct NetDevCfgRaw {
-	config_generation: u32,
 	// Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
 	mac: [u8; 6],
 	// Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
@@ -37,19 +35,7 @@ pub struct NetDevCfgRaw {
 impl NetDevCfgRaw {
 	pub fn get_mtu(&self) -> u16 {
 		// see Virtio specification v1.1 -  2.4.1
-		unsafe {
-			loop {
-				let before = read_volatile(&self.config_generation);
-				fence(Ordering::SeqCst);
-				let mtu = read_volatile(&self.mtu);
-				fence(Ordering::SeqCst);
-				let after = read_volatile(&self.config_generation);
-
-				if before == after {
-					return mtu;
-				}
-			}
-		}
+		unsafe { read_volatile(&self.mtu) }
 	}
 
 	pub fn get_mac(&self) -> [u8; 6] {
@@ -57,53 +43,20 @@ impl NetDevCfgRaw {
 
 		// see Virtio specification v1.1 -  2.4.1
 		unsafe {
-			loop {
-				let before = read_volatile(&self.config_generation);
-				fence(Ordering::SeqCst);
-				let mut src = self.mac.iter();
-				mac.fill_with(|| read_volatile(src.next().unwrap()));
-				fence(Ordering::SeqCst);
-				let after = read_volatile(&self.config_generation);
-
-				if before == after {
-					return mac;
-				}
-			}
+			let mut src = self.mac.iter();
+			mac.fill_with(|| read_volatile(src.next().unwrap()));
+			mac
 		}
 	}
 
 	pub fn get_status(&self) -> u16 {
 		// see Virtio specification v1.1 -  2.4.1
-		unsafe {
-			loop {
-				let before = read_volatile(&self.config_generation);
-				fence(Ordering::SeqCst);
-				let status = read_volatile(&self.status);
-				fence(Ordering::SeqCst);
-				let after = read_volatile(&self.config_generation);
-
-				if before == after {
-					return status;
-				}
-			}
-		}
+		unsafe { read_volatile(&self.status) }
 	}
 
 	pub fn get_max_virtqueue_pairs(&self) -> u16 {
 		// see Virtio specification v1.1 -  2.4.1
-		unsafe {
-			loop {
-				let before = read_volatile(&self.config_generation);
-				fence(Ordering::SeqCst);
-				let max_pairs = read_volatile(&self.max_virtqueue_pairs);
-				fence(Ordering::SeqCst);
-				let after = read_volatile(&self.config_generation);
-
-				if before == after {
-					return max_pairs;
-				}
-			}
-		}
+		unsafe { read_volatile(&self.max_virtqueue_pairs) }
 	}
 }
 
@@ -118,7 +71,7 @@ impl VirtioNetDriver {
 			&*registers
 				.borrow_mut()
 				.as_mut_ptr()
-				.config_generation()
+				.config()
 				.as_raw_ptr()
 				.cast::<NetDevCfgRaw>()
 				.as_ptr()

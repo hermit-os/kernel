@@ -365,6 +365,10 @@ impl ComCfg {
 		}
 	}
 
+	pub fn config_generation(&self) -> u32 {
+		self.com_cfg.as_ptr().config_generation().read().into()
+	}
+
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
 		self.com_cfg.as_ptr().device_status().read().bits()
