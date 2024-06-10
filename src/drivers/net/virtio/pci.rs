@@ -7,6 +7,7 @@ use core::str::FromStr;
 
 use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
+use volatile::VolatileRef;
 
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
@@ -15,46 +16,16 @@ use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 
-/// Virtio's network device configuration structure.
-/// See specification v1.1. - 5.1.4
-///
-#[repr(C)]
-pub(crate) struct NetDevCfgRaw {
-	// Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
-	mac: [u8; 6],
-	// Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
-	status: u16,
-	// Indicates number of allowed vq-pairs. Only valid if VIRTIO_NET_F_MQ is set.
-	max_virtqueue_pairs: u16,
-	// Indicates the maximum MTU driver should use. Only valid if VIRTIONET_F_MTU is set.
-	mtu: u16,
-}
-
-impl NetDevCfgRaw {
-	pub fn get_mtu(&self) -> u16 {
-		self.mtu
-	}
-
-	pub fn get_mac(&self) -> [u8; 6] {
-		self.mac
-	}
-
-	pub fn get_status(&self) -> u16 {
-		self.status
-	}
-
-	pub fn get_max_virtqueue_pairs(&self) -> u16 {
-		self.max_virtqueue_pairs
-	}
-}
-
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
-		let dev_cfg: &'static NetDevCfgRaw = match pci::map_dev_cfg::<NetDevCfgRaw>(cap) {
-			Some(cfg) => cfg,
-			None => return None,
-		};
+		let dev_cfg: &'static virtio_spec::net::Config =
+			match pci::map_dev_cfg::<virtio_spec::net::Config>(cap) {
+				Some(cfg) => cfg,
+				None => return None,
+			};
+
+		let dev_cfg = VolatileRef::from_ref(dev_cfg);
 
 		Some(NetDevCfg {
 			raw: dev_cfg,

@@ -5,12 +5,8 @@
 cfg_if::cfg_if! {
 	if #[cfg(feature = "pci")] {
 		mod pci;
-
-		use self::pci::NetDevCfgRaw;
 	} else {
 		mod mmio;
-
-		use self::mmio::NetDevCfgRaw;
 	}
 }
 
@@ -24,8 +20,10 @@ use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
-use virtio_spec::net::{Hdr, HdrF};
+use virtio_spec::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
 use virtio_spec::FeatureBits;
+use volatile::access::ReadOnly;
+use volatile::VolatileRef;
 
 use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
@@ -46,7 +44,7 @@ use crate::executor::device::{RxToken, TxToken};
 /// Handling the right access to fields, as some are read-only
 /// for the driver.
 pub(crate) struct NetDevCfg {
-	pub raw: &'static NetDevCfgRaw,
+	pub raw: VolatileRef<'static, virtio_spec::net::Config, ReadOnly>,
 	pub dev_id: u16,
 	pub features: virtio_spec::net::F,
 }
@@ -162,7 +160,7 @@ impl RxQueues {
 			(1514 + mem::size_of::<Hdr>())
 				.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>())
 		} else {
-			dev_cfg.raw.get_mtu() as usize + mem::size_of::<Hdr>()
+			dev_cfg.raw.as_ptr().mtu().read().to_ne() as usize + mem::size_of::<Hdr>()
 		};
 
 		// See Virtio specification v1.1 - 5.1.6.3.1
@@ -326,8 +324,10 @@ impl TxQueues {
 				//      Header and data are added as ONE output descriptor to the transmitvq.
 				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
 				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-				let buff_def =
-					Bytes::new(mem::size_of::<Hdr>() + dev_cfg.raw.get_mtu() as usize).unwrap();
+				let buff_def = Bytes::new(
+					mem::size_of::<Hdr>() + dev_cfg.raw.as_ptr().mtu().read().to_ne() as usize,
+				)
+				.unwrap();
 				let spec = BuffSpec::Single(buff_def);
 
 				let num_buff: u16 = vq.size().into();
@@ -431,7 +431,7 @@ impl NetworkDriver for VirtioNetDriver {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::MAC) {
 			loop {
 				let before = self.com_cfg.config_generation();
-				let mac = self.dev_cfg.raw.get_mac();
+				let mac = self.dev_cfg.raw.as_ptr().mac().read();
 				let after = self.com_cfg.config_generation();
 				if before == after {
 					break mac;
@@ -652,11 +652,11 @@ impl VirtioNetDriver {
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
 	/// has been negotiated. Otherwise assumes an active device.
 	#[cfg(not(feature = "pci"))]
-	pub fn dev_status(&self) -> u16 {
+	pub fn dev_status(&self) -> virtio_spec::net::S {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
-			self.dev_cfg.raw.get_status()
+			self.dev_cfg.raw.as_ptr().status().read()
 		} else {
-			virtio_spec::net::S::LINK_UP.bits().to_ne()
+			virtio_spec::net::S::LINK_UP
 		}
 	}
 
@@ -665,8 +665,12 @@ impl VirtioNetDriver {
 	#[cfg(feature = "pci")]
 	pub fn is_link_up(&self) -> bool {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
-			self.dev_cfg.raw.get_status() & virtio_spec::net::S::LINK_UP.bits().to_ne()
-				== virtio_spec::net::S::LINK_UP.bits().to_ne()
+			self.dev_cfg
+				.raw
+				.as_ptr()
+				.status()
+				.read()
+				.contains(virtio_spec::net::S::LINK_UP)
 		} else {
 			true
 		}
@@ -675,8 +679,12 @@ impl VirtioNetDriver {
 	#[allow(dead_code)]
 	pub fn is_announce(&self) -> bool {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
-			self.dev_cfg.raw.get_status() & virtio_spec::net::S::ANNOUNCE.bits().to_ne()
-				== virtio_spec::net::S::ANNOUNCE.bits().to_ne()
+			self.dev_cfg
+				.raw
+				.as_ptr()
+				.status()
+				.read()
+				.contains(virtio_spec::net::S::ANNOUNCE)
 		} else {
 			false
 		}
@@ -690,7 +698,12 @@ impl VirtioNetDriver {
 	#[allow(dead_code)]
 	pub fn get_max_vq_pairs(&self) -> u16 {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::MQ) {
-			self.dev_cfg.raw.get_max_virtqueue_pairs()
+			self.dev_cfg
+				.raw
+				.as_ptr()
+				.max_virtqueue_pairs()
+				.read()
+				.to_ne()
 		} else {
 			1
 		}
@@ -853,7 +866,7 @@ impl VirtioNetDriver {
 		debug!("{:?}", self.checksums);
 
 		if self.dev_cfg.features.contains(virtio_spec::net::F::MTU) {
-			self.mtu = self.dev_cfg.raw.get_mtu();
+			self.mtu = self.dev_cfg.raw.as_ptr().mtu().read().to_ne();
 		}
 
 		Ok(())
@@ -939,10 +952,23 @@ impl VirtioNetDriver {
 		// - the num_queues is found in the ComCfg struct of the device and defines the maximal number
 		// of supported queues.
 		if self.dev_cfg.features.contains(virtio_spec::net::F::MQ) {
-			if self.dev_cfg.raw.get_max_virtqueue_pairs() * 2 >= MAX_NUM_VQ {
+			if self
+				.dev_cfg
+				.raw
+				.as_ptr()
+				.max_virtqueue_pairs()
+				.read()
+				.to_ne() * 2 >= MAX_NUM_VQ
+			{
 				self.num_vqs = MAX_NUM_VQ;
 			} else {
-				self.num_vqs = self.dev_cfg.raw.get_max_virtqueue_pairs() * 2;
+				self.num_vqs = self
+					.dev_cfg
+					.raw
+					.as_ptr()
+					.max_virtqueue_pairs()
+					.read()
+					.to_ne() * 2;
 			}
 		} else {
 			// Minimal number of virtqueues defined in the standard v1.1. - 5.1.5 Step 1

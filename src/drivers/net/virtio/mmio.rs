@@ -4,7 +4,6 @@
 
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::ptr::read_volatile;
 use core::str::FromStr;
 
 use smoltcp::phy::ChecksumCapabilities;
@@ -16,49 +15,6 @@ use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::Virtq;
 
-/// Virtio's network device configuration structure.
-/// See specification v1.1. - 5.1.4
-///
-#[repr(C)]
-pub struct NetDevCfgRaw {
-	// Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
-	mac: [u8; 6],
-	// Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
-	status: u16,
-	// Indicates number of allowed vq-pairs. Only valid if VIRTIO_NET_F_MQ is set.
-	max_virtqueue_pairs: u16,
-	// Indicates the maximum MTU driver should use. Only valid if VIRTIONET_F_MTU is set.
-	mtu: u16,
-}
-
-impl NetDevCfgRaw {
-	pub fn get_mtu(&self) -> u16 {
-		// see Virtio specification v1.1 -  2.4.1
-		unsafe { read_volatile(&self.mtu) }
-	}
-
-	pub fn get_mac(&self) -> [u8; 6] {
-		let mut mac: [u8; 6] = [0u8; 6];
-
-		// see Virtio specification v1.1 -  2.4.1
-		unsafe {
-			let mut src = self.mac.iter();
-			mac.fill_with(|| read_volatile(src.next().unwrap()));
-			mac
-		}
-	}
-
-	pub fn get_status(&self) -> u16 {
-		// see Virtio specification v1.1 -  2.4.1
-		unsafe { read_volatile(&self.status) }
-	}
-
-	pub fn get_max_virtqueue_pairs(&self) -> u16 {
-		// see Virtio specification v1.1 -  2.4.1
-		unsafe { read_volatile(&self.max_virtqueue_pairs) }
-	}
-}
-
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
 	pub fn new(
@@ -66,15 +22,16 @@ impl VirtioNetDriver {
 		mut registers: VolatileRef<'static, DeviceRegisters>,
 		irq: u8,
 	) -> Result<Self, VirtioNetError> {
-		let dev_cfg_raw: &'static NetDevCfgRaw = unsafe {
+		let dev_cfg_raw: &'static virtio_spec::net::Config = unsafe {
 			&*registers
 				.borrow_mut()
 				.as_mut_ptr()
 				.config()
 				.as_raw_ptr()
-				.cast::<NetDevCfgRaw>()
+				.cast::<virtio_spec::net::Config>()
 				.as_ptr()
 		};
+		let dev_cfg_raw = VolatileRef::from_ref(dev_cfg_raw);
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,
@@ -107,7 +64,7 @@ impl VirtioNetDriver {
 
 	pub fn print_information(&mut self) {
 		self.com_cfg.print_information();
-		if self.dev_status() == virtio_spec::net::S::LINK_UP.bits().to_ne() {
+		if self.dev_status() == virtio_spec::net::S::LINK_UP {
 			info!("The link of the network device is up!");
 		}
 	}
