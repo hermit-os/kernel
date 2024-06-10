@@ -168,7 +168,6 @@ pub struct UniCapsColl {
 	com_cfg_list: Vec<ComCfg>,
 	notif_cfg_list: Vec<NotifCfg>,
 	isr_stat_list: Vec<IsrStatus>,
-	pci_cfg_acc_list: Vec<PciCfgAlt>,
 	sh_mem_cfg_list: Vec<ShMemCfg>,
 	dev_cfg_list: Vec<PciCap>,
 }
@@ -180,7 +179,6 @@ impl UniCapsColl {
 			com_cfg_list: Vec::new(),
 			notif_cfg_list: Vec::new(),
 			isr_stat_list: Vec::new(),
-			pci_cfg_acc_list: Vec::new(),
 			sh_mem_cfg_list: Vec::new(),
 			dev_cfg_list: Vec::new(),
 		}
@@ -211,16 +209,6 @@ impl UniCapsColl {
 		// This should not be to expensive, as "rational" devices will hold an
 		// acceptable amount of configuration structures.
 		self.isr_stat_list.sort_by(|a, b| b.rank.cmp(&a.rank));
-	}
-
-	fn add_cfg_alt(&mut self, pci_alt: PciCfgAlt) {
-		self.pci_cfg_acc_list.push(pci_alt);
-		// Resort array
-		//
-		// This should not be to expensive, as "rational" devices will hold an
-		// acceptable amount of configuration structures.
-		self.pci_cfg_acc_list
-			.sort_by(|a, b| b.pci_cap.cap.id.cmp(&a.pci_cap.cap.id));
 	}
 
 	fn add_cfg_sh_mem(&mut self, sh_mem: ShMemCfg) {
@@ -653,36 +641,6 @@ impl IsrStatus {
 	}
 }
 
-/// PCI configuration access structure of Virtio PCI devices.
-/// See Virtio specification v1.1. - 4.1.4.8
-///
-/// ONLY an alternative access method to the common configuration, notification,
-/// ISR and device-specific configuration regions/structures.
-//
-// Currently has no functionality. All funcitonalty must be done via the read_config methods
-// as this struct writes/reads to/from the configuration space which can NOT be mapped!
-pub struct PciCfgAlt {
-	pci_cap: PciCap,
-	pci_cfg_data: [u8; 4], // Data for BAR access
-	                       // TODO:
-	                       // The fields cap.bar, cap.length, cap.offset and pci_cfg_data are read-write (RW) for the driver.
-	                       // To access a device region, the driver writes into the capability structure (ie. within the PCI configuration
-	                       // space) as follows:
-	                       // • The driver sets the BAR to access by writing to cap.bar.
-	                       // • The  driver sets the size of the access by writing 1, 2 or 4 to cap.length.
-	                       // • The driver sets the offset within the BAR by writing to cap.offset.
-	                       // At that point, pci_cfg_data will provide a window of size cap.length into the given cap.bar at offset cap.offset.
-}
-
-impl PciCfgAlt {
-	fn new(cap: &PciCap) -> Self {
-		PciCfgAlt {
-			pci_cap: cap.clone(),
-			pci_cfg_data: [0; 4],
-		}
-	}
-}
-
 /// Shared memory configuration structure of Virtio PCI devices.
 /// See Virtio specification v1.1. - 4.1.4.7
 ///
@@ -903,7 +861,6 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					pci_cap.cap.id, device_id
 				),
 			},
-			CapCfgType::Pci => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
 			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
 				Some(sh_mem) => caps.add_cfg_sh_mem(sh_mem),
 				None => error!(
