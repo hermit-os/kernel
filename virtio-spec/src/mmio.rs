@@ -32,6 +32,18 @@ macro_rules! field_fn {
         $(#[doc = $doc:literal])*
         #[doc(alias = $alias:literal)]
         #[access($Access:ty)]
+        $field:ident: (),
+    ) => {
+        $(#[doc = $doc])*
+        #[doc(alias = $alias)]
+        fn $field(self) -> VolatilePtr<'a, (), A::Restricted>
+        where
+            A: RestrictAccess<$Access>;
+    };
+    (
+        $(#[doc = $doc:literal])*
+        #[doc(alias = $alias:literal)]
+        #[access($Access:ty)]
         $field:ident: $T:ty,
     ) => {
         $(#[doc = $doc])*
@@ -61,6 +73,21 @@ macro_rules! field_impl {
     (
         #[offset($offset:literal)]
         #[access($Access:ty)]
+        $field:ident: (),
+    ) => {
+        fn $field(self) -> VolatilePtr<'a, (), A::Restricted>
+        where
+            A: RestrictAccess<$Access>,
+        {
+            unsafe {
+                self.map(|ptr| ptr.cast::<()>().byte_add($offset))
+                    .restrict()
+            }
+        }
+    };
+    (
+        #[offset($offset:literal)]
+        #[access($Access:ty)]
         $field:ident: $T:ty,
     ) => {
         fn $field(self) -> OveralignedVolatilePtr<'a, $T, le32, A::Restricted>
@@ -82,7 +109,7 @@ macro_rules! device_register_impl {
                 #[doc(alias = $alias:literal)]
                 #[offset($offset:literal)]
                 #[access($Access:ty)]
-                $field:ident: $T:ident,
+                $field:ident: $T:tt,
             )*
         }
     ) => {
@@ -457,6 +484,16 @@ device_register_impl! {
         #[offset(0x0fc)]
         #[access(ReadOnly)]
         config_generation: le32,
+
+        /// Configuration space
+        ///
+        /// Device-specific configuration space starts at the offset 0x100
+        /// and is accessed with byte alignment. Its meaning and size
+        /// depend on the device and the driver.
+        #[doc(alias = "Config")]
+        #[offset(0x100)]
+        #[access(ReadWrite)]
+        config: (),
     }
 }
 
