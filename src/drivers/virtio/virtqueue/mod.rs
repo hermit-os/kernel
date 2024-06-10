@@ -171,7 +171,7 @@ pub trait Virtq: VirtqPrivate {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		features: virtio_spec::F,
+		features: virtio::F,
 	) -> Result<Self, VirtqError>
 	where
 		Self: Sized;
@@ -2590,7 +2590,7 @@ pub mod error {
 		/// referring to).
 		BufferToLarge,
 		QueueSizeNotAllowed(u16),
-		FeatureNotSupported(virtio_spec::F),
+		FeatureNotSupported(virtio::F),
 		AllocationError,
 	}
 

@@ -55,7 +55,7 @@ impl VirtioFsDriver {
 		Some(FsDevCfg {
 			raw: dev_cfg,
 			dev_id: cap.dev_id(),
-			features: virtio_spec::fs::F::empty(),
+			features: virtio::fs::F::empty(),
 		})
 	}
 

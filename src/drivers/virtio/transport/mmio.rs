@@ -5,11 +5,11 @@
 
 use core::mem;
 
-use virtio_spec::mmio::{
+use virtio::mmio::{
 	DeviceRegisterVolatileFieldAccess, DeviceRegisterVolatileWideFieldAccess, DeviceRegisters,
 	InterruptStatus, NotificationData,
 };
-use virtio_spec::{le32, DeviceStatus};
+use virtio::{le32, DeviceStatus};
 use volatile::VolatileRef;
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -201,7 +201,7 @@ impl ComCfg {
 	}
 
 	/// Returns the features offered by the device.
-	pub fn dev_features(&mut self) -> virtio_spec::F {
+	pub fn dev_features(&mut self) -> virtio::F {
 		let ptr = self.com_cfg.as_mut_ptr();
 
 		// Indicate device to show high 32 bits in device_feature field.
@@ -218,11 +218,11 @@ impl ComCfg {
 		// read low 32 bits of device features
 		device_features |= u64::from(ptr.device_features().read().to_ne());
 
-		virtio_spec::F::from_bits_retain(u128::from(device_features).into())
+		virtio::F::from_bits_retain(u128::from(device_features).into())
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
+	pub fn set_drv_features(&mut self, features: virtio::F) {
 		let ptr = self.com_cfg.as_mut_ptr();
 
 		let features = features.bits().to_ne() as u64;
@@ -385,7 +385,7 @@ pub(crate) fn init_device(
 	// Verify the device-ID to find the network card
 	match registers.as_ptr().device_id().read() {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		virtio_spec::Id::Net => {
+		virtio::Id::Net => {
 			match VirtioNetDriver::init(dev_id, registers, irq_no) {
 				Ok(virt_net_drv) => {
 					info!("Virtio network driver initialized.");
