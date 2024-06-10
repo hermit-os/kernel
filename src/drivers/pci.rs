@@ -104,13 +104,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	/// Set flag to the command register
 	pub fn set_command(&self, cmd: CommandRegister) {
-		// TODO: don't convert to bits once one of the following PRs is released:
-		// - https://github.com/rust-osdev/pci_types/pull/15
-		// - https://github.com/rust-osdev/pci_types/pull/20
-		let cmd = cmd.bits();
-		self.header().update_command(&self.access, |command| {
-			command | CommandRegister::from_bits_retain(cmd)
-		});
+		self.header()
+			.update_command(&self.access, |command| command | cmd);
 	}
 
 	/// Get value of the command register
