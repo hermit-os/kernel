@@ -33,15 +33,6 @@ use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
-/// Public structure to allow drivers to read the configuration space
-/// safely
-#[derive(Clone)]
-pub struct Origin {
-	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
-	dev_id: u16,
-	cap_struct: Cap,
-}
-
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
@@ -91,19 +82,18 @@ pub struct PciCap {
 	bar: PciBar,
 	id: u8,
 	device: PciDevice<PciConfigRegion>,
-	// Following field can be used to retrieve original structure
-	// from the config space. Needed by some structures and f
-	// device specific configs.
-	origin: Origin,
+	cfg_ptr: u16, // Register to be read to reach configuration structure of type cfg_type
+	dev_id: u16,
+	cap_struct: Cap,
 }
 
 impl PciCap {
 	pub fn offset(&self) -> MemOff {
-		self.origin.cap_struct.offset.to_ne().into()
+		self.cap_struct.offset.to_ne().into()
 	}
 
 	pub fn len(&self) -> MemLen {
-		self.origin.cap_struct.length.to_ne().into()
+		self.cap_struct.length.to_ne().into()
 	}
 
 	pub fn bar_len(&self) -> u64 {
@@ -115,7 +105,7 @@ impl PciCap {
 	}
 
 	pub fn dev_id(&self) -> u16 {
-		self.origin.dev_id
+		self.dev_id
 	}
 
 	/// Returns a reference to the actual structure inside the PCI devices memory space.
@@ -123,7 +113,7 @@ impl PciCap {
 		if self.bar.length < u64::from(self.len() + self.offset()) {
 			error!("Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!", 
 			self.id,
-			self.origin.dev_id,
+			self.dev_id,
 			self.bar.index
             );
 			return None;
@@ -151,7 +141,7 @@ impl PciCap {
 		if self.bar.length < u64::from(self.len() + self.offset()) {
 			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
 				self.id,
-				self.origin.dev_id,
+				self.dev_id,
 				self.bar.index
             );
 			return None;
@@ -547,7 +537,7 @@ impl NotifCfg {
 		if cap.bar.length < u64::from(u32::from(cap.len() + cap.offset())) {
 			error!("Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
-                cap.origin.dev_id,
+                cap.dev_id,
                 cap.bar.index
             );
 			return None;
@@ -555,8 +545,7 @@ impl NotifCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let notify_off_multiplier_ptr =
-			cap.origin.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
+		let notify_off_multiplier_ptr = cap.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
 		let notify_off_multiplier = cap.device.read_register(notify_off_multiplier_ptr);
 
 		// define base memory address from which the actual Queue Notify address can be derived via
@@ -734,7 +723,7 @@ impl ShMemCfg {
 		if cap.bar.length < u64::from(cap.len() + cap.offset()) {
 			error!("Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
-                cap.origin.dev_id,
+                cap.dev_id,
                  cap.bar.index
             );
 			return None;
@@ -744,24 +733,22 @@ impl ShMemCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let offset_hi_ptr = cap.origin.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
+		let offset_hi_ptr = cap.cfg_ptr + u16::try_from(mem::size_of::<Cap>()).unwrap();
 		let offset_hi = cap.device.read_register(offset_hi_ptr);
 
 		// Create 64 bit offset from high and low 32 bit values
-		let offset = MemOff::from(
-			(u64::from(offset_hi) << 32) ^ u64::from(cap.origin.cap_struct.offset.to_ne()),
-		);
+		let offset =
+			MemOff::from((u64::from(offset_hi) << 32) ^ u64::from(cap.cap_struct.offset.to_ne()));
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let length_hi_ptr = cap.origin.cfg_ptr
-			+ u16::try_from(mem::size_of::<Cap>() + mem::size_of::<u32>()).unwrap();
+		let length_hi_ptr =
+			cap.cfg_ptr + u16::try_from(mem::size_of::<Cap>() + mem::size_of::<u32>()).unwrap();
 		let length_hi = cap.device.read_register(length_hi_ptr);
 
 		// Create 64 bit length from high and low 32 bit values
-		let length = MemLen::from(
-			(u64::from(length_hi) << 32) ^ u64::from(cap.origin.cap_struct.length.to_ne()),
-		);
+		let length =
+			MemLen::from((u64::from(length_hi) << 32) ^ u64::from(cap.cap_struct.length.to_ne()));
 
 		let virt_addr_raw = cap.bar.mem_addr + offset;
 		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.into());
@@ -873,11 +860,9 @@ fn read_caps(
 			bar: *bars.iter().find(|bar| bar.index == capability.bar).unwrap(),
 			id: capability.id,
 			device: *device,
-			origin: Origin {
-				cfg_ptr: ptr,
-				dev_id: device_id,
-				cap_struct: capability,
-			},
+			cfg_ptr: ptr,
+			dev_id: device_id,
+			cap_struct: capability,
 		})
 		.collect::<Vec<_>>();
 
