@@ -27,7 +27,7 @@ use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
 use virtio_spec::net::{Hdr, HdrF};
 use virtio_spec::FeatureBits;
 
-use self::constants::{Status, MAX_NUM_VQ};
+use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::arch::kernel::core_local::increment_irq_counter;
@@ -656,7 +656,7 @@ impl VirtioNetDriver {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
 			self.dev_cfg.raw.get_status()
 		} else {
-			u16::from(Status::VIRTIO_NET_S_LINK_UP)
+			virtio_spec::net::S::LINK_UP.bits().to_ne()
 		}
 	}
 
@@ -665,8 +665,8 @@ impl VirtioNetDriver {
 	#[cfg(feature = "pci")]
 	pub fn is_link_up(&self) -> bool {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
-			self.dev_cfg.raw.get_status() & u16::from(Status::VIRTIO_NET_S_LINK_UP)
-				== u16::from(Status::VIRTIO_NET_S_LINK_UP)
+			self.dev_cfg.raw.get_status() & virtio_spec::net::S::LINK_UP.bits().to_ne()
+				== virtio_spec::net::S::LINK_UP.bits().to_ne()
 		} else {
 			true
 		}
@@ -675,8 +675,8 @@ impl VirtioNetDriver {
 	#[allow(dead_code)]
 	pub fn is_announce(&self) -> bool {
 		if self.dev_cfg.features.contains(virtio_spec::net::F::STATUS) {
-			self.dev_cfg.raw.get_status() & u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
-				== u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
+			self.dev_cfg.raw.get_status() & virtio_spec::net::S::ANNOUNCE.bits().to_ne()
+				== virtio_spec::net::S::ANNOUNCE.bits().to_ne()
 		} else {
 			false
 		}
@@ -1027,28 +1027,6 @@ impl VirtioNetDriver {
 pub mod constants {
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
-
-	/// Enum contains virtio's network device status
-	/// indiacted in the status field of the device's
-	/// configuration structure.
-	///
-	/// See Virtio specification v1.1. - 5.1.4
-	#[allow(dead_code, non_camel_case_types)]
-	#[derive(Copy, Clone, Debug)]
-	#[repr(u16)]
-	pub enum Status {
-		VIRTIO_NET_S_LINK_UP = 1 << 0,
-		VIRTIO_NET_S_ANNOUNCE = 1 << 1,
-	}
-
-	impl From<Status> for u16 {
-		fn from(stat: Status) -> Self {
-			match stat {
-				Status::VIRTIO_NET_S_LINK_UP => 1,
-				Status::VIRTIO_NET_S_ANNOUNCE => 2,
-			}
-		}
-	}
 }
 
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]

@@ -11,7 +11,6 @@ use smoltcp::phy::ChecksumCapabilities;
 use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
 use volatile::VolatileRef;
 
-use crate::drivers::net::virtio::constants::Status;
 use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -108,7 +107,7 @@ impl VirtioNetDriver {
 
 	pub fn print_information(&mut self) {
 		self.com_cfg.print_information();
-		if self.dev_status() == u16::from(Status::VIRTIO_NET_S_LINK_UP) {
+		if self.dev_status() == virtio_spec::net::S::LINK_UP.bits().to_ne() {
 			info!("The link of the network device is up!");
 		}
 	}
