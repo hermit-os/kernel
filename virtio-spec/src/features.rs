@@ -16,15 +16,16 @@ where
     /// # Examples
     ///
     /// ```
-    /// use virtio_spec::FeatureBits;
+    /// # use virtio_spec as virtio;
+    /// use virtio::FeatureBits;
     ///
     /// assert_eq!(
-    ///     virtio_spec::net::F::GUEST_TSO4.requirements(),
-    ///     virtio_spec::net::F::GUEST_CSUM
+    ///     virtio::net::F::GUEST_TSO4.requirements(),
+    ///     virtio::net::F::GUEST_CSUM
     /// );
     /// assert_eq!(
-    ///     virtio_spec::net::F::GUEST_ECN.requirements(),
-    ///     virtio_spec::net::F::GUEST_TSO4 | virtio_spec::net::F::GUEST_TSO6
+    ///     virtio::net::F::GUEST_ECN.requirements(),
+    ///     virtio::net::F::GUEST_TSO4 | virtio::net::F::GUEST_TSO6
     /// );
     /// ```
     fn requirements(&self) -> Self {
@@ -36,14 +37,15 @@ where
     /// # Examples
     ///
     /// ```
-    /// use virtio_spec::FeatureBits;
+    /// # use virtio_spec as virtio;
+    /// use virtio::FeatureBits;
     ///
-    /// assert!((virtio_spec::net::F::GUEST_TSO4
-    ///     | virtio_spec::net::F::GUEST_CSUM)
+    /// assert!((virtio::net::F::GUEST_TSO4
+    ///     | virtio::net::F::GUEST_CSUM)
     ///         .requirements_satisfied());
-    /// assert!((virtio_spec::net::F::GUEST_ECN
-    ///     | virtio_spec::net::F::GUEST_TSO4
-    ///     | virtio_spec::net::F::GUEST_CSUM)
+    /// assert!((virtio::net::F::GUEST_ECN
+    ///     | virtio::net::F::GUEST_TSO4
+    ///     | virtio::net::F::GUEST_CSUM)
     ///     .requirements_satisfied());
     /// ```
     fn requirements_satisfied(&self) -> bool {
@@ -208,37 +210,37 @@ macro_rules! feature_bits {
                     const $Flag = $value;
                 )*
 
-                /// Device-independent Bit. See [`virtio_spec::F::INDIRECT_DESC`](crate::F::INDIRECT_DESC).
+                /// Device-independent Bit. See [`virtio::F::INDIRECT_DESC`](crate::F::INDIRECT_DESC).
                 const INDIRECT_DESC = $crate::F::INDIRECT_DESC.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::EVENT_IDX`](crate::F::EVENT_IDX).
+                /// Device-independent Bit. See [`virtio::F::EVENT_IDX`](crate::F::EVENT_IDX).
                 const EVENT_IDX = $crate::F::EVENT_IDX.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::VERSION_1`](crate::F::VERSION_1).
+                /// Device-independent Bit. See [`virtio::F::VERSION_1`](crate::F::VERSION_1).
                 const VERSION_1 = $crate::F::VERSION_1.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::ACCESS_PLATFORM`](crate::F::ACCESS_PLATFORM).
+                /// Device-independent Bit. See [`virtio::F::ACCESS_PLATFORM`](crate::F::ACCESS_PLATFORM).
                 const ACCESS_PLATFORM = $crate::F::ACCESS_PLATFORM.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::RING_PACKED`](crate::F::RING_PACKED).
+                /// Device-independent Bit. See [`virtio::F::RING_PACKED`](crate::F::RING_PACKED).
                 const RING_PACKED = $crate::F::RING_PACKED.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::IN_ORDER`](crate::F::IN_ORDER).
+                /// Device-independent Bit. See [`virtio::F::IN_ORDER`](crate::F::IN_ORDER).
                 const IN_ORDER = $crate::F::IN_ORDER.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::ORDER_PLATFORM`](crate::F::ORDER_PLATFORM).
+                /// Device-independent Bit. See [`virtio::F::ORDER_PLATFORM`](crate::F::ORDER_PLATFORM).
                 const ORDER_PLATFORM = $crate::F::ORDER_PLATFORM.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::SR_IOV`](crate::F::SR_IOV).
+                /// Device-independent Bit. See [`virtio::F::SR_IOV`](crate::F::SR_IOV).
                 const SR_IOV = $crate::F::SR_IOV.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::NOTIFICATION_DATA`](crate::F::NOTIFICATION_DATA).
+                /// Device-independent Bit. See [`virtio::F::NOTIFICATION_DATA`](crate::F::NOTIFICATION_DATA).
                 const NOTIFICATION_DATA = $crate::F::NOTIFICATION_DATA.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::NOTIF_CONFIG_DATA`](crate::F::NOTIF_CONFIG_DATA).
+                /// Device-independent Bit. See [`virtio::F::NOTIF_CONFIG_DATA`](crate::F::NOTIF_CONFIG_DATA).
                 const NOTIF_CONFIG_DATA = $crate::F::NOTIF_CONFIG_DATA.bits().to_ne();
 
-                /// Device-independent Bit. See [`virtio_spec::F::RING_RESET`](crate::F::RING_RESET).
+                /// Device-independent Bit. See [`virtio::F::RING_RESET`](crate::F::RING_RESET).
                 const RING_RESET = $crate::F::RING_RESET.bits().to_ne();
             }
         }

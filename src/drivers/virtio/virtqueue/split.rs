@@ -10,7 +10,7 @@ use core::cell::{RefCell, UnsafeCell};
 use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
-use virtio_spec::{le16, le32, le64};
+use virtio::{le16, le32, le64};
 use volatile::access::ReadOnly;
 use volatile::{map_field, VolatilePtr, VolatileRef};
 
@@ -392,7 +392,7 @@ impl Virtq for SplitVq {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		features: virtio_spec::F,
+		features: virtio::F,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
 		let mut vq_handler = match com_cfg.select_vq(index.into()) {
@@ -482,7 +482,7 @@ impl Virtq for SplitVq {
 
 		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
 
-		if features.contains(virtio_spec::F::NOTIFICATION_DATA) {
+		if features.contains(virtio::F::NOTIFICATION_DATA) {
 			notif_ctrl.enable_notif_data();
 		}
 

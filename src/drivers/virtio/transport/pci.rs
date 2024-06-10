@@ -8,11 +8,11 @@ use core::ptr::NonNull;
 use core::{mem, ptr};
 
 use pci_types::capability::PciCapability;
-use virtio_spec::pci::{
+use virtio::pci::{
 	CapCfgType, CapData, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw, NotificationData,
 };
-use virtio_spec::{le16, le32, DeviceStatus};
+use virtio::{le16, le32, DeviceStatus};
 use volatile::VolatileRef;
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
@@ -452,7 +452,7 @@ impl ComCfg {
 	}
 
 	/// Returns the features offered by the device.
-	pub fn dev_features(&mut self) -> virtio_spec::F {
+	pub fn dev_features(&mut self) -> virtio::F {
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let device_feature_select = com_cfg.device_feature_select();
 		let device_feature = com_cfg.device_feature();
@@ -474,11 +474,11 @@ impl ComCfg {
 		// read low 32 bits of device features
 		device_features |= u64::from(device_feature.read().to_ne());
 
-		virtio_spec::F::from_bits_retain(u128::from(device_features).into())
+		virtio::F::from_bits_retain(u128::from(device_features).into())
 	}
 
 	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: virtio_spec::F) {
+	pub fn set_drv_features(&mut self, features: virtio::F) {
 		let features = features.bits().to_ne() as u64;
 		let com_cfg = self.com_cfg.as_mut_ptr();
 		let driver_feature_select = com_cfg.driver_feature_select();
@@ -903,11 +903,11 @@ pub(crate) fn init_device(
 		));
 	}
 
-	let id = virtio_spec::Id::from(u8::try_from(device_id - 0x1040).unwrap());
+	let id = virtio::Id::from(u8::try_from(device_id - 0x1040).unwrap());
 
 	let virt_drv = match id {
 		#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-		virtio_spec::Id::Net => match VirtioNetDriver::init(device) {
+		virtio::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Network(virt_net_drv))
@@ -921,7 +921,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "fuse")]
-		virtio_spec::Id::Fs => {
+		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
 			match VirtioFsDriver::init(device) {

@@ -3,7 +3,7 @@ use core::ptr::NonNull;
 
 use fdt::Fdt;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
-use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use virtio::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use volatile::VolatileRef;
 
@@ -209,7 +209,7 @@ pub fn init_drivers() {
 					// Verify the device-ID to find the network card
 					let id = mmio.as_ptr().device_id().read();
 
-					if id != virtio_spec::Id::Net {
+					if id != virtio::Id::Net {
 						debug!("It's not a network card at {mmio:p}");
 					} else {
 						info!("Found network card at {mmio:p}");

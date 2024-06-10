@@ -5,7 +5,7 @@ use core::{ptr, str};
 
 use align_address::Align;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
-use virtio_spec::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use virtio::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
 use volatile::VolatileRef;
 
 use crate::arch::x86_64::mm::paging::{
@@ -62,7 +62,7 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 	// Verify the device-ID to find the network card
 	let id = mmio.as_ptr().device_id().read();
 
-	if id != virtio_spec::Id::Net {
+	if id != virtio::Id::Net {
 		trace!("It's not a network card at {mmio:p}");
 		return None;
 	}
