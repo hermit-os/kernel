@@ -1,7 +1,41 @@
 //! Network Device
 
+use volatile_macro::VolatileFieldAccess;
+
 pub use super::features::net::F;
 use crate::{le16, le32};
+
+endian_bitflags! {
+    /// Network Device Status Flags
+    #[doc(alias = "VIRTIO_NET_S")]
+    pub struct S: le16 {
+        #[doc(alias = "VIRTIO_NET_S_LINK_UP")]
+        const LINK_UP = 1;
+
+        #[doc(alias = "VIRTIO_NET_S_ANNOUNCE")]
+        const ANNOUNCE = 2;
+    }
+}
+
+/// Network Device Configuration Layout
+#[doc(alias = "virtio_net_config")]
+#[cfg_attr(
+    feature = "zerocopy",
+    derive(zerocopy_derive::FromZeroes, zerocopy_derive::FromBytes)
+)]
+#[derive(VolatileFieldAccess)]
+#[repr(C)]
+pub struct Config {
+    mac: [u8; 6],
+    status: S,
+    max_virtqueue_pairs: le16,
+    mtu: le16,
+    speed: le32,
+    duplex: u8,
+    rss_max_key_size: u8,
+    rss_max_indirection_table_length: le16,
+    supported_hash_types: le32,
+}
 
 virtio_bitflags! {
     /// Network Device Header Flags

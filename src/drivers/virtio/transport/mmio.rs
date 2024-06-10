@@ -19,7 +19,7 @@ use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::network_irqhandler;
 #[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
 
 pub struct VqCfgHandler<'a> {
@@ -92,6 +92,10 @@ pub struct ComCfg {
 impl ComCfg {
 	pub fn new(raw: VolatileRef<'static, DeviceRegisters>, rank: u8) -> Self {
 		ComCfg { com_cfg: raw, rank }
+	}
+
+	pub fn config_generation(&self) -> u32 {
+		self.com_cfg.as_ptr().config_generation().read().to_ne()
 	}
 
 	/// Select a queue via an index. If queue does NOT exist returns `None`, else

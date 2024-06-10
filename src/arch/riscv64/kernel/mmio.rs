@@ -5,7 +5,7 @@ use hermit_sync::InterruptSpinMutex;
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem::GEMDriver;
 #[cfg(not(feature = "gem-net"))]
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
 

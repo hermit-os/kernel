@@ -11,7 +11,7 @@ pub mod error {
 	#[cfg(feature = "fuse")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
+	pub use crate::drivers::net::virtio::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
 

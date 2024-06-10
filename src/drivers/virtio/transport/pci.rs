@@ -26,7 +26,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::network_irqhandler;
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::VirtioError;
@@ -363,6 +363,10 @@ impl ComCfg {
 				raw: self.com_cfg.borrow_mut(),
 			})
 		}
+	}
+
+	pub fn config_generation(&self) -> u32 {
+		self.com_cfg.as_ptr().config_generation().read().into()
 	}
 
 	/// Returns the device status field.

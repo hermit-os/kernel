@@ -19,7 +19,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 	feature = "fuse"

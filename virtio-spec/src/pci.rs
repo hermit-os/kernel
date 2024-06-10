@@ -296,7 +296,7 @@ pub enum CapCfgType {
 ///
 /// The common configuration structure is found at the bar and offset within the [`VIRTIO_PCI_CAP_COMMON_CFG`] capability.
 ///
-/// [`VIRTIO_PCI_CAP_COMMON_CFG`]: Cap::CommonCfg
+/// [`VIRTIO_PCI_CAP_COMMON_CFG`]: CapCfgType::Common
 #[doc(alias = "virtio_pci_common_cfg")]
 #[cfg_attr(
     feature = "zerocopy",

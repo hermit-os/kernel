@@ -7,75 +7,25 @@ use core::str::FromStr;
 
 use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
+use volatile::VolatileRef;
 
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
+use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 
-/// Virtio's network device configuration structure.
-/// See specification v1.1. - 5.1.4
-///
-#[repr(C)]
-pub(crate) struct NetDevCfgRaw {
-	// Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
-	mac: [u8; 6],
-	// Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
-	status: u16,
-	// Indicates number of allowed vq-pairs. Only valid if VIRTIO_NET_F_MQ is set.
-	max_virtqueue_pairs: u16,
-	// Indicates the maximum MTU driver should use. Only valid if VIRTIONET_F_MTU is set.
-	mtu: u16,
-}
-
-impl NetDevCfgRaw {
-	pub fn get_mtu(&self) -> u16 {
-		self.mtu
-	}
-
-	pub fn get_mac(&self) -> [u8; 6] {
-		self.mac
-	}
-
-	pub fn get_status(&self) -> u16 {
-		self.status
-	}
-
-	pub fn get_max_virtqueue_pairs(&self) -> u16 {
-		self.max_virtqueue_pairs
-	}
-}
-
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
-		/*
-		if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
-			error!("Network config of device {:x}, does not fit into memory specified by bar!",
-				cap.dev_id(),
-			);
-			return None
-		}
+		let dev_cfg: &'static virtio_spec::net::Config =
+			match pci::map_dev_cfg::<virtio_spec::net::Config>(cap) {
+				Some(cfg) => cfg,
+				None => return None,
+			};
 
-		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if cap.len() < MemLen::from(mem::size_of::<NetDevCfg>()) {
-			error!("Network config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
-			return None
-		}
-
-		let virt_addr_raw = cap.bar_addr() + cap.offset();
-
-		// Create mutable reference to the PCI structure in PCI memory
-		let dev_cfg: &mut NetDevCfgRaw = unsafe {
-			&mut *(usize::from(virt_addr_raw) as *mut NetDevCfgRaw)
-		};
-		*/
-		let dev_cfg: &'static NetDevCfgRaw = match pci::map_dev_cfg::<NetDevCfgRaw>(cap) {
-			Some(cfg) => cfg,
-			None => return None,
-		};
+		let dev_cfg = VolatileRef::from_ref(dev_cfg);
 
 		Some(NetDevCfg {
 			raw: dev_cfg,
