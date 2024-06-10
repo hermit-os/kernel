@@ -224,21 +224,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	}
 
 	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
-		// TODO: implement with `EndpointHeader::update_interrupt` and remove `DeviceHeader` once merged:
-		// https://github.com/rust-osdev/pci_types/pull/21
-		unsafe {
-			let mut command = self
-				.access
-				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
-			command &= 0xFFFF_0000u32;
-			command |= u32::from(line);
-			command |= u32::from(pin) << 8;
-			self.access.write(
-				self.address,
-				DeviceHeader::PCI_INTERRUPT_REGISTER.into(),
-				command,
-			);
-		}
+		let mut header = EndpointHeader::from_header(self.header(), &self.access).unwrap();
+		header.update_interrupt(&self.access, |(_pin, _line)| (pin, line));
 	}
 
 	pub fn bus(&self) -> u8 {
