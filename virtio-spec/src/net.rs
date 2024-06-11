@@ -1,6 +1,6 @@
 //! Network Device
 
-use num_enum::{FromPrimitive, IntoPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use volatile_macro::VolatileFieldAccess;
 
 pub use super::features::net::F;
@@ -191,4 +191,124 @@ pub enum HashReport {
 
     #[num_enum(catch_all)]
     Unknown(u16),
+}
+
+/// Command class
+#[doc(alias = "VIRTIO_NET_CTRL")]
+#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[non_exhaustive]
+#[repr(u8)]
+pub enum Ctrl {
+    #[doc(alias = "VIRTIO_NET_CTRL_RX")]
+    Rx = 0,
+
+    #[doc(alias = "VIRTIO_NET_CTRL_MAC")]
+    Mac = 1,
+
+    #[doc(alias = "VIRTIO_NET_CTRL_VLAN")]
+    Vlan = 2,
+
+    #[doc(alias = "VIRTIO_NET_CTRL_ANNOUNCE")]
+    Announce = 3,
+
+    #[doc(alias = "VIRTIO_NET_CTRL_MQ")]
+    Mq = 4,
+
+    #[doc(alias = "VIRTIO_NET_CTRL_GUEST_OFFLOADS")]
+    GuestOffloads = 5,
+}
+
+/// Commands
+pub mod ctrl {
+    use num_enum::{IntoPrimitive, TryFromPrimitive};
+
+    /// Packed Receive Filtering commands
+    #[doc(alias = "VIRTIO_NET_CTRL_RX")]
+    #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+    #[non_exhaustive]
+    #[repr(u8)]
+    pub enum Rx {
+        #[doc(alias = "VIRTIO_NET_CTRL_RX_PROMISC")]
+        Promisc = 0,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_RX_ALLMULTI")]
+        Allmulti = 1,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_RX_ALLUNI")]
+        Alluni = 2,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_RX_NOMULTI")]
+        Nomulti = 3,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_RX_NOUNI")]
+        Nouni = 4,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_RX_NOBCAST")]
+        Nobcast = 5,
+    }
+
+    /// MAC Address Filtering commands
+    #[doc(alias = "VIRTIO_NET_CTRL_MAC")]
+    #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+    #[non_exhaustive]
+    #[repr(u8)]
+    pub enum Mac {
+        #[doc(alias = "VIRTIO_NET_CTRL_MAC_TABLE_SET")]
+        TableSet = 0,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_MAC_ADDR_SET")]
+        AddrSet = 1,
+    }
+
+    /// VLAN filtering commands
+    #[doc(alias = "VIRTIO_NET_CTRL_VLAN")]
+    #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+    #[non_exhaustive]
+    #[repr(u8)]
+    pub enum Vlan {
+        #[doc(alias = "VIRTIO_NET_CTRL_VLAN_ADD")]
+        Add = 0,
+
+        #[doc(alias = "VIRTIO_NET_CTRL_VLAN_DEL")]
+        Del = 1,
+    }
+
+    /// Gratuitous Packet Sending commands
+    #[doc(alias = "VIRTIO_NET_CTRL_ANNOUNCE")]
+    #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+    #[non_exhaustive]
+    #[repr(u8)]
+    pub enum Announce {
+        #[doc(alias = "VIRTIO_NET_CTRL_ANNOUNCE_ACK")]
+        Ack = 0,
+    }
+
+    /// Multiqueue mode commands
+    #[doc(alias = "VIRTIO_NET_CTRL_MQ")]
+    #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+    #[non_exhaustive]
+    #[repr(u8)]
+    pub enum Mq {
+        /// For automatic receive steering
+        #[doc(alias = "VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET")]
+        VqPairsSet = 0,
+
+        /// For configurable receive steering
+        #[doc(alias = "VIRTIO_NET_CTRL_MQ_RSS_CONFIG")]
+        RssConfig = 1,
+
+        /// For configurable hash calculation
+        #[doc(alias = "VIRTIO_NET_CTRL_MQ_HASH_CONFIG")]
+        HashConfig = 2,
+    }
+
+    /// Setting Offloads State commands
+    #[doc(alias = "VIRTIO_NET_CTRL_GUEST_OFFLOADS")]
+    #[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+    #[non_exhaustive]
+    #[repr(u8)]
+    pub enum GuestOffloads {
+        #[doc(alias = "VIRTIO_NET_CTRL_GUEST_OFFLOADS_SET")]
+        Set = 0,
+    }
 }
