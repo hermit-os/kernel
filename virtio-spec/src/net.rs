@@ -1,5 +1,6 @@
 //! Network Device
 
+use num_enum::{FromPrimitive, IntoPrimitive};
 use volatile_macro::VolatileFieldAccess;
 
 pub use super::features::net::F;
@@ -119,4 +120,75 @@ pub struct HdrHashReport {
     pub hash_report: le16,
     /// Only if VIRTIO_NET_F_HASH_REPORT negotiated
     pub padding_reserved: le16,
+}
+
+endian_bitflags! {
+    /// Hash Type
+    pub struct HashType: le32 {
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_IPv4")]
+        const IPV4 = 1 << 0;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_TCPv4")]
+        const TCPV4 = 1 << 1;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_UDPv4")]
+        const UDPV4 = 1 << 2;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_IPv6")]
+        const IPV6 = 1 << 3;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_TCPv6")]
+        const TCPV6 = 1 << 4;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_UDPv6")]
+        const UDPV6 = 1 << 5;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_IP_EX")]
+        const IP_EX = 1 << 6;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_TCP_EX")]
+        const TCP_EX = 1 << 7;
+
+        #[doc(alias = "VIRTIO_NET_HASH_TYPE_UDP_EX")]
+        const UDP_EX = 1 << 8;
+    }
+}
+
+/// Hash Report
+#[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[non_exhaustive]
+#[repr(u16)]
+pub enum HashReport {
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_NONE")]
+    None = 0,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_IPv4")]
+    Ipv4 = 1,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_TCPv4")]
+    Tcpv4 = 2,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_UDPv4")]
+    Udpv4 = 3,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_IPv6")]
+    IPv6 = 4,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_TCPv6")]
+    Tcpv6 = 5,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_UDPv6")]
+    Udpv6 = 6,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_IPv6_EX")]
+    Ipv6Ex = 7,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_TCPv6_EX")]
+    Tcpv6Ex = 8,
+
+    #[doc(alias = "VIRTIO_NET_HASH_REPORT_UDPv6_EX")]
+    Udpv6Ex = 9,
+
+    #[num_enum(catch_all)]
+    Unknown(u16),
 }
