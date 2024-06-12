@@ -11,7 +11,7 @@ use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
 use virtio::pci::NotificationData;
-use virtio::{le16, le32, virtq};
+use virtio::{le16, virtq};
 use volatile::access::ReadOnly;
 use volatile::{map_field, VolatilePtr, VolatileRef};
 
@@ -71,13 +71,17 @@ type UsedRing = GenericRing<[u8]>;
 impl UsedRing {
 	fn ring_ptr<A: volatile::access::Access>(
 		volatile_self: VolatilePtr<'_, Self, A>,
-	) -> VolatilePtr<'_, [UsedElem], A> {
+	) -> VolatilePtr<'_, [virtq::UsedElem], A> {
 		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
-		let ring_len = (ring_and_event_ptr.len() - size_of::<le16>()) / size_of::<UsedElem>();
+		let ring_len =
+			(ring_and_event_ptr.len() - size_of::<le16>()) / size_of::<virtq::UsedElem>();
 
 		unsafe {
 			ring_and_event_ptr.map(|ring_and_event_ptr| {
-				NonNull::slice_from_raw_parts(ring_and_event_ptr.cast::<UsedElem>(), ring_len)
+				NonNull::slice_from_raw_parts(
+					ring_and_event_ptr.cast::<virtq::UsedElem>(),
+					ring_len,
+				)
 			})
 		}
 	}
@@ -93,13 +97,6 @@ impl UsedRing {
 
 		unsafe { event_bytes_ptr.map(|event_bytes| event_bytes.cast::<le16>()) }
 	}
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct UsedElem {
-	id: le32,
-	len: le32,
 }
 
 struct DescrRing {
@@ -427,7 +424,7 @@ impl Virtq for SplitVq {
 		};
 
 		let used_ring_cell = {
-			let ring_and_event_layout = Layout::array::<UsedElem>(size.into())
+			let ring_and_event_layout = Layout::array::<virtq::UsedElem>(size.into())
 				.unwrap()
 				.extend(Layout::new::<le16>()) // for event
 				.unwrap()
