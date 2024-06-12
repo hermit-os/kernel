@@ -43,3 +43,18 @@ endian_bitflags! {
         const USED = 1 << 15;
     }
 }
+
+/// Used Ring Entry
+#[doc(alias = "virtq_used_elem")]
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct UsedElem {
+    /// Index of start of used descriptor chain.
+    ///
+    /// le32 is used here for ids for padding reasons.
+    pub id: le32,
+
+    /// The number of bytes written into the device writable portion of
+    /// the buffer described by the descriptor chain.
+    pub len: le32,
+}
