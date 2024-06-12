@@ -12,7 +12,7 @@ use core::{ops, ptr};
 
 use align_address::Align;
 use virtio::pci::NotificationData;
-use zerocopy::little_endian;
+use virtio::{le16, le32, le64};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -302,7 +302,7 @@ impl DescriptorRing {
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
 		self.ring[usize::from(first_ctrl_settings.0)].flags |=
-			first_ctrl_settings.2.as_flags_avail().into();
+			le16::from_ne(first_ctrl_settings.2.as_flags_avail());
 
 		RingIdx {
 			off: self.write_index,
@@ -469,10 +469,16 @@ impl<'a> ReadCtrl<'a> {
 	/// updating the queue and returns the respective TransferToken.
 	fn poll_next(&mut self) -> Option<Box<TransferToken>> {
 		// Check if descriptor has been marked used.
-		if self.desc_ring.ring[usize::from(self.position)].flags.get() & WrapCount::flag_mask()
+		if self.desc_ring.ring[usize::from(self.position)]
+			.flags
+			.to_ne() & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
-			let buff_id = usize::from(self.desc_ring.ring[usize::from(self.position)].buff_id);
+			let buff_id = usize::from(
+				self.desc_ring.ring[usize::from(self.position)]
+					.buff_id
+					.to_ne(),
+			);
 			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id].take().expect(
 				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 			);
@@ -578,11 +584,11 @@ impl<'a> ReadCtrl<'a> {
 
 					if write_len >= ring_desc.len.into() {
 						// Complete length has been written but reduce len_written for next one
-						write_len -= ring_desc.len.get();
+						write_len -= ring_desc.len.to_ne();
 					} else {
 						ring_desc.len = (write_len).into();
 						desc.len = write_len as usize;
-						write_len -= ring_desc.len.get();
+						write_len -= ring_desc.len.to_ne();
 						assert_eq!(write_len, 0);
 					}
 				}
@@ -630,11 +636,11 @@ impl<'a> ReadCtrl<'a> {
 
 					if write_len >= ring_desc.len.into() {
 						// Complete length has been written but reduce len_written for next one
-						write_len -= ring_desc.len.get();
+						write_len -= ring_desc.len.to_ne();
 					} else {
 						ring_desc.len = write_len.into();
 						desc.len = write_len as usize;
-						write_len -= ring_desc.len.get();
+						write_len -= ring_desc.len.to_ne();
 						assert_eq!(write_len, 0);
 					}
 				}
@@ -766,9 +772,9 @@ impl<'a> WriteCtrl<'a> {
 		// descriptor.
 		if self.start == self.position {
 			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
-			desc_ref
-				.address
-				.set(paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into());
+			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
+				.as_u64()
+				.into();
 			desc_ref.len = (mem_desc.len as u32).into();
 			desc_ref.buff_id = (mem_desc.id.as_ref().unwrap().0).into();
 			// Remove possibly set avail and used flags
@@ -780,9 +786,9 @@ impl<'a> WriteCtrl<'a> {
 			self.incrmt();
 		} else {
 			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
-			desc_ref
-				.address
-				.set(paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into());
+			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
+				.as_u64()
+				.into();
 			desc_ref.len = (mem_desc.len as u32).into();
 			desc_ref.buff_id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
@@ -808,17 +814,17 @@ impl<'a> WriteCtrl<'a> {
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
 		self.desc_ring.ring[usize::from(self.start)].flags |=
-			self.wrap_at_init.as_flags_avail().into();
+			le16::from_ne(self.wrap_at_init.as_flags_avail());
 	}
 }
 
 #[derive(Clone, Copy)]
-#[repr(C, align(16))]
+#[repr(C)]
 struct Descriptor {
-	address: little_endian::U64,
-	len: little_endian::U32,
-	buff_id: little_endian::U16,
-	flags: little_endian::U16,
+	address: le64,
+	len: le32,
+	buff_id: le16,
+	flags: le16,
 }
 
 impl Descriptor {
