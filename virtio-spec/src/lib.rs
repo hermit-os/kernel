@@ -14,6 +14,7 @@ pub mod fs;
 pub mod mmio;
 pub mod net;
 pub mod pci;
+pub mod virtq;
 
 pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
 use num_enum::{FromPrimitive, IntoPrimitive};
