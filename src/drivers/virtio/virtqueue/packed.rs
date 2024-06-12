@@ -12,7 +12,7 @@ use core::{ops, ptr};
 
 use align_address::Align;
 use virtio::pci::NotificationData;
-use virtio::{le16, le32, le64, virtq};
+use virtio::{pvirtq, virtq};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -108,7 +108,7 @@ impl WrapCount {
 
 /// Structure which allows to control raw ring and operate easily on it
 struct DescriptorRing {
-	ring: &'static mut [Descriptor],
+	ring: &'static mut [pvirtq::Desc],
 	tkn_ref_ring: Box<[Option<Box<TransferToken>>]>,
 
 	// Controlling variables for the ring
@@ -127,11 +127,11 @@ struct DescriptorRing {
 impl DescriptorRing {
 	fn new(size: u16) -> Self {
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = (usize::from(size) * core::mem::size_of::<Descriptor>())
+		let _mem_len = (usize::from(size) * core::mem::size_of::<pvirtq::Desc>())
 			.align_up(BasePageSize::SIZE as usize);
 		let ptr = ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
-		let ring: &'static mut [Descriptor] =
+		let ring: &'static mut [pvirtq::Desc] =
 			unsafe { core::slice::from_raw_parts_mut(ptr, size.into()) };
 
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
@@ -458,11 +458,7 @@ impl<'a> ReadCtrl<'a> {
 		if self.desc_ring.ring[usize::from(self.position)].flags & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
-			let buff_id = usize::from(
-				self.desc_ring.ring[usize::from(self.position)]
-					.buff_id
-					.to_ne(),
-			);
+			let buff_id = usize::from(self.desc_ring.ring[usize::from(self.position)].id.to_ne());
 			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id].take().expect(
 				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 			);
@@ -546,9 +542,9 @@ impl<'a> ReadCtrl<'a> {
 				// This should read the descriptors inside the ctrl desc memory and update the memory
 				// accordingly
 				let desc_slice = unsafe {
-					let size = core::mem::size_of::<Descriptor>();
+					let size = core::mem::size_of::<pvirtq::Desc>();
 					core::slice::from_raw_parts_mut(
-						ctrl_desc.ptr as *mut Descriptor,
+						ctrl_desc.ptr as *mut pvirtq::Desc,
 						ctrl_desc.len / size,
 					)
 				};
@@ -583,9 +579,9 @@ impl<'a> ReadCtrl<'a> {
 				// This should read the descriptors inside the ctrl desc memory and update the memory
 				// accordingly
 				let desc_slice = unsafe {
-					let size = core::mem::size_of::<Descriptor>();
+					let size = core::mem::size_of::<pvirtq::Desc>();
 					core::slice::from_raw_parts(
-						ctrl_desc.ptr as *mut Descriptor,
+						ctrl_desc.ptr as *mut pvirtq::Desc,
 						ctrl_desc.len / size,
 					)
 				};
@@ -603,9 +599,9 @@ impl<'a> ReadCtrl<'a> {
 				// This should read the descriptors inside the ctrl desc memory and update the memory
 				// accordingly
 				let desc_slice = unsafe {
-					let size = core::mem::size_of::<Descriptor>();
+					let size = core::mem::size_of::<pvirtq::Desc>();
 					core::slice::from_raw_parts_mut(
-						ctrl_desc.ptr as *mut Descriptor,
+						ctrl_desc.ptr as *mut pvirtq::Desc,
 						ctrl_desc.len / size,
 					)
 				};
@@ -756,11 +752,11 @@ impl<'a> WriteCtrl<'a> {
 		// descriptor.
 		if self.start == self.position {
 			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
-			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
+			desc_ref.addr = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
 				.as_u64()
 				.into();
 			desc_ref.len = (mem_desc.len as u32).into();
-			desc_ref.buff_id = (mem_desc.id.as_ref().unwrap().0).into();
+			desc_ref.id = (mem_desc.id.as_ref().unwrap().0).into();
 			// Remove possibly set avail and used flags
 			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
 
@@ -768,11 +764,11 @@ impl<'a> WriteCtrl<'a> {
 			self.incrmt();
 		} else {
 			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
-			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
+			desc_ref.addr = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
 				.as_u64()
 				.into();
 			desc_ref.len = (mem_desc.len as u32).into();
-			desc_ref.buff_id = (self.buff_id).into();
+			desc_ref.id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
 			// according to the current WrapCount.
 			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
@@ -793,26 +789,6 @@ impl<'a> WriteCtrl<'a> {
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
 		self.desc_ring.ring[usize::from(self.start)].flags |= self.wrap_at_init.as_flags_avail();
-	}
-}
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-struct Descriptor {
-	address: le64,
-	len: le32,
-	buff_id: le16,
-	flags: virtq::DescF,
-}
-
-impl Descriptor {
-	fn new(add: u64, len: u32, id: u16, flags: virtq::DescF) -> Self {
-		Descriptor {
-			address: add.into(),
-			len: len.into(),
-			buff_id: id.into(),
-			flags,
-		}
 	}
 }
 
@@ -1189,7 +1165,7 @@ impl VirtqPrivate for PackedVq {
 			(Some(send_desc_lst), Some(recv_desc_lst)) => send_desc_lst.len() + recv_desc_lst.len(),
 		};
 
-		let sz_indrct_lst = match Bytes::new(core::mem::size_of::<Descriptor>() * len) {
+		let sz_indrct_lst = match Bytes::new(core::mem::size_of::<pvirtq::Desc>() * len) {
 			Some(bytes) => bytes,
 			None => return Err(VirtqError::BufferToLarge),
 		};
@@ -1206,8 +1182,11 @@ impl VirtqPrivate for PackedVq {
 		let mut crtl_desc_iter = 0usize;
 
 		let desc_slice = unsafe {
-			let size = core::mem::size_of::<Descriptor>();
-			core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+			let size = core::mem::size_of::<pvirtq::Desc>();
+			core::slice::from_raw_parts_mut(
+				ctrl_desc.ptr as *mut pvirtq::Desc,
+				ctrl_desc.len / size,
+			)
 		};
 
 		match (send, recv) {
@@ -1215,12 +1194,14 @@ impl VirtqPrivate for PackedVq {
 			// Only recving descriptorsn (those are writabel by device)
 			(None, Some(recv_desc_lst)) => {
 				for desc in recv_desc_lst {
-					desc_slice[crtl_desc_iter] = Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						0,
-						virtq::DescF::WRITE,
-					);
+					desc_slice[crtl_desc_iter] = pvirtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						id: 0.into(),
+						flags: virtq::DescF::WRITE,
+					};
 
 					crtl_desc_iter += 1;
 				}
@@ -1229,12 +1210,14 @@ impl VirtqPrivate for PackedVq {
 			// Only sending descriptors
 			(Some(send_desc_lst), None) => {
 				for desc in send_desc_lst {
-					desc_slice[crtl_desc_iter] = Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						0,
-						virtq::DescF::empty(),
-					);
+					desc_slice[crtl_desc_iter] = pvirtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						id: 0.into(),
+						flags: virtq::DescF::empty(),
+					};
 
 					crtl_desc_iter += 1;
 				}
@@ -1243,23 +1226,27 @@ impl VirtqPrivate for PackedVq {
 			(Some(send_desc_lst), Some(recv_desc_lst)) => {
 				// Send descriptors ALWAYS before receiving ones.
 				for desc in send_desc_lst {
-					desc_slice[crtl_desc_iter] = Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						0,
-						virtq::DescF::empty(),
-					);
+					desc_slice[crtl_desc_iter] = pvirtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						id: 0.into(),
+						flags: virtq::DescF::empty(),
+					};
 
 					crtl_desc_iter += 1;
 				}
 
 				for desc in recv_desc_lst {
-					desc_slice[crtl_desc_iter] = Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						0,
-						virtq::DescF::WRITE,
-					);
+					desc_slice[crtl_desc_iter] = pvirtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						id: 0.into(),
+						flags: virtq::DescF::WRITE,
+					};
 
 					crtl_desc_iter += 1;
 				}
