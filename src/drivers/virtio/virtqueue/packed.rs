@@ -12,7 +12,7 @@ use core::{ops, ptr};
 
 use align_address::Align;
 use virtio::pci::NotificationData;
-use virtio::{le16, le32, le64};
+use virtio::{le16, le32, le64, virtq};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -20,8 +20,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, Buffer, BufferToken, BufferType, Bytes, DescrFlags, MemDescr, MemPool, TransferToken,
-	Virtq, VirtqPrivate, VqIndex, VqSize,
+	BuffSpec, Buffer, BufferToken, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
+	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -60,8 +60,8 @@ struct WrapCount(bool);
 
 impl WrapCount {
 	/// Masks all other bits, besides the wrap count specific ones.
-	fn flag_mask() -> u16 {
-		1 << 7 | 1 << 15
+	fn flag_mask() -> virtq::DescF {
+		virtq::DescF::AVAIL | virtq::DescF::USED
 	}
 
 	/// Returns a new WrapCount struct initialized to true or 1.
@@ -84,11 +84,11 @@ impl WrapCount {
 	///
 	/// I.e.: Set avail flag to match the WrapCount and the used flag
 	/// to NOT match the WrapCount.
-	fn as_flags_avail(&self) -> u16 {
+	fn as_flags_avail(&self) -> virtq::DescF {
 		if self.0 {
-			1 << 7
+			virtq::DescF::AVAIL
 		} else {
-			1 << 15
+			virtq::DescF::USED
 		}
 	}
 
@@ -97,11 +97,11 @@ impl WrapCount {
 	///
 	/// I.e.: Set avail flag to match the WrapCount and the used flag
 	/// to also match the WrapCount.
-	fn as_flags_used(&self) -> u16 {
+	fn as_flags_used(&self) -> virtq::DescF {
 		if self.0 {
-			1 << 7 | 1 << 15
+			virtq::DescF::AVAIL | virtq::DescF::USED
 		} else {
-			0
+			virtq::DescF::empty()
 		}
 	}
 }
@@ -202,7 +202,7 @@ impl DescriptorRing {
 					match (send_buff.get_ctrl_desc(), recv_buff.get_ctrl_desc()) {
 						(Some(ctrl_desc), Some(_)) => {
 							// One indirect descriptor with only flag indirect set
-							ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into());
+							ctrl.write_desc(ctrl_desc, virtq::DescF::INDIRECT);
 						}
 						(None, None) => {
 							let mut buff_len =
@@ -210,22 +210,18 @@ impl DescriptorRing {
 
 							for desc in send_buff.as_slice() {
 								if buff_len > 1 {
-									ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+									ctrl.write_desc(desc, virtq::DescF::NEXT);
 								} else {
-									ctrl.write_desc(desc, 0);
+									ctrl.write_desc(desc, virtq::DescF::empty());
 								}
 								buff_len -= 1;
 							}
 
 							for desc in recv_buff.as_slice() {
 								if buff_len > 1 {
-									ctrl.write_desc(
-										desc,
-										DescrFlags::VIRTQ_DESC_F_NEXT
-											| DescrFlags::VIRTQ_DESC_F_WRITE,
-									);
+									ctrl.write_desc(desc, virtq::DescF::NEXT | virtq::DescF::WRITE);
 								} else {
-									ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+									ctrl.write_desc(desc, virtq::DescF::WRITE);
 								}
 								buff_len -= 1;
 							}
@@ -242,16 +238,16 @@ impl DescriptorRing {
 					match send_buff.get_ctrl_desc() {
 						Some(ctrl_desc) => {
 							// One indirect descriptor with only flag indirect set
-							ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into());
+							ctrl.write_desc(ctrl_desc, virtq::DescF::INDIRECT);
 						}
 						None => {
 							let mut buff_len = send_buff.as_slice().len();
 
 							for desc in send_buff.as_slice() {
 								if buff_len > 1 {
-									ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+									ctrl.write_desc(desc, virtq::DescF::NEXT);
 								} else {
-									ctrl.write_desc(desc, 0);
+									ctrl.write_desc(desc, virtq::DescF::empty());
 								}
 								buff_len -= 1;
 							}
@@ -262,20 +258,16 @@ impl DescriptorRing {
 					match recv_buff.get_ctrl_desc() {
 						Some(ctrl_desc) => {
 							// One indirect descriptor with only flag indirect set
-							ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into());
+							ctrl.write_desc(ctrl_desc, virtq::DescF::INDIRECT);
 						}
 						None => {
 							let mut buff_len = recv_buff.as_slice().len();
 
 							for desc in recv_buff.as_slice() {
 								if buff_len > 1 {
-									ctrl.write_desc(
-										desc,
-										DescrFlags::VIRTQ_DESC_F_NEXT
-											| DescrFlags::VIRTQ_DESC_F_WRITE,
-									);
+									ctrl.write_desc(desc, virtq::DescF::NEXT | virtq::DescF::WRITE);
 								} else {
-									ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+									ctrl.write_desc(desc, virtq::DescF::WRITE);
 								}
 								buff_len -= 1;
 							}
@@ -302,7 +294,7 @@ impl DescriptorRing {
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
 		self.ring[usize::from(first_ctrl_settings.0)].flags |=
-			le16::from_ne(first_ctrl_settings.2.as_flags_avail());
+			first_ctrl_settings.2.as_flags_avail();
 
 		RingIdx {
 			off: self.write_index,
@@ -337,28 +329,25 @@ impl DescriptorRing {
 				match (send_buff.get_ctrl_desc(), recv_buff.get_ctrl_desc()) {
 					(Some(ctrl_desc), Some(_)) => {
 						// One indirect descriptor with only flag indirect set
-						ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into());
+						ctrl.write_desc(ctrl_desc, virtq::DescF::INDIRECT);
 					}
 					(None, None) => {
 						let mut buff_len = send_buff.as_slice().len() + recv_buff.as_slice().len();
 
 						for desc in send_buff.as_slice() {
 							if buff_len > 1 {
-								ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+								ctrl.write_desc(desc, virtq::DescF::NEXT);
 							} else {
-								ctrl.write_desc(desc, 0);
+								ctrl.write_desc(desc, virtq::DescF::empty());
 							}
 							buff_len -= 1;
 						}
 
 						for desc in recv_buff.as_slice() {
 							if buff_len > 1 {
-								ctrl.write_desc(
-									desc,
-									DescrFlags::VIRTQ_DESC_F_NEXT | DescrFlags::VIRTQ_DESC_F_WRITE,
-								);
+								ctrl.write_desc(desc, virtq::DescF::NEXT | virtq::DescF::WRITE);
 							} else {
-								ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+								ctrl.write_desc(desc, virtq::DescF::WRITE);
 							}
 							buff_len -= 1;
 						}
@@ -371,16 +360,16 @@ impl DescriptorRing {
 				match send_buff.get_ctrl_desc() {
 					Some(ctrl_desc) => {
 						// One indirect descriptor with only flag indirect set
-						ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into());
+						ctrl.write_desc(ctrl_desc, virtq::DescF::INDIRECT);
 					}
 					None => {
 						let mut buff_len = send_buff.as_slice().len();
 
 						for desc in send_buff.as_slice() {
 							if buff_len > 1 {
-								ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+								ctrl.write_desc(desc, virtq::DescF::NEXT);
 							} else {
-								ctrl.write_desc(desc, 0);
+								ctrl.write_desc(desc, virtq::DescF::empty());
 							}
 							buff_len -= 1;
 						}
@@ -391,19 +380,16 @@ impl DescriptorRing {
 				match recv_buff.get_ctrl_desc() {
 					Some(ctrl_desc) => {
 						// One indirect descriptor with only flag indirect set
-						ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into());
+						ctrl.write_desc(ctrl_desc, virtq::DescF::INDIRECT);
 					}
 					None => {
 						let mut buff_len = recv_buff.as_slice().len();
 
 						for desc in recv_buff.as_slice() {
 							if buff_len > 1 {
-								ctrl.write_desc(
-									desc,
-									DescrFlags::VIRTQ_DESC_F_NEXT | DescrFlags::VIRTQ_DESC_F_WRITE,
-								);
+								ctrl.write_desc(desc, virtq::DescF::NEXT | virtq::DescF::WRITE);
 							} else {
-								ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+								ctrl.write_desc(desc, virtq::DescF::WRITE);
 							}
 							buff_len -= 1;
 						}
@@ -469,9 +455,7 @@ impl<'a> ReadCtrl<'a> {
 	/// updating the queue and returns the respective TransferToken.
 	fn poll_next(&mut self) -> Option<Box<TransferToken>> {
 		// Check if descriptor has been marked used.
-		if self.desc_ring.ring[usize::from(self.position)]
-			.flags
-			.to_ne() & WrapCount::flag_mask()
+		if self.desc_ring.ring[usize::from(self.position)].flags & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
 			let buff_id = usize::from(
@@ -662,7 +646,7 @@ impl<'a> ReadCtrl<'a> {
 		// self.desc_ring.ring[self.position].len = 0;
 		// self.desc_ring.ring[self.position].buff_id = 0;
 		self.desc_ring.ring[usize::from(self.position)].flags =
-			self.desc_ring.dev_wc.as_flags_used().into();
+			self.desc_ring.dev_wc.as_flags_used();
 	}
 
 	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
@@ -767,7 +751,7 @@ impl<'a> WriteCtrl<'a> {
 	/// with the given flags.
 	/// * Flags for avail and used will be set by the queue itself.
 	///   * -> Only set different flags here.
-	fn write_desc(&mut self, mem_desc: &MemDescr, flags: u16) {
+	fn write_desc(&mut self, mem_desc: &MemDescr, flags: virtq::DescF) {
 		// This also sets the buff_id for the WriteCtrl struct to the ID of the first
 		// descriptor.
 		if self.start == self.position {
@@ -778,9 +762,7 @@ impl<'a> WriteCtrl<'a> {
 			desc_ref.len = (mem_desc.len as u32).into();
 			desc_ref.buff_id = (mem_desc.id.as_ref().unwrap().0).into();
 			// Remove possibly set avail and used flags
-			desc_ref.flags =
-				(flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED))
-					.into();
+			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
 
 			self.buff_id = mem_desc.id.as_ref().unwrap().0;
 			self.incrmt();
@@ -793,10 +775,7 @@ impl<'a> WriteCtrl<'a> {
 			desc_ref.buff_id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
 			// according to the current WrapCount.
-			desc_ref.flags =
-				((flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED))
-					| self.desc_ring.drv_wc.as_flags_avail())
-				.into();
+			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
 
 			self.incrmt()
 		}
@@ -813,8 +792,7 @@ impl<'a> WriteCtrl<'a> {
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.desc_ring.ring[usize::from(self.start)].flags |=
-			le16::from_ne(self.wrap_at_init.as_flags_avail());
+		self.desc_ring.ring[usize::from(self.start)].flags |= self.wrap_at_init.as_flags_avail();
 	}
 }
 
@@ -824,16 +802,16 @@ struct Descriptor {
 	address: le64,
 	len: le32,
 	buff_id: le16,
-	flags: le16,
+	flags: virtq::DescF,
 }
 
 impl Descriptor {
-	fn new(add: u64, len: u32, id: u16, flags: u16) -> Self {
+	fn new(add: u64, len: u32, id: u16, flags: virtq::DescF) -> Self {
 		Descriptor {
 			address: add.into(),
 			len: len.into(),
 			buff_id: id.into(),
-			flags: flags.into(),
+			flags,
 		}
 	}
 }
@@ -1241,7 +1219,7 @@ impl VirtqPrivate for PackedVq {
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
 						0,
-						DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+						virtq::DescF::WRITE,
 					);
 
 					crtl_desc_iter += 1;
@@ -1255,7 +1233,7 @@ impl VirtqPrivate for PackedVq {
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
 						0,
-						0,
+						virtq::DescF::empty(),
 					);
 
 					crtl_desc_iter += 1;
@@ -1269,7 +1247,7 @@ impl VirtqPrivate for PackedVq {
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
 						0,
-						0,
+						virtq::DescF::empty(),
 					);
 
 					crtl_desc_iter += 1;
@@ -1280,7 +1258,7 @@ impl VirtqPrivate for PackedVq {
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
 						0,
-						DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+						virtq::DescF::WRITE,
 					);
 
 					crtl_desc_iter += 1;

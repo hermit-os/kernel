@@ -18,7 +18,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::mem::{self, MaybeUninit};
-use core::ops::{BitAnd, Deref, DerefMut};
+use core::ops::{Deref, DerefMut};
 use core::ptr;
 
 use align_address::Align;
@@ -2458,81 +2458,6 @@ pub enum BuffSpec<'a> {
 	// the sum of all `Bytes` in the slide. But consumes only ONE descriptor of the actual
 	/// virtqueue.
 	Indirect(&'a [Bytes]),
-}
-
-/// Virtqueue descr flags as defined in the specification.
-///
-/// See Virtio specification v1.1. - 2.6.5
-///                          v1.1. - 2.7.1
-///
-/// INFO: `VIRQ_DESC_F_AVAIL` and `VIRTQ_DESC_F_USED` are only valid for packed
-/// virtqueues.
-#[allow(dead_code, non_camel_case_types)]
-#[derive(Debug, Copy, Clone)]
-#[repr(u16)]
-pub enum DescrFlags {
-	VIRTQ_DESC_F_NEXT = 1 << 0,
-	VIRTQ_DESC_F_WRITE = 1 << 1,
-	VIRTQ_DESC_F_INDIRECT = 1 << 2,
-	VIRTQ_DESC_F_AVAIL = 1 << 7,
-	VIRTQ_DESC_F_USED = 1 << 15,
-}
-use core::ops::Not;
-impl Not for DescrFlags {
-	type Output = u16;
-
-	fn not(self) -> Self::Output {
-		!(u16::from(self))
-	}
-}
-
-use core::ops::BitOr;
-impl BitOr for DescrFlags {
-	type Output = u16;
-	fn bitor(self, rhs: DescrFlags) -> Self::Output {
-		u16::from(self) | u16::from(rhs)
-	}
-}
-
-impl BitOr<DescrFlags> for u16 {
-	type Output = u16;
-	fn bitor(self, rhs: DescrFlags) -> Self::Output {
-		self | u16::from(rhs)
-	}
-}
-
-impl BitAnd for DescrFlags {
-	type Output = u16;
-
-	fn bitand(self, rhs: Self) -> Self::Output {
-		u16::from(self) & u16::from(rhs)
-	}
-}
-
-impl BitAnd<DescrFlags> for u16 {
-	type Output = u16;
-
-	fn bitand(self, rhs: DescrFlags) -> Self::Output {
-		self & u16::from(rhs)
-	}
-}
-
-impl PartialEq<DescrFlags> for u16 {
-	fn eq(&self, other: &DescrFlags) -> bool {
-		*self == u16::from(*other)
-	}
-}
-
-impl From<DescrFlags> for u16 {
-	fn from(flag: DescrFlags) -> Self {
-		match flag {
-			DescrFlags::VIRTQ_DESC_F_NEXT => 1 << 0,
-			DescrFlags::VIRTQ_DESC_F_WRITE => 1 << 1,
-			DescrFlags::VIRTQ_DESC_F_INDIRECT => 1 << 2,
-			DescrFlags::VIRTQ_DESC_F_AVAIL => 1 << 7,
-			DescrFlags::VIRTQ_DESC_F_USED => 1 << 15,
-		}
-	}
 }
 
 /// Virtqeueus error module.

@@ -11,7 +11,7 @@ use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
 use virtio::pci::NotificationData;
-use virtio::{le16, le32, le64};
+use virtio::{le16, le32, le64, virtq};
 use volatile::access::ReadOnly;
 use volatile::{map_field, VolatilePtr, VolatileRef};
 
@@ -21,7 +21,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, BufferToken, BufferType, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
+	BuffSpec, BufferToken, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
@@ -33,16 +33,16 @@ use crate::mm::device_alloc::DeviceAlloc;
 struct Descriptor {
 	address: le64,
 	len: le32,
-	flags: le16,
+	flags: virtq::DescF,
 	next: le16,
 }
 
 impl Descriptor {
-	fn new(addr: u64, len: u32, flags: u16, next: u16) -> Self {
+	fn new(addr: u64, len: u32, flags: virtq::DescF, next: u16) -> Self {
 		Descriptor {
 			address: addr.into(),
 			len: len.into(),
-			flags: flags.into(),
+			flags,
 			next: next.into(),
 		}
 	}
@@ -203,14 +203,14 @@ impl DescrRing {
 					Descriptor::new(
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_INDIRECT | DescrFlags::VIRTQ_DESC_F_WRITE,
+						virtq::DescF::INDIRECT | virtq::DescF::WRITE,
 						0,
 					)
 				} else {
 					Descriptor::new(
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_INDIRECT.into(),
+						virtq::DescF::INDIRECT,
 						0,
 					)
 				}
@@ -224,14 +224,14 @@ impl DescrRing {
 					Descriptor::new(
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
+						virtq::DescF::WRITE | virtq::DescF::NEXT,
 						next_index,
 					)
 				} else {
 					Descriptor::new(
 						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_NEXT.into(),
+						virtq::DescF::NEXT,
 						next_index,
 					)
 				}
@@ -239,14 +239,14 @@ impl DescrRing {
 				Descriptor::new(
 					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 					desc.len as u32,
-					DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+					virtq::DescF::WRITE,
 					0,
 				)
 			} else {
 				Descriptor::new(
 					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 					desc.len as u32,
-					0,
+					virtq::DescF::empty(),
 					0,
 				)
 			};
@@ -573,14 +573,14 @@ impl VirtqPrivate for SplitVq {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
+							virtq::DescF::WRITE | virtq::DescF::NEXT,
 							(crtl_desc_iter + 1) as u16,
 						)
 					} else {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+							virtq::DescF::WRITE,
 							0,
 						)
 					};
@@ -597,14 +597,14 @@ impl VirtqPrivate for SplitVq {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_NEXT.into(),
+							virtq::DescF::NEXT,
 							(crtl_desc_iter + 1) as u16,
 						)
 					} else {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							0,
+							virtq::DescF::empty(),
 							0,
 						)
 					};
@@ -621,14 +621,14 @@ impl VirtqPrivate for SplitVq {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_NEXT.into(),
+							virtq::DescF::NEXT,
 							(crtl_desc_iter + 1) as u16,
 						)
 					} else {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							0,
+							virtq::DescF::empty(),
 							0,
 						)
 					};
@@ -642,14 +642,14 @@ impl VirtqPrivate for SplitVq {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
+							virtq::DescF::WRITE | virtq::DescF::NEXT,
 							(crtl_desc_iter + 1) as u16,
 						)
 					} else {
 						Descriptor::new(
 							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
 							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+							virtq::DescF::WRITE,
 							0,
 						)
 					};
