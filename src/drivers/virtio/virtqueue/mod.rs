@@ -23,6 +23,7 @@ use core::ptr;
 
 use align_address::Align;
 use async_channel::TryRecvError;
+use virtio::{le32, virtq};
 use zerocopy::AsBytes;
 
 use self::error::{BufferError, VirtqError};
@@ -89,15 +90,6 @@ impl From<VqSize> for u16 {
 	fn from(val: VqSize) -> Self {
 		val.0
 	}
-}
-
-/// The General Descriptor struct for both Packed and SplitVq.
-#[repr(C, align(16))]
-struct Descriptor {
-	address: u64,
-	len: u32,
-	buff_id: u16,
-	flags: u16,
 }
 
 type BufferTokenSender = async_channel::Sender<Box<BufferToken>>;
@@ -1187,9 +1179,9 @@ impl BufferToken {
 			match buff.get_ctrl_desc_mut() {
 				Some(ctrl_desc) => {
 					let ind_desc_lst = unsafe {
-						let size = core::mem::size_of::<Descriptor>();
+						let size = core::mem::size_of::<virtq::Desc>();
 						core::slice::from_raw_parts_mut(
-							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.ptr as *mut virtq::Desc,
 							ctrl_desc.len / size,
 						)
 					};
@@ -1198,7 +1190,7 @@ impl BufferToken {
 						desc.len = desc._init_len;
 						// This is fine as the length of the descriptors is restricted
 						// by u32::MAX (see also Bytes::new())
-						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ind_desc_lst[ctrl_desc_cnt].len = (desc._init_len as u32).into();
 						ctrl_desc_cnt += 1;
 						init_buff_len += desc._init_len;
 
@@ -1231,9 +1223,9 @@ impl BufferToken {
 			match buff.get_ctrl_desc_mut() {
 				Some(ctrl_desc) => {
 					let ind_desc_lst = unsafe {
-						let size = core::mem::size_of::<Descriptor>();
+						let size = core::mem::size_of::<virtq::Desc>();
 						core::slice::from_raw_parts_mut(
-							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.ptr as *mut virtq::Desc,
 							ctrl_desc.len / size,
 						)
 					};
@@ -1242,7 +1234,7 @@ impl BufferToken {
 						desc.len = desc._init_len;
 						// This is fine as the length of the descriptors is restricted
 						// by u32::MAX (see also Bytes::new())
-						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ind_desc_lst[ctrl_desc_cnt].len = (desc._init_len as u32).into();
 						ctrl_desc_cnt += 1;
 						init_buff_len += desc._init_len;
 
@@ -1286,9 +1278,9 @@ impl BufferToken {
 			match buff.get_ctrl_desc_mut() {
 				Some(ctrl_desc) => {
 					let ind_desc_lst = unsafe {
-						let size = core::mem::size_of::<Descriptor>();
+						let size = core::mem::size_of::<virtq::Desc>();
 						core::slice::from_raw_parts_mut(
-							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.ptr as *mut virtq::Desc,
 							ctrl_desc.len / size,
 						)
 					};
@@ -1297,7 +1289,7 @@ impl BufferToken {
 						desc.len = desc._init_len;
 						// This is fine as the length of the descriptors is restricted
 						// by u32::MAX (see also Bytes::new())
-						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ind_desc_lst[ctrl_desc_cnt].len = (desc._init_len as u32).into();
 						ctrl_desc_cnt += 1;
 						init_buff_len += desc._init_len;
 					}
@@ -1320,9 +1312,9 @@ impl BufferToken {
 			match buff.get_ctrl_desc_mut() {
 				Some(ctrl_desc) => {
 					let ind_desc_lst = unsafe {
-						let size = core::mem::size_of::<Descriptor>();
+						let size = core::mem::size_of::<virtq::Desc>();
 						core::slice::from_raw_parts_mut(
-							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.ptr as *mut virtq::Desc,
 							ctrl_desc.len / size,
 						)
 					};
@@ -1331,7 +1323,7 @@ impl BufferToken {
 						desc.len = desc._init_len;
 						// This is fine as the length of the descriptors is restricted
 						// by u32::MAX (see also Bytes::new())
-						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ind_desc_lst[ctrl_desc_cnt].len = (desc._init_len as u32).into();
 						ctrl_desc_cnt += 1;
 						init_buff_len += desc._init_len;
 					}
@@ -1399,9 +1391,9 @@ impl BufferToken {
 									return Err(VirtqError::General);
 								} else {
 									let ind_desc_lst = unsafe {
-										let size = core::mem::size_of::<Descriptor>();
+										let size = core::mem::size_of::<virtq::Desc>();
 										core::slice::from_raw_parts_mut(
-											ctrl_desc.ptr as *mut Descriptor,
+											ctrl_desc.ptr as *mut virtq::Desc,
 											ctrl_desc.len / size,
 										)
 									};
@@ -1416,12 +1408,12 @@ impl BufferToken {
 											desc.len -= len_now - new_len;
 											// As u32 is save here as all buffers length is restricted by u32::MAX
 											ind_desc_lst[ctrl_desc_cnt].len -=
-												(len_now - new_len) as u32;
+												le32::from_ne((len_now - new_len) as u32);
 
 											rest_zero = true;
 										} else if rest_zero {
 											desc.len = 0;
-											ind_desc_lst[ctrl_desc_cnt].len = 0;
+											ind_desc_lst[ctrl_desc_cnt].len = 0.into();
 										}
 										ctrl_desc_cnt += 1;
 									}
@@ -1474,9 +1466,9 @@ impl BufferToken {
 									return Err(VirtqError::General);
 								} else {
 									let ind_desc_lst = unsafe {
-										let size = core::mem::size_of::<Descriptor>();
+										let size = core::mem::size_of::<virtq::Desc>();
 										core::slice::from_raw_parts_mut(
-											ctrl_desc.ptr as *mut Descriptor,
+											ctrl_desc.ptr as *mut virtq::Desc,
 											ctrl_desc.len / size,
 										)
 									};
@@ -1491,12 +1483,12 @@ impl BufferToken {
 											desc.len -= len_now - new_len;
 											// As u32 is save here as all buffers length is restricted by u32::MAX
 											ind_desc_lst[ctrl_desc_cnt].len -=
-												(len_now - new_len) as u32;
+												le32::from_ne((len_now - new_len) as u32);
 
 											rest_zero = true;
 										} else if rest_zero {
 											desc.len = 0;
-											ind_desc_lst[ctrl_desc_cnt].len = 0;
+											ind_desc_lst[ctrl_desc_cnt].len = 0.into();
 										}
 										ctrl_desc_cnt += 1;
 									}
