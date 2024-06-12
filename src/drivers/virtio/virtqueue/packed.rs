@@ -12,7 +12,8 @@ use core::{ops, ptr};
 
 use align_address::Align;
 use virtio::pci::NotificationData;
-use virtio::{pvirtq, virtq};
+use virtio::pvirtq::{EventSuppressDesc, EventSuppressFlags};
+use virtio::{pvirtq, virtq, RingEventFlags};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -792,38 +793,6 @@ impl<'a> WriteCtrl<'a> {
 	}
 }
 
-/// Driver and device event suppression struct used in packed virtqueues.
-///
-/// Structure layout see Virtio specification v1.1. - 2.7.14
-/// Alignment see Virtio specification v1.1. - 2.7.10.1
-///
-// /* Enable events */
-// #define RING_EVENT_FLAGS_ENABLE 0x0
-// /* Disable events */
-// #define RING_EVENT_FLAGS_DISABLE 0x1
-// /*
-//  * Enable events for a specific descriptor
-//  * (as specified by Descriptor Ring Change Event Offset/Wrap Counter). * Only valid if VIRTIO_F_RING_EVENT_IDX has been negotiated.
-//  */
-//  #define RING_EVENT_FLAGS_DESC 0x2
-//  /* The value 0x3 is reserved */
-//
-// struct pvirtq_event_suppress {
-//      le16 {
-//         desc_event_off : 15;     /* Descriptor Ring Change Event Offset */
-//         desc_event_wrap : 1;     /* Descriptor Ring Change Event Wrap Counter */
-//      } desc;                     /* If desc_event_flags set to RING_EVENT_FLAGS_DESC */ -> For a single descriptor notification settings
-//      le16 {
-//         desc_event_flags : 2,    /* Descriptor Ring Change Event Flags */ -> General notification on/off
-//         reserved : 14;           /* Reserved, set to 0 */
-//      } flags;
-// };
-#[repr(C, align(4))]
-struct EventSuppr {
-	event: u16,
-	flags: u16,
-}
-
 /// A newtype in order to implement the correct functionality upon
 /// the `EventSuppr` structure for driver notifications settings.
 /// The Driver Event Suppression structure is read-only by the device
@@ -832,7 +801,7 @@ struct DrvNotif {
 	/// Indicates if VIRTIO_F_RING_EVENT_IDX has been negotiated
 	f_notif_idx: bool,
 	/// Actual structure to read from, if device wants notifs
-	raw: &'static mut EventSuppr,
+	raw: &'static mut pvirtq::EventSuppress,
 }
 
 /// A newtype in order to implement the correct functionality upon
@@ -843,35 +812,30 @@ struct DevNotif {
 	/// Indicates if VIRTIO_F_RING_EVENT_IDX has been negotiated
 	f_notif_idx: bool,
 	/// Actual structure to read from, if device wants notifs
-	raw: &'static mut EventSuppr,
-}
-
-impl EventSuppr {
-	/// Returns a zero initialized EventSuppr structure
-	fn new() -> Self {
-		EventSuppr { event: 0, flags: 0 }
-	}
+	raw: &'static mut pvirtq::EventSuppress,
 }
 
 impl DrvNotif {
 	/// Enables notifications by unsetting the LSB.
 	/// See Virito specification v1.1. - 2.7.10
 	fn enable_notif(&mut self) {
-		self.raw.flags = 0;
+		self.raw.flags = EventSuppressFlags::new().with_desc_event_flags(RingEventFlags::Enable);
 	}
 
 	/// Disables notifications by setting the LSB.
 	/// See Virtio specification v1.1. - 2.7.10
 	fn disable_notif(&mut self) {
-		self.raw.flags = 1;
+		self.raw.flags = EventSuppressFlags::new().with_desc_event_flags(RingEventFlags::Disable);
 	}
 
 	/// Enables a notification by the device for a specific descriptor.
 	fn enable_specific(&mut self, idx: RingIdx) {
 		// Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
 		if self.f_notif_idx {
-			self.raw.flags = 2;
-			self.raw.event = idx.off & !(1 << 15) | (idx.wrap as u16) << 15;
+			self.raw.flags = EventSuppressFlags::new().with_desc_event_flags(RingEventFlags::Desc);
+			self.raw.desc = EventSuppressDesc::new()
+				.with_desc_event_off(idx.off)
+				.with_desc_event_wrap(idx.wrap);
 		}
 	}
 }
@@ -885,7 +849,7 @@ impl DevNotif {
 	/// Reads notification bit (i.e. LSB) and returns value.
 	/// If notifications are enabled returns true, else false.
 	fn is_notif(&self) -> bool {
-		self.raw.flags & 0b11 == 0
+		self.raw.flags.desc_event_flags() == RingEventFlags::Enable
 	}
 
 	fn notif_specific(&self) -> Option<RingIdx> {
@@ -893,12 +857,12 @@ impl DevNotif {
 			return None;
 		}
 
-		if self.raw.flags & 0b11 != 2 {
+		if self.raw.flags.desc_event_flags() != RingEventFlags::Desc {
 			return None;
 		}
 
-		let off = self.raw.event & !(1 << 15);
-		let wrap = (self.raw.event >> 15) as u8;
+		let off = self.raw.desc.desc_event_off();
+		let wrap = self.raw.desc.desc_event_wrap();
 
 		Some(RingIdx { off, wrap })
 	}
@@ -1067,7 +1031,8 @@ impl Virtq for PackedVq {
 
 		let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = core::mem::size_of::<EventSuppr>().align_up(BasePageSize::SIZE as usize);
+		let _mem_len =
+			core::mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event_ptr =
 			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
@@ -1082,9 +1047,9 @@ impl Virtq for PackedVq {
 		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(drv_event_ptr as u64)));
 		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(dev_event_ptr as u64)));
 
-		let drv_event: &'static mut EventSuppr = unsafe { &mut *(drv_event_ptr) };
+		let drv_event: &'static mut pvirtq::EventSuppress = unsafe { &mut *(drv_event_ptr) };
 
-		let dev_event: &'static mut EventSuppr = unsafe { &mut *(dev_event_ptr) };
+		let dev_event: &'static mut pvirtq::EventSuppress = unsafe { &mut *(dev_event_ptr) };
 
 		let drv_event = RefCell::new(DrvNotif {
 			f_notif_idx: false,
