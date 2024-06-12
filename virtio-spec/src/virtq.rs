@@ -1,6 +1,24 @@
 //! Virtqueue definitions
 
-use endian_num::le16;
+use endian_num::{le16, le32, le64};
+
+/// Split Virtqueue Descriptor
+#[doc(alias = "virtq_desc")]
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct Desc {
+    /// Address (guest-physical).
+    pub addr: le64,
+
+    /// Length.
+    pub len: le32,
+
+    /// The flags as indicated in [`DescF`].
+    pub flags: DescF,
+
+    /// Next field if flags & NEXT
+    pub next: le16,
+}
 
 endian_bitflags! {
     /// Virtqueue descriptor flags
