@@ -875,24 +875,24 @@ impl EventSuppr {
 }
 
 impl DrvNotif {
-	/// Enables notifications by setting the LSB.
+	/// Enables notifications by unsetting the LSB.
 	/// See Virito specification v1.1. - 2.7.10
 	fn enable_notif(&mut self) {
 		self.raw.flags = 0;
 	}
 
-	/// Disables notifications by unsetting the LSB.
+	/// Disables notifications by setting the LSB.
 	/// See Virtio specification v1.1. - 2.7.10
 	fn disable_notif(&mut self) {
-		self.raw.flags = 0;
+		self.raw.flags = 1;
 	}
 
 	/// Enables a notification by the device for a specific descriptor.
 	fn enable_specific(&mut self, idx: RingIdx) {
 		// Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
 		if self.f_notif_idx {
-			self.raw.flags |= 1 << 1;
-			self.raw.event = idx.off | (idx.wrap as u16) << 15;
+			self.raw.flags = 2;
+			self.raw.event = idx.off & !(1 << 15) | (idx.wrap as u16) << 15;
 		}
 	}
 }
@@ -906,12 +906,12 @@ impl DevNotif {
 	/// Reads notification bit (i.e. LSB) and returns value.
 	/// If notifications are enabled returns true, else false.
 	fn is_notif(&self) -> bool {
-		self.raw.flags & (1 << 0) == 0
+		self.raw.flags & 0b11 == 0
 	}
 
 	fn is_notif_specfic(&self, idx: RingIdx) -> bool {
 		if self.f_notif_idx {
-			if self.raw.flags & 1 << 1 == 2 {
+			if self.raw.flags & 0b11 == 2 {
 				let event_idx = RingIdx {
 					off: self.raw.event & !(1 << 15),
 					wrap: (self.raw.event >> 15) as u8,
