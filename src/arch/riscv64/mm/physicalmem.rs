@@ -27,7 +27,7 @@ fn detect_from_limits() -> Result<(), ()> {
 	unsafe {
 		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 	}
-	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+	TOTAL_MEMORY.store(limit, Ordering::Relaxed);
 
 	Ok(())
 }
@@ -37,7 +37,7 @@ pub fn init() {
 }
 
 pub fn total_memory_size() -> usize {
-	TOTAL_MEMORY.load(Ordering::SeqCst)
+	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {

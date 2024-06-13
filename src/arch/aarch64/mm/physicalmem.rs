@@ -21,7 +21,7 @@ fn detect_from_limits() -> Result<(), ()> {
 	let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
 	TOTAL_MEMORY.store(
 		limit - mm::kernel_end_address().as_usize(),
-		Ordering::SeqCst,
+		Ordering::Relaxed,
 	);
 	unsafe {
 		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -35,7 +35,7 @@ pub fn init() {
 }
 
 pub fn total_memory_size() -> usize {
-	TOTAL_MEMORY.load(Ordering::SeqCst)
+	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
 pub fn init_page_tables() {}

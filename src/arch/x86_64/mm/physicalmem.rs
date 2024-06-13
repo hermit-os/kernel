@@ -7,7 +7,7 @@ use multiboot::information::{MemoryType, Multiboot};
 use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
-use crate::mm;
+use crate::{env, mm};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -45,7 +45,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(end_address - start_address.as_u64()) as usize,
-			Ordering::SeqCst,
+			Ordering::Relaxed,
 		);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -90,7 +90,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		.unwrap();
 		let _ = TOTAL_MEMORY.fetch_add(
 			(m.base_address() + m.length() - start_address.as_u64()) as usize,
-			Ordering::SeqCst,
+			Ordering::Relaxed,
 		);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -105,35 +105,41 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 	Ok(())
 }
 
-fn detect_from_limits() -> Result<(), ()> {
-	let limit = get_limit();
-	if limit == 0 {
+fn detect_from_uhyve() -> Result<(), ()> {
+	if !env::is_uhyve() {
 		return Err(());
 	}
+
+	let limit = get_limit();
+	assert_ne!(limit, 0);
+	let mut free_list = PHYSICAL_FREE_LIST.lock();
+	let total_memory;
 
 	// add gap for the APIC
 	if limit > KVM_32BIT_GAP_START {
 		let range =
 			PageRange::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			free_list.deallocate(range).unwrap();
 		}
 		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
 			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
 			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				free_list.deallocate(range).unwrap();
 			}
-			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::SeqCst);
+			total_memory = limit - KVM_32BIT_GAP_SIZE;
 		} else {
-			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::SeqCst);
+			total_memory = KVM_32BIT_GAP_START;
 		}
 	} else {
 		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			free_list.deallocate(range).unwrap();
 		}
-		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+		total_memory = limit;
 	}
+
+	TOTAL_MEMORY.store(total_memory, Ordering::Relaxed);
 
 	Ok(())
 }
@@ -141,12 +147,12 @@ fn detect_from_limits() -> Result<(), ()> {
 pub fn init() {
 	detect_from_fdt()
 		.or_else(|_e| detect_from_multiboot_info())
-		.or_else(|_e| detect_from_limits())
+		.or_else(|_e| detect_from_uhyve())
 		.unwrap();
 }
 
 pub fn total_memory_size() -> usize {
-	TOTAL_MEMORY.load(Ordering::SeqCst)
+	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
