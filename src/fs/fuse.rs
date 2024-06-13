@@ -5,7 +5,6 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future;
-use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
 
@@ -44,8 +43,8 @@ pub(crate) trait FuseInterface {
 	fn send_command<O: ops::Op>(
 		&mut self,
 		cmd: Cmd<O>,
-		rsp: &mut UninitRsp<O>,
-	) -> Result<(), VirtqError>;
+		rsp_payload_len: u32,
+	) -> Result<Rsp<O>, VirtqError>;
 
 	fn get_mount_point(&self) -> String;
 }
@@ -55,7 +54,7 @@ pub(crate) mod ops {
 	use alloc::boxed::Box;
 	use alloc::ffi::CString;
 
-	use super::{Cmd, UninitRsp};
+	use super::Cmd;
 	use crate::fd::PollEvent;
 	use crate::fs::{fuse_abi, SeekWhence};
 
@@ -80,7 +79,7 @@ pub(crate) mod ops {
 	}
 
 	impl Init {
-		pub(crate) fn create() -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create() -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
 				fuse_abi::ROOT_ID,
 				fuse_abi::InitIn {
@@ -90,9 +89,7 @@ pub(crate) mod ops {
 					flags: 0,
 				},
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -109,7 +106,7 @@ pub(crate) mod ops {
 
 	impl Create {
 		#[allow(clippy::self_named_constructors)]
-		pub(crate) fn create(path: CString, flags: u32, mode: u32) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(path: CString, flags: u32, mode: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(
 				fuse_abi::ROOT_ID,
 				fuse_abi::CreateIn {
@@ -119,9 +116,7 @@ pub(crate) mod ops {
 				},
 				path,
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -137,7 +132,7 @@ pub(crate) mod ops {
 	}
 
 	impl Open {
-		pub(crate) fn create(nid: u64, flags: u32) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(nid: u64, flags: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
 				nid,
 				fuse_abi::OpenIn {
@@ -145,9 +140,7 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -163,12 +156,7 @@ pub(crate) mod ops {
 	}
 
 	impl Write {
-		pub(crate) fn create(
-			nid: u64,
-			fh: u64,
-			buf: Box<[u8]>,
-			offset: u64,
-		) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(nid: u64, fh: u64, buf: Box<[u8]>, offset: u64) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_boxed_slice(
 				nid,
 				fuse_abi::WriteIn {
@@ -179,9 +167,7 @@ pub(crate) mod ops {
 				},
 				buf,
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -197,12 +183,7 @@ pub(crate) mod ops {
 	}
 
 	impl Read {
-		pub(crate) fn create(
-			nid: u64,
-			fh: u64,
-			size: u32,
-			offset: u64,
-		) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(nid: u64, fh: u64, size: u32, offset: u64) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
 				nid,
 				fuse_abi::ReadIn {
@@ -212,9 +193,7 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
-			let rsp = UninitRsp::with_capacity(size.try_into().unwrap());
-
-			(cmd, rsp)
+			(cmd, size)
 		}
 	}
 
@@ -235,7 +214,7 @@ pub(crate) mod ops {
 			fh: u64,
 			offset: isize,
 			whence: SeekWhence,
-		) -> (Cmd<Self>, UninitRsp<Self>) {
+		) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
 				nid,
 				fuse_abi::LseekIn {
@@ -245,9 +224,7 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -263,11 +240,9 @@ pub(crate) mod ops {
 	}
 
 	impl Readlink {
-		pub(crate) fn create(nid: u64, size: u32) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(nid: u64, size: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(nid, fuse_abi::ReadlinkIn {});
-			let rsp = UninitRsp::with_capacity(size as usize);
-
-			(cmd, rsp)
+			(cmd, size)
 		}
 	}
 
@@ -283,7 +258,7 @@ pub(crate) mod ops {
 	}
 
 	impl Release {
-		pub(crate) fn create(nid: u64, fh: u64) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(nid: u64, fh: u64) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
 				nid,
 				fuse_abi::ReleaseIn {
@@ -291,9 +266,7 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -309,12 +282,7 @@ pub(crate) mod ops {
 	}
 
 	impl Poll {
-		pub(crate) fn create(
-			nid: u64,
-			fh: u64,
-			kh: u64,
-			event: PollEvent,
-		) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(nid: u64, fh: u64, kh: u64, event: PollEvent) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
 				nid,
 				fuse_abi::PollIn {
@@ -324,9 +292,7 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -342,7 +308,7 @@ pub(crate) mod ops {
 	}
 
 	impl Mkdir {
-		pub(crate) fn create(path: CString, mode: u32) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(path: CString, mode: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(
 				fuse_abi::ROOT_ID,
 				fuse_abi::MkdirIn {
@@ -351,9 +317,7 @@ pub(crate) mod ops {
 				},
 				path,
 			);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -369,11 +333,9 @@ pub(crate) mod ops {
 	}
 
 	impl Unlink {
-		pub(crate) fn create(name: CString) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(fuse_abi::ROOT_ID, fuse_abi::UnlinkIn {}, name);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -389,11 +351,9 @@ pub(crate) mod ops {
 	}
 
 	impl Rmdir {
-		pub(crate) fn create(name: CString) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(fuse_abi::ROOT_ID, fuse_abi::RmdirIn {}, name);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 
@@ -409,11 +369,9 @@ pub(crate) mod ops {
 	}
 
 	impl Lookup {
-		pub(crate) fn create(name: CString) -> (Cmd<Self>, UninitRsp<Self>) {
+		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(fuse_abi::ROOT_ID, fuse_abi::LookupIn {}, name);
-			let rsp = UninitRsp::new();
-
-			(cmd, rsp)
+			(cmd, 0)
 		}
 	}
 }
@@ -539,44 +497,20 @@ pub(crate) struct RspHeader<O: ops::Op> {
 }
 
 #[derive(Debug)]
-pub(crate) struct UninitRsp<O: ops::Op> {
-	pub headers: Box<MaybeUninit<RspHeader<O>>>,
-	pub payload: Option<Box<[MaybeUninit<u8>]>>,
-}
-
-impl<O: ops::Op> UninitRsp<O>
-where
-	O: ops::Op<OutPayload = ()>,
-{
-	fn new() -> Self {
-		Self {
-			headers: Box::new_uninit(),
-			payload: None,
-		}
-	}
-}
-
-impl<O: ops::Op> UninitRsp<O>
-where
-	O: ops::Op<OutPayload = [u8]>,
-{
-	fn with_capacity(len: usize) -> Self {
-		Self {
-			headers: Box::new_uninit(),
-			payload: Some(Box::new_uninit_slice(len)),
-		}
-	}
+pub(crate) struct Rsp<O: ops::Op> {
+	pub headers: Box<RspHeader<O>>,
+	pub payload: Option<Box<[u8]>>,
 }
 
 fn lookup(name: CString) -> Option<u64> {
-	let (cmd, mut rsp) = ops::Lookup::create(name);
-	get_filesystem_driver()
+	let (cmd, rsp_payload_len) = ops::Lookup::create(name);
+	let rsp = get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command(cmd, &mut rsp)
+		.send_command(cmd, rsp_payload_len)
 		.ok()?;
-	if unsafe { rsp.headers.assume_init_ref().out_header.error } == 0 {
-		Some(unsafe { rsp.headers.assume_init_ref().op_header.nodeid })
+	if rsp.headers.out_header.error == 0 {
+		Some(rsp.headers.op_header.nodeid)
 	} else {
 		None
 	}
@@ -584,27 +518,24 @@ fn lookup(name: CString) -> Option<u64> {
 
 fn readlink(nid: u64) -> Result<String, IoError> {
 	let len = MAX_READ_LEN as u32;
-	let (cmd, mut rsp) = ops::Readlink::create(nid, len);
-	get_filesystem_driver()
+	let (cmd, rsp_payload_len) = ops::Readlink::create(nid, len);
+	let rsp = get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command(cmd, &mut rsp)?;
-	let len: usize = if unsafe { rsp.headers.assume_init_ref().out_header.len } as usize
+		.send_command(cmd, rsp_payload_len)?;
+	let len: usize = if rsp.headers.out_header.len as usize
 		- ::core::mem::size_of::<fuse_abi::OutHeader>()
 		- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 		>= len.try_into().unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
-		(unsafe { rsp.headers.assume_init_ref().out_header.len } as usize)
+		(rsp.headers.out_header.len as usize)
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
 			- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 	};
 
-	Ok(String::from_utf8(unsafe {
-		MaybeUninit::slice_assume_init_ref(&rsp.payload.unwrap()[..len]).to_vec()
-	})
-	.unwrap())
+	Ok(String::from_utf8(rsp.payload.unwrap()[..len].to_vec()).unwrap())
 }
 
 #[derive(Debug)]
@@ -629,21 +560,18 @@ impl FuseFileHandleInner {
 
 		future::poll_fn(|cx| {
 			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-				let (cmd, mut rsp) = ops::Poll::create(nid, fh, kh, events);
-				get_filesystem_driver()
+				let (cmd, rsp_payload_len) = ops::Poll::create(nid, fh, kh, events);
+				let rsp = get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
-					.send_command(cmd, &mut rsp)?;
+					.send_command(cmd, rsp_payload_len)?;
 
-				if unsafe { rsp.headers.assume_init_ref().out_header.error } < 0 {
+				if rsp.headers.out_header.error < 0 {
 					Poll::Ready(Err(IoError::EIO))
 				} else {
-					let revents = unsafe {
-						PollEvent::from_bits(
-							i16::try_from(rsp.headers.assume_init_ref().op_header.revents).unwrap(),
-						)
-						.unwrap()
-					};
+					let revents =
+						PollEvent::from_bits(i16::try_from(rsp.headers.op_header.revents).unwrap())
+							.unwrap();
 					if !revents.intersects(events)
 						&& !revents.intersects(
 							PollEvent::POLLERR | PollEvent::POLLNVAL | PollEvent::POLLHUP,
@@ -668,28 +596,26 @@ impl FuseFileHandleInner {
 			len = MAX_READ_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) =
+			let (cmd, rsp_payload_len) =
 				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
-			get_filesystem_driver()
+			let rsp = get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd, &mut rsp)?;
-			let len: usize = if (unsafe { rsp.headers.assume_init_ref().out_header.len } as usize)
+				.send_command(cmd, rsp_payload_len)?;
+			let len: usize = if (rsp.headers.out_header.len as usize)
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 				>= len
 			{
 				len
 			} else {
-				(unsafe { rsp.headers.assume_init_ref().out_header.len } as usize)
+				(rsp.headers.out_header.len as usize)
 					- ::core::mem::size_of::<fuse_abi::OutHeader>()
 					- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			};
 			self.offset += len;
 
-			buf[..len].copy_from_slice(unsafe {
-				MaybeUninit::slice_assume_init_ref(&rsp.payload.unwrap()[..len])
-			});
+			buf[..len].copy_from_slice(&rsp.payload.unwrap()[..len]);
 
 			Ok(len)
 		} else {
@@ -711,17 +637,18 @@ impl FuseFileHandleInner {
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 			let truncated_buf = Box::<[u8]>::from(&buf[..truncated_len]);
-			let (cmd, mut rsp) = ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
-			get_filesystem_driver()
+			let (cmd, rsp_payload_len) =
+				ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
+			let rsp = get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd, &mut rsp)?;
+				.send_command(cmd, rsp_payload_len)?;
 
-			if unsafe { rsp.headers.assume_init_ref().out_header.error } < 0 {
+			if rsp.headers.out_header.error < 0 {
 				return Err(IoError::EIO);
 			}
 
-			let rsp_size = unsafe { rsp.headers.assume_init_ref().op_header.size };
+			let rsp_size = rsp.headers.op_header.size;
 			let rsp_len: usize = if rsp_size > truncated_len.try_into().unwrap() {
 				truncated_len
 			} else {
@@ -739,17 +666,17 @@ impl FuseFileHandleInner {
 		debug!("FUSE lseek");
 
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = ops::Lseek::create(nid, fh, offset, whence);
-			get_filesystem_driver()
+			let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
+			let rsp = get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command(cmd, &mut rsp)?;
+				.send_command(cmd, rsp_payload_len)?;
 
-			if unsafe { rsp.headers.assume_init_ref().out_header.error } < 0 {
+			if rsp.headers.out_header.error < 0 {
 				return Err(IoError::EIO);
 			}
 
-			let rsp_offset = unsafe { rsp.headers.assume_init_ref().op_header.offset };
+			let rsp_offset = rsp.headers.op_header.offset;
 
 			Ok(rsp_offset.try_into().unwrap())
 		} else {
@@ -761,12 +688,12 @@ impl FuseFileHandleInner {
 impl Drop for FuseFileHandleInner {
 	fn drop(&mut self) {
 		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
-			let (cmd, mut rsp) =
+			let (cmd, rsp_payload_len) =
 				ops::Release::create(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command(cmd, &mut rsp)
+				.send_command(cmd, rsp_payload_len)
 				.unwrap();
 		}
 	}
@@ -833,13 +760,13 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
-		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
-		get_filesystem_driver()
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
-		let fuse_fh = unsafe { rsp.headers.assume_init_ref().op_header.fh };
+			.send_command(cmd, rsp_payload_len)?;
+		let fuse_fh = rsp.headers.op_header.fh;
 
 		debug!("FUSE readdir: {path:#?}");
 
@@ -848,21 +775,21 @@ impl ObjectInterface for FuseDirectoryHandle {
 		let mut offset: usize = 0;
 
 		// read content of the directory
-		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
-		get_filesystem_driver()
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if unsafe { rsp.headers.assume_init_ref().out_header.len } as usize
+		let len: usize = if rsp.headers.out_header.len as usize
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
 			- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			(unsafe { rsp.headers.assume_init_ref().out_header.len } as usize)
+			(rsp.headers.out_header.len as usize)
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 		};
@@ -873,7 +800,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while (unsafe { rsp.headers.assume_init_ref().out_header.len } as usize) - offset
+		while (rsp.headers.out_header.len as usize) - offset
 			> core::mem::size_of::<fuse_abi::Dirent>()
 		{
 			let dirent = unsafe {
@@ -896,11 +823,11 @@ impl ObjectInterface for FuseDirectoryHandle {
 			}));
 		}
 
-		let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
+		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
 		Ok(entries)
 	}
@@ -966,13 +893,13 @@ impl VfsNode for FuseDirectory {
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
-		let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
-		get_filesystem_driver()
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
-		let fuse_fh = unsafe { rsp.headers.assume_init_ref().op_header.fh };
+			.send_command(cmd, rsp_payload_len)?;
+		let fuse_fh = rsp.headers.op_header.fh;
 
 		debug!("FUSE readdir: {path:#?}");
 
@@ -981,21 +908,21 @@ impl VfsNode for FuseDirectory {
 		let mut offset: usize = 0;
 
 		// read content of the directory
-		let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
-		get_filesystem_driver()
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if unsafe { rsp.headers.assume_init_ref().out_header.len } as usize
+		let len: usize = if rsp.headers.out_header.len as usize
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
 			- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			(unsafe { rsp.headers.assume_init_ref().out_header.len } as usize)
+			(rsp.headers.out_header.len as usize)
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 		};
@@ -1006,7 +933,7 @@ impl VfsNode for FuseDirectory {
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while (unsafe { rsp.headers.assume_init_ref().out_header.len } as usize) - offset
+		while (rsp.headers.out_header.len as usize) - offset
 			> core::mem::size_of::<fuse_abi::Dirent>()
 		{
 			let dirent = unsafe {
@@ -1029,11 +956,11 @@ impl VfsNode for FuseDirectory {
 			}));
 		}
 
-		let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
+		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
 		Ok(entries)
 	}
@@ -1044,18 +971,18 @@ impl VfsNode for FuseDirectory {
 		debug!("FUSE stat: {path:#?}");
 
 		// Is there a better way to implement this?
-		let (cmd, mut rsp) = ops::Lookup::create(path);
-		get_filesystem_driver()
+		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
+		let rsp = get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
-		if unsafe { rsp.headers.assume_init_ref().out_header.error } != 0 {
+		if rsp.headers.out_header.error != 0 {
 			// TODO: Correct error handling
 			return Err(IoError::EIO);
 		}
 
-		let rsp = unsafe { rsp.headers.assume_init().op_header };
+		let rsp = rsp.headers.op_header;
 		let attr = rsp.attr;
 
 		if attr.mode & S_IFMT != S_IFLNK {
@@ -1072,13 +999,13 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE lstat: {path:#?}");
 
-		let (cmd, mut rsp) = ops::Lookup::create(path);
-		get_filesystem_driver()
+		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
+		let rsp = get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
-		let attr = unsafe { rsp.headers.assume_init().op_header.attr };
+		let attr = rsp.headers.op_header.attr;
 		Ok(FileAttr::from(attr))
 	}
 
@@ -1092,13 +1019,13 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE lstat: {path:#?}");
 
-		let (cmd, mut rsp) = ops::Lookup::create(path.clone());
-		get_filesystem_driver()
+		let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
+		let rsp = get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 
-		let attr = unsafe { FileAttr::from(rsp.headers.assume_init().op_header.attr) };
+		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		let is_dir = attr.st_mode.contains(AccessPermission::S_IFDIR);
 
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
@@ -1129,23 +1056,23 @@ impl VfsNode for FuseDirectory {
 				}
 
 				// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-				let (cmd, mut rsp) =
+				let (cmd, rsp_payload_len) =
 					ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
-				get_filesystem_driver()
+				let rsp = get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
-					.send_command(cmd, &mut rsp)?;
-				file_guard.fuse_fh = Some(unsafe { rsp.headers.assume_init_ref().op_header.fh });
+					.send_command(cmd, rsp_payload_len)?;
+				file_guard.fuse_fh = Some(rsp.headers.op_header.fh);
 			} else {
 				// Create file (opens implicitly, returns results from both lookup and open calls)
-				let (cmd, mut rsp) =
+				let (cmd, rsp_payload_len) =
 					ops::Create::create(path, opt.bits().try_into().unwrap(), mode.bits());
-				get_filesystem_driver()
+				let rsp = get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
-					.send_command(cmd, &mut rsp)?;
+					.send_command(cmd, rsp_payload_len)?;
 
-				let inner = unsafe { rsp.headers.assume_init().op_header };
+				let inner = rsp.headers.op_header;
 				file_guard.fuse_nid = Some(inner.entry.nodeid);
 				file_guard.fuse_fh = Some(inner.open.fh);
 			}
@@ -1159,11 +1086,11 @@ impl VfsNode for FuseDirectory {
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
 		let path = self.traversal_path(components);
 
-		let (cmd, mut rsp) = ops::Unlink::create(path);
-		get_filesystem_driver()
+		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
@@ -1172,11 +1099,11 @@ impl VfsNode for FuseDirectory {
 	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
 		let path = self.traversal_path(components);
 
-		let (cmd, mut rsp) = ops::Rmdir::create(path);
-		get_filesystem_driver()
+		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
+			.send_command(cmd, rsp_payload_len)?;
 		trace!("rmdir answer {:?}", rsp);
 
 		Ok(())
@@ -1188,19 +1115,16 @@ impl VfsNode for FuseDirectory {
 		mode: AccessPermission,
 	) -> Result<(), IoError> {
 		let path = self.traversal_path(components);
-		let (cmd, mut rsp) = ops::Mkdir::create(path, mode.bits());
+		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
-		get_filesystem_driver()
+		let rsp = get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command(cmd, &mut rsp)?;
-		if unsafe { rsp.headers.assume_init_ref().out_header.error } == 0 {
+			.send_command(cmd, rsp_payload_len)?;
+		if rsp.headers.out_header.error == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(unsafe {
-				rsp.headers.assume_init_ref().out_header.error
-			})
-			.unwrap())
+			Err(num::FromPrimitive::from_i32(rsp.headers.out_header.error).unwrap())
 		}
 	}
 }
@@ -1209,8 +1133,8 @@ pub(crate) fn init() {
 	debug!("Try to initialize fuse filesystem");
 
 	if let Some(driver) = get_filesystem_driver() {
-		let (cmd, mut rsp) = ops::Init::create();
-		driver.lock().send_command(cmd, &mut rsp).unwrap();
+		let (cmd, rsp_payload_len) = ops::Init::create();
+		let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
 		trace!("fuse init answer: {:?}", rsp);
 
 		let mount_point = driver.lock().get_mount_point().to_string();
@@ -1218,36 +1142,36 @@ pub(crate) fn init() {
 			let fuse_nid = lookup(c"/".to_owned()).unwrap();
 			// Opendir
 			// Flag 0x10000 for O_DIRECTORY might not be necessary
-			let (mut cmd, mut rsp) = ops::Open::create(fuse_nid, 0x10000);
+			let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 			cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
-			get_filesystem_driver()
+			let rsp = get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command(cmd, &mut rsp)
+				.send_command(cmd, rsp_payload_len)
 				.unwrap();
-			let fuse_fh = unsafe { rsp.headers.assume_init_ref().op_header.fh };
+			let fuse_fh = rsp.headers.op_header.fh;
 
 			// Linux seems to allocate a single page to store the dirfile
 			let len = MAX_READ_LEN as u32;
 			let mut offset: usize = 0;
 
 			// read content of the directory
-			let (mut cmd, mut rsp) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
+			let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 			cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
-			get_filesystem_driver()
+			let rsp = get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command(cmd, &mut rsp)
+				.send_command(cmd, rsp_payload_len)
 				.unwrap();
 
-			let len: usize = if unsafe { rsp.headers.assume_init_ref().out_header.len } as usize
+			let len: usize = if rsp.headers.out_header.len as usize
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 				>= len.try_into().unwrap()
 			{
 				len.try_into().unwrap()
 			} else {
-				(unsafe { rsp.headers.assume_init_ref().out_header.len } as usize)
+				(rsp.headers.out_header.len as usize)
 					- ::core::mem::size_of::<fuse_abi::OutHeader>()
 					- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			};
@@ -1257,7 +1181,7 @@ pub(crate) fn init() {
 			}
 
 			let mut entries: Vec<String> = Vec::new();
-			while (unsafe { rsp.headers.assume_init_ref().out_header.len } as usize) - offset
+			while (rsp.headers.out_header.len as usize) - offset
 				> core::mem::size_of::<fuse_abi::Dirent>()
 			{
 				let dirent = unsafe {
@@ -1278,11 +1202,11 @@ pub(crate) fn init() {
 				entries.push(unsafe { core::str::from_utf8_unchecked(name).to_string() });
 			}
 
-			let (cmd, mut rsp) = ops::Release::create(fuse_nid, fuse_fh);
+			let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command(cmd, &mut rsp)
+				.send_command(cmd, rsp_payload_len)
 				.unwrap();
 
 			// remove predefined directories
@@ -1294,14 +1218,14 @@ pub(crate) fn init() {
 
 			for i in entries {
 				let i_cstr = CString::new(i.clone()).unwrap();
-				let (cmd, mut rsp) = ops::Lookup::create(i_cstr);
-				get_filesystem_driver()
+				let (cmd, rsp_payload_len) = ops::Lookup::create(i_cstr);
+				let rsp = get_filesystem_driver()
 					.unwrap()
 					.lock()
-					.send_command(cmd, &mut rsp)
+					.send_command(cmd, rsp_payload_len)
 					.unwrap();
 
-				let attr = unsafe { rsp.headers.assume_init().op_header.attr };
+				let attr = rsp.headers.op_header.attr;
 				let attr = FileAttr::from(attr);
 
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {

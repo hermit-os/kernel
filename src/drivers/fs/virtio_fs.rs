@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -19,7 +20,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{AsSliceU8, BufferType, Virtq, VqIndex, VqSize};
-use crate::fs::fuse::{self, FuseInterface};
+use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
 
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
@@ -150,8 +151,8 @@ impl FuseInterface for VirtioFsDriver {
 	fn send_command<O: fuse::ops::Op>(
 		&mut self,
 		cmd: fuse::Cmd<O>,
-		rsp: &mut fuse::UninitRsp<O>,
-	) -> Result<(), VirtqError> {
+		rsp_payload_len: u32,
+	) -> Result<fuse::Rsp<O>, VirtqError> {
 		let fuse::Cmd {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
@@ -162,23 +163,30 @@ impl FuseInterface for VirtioFsDriver {
 			&[cmd_headers.as_slice_u8()]
 		};
 
-		let fuse::UninitRsp {
-			headers: rsp_headers,
-			payload: rsp_payload_opt,
-		} = rsp;
-		let recv: &[&mut [MaybeUninit<u8>]] =
-			if let Some(rsp_payload) = rsp_payload_opt.as_deref_mut() {
-				&[rsp_headers.as_bytes_mut(), rsp_payload]
-			} else {
-				&[rsp_headers.as_bytes_mut()]
-			};
+		let mut rsp_headers = Box::<RspHeader<O>>::new_uninit();
+		let mut rsp_payload_opt;
+		let recv: &[&mut [MaybeUninit<u8>]] = if rsp_payload_len == 0 {
+			rsp_payload_opt = None;
+			&[rsp_headers.as_bytes_mut()]
+		} else {
+			rsp_payload_opt = Some(Box::new_uninit_slice(rsp_payload_len as usize));
+			&[
+				rsp_headers.as_bytes_mut(),
+				rsp_payload_opt.as_mut().unwrap(),
+			]
+		};
 
 		let transfer_tkn = self.vqueues[1]
 			.clone()
 			.prep_transfer_from_raw(send, recv, BufferType::Direct)
 			.unwrap();
 		transfer_tkn.dispatch_blocking()?;
-		Ok(())
+		Ok(unsafe {
+			Rsp {
+				headers: rsp_headers.assume_init(),
+				payload: rsp_payload_opt.map(|slice| Box::<[MaybeUninit<_>]>::assume_init(slice)),
+			}
+		})
 	}
 
 	fn get_mount_point(&self) -> String {
