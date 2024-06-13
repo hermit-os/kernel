@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 align-address = "0.3"
+allocator-api2 = { version = "0.2", default-features = false }
 anstyle = { version = "1", default-features = false }
 cfg-if = "1"
 hermit-entry = { version = "0.10", features = ["loader"] }
@@ -33,11 +34,8 @@ aarch64-cpu = "9"
 hermit-dtb = { version = "0.1" }
 goblin = { version = "0.8", default-features = false, features = ["elf64"] }
 
-[target.'cfg(target_os = "none")'.dependencies]
-allocator-api2 = { version = "0.2", default-features = false }
-
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = { version = "0.28", features = ["alloc", "global_allocator", "panic_handler", "qemu"] }
+uefi = { version = "0.28", features = ["alloc", "panic_handler", "qemu"] }
 qemu-exit = "3"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]

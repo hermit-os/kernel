@@ -1,7 +1,6 @@
 //! Implementation of the Hermit Allocator in the loader
 
 mod bootstrap;
-mod bump;
 
 use core::ptr;
 use core::ptr::NonNull;
@@ -10,7 +9,7 @@ use allocator_api2::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
 use one_shot_mutex::OneShotMutex;
 
 use self::bootstrap::BootstrapAllocator;
-use self::bump::BumpAllocator;
+use crate::bump_allocator::BumpAllocator;
 
 /// The global system allocator for Hermit.
 struct GlobalAllocator {

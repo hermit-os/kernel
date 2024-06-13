@@ -14,6 +14,7 @@ use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 mod macros;
 
 mod arch;
+mod bump_allocator;
 mod log;
 mod os;
 
