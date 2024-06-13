@@ -313,7 +313,6 @@ dependencies = [
  "qemu-exit",
  "riscv",
  "sbi-rt",
- "spinning_top",
  "sptr",
  "take-static",
  "uart_16550",
@@ -543,15 +542,6 @@ name = "scroll"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ab8598aa408498679922eff7fa985c25d58a90771bd6be794434c5277eab1a6"
-
-[[package]]
-name = "spinning_top"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d96d2d1d716fb500937168cc09353ffdc7a012be8475ac7308e1bdf0e3923300"
-dependencies = [
- "lock_api",
-]
 
 [[package]]
 name = "sptr"
