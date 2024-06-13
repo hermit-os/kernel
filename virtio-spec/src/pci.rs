@@ -255,6 +255,7 @@ impl CapData {
 }
 
 /// PCI Capability Configuration Type
+#[doc(alias = "VIRTIO_PCI_CAP")]
 #[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
 #[non_exhaustive]
 #[repr(u8)]

@@ -142,6 +142,7 @@ pub struct HdrHashReport {
 
 endian_bitflags! {
     /// Hash Type
+    #[doc(alias = "VIRTIO_NET_HASH_TYPE")]
     pub struct HashType: le32 {
         #[doc(alias = "VIRTIO_NET_HASH_TYPE_IPv4")]
         const IPV4 = 1 << 0;
@@ -173,6 +174,7 @@ endian_bitflags! {
 }
 
 /// Hash Report
+#[doc(alias = "VIRTIO_NET_HASH_REPORT")]
 #[derive(IntoPrimitive, FromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
 #[non_exhaustive]
 #[repr(u16)]
