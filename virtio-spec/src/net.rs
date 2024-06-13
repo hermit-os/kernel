@@ -1,6 +1,7 @@
 //! Network Device
 
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use volatile::access::ReadOnly;
 use volatile_macro::VolatileFieldAccess;
 
 pub use super::features::net::F;
@@ -27,14 +28,31 @@ endian_bitflags! {
 #[derive(VolatileFieldAccess)]
 #[repr(C)]
 pub struct Config {
+    #[access(ReadOnly)]
     mac: [u8; 6],
+
+    #[access(ReadOnly)]
     status: S,
+
+    #[access(ReadOnly)]
     max_virtqueue_pairs: le16,
+
+    #[access(ReadOnly)]
     mtu: le16,
+
+    #[access(ReadOnly)]
     speed: le32,
+
+    #[access(ReadOnly)]
     duplex: u8,
+
+    #[access(ReadOnly)]
     rss_max_key_size: u8,
+
+    #[access(ReadOnly)]
     rss_max_indirection_table_length: le16,
+
+    #[access(ReadOnly)]
     supported_hash_types: le32,
 }
 
