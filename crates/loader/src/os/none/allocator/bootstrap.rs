@@ -33,7 +33,7 @@ use core::ops::Range;
 use core::ptr::NonNull;
 
 use allocator_api2::alloc::{AllocError, Allocator, Layout};
-use exclusive_cell::ExclusiveCell;
+use take_static::take_static;
 
 use self::ptr_range::PtrRange;
 
@@ -57,8 +57,10 @@ where
 		let mem = {
 			const SIZE: usize = 4 * 1024;
 			const BYTE: MaybeUninit<u8> = MaybeUninit::uninit();
-			/// The actual memory of the boostrap allocator.
-			static MEM: ExclusiveCell<[MaybeUninit<u8>; SIZE]> = ExclusiveCell::new([BYTE; SIZE]);
+			take_static! {
+				/// The actual memory of the boostrap allocator.
+				static MEM: [MaybeUninit<u8>; SIZE] = [BYTE; SIZE];
+			}
 			MEM.take().unwrap()
 		};
 

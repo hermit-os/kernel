@@ -1,16 +1,15 @@
 //! Implementation of the Hermit Allocator in the loader
 
 mod bootstrap;
-mod bump;
 
 use core::ptr;
 use core::ptr::NonNull;
 
 use allocator_api2::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
-use spinning_top::Spinlock;
+use one_shot_mutex::OneShotMutex;
 
 use self::bootstrap::BootstrapAllocator;
-use self::bump::BumpAllocator;
+use crate::bump_allocator::BumpAllocator;
 
 /// The global system allocator for Hermit.
 struct GlobalAllocator {
@@ -53,12 +52,12 @@ impl GlobalAllocator {
 	}
 }
 
-pub struct LockedAllocator(Spinlock<GlobalAllocator>);
+pub struct LockedAllocator(OneShotMutex<GlobalAllocator>);
 
 impl LockedAllocator {
 	/// Creates an empty allocator. All allocate calls will return `None`.
 	pub const fn empty() -> LockedAllocator {
-		LockedAllocator(Spinlock::new(GlobalAllocator::empty()))
+		LockedAllocator(OneShotMutex::new(GlobalAllocator::empty()))
 	}
 }
 
