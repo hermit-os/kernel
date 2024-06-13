@@ -2,13 +2,15 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::str;
 
 use pci_types::InterruptLine;
+use virtio::fs::ConfigVolatileFieldAccess;
 use virtio::FeatureBits;
+use volatile::access::ReadOnly;
+use volatile::VolatileRef;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-#[cfg(feature = "pci")]
-use crate::drivers::fs::virtio_pci::FsDevCfgRaw;
 use crate::drivers::virtio::error::VirtioFsError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -23,7 +25,7 @@ use crate::fs::fuse::{self, FuseInterface};
 /// Handling the right access to fields, as some are read-only
 /// for the driver.
 pub(crate) struct FsDevCfg {
-	pub raw: &'static FsDevCfgRaw,
+	pub raw: VolatileRef<'static, virtio::fs::Config, ReadOnly>,
 	pub dev_id: u16,
 	pub features: virtio::fs::F,
 }
@@ -112,7 +114,13 @@ impl VirtioFsDriver {
 		}
 
 		// 1 highprio queue, and n normal request queues
-		let vqnum = self.dev_cfg.raw.get_num_queues() + 1;
+		let vqnum = self
+			.dev_cfg
+			.raw
+			.as_ptr()
+			.num_request_queues()
+			.read()
+			.to_ne() + 1;
 		if vqnum == 0 {
 			error!("0 request queues requested from device. Aborting!");
 			return Err(VirtioFsError::Unknown);
@@ -160,7 +168,10 @@ impl FuseInterface for VirtioFsDriver {
 	}
 
 	fn get_mount_point(&self) -> String {
-		self.dev_cfg.raw.get_tag().to_string()
+		let tag = self.dev_cfg.raw.as_ptr().tag().read();
+		let tag = str::from_utf8(&tag).unwrap();
+		let tag = tag.split('\0').next().unwrap();
+		tag.to_string()
 	}
 }
 
