@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 align-address = "0.3"
+anstyle = { version = "1", default-features = false }
 cfg-if = "1"
 hermit-entry = { version = "0.10", features = ["loader"] }
 log = "0.4"
@@ -15,7 +16,6 @@ one-shot-mutex = "0.1"
 sptr = "0.3"
 take-static = "0.1"
 vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
-anstyle = { version = "1", default-features = false }
 
 [features]
 default = []
