@@ -10,6 +10,7 @@ mod bitflags;
 #[macro_use]
 pub mod volatile;
 mod features;
+pub mod fs;
 pub mod mmio;
 pub mod net;
 pub mod pci;
@@ -18,12 +19,6 @@ pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 pub use self::features::{FeatureBits, F};
-
-pub mod fs {
-    //! File System Device
-
-    pub use super::features::fs::F;
-}
 
 virtio_bitflags! {
     /// Device Status Field
