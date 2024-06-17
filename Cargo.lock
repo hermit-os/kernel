@@ -970,9 +970,9 @@ dependencies = [
 
 [[package]]
 name = "pci_types"
-version = "0.9.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6848549f754bd20aa382ffec0f4f04ba50e55a18ff75a0862bf9e227fe42b57"
+checksum = "c4325c6aa3cca3373503b1527e75756f9fbfe5fd76be4b4c8a143ee47430b8e0"
 dependencies = [
  "bit_field",
  "bitflags 2.5.0",

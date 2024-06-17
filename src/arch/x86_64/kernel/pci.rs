@@ -22,11 +22,6 @@ impl PciConfigRegion {
 
 impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
-	fn function_exists(&self, _address: PciAddress) -> bool {
-		true
-	}
-
-	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, register: u16) -> u32 {
 		let address = PCI_CONFIG_ADDRESS_ENABLE
 			| u32::from(pci_addr.bus()) << 16

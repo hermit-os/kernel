@@ -40,12 +40,6 @@ impl PciConfigRegion {
 
 impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
-	fn function_exists(&self, _address: PciAddress) -> bool {
-		// we trust the device tree
-		true
-	}
-
-	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, offset: u16) -> u32 {
 		let ptr = core::ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
 		unsafe { u32::from_le(core::ptr::read_volatile(ptr)) }
