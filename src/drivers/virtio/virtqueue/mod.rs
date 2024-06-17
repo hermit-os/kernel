@@ -17,6 +17,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::mem::{self, MaybeUninit};
 use core::ops::{BitAnd, Deref, DerefMut};
 use core::ptr;
 
@@ -248,7 +249,7 @@ pub trait Virtq: VirtqPrivate {
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
 		send: &[&[u8]],
-		recv: &[&mut [u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>;
 
@@ -258,7 +259,7 @@ pub trait Virtq: VirtqPrivate {
 	fn prep_transfer_from_raw_static(
 		self: Rc<Self>,
 		send: &[&[u8]],
-		recv: &[&mut [u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError>
 	where
@@ -2269,7 +2270,7 @@ impl MemPool {
 	///
 	/// * The descriptor will consume one element of the pool.
 	/// * The referred to memory area will NOT be deallocated upon drop.
-	fn pull_from_raw(self: Rc<Self>, slice: &[u8]) -> Result<MemDescr, VirtqError> {
+	fn pull_from_raw<T>(self: Rc<Self>, slice: &[T]) -> Result<MemDescr, VirtqError> {
 		// Zero sized descriptors are NOT allowed
 		// This also prohibids a panic due to accessing wrong index below
 		assert!(!slice.is_empty());
@@ -2282,16 +2283,17 @@ impl MemPool {
 
 		assert_eq!(end_phy, end_phy_calc);
 
-		let desc_id = match self.pool.borrow_mut().pop() {
-			Some(id) => id,
-			None => return Err(VirtqError::NoDescrAvail),
-		};
+		let desc_id = self
+			.pool
+			.borrow_mut()
+			.pop()
+			.ok_or(VirtqError::NoDescrAvail)?;
 
 		Ok(MemDescr {
 			ptr: slice.as_ptr() as *mut _,
-			len: slice.len(),
-			_init_len: slice.len(),
-			_mem_len: slice.len(),
+			len: mem::size_of_val(slice),
+			_init_len: mem::size_of_val(slice),
+			_mem_len: mem::size_of_val(slice),
 			id: Some(desc_id),
 			dealloc: Dealloc::Not,
 			pool: self.clone(),
@@ -2311,7 +2313,7 @@ impl MemPool {
 	///
 	/// * The descriptor will consume one element of the pool.
 	/// * The referred to memory area will NOT be deallocated upon drop.
-	fn pull_from_raw_untracked(self: Rc<Self>, slice: &[u8]) -> MemDescr {
+	fn pull_from_raw_untracked<T>(self: Rc<Self>, slice: &[T]) -> MemDescr {
 		// Zero sized descriptors are NOT allowed
 		// This also prohibids a panic due to accessing wrong index below
 		assert!(!slice.is_empty());
@@ -2326,9 +2328,9 @@ impl MemPool {
 
 		MemDescr {
 			ptr: slice.as_ptr() as *mut _,
-			len: slice.len(),
-			_init_len: slice.len(),
-			_mem_len: slice.len(),
+			len: mem::size_of_val(slice),
+			_init_len: mem::size_of_val(slice),
+			_mem_len: mem::size_of_val(slice),
 			id: None,
 			dealloc: Dealloc::Not,
 			pool: self.clone(),

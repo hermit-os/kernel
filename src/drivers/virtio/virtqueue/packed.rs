@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::mem::MaybeUninit;
 use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
@@ -1120,7 +1121,7 @@ impl Virtq for PackedVq {
 	fn prep_transfer_from_raw(
 		self: Rc<Self>,
 		send: &[&[u8]],
-		recv: &[&mut [u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
 		buffer_type: BufferType,
 	) -> Result<TransferToken, VirtqError> {
 		self.prep_transfer_from_raw_static(send, recv, buffer_type)
