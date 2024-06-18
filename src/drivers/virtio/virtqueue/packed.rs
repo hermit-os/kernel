@@ -305,8 +305,8 @@ impl DescriptorRing {
 			first_ctrl_settings.2.as_flags_avail().into();
 
 		RingIdx {
-			off: first_ctrl_settings.0,
-			wrap: first_ctrl_settings.2 .0.into(),
+			off: self.write_index,
+			wrap: self.drv_wc.0.into(),
 		}
 	}
 
@@ -419,8 +419,8 @@ impl DescriptorRing {
 		fence(Ordering::SeqCst);
 
 		RingIdx {
-			off: ctrl.start,
-			wrap: ctrl.wrap_at_init.0.into(),
+			off: self.write_index,
+			wrap: self.drv_wc.0.into(),
 		}
 	}
 
