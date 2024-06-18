@@ -825,7 +825,8 @@ pub fn ipi_tlb_flush() {
 					local_apic_write(
 						IA32_X2APIC_ICR,
 						destination
-							| APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED
+							| APIC_ICR_LEVEL_ASSERT
+							| APIC_ICR_DELIVERY_MODE_FIXED
 							| u64::from(TLB_FLUSH_INTERRUPT_NUMBER),
 					);
 				}

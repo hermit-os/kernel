@@ -160,7 +160,8 @@ impl TaskStacks {
 		unsafe {
 			ptr::write_bytes(
 				(virt_addr
-					+ KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE
+					+ KERNEL_STACK_SIZE
+					+ DEFAULT_STACK_SIZE
 					+ 3 * BasePageSize::SIZE as usize)
 					//(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE)
 					.as_mut_ptr::<u8>(),
@@ -198,7 +199,8 @@ impl TaskStacks {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
 				stacks.virt_addr
-					+ KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE
+					+ KERNEL_STACK_SIZE
+					+ DEFAULT_STACK_SIZE
 					+ 3 * BasePageSize::SIZE as usize
 				//stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE
 			}
@@ -280,7 +282,7 @@ impl TaskTLS {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
 		let tls_allocation_size = tls_size.align_up(32usize); // + mem::size_of::<usize>();
-													  // We allocate in 128 byte granularity (= cache line size) to avoid false sharing
+														// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
 		let memory_size = tls_allocation_size.align_up(128usize);
 		let layout =
 			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
