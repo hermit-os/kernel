@@ -5,10 +5,10 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::mem::MaybeUninit;
-use core::ptr;
 use core::sync::atomic::{fence, Ordering};
+use core::{ops, ptr};
 
 use align_address::Align;
 use virtio::pci::NotificationData;
@@ -26,10 +26,29 @@ use super::{
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
 struct RingIdx {
 	off: u16,
 	wrap: u8,
+}
+
+trait RingIndexRange {
+	fn wrapping_contains(&self, item: &RingIdx) -> bool;
+}
+
+impl RingIndexRange for ops::Range<RingIdx> {
+	fn wrapping_contains(&self, item: &RingIdx) -> bool {
+		let ops::Range { start, end } = self;
+
+		if start.wrap == end.wrap {
+			item.wrap == start.wrap && start.off <= item.off && item.off < end.off
+		} else if item.wrap == start.wrap {
+			start.off <= item.off
+		} else {
+			debug_assert!(item.wrap == end.wrap);
+			item.off < end.off
+		}
+	}
 }
 
 /// A newtype of bool used for convenience in context with
@@ -909,21 +928,19 @@ impl DevNotif {
 		self.raw.flags & 0b11 == 0
 	}
 
-	fn is_notif_specfic(&self, idx: RingIdx) -> bool {
-		if self.f_notif_idx {
-			if self.raw.flags & 0b11 == 2 {
-				let event_idx = RingIdx {
-					off: self.raw.event & !(1 << 15),
-					wrap: (self.raw.event >> 15) as u8,
-				};
-
-				event_idx == idx
-			} else {
-				false
-			}
-		} else {
-			false
+	fn notif_specific(&self) -> Option<RingIdx> {
+		if !self.f_notif_idx {
+			return None;
 		}
+
+		if self.raw.flags & 0b11 != 2 {
+			return None;
+		}
+
+		let off = self.raw.event & !(1 << 15);
+		let wrap = (self.raw.event >> 15) as u8;
+
+		Some(RingIdx { off, wrap })
 	}
 }
 
@@ -948,6 +965,7 @@ pub struct PackedVq {
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
 	index: VqIndex,
+	last_next: Cell<RingIdx>,
 }
 
 // Public interface of PackedVq
@@ -977,12 +995,19 @@ impl Virtq for PackedVq {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_idx) {
+		let range = self.last_next.get()..next_idx;
+		let notif_specific = self
+			.dev_event
+			.notif_specific()
+			.map_or(false, |idx| range.wrapping_contains(&idx));
+
+		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
+			self.last_next.set(next_idx);
 		}
 	}
 
@@ -1006,12 +1031,19 @@ impl Virtq for PackedVq {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() {
+		let range = self.last_next.get()..next_idx;
+		let notif_specific = self
+			.dev_event
+			.notif_specific()
+			.map_or(false, |idx| range.wrapping_contains(&idx));
+
+		if self.dev_event.is_notif() | notif_specific {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
+			self.last_next.set(next_idx);
 		}
 	}
 
@@ -1022,12 +1054,15 @@ impl Virtq for PackedVq {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() {
+		let notif_specific = self.dev_event.notif_specific() == Some(self.last_next.get());
+
+		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
+			self.last_next.set(next_idx);
 		}
 	}
 
@@ -1126,6 +1161,7 @@ impl Virtq for PackedVq {
 			mem_pool,
 			size: VqSize::from(vq_size),
 			index,
+			last_next: Default::default(),
 		})
 	}
 
