@@ -172,8 +172,10 @@ impl ObjectInterface for Socket {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
 					let available = PollEvent::POLLOUT
-						| PollEvent::POLLWRNORM | PollEvent::POLLWRBAND
-						| PollEvent::POLLIN | PollEvent::POLLRDNORM
+						| PollEvent::POLLWRNORM
+						| PollEvent::POLLWRBAND
+						| PollEvent::POLLIN
+						| PollEvent::POLLRDNORM
 						| PollEvent::POLLRDBAND;
 
 					let ret = event & available;
