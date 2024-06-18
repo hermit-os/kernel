@@ -881,10 +881,7 @@ impl DrvNotif {
 		// Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
 		if self.f_notif_idx {
 			self.raw.flags |= 1 << 1;
-			// Reset event fields
-			self.raw.event = 0;
-			self.raw.event = at_offset;
-			self.raw.event |= (at_wrap as u16) << 15;
+			self.raw.event = at_offset | (at_wrap as u16) << 15;
 		}
 	}
 }
