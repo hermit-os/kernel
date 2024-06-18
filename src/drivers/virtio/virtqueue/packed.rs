@@ -26,6 +26,12 @@ use super::{
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
 
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+struct RingIdx {
+	off: u16,
+	wrap: u8,
+}
+
 /// A newtype of bool used for convenience in context with
 /// packed queues wrap counter.
 ///
@@ -142,7 +148,7 @@ impl DescriptorRing {
 		}
 	}
 
-	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (u16, u8) {
+	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> RingIdx {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
@@ -279,11 +285,13 @@ impl DescriptorRing {
 		self.ring[usize::from(first_ctrl_settings.0)].flags |=
 			first_ctrl_settings.2.as_flags_avail().into();
 
-		// Converting a boolean as u8 is fine
-		(first_ctrl_settings.0, first_ctrl_settings.2 .0 as u8)
+		RingIdx {
+			off: first_ctrl_settings.0,
+			wrap: first_ctrl_settings.2 .0.into(),
+		}
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (u16, u8) {
+	fn push(&mut self, tkn: TransferToken) -> RingIdx {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
 		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
@@ -391,8 +399,10 @@ impl DescriptorRing {
 		ctrl.make_avail(Box::new(tkn));
 		fence(Ordering::SeqCst);
 
-		// Converting a boolean as u8 is fine
-		(ctrl.start, ctrl.wrap_at_init.0 as u8)
+		RingIdx {
+			off: ctrl.start,
+			wrap: ctrl.wrap_at_init.0.into(),
+		}
 	}
 
 	/// # Unsafe
@@ -878,11 +888,11 @@ impl DrvNotif {
 	}
 
 	/// Enables a notification by the device for a specific descriptor.
-	fn enable_specific(&mut self, at_offset: u16, at_wrap: u8) {
+	fn enable_specific(&mut self, idx: RingIdx) {
 		// Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
 		if self.f_notif_idx {
 			self.raw.flags |= 1 << 1;
-			self.raw.event = at_offset | (at_wrap as u16) << 15;
+			self.raw.event = idx.off | (idx.wrap as u16) << 15;
 		}
 	}
 }
@@ -899,15 +909,15 @@ impl DevNotif {
 		self.raw.flags & (1 << 0) == 0
 	}
 
-	fn is_notif_specfic(&self, next_off: u16, next_wrap: u8) -> bool {
+	fn is_notif_specfic(&self, idx: RingIdx) -> bool {
 		if self.f_notif_idx {
 			if self.raw.flags & 1 << 1 == 2 {
-				// as u16 is okay for usize, as size of queue is restricted to 2^15
-				// it is also okay to just loose the upper 8 bits, as we only check the LSB in second clause.
-				let desc_event_off = self.raw.event & !(1 << 15);
-				let desc_event_wrap = (self.raw.event >> 15) as u8;
+				let event_idx = RingIdx {
+					off: self.raw.event & !(1 << 15),
+					wrap: (self.raw.event >> 15) as u8,
+				};
 
-				desc_event_off == next_off && desc_event_wrap == next_wrap
+				event_idx == idx
 			} else {
 				false
 			}
@@ -961,19 +971,17 @@ impl Virtq for PackedVq {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
 
-		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
-			self.drv_event
-				.borrow_mut()
-				.enable_specific(next_off, next_wrap);
+			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_off, next_wrap) {
+		if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_idx) {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
-				.with_next_off(next_off)
-				.with_next_wrap(next_wrap);
+				.with_next_off(next_idx.off)
+				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
@@ -992,37 +1000,33 @@ impl Virtq for PackedVq {
 			tkn.await_queue = Some(await_queue.clone());
 		}
 
-		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
-			self.drv_event
-				.borrow_mut()
-				.enable_specific(next_off, next_wrap);
+			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
 		if self.dev_event.is_notif() {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
-				.with_next_off(next_off)
-				.with_next_wrap(next_wrap);
+				.with_next_off(next_idx.off)
+				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
 
 	fn dispatch(&self, tkn: TransferToken, notif: bool) {
-		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
+		let next_idx = self.descr_ring.borrow_mut().push(tkn);
 
 		if notif {
-			self.drv_event
-				.borrow_mut()
-				.enable_specific(next_off, next_wrap);
+			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
 		if self.dev_event.is_notif() {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
-				.with_next_off(next_off)
-				.with_next_wrap(next_wrap);
+				.with_next_off(next_idx.off)
+				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
