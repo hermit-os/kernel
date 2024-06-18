@@ -11,6 +11,7 @@ use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
 use align_address::Align;
+use virtio::pci::NotificationData;
 use zerocopy::little_endian;
 
 #[cfg(not(feature = "pci"))]
@@ -969,8 +970,11 @@ impl Virtq for PackedVq {
 		}
 
 		if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_off, next_wrap) {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_off)
+				.with_next_wrap(next_wrap);
+			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
 
@@ -997,8 +1001,11 @@ impl Virtq for PackedVq {
 		}
 
 		if self.dev_event.is_notif() {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_off)
+				.with_next_wrap(next_wrap);
+			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
 
@@ -1012,8 +1019,11 @@ impl Virtq for PackedVq {
 		}
 
 		if self.dev_event.is_notif() {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_off)
+				.with_next_wrap(next_wrap);
+			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
 

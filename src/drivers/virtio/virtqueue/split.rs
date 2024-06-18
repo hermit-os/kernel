@@ -10,6 +10,7 @@ use core::cell::{RefCell, UnsafeCell};
 use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
+use virtio::pci::NotificationData;
 use virtio::{le16, le32, le64};
 use volatile::access::ReadOnly;
 use volatile::{map_field, VolatilePtr, VolatileRef};
@@ -378,8 +379,11 @@ impl Virtq for SplitVq {
 		}
 
 		if self.ring.borrow().dev_is_notif() {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_off)
+				.with_next_wrap(next_wrap);
+			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
 

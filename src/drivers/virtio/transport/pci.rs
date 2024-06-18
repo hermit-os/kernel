@@ -579,26 +579,20 @@ impl NotifCtrl {
 		self.f_notif_data = true;
 	}
 
-	pub fn notify_dev(&self, vqn: u16, next_off: u16, next_wrap: u8) {
+	pub fn notify_dev(&self, data: NotificationData) {
 		// See Virtio specification v.1.1. - 4.1.5.2
 		// Depending in the feature negotiation, we write either only the
 		// virtqueue index or the index and the next position inside the queue.
 
-		let notification_data = NotificationData::new()
-			.with_vqn(vqn)
-			.with_next_off(next_off)
-			.with_next_wrap(next_wrap);
-
 		if self.f_notif_data {
 			unsafe {
-				self.notif_addr
-					.write_volatile(notification_data.into_bits());
+				self.notif_addr.write_volatile(data.into_bits());
 			}
 		} else {
 			unsafe {
 				self.notif_addr
 					.cast::<le16>()
-					.write_volatile(notification_data.vqn().into());
+					.write_volatile(data.vqn().into());
 			}
 		}
 	}

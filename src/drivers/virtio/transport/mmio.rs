@@ -304,16 +304,11 @@ impl NotifCtrl {
 		self.f_notif_data = true;
 	}
 
-	pub fn notify_dev(&self, vqn: u16, next_off: u16, next_wrap: u8) {
-		let notification_data = NotificationData::new()
-			.with_vqn(vqn)
-			.with_next_off(next_off)
-			.with_next_wrap(next_wrap);
-
+	pub fn notify_dev(&self, data: NotificationData) {
 		let notification_data = if self.f_notif_data {
-			notification_data.into_bits()
+			data.into_bits()
 		} else {
-			u32::from(notification_data.vqn()).into()
+			u32::from(data.vqn()).into()
 		};
 
 		unsafe {
