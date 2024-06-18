@@ -148,7 +148,7 @@ impl DescrRing {
 		unsafe { VolatileRef::new_read_only(NonNull::new(self.used_ring_cell.get()).unwrap()) }
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (u16, u8) {
+	fn push(&mut self, tkn: TransferToken) -> u16 {
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
 
@@ -271,9 +271,10 @@ impl DescrRing {
 			.write(MaybeUninit::new((index as u16).into()));
 
 		memory_barrier();
-		map_field!(avail_ring.index).update(|val| (val.to_ne().wrapping_add(1)).into());
+		let next_idx = idx.wrapping_add(1);
+		map_field!(avail_ring.index).write(next_idx.into());
 
-		(0, 0)
+		next_idx
 	}
 
 	fn poll(&mut self) {
@@ -370,7 +371,7 @@ impl Virtq for SplitVq {
 	}
 
 	fn dispatch(&self, tkn: TransferToken, notif: bool) {
-		let (next_off, next_wrap) = self.ring.borrow_mut().push(tkn);
+		let next_idx = self.ring.borrow_mut().push(tkn);
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -381,8 +382,7 @@ impl Virtq for SplitVq {
 		if self.ring.borrow().dev_is_notif() {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
-				.with_next_off(next_off)
-				.with_next_wrap(next_wrap);
+				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
 	}
