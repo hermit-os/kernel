@@ -16,12 +16,12 @@ pub mod split;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use core::alloc::{Allocator, Layout};
 use core::cell::RefCell;
 use core::mem::{self, MaybeUninit};
 use core::ops::{Deref, DerefMut};
-use core::ptr;
+use core::ptr::{self, NonNull};
 
-use align_address::Align;
 use async_channel::TryRecvError;
 use virtio::{le32, virtq};
 use zerocopy::AsBytes;
@@ -31,8 +31,8 @@ use self::error::{BufferError, VirtqError};
 use super::transport::mmio::{ComCfg, NotifCfg};
 #[cfg(feature = "pci")]
 use super::transport::pci::{ComCfg, NotifCfg};
-use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
+use crate::mm::device_alloc::DeviceAlloc;
 
 /// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
 /// smaller-equal to `min(u16::MAX , T::MAX)`.
@@ -1910,7 +1910,7 @@ impl Buffer {
 	/// This consumes the the given buffer and returns the raw information (i.e. a `*mut u8` and a `usize` inidacting the start and
 	/// length of the buffers memory).
 	///
-	/// After this call the users is responsible for deallocating the given memory via the kernel `mem::dealloc` function.
+	/// After this call the users is responsible for deallocating the given memory via the [DeviceAlloc::deallocate] function.
 	fn into_raw(self) -> Vec<(*mut u8, usize)> {
 		match self {
 			Buffer::Single { mut desc_lst, .. }
@@ -1920,8 +1920,8 @@ impl Buffer {
 
 				for desc in desc_lst.iter_mut() {
 					// Need to be a little careful here.
-					desc.dealloc = Dealloc::Not;
-					arr.push((desc.ptr, desc._mem_len));
+					desc.dealloc = false;
+					arr.push((desc.ptr, desc._init_len));
 				}
 				arr
 			}
@@ -2059,9 +2059,6 @@ struct MemDescr {
 	/// after writes of the device, but the Descriptors need to be reset
 	/// in case they are reused. So the initial length must be preserved.
 	_init_len: usize,
-	/// Defines the length of the controlled memory area
-	/// starting a `ptr: *mut u8`. Never Changes.
-	_mem_len: usize,
 	/// If `id == None` this is an untracked memory descriptor
 	/// * Meaining: The descriptor does NOT count as a descriptor
 	///   taken from the [MemPool].
@@ -2075,18 +2072,18 @@ struct MemDescr {
 	///     that someone else is "controlling" area and takes
 	///     of deallocation.
 	/// * Default is true.
-	dealloc: Dealloc,
+	dealloc: bool,
 }
 
 impl MemDescr {
 	/// Provides a handle to the given memory area by
 	/// giving a Box ownership to it.
-	fn into_vec(mut self) -> Vec<u8> {
+	fn into_vec(mut self) -> Vec<u8, DeviceAlloc> {
 		// Prevent double frees, as ownership will be tracked by
 		// Box from now on.
-		self.dealloc = Dealloc::Not;
+		self.dealloc = false;
 
-		unsafe { Vec::from_raw_parts(self.ptr, self._mem_len, 0) }
+		unsafe { Vec::from_raw_parts_in(self.ptr, self.len, self._init_len, DeviceAlloc) }
 	}
 
 	/// Copies the given memory area into a Vector.
@@ -2127,10 +2124,9 @@ impl MemDescr {
 			ptr: self.ptr,
 			len: self.len,
 			_init_len: self.len(),
-			_mem_len: self._mem_len,
 			id: None,
 			pool: Rc::clone(&self.pool),
-			dealloc: Dealloc::Not,
+			dealloc: false,
 		}
 	}
 }
@@ -2155,11 +2151,12 @@ impl Drop for MemDescr {
 			self.pool.ret_id(id);
 		}
 
-		match self.dealloc {
-			Dealloc::Not => (),
-			Dealloc::AsSlice => unsafe { drop(Vec::from_raw_parts(self.ptr, self._mem_len, 0)) },
-			Dealloc::AsPage => {
-				crate::mm::deallocate(VirtAddr::from(self.ptr as usize), self._mem_len)
+		if self.dealloc {
+			unsafe {
+				DeviceAlloc.deallocate(
+					NonNull::new(self.ptr).unwrap(),
+					Layout::array::<u8>(self._init_len).unwrap(),
+				)
 			}
 		}
 	}
@@ -2199,12 +2196,6 @@ impl From<Bytes> for usize {
 	fn from(byte: Bytes) -> Self {
 		byte.0
 	}
-}
-
-enum Dealloc {
-	Not,
-	AsPage,
-	AsSlice,
 }
 
 /// MemPool allows to easily control, request and provide memory for Virtqueues.
@@ -2285,9 +2276,8 @@ impl MemPool {
 			ptr: slice.as_ptr() as *mut _,
 			len: mem::size_of_val(slice),
 			_init_len: mem::size_of_val(slice),
-			_mem_len: mem::size_of_val(slice),
 			id: Some(desc_id),
-			dealloc: Dealloc::Not,
+			dealloc: false,
 			pool: self.clone(),
 		})
 	}
@@ -2322,9 +2312,8 @@ impl MemPool {
 			ptr: slice.as_ptr() as *mut _,
 			len: mem::size_of_val(slice),
 			_init_len: mem::size_of_val(slice),
-			_mem_len: mem::size_of_val(slice),
 			id: None,
-			dealloc: Dealloc::Not,
+			dealloc: false,
 			pool: self.clone(),
 		}
 	}
@@ -2348,26 +2337,16 @@ impl MemPool {
 		};
 
 		let len = bytes.0;
-
-		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = len.align_up(BasePageSize::SIZE as usize);
-		let ptr = ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
-
-		// Assert descriptor does not cross a page barrier
-		let start_virt = ptr as usize;
-		let end_virt = start_virt + (len - 1);
-		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (len - 1);
-		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
-
-		assert_eq!(end_phy, end_phy_calc);
+		let ptr = Vec::<u8, _>::with_capacity_in(len, DeviceAlloc)
+			.into_raw_parts_with_alloc()
+			.0;
 
 		Ok(MemDescr {
 			ptr,
 			len,
 			_init_len: len,
-			_mem_len,
 			id: Some(id),
-			dealloc: Dealloc::AsPage,
+			dealloc: true,
 			pool: self.clone(),
 		})
 	}
@@ -2383,26 +2362,16 @@ impl MemPool {
 	///   * Third MemPool.pull -> MemDesc with id = 2,
 	fn pull_untracked(self: Rc<Self>, bytes: Bytes) -> MemDescr {
 		let len = bytes.0;
-
-		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = len.align_up(BasePageSize::SIZE as usize);
-		let ptr = ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
-
-		// Assert descriptor does not cross a page barrier
-		let start_virt = ptr as usize;
-		let end_virt = start_virt + (len - 1);
-		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (len - 1);
-		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
-
-		assert_eq!(end_phy, end_phy_calc);
+		let ptr = Vec::<u8, _>::with_capacity_in(len, DeviceAlloc)
+			.into_raw_parts_with_alloc()
+			.0;
 
 		MemDescr {
 			ptr,
 			len,
 			_init_len: len,
-			_mem_len,
 			id: None,
-			dealloc: Dealloc::AsPage,
+			dealloc: true,
 			pool: self.clone(),
 		}
 	}
