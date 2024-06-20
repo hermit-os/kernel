@@ -5,12 +5,13 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::mem::MaybeUninit;
-use core::ptr;
 use core::sync::atomic::{fence, Ordering};
+use core::{ops, ptr};
 
 use align_address::Align;
+use virtio::pci::NotificationData;
 use zerocopy::little_endian;
 
 #[cfg(not(feature = "pci"))]
@@ -24,6 +25,31 @@ use super::{
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
+
+#[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
+struct RingIdx {
+	off: u16,
+	wrap: u8,
+}
+
+trait RingIndexRange {
+	fn wrapping_contains(&self, item: &RingIdx) -> bool;
+}
+
+impl RingIndexRange for ops::Range<RingIdx> {
+	fn wrapping_contains(&self, item: &RingIdx) -> bool {
+		let ops::Range { start, end } = self;
+
+		if start.wrap == end.wrap {
+			item.wrap == start.wrap && start.off <= item.off && item.off < end.off
+		} else if item.wrap == start.wrap {
+			start.off <= item.off
+		} else {
+			debug_assert!(item.wrap == end.wrap);
+			item.off < end.off
+		}
+	}
+}
 
 /// A newtype of bool used for convenience in context with
 /// packed queues wrap counter.
@@ -141,7 +167,7 @@ impl DescriptorRing {
 		}
 	}
 
-	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (u16, u8) {
+	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> RingIdx {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
@@ -278,11 +304,13 @@ impl DescriptorRing {
 		self.ring[usize::from(first_ctrl_settings.0)].flags |=
 			first_ctrl_settings.2.as_flags_avail().into();
 
-		// Converting a boolean as u8 is fine
-		(first_ctrl_settings.0, first_ctrl_settings.2 .0 as u8)
+		RingIdx {
+			off: self.write_index,
+			wrap: self.drv_wc.0.into(),
+		}
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (u16, u8) {
+	fn push(&mut self, tkn: TransferToken) -> RingIdx {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
 		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
@@ -390,8 +418,10 @@ impl DescriptorRing {
 		ctrl.make_avail(Box::new(tkn));
 		fence(Ordering::SeqCst);
 
-		// Converting a boolean as u8 is fine
-		(ctrl.start, ctrl.wrap_at_init.0 as u8)
+		RingIdx {
+			off: self.write_index,
+			wrap: self.drv_wc.0.into(),
+		}
 	}
 
 	/// # Unsafe
@@ -864,27 +894,24 @@ impl EventSuppr {
 }
 
 impl DrvNotif {
-	/// Enables notifications by setting the LSB.
+	/// Enables notifications by unsetting the LSB.
 	/// See Virito specification v1.1. - 2.7.10
 	fn enable_notif(&mut self) {
 		self.raw.flags = 0;
 	}
 
-	/// Disables notifications by unsetting the LSB.
+	/// Disables notifications by setting the LSB.
 	/// See Virtio specification v1.1. - 2.7.10
 	fn disable_notif(&mut self) {
-		self.raw.flags = 0;
+		self.raw.flags = 1;
 	}
 
 	/// Enables a notification by the device for a specific descriptor.
-	fn enable_specific(&mut self, at_offset: u16, at_wrap: u8) {
+	fn enable_specific(&mut self, idx: RingIdx) {
 		// Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
 		if self.f_notif_idx {
-			self.raw.flags |= 1 << 1;
-			// Reset event fields
-			self.raw.event = 0;
-			self.raw.event = at_offset;
-			self.raw.event |= (at_wrap as u16) << 15;
+			self.raw.flags = 2;
+			self.raw.event = idx.off & !(1 << 15) | (idx.wrap as u16) << 15;
 		}
 	}
 }
@@ -898,24 +925,22 @@ impl DevNotif {
 	/// Reads notification bit (i.e. LSB) and returns value.
 	/// If notifications are enabled returns true, else false.
 	fn is_notif(&self) -> bool {
-		self.raw.flags & (1 << 0) == 0
+		self.raw.flags & 0b11 == 0
 	}
 
-	fn is_notif_specfic(&self, next_off: u16, next_wrap: u8) -> bool {
-		if self.f_notif_idx {
-			if self.raw.flags & 1 << 1 == 2 {
-				// as u16 is okay for usize, as size of queue is restricted to 2^15
-				// it is also okay to just loose the upper 8 bits, as we only check the LSB in second clause.
-				let desc_event_off = self.raw.event & !(1 << 15);
-				let desc_event_wrap = (self.raw.event >> 15) as u8;
-
-				desc_event_off == next_off && desc_event_wrap == next_wrap
-			} else {
-				false
-			}
-		} else {
-			false
+	fn notif_specific(&self) -> Option<RingIdx> {
+		if !self.f_notif_idx {
+			return None;
 		}
+
+		if self.raw.flags & 0b11 != 2 {
+			return None;
+		}
+
+		let off = self.raw.event & !(1 << 15);
+		let wrap = (self.raw.event >> 15) as u8;
+
+		Some(RingIdx { off, wrap })
 	}
 }
 
@@ -940,6 +965,7 @@ pub struct PackedVq {
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
 	index: VqIndex,
+	last_next: Cell<RingIdx>,
 }
 
 // Public interface of PackedVq
@@ -963,17 +989,25 @@ impl Virtq for PackedVq {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
 
-		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
-			self.drv_event
-				.borrow_mut()
-				.enable_specific(next_off, next_wrap);
+			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_off, next_wrap) {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+		let range = self.last_next.get()..next_idx;
+		let notif_specific = self
+			.dev_event
+			.notif_specific()
+			.map_or(false, |idx| range.wrapping_contains(&idx));
+
+		if self.dev_event.is_notif() || notif_specific {
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_idx.off)
+				.with_next_wrap(next_idx.wrap);
+			self.notif_ctrl.notify_dev(notification_data);
+			self.last_next.set(next_idx);
 		}
 	}
 
@@ -991,32 +1025,44 @@ impl Virtq for PackedVq {
 			tkn.await_queue = Some(await_queue.clone());
 		}
 
-		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
-			self.drv_event
-				.borrow_mut()
-				.enable_specific(next_off, next_wrap);
+			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+		let range = self.last_next.get()..next_idx;
+		let notif_specific = self
+			.dev_event
+			.notif_specific()
+			.map_or(false, |idx| range.wrapping_contains(&idx));
+
+		if self.dev_event.is_notif() | notif_specific {
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_idx.off)
+				.with_next_wrap(next_idx.wrap);
+			self.notif_ctrl.notify_dev(notification_data);
+			self.last_next.set(next_idx);
 		}
 	}
 
 	fn dispatch(&self, tkn: TransferToken, notif: bool) {
-		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
+		let next_idx = self.descr_ring.borrow_mut().push(tkn);
 
 		if notif {
-			self.drv_event
-				.borrow_mut()
-				.enable_specific(next_off, next_wrap);
+			self.drv_event.borrow_mut().enable_specific(next_idx);
 		}
 
-		if self.dev_event.is_notif() {
-			self.notif_ctrl
-				.notify_dev(self.index.0, next_off, next_wrap);
+		let notif_specific = self.dev_event.notif_specific() == Some(self.last_next.get());
+
+		if self.dev_event.is_notif() || notif_specific {
+			let notification_data = NotificationData::new()
+				.with_vqn(self.index.0)
+				.with_next_off(next_idx.off)
+				.with_next_wrap(next_idx.wrap);
+			self.notif_ctrl.notify_dev(notification_data);
+			self.last_next.set(next_idx);
 		}
 	}
 
@@ -1115,6 +1161,7 @@ impl Virtq for PackedVq {
 			mem_pool,
 			size: VqSize::from(vq_size),
 			index,
+			last_next: Default::default(),
 		})
 	}
 
