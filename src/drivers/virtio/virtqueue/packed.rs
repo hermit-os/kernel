@@ -772,7 +772,8 @@ impl<'a> WriteCtrl<'a> {
 			desc_ref.id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
 			// according to the current WrapCount.
-			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
+			desc_ref.flags = (flags - virtq::DescF::AVAIL - virtq::DescF::USED)
+				| self.desc_ring.drv_wc.as_flags_avail();
 
 			self.incrmt()
 		}
