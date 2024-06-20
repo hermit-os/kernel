@@ -14,9 +14,11 @@ pub mod fs;
 pub mod mmio;
 pub mod net;
 pub mod pci;
+pub mod pvirtq;
+pub mod virtq;
 
 pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
-use num_enum::{FromPrimitive, IntoPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 pub use self::features::{FeatureBits, F};
 
@@ -198,4 +200,43 @@ pub enum Id {
     /// Unknown device
     #[num_enum(catch_all)]
     Unknown(u8),
+}
+
+/// Descriptor Ring Change Event Flags
+#[doc(alias = "RING_EVENT_FLAGS")]
+#[derive(IntoPrimitive, TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[non_exhaustive]
+#[repr(u8)]
+pub enum RingEventFlags {
+    /// Enable events
+    #[doc(alias = "RING_EVENT_FLAGS_ENABLE")]
+    Enable = 0x0,
+
+    /// Disable events
+    #[doc(alias = "RING_EVENT_FLAGS_DISABLE")]
+    Disable = 0x1,
+
+    /// Enable events for a specific descriptor
+    /// (as specified by Descriptor Ring Change Event Offset/Wrap Counter).
+    /// Only valid if VIRTIO_F_EVENT_IDX has been negotiated.
+    #[doc(alias = "RING_EVENT_FLAGS_DESC")]
+    Desc = 0x2,
+
+    Reserved = 0x3,
+}
+
+impl RingEventFlags {
+    const fn from_bits(bits: u8) -> Self {
+        match bits {
+            0x0 => Self::Enable,
+            0x1 => Self::Disable,
+            0x2 => Self::Desc,
+            0x3 => Self::Reserved,
+            _ => unreachable!(),
+        }
+    }
+
+    const fn into_bits(self) -> u8 {
+        self as u8
+    }
 }

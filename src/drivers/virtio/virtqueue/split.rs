@@ -11,7 +11,7 @@ use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
 use virtio::pci::NotificationData;
-use virtio::{le16, le32, le64};
+use virtio::{le16, virtq};
 use volatile::access::ReadOnly;
 use volatile::{map_field, VolatilePtr, VolatileRef};
 
@@ -21,32 +21,12 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, BufferToken, BufferType, Bytes, DescrFlags, MemDescr, MemPool, TransferToken, Virtq,
+	BuffSpec, BufferToken, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
 use crate::mm::device_alloc::DeviceAlloc;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct Descriptor {
-	address: le64,
-	len: le32,
-	flags: le16,
-	next: le16,
-}
-
-impl Descriptor {
-	fn new(addr: u64, len: u32, flags: u16, next: u16) -> Self {
-		Descriptor {
-			address: addr.into(),
-			len: len.into(),
-			flags: flags.into(),
-			next: next.into(),
-		}
-	}
-}
 
 // The generic structure eases the creation of the layout for the statically
 // sized portion of [AvailRing] and [UsedRing]. This way, to be allocated they
@@ -91,13 +71,17 @@ type UsedRing = GenericRing<[u8]>;
 impl UsedRing {
 	fn ring_ptr<A: volatile::access::Access>(
 		volatile_self: VolatilePtr<'_, Self, A>,
-	) -> VolatilePtr<'_, [UsedElem], A> {
+	) -> VolatilePtr<'_, [virtq::UsedElem], A> {
 		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
-		let ring_len = (ring_and_event_ptr.len() - size_of::<le16>()) / size_of::<UsedElem>();
+		let ring_len =
+			(ring_and_event_ptr.len() - size_of::<le16>()) / size_of::<virtq::UsedElem>();
 
 		unsafe {
 			ring_and_event_ptr.map(|ring_and_event_ptr| {
-				NonNull::slice_from_raw_parts(ring_and_event_ptr.cast::<UsedElem>(), ring_len)
+				NonNull::slice_from_raw_parts(
+					ring_and_event_ptr.cast::<virtq::UsedElem>(),
+					ring_len,
+				)
 			})
 		}
 	}
@@ -115,13 +99,6 @@ impl UsedRing {
 	}
 }
 
-#[repr(C)]
-#[derive(Copy, Clone)]
-struct UsedElem {
-	id: le32,
-	len: le32,
-}
-
 struct DescrRing {
 	read_idx: u16,
 	token_ring: Box<[Option<Box<TransferToken>>]>,
@@ -132,13 +109,13 @@ struct DescrRing {
 	///
 	/// These tables may only be accessed via volatile operations.
 	/// See the corresponding method for a safe wrapper.
-	descr_table_cell: Box<UnsafeCell<[MaybeUninit<Descriptor>]>, DeviceAlloc>,
+	descr_table_cell: Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 	avail_ring_cell: Box<UnsafeCell<AvailRing>, DeviceAlloc>,
 	used_ring_cell: Box<UnsafeCell<UsedRing>, DeviceAlloc>,
 }
 
 impl DescrRing {
-	fn descr_table_ref(&mut self) -> VolatileRef<'_, [MaybeUninit<Descriptor>]> {
+	fn descr_table_ref(&mut self) -> VolatileRef<'_, [MaybeUninit<virtq::Desc>]> {
 		unsafe { VolatileRef::new(NonNull::new(self.descr_table_cell.get_mut()).unwrap()) }
 	}
 	fn avail_ring_ref(&mut self) -> VolatileRef<'_, AvailRing> {
@@ -200,19 +177,23 @@ impl DescrRing {
 			let descriptor = if is_indirect {
 				assert!(len == 1);
 				if is_write {
-					Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_INDIRECT | DescrFlags::VIRTQ_DESC_F_WRITE,
-						0,
-					)
+					virtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						flags: virtq::DescF::INDIRECT | virtq::DescF::WRITE,
+						next: 0.into(),
+					}
 				} else {
-					Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_INDIRECT.into(),
-						0,
-					)
+					virtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						flags: virtq::DescF::INDIRECT,
+						next: 0.into(),
+					}
 				}
 			} else if len > 1 {
 				let next_index = {
@@ -221,34 +202,42 @@ impl DescrRing {
 				};
 
 				if is_write {
-					Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
-						next_index,
-					)
+					virtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						flags: virtq::DescF::WRITE | virtq::DescF::NEXT,
+						next: next_index.into(),
+					}
 				} else {
-					Descriptor::new(
-						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-						desc.len as u32,
-						DescrFlags::VIRTQ_DESC_F_NEXT.into(),
-						next_index,
-					)
+					virtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (desc.len as u32).into(),
+						flags: virtq::DescF::NEXT,
+						next: next_index.into(),
+					}
 				}
 			} else if is_write {
-				Descriptor::new(
-					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-					desc.len as u32,
-					DescrFlags::VIRTQ_DESC_F_WRITE.into(),
-					0,
-				)
+				virtq::Desc {
+					addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+						.as_u64()
+						.into(),
+					len: (desc.len as u32).into(),
+					flags: virtq::DescF::WRITE,
+					next: 0.into(),
+				}
 			} else {
-				Descriptor::new(
-					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-					desc.len as u32,
-					0,
-					0,
-				)
+				virtq::Desc {
+					addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+						.as_u64()
+						.into(),
+					len: (desc.len as u32).into(),
+					flags: virtq::DescF::empty(),
+					next: 0.into(),
+				}
 			};
 
 			self.descr_table_ref()
@@ -409,8 +398,8 @@ impl Virtq for SplitVq {
 
 		let descr_table_cell = unsafe {
 			core::mem::transmute::<
-				Box<[MaybeUninit<Descriptor>], DeviceAlloc>,
-				Box<UnsafeCell<[MaybeUninit<Descriptor>]>, DeviceAlloc>,
+				Box<[MaybeUninit<virtq::Desc>], DeviceAlloc>,
+				Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 			>(Box::new_uninit_slice_in(size.into(), ALLOCATOR))
 		};
 
@@ -435,7 +424,7 @@ impl Virtq for SplitVq {
 		};
 
 		let used_ring_cell = {
-			let ring_and_event_layout = Layout::array::<UsedElem>(size.into())
+			let ring_and_event_layout = Layout::array::<virtq::UsedElem>(size.into())
 				.unwrap()
 				.extend(Layout::new::<le16>()) // for event
 				.unwrap()
@@ -542,7 +531,7 @@ impl VirtqPrivate for SplitVq {
 			(Some(send_desc_lst), Some(recv_desc_lst)) => send_desc_lst.len() + recv_desc_lst.len(),
 		};
 
-		let sz_indrct_lst = match Bytes::new(core::mem::size_of::<Descriptor>() * len) {
+		let sz_indrct_lst = match Bytes::new(core::mem::size_of::<virtq::Desc>() * len) {
 			Some(bytes) => bytes,
 			None => return Err(VirtqError::BufferToLarge),
 		};
@@ -560,8 +549,8 @@ impl VirtqPrivate for SplitVq {
 		let mut desc_lst_len = len;
 
 		let desc_slice = unsafe {
-			let size = core::mem::size_of::<Descriptor>();
-			core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+			let size = core::mem::size_of::<virtq::Desc>();
+			core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut virtq::Desc, ctrl_desc.len / size)
 		};
 
 		match (send, recv) {
@@ -570,19 +559,23 @@ impl VirtqPrivate for SplitVq {
 			(None, Some(recv_desc_lst)) => {
 				for desc in recv_desc_lst {
 					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
-							(crtl_desc_iter + 1) as u16,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::WRITE | virtq::DescF::NEXT,
+							next: ((crtl_desc_iter + 1) as u16).into(),
+						}
 					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE.into(),
-							0,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::WRITE,
+							next: 0.into(),
+						}
 					};
 
 					desc_lst_len -= 1;
@@ -594,19 +587,23 @@ impl VirtqPrivate for SplitVq {
 			(Some(send_desc_lst), None) => {
 				for desc in send_desc_lst {
 					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_NEXT.into(),
-							(crtl_desc_iter + 1) as u16,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::NEXT,
+							next: ((crtl_desc_iter + 1) as u16).into(),
+						}
 					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							0,
-							0,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::empty(),
+							next: 0.into(),
+						}
 					};
 
 					desc_lst_len -= 1;
@@ -618,19 +615,23 @@ impl VirtqPrivate for SplitVq {
 				// Send descriptors ALWAYS before receiving ones.
 				for desc in send_desc_lst {
 					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_NEXT.into(),
-							(crtl_desc_iter + 1) as u16,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::NEXT,
+							next: ((crtl_desc_iter + 1) as u16).into(),
+						}
 					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							0,
-							0,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::empty(),
+							next: 0.into(),
+						}
 					};
 
 					desc_lst_len -= 1;
@@ -639,19 +640,23 @@ impl VirtqPrivate for SplitVq {
 
 				for desc in recv_desc_lst {
 					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
-							(crtl_desc_iter + 1) as u16,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::WRITE | virtq::DescF::NEXT,
+							next: ((crtl_desc_iter + 1) as u16).into(),
+						}
 					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE.into(),
-							0,
-						)
+						virtq::Desc {
+							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
+								.as_u64()
+								.into(),
+							len: (desc.len as u32).into(),
+							flags: virtq::DescF::WRITE,
+							next: 0.into(),
+						}
 					};
 
 					desc_lst_len -= 1;

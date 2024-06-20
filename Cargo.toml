@@ -106,7 +106,7 @@ take-static = "0.1"
 talc = { version = "4" }
 time = { version = "0.3", default-features = false }
 volatile = { version = "0.6", features = ["unstable"] }
-zerocopy = { version = "0.7", features = ["derive"] }
+zerocopy = { version = "0.7", default-features = false }
 
 [dependencies.smoltcp]
 version = "0.11"
