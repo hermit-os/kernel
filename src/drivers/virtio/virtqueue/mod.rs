@@ -263,45 +263,30 @@ pub trait Virtq: VirtqPrivate {
 		let total_send_len = send.iter().map(|slice| slice.len()).sum();
 		let total_recv_len = recv.iter().map(|slice| slice.len()).sum();
 
-		let send_desc_lst;
-		let recv_desc_lst;
-		let ctrl_desc;
-		match buffer_type {
-			BufferType::Direct => {
-				send_desc_lst = send
-					.iter()
-					.map(|slice| self.mem_pool().pull_from_raw(slice))
-					.collect::<Result<Vec<_>, VirtqError>>()?;
+		let send_desc_lst: Vec<_> = send
+			.iter()
+			.map(|slice| MemDescr::pull_from_raw(slice))
+			.collect();
 
-				recv_desc_lst = recv
-					.iter()
-					.map(|slice| self.mem_pool().pull_from_raw(slice))
-					.collect::<Result<Vec<_>, VirtqError>>()?;
-				ctrl_desc = None;
-			}
-			BufferType::Indirect => {
-				send_desc_lst = send
-					.iter()
-					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
-					.collect();
-				recv_desc_lst = recv
-					.iter()
-					.map(|slice| self.mem_pool().pull_from_raw_untracked(slice))
-					.collect();
+		let recv_desc_lst: Vec<_> = recv
+			.iter()
+			.map(|slice| MemDescr::pull_from_raw(slice))
+			.collect();
 
-				ctrl_desc = Some(self.create_indirect_ctrl(
-					if !send.is_empty() {
-						Some(&send_desc_lst)
-					} else {
-						None
-					},
-					if !recv.is_empty() {
-						Some(&recv_desc_lst)
-					} else {
-						None
-					},
-				)?);
-			}
+		let ctrl_desc = match buffer_type {
+			BufferType::Direct => None,
+			BufferType::Indirect => Some(self.create_indirect_ctrl(
+				if !send.is_empty() {
+					Some(&send_desc_lst)
+				} else {
+					None
+				},
+				if !recv.is_empty() {
+					Some(&recv_desc_lst)
+				} else {
+					None
+				},
+			)?),
 		};
 
 		let send_buff = if !send.is_empty() {
@@ -402,7 +387,7 @@ pub trait Virtq: VirtqPrivate {
 			// Send buffer specified, No recv buffer
 			(Some(spec), None) => {
 				match spec {
-					BuffSpec::Single(size) => match self.mem_pool().pull(size) {
+					BuffSpec::Single(size) => match MemDescr::pull(size) {
 						Ok(desc) => {
 							let buffer = Buffer {
 								desc_lst: vec![desc].into_boxed_slice(),
@@ -426,7 +411,7 @@ pub trait Virtq: VirtqPrivate {
 						let mut len = 0usize;
 
 						for size in size_lst {
-							match self.mem_pool().pull(*size) {
+							match MemDescr::pull(*size) {
 								Ok(desc) => desc_lst.push(desc),
 								Err(vq_err) => return Err(vq_err),
 							}
@@ -455,7 +440,7 @@ pub trait Virtq: VirtqPrivate {
 						for size in size_lst {
 							// As the indirect list does only consume one descriptor for the
 							// control descriptor, the actual list is untracked
-							desc_lst.push(self.mem_pool().pull_untracked(*size));
+							desc_lst.push(MemDescr::pull(*size)?);
 							len += usize::from(*size);
 						}
 
@@ -479,7 +464,7 @@ pub trait Virtq: VirtqPrivate {
 			// No send buffer, recv buffer is specified
 			(None, Some(spec)) => {
 				match spec {
-					BuffSpec::Single(size) => match self.mem_pool().pull(size) {
+					BuffSpec::Single(size) => match MemDescr::pull(size) {
 						Ok(desc) => {
 							let buffer = Buffer {
 								desc_lst: vec![desc].into_boxed_slice(),
@@ -503,7 +488,7 @@ pub trait Virtq: VirtqPrivate {
 						let mut len = 0usize;
 
 						for size in size_lst {
-							match self.mem_pool().pull(*size) {
+							match MemDescr::pull(*size) {
 								Ok(desc) => desc_lst.push(desc),
 								Err(vq_err) => return Err(vq_err),
 							}
@@ -532,7 +517,7 @@ pub trait Virtq: VirtqPrivate {
 						for size in size_lst {
 							// As the indirect list does only consume one descriptor for the
 							// control descriptor, the actual list is untracked
-							desc_lst.push(self.mem_pool().pull_untracked(*size));
+							desc_lst.push(MemDescr::pull(*size)?);
 							len += usize::from(*size);
 						}
 
@@ -557,7 +542,7 @@ pub trait Virtq: VirtqPrivate {
 			(Some(send_spec), Some(recv_spec)) => {
 				match (send_spec, recv_spec) {
 					(BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
-						let send_buff = match self.mem_pool().pull(send_size) {
+						let send_buff = match MemDescr::pull(send_size) {
 							Ok(send_desc) => Some(Buffer {
 								desc_lst: vec![send_desc].into_boxed_slice(),
 								len: send_size.into(),
@@ -566,7 +551,7 @@ pub trait Virtq: VirtqPrivate {
 							Err(vq_err) => return Err(vq_err),
 						};
 
-						let recv_buff = match self.mem_pool().pull(recv_size) {
+						let recv_buff = match MemDescr::pull(recv_size) {
 							Ok(recv_desc) => Some(Buffer {
 								desc_lst: vec![recv_desc].into_boxed_slice(),
 								len: recv_size.into(),
@@ -585,7 +570,7 @@ pub trait Virtq: VirtqPrivate {
 						})
 					}
 					(BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
-						let send_buff = match self.mem_pool().pull(send_size) {
+						let send_buff = match MemDescr::pull(send_size) {
 							Ok(send_desc) => Some(Buffer {
 								desc_lst: vec![send_desc].into_boxed_slice(),
 								len: send_size.into(),
@@ -599,7 +584,7 @@ pub trait Virtq: VirtqPrivate {
 						let mut recv_len = 0usize;
 
 						for size in recv_size_lst {
-							match self.mem_pool().pull(*size) {
+							match MemDescr::pull(*size) {
 								Ok(desc) => recv_desc_lst.push(desc),
 								Err(vq_err) => return Err(vq_err),
 							}
@@ -626,7 +611,7 @@ pub trait Virtq: VirtqPrivate {
 							Vec::with_capacity(send_size_lst.len());
 						let mut send_len = 0usize;
 						for size in send_size_lst {
-							match self.mem_pool().pull(*size) {
+							match MemDescr::pull(*size) {
 								Ok(desc) => send_desc_lst.push(desc),
 								Err(vq_err) => return Err(vq_err),
 							}
@@ -644,7 +629,7 @@ pub trait Virtq: VirtqPrivate {
 						let mut recv_len = 0usize;
 
 						for size in recv_size_lst {
-							match self.mem_pool().pull(*size) {
+							match MemDescr::pull(*size) {
 								Ok(desc) => recv_desc_lst.push(desc),
 								Err(vq_err) => return Err(vq_err),
 							}
@@ -672,7 +657,7 @@ pub trait Virtq: VirtqPrivate {
 						let mut send_len = 0usize;
 
 						for size in send_size_lst {
-							match self.mem_pool().pull(*size) {
+							match MemDescr::pull(*size) {
 								Ok(desc) => send_desc_lst.push(desc),
 								Err(vq_err) => return Err(vq_err),
 							}
@@ -685,7 +670,7 @@ pub trait Virtq: VirtqPrivate {
 							next_write: 0,
 						});
 
-						let recv_buff = match self.mem_pool().pull(recv_size) {
+						let recv_buff = match MemDescr::pull(recv_size) {
 							Ok(recv_desc) => Some(Buffer {
 								desc_lst: vec![recv_desc].into_boxed_slice(),
 								len: recv_size.into(),
@@ -711,7 +696,7 @@ pub trait Virtq: VirtqPrivate {
 						for size in send_size_lst {
 							// As the indirect list does only consume one descriptor for the
 							// control descriptor, the actual list is untracked
-							send_desc_lst.push(self.mem_pool().pull_untracked(*size));
+							send_desc_lst.push(MemDescr::pull(*size)?);
 							send_len += usize::from(*size);
 						}
 
@@ -722,7 +707,7 @@ pub trait Virtq: VirtqPrivate {
 						for size in recv_size_lst {
 							// As the indirect list does only consume one descriptor for the
 							// control descriptor, the actual list is untracked
-							recv_desc_lst.push(self.mem_pool().pull_untracked(*size));
+							recv_desc_lst.push(MemDescr::pull(*size)?);
 							recv_len += usize::from(*size);
 						}
 
@@ -764,8 +749,6 @@ trait VirtqPrivate {
 		send: Option<&[MemDescr]>,
 		recv: Option<&[MemDescr]>,
 	) -> Result<MemDescr, VirtqError>;
-
-	fn mem_pool(&self) -> Rc<MemPool>;
 }
 
 /// Allows to check, if a given structure crosses a physical page boundary.
@@ -1694,12 +1677,6 @@ struct MemDescr {
 	/// after writes of the device, but the Descriptors need to be reset
 	/// in case they are reused. So the initial length must be preserved.
 	_init_len: usize,
-	/// If `id == None` this is an untracked memory descriptor
-	/// * Meaining: The descriptor does NOT count as a descriptor
-	///   taken from the [MemPool].
-	id: Option<MemDescrId>,
-	/// Refers to the controlling [memory pool](MemPool)
-	pool: Rc<MemPool>,
 	/// Controls whether the memory area is deallocated
 	/// upon drop.
 	/// * Should NEVER be set to true, when false.
@@ -1745,6 +1722,66 @@ impl MemDescr {
 	fn len(&self) -> usize {
 		self.len
 	}
+
+	/// Creates a MemDescr which refers to already existing memory.
+	///
+	/// **Info on Usage:**
+	/// * `Panics` if given `slice.len() == 0`
+	/// * `Panics` if slice crosses physical page boundary
+	/// * The given slice MUST be a heap allocated slice.
+	/// * Panics if slice crosses page boundaries!
+	///
+	/// **Properties of Returned MemDescr:**
+	///
+	/// * The descriptor will consume one element of the pool.
+	/// * The referred to memory area will NOT be deallocated upon drop.
+	fn pull_from_raw<T>(slice: &[T]) -> Self {
+		// Zero sized descriptors are NOT allowed
+		// This also prohibids a panic due to accessing wrong index below
+		assert!(!slice.is_empty());
+
+		// Assert descriptor does not cross a page barrier
+		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
+		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
+		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
+
+		assert_eq!(end_phy, end_phy_calc);
+
+		Self {
+			ptr: slice.as_ptr() as *mut _,
+			len: mem::size_of_val(slice),
+			_init_len: mem::size_of_val(slice),
+			dealloc: false,
+		}
+	}
+
+	/// Pulls a memory descriptor, which owns a memory area of the specified size in bytes. The
+	/// descriptor does consume an ID and hence reduces the amount of descriptors left in the pool by one.
+	///
+	/// **INFO:**
+	/// * Fails (returns VirtqError), if the pool is empty.
+	/// * ID`s of descriptor are by no means sorted. A descriptor can contain an ID between 1 and size_of_pool.
+	/// * Calleys can NOT rely on the next pulled descriptor to contain the subsequent ID after the previously
+	///   pulled descriptor.
+	///   In essence this means MemDesc can contain arbitrary ID's. E.g.:
+	///   * First MemPool.pull -> MemDesc with id = 3
+	///   * Second MemPool.pull -> MemDesc with id = 100
+	///   * Third MemPool.pull -> MemDesc with id = 2,
+	fn pull(bytes: Bytes) -> Result<Self, VirtqError> {
+		let len = bytes.0;
+
+		let ptr = Vec::<u8, _>::with_capacity_in(len, DeviceAlloc)
+			.into_raw_parts_with_alloc()
+			.0;
+
+		Ok(Self {
+			ptr,
+			len,
+			_init_len: len,
+			dealloc: true,
+		})
+	}
 }
 
 impl Deref for MemDescr {
@@ -1762,11 +1799,6 @@ impl DerefMut for MemDescr {
 
 impl Drop for MemDescr {
 	fn drop(&mut self) {
-		// Handle returning of Id's to pool
-		if let Some(id) = self.id.take() {
-			self.pool.ret_id(id);
-		}
-
 		if self.dealloc {
 			unsafe {
 				DeviceAlloc.deallocate(
@@ -1779,6 +1811,7 @@ impl Drop for MemDescr {
 }
 
 /// A newtype for descriptor ids, for better readability.
+#[derive(Clone, Copy)]
 struct MemDescrId(pub u16);
 
 /// A newtype for a usize, which indiactes how many bytes the usize does refer to.
@@ -1843,141 +1876,6 @@ impl MemPool {
 		MemPool {
 			pool: RefCell::new((0..size).map(MemDescrId).collect()),
 			limit: size,
-		}
-	}
-
-	/// Creates a MemDescr which refers to already existing memory.
-	///
-	/// **Info on Usage:**
-	/// * `Panics` if given `slice.len() == 0`
-	/// * `Panics` if slice crosses physical page boundary
-	/// * The given slice MUST be a heap allocated slice.
-	/// * Panics if slice crosses page boundaries!
-	///
-	/// **Properties of Returned MemDescr:**
-	///
-	/// * The descriptor will consume one element of the pool.
-	/// * The referred to memory area will NOT be deallocated upon drop.
-	fn pull_from_raw<T>(self: Rc<Self>, slice: &[T]) -> Result<MemDescr, VirtqError> {
-		// Zero sized descriptors are NOT allowed
-		// This also prohibids a panic due to accessing wrong index below
-		assert!(!slice.is_empty());
-
-		// Assert descriptor does not cross a page barrier
-		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
-		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
-		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
-		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
-
-		assert_eq!(end_phy, end_phy_calc);
-
-		let desc_id = self
-			.pool
-			.borrow_mut()
-			.pop()
-			.ok_or(VirtqError::NoDescrAvail)?;
-
-		Ok(MemDescr {
-			ptr: slice.as_ptr() as *mut _,
-			len: mem::size_of_val(slice),
-			_init_len: mem::size_of_val(slice),
-			id: Some(desc_id),
-			dealloc: false,
-			pool: self.clone(),
-		})
-	}
-
-	/// Creates a MemDescr which refers to already existing memory.
-	/// The MemDescr does NOT consume a place in the pool and should
-	/// be used with `Buffer`.
-	///
-	/// **Info on Usage:**
-	/// * `Panics` if given `slice.len() == 0`
-	/// * `Panics` if slice crosses physical page boundary
-	/// * The given slice MUST be a heap allocated slice.
-	///
-	/// **Properties of Returned MemDescr:**
-	///
-	/// * The descriptor will consume one element of the pool.
-	/// * The referred to memory area will NOT be deallocated upon drop.
-	fn pull_from_raw_untracked<T>(self: Rc<Self>, slice: &[T]) -> MemDescr {
-		// Zero sized descriptors are NOT allowed
-		// This also prohibids a panic due to accessing wrong index below
-		assert!(!slice.is_empty());
-
-		// Assert descriptor does not cross a page barrier
-		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
-		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
-		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
-		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
-
-		assert_eq!(end_phy, end_phy_calc);
-
-		MemDescr {
-			ptr: slice.as_ptr() as *mut _,
-			len: mem::size_of_val(slice),
-			_init_len: mem::size_of_val(slice),
-			id: None,
-			dealloc: false,
-			pool: self.clone(),
-		}
-	}
-
-	/// Pulls a memory descriptor, which owns a memory area of the specified size in bytes. The
-	/// descriptor does consume an ID and hence reduces the amount of descriptors left in the pool by one.
-	///
-	/// **INFO:**
-	/// * Fails (returns VirtqError), if the pool is empty.
-	/// * ID`s of descriptor are by no means sorted. A descriptor can contain an ID between 1 and size_of_pool.
-	/// * Calleys can NOT rely on the next pulled descriptor to contain the subsequent ID after the previously
-	///   pulled descriptor.
-	///   In essence this means MemDesc can contain arbitrary ID's. E.g.:
-	///   * First MemPool.pull -> MemDesc with id = 3
-	///   * Second MemPool.pull -> MemDesc with id = 100
-	///   * Third MemPool.pull -> MemDesc with id = 2,
-	fn pull(self: Rc<Self>, bytes: Bytes) -> Result<MemDescr, VirtqError> {
-		let id = match self.pool.borrow_mut().pop() {
-			Some(id) => id,
-			None => return Err(VirtqError::NoDescrAvail),
-		};
-
-		let len = bytes.0;
-		let ptr = Vec::<u8, _>::with_capacity_in(len, DeviceAlloc)
-			.into_raw_parts_with_alloc()
-			.0;
-
-		Ok(MemDescr {
-			ptr,
-			len,
-			_init_len: len,
-			id: Some(id),
-			dealloc: true,
-			pool: self.clone(),
-		})
-	}
-
-	/// Pulls a memory descriptor, which owns a memory area of the specified size in bytes. The
-	/// descriptor consumes NO ID and hence DOES NOT reduce the amount of descriptors left in the pool.
-	/// * ID`s of descriptor are by no means sorted. A descriptor can contain an ID between 1 and size_of_pool.
-	/// * Calleys can NOT rely on the next pulled descriptor to contain the subsequent ID after the previously
-	///   pulled descriptor.
-	///   In essence this means MemDesc can contain arbitrary ID's. E.g.:
-	///   * First MemPool.pull -> MemDesc with id = 3
-	///   * Second MemPool.pull -> MemDesc with id = 100
-	///   * Third MemPool.pull -> MemDesc with id = 2,
-	fn pull_untracked(self: Rc<Self>, bytes: Bytes) -> MemDescr {
-		let len = bytes.0;
-		let ptr = Vec::<u8, _>::with_capacity_in(len, DeviceAlloc)
-			.into_raw_parts_with_alloc()
-			.0;
-
-		MemDescr {
-			ptr,
-			len,
-			_init_len: len,
-			id: None,
-			dealloc: true,
-			pool: self.clone(),
 		}
 	}
 }

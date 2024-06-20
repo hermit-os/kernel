@@ -21,8 +21,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, Buffer, BufferToken, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
-	VirtqPrivate, VqIndex, VqSize,
+	BuffSpec, Buffer, BufferToken, BufferType, Bytes, MemDescr, MemDescrId, MemPool, TransferToken,
+	Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -123,6 +123,9 @@ struct DescriptorRing {
 	/// See Virtio specification v1.1. - 2.7.1
 	drv_wc: WrapCount,
 	dev_wc: WrapCount,
+	/// Memory pool controls the amount of "free floating" descriptors
+	/// See [MemPool] docs for detail.
+	mem_pool: MemPool,
 }
 
 impl DescriptorRing {
@@ -149,6 +152,7 @@ impl DescriptorRing {
 			poll_index: 0,
 			drv_wc: WrapCount::new(),
 			dev_wc: WrapCount::new(),
+			mem_pool: MemPool::new(size),
 		}
 	}
 
@@ -170,7 +174,8 @@ impl DescriptorRing {
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
 
-		let mut first_ctrl_settings: (u16, u16, WrapCount) = (0, 0, WrapCount::new());
+		let mut first_ctrl_settings: (u16, MemDescrId, WrapCount) =
+			(0, MemDescrId(0), WrapCount::new());
 		let mut first_buffer = None;
 
 		for (i, tkn) in tkn_lst.into_iter().enumerate() {
@@ -267,12 +272,13 @@ impl DescriptorRing {
 	/// Returns an initialized write controller in order
 	/// to write the queue correctly.
 	fn get_write_ctrler(&mut self) -> WriteCtrl<'_> {
+		let desc_id = self.mem_pool.pool.borrow_mut().pop().unwrap();
 		WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
 			modulo: u16::try_from(self.ring.len()).unwrap(),
 			wrap_at_init: self.drv_wc,
-			buff_id: 0,
+			buff_id: desc_id,
 
 			desc_ring: self,
 		}
@@ -293,11 +299,11 @@ impl DescriptorRing {
 		&mut self,
 		raw_tkn: Box<TransferToken>,
 		start: u16,
-		buff_id: u16,
+		buff_id: MemDescrId,
 		wrap_at_init: WrapCount,
 	) {
 		// provide reference, in order to let TransferToken know upon finish.
-		self.tkn_ref_ring[usize::from(buff_id)] = Some(raw_tkn);
+		self.tkn_ref_ring[usize::from(buff_id.0)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -321,10 +327,12 @@ impl<'a> ReadCtrl<'a> {
 		if self.desc_ring.ring[usize::from(self.position)].flags & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
-			let buff_id = usize::from(self.desc_ring.ring[usize::from(self.position)].id.to_ne());
-			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id].take().expect(
-				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
-			);
+			let buff_id = self.desc_ring.ring[usize::from(self.position)].id.to_ne();
+			let mut tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
+				.take()
+				.expect(
+					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
+				);
 
 			let (send_buff, recv_buff) = {
 				let BufferToken {
@@ -366,6 +374,7 @@ impl<'a> ReadCtrl<'a> {
 					self.update_recv((recv_buff, write_len.into()));
 				}
 			}
+			self.desc_ring.mem_pool.ret_id(MemDescrId(buff_id));
 			Some(tkn)
 		} else {
 			None
@@ -480,7 +489,7 @@ struct WriteCtrl<'a> {
 	/// Important in order to set the right avail and used flags
 	wrap_at_init: WrapCount,
 	/// Buff ID of this write
-	buff_id: u16,
+	buff_id: MemDescrId,
 
 	desc_ring: &'a mut DescriptorRing,
 }
@@ -520,14 +529,11 @@ impl<'a> WriteCtrl<'a> {
 			.as_u64()
 			.into();
 		desc_ref.len = (mem_desc.len as u32).into();
+		desc_ref.id = self.buff_id.0.into();
 		if self.start == self.position {
-			desc_ref.id = (mem_desc.id.as_ref().unwrap().0).into();
 			// Remove possibly set avail and used flags
 			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
-
-			self.buff_id = mem_desc.id.as_ref().unwrap().0;
 		} else {
-			desc_ref.id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
 			// according to the current WrapCount.
 			desc_ref.flags = (flags - virtq::DescF::AVAIL - virtq::DescF::USED)
@@ -631,9 +637,6 @@ pub struct PackedVq {
 	dev_event: DevNotif,
 	/// Actually notify device about avail buffers
 	notif_ctrl: NotifCtrl,
-	/// Memory pool controls the amount of "free floating" descriptors
-	/// See [MemPool] docs for detail.
-	mem_pool: Rc<MemPool>,
 	/// The size of the queue, equals the number of descriptors which can
 	/// be used
 	size: VqSize,
@@ -822,9 +825,6 @@ impl Virtq for PackedVq {
 			drv_event.borrow_mut().f_notif_idx = true;
 		}
 
-		// Initialize new memory pool.
-		let mem_pool = Rc::new(MemPool::new(vq_size));
-
 		vq_handler.enable_queue();
 
 		info!("Created PackedVq: idx={}, size={}", index.0, vq_size);
@@ -834,7 +834,6 @@ impl Virtq for PackedVq {
 			drv_event,
 			dev_event,
 			notif_ctrl,
-			mem_pool,
 			size: VqSize::from(vq_size),
 			index,
 			last_next: Default::default(),
@@ -864,10 +863,6 @@ impl Virtq for PackedVq {
 }
 
 impl VirtqPrivate for PackedVq {
-	fn mem_pool(&self) -> Rc<MemPool> {
-		self.mem_pool.clone()
-	}
-
 	fn create_indirect_ctrl(
 		&self,
 		send: Option<&[MemDescr]>,
@@ -886,7 +881,7 @@ impl VirtqPrivate for PackedVq {
 			None => return Err(VirtqError::BufferToLarge),
 		};
 
-		let ctrl_desc = match self.mem_pool.clone().pull(sz_indrct_lst) {
+		let ctrl_desc = match MemDescr::pull(sz_indrct_lst) {
 			Ok(desc) => desc,
 			Err(vq_err) => return Err(vq_err),
 		};
