@@ -1840,19 +1840,8 @@ impl MemPool {
 
 	/// Returns a new instance, with a pool of the specified size.
 	fn new(size: u16) -> MemPool {
-		// Not really safe "as usize". But the minimum usize on rust is currently
-		// usize = 16bit. So it should work, as long as this does not change changes.
-		// Thus asserting here, to catch this change!
-		assert!(core::mem::size_of::<usize>() >= 2);
-
-		let mut id_vec = Vec::with_capacity(size as usize);
-
-		for i in 1..(size + 1) {
-			id_vec.push(MemDescrId(i));
-		}
-
 		MemPool {
-			pool: RefCell::new(id_vec),
+			pool: RefCell::new((0..size).map(MemDescrId).collect()),
 			limit: size,
 		}
 	}

@@ -155,16 +155,13 @@ impl DescrRing {
 
 		assert!(!desc_lst.is_empty());
 		// Minus 1, comes from  the fact that ids run from one to 255 and not from 0 to 254 for u8::MAX sized pool
-		let index = {
-			let (desc, _) = desc_lst[0];
-			(desc.id.as_ref().unwrap().0 - 1) as usize
-		};
+		let index = desc_lst[0].0.id.as_ref().unwrap().0 as usize;
 		let mut desc_cnt = 0usize;
 
 		while len != 0 {
 			let (desc, is_write) = desc_lst[desc_cnt];
 			// This is due to dhe fact that i have ids from one to 255 and not from 0 to 254 for u8::MAX sized pool
-			let write_indx = (desc.id.as_ref().unwrap().0 - 1) as usize;
+			let write_indx = desc.id.as_ref().unwrap().0 as usize;
 
 			let descriptor = if tkn.ctrl_desc.is_some() {
 				assert!(len == 1);
@@ -177,10 +174,7 @@ impl DescrRing {
 					next: 0.into(),
 				}
 			} else if len > 1 {
-				let next_index = {
-					let (desc, _) = desc_lst[desc_cnt + 1];
-					desc.id.as_ref().unwrap().0 - 1
-				};
+				let next_index = desc_lst[desc_cnt + 1].0.id.as_ref().unwrap().0;
 
 				if is_write {
 					virtq::Desc {

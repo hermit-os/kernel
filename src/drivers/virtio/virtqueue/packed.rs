@@ -135,12 +135,9 @@ impl DescriptorRing {
 		let ring: &'static mut [pvirtq::Desc] =
 			unsafe { core::slice::from_raw_parts_mut(ptr, size.into()) };
 
-		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
-		// reference ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
-		// and do not care about the first element being unused.
 		// `Box` is not Clone, so neither is `None::<Box<_>>`. Hence, we need to produce `None`s with a closure.
 		let tkn_ref_ring = core::iter::repeat_with(|| None)
-			.take((size + 1).into())
+			.take(size.into())
 			.collect::<Vec<_>>()
 			.into_boxed_slice();
 
@@ -299,9 +296,6 @@ impl DescriptorRing {
 		buff_id: u16,
 		wrap_at_init: WrapCount,
 	) {
-		// We also fail if buff_id is not set!
-		assert!(buff_id != 0);
-
 		// provide reference, in order to let TransferToken know upon finish.
 		self.tkn_ref_ring[usize::from(buff_id)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
