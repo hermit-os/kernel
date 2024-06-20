@@ -758,32 +758,25 @@ impl<'a> WriteCtrl<'a> {
 	fn write_desc(&mut self, mem_desc: &MemDescr, flags: virtq::DescF) {
 		// This also sets the buff_id for the WriteCtrl struct to the ID of the first
 		// descriptor.
+		let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
+		desc_ref.addr = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
+			.as_u64()
+			.into();
+		desc_ref.len = (mem_desc.len as u32).into();
 		if self.start == self.position {
-			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
-			desc_ref.addr = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
-				.as_u64()
-				.into();
-			desc_ref.len = (mem_desc.len as u32).into();
 			desc_ref.id = (mem_desc.id.as_ref().unwrap().0).into();
 			// Remove possibly set avail and used flags
 			desc_ref.flags = flags - virtq::DescF::AVAIL - virtq::DescF::USED;
 
 			self.buff_id = mem_desc.id.as_ref().unwrap().0;
-			self.incrmt();
 		} else {
-			let desc_ref = &mut self.desc_ring.ring[usize::from(self.position)];
-			desc_ref.addr = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
-				.as_u64()
-				.into();
-			desc_ref.len = (mem_desc.len as u32).into();
 			desc_ref.id = (self.buff_id).into();
 			// Remove possibly set avail and used flags and then set avail and used
 			// according to the current WrapCount.
 			desc_ref.flags = (flags - virtq::DescF::AVAIL - virtq::DescF::USED)
 				| self.desc_ring.drv_wc.as_flags_avail();
-
-			self.incrmt()
 		}
+		self.incrmt()
 	}
 
 	fn make_avail(&mut self, raw_tkn: Box<TransferToken>) {
