@@ -202,6 +202,8 @@ jobs:
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4
         # https://github.com/hermit-os/kernel/issues/737
         if: matrix.arch != 'aarch64'
+        # https://github.com/hermit-os/kernel/issues/1286
+        continue-on-error: ${{ matrix.arch == 'riscv64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rftrace-example --virtiofsd
         if: matrix.arch == 'x86_64'
         continue-on-error: ${{ matrix.profile == 'release' }}
