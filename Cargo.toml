@@ -145,7 +145,7 @@ time = { version = "0.3", default-features = false }
 volatile = "0.6"
 zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.3"
-wasmtime = { version = "35.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
+wasmtime = { version = "22.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
 
 [dependencies.smoltcp]
 version = "0.12"
