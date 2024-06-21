@@ -106,7 +106,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 
 	match translate {
 		TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
-			warn!(
+			trace!(
 				"Uable to determine the physical address of 0x{:X}",
 				virtual_address
 			);
