@@ -171,18 +171,26 @@ free-list = { version = "0.3", features = ["x86_64"] }
 raw-cpuid = "11"
 uart_16550 = "0.4"
 x86_64 = "0.15"
+<<<<<<< HEAD
 memory_addresses = { version = "0.2.3", default-features = false, features = [
 	"x86_64",
 	"conv-x86_64",
 ] }
+=======
+wasmtime = { version = "22.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
+>>>>>>> cd1d8b6fa (prepare wasm support for aarch64 and riscv64)
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64 = { version = "0.0.14", default-features = false }
 arm-gic = { version = "0.6" }
 semihosting = { version = "0.1", optional = true }
+<<<<<<< HEAD
 memory_addresses = { version = "0.2.3", default-features = false, features = [
 	"aarch64",
 ] }
+=======
+wasmtime = { version = "22.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
+>>>>>>> cd1d8b6fa (prepare wasm support for aarch64 and riscv64)
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = "0.14"

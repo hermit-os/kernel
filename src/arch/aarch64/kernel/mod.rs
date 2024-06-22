@@ -31,6 +31,55 @@ use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
 use crate::env;
 
+const SERIAL_PORT_BAUDRATE: u32 = 115_200;
+
+global_asm!(include_str!("setjmp.s"));
+global_asm!(include_str!("longjmp.s"));
+
+pub(crate) struct Console {
+	serial_port: SerialPort,
+}
+
+impl Console {
+	pub fn new() -> Self {
+		CoreLocal::install();
+
+		let base = env::boot_info()
+			.hardware_info
+			.serial_port_base
+			.map(|uartport| uartport.get())
+			.unwrap_or_default()
+			.try_into()
+			.unwrap();
+
+		let serial_port = SerialPort::new(base);
+
+		serial_port.init(SERIAL_PORT_BAUDRATE);
+
+		Self { serial_port }
+	}
+
+	pub fn write(&mut self, buf: &[u8]) {
+		self.serial_port.write_buf(buf);
+	}
+
+	pub fn read(&mut self) -> Option<u8> {
+		None
+	}
+
+	pub fn is_empty(&self) -> bool {
+		true
+	}
+
+	pub fn register_waker(&mut self, _waker: &Waker) {}
+}
+
+impl Default for Console {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 #[repr(align(8))]
 pub(crate) struct AlignedAtomicU32(AtomicU32);
 
