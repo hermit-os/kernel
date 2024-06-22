@@ -1,3 +1,8 @@
+# The code is derived from the musl implementation
+# of longjmp.
+#
+# Copyright 2011-2012 Nicholas J. Kain,
+# licensed under standard MIT license
 .section .text
 .global longjmp
 longjmp:
