@@ -1,4 +1,3 @@
-use core::arch::global_asm;
 use core::cell::UnsafeCell;
 
 use align_address::Align;
@@ -13,7 +12,7 @@ bitflags! {
 	/// Flags to either `wasmtime_mmap_{new,remap}` or `wasmtime_mprotect`.
 	#[repr(C)]
 	#[derive(Debug, Copy, Clone, Default)]
-	struct WasmProt: u32 {
+	pub struct WasmProt: u32 {
 		/// Indicates that the memory region should be readable.
 		const Read = 1 << 0;
 		/// Indicates that the memory region should be writable.
@@ -48,13 +47,13 @@ bitflags! {
 /// When this function does not return it's because `wasmtime_longjmp` is
 /// used to handle a Wasm-based trap.
 #[allow(non_camel_case_types)]
-type wasmtime_trap_handler_t =
+pub type wasmtime_trap_handler_t =
 	extern "C" fn(ip: usize, fp: usize, has_faulting_addr: bool, faulting_addr: usize);
 
 /// Abstract pointer type used in the `wasmtime_memory_image_*` APIs which
 /// is defined by the embedder.
 #[allow(non_camel_case_types)]
-enum wasmtime_memory_image {}
+pub enum wasmtime_memory_image {}
 
 #[thread_local]
 static TLS: UnsafeCell<*mut u8> = UnsafeCell::new(core::ptr::null_mut());
