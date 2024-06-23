@@ -1,3 +1,4 @@
+#![allow(dependency_on_unit_never_type_fallback)]
 mod capi;
 
 use wasmtime::*;
