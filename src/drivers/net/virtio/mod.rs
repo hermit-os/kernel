@@ -113,9 +113,16 @@ impl RxQueues {
 			// BufferTokens are directly provided to the queue
 			// TransferTokens are directly dispatched
 			// Transfers will be awaited at the queue
-			buff_tkn
+			match buff_tkn
 				.provide(BufferType::Direct)
-				.dispatch_await(self.poll_sender.clone(), false);
+				.dispatch_await(self.poll_sender.clone(), false)
+			{
+				Ok(_) => (),
+				Err(_) => {
+					error!("Descriptor IDs were exhausted earlier than expected.");
+					break;
+				}
+			}
 		}
 
 		// Safe virtqueue
@@ -452,7 +459,8 @@ impl NetworkDriver for VirtioNetDriver {
 
 			buff_tkn
 				.provide(BufferType::Direct)
-				.dispatch_await(self.send_vqs.poll_sender.clone(), false);
+				.dispatch_await(self.send_vqs.poll_sender.clone(), false)
+				.unwrap();
 
 			result
 		} else {
@@ -486,7 +494,8 @@ impl NetworkDriver for VirtioNetDriver {
 							transfer
 								.reset()
 								.provide(BufferType::Direct)
-								.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+								.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+								.unwrap();
 
 							return None;
 						}
@@ -503,7 +512,8 @@ impl NetworkDriver for VirtioNetDriver {
 						transfer
 							.reset()
 							.provide(BufferType::Direct)
-							.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+							.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+							.unwrap();
 
 						num_buffers
 					};
@@ -525,7 +535,8 @@ impl NetworkDriver for VirtioNetDriver {
 						transfer
 							.reset()
 							.provide(BufferType::Direct)
-							.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+							.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+							.unwrap();
 					}
 
 					Some((RxToken::new(vec_data), TxToken::new()))
@@ -536,7 +547,8 @@ impl NetworkDriver for VirtioNetDriver {
 						.write_seq(None::<&Hdr>, Some(&Hdr::default()))
 						.unwrap()
 						.provide(BufferType::Direct)
-						.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+						.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+						.unwrap();
 
 					None
 				}

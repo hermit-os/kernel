@@ -169,7 +169,7 @@ impl DescriptorRing {
 		}
 	}
 
-	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> RingIdx {
+	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> Result<RingIdx, VirtqError> {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
@@ -179,7 +179,7 @@ impl DescriptorRing {
 		let mut first_buffer = None;
 
 		for (i, tkn) in tkn_lst.into_iter().enumerate() {
-			let mut ctrl = self.push_without_making_available(&tkn);
+			let mut ctrl = self.push_without_making_available(&tkn)?;
 			if i == 0 {
 				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
 				first_buffer = Some(Box::new(tkn));
@@ -197,31 +197,34 @@ impl DescriptorRing {
 			first_ctrl_settings.1,
 			first_ctrl_settings.2,
 		);
-		RingIdx {
+		Ok(RingIdx {
 			off: self.write_index,
 			wrap: self.drv_wc.0.into(),
-		}
+		})
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> RingIdx {
-		let mut ctrl = self.push_without_making_available(&tkn);
+	fn push(&mut self, tkn: TransferToken) -> Result<RingIdx, VirtqError> {
+		let mut ctrl = self.push_without_making_available(&tkn)?;
 		// Update flags of the first descriptor and set new write_index
 		ctrl.make_avail(Box::new(tkn));
 
-		RingIdx {
+		Ok(RingIdx {
 			off: self.write_index,
 			wrap: self.drv_wc.0.into(),
-		}
+		})
 	}
 
-	fn push_without_making_available(&mut self, tkn: &TransferToken) -> WriteCtrl<'_> {
+	fn push_without_making_available(
+		&mut self,
+		tkn: &TransferToken,
+	) -> Result<WriteCtrl<'_>, VirtqError> {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
 		assert!(tkn.num_consuming_descr() <= self.capacity);
 
 		// create an counter that wrappes to the first element
 		// after reaching a the end of the ring
-		let mut ctrl = self.get_write_ctrler();
+		let mut ctrl = self.get_write_ctrler()?;
 
 		// Importance here is:
 		// * distinguish between Indirect and direct buffers
@@ -260,7 +263,7 @@ impl DescriptorRing {
 			let (last_desc, last_flag) = all_desc_iter.next().unwrap();
 			ctrl.write_desc(last_desc, last_flag);
 		}
-		ctrl
+		Ok(ctrl)
 	}
 
 	/// # Unsafe
@@ -271,9 +274,14 @@ impl DescriptorRing {
 
 	/// Returns an initialized write controller in order
 	/// to write the queue correctly.
-	fn get_write_ctrler(&mut self) -> WriteCtrl<'_> {
-		let desc_id = self.mem_pool.pool.borrow_mut().pop().unwrap();
-		WriteCtrl {
+	fn get_write_ctrler(&mut self) -> Result<WriteCtrl<'_>, VirtqError> {
+		let desc_id = self
+			.mem_pool
+			.pool
+			.borrow_mut()
+			.pop()
+			.ok_or(VirtqError::NoDescrAvail)?;
+		Ok(WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
 			modulo: u16::try_from(self.ring.len()).unwrap(),
@@ -281,7 +289,7 @@ impl DescriptorRing {
 			buff_id: desc_id,
 
 			desc_ring: self,
-		}
+		})
 	}
 
 	/// Returns an initialized read controller in order
@@ -663,11 +671,11 @@ impl Virtq for PackedVq {
 		self.descr_ring.borrow_mut().poll();
 	}
 
-	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) {
+	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
 
-		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns);
+		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns)?;
 
 		if notif {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
@@ -687,6 +695,7 @@ impl Virtq for PackedVq {
 			self.notif_ctrl.notify_dev(notification_data);
 			self.last_next.set(next_idx);
 		}
+		Ok(())
 	}
 
 	fn dispatch_batch_await(
@@ -694,7 +703,7 @@ impl Virtq for PackedVq {
 		mut tkns: Vec<TransferToken>,
 		await_queue: super::BufferTokenSender,
 		notif: bool,
-	) {
+	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
 
@@ -703,7 +712,7 @@ impl Virtq for PackedVq {
 			tkn.await_queue = Some(await_queue.clone());
 		}
 
-		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns);
+		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns)?;
 
 		if notif {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
@@ -723,10 +732,11 @@ impl Virtq for PackedVq {
 			self.notif_ctrl.notify_dev(notification_data);
 			self.last_next.set(next_idx);
 		}
+		Ok(())
 	}
 
-	fn dispatch(&self, tkn: TransferToken, notif: bool) {
-		let next_idx = self.descr_ring.borrow_mut().push(tkn);
+	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError> {
+		let next_idx = self.descr_ring.borrow_mut().push(tkn)?;
 
 		if notif {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
@@ -742,6 +752,7 @@ impl Virtq for PackedVq {
 			self.notif_ctrl.notify_dev(notification_data);
 			self.last_next.set(next_idx);
 		}
+		Ok(())
 	}
 
 	fn index(&self) -> VqIndex {

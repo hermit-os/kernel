@@ -127,7 +127,7 @@ impl DescrRing {
 		unsafe { VolatileRef::new_read_only(NonNull::new(self.used_ring_cell.get()).unwrap()) }
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> u16 {
+	fn push(&mut self, tkn: TransferToken) -> Result<u16, VirtqError> {
 		let mut index;
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
 			let descriptor = virtq::Desc {
@@ -139,7 +139,13 @@ impl DescrRing {
 				next: 0.into(),
 			};
 
-			index = self.mem_pool.pool.borrow_mut().pop().unwrap().0;
+			index = self
+				.mem_pool
+				.pool
+				.borrow_mut()
+				.pop()
+				.ok_or(VirtqError::NoDescrAvail)?
+				.0;
 			self.descr_table_ref()
 				.as_mut_ptr()
 				.index(usize::from(index))
@@ -180,7 +186,13 @@ impl DescrRing {
 				// If the [BufferToken] is empty, we panic
 				let descriptor = rev_all_desc_iter.next().unwrap();
 
-				index = self.mem_pool.pool.borrow_mut().pop().unwrap().0;
+				index = self
+					.mem_pool
+					.pool
+					.borrow_mut()
+					.pop()
+					.ok_or(VirtqError::NoDescrAvail)?
+					.0;
 				self.descr_table_ref()
 					.as_mut_ptr()
 					.index(usize::from(index))
@@ -191,7 +203,13 @@ impl DescrRing {
 				// We have not updated `index` yet, so it is at this point the index of the previous descriptor that had been written.
 				descriptor.next = le16::from(index);
 
-				index = self.mem_pool.pool.borrow_mut().pop().unwrap().0;
+				index = self
+					.mem_pool
+					.pool
+					.borrow_mut()
+					.pop()
+					.ok_or(VirtqError::NoDescrAvail)?
+					.0;
 				self.descr_table_ref()
 					.as_mut_ptr()
 					.index(usize::from(index))
@@ -215,7 +233,7 @@ impl DescrRing {
 		let next_idx = idx.wrapping_add(1);
 		map_field!(avail_ring.index).write(next_idx.into());
 
-		next_idx
+		Ok(next_idx)
 	}
 
 	fn poll(&mut self) {
@@ -314,7 +332,7 @@ impl Virtq for SplitVq {
 		self.ring.borrow_mut().poll()
 	}
 
-	fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) {
+	fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) -> Result<(), VirtqError> {
 		unimplemented!();
 	}
 
@@ -323,12 +341,12 @@ impl Virtq for SplitVq {
 		_tkns: Vec<TransferToken>,
 		_await_queue: super::BufferTokenSender,
 		_notif: bool,
-	) {
+	) -> Result<(), VirtqError> {
 		unimplemented!()
 	}
 
-	fn dispatch(&self, tkn: TransferToken, notif: bool) {
-		let next_idx = self.ring.borrow_mut().push(tkn);
+	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError> {
+		let next_idx = self.ring.borrow_mut().push(tkn)?;
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -342,6 +360,7 @@ impl Virtq for SplitVq {
 				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
+		Ok(())
 	}
 
 	fn index(&self) -> VqIndex {

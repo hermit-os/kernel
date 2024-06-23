@@ -110,7 +110,7 @@ pub trait Virtq: VirtqPrivate {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	fn dispatch(&self, tkn: TransferToken, notif: bool);
+	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError>;
 
 	/// Enables interrupts for this virtqueue upon receiving a transfer
 	fn enable_notifs(&self);
@@ -132,7 +132,7 @@ pub trait Virtq: VirtqPrivate {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool);
+	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Result<(), VirtqError>;
 
 	/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
 	/// upon finish.
@@ -151,7 +151,7 @@ pub trait Virtq: VirtqPrivate {
 		tkns: Vec<TransferToken>,
 		await_queue: BufferTokenSender,
 		notif: bool,
-	);
+	) -> Result<(), VirtqError>;
 
 	/// Creates a new Virtq of the specified [VqSize] and the [VqIndex].
 	/// The index represents the "ID" of the virtqueue.
@@ -807,7 +807,7 @@ pub fn free_raw(ptr: *mut u8, len: usize) {
 /// The `notif` parameter indicates if the driver wants to have a notification for this specific
 /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 /// updated notification flags before finishing transfers!
-pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) {
+pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) -> Result<(), VirtqError> {
 	let mut used_vqs: Vec<(Rc<dyn Virtq>, Vec<TransferToken>)> = Vec::new();
 
 	// Sort the TransferTokens depending in the queue their coming from.
@@ -838,8 +838,9 @@ pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) {
 	}
 
 	for (vq_ref, tkn_lst) in used_vqs {
-		vq_ref.dispatch_batch(tkn_lst, notif);
+		vq_ref.dispatch_batch(tkn_lst, notif)?;
 	}
+	Ok(())
 }
 
 /// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
@@ -856,7 +857,11 @@ pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) {
 /// The `notif` parameter indicates if the driver wants to have a notification for this specific
 /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 /// updated notification flags before finishing transfers!
-pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: BufferTokenSender, notif: bool) {
+pub fn dispatch_batch_await(
+	tkns: Vec<TransferToken>,
+	await_queue: BufferTokenSender,
+	notif: bool,
+) -> Result<(), VirtqError> {
 	let mut used_vqs: Vec<(Rc<dyn Virtq>, Vec<TransferToken>)> = Vec::new();
 
 	// Sort the TransferTokens depending in the queue their coming from.
@@ -887,8 +892,9 @@ pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: BufferTokenSe
 	}
 
 	for (vq, tkn_lst) in used_vqs {
-		vq.dispatch_batch_await(tkn_lst, await_queue.clone(), notif);
+		vq.dispatch_batch_await(tkn_lst, await_queue.clone(), notif)?;
 	}
+	Ok(())
 }
 
 /// The trait needs to be implemented for
@@ -961,10 +967,14 @@ impl TransferToken {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_await(mut self, await_queue: BufferTokenSender, notif: bool) {
+	pub fn dispatch_await(
+		mut self,
+		await_queue: BufferTokenSender,
+		notif: bool,
+	) -> Result<(), VirtqError> {
 		self.await_queue = Some(await_queue.clone());
 
-		self.get_vq().dispatch(self, notif);
+		self.get_vq().dispatch(self, notif)
 	}
 
 	/// Dispatches the provided TransferToken to the respective queue.
@@ -972,8 +982,8 @@ impl TransferToken {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch(self, notif: bool) {
-		self.get_vq().dispatch(self, notif);
+	pub fn dispatch(self, notif: bool) -> Result<(), VirtqError> {
+		self.get_vq().dispatch(self, notif)
 	}
 
 	/// Dispatches the provided TransferToken to the respectuve queue and does
@@ -988,7 +998,7 @@ impl TransferToken {
 	pub fn dispatch_blocking(self) -> Result<Box<BufferToken>, VirtqError> {
 		let vq = self.get_vq();
 		let (sender, receiver) = async_channel::bounded(1);
-		self.dispatch_await(sender, false);
+		self.dispatch_await(sender, false)?;
 
 		vq.disable_notifs();
 
