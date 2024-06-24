@@ -34,6 +34,8 @@ mod condvar;
 mod entropy;
 mod futex;
 mod interfaces;
+#[cfg(feature = "mmap")]
+mod mmap;
 mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
