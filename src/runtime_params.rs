@@ -1,4 +1,4 @@
-//! Central parsing of the command-line parameters.
+//! Kernel Runtime parameters (e.g., command line arguments)
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -19,6 +19,7 @@ pub fn init() {
 	CLI.set(Cli::default()).unwrap();
 }
 
+/// Parameters retrieved from the command line arguments of the kernel.
 #[derive(Debug)]
 struct Cli {
 	#[allow(dead_code)]
