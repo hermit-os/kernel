@@ -12,7 +12,7 @@ use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 use self::serial::SerialPort;
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::core_local::*;
-use crate::env::{self, is_uhyve};
+use crate::runtime_params::{self, is_uhyve};
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -157,7 +157,7 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && !env::is_uhyve() {
+	if cfg!(feature = "vga") && !runtime_params::is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
@@ -165,7 +165,7 @@ pub fn boot_processor_init() {
 	crate::mm::init();
 	crate::mm::print_information();
 	CoreLocal::get().add_irq_counter();
-	env::init();
+	runtime_params::init();
 	gdt::add_current_core();
 	interrupts::load_idt();
 	pic::init();
@@ -182,7 +182,7 @@ pub fn boot_processor_init() {
 		#[cfg(feature = "pci")]
 		pci::init();
 	}
-	if !env::is_uhyve() {
+	if !runtime_params::is_uhyve() {
 		#[cfg(feature = "acpi")]
 		acpi::init();
 	}
@@ -220,7 +220,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	if env::is_uhyve() {
+	if runtime_params::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
 		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.

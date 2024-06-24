@@ -6,7 +6,7 @@ use hermit_dtb::Dtb;
 use hermit_sync::{without_interrupts, Lazy};
 
 use crate::arch::aarch64::kernel::boot_info;
-use crate::env;
+use crate::runtime_params;
 
 // System counter frequency in Hz
 static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
@@ -63,7 +63,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		let mhz = env::freq().ok_or(())?;
+		let mhz = runtime_params::freq().ok_or(())?;
 		self.set_detected_cpu_frequency(u32::from(mhz) * 1000000, CpuFrequencySources::CommandLine)
 	}
 

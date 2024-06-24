@@ -29,7 +29,7 @@ use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::scheduler::CoreId;
-use crate::{arch, env, scheduler};
+use crate::{arch, runtime_params, scheduler};
 
 const MP_FLT_SIGNATURE: u32 = 0x5f504d5f;
 const MP_CONFIG_SIGNATURE: u32 = 0x504d4350;
@@ -448,7 +448,7 @@ fn default_apic() -> PhysAddr {
 	let default_address = PhysAddr(0xFEE0_0000);
 
 	// currently, uhyve doesn't support an IO-APIC
-	if !env::is_uhyve() {
+	if !runtime_params::is_uhyve() {
 		init_ioapic_address(default_address);
 	}
 
@@ -515,7 +515,7 @@ pub fn init() {
 	}
 
 	// currently, IO-APIC isn't supported by uhyve
-	if !env::is_uhyve() {
+	if !runtime_params::is_uhyve() {
 		// initialize IO-APIC
 		init_ioapic();
 	}

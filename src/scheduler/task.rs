@@ -28,7 +28,7 @@ use crate::fd::{
 	FileDescriptor, IoError, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
 };
 use crate::scheduler::CoreId;
-use crate::{arch, env};
+use crate::{arch, runtime_params};
 
 /// Returns the most significant bit.
 ///
@@ -467,7 +467,7 @@ impl Task {
 			let _ = poll_on(
 				async {
 					let mut guard = objmap.write().await;
-					if env::is_uhyve() {
+					if runtime_params::is_uhyve() {
 						guard
 							.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
 							.map_err(|_| IoError::EIO)?;

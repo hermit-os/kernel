@@ -21,7 +21,7 @@ use crate::arch::mm::virtualmem::kernel_heap_end;
 #[cfg(feature = "pci")]
 use crate::arch::mm::PhysAddr;
 use crate::arch::mm::VirtAddr;
-use crate::{arch, env};
+use crate::{arch, runtime_params};
 
 #[cfg(target_os = "none")]
 #[global_allocator]
@@ -31,8 +31,9 @@ pub static ALLOCATOR: LockedAllocator = LockedAllocator::new();
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
 	if cfg!(target_os = "none") {
 		// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
-		env::get_base_address().align_down_to_large_page()
-			..(env::get_base_address() + env::get_image_size()).align_up_to_large_page()
+		runtime_params::get_base_address().align_down_to_large_page()
+			..(runtime_params::get_base_address() + runtime_params::get_image_size())
+				.align_up_to_large_page()
 	} else {
 		VirtAddr::zero()..VirtAddr::zero()
 	}
@@ -94,7 +95,7 @@ pub(crate) fn init() {
 	//info!("reserved space {} KB", reserved_space >> 10);
 
 	if total_memory_size()
-		< kernel_end_address().as_usize() - env::get_ram_address().as_usize()
+		< kernel_end_address().as_usize() - runtime_params::get_ram_address().as_usize()
 			+ reserved_space
 			+ LargePageSize::SIZE as usize
 	{
@@ -105,7 +106,7 @@ pub(crate) fn init() {
 	let mut map_size: usize;
 
 	let available_memory = (total_memory_size()
-		- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
+		- (kernel_end_address().as_usize() - runtime_params::get_ram_address().as_usize())
 		- reserved_space)
 		.align_down(LargePageSize::SIZE as usize);
 

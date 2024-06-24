@@ -15,7 +15,7 @@ use crate::arch::x86_64::mm::{paging, PhysAddr};
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
-use crate::env;
+use crate::runtime_params;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 
@@ -179,7 +179,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 /// Tries to find the network device within the specified address range.
 /// Returns a reference to it within the Ok() if successful or an Err() on failure.
 fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
-	let linux_mmio = env::mmio();
+	let linux_mmio = runtime_params::mmio();
 
 	if !linux_mmio.is_empty() {
 		check_linux_args(linux_mmio)

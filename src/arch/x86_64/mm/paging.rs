@@ -15,7 +15,7 @@ use x86_64::structures::paging::{
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
-use crate::{env, mm, scheduler};
+use crate::{mm, runtime_params, scheduler};
 
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
@@ -303,7 +303,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 pub fn init() {}
 
 pub fn init_page_tables() {
-	if env::is_uhyve() {
+	if runtime_params::is_uhyve() {
 		// Uhyve identity-maps the first Gibibyte of memory (512 page table entries * 2MiB pages)
 		// We now unmap all memory after the kernel image, so that we can remap it ourselves later for the heap.
 		// Ideally, uhyve would only map as much memory as necessary, but this requires a hermit-entry ABI jump.
