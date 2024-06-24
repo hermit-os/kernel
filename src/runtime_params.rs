@@ -32,11 +32,6 @@ struct Cli {
 	mmio: Vec<String>,
 }
 
-/// Whether Hermit is running under the "uhyve" hypervisor.
-pub fn is_uhyve() -> bool {
-	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
-}
-
 impl Default for Cli {
 	fn default() -> Self {
 		let mut image_path = None;
@@ -132,4 +127,9 @@ pub fn args() -> &'static [String] {
 #[allow(dead_code)]
 pub fn mmio() -> &'static [String] {
 	CLI.get().unwrap().mmio.as_slice()
+}
+
+/// Whether Hermit is running under the "uhyve" hypervisor.
+pub fn is_uhyve() -> bool {
+	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
