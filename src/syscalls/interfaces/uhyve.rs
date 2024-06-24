@@ -144,6 +144,7 @@ impl SyscallInterface for Uhyve {
 					.as_usize(),
 			));
 		}
+		env.push(ptr::null::<u8>());
 
 		// ask uhyve for the environment
 		let mut syscmdval = SysCmdval::new(
