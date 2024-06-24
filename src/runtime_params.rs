@@ -26,7 +26,9 @@ struct Cli {
 	image_path: Option<String>,
 	#[cfg(not(target_arch = "riscv64"))]
 	freq: Option<u16>,
-	env_vars: HashMap<String, String, RandomState>,
+	// Other Kernel parameters
+	parameters: HashMap<String, String, RandomState>,
+	// Application arguments
 	args: Vec<String>,
 	#[allow(dead_code)]
 	mmio: Vec<String>,
@@ -37,7 +39,7 @@ impl Default for Cli {
 		let mut image_path = None;
 		#[cfg(not(target_arch = "riscv64"))]
 		let mut freq = None;
-		let mut env_vars = HashMap::<String, String, RandomState>::with_hasher(
+		let mut variables = HashMap::<String, String, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 		let mut args = Vec::new();
@@ -67,19 +69,19 @@ impl Default for Cli {
 				}
 				"-ip" => {
 					let ip = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_IP"), ip);
+					variables.insert(String::from("HERMIT_IP"), ip);
 				}
 				"-mask" => {
 					let mask = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_MASK"), mask);
+					variables.insert(String::from("HERMIT_MASK"), mask);
 				}
 				"-gateway" => {
 					let gateway = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_GATEWAY"), gateway);
+					variables.insert(String::from("HERMIT_GATEWAY"), gateway);
 				}
 				"-mount" => {
 					let gateway = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("UHYVE_MOUNT"), gateway);
+					variables.insert(String::from("UHYVE_MOUNT"), gateway);
 				}
 				"--" => args.extend(&mut words),
 				_ if image_path.is_none() => image_path = Some(word),
@@ -95,7 +97,7 @@ impl Default for Cli {
 			image_path,
 			#[cfg(not(target_arch = "riscv64"))]
 			freq,
-			env_vars,
+			parameters: variables,
 			args,
 			#[allow(dead_code)]
 			mmio,
@@ -111,11 +113,11 @@ pub fn freq() -> Option<u16> {
 
 #[allow(dead_code)]
 pub fn var(key: &str) -> Option<&String> {
-	CLI.get().unwrap().env_vars.get(key)
+	CLI.get().unwrap().parameters.get(key)
 }
 
 pub fn vars() -> Iter<'static, String, String> {
-	CLI.get().unwrap().env_vars.iter()
+	CLI.get().unwrap().parameters.iter()
 }
 
 /// Returns the cmdline argument passed in after "--"
