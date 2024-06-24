@@ -1,5 +1,8 @@
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+
+/// Returns the base page size, in bytes, of the current system.
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_getpagesize() -> i32 {
-	crate::arch::mm::paging::get_application_page_size() as i32
+	BasePageSize::SIZE.try_into().unwrap()
 }

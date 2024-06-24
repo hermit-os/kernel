@@ -644,11 +644,6 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
-#[inline]
-pub fn get_application_page_size() -> usize {
-	LargePageSize::SIZE as usize
-}
-
 pub fn identity_map<S: PageSize>(start_address: PhysAddr, end_address: PhysAddr) {
 	let first_page = Page::<S>::including_address(VirtAddr(start_address.as_u64()));
 	let last_page = Page::<S>::including_address(VirtAddr(end_address.as_u64()));
