@@ -7,7 +7,7 @@ use multiboot::information::{MemoryType, Multiboot};
 use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
-use crate::{env, mm};
+use crate::{mm, runtime_params};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -106,7 +106,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 }
 
 fn detect_from_uhyve() -> Result<(), ()> {
-	if !env::is_uhyve() {
+	if !runtime_params::is_uhyve() {
 		return Err(());
 	}
 

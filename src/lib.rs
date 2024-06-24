@@ -60,7 +60,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use arch::core_local::*;
 // Used for integration test status.
 #[doc(hidden)]
-pub use env::is_uhyve as _is_uhyve;
+pub use runtime_params::is_uhyve as _is_uhyve;
 
 pub(crate) use crate::arch::*;
 pub use crate::config::DEFAULT_STACK_SIZE;
@@ -80,13 +80,13 @@ mod config;
 pub mod console;
 mod drivers;
 mod entropy;
-mod env;
 pub mod errno;
 mod executor;
 pub mod fd;
 pub mod fs;
 pub mod io;
 mod mm;
+mod runtime_params;
 pub mod scheduler;
 #[cfg(all(feature = "shell", target_arch = "x86_64"))]
 mod shell;
@@ -133,7 +133,7 @@ extern "C" fn initd(_arg: usize) {
 		fn main(argc: i32, argv: *const *const u8, env: *const *const u8);
 	}
 
-	if !env::is_uhyve() {
+	if !runtime_params::is_uhyve() {
 		info!("Hermit is running on common system!");
 	} else {
 		info!("Hermit is running on uhyve!");
@@ -192,7 +192,7 @@ fn boot_processor_main() -> ! {
 	}
 
 	info!("Welcome to Hermit {}", env!("CARGO_PKG_VERSION"));
-	info!("Kernel starts at {:p}", env::get_base_address());
+	info!("Kernel starts at {:p}", runtime_params::get_base_address());
 
 	#[cfg(target_arch = "x86_64")]
 	if let Some(fdt) = kernel::get_fdt() {
@@ -211,7 +211,7 @@ fn boot_processor_main() -> ! {
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
-	if !env::is_uhyve() {
+	if !runtime_params::is_uhyve() {
 		arch::boot_application_processors();
 	}
 
@@ -227,7 +227,7 @@ fn boot_processor_main() -> ! {
 	#[cfg(feature = "smp")]
 	info!("Compiled with SMP support");
 
-	if is_uhyve_with_pci() || !env::is_uhyve() {
+	if is_uhyve_with_pci() || !runtime_params::is_uhyve() {
 		#[cfg(feature = "pci")]
 		crate::drivers::pci::print_information();
 	}

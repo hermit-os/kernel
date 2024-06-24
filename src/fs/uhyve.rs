@@ -12,12 +12,12 @@ use async_trait::async_trait;
 use x86::io::outl;
 
 use crate::arch::mm::{paging, PhysAddr, VirtAddr};
-use crate::env::is_uhyve;
 use crate::executor::block_on;
 use crate::fd::IoError;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
+use crate::runtime_params::is_uhyve;
 
 /// forward a request to the hypervisor uhyve
 #[inline]

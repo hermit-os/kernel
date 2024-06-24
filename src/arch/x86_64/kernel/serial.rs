@@ -22,7 +22,7 @@ pub struct SerialPort {
 
 impl SerialPort {
 	pub unsafe fn new(base: u16) -> Self {
-		if crate::env::is_uhyve() {
+		if crate::runtime_params::is_uhyve() {
 			let serial = Port::new(base);
 			Self {
 				inner: SerialInner::Uhyve(serial),

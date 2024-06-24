@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
-use crate::{arch, env};
+use crate::{arch, runtime_params};
 
 mod generic;
 pub(crate) mod uhyve;
@@ -19,7 +19,7 @@ pub trait SyscallInterface: Send + Sync {
 		let name = Box::leak(Box::new("{name}\0")).as_ptr();
 		argv.push(name);
 
-		let args = env::args();
+		let args = runtime_params::args();
 		debug!("Setting argv as: {:?}", args);
 		for arg in args {
 			let ptr = Box::leak(format!("{arg}\0").into_boxed_str()).as_ptr();
@@ -28,7 +28,7 @@ pub trait SyscallInterface: Send + Sync {
 
 		let mut envv = Vec::new();
 
-		let envs = env::vars();
+		let envs = runtime_params::vars();
 		debug!("Setting envv as: {:?}", envs);
 		for (key, value) in envs {
 			let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();

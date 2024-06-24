@@ -21,7 +21,7 @@ use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::env;
+use crate::runtime_params;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
@@ -144,7 +144,7 @@ pub fn boot_processor_init() {
 	crate::mm::init();
 	crate::mm::print_information();
 	CoreLocal::get().add_irq_counter();
-	env::init();
+	runtime_params::init();
 	interrupts::init();
 	interrupts::enable();
 	processor::detect_frequency();

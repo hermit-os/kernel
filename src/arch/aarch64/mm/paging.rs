@@ -10,7 +10,7 @@ use crate::arch::aarch64::kernel::{
 	get_base_address, get_boot_info_address, get_image_size, get_ram_address, processor,
 };
 use crate::arch::aarch64::mm::{physicalmem, virtualmem, PhysAddr, VirtAddr};
-use crate::env::is_uhyve;
+use crate::runtime_params::is_uhyve;
 use crate::{mm, scheduler, KERNEL_STACK_SIZE};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).

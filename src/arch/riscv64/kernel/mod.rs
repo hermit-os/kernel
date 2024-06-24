@@ -25,7 +25,7 @@ pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
 use crate::arch::riscv64::kernel::processor::lsb;
 use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
 use crate::config::KERNEL_STACK_SIZE;
-use crate::env;
+use crate::runtime_params;
 
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
@@ -134,7 +134,7 @@ pub fn boot_processor_init() {
 	devicetree::init();
 	crate::mm::init();
 	crate::mm::print_information();
-	env::init();
+	runtime_params::init();
 	interrupts::install();
 
 	finish_processor_init();
@@ -199,7 +199,7 @@ fn finish_processor_init() {
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
 
 		//When running bare-metal/QEMU we use the firmware to start the next hart
-		if !env::is_uhyve() {
+		if !runtime_params::is_uhyve() {
 			sbi_rt::hart_start(
 				next_hart_id as usize,
 				start::_start as usize,

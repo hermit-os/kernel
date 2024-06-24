@@ -20,7 +20,6 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
-use crate::env;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, EventFlags, FileDescriptor, IoCtl,
 	IoError, OpenOption, PollFd,
@@ -28,6 +27,7 @@ use crate::fd::{
 use crate::fs::{self, FileAttr};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
+use crate::runtime_params;
 use crate::syscalls::interfaces::SyscallInterface;
 
 mod condvar;
@@ -48,7 +48,7 @@ mod tasks;
 mod timer;
 
 pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
-	if env::is_uhyve() {
+	if runtime_params::is_uhyve() {
 		&self::interfaces::Uhyve
 	} else {
 		&self::interfaces::Generic

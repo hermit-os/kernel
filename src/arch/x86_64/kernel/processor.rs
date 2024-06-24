@@ -24,7 +24,7 @@ use x86_64::VirtAddr;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{boot_info, interrupts, pic, pit};
-use crate::env;
+use crate::runtime_params;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -313,7 +313,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		let mhz = env::freq().ok_or(())?;
+		let mhz = runtime_params::freq().ok_or(())?;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
 	}
 
@@ -406,7 +406,7 @@ impl CpuFrequency {
 		use crate::arch::x86_64::kernel::interrupts::IDT;
 
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
-		if env::is_uhyve() {
+		if runtime_params::is_uhyve() {
 			return Err(());
 		}
 
@@ -672,7 +672,7 @@ impl fmt::Display for CpuFeaturePrinter {
 }
 
 pub(crate) fn run_on_hypervisor() -> bool {
-	env::is_uhyve() || FEATURES.run_on_hypervisor
+	runtime_params::is_uhyve() || FEATURES.run_on_hypervisor
 }
 
 #[derive(Debug)]
