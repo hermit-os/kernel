@@ -3,10 +3,8 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
-use core::mem::MaybeUninit;
 use core::sync::atomic::{fence, Ordering};
 use core::{iter, ops, ptr};
 
@@ -21,8 +19,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, Buffer, BufferToken, BufferType, Bytes, MemDescr, MemDescrId, MemPool, TransferToken,
-	Virtq, VirtqPrivate, VqIndex, VqSize,
+	Buffer, BufferToken, BufferTokenSender, BufferType, Bytes, MemDescr, MemDescrId, MemPool,
+	TransferToken, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -164,7 +162,7 @@ impl DescriptorRing {
 		if let Some(mut tkn) = ctrl.poll_next() {
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue.try_send(Box::new(tkn.buff_tkn)).unwrap();
+				queue.try_send(tkn.buff_tkn).unwrap();
 			}
 		}
 	}
@@ -671,11 +669,22 @@ impl Virtq for PackedVq {
 		self.descr_ring.borrow_mut().poll();
 	}
 
-	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Result<(), VirtqError> {
+	fn dispatch_batch(
+		&self,
+		buffer_tkns: Vec<(BufferToken, BufferType)>,
+		notif: bool,
+	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
-		assert!(!tkns.is_empty());
+		assert!(!buffer_tkns.is_empty());
 
-		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns)?;
+		let transfer_tkns = buffer_tkns
+			.into_iter()
+			.map(|(buffer_tkn, buffer_type)| {
+				self.transfer_token_from_buffer_token(buffer_tkn, None, buffer_type)
+			})
+			.collect();
+
+		let next_idx = self.descr_ring.borrow_mut().push_batch(transfer_tkns)?;
 
 		if notif {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
@@ -700,19 +709,25 @@ impl Virtq for PackedVq {
 
 	fn dispatch_batch_await(
 		&self,
-		mut tkns: Vec<TransferToken>,
+		buffer_tkns: Vec<(BufferToken, BufferType)>,
 		await_queue: super::BufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
-		assert!(!tkns.is_empty());
+		assert!(!buffer_tkns.is_empty());
 
-		// We have to iterate here too, in order to ensure, tokens are placed into the await_queue
-		for tkn in tkns.iter_mut() {
-			tkn.await_queue = Some(await_queue.clone());
-		}
+		let transfer_tkns = buffer_tkns
+			.into_iter()
+			.map(|(buffer_tkn, buffer_type)| {
+				self.transfer_token_from_buffer_token(
+					buffer_tkn,
+					Some(await_queue.clone()),
+					buffer_type,
+				)
+			})
+			.collect();
 
-		let next_idx = self.descr_ring.borrow_mut().push_batch(tkns)?;
+		let next_idx = self.descr_ring.borrow_mut().push_batch(transfer_tkns)?;
 
 		if notif {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
@@ -735,8 +750,16 @@ impl Virtq for PackedVq {
 		Ok(())
 	}
 
-	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError> {
-		let next_idx = self.descr_ring.borrow_mut().push(tkn)?;
+	fn dispatch_await(
+		&self,
+		buffer_tkn: BufferToken,
+		sender: BufferTokenSender,
+		notif: bool,
+		buffer_type: BufferType,
+	) -> Result<(), VirtqError> {
+		let transfer_tkn =
+			self.transfer_token_from_buffer_token(buffer_tkn, Some(sender), buffer_type);
+		let next_idx = self.descr_ring.borrow_mut().push(transfer_tkn)?;
 
 		if notif {
 			self.drv_event.borrow_mut().enable_specific(next_idx);
@@ -849,23 +872,6 @@ impl Virtq for PackedVq {
 			index,
 			last_next: Default::default(),
 		})
-	}
-
-	fn prep_transfer_from_raw(
-		self: Rc<Self>,
-		send: &[&[u8]],
-		recv: &[&mut [MaybeUninit<u8>]],
-		buffer_type: BufferType,
-	) -> Result<TransferToken, VirtqError> {
-		self.prep_transfer_from_raw_static(send, recv, buffer_type)
-	}
-
-	fn prep_buffer(
-		self: Rc<Self>,
-		send: Option<BuffSpec<'_>>,
-		recv: Option<BuffSpec<'_>>,
-	) -> Result<BufferToken, VirtqError> {
-		self.prep_buffer_static(send, recv)
 	}
 
 	fn size(&self) -> VqSize {

@@ -14,7 +14,6 @@ pub mod packed;
 pub mod split;
 
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
 use core::cell::RefCell;
@@ -91,7 +90,7 @@ impl From<VqSize> for u16 {
 	}
 }
 
-type BufferTokenSender = async_channel::Sender<Box<BufferToken>>;
+type BufferTokenSender = async_channel::Sender<BufferToken>;
 
 // Public interface of Virtq
 
@@ -103,14 +102,54 @@ type BufferTokenSender = async_channel::Sender<Box<BufferToken>>;
 /// do need these features should refrain from providing support for both
 /// Virtqueue types and use the structs directly instead.
 #[allow(private_bounds)]
-pub trait Virtq: VirtqPrivate {
-	/// Entry function which the TransferTokens can use, when they are dispatching
-	/// themselves via their `Rc<Virtq>` reference
-	///
+pub trait Virtq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError>;
+	fn dispatch_await(
+		&self,
+		tkn: BufferToken,
+		sender: BufferTokenSender,
+		notif: bool,
+		buffer_type: BufferType,
+	) -> Result<(), VirtqError>;
+
+	/// Dispatches the provided TransferToken to the respective queue and does
+	/// return when, the queue finished the transfer.
+	///
+	/// The returned [BufferToken] can be reused, copied from
+	/// or return the underlying buffers.
+	///
+	/// **INFO:**
+	/// Currently this function is constantly polling the queue while keeping the notifications disabled.
+	/// Upon finish notifications are enabled again.
+	fn dispatch_blocking(
+		&self,
+		tkn: BufferToken,
+		buffer_type: BufferType,
+	) -> Result<BufferToken, VirtqError> {
+		let (sender, receiver) = async_channel::bounded(1);
+		self.dispatch_await(tkn, sender, false, buffer_type)?;
+
+		self.disable_notifs();
+
+		let result: BufferToken;
+		// Keep Spinning until the receive queue is filled
+		loop {
+			match receiver.try_recv() {
+				Ok(buffer_tkn) => {
+					result = buffer_tkn;
+					break;
+				}
+				Err(TryRecvError::Closed) => return Err(VirtqError::General),
+				Err(TryRecvError::Empty) => self.poll(),
+			}
+		}
+
+		self.enable_notifs();
+
+		Ok(result)
+	}
 
 	/// Enables interrupts for this virtqueue upon receiving a transfer
 	fn enable_notifs(&self);
@@ -125,30 +164,34 @@ pub trait Virtq: VirtqPrivate {
 	///   these queues.
 	fn poll(&self);
 
-	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
+	/// Dispatches a batch of [BufferToken]s. The buffers are provided to the queue in
 	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Result<(), VirtqError>;
+	fn dispatch_batch(
+		&self,
+		tkns: Vec<(BufferToken, BufferType)>,
+		notif: bool,
+	) -> Result<(), VirtqError>;
 
-	/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
+	/// Dispatches a batch of [BufferToken]s. The tokens will be placed in to the `await_queue`
 	/// upon finish.
 	///
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
 	///
-	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
+	/// The buffers are provided to the queue in
 	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	fn dispatch_batch_await(
 		&self,
-		tkns: Vec<TransferToken>,
+		tkns: Vec<(BufferToken, BufferType)>,
 		await_queue: BufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError>;
@@ -174,571 +217,6 @@ pub trait Virtq: VirtqPrivate {
 
 	// Returns the index (ID) of a Virtqueue.
 	fn index(&self) -> VqIndex;
-
-	/// Provides the calley with a TransferToken. Fails upon multiple circumstances.
-	///
-	/// **INFO:**
-	/// * Data behind the respective raw pointers will NOT be deallocated. Under no circumstances.
-	/// * Calley is responsible for ensuring the raw pointers will remain valid from start till end of transfer.
-	///   * start: call of `fn prep_transfer_from_raw()`
-	///   * end: return of the [BufferToken] via [TransferToken::dispatch_blocking] or its push to the [TransferToken::await_queue].
-	///   * In case the underlying BufferToken is reused, the raw pointers MUST still be valid all the time
-	///     [BufferToken] exists.
-	/// * [BufferToken] created from this TransferTokens will ONLY allow to return a copy of the data.
-	///   * This is due to the fact, that the `Transfer.ret()` returns a `Box[u8]`, which must own
-	///     the array. This would lead to unwanted frees, if not handled carefully
-	/// * Drivers must take care of keeping a copy of the respective `*mut T` and `*mut K` for themselves
-	///
-	/// **Parameters**
-	/// * send: `Option<(*mut T, BuffSpec)>`
-	///     * None: No send buffers are provided to the device
-	///     * Some:
-	///         * `T` defines the structure which will be provided to the device
-	///         * [BuffSpec] defines how this struct will be presented to the device.
-	///           See documentation on `BuffSpec` for details.
-	/// * recv: `Option<(*mut K, BuffSpec)>`
-	///     * None: No buffers, which are writable for the device are provided to the device.
-	///     * Some:
-	///         * `K` defines the structure which will be provided to the device
-	///         * [BuffSpec] defines how this struct will be presented to the device.
-	///           See documentation on `BuffSpec` for details.
-	///
-	/// **Reasons for Failure:**
-	/// * Queue does not have enough descriptors left, to split `T` or `K` into the desired amount of memory chunks.
-	/// * Calley mixed `Indirect (Direct::Indirect())` with `Direct(BuffSpec::Single() or BuffSpec::Multiple())` descriptors.
-	///
-	/// **Details on Usage:**
-	/// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
-	/// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements.
-	/// * `(Single, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
-	/// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
-	///   many elements in the queue.
-	/// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
-	/// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
-	///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
-	///      descriptors, the queue will merge the send and recv structure as follows:
-	/// ```text
-	/// //+++++++++++++++++++++++
-	/// //+        Queue        +
-	/// //+++++++++++++++++++++++
-	/// //+ Indirect descriptor + -> refers to a descriptor list in the form of ->  ++++++++++++++++++++++++++
-	/// //+         ...         +                                                   +     Descriptors for T  +
-	/// //+++++++++++++++++++++++                                                   +     Descriptors for K  +
-	/// //                                                                          ++++++++++++++++++++++++++
-	/// ```
-	/// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
-	///
-	/// * If one wants to have a structure in the style of:
-	/// ```
-	/// struct send_recv_struct {
-	///     // send_part: ...
-	///     // recv_part: ...
-	/// }
-	/// ```
-	/// Then he must split the structure after the send part and provide the respective part via the send argument and the respective other
-	/// part via the recv argument.
-	fn prep_transfer_from_raw(
-		self: Rc<Self>,
-		send: &[&[u8]],
-		recv: &[&mut [MaybeUninit<u8>]],
-		buffer_type: BufferType,
-	) -> Result<TransferToken, VirtqError>;
-
-	/// The implementation of the method requires constraints that are incompatible with a trait object.
-	/// Because of this, we constrain it to static objects (via Sized) and call it from the implementation
-	/// of [Self::prep_buffer] inside the implementor.
-	fn prep_transfer_from_raw_static(
-		self: Rc<Self>,
-		send: &[&[u8]],
-		recv: &[&mut [MaybeUninit<u8>]],
-		buffer_type: BufferType,
-	) -> Result<TransferToken, VirtqError>
-	where
-		Self: Sized + 'static,
-	{
-		if send.is_empty() && recv.is_empty() {
-			return Err(VirtqError::BufferNotSpecified);
-		}
-
-		let total_send_len = send.iter().map(|slice| slice.len()).sum();
-		let total_recv_len = recv.iter().map(|slice| slice.len()).sum();
-
-		let send_desc_lst: Vec<_> = send
-			.iter()
-			.map(|slice| MemDescr::pull_from_raw(slice))
-			.collect();
-
-		let recv_desc_lst: Vec<_> = recv
-			.iter()
-			.map(|slice| MemDescr::pull_from_raw(slice))
-			.collect();
-
-		let ctrl_desc = match buffer_type {
-			BufferType::Direct => None,
-			BufferType::Indirect => Some(self.create_indirect_ctrl(
-				if !send.is_empty() {
-					Some(&send_desc_lst)
-				} else {
-					None
-				},
-				if !recv.is_empty() {
-					Some(&recv_desc_lst)
-				} else {
-					None
-				},
-			)?),
-		};
-
-		let send_buff = if !send.is_empty() {
-			Some(Buffer {
-				desc_lst: send_desc_lst.into_boxed_slice(),
-				len: total_send_len,
-				next_write: 0,
-			})
-		} else {
-			None
-		};
-
-		let recv_buff = if !recv.is_empty() {
-			Some(Buffer {
-				desc_lst: recv_desc_lst.into_boxed_slice(),
-				len: total_recv_len,
-				next_write: 0,
-			})
-		} else {
-			None
-		};
-
-		Ok(TransferToken {
-			buff_tkn: BufferToken {
-				recv_buff,
-				send_buff,
-				vq: self,
-				ret_send: false,
-				ret_recv: false,
-				reusable: false,
-			},
-			await_queue: None,
-			ctrl_desc,
-		})
-	}
-
-	/// Provides the calley with empty buffers as specified via the `send` and `recv` function parameters, (see [BuffSpec]), in form of
-	/// a [BufferToken].
-	/// Fails upon multiple circumstances.
-	///
-	/// **Parameters**
-	/// * send: `Option<BuffSpec>`
-	///     * None: No send buffers are provided to the device
-	///     * Some:
-	///         * [BuffSpec] defines the size of the buffer and how the buffer is
-	///           Buffer will be structured. See documentation on `BuffSpec` for details.
-	/// * recv: `Option<BuffSpec>`
-	///     * None: No buffers, which are writable for the device are provided to the device.
-	///     * Some:
-	///         * [BuffSpec] defines the size of the buffer and how the buffer is
-	///           Buffer will be structured. See documentation on `BuffSpec` for details.
-	///
-	/// **Reasons for Failure:**
-	/// * Queue does not have enough descriptors left to create the desired amount of descriptors as indicated by the `BuffSpec`.
-	/// * Calley mixed `Indirect (Direct::Indirect())` with `Direct(BuffSpec::Single() or BuffSpec::Multiple())` descriptors.
-	/// * Systerm does not have enough memory resources left.
-	///
-	/// **Details on Usage:**
-	/// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
-	/// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements.
-	/// * `(Single, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
-	/// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
-	///   many elements in the queue.
-	/// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
-	/// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
-	///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
-	///      descriptors, the queue will merge the send and recv structure as follows:
-	/// ```text
-	/// //+++++++++++++++++++++++
-	/// //+        Queue        +
-	/// //+++++++++++++++++++++++
-	/// //+ Indirect descriptor + -> refers to a descriptor list in the form of ->  ++++++++++++++++++++++++++
-	/// //+         ...         +                                                   +     Descriptors for T  +
-	/// //+++++++++++++++++++++++                                                   +     Descriptors for K  +
-	/// //                                                                          ++++++++++++++++++++++++++
-	/// ```
-	/// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
-	fn prep_buffer(
-		self: Rc<Self>,
-		send: Option<BuffSpec<'_>>,
-		recv: Option<BuffSpec<'_>>,
-	) -> Result<BufferToken, VirtqError>;
-
-	/// The implementation of the method requires constraints that are incompatible with a trait object.
-	/// Because of this, we constrain it to static objects (via Sized) and call it from the implementation
-	/// of [Self::prep_buffer] inside the implementor.
-	fn prep_buffer_static(
-		self: Rc<Self>,
-		send: Option<BuffSpec<'_>>,
-		recv: Option<BuffSpec<'_>>,
-	) -> Result<BufferToken, VirtqError>
-	where
-		Self: Sized + 'static,
-	{
-		match (send, recv) {
-			// No buffers specified
-			(None, None) => Err(VirtqError::BufferNotSpecified),
-			// Send buffer specified, No recv buffer
-			(Some(spec), None) => {
-				match spec {
-					BuffSpec::Single(size) => match MemDescr::pull(size) {
-						Ok(desc) => {
-							let buffer = Buffer {
-								desc_lst: vec![desc].into_boxed_slice(),
-								len: size.into(),
-								next_write: 0,
-							};
-
-							Ok(BufferToken {
-								send_buff: Some(buffer),
-								recv_buff: None,
-								vq: self.clone(),
-								ret_send: true,
-								ret_recv: false,
-								reusable: true,
-							})
-						}
-						Err(vq_err) => Err(vq_err),
-					},
-					BuffSpec::Multiple(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut len = 0usize;
-
-						for size in size_lst {
-							match MemDescr::pull(*size) {
-								Ok(desc) => desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							}
-							len += usize::from(*size);
-						}
-
-						let buffer = Buffer {
-							desc_lst: desc_lst.into_boxed_slice(),
-							len,
-							next_write: 0,
-						};
-
-						Ok(BufferToken {
-							send_buff: Some(buffer),
-							recv_buff: None,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: false,
-							reusable: true,
-						})
-					}
-					BuffSpec::Indirect(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut len = 0usize;
-
-						for size in size_lst {
-							// As the indirect list does only consume one descriptor for the
-							// control descriptor, the actual list is untracked
-							desc_lst.push(MemDescr::pull(*size)?);
-							len += usize::from(*size);
-						}
-
-						let buffer = Buffer {
-							desc_lst: desc_lst.into_boxed_slice(),
-							len,
-							next_write: 0,
-						};
-
-						Ok(BufferToken {
-							send_buff: Some(buffer),
-							recv_buff: None,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: false,
-							reusable: true,
-						})
-					}
-				}
-			}
-			// No send buffer, recv buffer is specified
-			(None, Some(spec)) => {
-				match spec {
-					BuffSpec::Single(size) => match MemDescr::pull(size) {
-						Ok(desc) => {
-							let buffer = Buffer {
-								desc_lst: vec![desc].into_boxed_slice(),
-								len: size.into(),
-								next_write: 0,
-							};
-
-							Ok(BufferToken {
-								send_buff: None,
-								recv_buff: Some(buffer),
-								vq: self.clone(),
-								ret_send: false,
-								ret_recv: true,
-								reusable: true,
-							})
-						}
-						Err(vq_err) => Err(vq_err),
-					},
-					BuffSpec::Multiple(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut len = 0usize;
-
-						for size in size_lst {
-							match MemDescr::pull(*size) {
-								Ok(desc) => desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							}
-							len += usize::from(*size);
-						}
-
-						let buffer = Buffer {
-							desc_lst: desc_lst.into_boxed_slice(),
-							len,
-							next_write: 0,
-						};
-
-						Ok(BufferToken {
-							send_buff: None,
-							recv_buff: Some(buffer),
-							vq: self.clone(),
-							ret_send: false,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-					BuffSpec::Indirect(size_lst) => {
-						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
-						let mut len = 0usize;
-
-						for size in size_lst {
-							// As the indirect list does only consume one descriptor for the
-							// control descriptor, the actual list is untracked
-							desc_lst.push(MemDescr::pull(*size)?);
-							len += usize::from(*size);
-						}
-
-						let buffer = Buffer {
-							desc_lst: desc_lst.into_boxed_slice(),
-							len,
-							next_write: 0,
-						};
-
-						Ok(BufferToken {
-							send_buff: None,
-							recv_buff: Some(buffer),
-							vq: self.clone(),
-							ret_send: false,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-				}
-			}
-			// Send buffer specified, recv buffer specified
-			(Some(send_spec), Some(recv_spec)) => {
-				match (send_spec, recv_spec) {
-					(BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
-						let send_buff = match MemDescr::pull(send_size) {
-							Ok(send_desc) => Some(Buffer {
-								desc_lst: vec![send_desc].into_boxed_slice(),
-								len: send_size.into(),
-								next_write: 0,
-							}),
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						let recv_buff = match MemDescr::pull(recv_size) {
-							Ok(recv_desc) => Some(Buffer {
-								desc_lst: vec![recv_desc].into_boxed_slice(),
-								len: recv_size.into(),
-								next_write: 0,
-							}),
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(BufferToken {
-							send_buff,
-							recv_buff,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-					(BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
-						let send_buff = match MemDescr::pull(send_size) {
-							Ok(send_desc) => Some(Buffer {
-								desc_lst: vec![send_desc].into_boxed_slice(),
-								len: send_size.into(),
-								next_write: 0,
-							}),
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						let mut recv_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(recv_size_lst.len());
-						let mut recv_len = 0usize;
-
-						for size in recv_size_lst {
-							match MemDescr::pull(*size) {
-								Ok(desc) => recv_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							}
-							recv_len += usize::from(*size);
-						}
-
-						let recv_buff = Some(Buffer {
-							desc_lst: recv_desc_lst.into_boxed_slice(),
-							len: recv_len,
-							next_write: 0,
-						});
-
-						Ok(BufferToken {
-							send_buff,
-							recv_buff,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-					(BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
-						let mut send_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(send_size_lst.len());
-						let mut send_len = 0usize;
-						for size in send_size_lst {
-							match MemDescr::pull(*size) {
-								Ok(desc) => send_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							}
-							send_len += usize::from(*size);
-						}
-
-						let send_buff = Some(Buffer {
-							desc_lst: send_desc_lst.into_boxed_slice(),
-							len: send_len,
-							next_write: 0,
-						});
-
-						let mut recv_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(recv_size_lst.len());
-						let mut recv_len = 0usize;
-
-						for size in recv_size_lst {
-							match MemDescr::pull(*size) {
-								Ok(desc) => recv_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							}
-							recv_len += usize::from(*size);
-						}
-
-						let recv_buff = Some(Buffer {
-							desc_lst: recv_desc_lst.into_boxed_slice(),
-							len: recv_len,
-							next_write: 0,
-						});
-
-						Ok(BufferToken {
-							send_buff,
-							recv_buff,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-					(BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
-						let mut send_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(send_size_lst.len());
-						let mut send_len = 0usize;
-
-						for size in send_size_lst {
-							match MemDescr::pull(*size) {
-								Ok(desc) => send_desc_lst.push(desc),
-								Err(vq_err) => return Err(vq_err),
-							}
-							send_len += usize::from(*size);
-						}
-
-						let send_buff = Some(Buffer {
-							desc_lst: send_desc_lst.into_boxed_slice(),
-							len: send_len,
-							next_write: 0,
-						});
-
-						let recv_buff = match MemDescr::pull(recv_size) {
-							Ok(recv_desc) => Some(Buffer {
-								desc_lst: vec![recv_desc].into_boxed_slice(),
-								len: recv_size.into(),
-								next_write: 0,
-							}),
-							Err(vq_err) => return Err(vq_err),
-						};
-
-						Ok(BufferToken {
-							send_buff,
-							recv_buff,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-					(BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
-						let mut send_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(send_size_lst.len());
-						let mut send_len = 0usize;
-
-						for size in send_size_lst {
-							// As the indirect list does only consume one descriptor for the
-							// control descriptor, the actual list is untracked
-							send_desc_lst.push(MemDescr::pull(*size)?);
-							send_len += usize::from(*size);
-						}
-
-						let mut recv_desc_lst: Vec<MemDescr> =
-							Vec::with_capacity(recv_size_lst.len());
-						let mut recv_len = 0usize;
-
-						for size in recv_size_lst {
-							// As the indirect list does only consume one descriptor for the
-							// control descriptor, the actual list is untracked
-							recv_desc_lst.push(MemDescr::pull(*size)?);
-							recv_len += usize::from(*size);
-						}
-
-						let recv_buff = Some(Buffer {
-							desc_lst: recv_desc_lst.into_boxed_slice(),
-							len: recv_len,
-							next_write: 0,
-						});
-						let send_buff = Some(Buffer {
-							desc_lst: send_desc_lst.into_boxed_slice(),
-							len: send_len,
-							next_write: 0,
-						});
-
-						Ok(BufferToken {
-							send_buff,
-							recv_buff,
-							vq: self.clone(),
-							ret_send: true,
-							ret_recv: true,
-							reusable: true,
-						})
-					}
-					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
-					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
-				}
-			}
-		}
-	}
 }
 
 /// These methods are an implementation detail and are meant only for consumption by the default method
@@ -749,6 +227,33 @@ trait VirtqPrivate {
 		send: Option<&[MemDescr]>,
 		recv: Option<&[MemDescr]>,
 	) -> Result<MemDescr, VirtqError>;
+
+	/// Consumes the [BufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
+	///
+	/// After this call, the buffers are no longer writable.
+	fn transfer_token_from_buffer_token(
+		&self,
+		buff_tkn: BufferToken,
+		await_queue: Option<BufferTokenSender>,
+		buffer_type: BufferType,
+	) -> TransferToken {
+		let ctrl_desc = match buffer_type {
+			BufferType::Direct => None,
+			BufferType::Indirect => Some(
+				self.create_indirect_ctrl(
+					buff_tkn.send_buff.as_ref().map(Buffer::as_slice),
+					buff_tkn.recv_buff.as_ref().map(Buffer::as_slice),
+				)
+				.unwrap(),
+			),
+		};
+
+		TransferToken {
+			buff_tkn,
+			await_queue,
+			ctrl_desc,
+		}
+	}
 }
 
 /// Allows to check, if a given structure crosses a physical page boundary.
@@ -791,110 +296,6 @@ pub fn check_bounds_slice(slice: &[u8]) -> bool {
 /// Frees memory regions gained access to via `Transfer.ret_raw()`.
 pub fn free_raw(ptr: *mut u8, len: usize) {
 	crate::mm::deallocate(VirtAddr::from(ptr as usize), len);
-}
-
-/// Dispatches a batch of TransferTokens. The actual behaviour depends on the respective
-/// virtqueue implementation. Please see the respective docs for details.
-///
-/// **INFO:**
-/// Due to the missing HashMap implementation in the kernel, this function currently uses a nested
-/// for-loop. The first iteration is over the number if dispatched tokens. Inside this loop, the
-/// function iterates over a list of all already "used" virtqueues. If the given token belongs to an
-/// existing queue it is inserted into the corresponding list of tokens, if it belongs to no queue,
-/// a new entry in the "used" virtqueues list is made.
-/// This procedure can possibly be very slow.
-///
-/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-/// updated notification flags before finishing transfers!
-pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) -> Result<(), VirtqError> {
-	let mut used_vqs: Vec<(Rc<dyn Virtq>, Vec<TransferToken>)> = Vec::new();
-
-	// Sort the TransferTokens depending in the queue their coming from.
-	// then call dispatch_batch of that queue
-	for tkn in tkns {
-		let index = tkn.get_vq().index();
-		let mut used = false;
-		let mut index_used = 0usize;
-
-		for (pos, (vq, _)) in used_vqs.iter_mut().enumerate() {
-			if index == vq.index() {
-				index_used = pos;
-				used = true;
-				break;
-			}
-		}
-
-		if used {
-			let (_, tkn_lst) = &mut used_vqs[index_used];
-			tkn_lst.push(tkn);
-		} else {
-			let mut new_tkn_lst = Vec::new();
-			let vq = tkn.get_vq();
-			new_tkn_lst.push(tkn);
-
-			used_vqs.push((vq, new_tkn_lst))
-		}
-	}
-
-	for (vq_ref, tkn_lst) in used_vqs {
-		vq_ref.dispatch_batch(tkn_lst, notif)?;
-	}
-	Ok(())
-}
-
-/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
-/// upon finish.
-///
-/// **INFO:**
-/// Due to the missing HashMap implementation in the kernel, this function currently uses a nested
-/// for-loop. The first iteration is over the number if dispatched tokens. Inside this loop, the
-/// function iterates over a list of all already "used" virtqueues. If the given token belongs to an
-/// existing queue it is inserted into the corresponding list of tokens, if it belongs to no queue,
-/// a new entry in the "used" virtqueues list is made.
-/// This procedure can possibly be very slow.
-///
-/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-/// updated notification flags before finishing transfers!
-pub fn dispatch_batch_await(
-	tkns: Vec<TransferToken>,
-	await_queue: BufferTokenSender,
-	notif: bool,
-) -> Result<(), VirtqError> {
-	let mut used_vqs: Vec<(Rc<dyn Virtq>, Vec<TransferToken>)> = Vec::new();
-
-	// Sort the TransferTokens depending in the queue their coming from.
-	// then call dispatch_batch of that queue
-	for tkn in tkns {
-		let index = tkn.get_vq().index();
-		let mut used = false;
-		let mut index_used = 0usize;
-
-		for (pos, (vq, _)) in used_vqs.iter_mut().enumerate() {
-			if index == vq.index() {
-				index_used = pos;
-				used = true;
-				break;
-			}
-		}
-
-		if used {
-			let (_, tkn_lst) = &mut used_vqs[index_used];
-			tkn_lst.push(tkn);
-		} else {
-			let mut new_tkn_lst = Vec::new();
-			let vq = tkn.get_vq();
-			new_tkn_lst.push(tkn);
-
-			used_vqs.push((vq, new_tkn_lst))
-		}
-	}
-
-	for (vq, tkn_lst) in used_vqs {
-		vq.dispatch_batch_await(tkn_lst, await_queue.clone(), notif)?;
-	}
-	Ok(())
 }
 
 /// The trait needs to be implemented for
@@ -956,70 +357,6 @@ pub struct TransferToken {
 
 /// Public Interface for TransferToken
 impl TransferToken {
-	/// Returns a reference to the holding virtqueue
-	pub fn get_vq(&self) -> Rc<dyn Virtq> {
-		// Unwrapping is okay here, as TransferToken must hold a BufferToken
-		Rc::clone(&self.buff_tkn.vq)
-	}
-
-	/// Dispatches a TransferToken and awaits it at the specified queue.
-	///
-	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-	/// updated notification flags before finishing transfers!
-	pub fn dispatch_await(
-		mut self,
-		await_queue: BufferTokenSender,
-		notif: bool,
-	) -> Result<(), VirtqError> {
-		self.await_queue = Some(await_queue.clone());
-
-		self.get_vq().dispatch(self, notif)
-	}
-
-	/// Dispatches the provided TransferToken to the respective queue.
-	///
-	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
-	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
-	/// updated notification flags before finishing transfers!
-	pub fn dispatch(self, notif: bool) -> Result<(), VirtqError> {
-		self.get_vq().dispatch(self, notif)
-	}
-
-	/// Dispatches the provided TransferToken to the respectuve queue and does
-	/// return when, the queue finished the transfer.
-	///
-	/// The returned [BufferToken] can be reused, copied from
-	/// or return the underlying buffers.
-	///
-	/// **INFO:**
-	/// Currently this function is constantly polling the queue while keeping the notifications disabled.
-	/// Upon finish notifications are enabled again.
-	pub fn dispatch_blocking(self) -> Result<Box<BufferToken>, VirtqError> {
-		let vq = self.get_vq();
-		let (sender, receiver) = async_channel::bounded(1);
-		self.dispatch_await(sender, false)?;
-
-		vq.disable_notifs();
-
-		let result: Box<BufferToken>;
-		// Keep Spinning until the receive queue is filled
-		loop {
-			match receiver.try_recv() {
-				Ok(buffer_tkn) => {
-					result = buffer_tkn;
-					break;
-				}
-				Err(TryRecvError::Closed) => return Err(VirtqError::General),
-				Err(TryRecvError::Empty) => vq.poll(),
-			}
-		}
-
-		vq.enable_notifs();
-
-		Ok(result)
-	}
-
 	/// Returns the number of descritprors that will be placed in the queue.
 	/// This number can differ from the `BufferToken.num_descr()` function value
 	/// as indirect buffers only consume one descriptor in the queue, but can have
@@ -1064,7 +401,6 @@ pub struct BufferToken {
 	//send_desc_lst: Option<Vec<usize>>,
 	recv_buff: Option<Buffer>,
 	//recv_desc_lst: Option<Vec<usize>>,
-	vq: Rc<dyn Virtq>,
 	/// Indicates whether the buff is returnable
 	ret_send: bool,
 	ret_recv: bool,
@@ -1096,7 +432,7 @@ impl BufferToken {
 	/// * Resetting the MemDescr length at initialization. This length might be reduced upon writes
 	///   of the driver or the device.
 	/// * Erazing all memory areas with zeros
-	fn reset_purge(mut self) -> Self {
+	fn reset_purge(&mut self) {
 		if let Some(buff) = self.send_buff.as_mut() {
 			buff.reset_write();
 			let mut init_buff_len = 0usize;
@@ -1126,7 +462,6 @@ impl BufferToken {
 			}
 			buff.reset_len(init_buff_len);
 		}
-		self
 	}
 
 	/// Resets all properties from the previous transfer.
@@ -1135,7 +470,7 @@ impl BufferToken {
 	/// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
 	/// * Resetting the MemDescr length at initialization. This length might be reduced upon writes
 	///   of the driver or the device.
-	pub fn reset(mut self) -> Self {
+	pub fn reset(&mut self) {
 		if let Some(buff) = self.send_buff.as_mut() {
 			buff.reset_write();
 			let mut init_buff_len = 0usize;
@@ -1155,12 +490,455 @@ impl BufferToken {
 			}
 			buff.reset_len(init_buff_len);
 		}
-		self
 	}
 }
 
 // Public interface of BufferToken
 impl BufferToken {
+	/// Provides the caller with empty buffers as specified via the `send` and `recv` function parameters, (see [BuffSpec]), in form of
+	/// a [BufferToken].
+	/// Fails upon multiple circumstances.
+	///
+	/// **Parameters**
+	/// * send: `Option<BuffSpec>`
+	///     * None: No send buffers are provided to the device
+	///     * Some:
+	///         * [BuffSpec] defines the size of the buffer and how the buffer is
+	///           Buffer will be structured. See documentation on `BuffSpec` for details.
+	/// * recv: `Option<BuffSpec>`
+	///     * None: No buffers, which are writable for the device are provided to the device.
+	///     * Some:
+	///         * [BuffSpec] defines the size of the buffer and how the buffer is
+	///           Buffer will be structured. See documentation on `BuffSpec` for details.
+	///
+	/// **Reasons for Failure:**
+	/// * Both `send` and `recv` are empty, which is not allowed by Virtio.
+	/// * System does not have enough heap memory left.
+	pub fn new(send: Option<BuffSpec<'_>>, recv: Option<BuffSpec<'_>>) -> Result<Self, VirtqError> {
+		match (send, recv) {
+			// No buffers specified
+			(None, None) => Err(VirtqError::BufferNotSpecified),
+			// Send buffer specified, No recv buffer
+			(Some(spec), None) => {
+				match spec {
+					BuffSpec::Single(size) => match MemDescr::pull(size) {
+						Ok(desc) => {
+							let buffer = Buffer {
+								desc_lst: vec![desc].into_boxed_slice(),
+								len: size.into(),
+								next_write: 0,
+							};
+
+							Ok(Self {
+								send_buff: Some(buffer),
+								recv_buff: None,
+								ret_send: true,
+								ret_recv: false,
+								reusable: true,
+							})
+						}
+						Err(vq_err) => Err(vq_err),
+					},
+					BuffSpec::Multiple(size_lst) => {
+						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+						let mut len = 0usize;
+
+						for size in size_lst {
+							match MemDescr::pull(*size) {
+								Ok(desc) => desc_lst.push(desc),
+								Err(vq_err) => return Err(vq_err),
+							}
+							len += usize::from(*size);
+						}
+
+						let buffer = Buffer {
+							desc_lst: desc_lst.into_boxed_slice(),
+							len,
+							next_write: 0,
+						};
+
+						Ok(Self {
+							send_buff: Some(buffer),
+							recv_buff: None,
+							ret_send: true,
+							ret_recv: false,
+							reusable: true,
+						})
+					}
+					BuffSpec::Indirect(size_lst) => {
+						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+						let mut len = 0usize;
+
+						for size in size_lst {
+							// As the indirect list does only consume one descriptor for the
+							// control descriptor, the actual list is untracked
+							desc_lst.push(MemDescr::pull(*size)?);
+							len += usize::from(*size);
+						}
+
+						let buffer = Buffer {
+							desc_lst: desc_lst.into_boxed_slice(),
+							len,
+							next_write: 0,
+						};
+
+						Ok(Self {
+							send_buff: Some(buffer),
+							recv_buff: None,
+							ret_send: true,
+							ret_recv: false,
+							reusable: true,
+						})
+					}
+				}
+			}
+			// No send buffer, recv buffer is specified
+			(None, Some(spec)) => {
+				match spec {
+					BuffSpec::Single(size) => match MemDescr::pull(size) {
+						Ok(desc) => {
+							let buffer = Buffer {
+								desc_lst: vec![desc].into_boxed_slice(),
+								len: size.into(),
+								next_write: 0,
+							};
+
+							Ok(Self {
+								send_buff: None,
+								recv_buff: Some(buffer),
+								ret_send: false,
+								ret_recv: true,
+								reusable: true,
+							})
+						}
+						Err(vq_err) => Err(vq_err),
+					},
+					BuffSpec::Multiple(size_lst) => {
+						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+						let mut len = 0usize;
+
+						for size in size_lst {
+							match MemDescr::pull(*size) {
+								Ok(desc) => desc_lst.push(desc),
+								Err(vq_err) => return Err(vq_err),
+							}
+							len += usize::from(*size);
+						}
+
+						let buffer = Buffer {
+							desc_lst: desc_lst.into_boxed_slice(),
+							len,
+							next_write: 0,
+						};
+
+						Ok(Self {
+							send_buff: None,
+							recv_buff: Some(buffer),
+							ret_send: false,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+					BuffSpec::Indirect(size_lst) => {
+						let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+						let mut len = 0usize;
+
+						for size in size_lst {
+							// As the indirect list does only consume one descriptor for the
+							// control descriptor, the actual list is untracked
+							desc_lst.push(MemDescr::pull(*size)?);
+							len += usize::from(*size);
+						}
+
+						let buffer = Buffer {
+							desc_lst: desc_lst.into_boxed_slice(),
+							len,
+							next_write: 0,
+						};
+
+						Ok(Self {
+							send_buff: None,
+							recv_buff: Some(buffer),
+							ret_send: false,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+				}
+			}
+			// Send buffer specified, recv buffer specified
+			(Some(send_spec), Some(recv_spec)) => {
+				match (send_spec, recv_spec) {
+					(BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
+						let send_buff = match MemDescr::pull(send_size) {
+							Ok(send_desc) => Some(Buffer {
+								desc_lst: vec![send_desc].into_boxed_slice(),
+								len: send_size.into(),
+								next_write: 0,
+							}),
+							Err(vq_err) => return Err(vq_err),
+						};
+
+						let recv_buff = match MemDescr::pull(recv_size) {
+							Ok(recv_desc) => Some(Buffer {
+								desc_lst: vec![recv_desc].into_boxed_slice(),
+								len: recv_size.into(),
+								next_write: 0,
+							}),
+							Err(vq_err) => return Err(vq_err),
+						};
+
+						Ok(Self {
+							send_buff,
+							recv_buff,
+							ret_send: true,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+					(BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
+						let send_buff = match MemDescr::pull(send_size) {
+							Ok(send_desc) => Some(Buffer {
+								desc_lst: vec![send_desc].into_boxed_slice(),
+								len: send_size.into(),
+								next_write: 0,
+							}),
+							Err(vq_err) => return Err(vq_err),
+						};
+
+						let mut recv_desc_lst: Vec<MemDescr> =
+							Vec::with_capacity(recv_size_lst.len());
+						let mut recv_len = 0usize;
+
+						for size in recv_size_lst {
+							match MemDescr::pull(*size) {
+								Ok(desc) => recv_desc_lst.push(desc),
+								Err(vq_err) => return Err(vq_err),
+							}
+							recv_len += usize::from(*size);
+						}
+
+						let recv_buff = Some(Buffer {
+							desc_lst: recv_desc_lst.into_boxed_slice(),
+							len: recv_len,
+							next_write: 0,
+						});
+
+						Ok(Self {
+							send_buff,
+							recv_buff,
+							ret_send: true,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+					(BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
+						let mut send_desc_lst: Vec<MemDescr> =
+							Vec::with_capacity(send_size_lst.len());
+						let mut send_len = 0usize;
+						for size in send_size_lst {
+							match MemDescr::pull(*size) {
+								Ok(desc) => send_desc_lst.push(desc),
+								Err(vq_err) => return Err(vq_err),
+							}
+							send_len += usize::from(*size);
+						}
+
+						let send_buff = Some(Buffer {
+							desc_lst: send_desc_lst.into_boxed_slice(),
+							len: send_len,
+							next_write: 0,
+						});
+
+						let mut recv_desc_lst: Vec<MemDescr> =
+							Vec::with_capacity(recv_size_lst.len());
+						let mut recv_len = 0usize;
+
+						for size in recv_size_lst {
+							match MemDescr::pull(*size) {
+								Ok(desc) => recv_desc_lst.push(desc),
+								Err(vq_err) => return Err(vq_err),
+							}
+							recv_len += usize::from(*size);
+						}
+
+						let recv_buff = Some(Buffer {
+							desc_lst: recv_desc_lst.into_boxed_slice(),
+							len: recv_len,
+							next_write: 0,
+						});
+
+						Ok(Self {
+							send_buff,
+							recv_buff,
+							ret_send: true,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+					(BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
+						let mut send_desc_lst: Vec<MemDescr> =
+							Vec::with_capacity(send_size_lst.len());
+						let mut send_len = 0usize;
+
+						for size in send_size_lst {
+							match MemDescr::pull(*size) {
+								Ok(desc) => send_desc_lst.push(desc),
+								Err(vq_err) => return Err(vq_err),
+							}
+							send_len += usize::from(*size);
+						}
+
+						let send_buff = Some(Buffer {
+							desc_lst: send_desc_lst.into_boxed_slice(),
+							len: send_len,
+							next_write: 0,
+						});
+
+						let recv_buff = match MemDescr::pull(recv_size) {
+							Ok(recv_desc) => Some(Buffer {
+								desc_lst: vec![recv_desc].into_boxed_slice(),
+								len: recv_size.into(),
+								next_write: 0,
+							}),
+							Err(vq_err) => return Err(vq_err),
+						};
+
+						Ok(Self {
+							send_buff,
+							recv_buff,
+							ret_send: true,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+					(BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
+						let mut send_desc_lst: Vec<MemDescr> =
+							Vec::with_capacity(send_size_lst.len());
+						let mut send_len = 0usize;
+
+						for size in send_size_lst {
+							// As the indirect list does only consume one descriptor for the
+							// control descriptor, the actual list is untracked
+							send_desc_lst.push(MemDescr::pull(*size)?);
+							send_len += usize::from(*size);
+						}
+
+						let mut recv_desc_lst: Vec<MemDescr> =
+							Vec::with_capacity(recv_size_lst.len());
+						let mut recv_len = 0usize;
+
+						for size in recv_size_lst {
+							// As the indirect list does only consume one descriptor for the
+							// control descriptor, the actual list is untracked
+							recv_desc_lst.push(MemDescr::pull(*size)?);
+							recv_len += usize::from(*size);
+						}
+
+						let recv_buff = Some(Buffer {
+							desc_lst: recv_desc_lst.into_boxed_slice(),
+							len: recv_len,
+							next_write: 0,
+						});
+						let send_buff = Some(Buffer {
+							desc_lst: send_desc_lst.into_boxed_slice(),
+							len: send_len,
+							next_write: 0,
+						});
+
+						Ok(Self {
+							send_buff,
+							recv_buff,
+							ret_send: true,
+							ret_recv: true,
+							reusable: true,
+						})
+					}
+					(BuffSpec::Indirect(_), BuffSpec::Single(_))
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
+					(BuffSpec::Single(_), BuffSpec::Indirect(_))
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
+				}
+			}
+		}
+	}
+
+	/// * Data behind the respective slices will NOT be deallocated under any circumstances.
+	/// * Caller is responsible for ensuring that the slices remain valid from the start till the end of the transfer.
+	///   * start: call of [Self::from_existing]
+	///   * end: return of the [BufferToken] via [Virtq::dispatch_blocking] or its push to the [BufferTokenSender] provided to the dispatch function.
+	///   * In case the underlying [BufferToken] is reused, the slices MUST still be valid the whole time [BufferToken] exists.
+	/// * [BufferToken] created by this function will ONLY allow to return a copy of the data.
+	///   * This is due to the fact, that the [Buffer::cpy] returns a [Box<[u8]>], which must own
+	///     the slice. This would lead to unwanted frees, if not handled carefully
+	/// * Drivers must take care of keeping a copy of the respective [&[u8]] and [&mut [u8]] for themselves.
+	///
+	/// **Parameters**
+	/// * send: The slices that will make up the elements of the driver-writable buffer.
+	/// * recv: The slices that will make up the elements of the device-writable buffer.
+	///
+	/// **Reasons for Failure:**
+	/// * Both `send` and `recv` are empty, which is not allowed by Virtio.
+	///
+	/// * If one wants to have a structure in the style of:
+	/// ```
+	/// struct send_recv_struct {
+	///     // send_part: ...
+	///     // recv_part: ...
+	/// }
+	/// ```
+	/// they must split the structure after the send part and provide the respective part via the send argument and the respective other
+	/// part via the recv argument.
+	pub fn from_existing(
+		send: &[&[u8]],
+		recv: &[&mut [MaybeUninit<u8>]],
+	) -> Result<Self, VirtqError> {
+		if send.is_empty() && recv.is_empty() {
+			return Err(VirtqError::BufferNotSpecified);
+		}
+
+		let total_send_len = send.iter().map(|slice| slice.len()).sum();
+		let total_recv_len = recv.iter().map(|slice| slice.len()).sum();
+
+		let send_desc_lst: Vec<_> = send
+			.iter()
+			.map(|slice| MemDescr::pull_from_raw(slice))
+			.collect();
+
+		let recv_desc_lst: Vec<_> = recv
+			.iter()
+			.map(|slice| MemDescr::pull_from_raw(slice))
+			.collect();
+
+		let send_buff = if !send.is_empty() {
+			Some(Buffer {
+				desc_lst: send_desc_lst.into_boxed_slice(),
+				len: total_send_len,
+				next_write: 0,
+			})
+		} else {
+			None
+		};
+
+		let recv_buff = if !recv.is_empty() {
+			Some(Buffer {
+				desc_lst: recv_desc_lst.into_boxed_slice(),
+				len: total_recv_len,
+				next_write: 0,
+			})
+		} else {
+			None
+		};
+
+		Ok(Self {
+			recv_buff,
+			send_buff,
+			ret_send: false,
+			ret_recv: false,
+			reusable: false,
+		})
+	}
+
 	/// Restricts the size of a given BufferToken. One must specify either a `new_send_len` or/and `new_recv_len`. If possible
 	/// the function will restrict the respective buffers size to this value. This is especially useful if one has to provide the
 	/// user-space or the device with a buffer and has already a free buffer at hand, which is to large. With this method the user
@@ -1411,11 +1189,10 @@ impl BufferToken {
 	/// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a single continuous
 	/// memory element and as a result writes `T` or `H` as a slice of bytes into this memory.
 	pub fn write<K: AsSliceU8 + ?Sized, H: AsSliceU8 + ?Sized>(
-		mut self,
+		&mut self,
 		send: Option<&K>,
 		recv: Option<&H>,
-		buffer_type: BufferType,
-	) -> Result<TransferToken, VirtqError> {
+	) -> Result<(), VirtqError> {
 		if let Some(data) = send {
 			match self.send_buff.as_mut() {
 				Some(buff) => {
@@ -1470,7 +1247,7 @@ impl BufferToken {
 				None => return Err(VirtqError::NoBufferAvail),
 			}
 		}
-		Ok(self.provide(buffer_type))
+		Ok(())
 	}
 
 	/// Writes `K` or `H` respectively into the next buffer descriptor.
@@ -1486,10 +1263,10 @@ impl BufferToken {
 	/// * Third Write: `write_seq(Some(10 bytes, Some(4 bytes))`:
 	///   * Will result in 10 bytes written to the second buffer descriptor of the send buffer and 4 bytes written to the third buffer descriptor of the recv buffer.
 	pub fn write_seq<K: AsBytes, H: AsBytes + ?Sized>(
-		mut self,
+		&mut self,
 		send_seq: Option<&K>,
 		recv_seq: Option<&H>,
-	) -> Result<Self, VirtqError> {
+	) -> Result<(), VirtqError> {
 		if let Some(data) = send_seq {
 			match self.send_buff.as_mut() {
 				Some(buff) => {
@@ -1521,36 +1298,23 @@ impl BufferToken {
 				None => return Err(VirtqError::NoBufferAvail),
 			}
 		}
-
-		Ok(self)
-	}
-
-	/// Consumes the [BufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
-	///
-	/// After this call, the buffers are no longer writable.
-	pub fn provide(self, buffer_type: BufferType) -> TransferToken {
-		let ctrl_desc = match buffer_type {
-			BufferType::Direct => None,
-			BufferType::Indirect => Some(
-				self.vq
-					.create_indirect_ctrl(
-						self.send_buff.as_ref().map(Buffer::as_slice),
-						self.recv_buff.as_ref().map(Buffer::as_slice),
-					)
-					.unwrap(),
-			),
-		};
-
-		TransferToken {
-			buff_tkn: self,
-			await_queue: None,
-			ctrl_desc,
-		}
+		Ok(())
 	}
 }
-
 pub enum BufferType {
+	/// As many descriptors get consumed in the descriptor table as the sum of the numbers of slices in [BufferToken::send_buff] and [BufferToken::recv_buff].
 	Direct,
+	/// Results in one descriptor in the queue, hence consumes one element in the main descriptor table. The queue will merge the send and recv buffers as follows:
+	/// ```text
+	/// //+++++++++++++++++++++++
+	/// //+        Queue        +
+	/// //+++++++++++++++++++++++
+	/// //+ Indirect descriptor + -> refers to a descriptor list in the form of ->  ++++++++++++++++++++++++++
+	/// //+         ...         +                                                   +  Descriptors for send  +
+	/// //+++++++++++++++++++++++                                                   +  Descriptors for recv  +
+	/// //                                                                          ++++++++++++++++++++++++++
+	/// ```
+	/// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
 	Indirect,
 }
 
