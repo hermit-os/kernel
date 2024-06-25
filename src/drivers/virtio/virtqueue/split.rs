@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
 use core::cell::{RefCell, UnsafeCell};
@@ -22,7 +21,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BuffSpec, BufferToken, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
+	BufferToken, BufferTokenSender, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
@@ -266,7 +265,7 @@ impl DescrRing {
 					.unwrap();
 			}
 			if let Some(queue) = tkn.await_queue.take() {
-				queue.try_send(Box::new(tkn.buff_tkn)).unwrap()
+				queue.try_send(tkn.buff_tkn).unwrap()
 			}
 
 			let mut id_ret_idx = u16::try_from(cur_ring_index).unwrap();
@@ -332,21 +331,33 @@ impl Virtq for SplitVq {
 		self.ring.borrow_mut().poll()
 	}
 
-	fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) -> Result<(), VirtqError> {
+	fn dispatch_batch(
+		&self,
+		_tkns: Vec<(BufferToken, BufferType)>,
+		_notif: bool,
+	) -> Result<(), VirtqError> {
 		unimplemented!();
 	}
 
 	fn dispatch_batch_await(
 		&self,
-		_tkns: Vec<TransferToken>,
+		_tkns: Vec<(BufferToken, BufferType)>,
 		_await_queue: super::BufferTokenSender,
 		_notif: bool,
 	) -> Result<(), VirtqError> {
 		unimplemented!()
 	}
 
-	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError> {
-		let next_idx = self.ring.borrow_mut().push(tkn)?;
+	fn dispatch_await(
+		&self,
+		buffer_tkn: BufferToken,
+		sender: BufferTokenSender,
+		notif: bool,
+		buffer_type: BufferType,
+	) -> Result<(), VirtqError> {
+		let transfer_tkn =
+			self.transfer_token_from_buffer_token(buffer_tkn, Some(sender), buffer_type);
+		let next_idx = self.ring.borrow_mut().push(transfer_tkn)?;
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -477,23 +488,6 @@ impl Virtq for SplitVq {
 			size: VqSize(size),
 			index,
 		})
-	}
-
-	fn prep_transfer_from_raw(
-		self: Rc<Self>,
-		send: &[&[u8]],
-		recv: &[&mut [MaybeUninit<u8>]],
-		buffer_type: BufferType,
-	) -> Result<TransferToken, VirtqError> {
-		self.prep_transfer_from_raw_static(send, recv, buffer_type)
-	}
-
-	fn prep_buffer(
-		self: Rc<Self>,
-		send: Option<BuffSpec<'_>>,
-		recv: Option<BuffSpec<'_>>,
-	) -> Result<BufferToken, VirtqError> {
-		self.prep_buffer_static(send, recv)
 	}
 
 	fn size(&self) -> VqSize {
