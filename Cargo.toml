@@ -70,6 +70,7 @@ nostd = []
 semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
 idle-poll = []
+wasm = ["wasmtime"]
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
@@ -136,12 +137,14 @@ multiboot = "0.8"
 uart_16550 = "0.3"
 x86 = { version = "0.52", default-features = false }
 x86_64 = "0.15"
+wasmtime = { version = "22.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64 = { version = "0.0.10", default-features = false }
 arm-gic = { version = "0.1" }
 hermit-dtb = { version = "0.1" }
 semihosting = { version = "0.1", optional = true }
+wasmtime = { version = "22.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = "0.11"

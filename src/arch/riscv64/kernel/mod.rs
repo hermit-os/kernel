@@ -12,6 +12,7 @@ pub mod switch;
 pub mod systemtime;
 
 use alloc::vec::Vec;
+use core::arch::global_asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
@@ -26,6 +27,9 @@ use crate::arch::riscv64::kernel::processor::lsb;
 use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
+
+global_asm!(include_str!("setjmp.s"));
+global_asm!(include_str!("longjmp.s"));
 
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id

@@ -93,6 +93,8 @@ mod shell;
 mod synch;
 pub mod syscalls;
 pub mod time;
+#[cfg(all(any(target_arch = "x86_64", target_arch = "aarch64"), feature = "wasm"))]
+mod wasm;
 
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
@@ -155,6 +157,11 @@ extern "C" fn initd(_arg: usize) {
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]
 	let (argc, argv, environ) = syscalls::get_application_parameters();
+
+	#[cfg(all(any(target_arch = "x86_64", target_arch = "aarch64"), feature = "wasm"))]
+	if crate::wasm::init().is_err() {
+		error!("Unable to initialized wasm support")
+	}
 
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();

@@ -23,6 +23,9 @@ use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::env;
 
+global_asm!(include_str!("setjmp.s"));
+global_asm!(include_str!("longjmp.s"));
+
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 static mut COM1: SerialPort = SerialPort::new(0x800);

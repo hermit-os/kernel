@@ -1,5 +1,6 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
+use core::arch::global_asm;
 use core::num::NonZeroU64;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
@@ -37,6 +38,9 @@ mod syscall;
 pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
+
+global_asm!(include_str!("setjmp.s"));
+global_asm!(include_str!("longjmp.s"));
 
 /// Kernel header to announce machine features
 #[cfg_attr(target_os = "none", link_section = ".data")]
