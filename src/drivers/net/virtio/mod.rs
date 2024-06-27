@@ -37,7 +37,9 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
-use crate::drivers::virtio::virtqueue::{BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize};
+use crate::drivers::virtio::virtqueue::{
+	BuffSpec, BufferToken, BufferType, Bytes, Virtq, VqIndex, VqSize,
+};
 use crate::executor::device::{RxToken, TxToken};
 
 /// A wrapper struct for the raw configuration structure.
@@ -111,9 +113,16 @@ impl RxQueues {
 			// BufferTokens are directly provided to the queue
 			// TransferTokens are directly dispatched
 			// Transfers will be awaited at the queue
-			buff_tkn
-				.provide()
-				.dispatch_await(self.poll_sender.clone(), false);
+			match buff_tkn
+				.provide(BufferType::Direct)
+				.dispatch_await(self.poll_sender.clone(), false)
+			{
+				Ok(_) => (),
+				Err(_) => {
+					error!("Descriptor IDs were exhausted earlier than expected.");
+					break;
+				}
+			}
 		}
 
 		// Safe virtqueue
@@ -449,8 +458,9 @@ impl NetworkDriver for VirtioNetDriver {
 			}
 
 			buff_tkn
-				.provide()
-				.dispatch_await(self.send_vqs.poll_sender.clone(), false);
+				.provide(BufferType::Direct)
+				.dispatch_await(self.send_vqs.poll_sender.clone(), false)
+				.unwrap();
 
 			result
 		} else {
@@ -483,8 +493,9 @@ impl NetworkDriver for VirtioNetDriver {
 						if packet.len() < HEADER_SIZE {
 							transfer
 								.reset()
-								.provide()
-								.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+								.provide(BufferType::Direct)
+								.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+								.unwrap();
 
 							return None;
 						}
@@ -500,8 +511,9 @@ impl NetworkDriver for VirtioNetDriver {
 						vec_data.extend_from_slice(&packet[mem::size_of::<Hdr>()..]);
 						transfer
 							.reset()
-							.provide()
-							.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+							.provide(BufferType::Direct)
+							.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+							.unwrap();
 
 						num_buffers
 					};
@@ -522,8 +534,9 @@ impl NetworkDriver for VirtioNetDriver {
 						vec_data.extend_from_slice(packet);
 						transfer
 							.reset()
-							.provide()
-							.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+							.provide(BufferType::Direct)
+							.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+							.unwrap();
 					}
 
 					Some((RxToken::new(vec_data), TxToken::new()))
@@ -533,8 +546,9 @@ impl NetworkDriver for VirtioNetDriver {
 						.reset()
 						.write_seq(None::<&Hdr>, Some(&Hdr::default()))
 						.unwrap()
-						.provide()
-						.dispatch_await(self.recv_vqs.poll_sender.clone(), false);
+						.provide(BufferType::Direct)
+						.dispatch_await(self.recv_vqs.poll_sender.clone(), false)
+						.unwrap();
 
 					None
 				}

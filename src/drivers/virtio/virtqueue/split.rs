@@ -7,6 +7,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
 use core::cell::{RefCell, UnsafeCell};
+use core::iter;
 use core::mem::{size_of, MaybeUninit};
 use core::ptr::{self, NonNull};
 
@@ -102,6 +103,7 @@ impl UsedRing {
 struct DescrRing {
 	read_idx: u16,
 	token_ring: Box<[Option<Box<TransferToken>>]>,
+	mem_pool: MemPool,
 
 	/// Descriptor Tables
 	///
@@ -125,131 +127,99 @@ impl DescrRing {
 		unsafe { VolatileRef::new_read_only(NonNull::new(self.used_ring_cell.get()).unwrap()) }
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> u16 {
-		let mut desc_lst = Vec::new();
-		let mut is_indirect = false;
-
-		if let Some(buff) = tkn.buff_tkn.as_ref().unwrap().send_buff.as_ref() {
-			if buff.is_indirect() {
-				desc_lst.push((buff.get_ctrl_desc().unwrap(), false));
-				is_indirect = true;
-			} else {
-				for desc in buff.as_slice() {
-					desc_lst.push((desc, false));
-				}
-			}
-		}
-
-		if let Some(buff) = tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref() {
-			if buff.is_indirect() {
-				if desc_lst.is_empty() {
-					desc_lst.push((buff.get_ctrl_desc().unwrap(), true));
-					is_indirect = true;
-				} else if desc_lst.len() == 1 {
-					//ensure write flag is set
-					let (_, is_write) = &mut desc_lst[0];
-					*is_write = true;
-				} else {
-					panic!("Indirect descriptor should always be inserted as a single descriptor in the queue...")
-				}
-			} else {
-				for desc in buff.as_slice() {
-					desc_lst.push((desc, true));
-				}
-			}
-		}
-
-		let mut len = tkn.buff_tkn.as_ref().unwrap().num_consuming_descr();
-
-		assert!(!desc_lst.is_empty());
-		// Minus 1, comes from  the fact that ids run from one to 255 and not from 0 to 254 for u8::MAX sized pool
-		let index = {
-			let (desc, _) = desc_lst[0];
-			(desc.id.as_ref().unwrap().0 - 1) as usize
-		};
-		let mut desc_cnt = 0usize;
-
-		while len != 0 {
-			let (desc, is_write) = desc_lst[desc_cnt];
-			// This is due to dhe fact that i have ids from one to 255 and not from 0 to 254 for u8::MAX sized pool
-			let write_indx = (desc.id.as_ref().unwrap().0 - 1) as usize;
-
-			let descriptor = if is_indirect {
-				assert!(len == 1);
-				if is_write {
-					virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-							.as_u64()
-							.into(),
-						len: (desc.len as u32).into(),
-						flags: virtq::DescF::INDIRECT | virtq::DescF::WRITE,
-						next: 0.into(),
-					}
-				} else {
-					virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-							.as_u64()
-							.into(),
-						len: (desc.len as u32).into(),
-						flags: virtq::DescF::INDIRECT,
-						next: 0.into(),
-					}
-				}
-			} else if len > 1 {
-				let next_index = {
-					let (desc, _) = desc_lst[desc_cnt + 1];
-					desc.id.as_ref().unwrap().0 - 1
-				};
-
-				if is_write {
-					virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-							.as_u64()
-							.into(),
-						len: (desc.len as u32).into(),
-						flags: virtq::DescF::WRITE | virtq::DescF::NEXT,
-						next: next_index.into(),
-					}
-				} else {
-					virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-							.as_u64()
-							.into(),
-						len: (desc.len as u32).into(),
-						flags: virtq::DescF::NEXT,
-						next: next_index.into(),
-					}
-				}
-			} else if is_write {
-				virtq::Desc {
-					addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-						.as_u64()
-						.into(),
-					len: (desc.len as u32).into(),
-					flags: virtq::DescF::WRITE,
-					next: 0.into(),
-				}
-			} else {
-				virtq::Desc {
-					addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-						.as_u64()
-						.into(),
-					len: (desc.len as u32).into(),
-					flags: virtq::DescF::empty(),
-					next: 0.into(),
-				}
+	fn push(&mut self, tkn: TransferToken) -> Result<u16, VirtqError> {
+		let mut index;
+		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
+			let descriptor = virtq::Desc {
+				addr: paging::virt_to_phys(VirtAddr::from(ctrl_desc.ptr as u64))
+					.as_u64()
+					.into(),
+				len: (ctrl_desc.len as u32).into(),
+				flags: virtq::DescF::INDIRECT,
+				next: 0.into(),
 			};
 
+			index = self
+				.mem_pool
+				.pool
+				.borrow_mut()
+				.pop()
+				.ok_or(VirtqError::NoDescrAvail)?
+				.0;
 			self.descr_table_ref()
 				.as_mut_ptr()
-				.index(write_indx)
+				.index(usize::from(index))
 				.write(MaybeUninit::new(descriptor));
+		} else {
+			let rev_send_desc_iter = tkn
+				.buff_tkn
+				.send_buff
+				.as_ref()
+				.map(|send_buff| send_buff.as_slice().iter())
+				.into_iter()
+				.flatten()
+				.rev()
+				.zip(iter::repeat(virtq::DescF::empty()));
+			let rev_recv_desc_iter = tkn
+				.buff_tkn
+				.recv_buff
+				.as_ref()
+				.map(|recv_buff| recv_buff.as_slice().iter())
+				.into_iter()
+				.flatten()
+				.rev()
+				.zip(iter::repeat(virtq::DescF::WRITE));
+			let mut rev_all_desc_iter =
+				rev_recv_desc_iter
+					.chain(rev_send_desc_iter)
+					.map(|(mem_descr, flags)| virtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(mem_descr.ptr as u64))
+							.as_u64()
+							.into(),
+						len: (mem_descr.len as u32).into(),
+						flags,
+						next: 0.into(),
+					});
 
-			desc_cnt += 1;
-			len -= 1;
+			// We need to handle the last descriptor (the first for the reversed iterator) specially to not set the next flag.
+			{
+				// If the [BufferToken] is empty, we panic
+				let descriptor = rev_all_desc_iter.next().unwrap();
+
+				index = self
+					.mem_pool
+					.pool
+					.borrow_mut()
+					.pop()
+					.ok_or(VirtqError::NoDescrAvail)?
+					.0;
+				self.descr_table_ref()
+					.as_mut_ptr()
+					.index(usize::from(index))
+					.write(MaybeUninit::new(descriptor));
+			}
+			for mut descriptor in rev_all_desc_iter {
+				descriptor.flags |= virtq::DescF::NEXT;
+				// We have not updated `index` yet, so it is at this point the index of the previous descriptor that had been written.
+				descriptor.next = le16::from(index);
+
+				index = self
+					.mem_pool
+					.pool
+					.borrow_mut()
+					.pop()
+					.ok_or(VirtqError::NoDescrAvail)?
+					.0;
+				self.descr_table_ref()
+					.as_mut_ptr()
+					.index(usize::from(index))
+					.write(MaybeUninit::new(descriptor));
+			}
+			// At this point, `index` is the index of the last element of the reversed iterator,
+			// thus the head of the descriptor chain.
 		}
 
-		self.token_ring[index] = Some(Box::new(tkn));
+		self.token_ring[usize::from(index)] = Some(Box::new(tkn));
 
 		let len = self.token_ring.len();
 		let mut avail_ring_ref = self.avail_ring_ref();
@@ -257,13 +227,13 @@ impl DescrRing {
 		let idx = map_field!(avail_ring.index).read().to_ne();
 		AvailRing::ring_ptr(avail_ring)
 			.index(idx as usize % len)
-			.write(MaybeUninit::new((index as u16).into()));
+			.write(MaybeUninit::new(index.into()));
 
 		memory_barrier();
 		let next_idx = idx.wrapping_add(1);
 		map_field!(avail_ring.index).write(next_idx.into());
 
-		next_idx
+		Ok(next_idx)
 	}
 
 	fn poll(&mut self) {
@@ -272,13 +242,14 @@ impl DescrRing {
 		// need to move [Self::used_ring_ref] lines into a separate scope.
 		loop {
 			let used_elem;
+			let cur_ring_index;
 			{
 				let used_ring_ref = self.used_ring_ref();
 				let used_ring = used_ring_ref.as_ptr();
 				if self.read_idx == map_field!(used_ring.index).read().to_ne() {
 					break;
 				} else {
-					let cur_ring_index = self.read_idx as usize % self.token_ring.len();
+					cur_ring_index = self.read_idx as usize % self.token_ring.len();
 					used_elem = UsedRing::ring_ptr(used_ring).index(cur_ring_index).read();
 				}
 			}
@@ -289,16 +260,32 @@ impl DescrRing {
 					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 				);
 
-			if tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref().is_some() {
+			if tkn.buff_tkn.recv_buff.as_ref().is_some() {
 				tkn.buff_tkn
-					.as_mut()
-					.unwrap()
 					.restr_size(None, Some(used_elem.len.to_ne() as usize))
 					.unwrap();
 			}
 			if let Some(queue) = tkn.await_queue.take() {
-				queue.try_send(Box::new(tkn.buff_tkn.unwrap())).unwrap()
+				queue.try_send(Box::new(tkn.buff_tkn)).unwrap()
 			}
+
+			let mut id_ret_idx = u16::try_from(cur_ring_index).unwrap();
+			loop {
+				self.mem_pool.ret_id(super::MemDescrId(id_ret_idx));
+				let cur_chain_elem = unsafe {
+					self.descr_table_ref()
+						.as_ptr()
+						.index(usize::from(id_ret_idx))
+						.read()
+						.assume_init()
+				};
+				if cur_chain_elem.flags.contains(virtq::DescF::NEXT) {
+					id_ret_idx = cur_chain_elem.next.to_ne();
+				} else {
+					break;
+				}
+			}
+
 			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
 		}
@@ -326,7 +313,6 @@ impl DescrRing {
 /// Virtio's split virtqueue structure
 pub struct SplitVq {
 	ring: RefCell<DescrRing>,
-	mem_pool: Rc<MemPool>,
 	size: VqSize,
 	index: VqIndex,
 
@@ -346,7 +332,7 @@ impl Virtq for SplitVq {
 		self.ring.borrow_mut().poll()
 	}
 
-	fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) {
+	fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) -> Result<(), VirtqError> {
 		unimplemented!();
 	}
 
@@ -355,12 +341,12 @@ impl Virtq for SplitVq {
 		_tkns: Vec<TransferToken>,
 		_await_queue: super::BufferTokenSender,
 		_notif: bool,
-	) {
+	) -> Result<(), VirtqError> {
 		unimplemented!()
 	}
 
-	fn dispatch(&self, tkn: TransferToken, notif: bool) {
-		let next_idx = self.ring.borrow_mut().push(tkn);
+	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Result<(), VirtqError> {
+		let next_idx = self.ring.borrow_mut().push(tkn)?;
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -374,6 +360,7 @@ impl Virtq for SplitVq {
 				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
+		Ok(())
 	}
 
 	fn index(&self) -> VqIndex {
@@ -467,6 +454,7 @@ impl Virtq for SplitVq {
 				.take(size.into())
 				.collect::<Vec<_>>()
 				.into_boxed_slice(),
+			mem_pool: MemPool::new(size),
 
 			descr_table_cell,
 			avail_ring_cell,
@@ -479,9 +467,6 @@ impl Virtq for SplitVq {
 			notif_ctrl.enable_notif_data();
 		}
 
-		// Initialize new memory pool.
-		let mem_pool = Rc::new(MemPool::new(size));
-
 		vq_handler.enable_queue();
 
 		info!("Created SplitVq: idx={}, size={}", index.0, size);
@@ -489,7 +474,6 @@ impl Virtq for SplitVq {
 		Ok(SplitVq {
 			ring: RefCell::new(descr_ring),
 			notif_ctrl,
-			mem_pool,
 			size: VqSize(size),
 			index,
 		})
@@ -520,8 +504,8 @@ impl Virtq for SplitVq {
 impl VirtqPrivate for SplitVq {
 	fn create_indirect_ctrl(
 		&self,
-		send: Option<&Vec<MemDescr>>,
-		recv: Option<&Vec<MemDescr>>,
+		send: Option<&[MemDescr]>,
+		recv: Option<&[MemDescr]>,
 	) -> Result<MemDescr, VirtqError> {
 		// Need to match (send, recv) twice, as the "size" of the control descriptor to be pulled must be known in advance.
 		let len: usize = match (send, recv) {
@@ -536,7 +520,7 @@ impl VirtqPrivate for SplitVq {
 			None => return Err(VirtqError::BufferToLarge),
 		};
 
-		let ctrl_desc = match self.mem_pool.clone().pull(sz_indrct_lst) {
+		let ctrl_desc = match MemDescr::pull(sz_indrct_lst) {
 			Ok(desc) => desc,
 			Err(vq_err) => return Err(vq_err),
 		};
@@ -666,8 +650,5 @@ impl VirtqPrivate for SplitVq {
 				Ok(ctrl_desc)
 			}
 		}
-	}
-	fn mem_pool(&self) -> Rc<MemPool> {
-		self.mem_pool.clone()
 	}
 }
