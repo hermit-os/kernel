@@ -74,7 +74,7 @@ mmap = []
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
-virtio = { package = "virtio-spec", path = "virtio-spec", features = ["zerocopy"] }
+virtio = { package = "virtio-spec", path = "virtio-spec", features = ["alloc", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }

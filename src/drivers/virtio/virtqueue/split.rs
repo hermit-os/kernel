@@ -4,10 +4,9 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::alloc::{Allocator, Layout};
 use core::cell::{RefCell, UnsafeCell};
-use core::mem::{size_of, MaybeUninit};
-use core::{iter, ptr, slice};
+use core::mem::{self, MaybeUninit};
+use core::{iter, ptr};
 
 use virtio::pci::NotificationData;
 use virtio::{le16, virtq};
@@ -25,49 +24,6 @@ use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
 use crate::mm::device_alloc::DeviceAlloc;
 
-// The generic structure eases the creation of the layout for the statically
-// sized portion of [AvailRing] and [UsedRing]. This way, to be allocated they
-// only need to be extended with the dynamic portion.
-#[repr(C)]
-struct GenericRing<T: ?Sized> {
-	flags: le16,
-	idx: le16,
-
-	// Rust does not allow a field other than the last one to be unsized.
-	// Unfortunately, this is not the case with the layout in the specification.
-	// For this reason, we merge the last two fields and provide appropriate
-	// accessor methods.
-	ring_and_event: T,
-}
-
-type AvailRing = GenericRing<[MaybeUninit<le16>]>;
-
-impl AvailRing {
-	fn ring_mut(&mut self) -> &mut [MaybeUninit<le16>] {
-		let len = self.ring_and_event.len();
-		&mut self.ring_and_event[0..len - 1]
-	}
-}
-
-// The elements of the unsized field and the last field are not of the same type.
-// For this reason, the field stores raw bytes and we have typed accessors.
-type UsedRing = GenericRing<[u8]>;
-
-// Used ring is not supposed to be modified by the driver. Thus, we only have _ref methods (and not _mut methods).
-impl UsedRing {
-	fn ring(&self) -> &[virtq::UsedElem] {
-		let ring_len =
-			(self.ring_and_event.len() - size_of::<le16>()) / size_of::<virtq::UsedElem>();
-
-		unsafe {
-			slice::from_raw_parts(
-				ptr::from_ref(&self.ring_and_event).cast::<virtq::UsedElem>(),
-				ring_len,
-			)
-		}
-	}
-}
-
 struct DescrRing {
 	read_idx: u16,
 	token_ring: Box<[Option<Box<TransferToken>>]>,
@@ -80,21 +36,21 @@ struct DescrRing {
 	/// These tables may only be accessed via volatile operations.
 	/// See the corresponding method for a safe wrapper.
 	descr_table_cell: Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
-	avail_ring_cell: Box<UnsafeCell<AvailRing>, DeviceAlloc>,
-	used_ring_cell: Box<UnsafeCell<UsedRing>, DeviceAlloc>,
+	avail_ring_cell: Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
+	used_ring_cell: Box<UnsafeCell<virtq::Used>, DeviceAlloc>,
 }
 
 impl DescrRing {
 	fn descr_table_mut(&mut self) -> &mut [MaybeUninit<virtq::Desc>] {
 		unsafe { &mut *self.descr_table_cell.get() }
 	}
-	fn avail_ring(&self) -> &AvailRing {
+	fn avail_ring(&self) -> &virtq::Avail {
 		unsafe { &*self.avail_ring_cell.get() }
 	}
-	fn avail_ring_mut(&mut self) -> &mut AvailRing {
+	fn avail_ring_mut(&mut self) -> &mut virtq::Avail {
 		unsafe { &mut *self.avail_ring_cell.get() }
 	}
-	fn used_ring(&self) -> &UsedRing {
+	fn used_ring(&self) -> &virtq::Used {
 		unsafe { &*self.used_ring_cell.get() }
 	}
 
@@ -185,7 +141,7 @@ impl DescrRing {
 
 		let len = self.token_ring.len();
 		let idx = self.avail_ring_mut().idx.to_ne();
-		self.avail_ring_mut().ring_mut()[idx as usize % len] = MaybeUninit::new(index.into());
+		self.avail_ring_mut().ring_mut(true)[idx as usize % len] = index.into();
 
 		memory_barrier();
 		let next_idx = idx.wrapping_add(1);
@@ -243,15 +199,19 @@ impl DescrRing {
 	}
 
 	fn drv_enable_notif(&mut self) {
-		self.avail_ring_mut().flags = 0.into();
+		self.avail_ring_mut()
+			.flags
+			.remove(virtq::AvailF::NO_INTERRUPT);
 	}
 
 	fn drv_disable_notif(&mut self) {
-		self.avail_ring_mut().flags = 1.into();
+		self.avail_ring_mut()
+			.flags
+			.insert(virtq::AvailF::NO_INTERRUPT);
 	}
 
 	fn dev_is_notif(&self) -> bool {
-		self.used_ring().flags.to_ne() & 1 == 0
+		!self.used_ring().flags.contains(virtq::UsedF::NO_NOTIFY)
 	}
 }
 
@@ -336,48 +296,26 @@ impl Virtq for SplitVq {
 		};
 
 		let avail_ring_cell = {
-			let ring_and_event_len = usize::from(size) + 1;
-			let allocation = ALLOCATOR
-				.allocate(
-					Layout::new::<GenericRing<()>>() // flags
-						.extend(Layout::array::<le16>(ring_and_event_len).unwrap()) // +1 for event
-						.unwrap()
-						.0
-						.pad_to_align(),
-				)
+			let avail = virtq::Avail::try_new_in(size, true, ALLOCATOR)
 				.map_err(|_| VirtqError::AllocationError)?;
+
 			unsafe {
-				Box::from_raw_in(
-					core::ptr::slice_from_raw_parts_mut(allocation.as_mut_ptr(), ring_and_event_len)
-						as *mut UnsafeCell<AvailRing>,
-					ALLOCATOR,
-				)
+				mem::transmute::<
+					Box<virtq::Avail, DeviceAlloc>,
+					Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
+				>(avail)
 			}
 		};
 
 		let used_ring_cell = {
-			let ring_and_event_layout = Layout::array::<virtq::UsedElem>(size.into())
-				.unwrap()
-				.extend(Layout::new::<le16>()) // for event
-				.unwrap()
-				.0;
-			let allocation = ALLOCATOR
-				.allocate(
-					Layout::new::<GenericRing<()>>()
-						.extend(ring_and_event_layout)
-						.unwrap()
-						.0
-						.pad_to_align(),
-				)
+			let used = virtq::Used::try_new_in(size, true, ALLOCATOR)
 				.map_err(|_| VirtqError::AllocationError)?;
+
 			unsafe {
-				Box::from_raw_in(
-					core::ptr::slice_from_raw_parts_mut(
-						allocation.as_mut_ptr(),
-						ring_and_event_layout.size(),
-					) as *mut UnsafeCell<UsedRing>,
-					ALLOCATOR,
-				)
+				mem::transmute::<
+					Box<virtq::Used, DeviceAlloc>,
+					Box<UnsafeCell<virtq::Used>, DeviceAlloc>,
+				>(used)
 			}
 		};
 
