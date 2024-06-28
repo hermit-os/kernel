@@ -6,14 +6,11 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::alloc::{Allocator, Layout};
 use core::cell::{RefCell, UnsafeCell};
-use core::iter;
 use core::mem::{size_of, MaybeUninit};
-use core::ptr::{self, NonNull};
+use core::{iter, ptr, slice};
 
 use virtio::pci::NotificationData;
 use virtio::{le16, virtq};
-use volatile::access::ReadOnly;
-use volatile::{map_field, VolatilePtr, VolatileRef};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -46,11 +43,9 @@ struct GenericRing<T: ?Sized> {
 type AvailRing = GenericRing<[MaybeUninit<le16>]>;
 
 impl AvailRing {
-	fn ring_ptr<A: volatile::access::Access>(
-		volatile_self: VolatilePtr<'_, Self, A>,
-	) -> VolatilePtr<'_, [MaybeUninit<le16>], A> {
-		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
-		ring_and_event_ptr.split_at(ring_and_event_ptr.len() - 1).0
+	fn ring_mut(&mut self) -> &mut [MaybeUninit<le16>] {
+		let len = self.ring_and_event.len();
+		&mut self.ring_and_event[0..len - 1]
 	}
 }
 
@@ -60,20 +55,15 @@ type UsedRing = GenericRing<[u8]>;
 
 // Used ring is not supposed to be modified by the driver. Thus, we only have _ref methods (and not _mut methods).
 impl UsedRing {
-	fn ring_ptr<A: volatile::access::Access>(
-		volatile_self: VolatilePtr<'_, Self, A>,
-	) -> VolatilePtr<'_, [virtq::UsedElem], A> {
-		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
+	fn ring(&self) -> &[virtq::UsedElem] {
 		let ring_len =
-			(ring_and_event_ptr.len() - size_of::<le16>()) / size_of::<virtq::UsedElem>();
+			(self.ring_and_event.len() - size_of::<le16>()) / size_of::<virtq::UsedElem>();
 
 		unsafe {
-			ring_and_event_ptr.map(|ring_and_event_ptr| {
-				NonNull::slice_from_raw_parts(
-					ring_and_event_ptr.cast::<virtq::UsedElem>(),
-					ring_len,
-				)
-			})
+			slice::from_raw_parts(
+				ptr::from_ref(&self.ring_and_event).cast::<virtq::UsedElem>(),
+				ring_len,
+			)
 		}
 	}
 }
@@ -95,14 +85,17 @@ struct DescrRing {
 }
 
 impl DescrRing {
-	fn descr_table_ref(&mut self) -> VolatileRef<'_, [MaybeUninit<virtq::Desc>]> {
-		unsafe { VolatileRef::new(NonNull::new(self.descr_table_cell.get_mut()).unwrap()) }
+	fn descr_table_mut(&mut self) -> &mut [MaybeUninit<virtq::Desc>] {
+		unsafe { &mut *self.descr_table_cell.get() }
 	}
-	fn avail_ring_ref(&mut self) -> VolatileRef<'_, AvailRing> {
-		unsafe { VolatileRef::new(NonNull::new(self.avail_ring_cell.get_mut()).unwrap()) }
+	fn avail_ring(&self) -> &AvailRing {
+		unsafe { &*self.avail_ring_cell.get() }
 	}
-	fn used_ring_ref(&self) -> VolatileRef<'_, UsedRing, ReadOnly> {
-		unsafe { VolatileRef::new_read_only(NonNull::new(self.used_ring_cell.get()).unwrap()) }
+	fn avail_ring_mut(&mut self) -> &mut AvailRing {
+		unsafe { &mut *self.avail_ring_cell.get() }
+	}
+	fn used_ring(&self) -> &UsedRing {
+		unsafe { &*self.used_ring_cell.get() }
 	}
 
 	fn push(&mut self, tkn: TransferToken) -> Result<u16, VirtqError> {
@@ -124,10 +117,7 @@ impl DescrRing {
 				.pop()
 				.ok_or(VirtqError::NoDescrAvail)?
 				.0;
-			self.descr_table_ref()
-				.as_mut_ptr()
-				.index(usize::from(index))
-				.write(MaybeUninit::new(descriptor));
+			self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 		} else {
 			let rev_send_desc_iter = tkn
 				.buff_tkn
@@ -171,10 +161,7 @@ impl DescrRing {
 					.pop()
 					.ok_or(VirtqError::NoDescrAvail)?
 					.0;
-				self.descr_table_ref()
-					.as_mut_ptr()
-					.index(usize::from(index))
-					.write(MaybeUninit::new(descriptor));
+				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			for mut descriptor in rev_all_desc_iter {
 				descriptor.flags |= virtq::DescF::NEXT;
@@ -188,10 +175,7 @@ impl DescrRing {
 					.pop()
 					.ok_or(VirtqError::NoDescrAvail)?
 					.0;
-				self.descr_table_ref()
-					.as_mut_ptr()
-					.index(usize::from(index))
-					.write(MaybeUninit::new(descriptor));
+				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			// At this point, `index` is the index of the last element of the reversed iterator,
 			// thus the head of the descriptor chain.
@@ -200,16 +184,12 @@ impl DescrRing {
 		self.token_ring[usize::from(index)] = Some(Box::new(tkn));
 
 		let len = self.token_ring.len();
-		let mut avail_ring_ref = self.avail_ring_ref();
-		let avail_ring = avail_ring_ref.as_mut_ptr();
-		let idx = map_field!(avail_ring.index).read().to_ne();
-		AvailRing::ring_ptr(avail_ring)
-			.index(idx as usize % len)
-			.write(MaybeUninit::new(index.into()));
+		let idx = self.avail_ring_mut().index.to_ne();
+		self.avail_ring_mut().ring_mut()[idx as usize % len] = MaybeUninit::new(index.into());
 
 		memory_barrier();
 		let next_idx = idx.wrapping_add(1);
-		map_field!(avail_ring.index).write(next_idx.into());
+		self.avail_ring_mut().index = next_idx.into();
 
 		Ok(next_idx)
 	}
@@ -222,13 +202,11 @@ impl DescrRing {
 			let used_elem;
 			let cur_ring_index;
 			{
-				let used_ring_ref = self.used_ring_ref();
-				let used_ring = used_ring_ref.as_ptr();
-				if self.read_idx == map_field!(used_ring.index).read().to_ne() {
+				if self.read_idx == self.used_ring().index.to_ne() {
 					break;
 				} else {
 					cur_ring_index = self.read_idx as usize % self.token_ring.len();
-					used_elem = UsedRing::ring_ptr(used_ring).index(cur_ring_index).read();
+					used_elem = self.used_ring().ring()[cur_ring_index];
 				}
 			}
 
@@ -250,13 +228,8 @@ impl DescrRing {
 			let mut id_ret_idx = u16::try_from(cur_ring_index).unwrap();
 			loop {
 				self.mem_pool.ret_id(super::MemDescrId(id_ret_idx));
-				let cur_chain_elem = unsafe {
-					self.descr_table_ref()
-						.as_ptr()
-						.index(usize::from(id_ret_idx))
-						.read()
-						.assume_init()
-				};
+				let cur_chain_elem =
+					unsafe { self.descr_table_mut()[usize::from(id_ret_idx)].assume_init() };
 				if cur_chain_elem.flags.contains(virtq::DescF::NEXT) {
 					id_ret_idx = cur_chain_elem.next.to_ne();
 				} else {
@@ -270,21 +243,15 @@ impl DescrRing {
 	}
 
 	fn drv_enable_notif(&mut self) {
-		let mut avail_ring_ref = self.avail_ring_ref();
-		let avail_ring = avail_ring_ref.as_mut_ptr();
-		map_field!(avail_ring.flags).write(0.into());
+		self.avail_ring_mut().flags = 0.into();
 	}
 
 	fn drv_disable_notif(&mut self) {
-		let mut avail_ring_ref = self.avail_ring_ref();
-		let avail_ring = avail_ring_ref.as_mut_ptr();
-		map_field!(avail_ring.flags).write(1.into());
+		self.avail_ring_mut().flags = 1.into();
 	}
 
 	fn dev_is_notif(&self) -> bool {
-		let used_ring_ref = self.used_ring_ref();
-		let used_ring = used_ring_ref.as_ptr();
-		map_field!(used_ring.flags).read().to_ne() & 1 == 0
+		self.used_ring().flags.to_ne() & 1 == 0
 	}
 }
 
