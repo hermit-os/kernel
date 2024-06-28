@@ -31,19 +31,6 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
-/// The module contains constants specific to PCI.
-#[allow(dead_code)]
-pub(crate) mod constants {
-	// PCI constants
-	pub(crate) const PCI_MAX_BUS_NUMBER: u8 = 32;
-	pub(crate) const PCI_MAX_DEVICE_NUMBER: u8 = 32;
-	pub(crate) const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
-	pub(crate) const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
-	pub(crate) const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
-	pub(crate) const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;
-	pub(crate) const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
-}
-
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
