@@ -53,23 +53,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		PciHeader::new(self.address)
 	}
 
-	pub fn read_register(&self, register: u16) -> u32 {
-		unsafe { self.access.read(self.address, register) }
-	}
-
-	pub fn write_register(&self, register: u16, value: u32) {
-		unsafe { self.access.write(self.address, register, value) }
-	}
-
 	/// Set flag to the command register
 	pub fn set_command(&self, cmd: CommandRegister) {
 		self.header()
 			.update_command(&self.access, |command| command | cmd);
-	}
-
-	/// Get value of the command register
-	pub fn get_command(&self) -> CommandRegister {
-		self.header().command(&self.access)
 	}
 
 	/// Returns the bar at bar-register `slot`.
@@ -180,19 +167,6 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
 		let mut header = EndpointHeader::from_header(self.header(), &self.access).unwrap();
 		header.update_interrupt(&self.access, |(_pin, _line)| (pin, line));
-	}
-
-	pub fn bus(&self) -> u8 {
-		self.address.bus()
-	}
-
-	pub fn device(&self) -> u8 {
-		self.address.device()
-	}
-
-	pub fn vendor_id(&self) -> VendorId {
-		let (vendor_id, _device_id) = self.header().id(&self.access);
-		vendor_id
 	}
 
 	pub fn device_id(&self) -> DeviceId {
