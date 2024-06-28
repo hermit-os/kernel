@@ -9,6 +9,7 @@ keywords = ["virtio", "driver", "volatile"]
 categories = ["no-std", "no-std::no-alloc"]
 
 [dependencies]
+allocator-api2 = { version = "0.2", default-features = false, features = ["alloc"], optional = true }
 bitfield-struct = "0.8"
 bitflags = "2"
 endian-num = { version = "0.1", features = ["bitflags", "linux-types"] }
@@ -20,4 +21,6 @@ zerocopy = { version = "0.7", optional = true, default-features = false }
 zerocopy-derive = { version = "0.7", optional = true }
 
 [features]
+alloc = ["dep:allocator-api2"]
+nightly = ["allocator-api2/nightly"]
 zerocopy = ["dep:zerocopy", "dep:zerocopy-derive", "endian-num/zerocopy"]
