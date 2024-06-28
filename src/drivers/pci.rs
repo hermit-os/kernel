@@ -44,34 +44,6 @@ pub(crate) mod constants {
 	pub(crate) const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
 }
 
-/// PCI registers offset inside header,
-/// if PCI header is of type 00h (general device).
-#[allow(dead_code, non_camel_case_types)]
-#[repr(u16)]
-pub enum DeviceHeader {
-	PCI_ID_REGISTER = 0x00u16,
-	PCI_COMMAND_REGISTER = 0x04u16,
-	PCI_CLASS_REGISTER = 0x08u16,
-	PCI_HEADER_REGISTER = 0x0Cu16,
-	PCI_BAR0_REGISTER = 0x10u16,
-	PCI_CAPABILITY_LIST_REGISTER = 0x34u16,
-	PCI_INTERRUPT_REGISTER = 0x3Cu16,
-}
-
-impl From<DeviceHeader> for u16 {
-	fn from(val: DeviceHeader) -> u16 {
-		match val {
-			DeviceHeader::PCI_ID_REGISTER => 0x00u16,
-			DeviceHeader::PCI_COMMAND_REGISTER => 0x04u16,
-			DeviceHeader::PCI_CLASS_REGISTER => 0x08u16,
-			DeviceHeader::PCI_HEADER_REGISTER => 0x0Cu16,
-			DeviceHeader::PCI_BAR0_REGISTER => 0x10u16,
-			DeviceHeader::PCI_CAPABILITY_LIST_REGISTER => 0x34u16,
-			DeviceHeader::PCI_INTERRUPT_REGISTER => 0x3Cu16,
-		}
-	}
-}
-
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
