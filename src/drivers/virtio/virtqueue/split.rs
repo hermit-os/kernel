@@ -31,7 +31,7 @@ use crate::mm::device_alloc::DeviceAlloc;
 #[repr(C)]
 struct GenericRing<T: ?Sized> {
 	flags: le16,
-	index: le16,
+	idx: le16,
 
 	// Rust does not allow a field other than the last one to be unsized.
 	// Unfortunately, this is not the case with the layout in the specification.
@@ -184,12 +184,12 @@ impl DescrRing {
 		self.token_ring[usize::from(index)] = Some(Box::new(tkn));
 
 		let len = self.token_ring.len();
-		let idx = self.avail_ring_mut().index.to_ne();
+		let idx = self.avail_ring_mut().idx.to_ne();
 		self.avail_ring_mut().ring_mut()[idx as usize % len] = MaybeUninit::new(index.into());
 
 		memory_barrier();
 		let next_idx = idx.wrapping_add(1);
-		self.avail_ring_mut().index = next_idx.into();
+		self.avail_ring_mut().idx = next_idx.into();
 
 		Ok(next_idx)
 	}
@@ -202,7 +202,7 @@ impl DescrRing {
 			let used_elem;
 			let cur_ring_index;
 			{
-				if self.read_idx == self.used_ring().index.to_ne() {
+				if self.read_idx == self.used_ring().idx.to_ne() {
 					break;
 				} else {
 					cur_ring_index = self.read_idx as usize % self.token_ring.len();
