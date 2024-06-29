@@ -53,7 +53,7 @@ impl AvailRing {
 		volatile_self: VolatilePtr<'_, Self, A>,
 	) -> VolatilePtr<'_, [MaybeUninit<le16>], A> {
 		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
-		ring_and_event_ptr.split_at(ring_and_event_ptr.len()).0
+		ring_and_event_ptr.split_at(ring_and_event_ptr.len() - 1).0
 	}
 
 	fn event_ptr<A: volatile::access::Access>(
