@@ -1,6 +1,5 @@
 //! This module contains Virtio's split virtqueue.
 //! See Virito specification v1.1. - 2.6
-#![allow(dead_code)]
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -44,8 +43,6 @@ struct GenericRing<T: ?Sized> {
 	ring_and_event: T,
 }
 
-const RING_AND_EVENT_ERROR: &str = "ring_and_event should have at least enough elements for the event. It seems to be allocated incorrectly.";
-
 type AvailRing = GenericRing<[MaybeUninit<le16>]>;
 
 impl AvailRing {
@@ -54,13 +51,6 @@ impl AvailRing {
 	) -> VolatilePtr<'_, [MaybeUninit<le16>], A> {
 		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
 		ring_and_event_ptr.split_at(ring_and_event_ptr.len() - 1).0
-	}
-
-	fn event_ptr<A: volatile::access::Access>(
-		volatile_self: VolatilePtr<'_, Self, A>,
-	) -> VolatilePtr<'_, MaybeUninit<le16>, A> {
-		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
-		ring_and_event_ptr.index(ring_and_event_ptr.len() - 1)
 	}
 }
 
@@ -85,18 +75,6 @@ impl UsedRing {
 				)
 			})
 		}
-	}
-
-	fn event_ptr<A: volatile::access::Access>(
-		volatile_self: VolatilePtr<'_, Self, A>,
-	) -> VolatilePtr<'_, le16, A> {
-		let ring_and_event_ptr = map_field!(volatile_self.ring_and_event);
-		let ring_and_event_len = ring_and_event_ptr.len();
-		let event_bytes_ptr = ring_and_event_ptr
-			.split_at(ring_and_event_len - size_of::<le16>())
-			.1;
-
-		unsafe { event_bytes_ptr.map(|event_bytes| event_bytes.cast::<le16>()) }
 	}
 }
 
