@@ -31,47 +31,6 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
-/// The module contains constants specific to PCI.
-#[allow(dead_code)]
-pub(crate) mod constants {
-	// PCI constants
-	pub(crate) const PCI_MAX_BUS_NUMBER: u8 = 32;
-	pub(crate) const PCI_MAX_DEVICE_NUMBER: u8 = 32;
-	pub(crate) const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
-	pub(crate) const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
-	pub(crate) const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
-	pub(crate) const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;
-	pub(crate) const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
-}
-
-/// PCI registers offset inside header,
-/// if PCI header is of type 00h (general device).
-#[allow(dead_code, non_camel_case_types)]
-#[repr(u16)]
-pub enum DeviceHeader {
-	PCI_ID_REGISTER = 0x00u16,
-	PCI_COMMAND_REGISTER = 0x04u16,
-	PCI_CLASS_REGISTER = 0x08u16,
-	PCI_HEADER_REGISTER = 0x0Cu16,
-	PCI_BAR0_REGISTER = 0x10u16,
-	PCI_CAPABILITY_LIST_REGISTER = 0x34u16,
-	PCI_INTERRUPT_REGISTER = 0x3Cu16,
-}
-
-impl From<DeviceHeader> for u16 {
-	fn from(val: DeviceHeader) -> u16 {
-		match val {
-			DeviceHeader::PCI_ID_REGISTER => 0x00u16,
-			DeviceHeader::PCI_COMMAND_REGISTER => 0x04u16,
-			DeviceHeader::PCI_CLASS_REGISTER => 0x08u16,
-			DeviceHeader::PCI_HEADER_REGISTER => 0x0Cu16,
-			DeviceHeader::PCI_BAR0_REGISTER => 0x10u16,
-			DeviceHeader::PCI_CAPABILITY_LIST_REGISTER => 0x34u16,
-			DeviceHeader::PCI_INTERRUPT_REGISTER => 0x3Cu16,
-		}
-	}
-}
-
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
@@ -94,23 +53,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		PciHeader::new(self.address)
 	}
 
-	pub fn read_register(&self, register: u16) -> u32 {
-		unsafe { self.access.read(self.address, register) }
-	}
-
-	pub fn write_register(&self, register: u16, value: u32) {
-		unsafe { self.access.write(self.address, register, value) }
-	}
-
 	/// Set flag to the command register
 	pub fn set_command(&self, cmd: CommandRegister) {
 		self.header()
 			.update_command(&self.access, |command| command | cmd);
-	}
-
-	/// Get value of the command register
-	pub fn get_command(&self) -> CommandRegister {
-		self.header().command(&self.access)
 	}
 
 	/// Returns the bar at bar-register `slot`.
@@ -221,19 +167,6 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
 		let mut header = EndpointHeader::from_header(self.header(), &self.access).unwrap();
 		header.update_interrupt(&self.access, |(_pin, _line)| (pin, line));
-	}
-
-	pub fn bus(&self) -> u8 {
-		self.address.bus()
-	}
-
-	pub fn device(&self) -> u8 {
-		self.address.device()
-	}
-
-	pub fn vendor_id(&self) -> VendorId {
-		let (vendor_id, _device_id) = self.header().id(&self.access);
-		vendor_id
 	}
 
 	pub fn device_id(&self) -> DeviceId {
