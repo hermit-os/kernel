@@ -16,7 +16,6 @@ pub use self::processor::*;
 #[cfg(feature = "newlib")]
 pub use self::recmutex::*;
 pub use self::semaphore::*;
-pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
@@ -42,7 +41,6 @@ mod recmutex;
 mod semaphore;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 pub mod socket;
-mod spinlock;
 mod system;
 #[cfg(feature = "common-os")]
 pub(crate) mod table;
