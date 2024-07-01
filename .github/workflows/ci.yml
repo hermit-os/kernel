@@ -206,7 +206,6 @@ jobs:
         continue-on-error: ${{ matrix.arch == 'riscv64' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rftrace-example --virtiofsd
         if: matrix.arch == 'x86_64'
-        continue-on-error: ${{ matrix.profile == 'release' }}
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci --no-default-virtio-features
