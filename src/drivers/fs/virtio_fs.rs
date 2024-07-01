@@ -19,7 +19,9 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
-use crate::drivers::virtio::virtqueue::{AsSliceU8, BufferType, Virtq, VqIndex, VqSize};
+use crate::drivers::virtio::virtqueue::{
+	AsSliceU8, BufferToken, BufferType, Virtq, VqIndex, VqSize,
+};
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
 
 /// A wrapper struct for the raw configuration structure.
@@ -176,11 +178,8 @@ impl FuseInterface for VirtioFsDriver {
 			]
 		};
 
-		let transfer_tkn = self.vqueues[1]
-			.clone()
-			.prep_transfer_from_raw(send, recv, BufferType::Direct)
-			.unwrap();
-		transfer_tkn.dispatch_blocking()?;
+		let buffer_tkn = BufferToken::from_existing(send, recv).unwrap();
+		self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
 		Ok(unsafe {
 			Rsp {
 				headers: rsp_headers.assume_init(),
