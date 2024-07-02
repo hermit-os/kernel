@@ -1,0 +1,1 @@
+searchState.loadedDescShard("interrupts", 0, "Cross-architecture utilities for temporarily disabling …\nAn interrupt guard.\nTemporarily disable interrupts.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nRun a closure with disabled interrupts.")
