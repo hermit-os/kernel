@@ -1,4 +1,5 @@
-/// Packed virtqueue definitions
+//! Packed virtqueue definitions
+
 use bitfield_struct::bitfield;
 use endian_num::{le16, le32, le64};
 
