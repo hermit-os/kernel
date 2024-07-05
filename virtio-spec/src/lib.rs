@@ -3,7 +3,11 @@
 //!
 //! For the actual specification see [Virtual I/O Device (VIRTIO) Version 1.2—Committee Specification 01](https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html).
 
-#![no_std]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(feature = "nightly", feature(allocator_api))]
+
+#[cfg(feature = "alloc")]
+extern crate alloc;
 
 #[macro_use]
 mod bitflags;
