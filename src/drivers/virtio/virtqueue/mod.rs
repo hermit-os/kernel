@@ -222,11 +222,13 @@ pub trait Virtq {
 /// These methods are an implementation detail and are meant only for consumption by the default method
 /// implementations in [Virtq].
 trait VirtqPrivate {
+	type Descriptor;
+
 	fn create_indirect_ctrl(
 		&self,
 		send: Option<&[MemDescr]>,
 		recv: Option<&[MemDescr]>,
-	) -> Result<MemDescr, VirtqError>;
+	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
 
 	/// Consumes the [BufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
 	///
@@ -236,7 +238,7 @@ trait VirtqPrivate {
 		buff_tkn: BufferToken,
 		await_queue: Option<BufferTokenSender>,
 		buffer_type: BufferType,
-	) -> TransferToken {
+	) -> TransferToken<Self::Descriptor> {
 		let ctrl_desc = match buffer_type {
 			BufferType::Direct => None,
 			BufferType::Indirect => Some(
@@ -342,7 +344,7 @@ pub trait AsSliceU8 {
 
 /// The struct represents buffers which are ready to be send via the
 /// virtqueue. Buffers can no longer be written or retrieved.
-pub struct TransferToken {
+pub struct TransferToken<Descriptor> {
 	/// Must be some in order to prevent drop
 	/// upon reuse.
 	buff_tkn: BufferToken,
@@ -352,11 +354,11 @@ pub struct TransferToken {
 	/// of the Token will be changed.
 	await_queue: Option<BufferTokenSender>,
 	// Contains the [MemDescr] for the indirect table if the transfer is indirect.
-	ctrl_desc: Option<MemDescr>,
+	ctrl_desc: Option<Box<[Descriptor]>>,
 }
 
 /// Public Interface for TransferToken
-impl TransferToken {
+impl<Descriptor> TransferToken<Descriptor> {
 	/// Returns the number of descritprors that will be placed in the queue.
 	/// This number can differ from the `BufferToken.num_descr()` function value
 	/// as indirect buffers only consume one descriptor in the queue, but can have
