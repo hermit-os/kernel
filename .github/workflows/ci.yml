@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
   merge_group:
+  workflow_dispatch:
 
 env:
   GH_TOKEN: ${{ github.token }}
