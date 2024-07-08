@@ -640,9 +640,9 @@ dependencies = [
 
 [[package]]
 name = "uefi"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9c0a56dc9fed2589aad6ddca11c2584968fc21f227b5d7083bb8961d26a69fa"
+checksum = "3e8fb42b46b5e5afaa49a237714d3259ccbf740ba68cbf25d715471b15cabe04"
 dependencies = [
  "bitflags 2.5.0",
  "cfg-if",
@@ -657,9 +657,9 @@ dependencies = [
 
 [[package]]
 name = "uefi-macros"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26a7b1c2c808c3db854a54d5215e3f7e7aaf5dcfbce095598cba6af29895695d"
+checksum = "4f345e42323c05e41e29e409505f5f8e0df7b5743340215d60344dbd79b729f4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -668,9 +668,9 @@ dependencies = [
 
 [[package]]
 name = "uefi-raw"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efa8716f52e8cab8bcedfd5052388a0f263b69fe5cc2561548dc6a530678333c"
+checksum = "29a70d0f6b34cbeb4e5cd492b442bf9679a838fbb010551c4a3e3b9e25e316a8"
 dependencies = [
  "bitflags 2.5.0",
  "ptr_meta",
