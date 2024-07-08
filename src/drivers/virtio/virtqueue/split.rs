@@ -16,7 +16,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BufferToken, BufferTokenSender, BufferType, Bytes, MemDescr, MemPool, TransferToken, Virtq,
+	BufferToken, BufferTokenSender, BufferType, MemDescr, MemPool, TransferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
@@ -25,7 +25,7 @@ use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
 	read_idx: u16,
-	token_ring: Box<[Option<Box<TransferToken>>]>,
+	token_ring: Box<[Option<Box<TransferToken<virtq::Desc>>>]>,
 	mem_pool: MemPool,
 
 	/// Descriptor Tables
@@ -53,14 +53,18 @@ impl DescrRing {
 		unsafe { &*self.used_ring_cell.get() }
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> Result<u16, VirtqError> {
+	fn push(&mut self, tkn: TransferToken<virtq::Desc>) -> Result<u16, VirtqError> {
 		let mut index;
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
+			let indirect_table_slice_ref = ctrl_desc.as_ref();
+
 			let descriptor = virtq::Desc {
-				addr: paging::virt_to_phys(VirtAddr::from(ctrl_desc.ptr as u64))
-					.as_u64()
-					.into(),
-				len: (ctrl_desc.len as u32).into(),
+				addr: paging::virt_to_phys(
+					VirtAddr::from(indirect_table_slice_ref.as_ptr() as u64),
+				)
+				.as_u64()
+				.into(),
+				len: (mem::size_of_val(indirect_table_slice_ref) as u32).into(),
 				flags: virtq::DescF::INDIRECT,
 				next: 0.into(),
 			};
@@ -379,153 +383,37 @@ impl Virtq for SplitVq {
 }
 
 impl VirtqPrivate for SplitVq {
+	type Descriptor = virtq::Desc;
 	fn create_indirect_ctrl(
 		&self,
 		send: Option<&[MemDescr]>,
 		recv: Option<&[MemDescr]>,
-	) -> Result<MemDescr, VirtqError> {
-		// Need to match (send, recv) twice, as the "size" of the control descriptor to be pulled must be known in advance.
-		let len: usize = match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
-			(None, Some(recv_desc_lst)) => recv_desc_lst.len(),
-			(Some(send_desc_lst), None) => send_desc_lst.len(),
-			(Some(send_desc_lst), Some(recv_desc_lst)) => send_desc_lst.len() + recv_desc_lst.len(),
-		};
+	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
+		let send_desc_iter = send
+			.iter()
+			.flat_map(|descriptors| descriptors.iter())
+			.zip(iter::repeat(virtq::DescF::empty()));
+		let recv_desc_iter = recv
+			.iter()
+			.flat_map(|descriptors| descriptors.iter())
+			.zip(iter::repeat(virtq::DescF::WRITE));
+		let all_desc_iter = send_desc_iter.chain(recv_desc_iter).zip(1u16..).map(
+			|((mem_descr, incomplete_flags), next_idx)| virtq::Desc {
+				addr: paging::virt_to_phys(VirtAddr::from(mem_descr.ptr as u64))
+					.as_u64()
+					.into(),
+				len: (mem_descr.len as u32).into(),
+				flags: incomplete_flags | virtq::DescF::NEXT,
+				next: next_idx.into(),
+			},
+		);
 
-		let sz_indrct_lst = match Bytes::new(core::mem::size_of::<virtq::Desc>() * len) {
-			Some(bytes) => bytes,
-			None => return Err(VirtqError::BufferToLarge),
-		};
-
-		let ctrl_desc = match MemDescr::pull(sz_indrct_lst) {
-			Ok(desc) => desc,
-			Err(vq_err) => return Err(vq_err),
-		};
-
-		// For indexing into the allocated memory area. This reduces the
-		// function to only iterate over the MemDescr once and not twice
-		// as otherwise needed if the raw descriptor bytes were to be stored
-		// in an array.
-		let mut crtl_desc_iter = 0usize;
-		let mut desc_lst_len = len;
-
-		let desc_slice = unsafe {
-			let size = core::mem::size_of::<virtq::Desc>();
-			core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut virtq::Desc, ctrl_desc.len / size)
-		};
-
-		match (send, recv) {
-			(None, None) => Err(VirtqError::BufferNotSpecified),
-			// Only recving descriptorsn (those are writabel by device)
-			(None, Some(recv_desc_lst)) => {
-				for desc in recv_desc_lst {
-					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::WRITE | virtq::DescF::NEXT,
-							next: ((crtl_desc_iter + 1) as u16).into(),
-						}
-					} else {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::WRITE,
-							next: 0.into(),
-						}
-					};
-
-					desc_lst_len -= 1;
-					crtl_desc_iter += 1;
-				}
-				Ok(ctrl_desc)
-			}
-			// Only sending descriptors
-			(Some(send_desc_lst), None) => {
-				for desc in send_desc_lst {
-					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::NEXT,
-							next: ((crtl_desc_iter + 1) as u16).into(),
-						}
-					} else {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::empty(),
-							next: 0.into(),
-						}
-					};
-
-					desc_lst_len -= 1;
-					crtl_desc_iter += 1;
-				}
-				Ok(ctrl_desc)
-			}
-			(Some(send_desc_lst), Some(recv_desc_lst)) => {
-				// Send descriptors ALWAYS before receiving ones.
-				for desc in send_desc_lst {
-					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::NEXT,
-							next: ((crtl_desc_iter + 1) as u16).into(),
-						}
-					} else {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::empty(),
-							next: 0.into(),
-						}
-					};
-
-					desc_lst_len -= 1;
-					crtl_desc_iter += 1;
-				}
-
-				for desc in recv_desc_lst {
-					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::WRITE | virtq::DescF::NEXT,
-							next: ((crtl_desc_iter + 1) as u16).into(),
-						}
-					} else {
-						virtq::Desc {
-							addr: paging::virt_to_phys(VirtAddr::from(desc.ptr as u64))
-								.as_u64()
-								.into(),
-							len: (desc.len as u32).into(),
-							flags: virtq::DescF::WRITE,
-							next: 0.into(),
-						}
-					};
-
-					desc_lst_len -= 1;
-					crtl_desc_iter += 1;
-				}
-
-				Ok(ctrl_desc)
-			}
-		}
+		let mut indirect_table: Vec<_> = all_desc_iter.collect();
+		let last_desc = indirect_table
+			.last_mut()
+			.ok_or(VirtqError::BufferNotSpecified)?;
+		last_desc.flags -= virtq::DescF::NEXT;
+		last_desc.next = 0.into();
+		Ok(indirect_table.into_boxed_slice())
 	}
 }
