@@ -431,22 +431,7 @@ impl<'a> ReadCtrl<'a> {
 				assert_eq!(write_len, 0);
 			}
 		}
-
-		// Increase poll_index and reset ring position beforehand in order to have a consistent and clean
-		// data structure.
-		self.reset_ring_pos();
 		self.incrmt();
-	}
-
-	/// Resets the current position in the ring in order to have a consistent data structure.
-	///
-	/// This does currently NOT include, resetting address, len and buff_id.
-	fn reset_ring_pos(&mut self) {
-		// self.desc_ring.ring[self.position].address = 0;
-		// self.desc_ring.ring[self.position].len = 0;
-		// self.desc_ring.ring[self.position].buff_id = 0;
-		self.desc_ring.ring[usize::from(self.position)].flags =
-			self.desc_ring.dev_wc.as_flags_used();
 	}
 
 	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
@@ -470,10 +455,6 @@ impl<'a> ReadCtrl<'a> {
 				write_len -= desc.len;
 				assert_eq!(write_len, 0);
 			}
-
-			// Increase poll_index and reset ring position beforehand in order to have a consistent and clean
-			// data structure.
-			self.reset_ring_pos();
 			self.incrmt();
 		}
 	}
@@ -482,9 +463,6 @@ impl<'a> ReadCtrl<'a> {
 	/// increments the poll_index by one.
 	fn update_send(&mut self, send_buff: &Buffer) {
 		for _desc in send_buff.as_slice() {
-			// Increase poll_index and reset ring position beforehand in order to have a consistent and clean
-			// data structure.
-			self.reset_ring_pos();
 			self.incrmt();
 		}
 	}
