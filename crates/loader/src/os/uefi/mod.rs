@@ -28,7 +28,7 @@ fn loader_main(_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 
 	allocator::exit_boot_services();
 	let (_runtime_system_table, _memory_map) =
-		system_table.exit_boot_services(MemoryType::LOADER_DATA);
+		unsafe { system_table.exit_boot_services(MemoryType::LOADER_DATA) };
 
 	println!("Exited boot services!");
 	println!("Allocations still {}!", String::from("work"));
