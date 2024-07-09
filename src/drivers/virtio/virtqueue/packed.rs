@@ -336,7 +336,9 @@ impl DescriptorRing {
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.ring[usize::from(start)].flags |= wrap_at_init.as_flags_avail();
+		self.ring[usize::from(start)].flags = (self.ring[usize::from(start)].flags
+			- WrapCount::flag_mask())
+			| wrap_at_init.as_flags_avail();
 	}
 }
 
@@ -548,12 +550,11 @@ impl<'a> WriteCtrl<'a> {
 
 	/// Completes the descriptor flags and id, and writes into the queue at the correct position.
 	fn write_desc(&mut self, mut incomplete_desc: pvirtq::Desc) {
-		// Remove possibly set avail and used flags
-		incomplete_desc.flags -= virtq::DescF::AVAIL | virtq::DescF::USED;
 		incomplete_desc.id = self.buff_id.0.into();
 		if self.start != self.position {
 			// Set avail and used according to the current WrapCount.
-			incomplete_desc.flags |= self.desc_ring.drv_wc.as_flags_avail();
+			incomplete_desc.flags = (incomplete_desc.flags - WrapCount::flag_mask())
+				| self.desc_ring.drv_wc.as_flags_avail();
 		}
 		self.desc_ring.ring[usize::from(self.position)] = incomplete_desc;
 		self.incrmt()
