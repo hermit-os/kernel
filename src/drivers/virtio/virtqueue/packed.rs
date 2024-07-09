@@ -24,6 +24,7 @@ use super::{
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
+use crate::mm::device_alloc::DeviceAlloc;
 
 #[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
 struct RingIdx {
@@ -107,7 +108,7 @@ impl WrapCount {
 
 /// Structure which allows to control raw ring and operate easily on it
 struct DescriptorRing {
-	ring: &'static mut [pvirtq::Desc],
+	ring: Box<[pvirtq::Desc], DeviceAlloc>,
 	tkn_ref_ring: Box<[Option<Box<TransferToken<pvirtq::Desc>>>]>,
 
 	// Controlling variables for the ring
@@ -128,13 +129,7 @@ struct DescriptorRing {
 
 impl DescriptorRing {
 	fn new(size: u16) -> Self {
-		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = (usize::from(size) * core::mem::size_of::<pvirtq::Desc>())
-			.align_up(BasePageSize::SIZE as usize);
-		let ptr = ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
-
-		let ring: &'static mut [pvirtq::Desc] =
-			unsafe { core::slice::from_raw_parts_mut(ptr, size.into()) };
+		let ring = unsafe { Box::new_zeroed_slice_in(size.into(), DeviceAlloc).assume_init() };
 
 		// `Box` is not Clone, so neither is `None::<Box<_>>`. Hence, we need to produce `None`s with a closure.
 		let tkn_ref_ring = core::iter::repeat_with(|| None)
