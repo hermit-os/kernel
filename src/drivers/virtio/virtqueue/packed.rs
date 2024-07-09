@@ -214,10 +214,9 @@ impl DescriptorRing {
 		&mut self,
 		tkn: &TransferToken<pvirtq::Desc>,
 	) -> Result<WriteCtrl<'_>, VirtqError> {
-		dbg!(tkn.num_consuming_descr());
-		// Check length and if its fits. This should always be true due to the restriction of
-		// the memory pool, but to be sure.
-		assert!(tkn.num_consuming_descr() <= self.capacity);
+		if tkn.num_consuming_descr() > self.capacity {
+			return Err(VirtqError::NoDescrAvail);
+		}
 
 		// create an counter that wrappes to the first element
 		// after reaching a the end of the ring
