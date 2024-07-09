@@ -11,6 +11,7 @@ use core::{iter, mem, ops, ptr};
 use align_address::Align;
 use virtio::pci::NotificationData;
 use virtio::pvirtq::{EventSuppressDesc, EventSuppressFlags};
+use virtio::virtq::DescF;
 use virtio::{pvirtq, virtq, RingEventFlags};
 
 #[cfg(not(feature = "pci"))]
@@ -78,32 +79,6 @@ impl WrapCount {
 	fn wrap(&mut self) {
 		self.0 = !self.0
 	}
-
-	/// Creates avail and used flags inside u16 in accordance to the
-	/// virito specification v1.1. - 2.7.1
-	///
-	/// I.e.: Set avail flag to match the WrapCount and the used flag
-	/// to NOT match the WrapCount.
-	fn as_flags_avail(&self) -> virtq::DescF {
-		if self.0 {
-			virtq::DescF::AVAIL
-		} else {
-			virtq::DescF::USED
-		}
-	}
-
-	/// Creates avail and used flags inside u16 in accordance to the
-	/// virito specification v1.1. - 2.7.1
-	///
-	/// I.e.: Set avail flag to match the WrapCount and the used flag
-	/// to also match the WrapCount.
-	fn as_flags_used(&self) -> virtq::DescF {
-		if self.0 {
-			virtq::DescF::AVAIL | virtq::DescF::USED
-		} else {
-			virtq::DescF::empty()
-		}
-	}
 }
 
 /// Structure which allows to control raw ring and operate easily on it
@@ -170,14 +145,13 @@ impl DescriptorRing {
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
 
-		let mut first_ctrl_settings: (u16, MemDescrId, WrapCount) =
-			(0, MemDescrId(0), WrapCount::new());
+		let mut first_ctrl_settings = (0, MemDescrId(0), DescF::empty());
 		let mut first_buffer = None;
 
 		for (i, tkn) in tkn_lst.into_iter().enumerate() {
 			let mut ctrl = self.push_without_making_available(&tkn)?;
 			if i == 0 {
-				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
+				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
 				first_buffer = Some(Box::new(tkn));
 			} else {
 				// Update flags of the first descriptor and set new write_index
@@ -305,7 +279,7 @@ impl DescriptorRing {
 			start: self.write_index,
 			position: self.write_index,
 			modulo: u16::try_from(self.ring.len()).unwrap(),
-			wrap_at_init: self.drv_wc,
+			first_flags: DescF::empty(),
 			buff_id: desc_id,
 
 			desc_ring: self,
@@ -328,16 +302,46 @@ impl DescriptorRing {
 		raw_tkn: Box<TransferToken<pvirtq::Desc>>,
 		start: u16,
 		buff_id: MemDescrId,
-		wrap_at_init: WrapCount,
+		first_flags: DescF,
 	) {
 		// provide reference, in order to let TransferToken know upon finish.
 		self.tkn_ref_ring[usize::from(buff_id.0)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-		self.ring[usize::from(start)].flags = (self.ring[usize::from(start)].flags
-			- WrapCount::flag_mask())
-			| wrap_at_init.as_flags_avail();
+		self.ring[usize::from(start)].flags = first_flags;
+	}
+
+	/// Returns the [DescF] with the avail and used flags set in accordance
+	/// with the VIRTIO specification v1.2 - 2.8.1 (i.e. avail flag set to match
+	/// the driver WrapCount and the used flag set to NOT match the WrapCount).
+	///
+	/// This function is defined on the whole ring rather than only the
+	/// wrap counter to ensure that it is not called on the incorrect
+	/// wrap counter (i.e. device wrap counter) by accident.
+	///
+	/// A copy of the flag is taken instead of a mutable reference
+	/// for the cases in which the modification of the flag needs to be
+	/// deferred (e.g. patched dispatches, chained buffers).
+	fn to_marked_avail(&self, mut flags: DescF) -> DescF {
+		flags.set(virtq::DescF::AVAIL, self.drv_wc.0);
+		flags.set(virtq::DescF::USED, !self.drv_wc.0);
+		flags
+	}
+
+	/// Checks the avail and used flags to see if the descriptor is marked
+	/// as used by the device in accordance with the
+	/// VIRTIO specification v1.2 - 2.8.1 (i.e. they match the device WrapCount)
+	///
+	/// This function is defined on the whole ring rather than only the
+	/// wrap counter to ensure that it is not called on the incorrect
+	/// wrap counter (i.e. driver wrap counter) by accident.
+	fn is_marked_used(&self, flags: DescF) -> bool {
+		if self.dev_wc.0 {
+			flags.contains(virtq::DescF::AVAIL | virtq::DescF::USED)
+		} else {
+			!flags.intersects(virtq::DescF::AVAIL | virtq::DescF::USED)
+		}
 	}
 }
 
@@ -354,10 +358,9 @@ impl<'a> ReadCtrl<'a> {
 	/// updating the queue and returns the respective TransferToken.
 	fn poll_next(&mut self) -> Option<Box<TransferToken<pvirtq::Desc>>> {
 		// Check if descriptor has been marked used.
-		if self.desc_ring.ring[usize::from(self.position)].flags & WrapCount::flag_mask()
-			== self.desc_ring.dev_wc.as_flags_used()
-		{
-			let buff_id = self.desc_ring.ring[usize::from(self.position)].id.to_ne();
+		let desc = &self.desc_ring.ring[usize::from(self.position)];
+		if self.desc_ring.is_marked_used(desc.flags) {
+			let buff_id = desc.id.to_ne();
 			let mut tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
 				.take()
 				.expect(
@@ -390,18 +393,18 @@ impl<'a> ReadCtrl<'a> {
 			// INFO:
 			// Due to the behaviour of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
 			// flag correctly upon writes. Hence we omit it, in order to receive data.
-			let write_len = self.desc_ring.ring[usize::from(self.position)].len;
+			let write_len = desc.len.to_ne();
 
 			if tkn.ctrl_desc.is_some() {
 				if let Some(recv_buff) = recv_buff {
-					self.update_indirect(recv_buff, write_len.into());
+					self.update_indirect(recv_buff, write_len);
 				}
 			} else {
 				if let Some(send_buff) = send_buff {
 					self.update_send(send_buff);
 				}
 				if let Some(recv_buff) = recv_buff {
-					self.update_recv((recv_buff, write_len.into()));
+					self.update_recv((recv_buff, write_len));
 				}
 			}
 			self.desc_ring.mem_pool.ret_id(MemDescrId(buff_id));
@@ -493,9 +496,8 @@ struct WriteCtrl<'a> {
 	/// write_next field.
 	position: u16,
 	modulo: u16,
-	/// What was the WrapCount at the first write position
-	/// Important in order to set the right avail and used flags
-	wrap_at_init: WrapCount,
+	/// The [pvirtq::Desc::flags] value for the first descriptor, the write of which is deferred.
+	first_flags: DescF,
 	/// Buff ID of this write
 	buff_id: MemDescrId,
 
@@ -528,10 +530,14 @@ impl<'a> WriteCtrl<'a> {
 	/// Completes the descriptor flags and id, and writes into the queue at the correct position.
 	fn write_desc(&mut self, mut incomplete_desc: pvirtq::Desc) {
 		incomplete_desc.id = self.buff_id.0.into();
-		if self.start != self.position {
+		if self.start == self.position {
+			// We save what the flags value for the first descriptor will be to be able
+			// to write it later when all the other descriptors are written (so that
+			// the device does not see an incomplete chain).
+			self.first_flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
+		} else {
 			// Set avail and used according to the current WrapCount.
-			incomplete_desc.flags = (incomplete_desc.flags - WrapCount::flag_mask())
-				| self.desc_ring.drv_wc.as_flags_avail();
+			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags)
 		}
 		self.desc_ring.ring[usize::from(self.position)] = incomplete_desc;
 		self.incrmt()
@@ -541,7 +547,7 @@ impl<'a> WriteCtrl<'a> {
 		// We fail if one wants to make a buffer available without inserting one element!
 		assert!(self.start != self.position);
 		self.desc_ring
-			.make_avail_with_state(raw_tkn, self.start, self.buff_id, self.wrap_at_init);
+			.make_avail_with_state(raw_tkn, self.start, self.buff_id, self.first_flags);
 	}
 }
 
