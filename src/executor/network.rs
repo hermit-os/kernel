@@ -115,7 +115,7 @@ async fn network_run() {
 }
 
 #[cfg(feature = "dns")]
-pub(crate) async fn get_query_result(query: QueryHandle) -> Result<Vec<IpAddress>, io::Error> {
+pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAddress>> {
 	future::poll_fn(|cx| {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
@@ -287,7 +287,7 @@ impl<'a> NetworkInterface<'a> {
 		&mut self,
 		name: &str,
 		query_type: DnsQueryType,
-	) -> Result<QueryHandle, io::Error> {
+	) -> io::Result<QueryHandle> {
 		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		let socket: &mut dns::Socket<'a> = self.sockets.get_mut(dns_handle);
 		socket
@@ -297,13 +297,13 @@ impl<'a> NetworkInterface<'a> {
 
 	#[allow(dead_code)]
 	#[cfg(feature = "dns")]
-	pub(crate) fn get_dns_socket(&self) -> Result<&dns::Socket<'a>, io::Error> {
+	pub(crate) fn get_dns_socket(&self) -> io::Result<&dns::Socket<'a>> {
 		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		Ok(self.sockets.get(dns_handle))
 	}
 
 	#[cfg(feature = "dns")]
-	pub(crate) fn get_mut_dns_socket(&mut self) -> Result<&mut dns::Socket<'a>, io::Error> {
+	pub(crate) fn get_mut_dns_socket(&mut self) -> io::Result<&mut dns::Socket<'a>> {
 		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		Ok(self.sockets.get_mut(dns_handle))
 	}

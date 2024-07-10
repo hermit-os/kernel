@@ -99,9 +99,9 @@ pub(crate) fn now() -> u64 {
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, io::Error>
+pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result<T>
 where
-	F: Future<Output = Result<T, io::Error>>,
+	F: Future<Output = io::Result<T>>,
 {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	let nic = get_network_driver();
@@ -165,9 +165,9 @@ where
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, io::Error>
+pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result<T>
 where
-	F: Future<Output = Result<T, io::Error>>,
+	F: Future<Output = io::Result<T>>,
 {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	let nic = get_network_driver();

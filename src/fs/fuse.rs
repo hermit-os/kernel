@@ -516,7 +516,7 @@ fn lookup(name: CString) -> Option<u64> {
 	}
 }
 
-fn readlink(nid: u64) -> Result<String, io::Error> {
+fn readlink(nid: u64) -> io::Result<String> {
 	let len = MAX_READ_LEN as u32;
 	let (cmd, rsp_payload_len) = ops::Readlink::create(nid, len);
 	let rsp = get_filesystem_driver()
@@ -554,7 +554,7 @@ impl FuseFileHandleInner {
 		}
 	}
 
-	async fn poll(&self, events: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, events: PollEvent) -> io::Result<PollEvent> {
 		static KH: AtomicU64 = AtomicU64::new(0);
 		let kh = KH.fetch_add(1, Ordering::SeqCst);
 
@@ -589,7 +589,7 @@ impl FuseFileHandleInner {
 		.await
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
 			debug!("Reading longer than max_read_len: {}", len);
@@ -624,7 +624,7 @@ impl FuseFileHandleInner {
 		}
 	}
 
-	fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		debug!("FUSE write!");
 		let mut truncated_len = buf.len();
 		if truncated_len > MAX_WRITE_LEN {
@@ -662,7 +662,7 @@ impl FuseFileHandleInner {
 		}
 	}
 
-	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<isize, io::Error> {
+	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		debug!("FUSE lseek");
 
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
@@ -710,19 +710,19 @@ impl FuseFileHandle {
 
 #[async_trait]
 impl ObjectInterface for FuseFileHandle {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		self.0.lock().await.poll(event).await
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		self.0.lock().await.write(buf)
 	}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, io::Error> {
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
 	}
 }
@@ -747,7 +747,7 @@ impl FuseDirectoryHandle {
 
 #[async_trait]
 impl ObjectInterface for FuseDirectoryHandle {
-	fn readdir(&self) -> Result<Vec<DirectoryEntry>, io::Error> {
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		let path: CString = if let Some(name) = &self.name {
 			CString::new("/".to_string() + name).unwrap()
 		} else {
@@ -876,18 +876,15 @@ impl VfsNode for FuseDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, io::Error> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Ok(self.attr)
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(FuseDirectoryHandle::new(self.prefix.clone())))
 	}
 
-	fn traverse_readdir(
-		&self,
-		components: &mut Vec<&str>,
-	) -> Result<Vec<DirectoryEntry>, io::Error> {
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE opendir: {path:#?}");
@@ -968,7 +965,7 @@ impl VfsNode for FuseDirectory {
 		Ok(entries)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE stat: {path:#?}");
@@ -997,7 +994,7 @@ impl VfsNode for FuseDirectory {
 		}
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE lstat: {path:#?}");
@@ -1017,7 +1014,7 @@ impl VfsNode for FuseDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE lstat: {path:#?}");
@@ -1086,7 +1083,7 @@ impl VfsNode for FuseDirectory {
 		}
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), io::Error> {
+	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		let path = self.traversal_path(components);
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
@@ -1099,7 +1096,7 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> core::result::Result<(), io::Error> {
+	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		let path = self.traversal_path(components);
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
@@ -1112,11 +1109,7 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(
-		&self,
-		components: &mut Vec<&str>,
-		mode: AccessPermission,
-	) -> Result<(), io::Error> {
+	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
 		let path = self.traversal_path(components);
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 

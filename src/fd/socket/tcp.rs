@@ -65,7 +65,7 @@ impl Socket {
 		result
 	}
 
-	async fn async_connect(&self, endpoint: IpEndpoint) -> Result<(), io::Error> {
+	async fn async_connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
 		self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
 			.map_err(|_| io::Error::EIO)?;
 
@@ -83,7 +83,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_close(&self) -> Result<(), io::Error> {
+	async fn async_close(&self) -> io::Result<()> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::FinWait1
@@ -120,7 +120,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_accept(&self) -> Result<IpEndpoint, io::Error> {
+	async fn async_accept(&self) -> io::Result<IpEndpoint> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed => {
@@ -167,7 +167,7 @@ impl Socket {
 
 #[async_trait]
 impl ObjectInterface for Socket {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
@@ -240,7 +240,7 @@ impl ObjectInterface for Socket {
 	// TODO: Remove allow once fixed:
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
@@ -271,7 +271,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buffer: &[u8]) -> io::Result<usize> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
@@ -316,12 +316,12 @@ impl ObjectInterface for Socket {
 		Ok(pos)
 	}
 
-	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), io::Error> {
+	fn bind(&self, endpoint: IpListenEndpoint) -> io::Result<()> {
 		self.port.store(endpoint.port, Ordering::Release);
 		Ok(())
 	}
 
-	fn connect(&self, endpoint: IpEndpoint) -> Result<(), io::Error> {
+	fn connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
 		if self.nonblocking.load(Ordering::Acquire) {
 			block_on(self.async_connect(endpoint), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == io::Error::ETIME {
@@ -335,7 +335,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn accept(&self) -> Result<IpEndpoint, io::Error> {
+	fn accept(&self) -> io::Result<IpEndpoint> {
 		if self.is_nonblocking() {
 			block_on(self.async_accept(), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == io::Error::ETIME {
@@ -361,7 +361,7 @@ impl ObjectInterface for Socket {
 		self.nonblocking.load(Ordering::Acquire)
 	}
 
-	fn listen(&self, _backlog: i32) -> Result<(), io::Error> {
+	fn listen(&self, _backlog: i32) -> io::Result<()> {
 		self.with(|socket| {
 			if !socket.is_open() {
 				self.listen.store(true, Ordering::Relaxed);
@@ -375,7 +375,7 @@ impl ObjectInterface for Socket {
 		})
 	}
 
-	fn setsockopt(&self, opt: SocketOption, optval: bool) -> Result<(), io::Error> {
+	fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
 		if opt == SocketOption::TcpNoDelay {
 			self.with(|socket| {
 				socket.set_nagle_enabled(optval);
@@ -391,7 +391,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn getsockopt(&self, opt: SocketOption) -> Result<bool, io::Error> {
+	fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
 		if opt == SocketOption::TcpNoDelay {
 			self.with(|socket| Ok(socket.nagle_enabled()))
 		} else {
@@ -399,7 +399,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn shutdown(&self, how: i32) -> Result<(), io::Error> {
+	fn shutdown(&self, how: i32) -> io::Result<()> {
 		match how {
 			SHUT_RD /* Read  */ |
 			SHUT_WR /* Write */ |
@@ -408,7 +408,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn ioctl(&self, cmd: IoCtl, value: bool) -> Result<(), io::Error> {
+	fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				trace!("set device to nonblocking mode");

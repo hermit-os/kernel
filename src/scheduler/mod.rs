@@ -461,10 +461,7 @@ impl PerCoreScheduler {
 	/// Map a file descriptor to their IO interface and returns
 	/// the shared reference
 	#[inline]
-	pub async fn get_object(
-		&self,
-		fd: FileDescriptor,
-	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	pub async fn get_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
@@ -480,7 +477,7 @@ impl PerCoreScheduler {
 	/// Creates a new map between file descriptor and their IO interface and
 	/// clone the standard descriptors.
 	#[allow(dead_code)]
-	pub async fn recreate_objmap(&self) -> Result<(), io::Error> {
+	pub async fn recreate_objmap(&self) -> io::Result<()> {
 		let mut map = HashMap::<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
@@ -498,7 +495,7 @@ impl PerCoreScheduler {
 					}
 				}
 
-				Ready(Ok::<(), io::Error>(()))
+				Ready(io::Result::Ok(()))
 			})
 		})
 		.await?;
@@ -512,17 +509,14 @@ impl PerCoreScheduler {
 
 	/// Insert a new IO interface and returns a file descriptor as
 	/// identifier to this object
-	pub async fn insert_object(
-		&self,
-		obj: Arc<dyn ObjectInterface>,
-	) -> Result<FileDescriptor, io::Error> {
+	pub async fn insert_object(&self, obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let new_fd = || -> Result<FileDescriptor, io::Error> {
+				let new_fd = || -> io::Result<FileDescriptor> {
 					let mut fd: FileDescriptor = 0;
 					loop {
 						if !guard.contains_key(&fd) {
@@ -549,7 +543,7 @@ impl PerCoreScheduler {
 		&self,
 		fd: FileDescriptor,
 		obj: Arc<dyn ObjectInterface>,
-	) -> Result<(), io::Error> {
+	) -> io::Result<()> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
@@ -565,7 +559,7 @@ impl PerCoreScheduler {
 
 	/// Duplicate a IO interface and returns a new file descriptor as
 	/// identifier to the new copy
-	pub async fn dup_object(&self, fd: FileDescriptor) -> Result<FileDescriptor, io::Error> {
+	pub async fn dup_object(&self, fd: FileDescriptor) -> io::Result<FileDescriptor> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
@@ -574,7 +568,7 @@ impl PerCoreScheduler {
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
 				let obj = (*(guard.get(&fd).ok_or(io::Error::EINVAL)?)).clone();
 
-				let new_fd = || -> Result<FileDescriptor, io::Error> {
+				let new_fd = || -> io::Result<FileDescriptor> {
 					let mut fd: FileDescriptor = 0;
 					loop {
 						if !guard.contains_key(&fd) {
@@ -599,10 +593,7 @@ impl PerCoreScheduler {
 	}
 
 	/// Remove a IO interface, which is named by the file descriptor
-	pub async fn remove_object(
-		&self,
-		fd: FileDescriptor,
-	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	pub async fn remove_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();

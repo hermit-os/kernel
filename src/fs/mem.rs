@@ -50,7 +50,7 @@ struct RomFileInterface {
 
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
@@ -63,7 +63,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -130,7 +130,7 @@ pub struct RamFileInterface {
 
 #[async_trait]
 impl ObjectInterface for RamFileInterface {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
@@ -143,7 +143,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -171,7 +171,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(len)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let mut guard = self.inner.write().await;
@@ -217,15 +217,15 @@ impl VfsNode for RomFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(RomFileInterface::new(self.data.clone())))
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, io::Error> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		block_on(async { Ok(self.data.read().await.attr) }, None)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
@@ -233,7 +233,7 @@ impl VfsNode for RomFile {
 		}
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
@@ -271,15 +271,15 @@ impl VfsNode for RamFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(RamFileInterface::new(self.data.clone())))
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, io::Error> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		block_on(async { Ok(self.data.read().await.attr) }, None)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
@@ -287,7 +287,7 @@ impl VfsNode for RamFile {
 		}
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
@@ -333,7 +333,7 @@ impl MemDirectoryInterface {
 
 #[async_trait]
 impl ObjectInterface for MemDirectoryInterface {
-	fn readdir(&self) -> Result<Vec<DirectoryEntry>, io::Error> {
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		block_on(
 			async {
 				let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -377,7 +377,7 @@ impl MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
@@ -422,19 +422,15 @@ impl VfsNode for MemDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(MemDirectoryInterface::new(self.inner.clone())))
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, io::Error> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Ok(self.attr)
 	}
 
-	fn traverse_mkdir(
-		&self,
-		components: &mut Vec<&str>,
-		mode: AccessPermission,
-	) -> Result<(), io::Error> {
+	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -459,7 +455,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> Result<(), io::Error> {
+	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -486,7 +482,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> Result<(), io::Error> {
+	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -513,10 +509,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_readdir(
-		&self,
-		components: &mut Vec<&str>,
-	) -> Result<Vec<DirectoryEntry>, io::Error> {
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -540,7 +533,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -565,7 +558,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, io::Error> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -594,7 +587,7 @@ impl VfsNode for MemDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> Result<(), io::Error> {
+	) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -621,7 +614,7 @@ impl VfsNode for MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		block_on(self.async_traverse_open(components, opt, mode), None)
 	}
 
@@ -631,7 +624,7 @@ impl VfsNode for MemDirectory {
 		ptr: *const u8,
 		length: usize,
 		mode: AccessPermission,
-	) -> Result<(), io::Error> {
+	) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {

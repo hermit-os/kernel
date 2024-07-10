@@ -55,7 +55,7 @@ impl EventFd {
 
 #[async_trait]
 impl ObjectInterface for EventFd {
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
@@ -98,7 +98,7 @@ impl ObjectInterface for EventFd {
 		.await
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
@@ -133,7 +133,7 @@ impl ObjectInterface for EventFd {
 		.await
 	}
 
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let guard = self.state.lock().await;
 
 		let mut available = PollEvent::empty();

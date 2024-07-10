@@ -83,12 +83,12 @@ pub struct GenericStdout;
 
 #[async_trait]
 impl ObjectInterface for GenericStdout {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let _guard = IO_LOCK.lock().await;
 		arch::output_message_buf(buf);
 
@@ -107,12 +107,12 @@ pub struct GenericStderr;
 
 #[async_trait]
 impl ObjectInterface for GenericStderr {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let _guard = IO_LOCK.lock().await;
 		arch::output_message_buf(buf);
 
@@ -142,12 +142,12 @@ pub struct UhyveStdout;
 
 #[async_trait]
 impl ObjectInterface for UhyveStdout {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
@@ -166,12 +166,12 @@ pub struct UhyveStderr;
 
 #[async_trait]
 impl ObjectInterface for UhyveStderr {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let mut syswrite = SysWrite::new(STDERR_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 

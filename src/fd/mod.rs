@@ -128,19 +128,19 @@ impl Default for AccessPermission {
 #[async_trait]
 pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// check if an IO event is possible
-	async fn poll(&self, _event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, _event: PollEvent) -> io::Result<PollEvent> {
 		Ok(PollEvent::empty())
 	}
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn async_read(&self, _buf: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, _buf: &mut [u8]) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	async fn async_write(&self, _buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, _buf: &[u8]) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -151,73 +151,73 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
-	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> Result<isize, io::Error> {
+	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `fstat`
-	fn fstat(&self, _stat: &mut FileAttr) -> Result<(), io::Error> {
+	fn fstat(&self, _stat: &mut FileAttr) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `unlink` removes file entry
 	#[allow(dead_code)]
-	fn unlink(&self, _path: &str) -> Result<(), io::Error> {
+	fn unlink(&self, _path: &str) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `rmdir` removes directory entry
 	#[allow(dead_code)]
-	fn rmdir(&self, _path: &str) -> Result<(), io::Error> {
+	fn rmdir(&self, _path: &str) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> Result<Vec<DirectoryEntry>, io::Error> {
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `mkdir` creates a directory entry
 	#[allow(dead_code)]
-	fn mkdir(&self, _path: &str, _mode: u32) -> Result<(), io::Error> {
+	fn mkdir(&self, _path: &str, _mode: u32) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn accept(&self) -> Result<IpEndpoint, io::Error> {
+	fn accept(&self) -> io::Result<IpEndpoint> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn connect(&self, _endpoint: IpEndpoint) -> Result<(), io::Error> {
+	fn connect(&self, _endpoint: IpEndpoint) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn bind(&self, _name: IpListenEndpoint) -> Result<(), io::Error> {
+	fn bind(&self, _name: IpListenEndpoint) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `listen` for connections on a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn listen(&self, _backlog: i32) -> Result<(), io::Error> {
+	fn listen(&self, _backlog: i32) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> Result<(), io::Error> {
+	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn getsockopt(&self, _opt: SocketOption) -> Result<bool, io::Error> {
+	fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
 		Err(io::Error::EINVAL)
 	}
 
@@ -236,7 +236,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// receive a message from a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(usize, IpEndpoint), io::Error> {
+	fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, IpEndpoint)> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -248,24 +248,24 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<usize, io::Error> {
+	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// shut down part of a full-duplex connection
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn shutdown(&self, _how: i32) -> Result<(), io::Error> {
+	fn shutdown(&self, _how: i32) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// The `ioctl` function manipulates the underlying device parameters of special
 	/// files.
-	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> Result<(), io::Error> {
+	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
 }
 
-pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, io::Error> {
+pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -289,7 +289,7 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, io::Erro
 	}
 }
 
-pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, io::Error> {
+pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -313,7 +313,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, io::Error> 
 	}
 }
 
-async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, io::Error> {
+async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 	future::poll_fn(|cx| {
 		let mut counter: u64 = 0;
 
@@ -345,7 +345,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, io::Error> {
 /// to become ready to perform I/O. The set of file descriptors to be
 /// monitored is specified in the `fds` argument, which is an array
 /// of structs of `PollFd`.
-pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, io::Error> {
+pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	let result = block_on(poll_fds(fds), timeout);
 	if let Err(ref e) = result {
 		if timeout.is_some() {
@@ -375,7 +375,7 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, io::Er
 /// `EFD_NONBLOCK`: Set the file descriptor in non-blocking mode
 /// `EFD_SEMAPHORE`: Provide semaphore-like semantics for reads
 /// from the new file descriptor.
-pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, io::Error> {
+pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<FileDescriptor> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
 
 	let fd = block_on(core_scheduler().insert_object(Arc::new(obj)), None)?;
@@ -383,19 +383,16 @@ pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, io::Er
 	Ok(fd)
 }
 
-pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+pub(crate) fn get_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 	block_on(core_scheduler().get_object(fd), None)
 }
 
-pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> Result<FileDescriptor, io::Error> {
+pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
 	block_on(core_scheduler().insert_object(obj), None)
 }
 
 #[allow(dead_code)]
-pub(crate) fn replace_object(
-	fd: FileDescriptor,
-	obj: Arc<dyn ObjectInterface>,
-) -> Result<(), io::Error> {
+pub(crate) fn replace_object(fd: FileDescriptor, obj: Arc<dyn ObjectInterface>) -> io::Result<()> {
 	block_on(core_scheduler().replace_object(fd, obj), None)
 }
 
@@ -403,10 +400,10 @@ pub(crate) fn replace_object(
 // to the same open file description as the descriptor oldfd. The new
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
-pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, io::Error> {
+pub(crate) fn dup_object(fd: FileDescriptor) -> io::Result<FileDescriptor> {
 	block_on(core_scheduler().dup_object(fd), None)
 }
 
-pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, io::Error> {
+pub(crate) fn remove_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 	block_on(core_scheduler().remove_object(fd), None)
 }

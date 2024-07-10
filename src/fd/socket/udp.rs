@@ -41,7 +41,7 @@ impl Socket {
 		result
 	}
 
-	async fn async_close(&self) -> Result<(), io::Error> {
+	async fn async_close(&self) -> io::Result<()> {
 		future::poll_fn(|_cx| {
 			self.with(|socket| {
 				socket.close();
@@ -51,7 +51,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_recvfrom(&self, buffer: &mut [u8]) -> Result<(usize, IpEndpoint), io::Error> {
+	async fn async_recvfrom(&self, buffer: &mut [u8]) -> io::Result<(usize, IpEndpoint)> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -83,11 +83,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_write_with_meta(
-		&self,
-		buffer: &[u8],
-		meta: &UdpMetadata,
-	) -> Result<usize, io::Error> {
+	async fn async_write_with_meta(&self, buffer: &[u8], meta: &UdpMetadata) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -113,7 +109,7 @@ impl Socket {
 
 #[async_trait]
 impl ObjectInterface for Socket {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				let ret = if socket.is_open() {
@@ -158,16 +154,16 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), io::Error> {
+	fn bind(&self, endpoint: IpListenEndpoint) -> io::Result<()> {
 		self.with(|socket| socket.bind(endpoint).map_err(|_| io::Error::EADDRINUSE))
 	}
 
-	fn connect(&self, endpoint: IpEndpoint) -> Result<(), io::Error> {
+	fn connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
 		self.endpoint.store(Some(endpoint));
 		Ok(())
 	}
 
-	fn sendto(&self, buf: &[u8], endpoint: IpEndpoint) -> Result<usize, io::Error> {
+	fn sendto(&self, buf: &[u8], endpoint: IpEndpoint) -> io::Result<usize> {
 		let meta = UdpMetadata::from(endpoint);
 
 		if self.nonblocking.load(Ordering::Acquire) {
@@ -180,7 +176,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn recvfrom(&self, buf: &mut [u8]) -> Result<(usize, IpEndpoint), io::Error> {
+	fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, IpEndpoint)> {
 		if self.nonblocking.load(Ordering::Acquire) {
 			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == io::Error::ETIME {
@@ -201,7 +197,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, io::Error> {
+	async fn async_read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -233,7 +229,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		if let Some(endpoint) = self.endpoint.load() {
 			let meta = UdpMetadata::from(endpoint);
 			self.async_write_with_meta(buf, &meta).await
@@ -242,7 +238,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn ioctl(&self, cmd: IoCtl, value: bool) -> Result<(), io::Error> {
+	fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				info!("set device to nonblocking mode");
