@@ -12,8 +12,8 @@ use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::executor::block_on;
 use crate::executor::network::{now, Handle, NetworkState, NIC};
-use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent, SocketOption};
-use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
+use crate::fd::{IoCtl, ObjectInterface, PollEvent, SocketOption};
+use crate::{io, DEFAULT_KEEP_ALIVE_INTERVAL};
 
 /// further receives will be disallowed
 pub const SHUT_RD: i32 = 0;
@@ -65,14 +65,14 @@ impl Socket {
 		result
 	}
 
-	async fn async_connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
+	async fn async_connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
 		self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
-			.map_err(|_| IoError::EIO)?;
+			.map_err(|_| io::Error::EIO)?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(IoError::EFAULT)),
-				tcp::State::Listen => Poll::Ready(Err(IoError::EIO)),
+				tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(io::Error::EFAULT)),
+				tcp::State::Listen => Poll::Ready(Err(io::Error::EIO)),
 				tcp::State::SynSent | tcp::State::SynReceived => {
 					socket.register_send_waker(cx.waker());
 					Poll::Pending
@@ -83,14 +83,14 @@ impl Socket {
 		.await
 	}
 
-	async fn async_close(&self) -> Result<(), IoError> {
+	async fn async_close(&self) -> io::Result<()> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::FinWait1
 				| tcp::State::FinWait2
 				| tcp::State::Closed
 				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+				| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
 				_ => {
 					if socket.send_queue() > 0 {
 						socket.register_send_waker(cx.waker());
@@ -120,7 +120,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_accept(&self) -> Result<IpEndpoint, IoError> {
+	async fn async_accept(&self) -> io::Result<IpEndpoint> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed => {
@@ -145,7 +145,7 @@ impl Socket {
 						tcp::State::Closed
 						| tcp::State::Closing
 						| tcp::State::FinWait1
-						| tcp::State::FinWait2 => Poll::Ready(Err(IoError::EIO)),
+						| tcp::State::FinWait2 => Poll::Ready(Err(io::Error::EIO)),
 						_ => {
 							socket.register_recv_waker(cx.waker());
 							Poll::Pending
@@ -157,7 +157,7 @@ impl Socket {
 		.await?;
 
 		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().map_err(|_| IoError::EIO)?;
+		let nic = guard.as_nic_mut().map_err(|_| io::Error::EIO)?;
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.handle);
 		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
 
@@ -167,7 +167,7 @@ impl Socket {
 
 #[async_trait]
 impl ObjectInterface for Socket {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
@@ -240,7 +240,7 @@ impl ObjectInterface for Socket {
 	// TODO: Remove allow once fixed:
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
@@ -249,7 +249,7 @@ impl ObjectInterface for Socket {
 				tcp::State::FinWait1
 				| tcp::State::FinWait2
 				| tcp::State::Listen
-				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+				| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
 				_ => {
 					if socket.can_recv() {
 						Poll::Ready(
@@ -259,7 +259,7 @@ impl ObjectInterface for Socket {
 									buffer[..len].copy_from_slice(&data[..len]);
 									(len, len)
 								})
-								.map_err(|_| IoError::EIO),
+								.map_err(|_| io::Error::EIO),
 						)
 					} else {
 						socket.register_recv_waker(cx.waker());
@@ -271,7 +271,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buffer: &[u8]) -> io::Result<usize> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
@@ -284,11 +284,13 @@ impl ObjectInterface for Socket {
 						tcp::State::FinWait1
 						| tcp::State::FinWait2
 						| tcp::State::Listen
-						| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+						| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
 						_ => {
 							if socket.can_send() {
 								Poll::Ready(
-									socket.send_slice(&buffer[pos..]).map_err(|_| IoError::EIO),
+									socket
+										.send_slice(&buffer[pos..])
+										.map_err(|_| io::Error::EIO),
 								)
 							} else if pos > 0 {
 								// we already send some data => return 0 as signal to stop the
@@ -314,16 +316,16 @@ impl ObjectInterface for Socket {
 		Ok(pos)
 	}
 
-	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), IoError> {
+	fn bind(&self, endpoint: IpListenEndpoint) -> io::Result<()> {
 		self.port.store(endpoint.port, Ordering::Release);
 		Ok(())
 	}
 
-	fn connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
+	fn connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
 		if self.nonblocking.load(Ordering::Acquire) {
 			block_on(self.async_connect(endpoint), Some(Duration::ZERO.into())).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
+				if x == io::Error::ETIME {
+					io::Error::EAGAIN
 				} else {
 					x
 				}
@@ -333,11 +335,11 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn accept(&self) -> Result<IpEndpoint, IoError> {
+	fn accept(&self) -> io::Result<IpEndpoint> {
 		if self.is_nonblocking() {
 			block_on(self.async_accept(), Some(Duration::ZERO.into())).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
+				if x == io::Error::ETIME {
+					io::Error::EAGAIN
 				} else {
 					x
 				}
@@ -359,21 +361,21 @@ impl ObjectInterface for Socket {
 		self.nonblocking.load(Ordering::Acquire)
 	}
 
-	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
+	fn listen(&self, _backlog: i32) -> io::Result<()> {
 		self.with(|socket| {
 			if !socket.is_open() {
 				self.listen.store(true, Ordering::Relaxed);
 				socket
 					.listen(self.port.load(Ordering::Acquire))
 					.map(|_| ())
-					.map_err(|_| IoError::EIO)
+					.map_err(|_| io::Error::EIO)
 			} else {
-				Err(IoError::EIO)
+				Err(io::Error::EIO)
 			}
 		})
 	}
 
-	fn setsockopt(&self, opt: SocketOption, optval: bool) -> Result<(), IoError> {
+	fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
 		if opt == SocketOption::TcpNoDelay {
 			self.with(|socket| {
 				socket.set_nagle_enabled(optval);
@@ -385,28 +387,28 @@ impl ObjectInterface for Socket {
 			});
 			Ok(())
 		} else {
-			Err(IoError::EINVAL)
+			Err(io::Error::EINVAL)
 		}
 	}
 
-	fn getsockopt(&self, opt: SocketOption) -> Result<bool, IoError> {
+	fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
 		if opt == SocketOption::TcpNoDelay {
 			self.with(|socket| Ok(socket.nagle_enabled()))
 		} else {
-			Err(IoError::EINVAL)
+			Err(io::Error::EINVAL)
 		}
 	}
 
-	fn shutdown(&self, how: i32) -> Result<(), IoError> {
+	fn shutdown(&self, how: i32) -> io::Result<()> {
 		match how {
 			SHUT_RD /* Read  */ |
 			SHUT_WR /* Write */ |
 			SHUT_RDWR /* Both */ => Ok(()),
-			_ => Err(IoError::EINVAL),
+			_ => Err(io::Error::EINVAL),
 		}
 	}
 
-	fn ioctl(&self, cmd: IoCtl, value: bool) -> Result<(), IoError> {
+	fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				trace!("set device to nonblocking mode");
@@ -418,7 +420,7 @@ impl ObjectInterface for Socket {
 
 			Ok(())
 		} else {
-			Err(IoError::EINVAL)
+			Err(io::Error::EINVAL)
 		}
 	}
 }

@@ -1705,7 +1705,7 @@ pub enum BuffSpec<'a> {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
-	use crate::fd;
+	use crate::io;
 
 	#[derive(Debug)]
 	// Internal Error Handling for Buffers
@@ -1781,9 +1781,9 @@ pub mod error {
 		}
 	}
 
-	impl core::convert::From<VirtqError> for fd::IoError {
+	impl core::convert::From<VirtqError> for io::Error {
 		fn from(_: VirtqError) -> Self {
-			fd::IoError::EIO
+			io::Error::EIO
 		}
 	}
 }

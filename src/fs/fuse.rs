@@ -12,7 +12,6 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 
 use crate::alloc::string::ToString;
-use crate::arch;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
@@ -20,12 +19,13 @@ use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::executor::block_on;
-use crate::fd::{IoError, PollEvent};
+use crate::fd::PollEvent;
 use crate::fs::{
 	self, fuse_abi, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface,
 	OpenOption, SeekWhence, VfsNode,
 };
 use crate::time::{time_t, timespec};
+use crate::{arch, io};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
@@ -516,7 +516,7 @@ fn lookup(name: CString) -> Option<u64> {
 	}
 }
 
-fn readlink(nid: u64) -> Result<String, IoError> {
+fn readlink(nid: u64) -> io::Result<String> {
 	let len = MAX_READ_LEN as u32;
 	let (cmd, rsp_payload_len) = ops::Readlink::create(nid, len);
 	let rsp = get_filesystem_driver()
@@ -554,7 +554,7 @@ impl FuseFileHandleInner {
 		}
 	}
 
-	async fn poll(&self, events: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, events: PollEvent) -> io::Result<PollEvent> {
 		static KH: AtomicU64 = AtomicU64::new(0);
 		let kh = KH.fetch_add(1, Ordering::SeqCst);
 
@@ -562,12 +562,12 @@ impl FuseFileHandleInner {
 			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 				let (cmd, rsp_payload_len) = ops::Poll::create(nid, fh, kh, events);
 				let rsp = get_filesystem_driver()
-					.ok_or(IoError::ENOSYS)?
+					.ok_or(io::Error::ENOSYS)?
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 
 				if rsp.headers.out_header.error < 0 {
-					Poll::Ready(Err(IoError::EIO))
+					Poll::Ready(Err(io::Error::EIO))
 				} else {
 					let revents =
 						PollEvent::from_bits(i16::try_from(rsp.headers.op_header.revents).unwrap())
@@ -589,7 +589,7 @@ impl FuseFileHandleInner {
 		.await
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
 			debug!("Reading longer than max_read_len: {}", len);
@@ -599,7 +599,7 @@ impl FuseFileHandleInner {
 			let (cmd, rsp_payload_len) =
 				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
 			let rsp = get_filesystem_driver()
-				.ok_or(IoError::ENOSYS)?
+				.ok_or(io::Error::ENOSYS)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 			let len: usize = if (rsp.headers.out_header.len as usize)
@@ -620,11 +620,11 @@ impl FuseFileHandleInner {
 			Ok(len)
 		} else {
 			debug!("File not open, cannot read!");
-			Err(IoError::ENOENT)
+			Err(io::Error::ENOENT)
 		}
 	}
 
-	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		debug!("FUSE write!");
 		let mut truncated_len = buf.len();
 		if truncated_len > MAX_WRITE_LEN {
@@ -640,12 +640,12 @@ impl FuseFileHandleInner {
 			let (cmd, rsp_payload_len) =
 				ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
 			let rsp = get_filesystem_driver()
-				.ok_or(IoError::ENOSYS)?
+				.ok_or(io::Error::ENOSYS)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error < 0 {
-				return Err(IoError::EIO);
+				return Err(io::Error::EIO);
 			}
 
 			let rsp_size = rsp.headers.op_header.size;
@@ -658,29 +658,29 @@ impl FuseFileHandleInner {
 			Ok(rsp_len)
 		} else {
 			warn!("File not open, cannot read!");
-			Err(IoError::ENOENT)
+			Err(io::Error::ENOENT)
 		}
 	}
 
-	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
+	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		debug!("FUSE lseek");
 
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 			let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
 			let rsp = get_filesystem_driver()
-				.ok_or(IoError::ENOSYS)?
+				.ok_or(io::Error::ENOSYS)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error < 0 {
-				return Err(IoError::EIO);
+				return Err(io::Error::EIO);
 			}
 
 			let rsp_offset = rsp.headers.op_header.offset;
 
 			Ok(rsp_offset.try_into().unwrap())
 		} else {
-			Err(IoError::EIO)
+			Err(io::Error::EIO)
 		}
 	}
 }
@@ -710,19 +710,19 @@ impl FuseFileHandle {
 
 #[async_trait]
 impl ObjectInterface for FuseFileHandle {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		self.0.lock().await.poll(event).await
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		self.0.lock().await.write(buf)
 	}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
 	}
 }
@@ -747,7 +747,7 @@ impl FuseDirectoryHandle {
 
 #[async_trait]
 impl ObjectInterface for FuseDirectoryHandle {
-	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		let path: CString = if let Some(name) = &self.name {
 			CString::new("/".to_string() + name).unwrap()
 		} else {
@@ -756,14 +756,14 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		debug!("FUSE opendir: {path:#?}");
 
-		let fuse_nid = lookup(path.clone()).ok_or(IoError::ENOENT)?;
+		let fuse_nid = lookup(path.clone()).ok_or(io::Error::ENOENT)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
@@ -778,7 +778,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
@@ -796,7 +796,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		if len <= core::mem::size_of::<fuse_abi::Dirent>() {
 			debug!("FUSE no new dirs");
-			return Err(IoError::ENOENT);
+			return Err(io::Error::ENOENT);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -876,27 +876,27 @@ impl VfsNode for FuseDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Ok(self.attr)
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(FuseDirectoryHandle::new(self.prefix.clone())))
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE opendir: {path:#?}");
 
-		let fuse_nid = lookup(path.clone()).ok_or(IoError::ENOENT)?;
+		let fuse_nid = lookup(path.clone()).ok_or(io::Error::ENOENT)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
@@ -911,7 +911,7 @@ impl VfsNode for FuseDirectory {
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
@@ -929,7 +929,7 @@ impl VfsNode for FuseDirectory {
 
 		if len <= core::mem::size_of::<fuse_abi::Dirent>() {
 			debug!("FUSE no new dirs");
-			return Err(IoError::ENOENT);
+			return Err(io::Error::ENOENT);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -965,7 +965,7 @@ impl VfsNode for FuseDirectory {
 		Ok(entries)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE stat: {path:#?}");
@@ -979,7 +979,7 @@ impl VfsNode for FuseDirectory {
 
 		if rsp.headers.out_header.error != 0 {
 			// TODO: Correct error handling
-			return Err(IoError::EIO);
+			return Err(io::Error::EIO);
 		}
 
 		let rsp = rsp.headers.op_header;
@@ -994,7 +994,7 @@ impl VfsNode for FuseDirectory {
 		}
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE lstat: {path:#?}");
@@ -1014,7 +1014,7 @@ impl VfsNode for FuseDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE lstat: {path:#?}");
@@ -1036,7 +1036,7 @@ impl VfsNode for FuseDirectory {
 			Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
 		} else {
 			if opt.contains(OpenOption::O_DIRECTORY) {
-				return Err(IoError::ENOTDIR);
+				return Err(io::Error::ENOTDIR);
 			}
 
 			let file = FuseFileHandle::new();
@@ -1052,14 +1052,14 @@ impl VfsNode for FuseDirectory {
 
 				if file_guard.fuse_nid.is_none() {
 					warn!("Fuse lookup seems to have failed!");
-					return Err(IoError::ENOENT);
+					return Err(io::Error::ENOENT);
 				}
 
 				// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 				let (cmd, rsp_payload_len) =
 					ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
 				let rsp = get_filesystem_driver()
-					.ok_or(IoError::ENOSYS)?
+					.ok_or(io::Error::ENOSYS)?
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 				file_guard.fuse_fh = Some(rsp.headers.op_header.fh);
@@ -1068,7 +1068,7 @@ impl VfsNode for FuseDirectory {
 				let (cmd, rsp_payload_len) =
 					ops::Create::create(path, opt.bits().try_into().unwrap(), mode.bits());
 				let rsp = get_filesystem_driver()
-					.ok_or(IoError::ENOSYS)?
+					.ok_or(io::Error::ENOSYS)?
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 
@@ -1083,12 +1083,12 @@ impl VfsNode for FuseDirectory {
 		}
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
+	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		let path = self.traversal_path(components);
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		trace!("unlink answer {:?}", rsp);
@@ -1096,12 +1096,12 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
+	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		let path = self.traversal_path(components);
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		trace!("rmdir answer {:?}", rsp);
@@ -1109,16 +1109,12 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(
-		&self,
-		components: &mut Vec<&str>,
-		mode: AccessPermission,
-	) -> Result<(), IoError> {
+	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
 		let path = self.traversal_path(components);
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
 		let rsp = get_filesystem_driver()
-			.ok_or(IoError::ENOSYS)?
+			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		if rsp.headers.out_header.error == 0 {

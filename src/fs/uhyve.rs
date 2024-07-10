@@ -14,10 +14,10 @@ use x86::io::outl;
 use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::env::is_uhyve;
 use crate::executor::block_on;
-use crate::fd::IoError;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
+use crate::io;
 
 /// forward a request to the hypervisor uhyve
 #[inline]
@@ -165,32 +165,32 @@ impl UhyveFileHandleInner {
 		Self(fd)
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut sysread = SysRead::new(self.0, buf.as_mut_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_READ, &mut sysread);
 
 		if sysread.ret >= 0 {
 			Ok(sysread.ret.try_into().unwrap())
 		} else {
-			Err(IoError::EIO)
+			Err(io::Error::EIO)
 		}
 	}
 
-	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let mut syswrite = SysWrite::new(self.0, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
 		Ok(syswrite.len)
 	}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut syslseek = SysLseek::new(self.0, offset, whence);
 		uhyve_send(UHYVE_PORT_LSEEK, &mut syslseek);
 
 		if syslseek.offset >= 0 {
 			Ok(syslseek.offset)
 		} else {
-			Err(IoError::EINVAL)
+			Err(io::Error::EINVAL)
 		}
 	}
 }
@@ -213,15 +213,15 @@ impl UhyveFileHandle {
 
 #[async_trait]
 impl ObjectInterface for UhyveFileHandle {
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		self.0.lock().await.write(buf)
 	}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
 	}
 }
@@ -247,12 +247,12 @@ impl VfsNode for UhyveDirectory {
 		NodeKind::Directory
 	}
 
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
-		Err(IoError::ENOSYS)
+	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		Err(io::Error::ENOSYS)
 	}
 
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
-		Err(IoError::ENOSYS)
+	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		Err(io::Error::ENOSYS)
 	}
 
 	fn traverse_open(
@@ -260,7 +260,7 @@ impl VfsNode for UhyveDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		let path: String = if components.is_empty() {
 			"/\0".to_string()
 		} else {
@@ -280,11 +280,11 @@ impl VfsNode for UhyveDirectory {
 		if sysopen.ret > 0 {
 			Ok(Arc::new(UhyveFileHandle::new(sysopen.ret)))
 		} else {
-			Err(IoError::EIO)
+			Err(io::Error::EIO)
 		}
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
+	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
@@ -301,20 +301,20 @@ impl VfsNode for UhyveDirectory {
 		if sysunlink.ret == 0 {
 			Ok(())
 		} else {
-			Err(IoError::EIO)
+			Err(io::Error::EIO)
 		}
 	}
 
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
-		Err(IoError::ENOSYS)
+	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+		Err(io::Error::ENOSYS)
 	}
 
 	fn traverse_mkdir(
 		&self,
 		_components: &mut Vec<&str>,
 		_mode: AccessPermission,
-	) -> Result<(), IoError> {
-		Err(IoError::ENOSYS)
+	) -> io::Result<()> {
+		Err(io::Error::ENOSYS)
 	}
 }
 

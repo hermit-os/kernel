@@ -19,11 +19,11 @@ use core::slice;
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 
-use crate::arch;
 use crate::executor::block_on;
-use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption, PollEvent};
+use crate::fd::{AccessPermission, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
 use crate::time::timespec;
+use crate::{arch, io};
 
 #[derive(Debug)]
 pub(crate) struct RomFileInner {
@@ -50,7 +50,7 @@ struct RomFileInterface {
 
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
@@ -63,7 +63,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -130,7 +130,7 @@ pub struct RamFileInterface {
 
 #[async_trait]
 impl ObjectInterface for RamFileInterface {
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let len = self.inner.read().await.data.len();
 		let pos = *self.pos.lock().await;
 
@@ -143,7 +143,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -171,7 +171,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(len)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let mut guard = self.inner.write().await;
@@ -217,27 +217,27 @@ impl VfsNode for RomFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(RomFileInterface::new(self.data.clone())))
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		block_on(async { Ok(self.data.read().await.attr) }, None)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(IoError::EBADF)
+			Err(io::Error::EBADF)
 		}
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(IoError::EBADF)
+			Err(io::Error::EBADF)
 		}
 	}
 }
@@ -271,27 +271,27 @@ impl VfsNode for RamFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(RamFileInterface::new(self.data.clone())))
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		block_on(async { Ok(self.data.read().await.attr) }, None)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(IoError::EBADF)
+			Err(io::Error::EBADF)
 		}
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(IoError::EBADF)
+			Err(io::Error::EBADF)
 		}
 	}
 }
@@ -333,7 +333,7 @@ impl MemDirectoryInterface {
 
 #[async_trait]
 impl ObjectInterface for MemDirectoryInterface {
-	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		block_on(
 			async {
 				let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -377,7 +377,7 @@ impl MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
@@ -385,7 +385,7 @@ impl MemDirectory {
 				let mut guard = self.inner.write().await;
 				if opt.contains(OpenOption::O_CREAT) || opt.contains(OpenOption::O_CREAT) {
 					if guard.get(&node_name).is_some() {
-						return Err(IoError::EEXIST);
+						return Err(io::Error::EEXIST);
 					} else {
 						let file = Box::new(RamFile::new(mode));
 						guard.insert(node_name, file.clone());
@@ -395,16 +395,16 @@ impl MemDirectory {
 					if opt.contains(OpenOption::O_DIRECTORY)
 						&& file.get_kind() != NodeKind::Directory
 					{
-						return Err(IoError::ENOTDIR);
+						return Err(io::Error::ENOTDIR);
 					}
 
 					if file.get_kind() == NodeKind::File || file.get_kind() == NodeKind::Directory {
 						return file.get_object();
 					} else {
-						return Err(IoError::ENOENT);
+						return Err(io::Error::ENOENT);
 					}
 				} else {
-					return Err(IoError::ENOENT);
+					return Err(io::Error::ENOENT);
 				}
 			}
 
@@ -413,7 +413,7 @@ impl MemDirectory {
 			}
 		}
 
-		Err(IoError::ENOENT)
+		Err(io::Error::ENOENT)
 	}
 }
 
@@ -422,19 +422,15 @@ impl VfsNode for MemDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
 		Ok(Arc::new(MemDirectoryInterface::new(self.inner.clone())))
 	}
 
-	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Ok(self.attr)
 	}
 
-	fn traverse_mkdir(
-		&self,
-		components: &mut Vec<&str>,
-		mode: AccessPermission,
-	) -> Result<(), IoError> {
+	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -453,13 +449,13 @@ impl VfsNode for MemDirectory {
 					}
 				}
 
-				Err(IoError::EBADF)
+				Err(io::Error::EBADF)
 			},
 			None,
 		)
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> Result<(), IoError> {
+	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -468,25 +464,25 @@ impl VfsNode for MemDirectory {
 					if components.is_empty() {
 						let mut guard = self.inner.write().await;
 
-						let obj = guard.remove(&node_name).ok_or(IoError::ENOENT)?;
+						let obj = guard.remove(&node_name).ok_or(io::Error::ENOENT)?;
 						if obj.get_kind() == NodeKind::Directory {
 							return Ok(());
 						} else {
 							guard.insert(node_name, obj);
-							return Err(IoError::ENOTDIR);
+							return Err(io::Error::ENOTDIR);
 						}
 					} else if let Some(directory) = self.inner.read().await.get(&node_name) {
 						return directory.traverse_rmdir(components);
 					}
 				}
 
-				Err(IoError::EBADF)
+				Err(io::Error::EBADF)
 			},
 			None,
 		)
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> Result<(), IoError> {
+	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -495,25 +491,25 @@ impl VfsNode for MemDirectory {
 					if components.is_empty() {
 						let mut guard = self.inner.write().await;
 
-						let obj = guard.remove(&node_name).ok_or(IoError::ENOENT)?;
+						let obj = guard.remove(&node_name).ok_or(io::Error::ENOENT)?;
 						if obj.get_kind() == NodeKind::File {
 							return Ok(());
 						} else {
 							guard.insert(node_name, obj);
-							return Err(IoError::EISDIR);
+							return Err(io::Error::EISDIR);
 						}
 					} else if let Some(directory) = self.inner.read().await.get(&node_name) {
 						return directory.traverse_unlink(components);
 					}
 				}
 
-				Err(IoError::EBADF)
+				Err(io::Error::EBADF)
 			},
 			None,
 		)
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -522,7 +518,7 @@ impl VfsNode for MemDirectory {
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
 						directory.traverse_readdir(components)
 					} else {
-						Err(IoError::EBADF)
+						Err(io::Error::EBADF)
 					}
 				} else {
 					let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -537,7 +533,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -552,17 +548,17 @@ impl VfsNode for MemDirectory {
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
 						directory.traverse_lstat(components)
 					} else {
-						Err(IoError::EBADF)
+						Err(io::Error::EBADF)
 					}
 				} else {
-					Err(IoError::ENOSYS)
+					Err(io::Error::ENOSYS)
 				}
 			},
 			None,
 		)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -577,10 +573,10 @@ impl VfsNode for MemDirectory {
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
 						directory.traverse_stat(components)
 					} else {
-						Err(IoError::EBADF)
+						Err(io::Error::EBADF)
 					}
 				} else {
-					Err(IoError::ENOSYS)
+					Err(io::Error::ENOSYS)
 				}
 			},
 			None,
@@ -591,7 +587,7 @@ impl VfsNode for MemDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> Result<(), IoError> {
+	) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -607,7 +603,7 @@ impl VfsNode for MemDirectory {
 					}
 				}
 
-				Err(IoError::EBADF)
+				Err(io::Error::EBADF)
 			},
 			None,
 		)
@@ -618,7 +614,7 @@ impl VfsNode for MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> io::Result<Arc<dyn ObjectInterface>> {
 		block_on(self.async_traverse_open(components, opt, mode), None)
 	}
 
@@ -628,7 +624,7 @@ impl VfsNode for MemDirectory {
 		ptr: *const u8,
 		length: usize,
 		mode: AccessPermission,
-	) -> Result<(), IoError> {
+	) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
@@ -648,7 +644,7 @@ impl VfsNode for MemDirectory {
 					}
 				}
 
-				Err(IoError::ENOENT)
+				Err(io::Error::ENOENT)
 			},
 			None,
 		)

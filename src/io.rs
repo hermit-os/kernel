@@ -1,17 +1,39 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::fmt;
+use core::{fmt, result};
 
-use crate::fd::IoError;
+// TODO: Integrate with src/errno.rs ?
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive)]
+pub enum Error {
+	ENOENT = crate::errno::ENOENT as isize,
+	ENOSYS = crate::errno::ENOSYS as isize,
+	EIO = crate::errno::EIO as isize,
+	EBADF = crate::errno::EBADF as isize,
+	EISDIR = crate::errno::EISDIR as isize,
+	EINVAL = crate::errno::EINVAL as isize,
+	ETIME = crate::errno::ETIME as isize,
+	EAGAIN = crate::errno::EAGAIN as isize,
+	EFAULT = crate::errno::EFAULT as isize,
+	ENOBUFS = crate::errno::ENOBUFS as isize,
+	ENOTCONN = crate::errno::ENOTCONN as isize,
+	ENOTDIR = crate::errno::ENOTDIR as isize,
+	EMFILE = crate::errno::EMFILE as isize,
+	EEXIST = crate::errno::EEXIST as isize,
+	EADDRINUSE = crate::errno::EADDRINUSE as isize,
+	EOVERFLOW = crate::errno::EOVERFLOW as isize,
+}
+
+pub type Result<T> = result::Result<T, Error>;
 
 /// The Read trait allows for reading bytes from a source.
 ///
 /// The Read trait is derived from Rust's std library.
 pub trait Read {
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError>;
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
 
 	/// Read all bytes until EOF in this source, placing them into buf.
-	fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize, IoError> {
+	fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
 		let start_len = buf.len();
 
 		loop {
@@ -31,7 +53,7 @@ pub trait Read {
 	///
 	/// If successful, this function returns the number of bytes which were read
 	/// and appended to `buf`.
-	fn read_to_string(&mut self, buf: &mut String) -> Result<usize, IoError> {
+	fn read_to_string(&mut self, buf: &mut String) -> Result<usize> {
 		unsafe { self.read_to_end(buf.as_mut_vec()) }
 	}
 }
@@ -40,14 +62,14 @@ pub trait Read {
 ///
 /// The Write trait is derived from Rust's std library.
 pub trait Write {
-	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError>;
+	fn write(&mut self, buf: &[u8]) -> Result<usize>;
 
 	/// Attempts to write an entire buffer into this writer.
-	fn write_all(&mut self, mut buf: &[u8]) -> Result<(), IoError> {
+	fn write_all(&mut self, mut buf: &[u8]) -> Result<()> {
 		while !buf.is_empty() {
 			match self.write(buf) {
 				Ok(0) => {
-					return Err(IoError::EIO);
+					return Err(Error::EIO);
 				}
 				Ok(n) => buf = &buf[n..],
 				Err(e) => return Err(e),
@@ -58,12 +80,12 @@ pub trait Write {
 	}
 
 	/// Writes a formatted string into this writer, returning any error encountered.
-	fn write_fmt(&mut self, fmt: fmt::Arguments<'_>) -> Result<(), IoError> {
+	fn write_fmt(&mut self, fmt: fmt::Arguments<'_>) -> Result<()> {
 		// Create a shim which translates a Write to a fmt::Write and saves
 		// off I/O errors. instead of discarding them
 		struct Adapter<'a, T: ?Sized> {
 			inner: &'a mut T,
-			error: Result<(), IoError>,
+			error: Result<()>,
 		}
 
 		impl<T: Write + ?Sized> fmt::Write for Adapter<'_, T> {
@@ -89,7 +111,7 @@ pub trait Write {
 				if output.error.is_err() {
 					output.error
 				} else {
-					Err(IoError::EINVAL)
+					Err(Error::EINVAL)
 				}
 			}
 		}

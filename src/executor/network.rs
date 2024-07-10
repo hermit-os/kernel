@@ -27,7 +27,7 @@ use crate::arch;
 use crate::executor::device::HermitNet;
 use crate::executor::spawn;
 #[cfg(feature = "dns")]
-use crate::fd::IoError;
+use crate::io;
 use crate::scheduler::PerCoreSchedulerExt;
 
 pub(crate) enum NetworkState<'a> {
@@ -115,7 +115,7 @@ async fn network_run() {
 }
 
 #[cfg(feature = "dns")]
-pub(crate) async fn get_query_result(query: QueryHandle) -> Result<Vec<IpAddress>, IoError> {
+pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAddress>> {
 	future::poll_fn(|cx| {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
@@ -135,7 +135,7 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> Result<Vec<IpAddress
 			}
 			Err(e) => {
 				warn!("DNS query failed: {e:?}");
-				Poll::Ready(Err(IoError::ENOENT))
+				Poll::Ready(Err(io::Error::ENOENT))
 			}
 		}
 	})
@@ -287,24 +287,24 @@ impl<'a> NetworkInterface<'a> {
 		&mut self,
 		name: &str,
 		query_type: DnsQueryType,
-	) -> Result<QueryHandle, IoError> {
-		let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+	) -> io::Result<QueryHandle> {
+		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		let socket: &mut dns::Socket<'a> = self.sockets.get_mut(dns_handle);
 		socket
 			.start_query(self.iface.context(), name, query_type)
-			.map_err(|_| IoError::EIO)
+			.map_err(|_| io::Error::EIO)
 	}
 
 	#[allow(dead_code)]
 	#[cfg(feature = "dns")]
-	pub(crate) fn get_dns_socket(&self) -> Result<&dns::Socket<'a>, IoError> {
-		let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+	pub(crate) fn get_dns_socket(&self) -> io::Result<&dns::Socket<'a>> {
+		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		Ok(self.sockets.get(dns_handle))
 	}
 
 	#[cfg(feature = "dns")]
-	pub(crate) fn get_mut_dns_socket(&mut self) -> Result<&mut dns::Socket<'a>, IoError> {
-		let dns_handle = self.dns_handle.ok_or(IoError::EINVAL)?;
+	pub(crate) fn get_mut_dns_socket(&mut self) -> io::Result<&mut dns::Socket<'a>> {
+		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		Ok(self.sockets.get_mut(dns_handle))
 	}
 }
