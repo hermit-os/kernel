@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::{RefCell, UnsafeCell};
 use core::mem::{self, MaybeUninit};
-use core::{iter, ptr};
+use core::ptr;
 
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
@@ -19,7 +19,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BufferToken, BufferTokenSender, BufferType, MemDescr, MemPool, TransferToken, Virtq,
+	BufferElem, BufferToken, BufferTokenSender, BufferType, MemPool, TransferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
@@ -81,32 +81,25 @@ impl DescrRing {
 				.0;
 			self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 		} else {
-			let rev_send_desc_iter = tkn
+			let send_desc_iter = tkn
 				.buff_tkn
 				.send_buff
-				.as_ref()
-				.map(|send_buff| send_buff.as_slice().iter())
-				.into_iter()
-				.flatten()
-				.rev()
-				.zip(iter::repeat(virtq::DescF::empty()));
-			let rev_recv_desc_iter = tkn
+				.iter()
+				.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
+			let recv_desc_iter = tkn
 				.buff_tkn
 				.recv_buff
-				.as_ref()
-				.map(|recv_buff| recv_buff.as_slice().iter())
-				.into_iter()
-				.flatten()
-				.rev()
-				.zip(iter::repeat(virtq::DescF::WRITE));
+				.iter()
+				.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
 			let mut rev_all_desc_iter =
-				rev_recv_desc_iter
-					.chain(rev_send_desc_iter)
-					.map(|(mem_descr, flags)| virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(mem_descr.ptr as u64))
+				send_desc_iter
+					.chain(recv_desc_iter)
+					.rev()
+					.map(|(mem_descr, len, flags)| virtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
 							.as_u64()
 							.into(),
-						len: (mem_descr.len as u32).into(),
+						len: (len as u32).into(),
 						flags,
 						next: 0.into(),
 					});
@@ -177,9 +170,9 @@ impl DescrRing {
 					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 				);
 
-			if tkn.buff_tkn.recv_buff.as_ref().is_some() {
+			if !tkn.buff_tkn.recv_buff.is_empty() {
 				tkn.buff_tkn
-					.restr_size(None, Some(used_elem.len.to_ne() as usize))
+					.set_device_written_len(used_elem.len.to_ne())
 					.unwrap();
 			}
 			if let Some(queue) = tkn.await_queue.take() {
@@ -259,15 +252,14 @@ impl Virtq for SplitVq {
 		unimplemented!()
 	}
 
-	fn dispatch_await(
+	fn dispatch(
 		&self,
 		buffer_tkn: BufferToken,
-		sender: BufferTokenSender,
+		sender: Option<BufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
-		let transfer_tkn =
-			self.transfer_token_from_buffer_token(buffer_tkn, Some(sender), buffer_type);
+		let transfer_tkn = self.transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
 		let next_idx = self.ring.borrow_mut().push(transfer_tkn)?;
 
 		if notif {
@@ -303,17 +295,16 @@ impl Virtq for SplitVq {
 		};
 
 		let size = vq_handler.set_vq_size(size.0);
-		const ALLOCATOR: DeviceAlloc = DeviceAlloc;
 
 		let descr_table_cell = unsafe {
 			core::mem::transmute::<
 				Box<[MaybeUninit<virtq::Desc>], DeviceAlloc>,
 				Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
-			>(Box::new_uninit_slice_in(size.into(), ALLOCATOR))
+			>(Box::new_uninit_slice_in(size.into(), DeviceAlloc))
 		};
 
 		let avail_ring_cell = {
-			let avail = virtq::Avail::try_new_in(size, true, ALLOCATOR)
+			let avail = virtq::Avail::try_new_in(size, true, DeviceAlloc)
 				.map_err(|_| VirtqError::AllocationError)?;
 
 			unsafe {
@@ -325,7 +316,7 @@ impl Virtq for SplitVq {
 		};
 
 		let used_ring_cell = {
-			let used = virtq::Used::try_new_in(size, true, ALLOCATOR)
+			let used = virtq::Used::try_new_in(size, true, DeviceAlloc)
 				.map_err(|_| VirtqError::AllocationError)?;
 
 			unsafe {
@@ -388,23 +379,21 @@ impl VirtqPrivate for SplitVq {
 	type Descriptor = virtq::Desc;
 	fn create_indirect_ctrl(
 		&self,
-		send: Option<&[MemDescr]>,
-		recv: Option<&[MemDescr]>,
+		send: &[BufferElem],
+		recv: &[BufferElem],
 	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
 		let send_desc_iter = send
 			.iter()
-			.flat_map(|descriptors| descriptors.iter())
-			.zip(iter::repeat(virtq::DescF::empty()));
+			.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
 		let recv_desc_iter = recv
 			.iter()
-			.flat_map(|descriptors| descriptors.iter())
-			.zip(iter::repeat(virtq::DescF::WRITE));
+			.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
 		let all_desc_iter = send_desc_iter.chain(recv_desc_iter).zip(1u16..).map(
-			|((mem_descr, incomplete_flags), next_idx)| virtq::Desc {
-				addr: paging::virt_to_phys(VirtAddr::from(mem_descr.ptr as u64))
+			|((mem_descr, len, incomplete_flags), next_idx)| virtq::Desc {
+				addr: paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
 					.as_u64()
 					.into(),
-				len: (mem_descr.len as u32).into(),
+				len: (len as u32).into(),
 				flags: incomplete_flags | virtq::DescF::NEXT,
 				next: next_idx.into(),
 			},

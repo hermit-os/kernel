@@ -20,13 +20,13 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
-use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
 };
+use crate::mm::device_alloc::DeviceAlloc;
 use crate::time::{time_t, timespec};
 use crate::{arch, io};
 
@@ -43,7 +43,7 @@ const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
 pub(crate) trait FuseInterface {
-	fn send_command<O: ops::Op>(
+	fn send_command<O: ops::Op + 'static>(
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
@@ -454,11 +454,9 @@ impl<O: ops::Op> CmdHeader<O> {
 	}
 }
 
-impl<O: ops::Op> AsSliceU8 for CmdHeader<O> {}
-
 pub(crate) struct Cmd<O: ops::Op> {
-	pub headers: Box<CmdHeader<O>>,
-	pub payload: Option<Box<[u8]>>,
+	pub headers: Box<CmdHeader<O>, DeviceAlloc>,
+	pub payload: Option<Vec<u8, DeviceAlloc>>,
 }
 
 impl<O: ops::Op> Cmd<O>
@@ -467,7 +465,7 @@ where
 {
 	fn new(nodeid: u64, op_header: O::InStruct) -> Self {
 		Self {
-			headers: Box::new(CmdHeader::new(nodeid, op_header)),
+			headers: Box::new_in(CmdHeader::new(nodeid, op_header), DeviceAlloc),
 			payload: None,
 		}
 	}
@@ -478,13 +476,12 @@ where
 	O: ops::Op<InPayload = CString>,
 {
 	fn with_cstring(nodeid: u64, op_header: O::InStruct, cstring: CString) -> Self {
-		let cstring_bytes = cstring.into_bytes_with_nul().into_boxed_slice();
+		let cstring_bytes = cstring.into_bytes_with_nul().to_vec_in(DeviceAlloc);
 		Self {
-			headers: Box::new(CmdHeader::with_payload_size(
-				nodeid,
-				op_header,
-				cstring_bytes.len(),
-			)),
+			headers: Box::new_in(
+				CmdHeader::with_payload_size(nodeid, op_header, cstring_bytes.len()),
+				DeviceAlloc,
+			),
 			payload: Some(cstring_bytes),
 		}
 	}
@@ -495,9 +492,14 @@ where
 	O: ops::Op<InPayload = [u8]>,
 {
 	fn with_boxed_slice(nodeid: u64, op_header: O::InStruct, slice: Box<[u8]>) -> Self {
+		let mut device_slice = Vec::with_capacity_in(slice.len(), DeviceAlloc);
+		device_slice.extend_from_slice(&slice);
 		Self {
-			headers: Box::new(CmdHeader::with_payload_size(nodeid, op_header, slice.len())),
-			payload: Some(slice),
+			headers: Box::new_in(
+				CmdHeader::with_payload_size(nodeid, op_header, slice.len()),
+				DeviceAlloc,
+			),
+			payload: Some(device_slice),
 		}
 	}
 }
@@ -511,8 +513,8 @@ pub(crate) struct RspHeader<O: ops::Op> {
 
 #[derive(Debug)]
 pub(crate) struct Rsp<O: ops::Op> {
-	pub headers: Box<RspHeader<O>>,
-	pub payload: Option<Box<[u8]>>,
+	pub headers: Box<RspHeader<O>, DeviceAlloc>,
+	pub payload: Option<Vec<u8, DeviceAlloc>>,
 }
 
 fn lookup(name: CString) -> Option<u64> {
