@@ -7,7 +7,8 @@ use core::task::{ready, Poll, Waker};
 use async_lock::Mutex;
 use async_trait::async_trait;
 
-use crate::fd::{block_on, EventFlags, IoError, ObjectInterface, PollEvent};
+use crate::fd::{block_on, EventFlags, ObjectInterface, PollEvent};
+use crate::io;
 
 #[derive(Debug)]
 struct EventState {
@@ -54,11 +55,11 @@ impl EventFd {
 
 #[async_trait]
 impl ObjectInterface for EventFd {
-	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, io::Error> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
-			return Err(IoError::EINVAL);
+			return Err(io::Error::EINVAL);
 		}
 
 		future::poll_fn(|cx| {
@@ -97,11 +98,11 @@ impl ObjectInterface for EventFd {
 		.await
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, io::Error> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
-			return Err(IoError::EINVAL);
+			return Err(io::Error::EINVAL);
 		}
 
 		let c = u64::from_ne_bytes(buf[..len].try_into().unwrap());
@@ -132,7 +133,7 @@ impl ObjectInterface for EventFd {
 		.await
 	}
 
-	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, io::Error> {
 		let guard = self.state.lock().await;
 
 		let mut available = PollEvent::empty();

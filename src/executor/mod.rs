@@ -29,7 +29,7 @@ use crate::drivers::pci::get_network_driver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::executor::network::network_delay;
 use crate::executor::task::AsyncTask;
-use crate::fd::IoError;
+use crate::io;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::synch::futex::*;
@@ -99,9 +99,9 @@ pub(crate) fn now() -> u64 {
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, IoError>
+pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, io::Error>
 where
-	F: Future<Output = Result<T, IoError>>,
+	F: Future<Output = Result<T, io::Error>>,
 {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	let nic = get_network_driver();
@@ -158,16 +158,16 @@ where
 					nic.lock().set_polling_mode(false);
 				}
 
-				return Err(IoError::ETIME);
+				return Err(io::Error::ETIME);
 			}
 		}
 	}
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, IoError>
+pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, io::Error>
 where
-	F: Future<Output = Result<T, IoError>>,
+	F: Future<Output = Result<T, io::Error>>,
 {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	let nic = get_network_driver();
@@ -228,7 +228,7 @@ where
 					nic.lock().set_polling_mode(false);
 				}
 
-				return Err(IoError::ETIME);
+				return Err(io::Error::ETIME);
 			}
 		}
 

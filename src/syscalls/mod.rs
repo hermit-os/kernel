@@ -20,15 +20,15 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
-use crate::env;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, EventFlags, FileDescriptor, IoCtl,
-	IoError, OpenOption, PollFd,
+	OpenOption, PollFd,
 };
 use crate::fs::{self, FileAttr};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
 use crate::syscalls::interfaces::SyscallInterface;
+use crate::{env, io};
 
 mod condvar;
 mod entropy;
@@ -669,7 +669,7 @@ pub unsafe extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -
 
 	crate::fd::poll(slice, timeout).map_or_else(
 		|e| {
-			if e == IoError::ETIME {
+			if e == io::Error::ETIME {
 				0
 			} else {
 				-num::ToPrimitive::to_i32(&e).unwrap()

@@ -24,11 +24,9 @@ use crate::arch::scheduler::TaskStacks;
 use crate::arch::scheduler::TaskTLS;
 use crate::executor::poll_on;
 use crate::fd::stdio::*;
-use crate::fd::{
-	FileDescriptor, IoError, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO,
-};
+use crate::fd::{FileDescriptor, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
-use crate::{arch, env};
+use crate::{arch, env, io};
 
 /// Returns the most significant bit.
 ///
@@ -470,23 +468,23 @@ impl Task {
 					if env::is_uhyve() {
 						guard
 							.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
-							.map_err(|_| IoError::EIO)?;
+							.map_err(|_| io::Error::EIO)?;
 						guard
 							.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
-							.map_err(|_| IoError::EIO)?;
+							.map_err(|_| io::Error::EIO)?;
 						guard
 							.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
-							.map_err(|_| IoError::EIO)?;
+							.map_err(|_| io::Error::EIO)?;
 					} else {
 						guard
 							.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
-							.map_err(|_| IoError::EIO)?;
+							.map_err(|_| io::Error::EIO)?;
 						guard
 							.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
-							.map_err(|_| IoError::EIO)?;
+							.map_err(|_| io::Error::EIO)?;
 						guard
 							.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
-							.map_err(|_| IoError::EIO)?;
+							.map_err(|_| io::Error::EIO)?;
 					}
 
 					Ok(())

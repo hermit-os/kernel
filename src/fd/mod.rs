@@ -13,6 +13,7 @@ use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::executor::{block_on, poll_on};
 use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
+use crate::io;
 
 mod eventfd;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -22,28 +23,6 @@ pub(crate) mod stdio;
 pub(crate) const STDIN_FILENO: FileDescriptor = 0;
 pub(crate) const STDOUT_FILENO: FileDescriptor = 1;
 pub(crate) const STDERR_FILENO: FileDescriptor = 2;
-
-// TODO: Integrate with src/errno.rs ?
-#[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive)]
-pub enum IoError {
-	ENOENT = crate::errno::ENOENT as isize,
-	ENOSYS = crate::errno::ENOSYS as isize,
-	EIO = crate::errno::EIO as isize,
-	EBADF = crate::errno::EBADF as isize,
-	EISDIR = crate::errno::EISDIR as isize,
-	EINVAL = crate::errno::EINVAL as isize,
-	ETIME = crate::errno::ETIME as isize,
-	EAGAIN = crate::errno::EAGAIN as isize,
-	EFAULT = crate::errno::EFAULT as isize,
-	ENOBUFS = crate::errno::ENOBUFS as isize,
-	ENOTCONN = crate::errno::ENOTCONN as isize,
-	ENOTDIR = crate::errno::ENOTDIR as isize,
-	EMFILE = crate::errno::EMFILE as isize,
-	EEXIST = crate::errno::EEXIST as isize,
-	EADDRINUSE = crate::errno::EADDRINUSE as isize,
-	EOVERFLOW = crate::errno::EOVERFLOW as isize,
-}
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
@@ -149,20 +128,20 @@ impl Default for AccessPermission {
 #[async_trait]
 pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// check if an IO event is possible
-	async fn poll(&self, _event: PollEvent) -> Result<PollEvent, IoError> {
+	async fn poll(&self, _event: PollEvent) -> Result<PollEvent, io::Error> {
 		Ok(PollEvent::empty())
 	}
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn async_read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
-		Err(IoError::ENOSYS)
+	async fn async_read(&self, _buf: &mut [u8]) -> Result<usize, io::Error> {
+		Err(io::Error::ENOSYS)
 	}
 
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	async fn async_write(&self, _buf: &[u8]) -> Result<usize, IoError> {
-		Err(IoError::ENOSYS)
+	async fn async_write(&self, _buf: &[u8]) -> Result<usize, io::Error> {
+		Err(io::Error::ENOSYS)
 	}
 
 	/// `is_nonblocking` returns `true`, if `read`, `write`, `recv` and send operations
@@ -172,74 +151,74 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
-	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> Result<isize, IoError> {
-		Err(IoError::EINVAL)
+	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> Result<isize, io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `fstat`
-	fn fstat(&self, _stat: &mut FileAttr) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn fstat(&self, _stat: &mut FileAttr) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `unlink` removes file entry
 	#[allow(dead_code)]
-	fn unlink(&self, _path: &str) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn unlink(&self, _path: &str) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `rmdir` removes directory entry
 	#[allow(dead_code)]
-	fn rmdir(&self, _path: &str) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn rmdir(&self, _path: &str) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
-		Err(IoError::EINVAL)
+	fn readdir(&self) -> Result<Vec<DirectoryEntry>, io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `mkdir` creates a directory entry
 	#[allow(dead_code)]
-	fn mkdir(&self, _path: &str, _mode: u32) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn mkdir(&self, _path: &str, _mode: u32) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn accept(&self) -> Result<IpEndpoint, IoError> {
-		Err(IoError::EINVAL)
+	fn accept(&self) -> Result<IpEndpoint, io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn connect(&self, _endpoint: IpEndpoint) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn connect(&self, _endpoint: IpEndpoint) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn bind(&self, _name: IpListenEndpoint) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn bind(&self, _name: IpListenEndpoint) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `listen` for connections on a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn listen(&self, _backlog: i32) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> Result<(), io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn getsockopt(&self, _opt: SocketOption) -> Result<bool, IoError> {
-		Err(IoError::EINVAL)
+	fn getsockopt(&self, _opt: SocketOption) -> Result<bool, io::Error> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockname` gets socket name
@@ -257,8 +236,8 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// receive a message from a socket
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
-		Err(IoError::ENOSYS)
+	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(usize, IpEndpoint), io::Error> {
+		Err(io::Error::ENOSYS)
 	}
 
 	/// send a message from a socket
@@ -269,24 +248,24 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<usize, IoError> {
-		Err(IoError::ENOSYS)
+	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<usize, io::Error> {
+		Err(io::Error::ENOSYS)
 	}
 
 	/// shut down part of a full-duplex connection
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn shutdown(&self, _how: i32) -> Result<(), IoError> {
-		Err(IoError::ENOSYS)
+	fn shutdown(&self, _how: i32) -> Result<(), io::Error> {
+		Err(io::Error::ENOSYS)
 	}
 
 	/// The `ioctl` function manipulates the underlying device parameters of special
 	/// files.
-	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> Result<(), IoError> {
-		Err(IoError::ENOSYS)
+	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> Result<(), io::Error> {
+		Err(io::Error::ENOSYS)
 	}
 }
 
-pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError> {
+pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, io::Error> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -295,22 +274,22 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError>
 
 	if obj.is_nonblocking() {
 		poll_on(obj.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
-			if x == IoError::ETIME {
-				IoError::EAGAIN
+			if x == io::Error::ETIME {
+				io::Error::EAGAIN
 			} else {
 				x
 			}
 		})
 	} else {
 		match poll_on(obj.async_read(buf), Some(Duration::from_secs(2))) {
-			Err(IoError::ETIME) => block_on(obj.async_read(buf), None),
+			Err(io::Error::ETIME) => block_on(obj.async_read(buf), None),
 			Err(x) => Err(x),
 			Ok(x) => Ok(x),
 		}
 	}
 }
 
-pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
+pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, io::Error> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -319,22 +298,22 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
 
 	if obj.is_nonblocking() {
 		poll_on(obj.async_write(buf), Some(Duration::ZERO)).map_err(|x| {
-			if x == IoError::ETIME {
-				IoError::EAGAIN
+			if x == io::Error::ETIME {
+				io::Error::EAGAIN
 			} else {
 				x
 			}
 		})
 	} else {
 		match poll_on(obj.async_write(buf), Some(Duration::from_secs(2))) {
-			Err(IoError::ETIME) => block_on(obj.async_write(buf), None),
+			Err(io::Error::ETIME) => block_on(obj.async_write(buf), None),
 			Err(x) => Err(x),
 			Ok(x) => Ok(x),
 		}
 	}
 }
 
-async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, IoError> {
+async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, io::Error> {
 	future::poll_fn(|cx| {
 		let mut counter: u64 = 0;
 
@@ -366,12 +345,12 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, IoError> {
 /// to become ready to perform I/O. The set of file descriptors to be
 /// monitored is specified in the `fds` argument, which is an array
 /// of structs of `PollFd`.
-pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, IoError> {
+pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, io::Error> {
 	let result = block_on(poll_fds(fds), timeout);
 	if let Err(ref e) = result {
 		if timeout.is_some() {
 			// A return value of zero indicates that the system call timed out
-			if *e == IoError::EAGAIN {
+			if *e == io::Error::EAGAIN {
 				return Ok(0);
 			}
 		}
@@ -396,7 +375,7 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, IoErro
 /// `EFD_NONBLOCK`: Set the file descriptor in non-blocking mode
 /// `EFD_SEMAPHORE`: Provide semaphore-like semantics for reads
 /// from the new file descriptor.
-pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, IoError> {
+pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, io::Error> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
 
 	let fd = block_on(core_scheduler().insert_object(Arc::new(obj)), None)?;
@@ -404,11 +383,11 @@ pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, IoErro
 	Ok(fd)
 }
 
-pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
+pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, io::Error> {
 	block_on(core_scheduler().get_object(fd), None)
 }
 
-pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> Result<FileDescriptor, IoError> {
+pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> Result<FileDescriptor, io::Error> {
 	block_on(core_scheduler().insert_object(obj), None)
 }
 
@@ -416,7 +395,7 @@ pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> Result<FileDescrip
 pub(crate) fn replace_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
-) -> Result<(), IoError> {
+) -> Result<(), io::Error> {
 	block_on(core_scheduler().replace_object(fd, obj), None)
 }
 
@@ -424,10 +403,10 @@ pub(crate) fn replace_object(
 // to the same open file description as the descriptor oldfd. The new
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
-pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
+pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, io::Error> {
 	block_on(core_scheduler().dup_object(fd), None)
 }
 
-pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
+pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, io::Error> {
 	block_on(core_scheduler().remove_object(fd), None)
 }

@@ -22,16 +22,16 @@ use hermit_sync::*;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 
-use crate::arch;
 use crate::arch::core_local::*;
 #[cfg(target_arch = "riscv64")]
 use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::arch::{get_processor_count, interrupts};
-use crate::fd::{FileDescriptor, IoError, ObjectInterface};
+use crate::fd::{FileDescriptor, ObjectInterface};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
+use crate::{arch, io};
 
 pub mod task;
 
@@ -464,14 +464,14 @@ impl PerCoreScheduler {
 	pub async fn get_object(
 		&self,
 		fd: FileDescriptor,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
 
 				let guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.get(&fd).cloned().ok_or(IoError::EINVAL))
+				Ready(guard.get(&fd).cloned().ok_or(io::Error::EINVAL))
 			})
 		})
 		.await
@@ -480,7 +480,7 @@ impl PerCoreScheduler {
 	/// Creates a new map between file descriptor and their IO interface and
 	/// clone the standard descriptors.
 	#[allow(dead_code)]
-	pub async fn recreate_objmap(&self) -> Result<(), IoError> {
+	pub async fn recreate_objmap(&self) -> Result<(), io::Error> {
 		let mut map = HashMap::<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
@@ -498,7 +498,7 @@ impl PerCoreScheduler {
 					}
 				}
 
-				Ready(Ok::<(), IoError>(()))
+				Ready(Ok::<(), io::Error>(()))
 			})
 		})
 		.await?;
@@ -515,20 +515,20 @@ impl PerCoreScheduler {
 	pub async fn insert_object(
 		&self,
 		obj: Arc<dyn ObjectInterface>,
-	) -> Result<FileDescriptor, IoError> {
+	) -> Result<FileDescriptor, io::Error> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let new_fd = || -> Result<FileDescriptor, IoError> {
+				let new_fd = || -> Result<FileDescriptor, io::Error> {
 					let mut fd: FileDescriptor = 0;
 					loop {
 						if !guard.contains_key(&fd) {
 							break Ok(fd);
 						} else if fd == FileDescriptor::MAX {
-							break Err(IoError::EOVERFLOW);
+							break Err(io::Error::EOVERFLOW);
 						}
 
 						fd = fd.saturating_add(1);
@@ -549,7 +549,7 @@ impl PerCoreScheduler {
 		&self,
 		fd: FileDescriptor,
 		obj: Arc<dyn ObjectInterface>,
-	) -> Result<(), IoError> {
+	) -> Result<(), io::Error> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
@@ -565,22 +565,22 @@ impl PerCoreScheduler {
 
 	/// Duplicate a IO interface and returns a new file descriptor as
 	/// identifier to the new copy
-	pub async fn dup_object(&self, fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
+	pub async fn dup_object(&self, fd: FileDescriptor) -> Result<FileDescriptor, io::Error> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
+				let obj = (*(guard.get(&fd).ok_or(io::Error::EINVAL)?)).clone();
 
-				let new_fd = || -> Result<FileDescriptor, IoError> {
+				let new_fd = || -> Result<FileDescriptor, io::Error> {
 					let mut fd: FileDescriptor = 0;
 					loop {
 						if !guard.contains_key(&fd) {
 							break Ok(fd);
 						} else if fd == FileDescriptor::MAX {
-							break Err(IoError::EOVERFLOW);
+							break Err(io::Error::EOVERFLOW);
 						}
 
 						fd = fd.saturating_add(1);
@@ -589,7 +589,7 @@ impl PerCoreScheduler {
 
 				let fd = new_fd()?;
 				if guard.try_insert(fd, obj).is_err() {
-					Ready(Err(IoError::EMFILE))
+					Ready(Err(io::Error::EMFILE))
 				} else {
 					Ready(Ok(fd))
 				}
@@ -602,13 +602,13 @@ impl PerCoreScheduler {
 	pub async fn remove_object(
 		&self,
 		fd: FileDescriptor,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> Result<Arc<dyn ObjectInterface>, io::Error> {
 		future::poll_fn(|cx| {
 			without_interrupts(|| {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.remove(&fd).ok_or(IoError::EINVAL))
+				Ready(guard.remove(&fd).ok_or(io::Error::EINVAL))
 			})
 		})
 		.await
