@@ -1,32 +1,63 @@
 use core::fmt;
 
+use alloc::collections::VecDeque;
+use enum_dispatch::enum_dispatch;
 use hermit_sync::InterruptTicketMutex;
+use crate::io::{Read, Write};
 
-use crate::arch;
+use crate::kernel::serial::Serial;
+use crate::{arch, io};
 
-pub(crate) struct Console(());
+#[enum_dispatch]
+pub trait SerialDevice: io::Read + io::Write {}
 
-/// A collection of methods that are required to format
-/// a message to Hermit's console.
-impl fmt::Write for Console {
-	/// Print a string of characters.
-	#[inline]
-	fn write_str(&mut self, s: &str) -> fmt::Result {
-		if !s.is_empty() {
-			let buf = s.as_bytes();
-			arch::output_message_buf(buf);
+pub(crate) struct Console {
+	serial: Option<Serial>,
+	#[cfg(feature = "shell")]
+	buffer: VecDeque<u8>,
+}
+
+impl Console {
+	const fn empty() -> Self {
+		Self {
+			serial: None,
+			#[cfg(feature = "shell")]
+			buffer: VecDeque::new(),
 		}
+	}
 
-		Ok(())
+	pub fn set_serial(&mut self, serial: Serial) {
+		self.serial = Some(serial);
+	}
+
+	#[cfg(feature = "shell")]
+	pub fn buffer_input(&mut self) {
+		if let Some(serial) = self.serial.as_mut() {
+			let mut buf = [0; 64];
+			let n = serial.read(&mut buf).unwrap();
+			self.buffer.extend(&buf[0..n]);
+		}
 	}
 }
 
-static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
+impl io::Read for Console {
+	fn read(&mut self,buf: &mut [u8]) -> io::Result<usize> {
+		self.buffer.read(buf)
+	}
+}
+
+pub static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console::empty());
 
 #[doc(hidden)]
 pub fn _print(args: ::core::fmt::Arguments<'_>) {
-	use core::fmt::Write;
-	CONSOLE.lock().write_fmt(args).unwrap();
+	let mut console = CONSOLE.lock();
+	if let Some(serial) = &mut console.serial {
+		serial.write_fmt(args).unwrap();
+	}
+}
+
+pub fn buffer_input() {
+	CONSOLE.lock().buffer_input();
 }
 
 #[cfg(all(test, not(target_os = "none")))]

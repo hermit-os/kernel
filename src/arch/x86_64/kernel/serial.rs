@@ -6,8 +6,79 @@ use x86_64::instructions::port::Port;
 use crate::arch::x86_64::kernel::core_local::increment_irq_counter;
 use crate::arch::x86_64::kernel::interrupts::{self, IDT};
 use crate::arch::x86_64::kernel::{apic, COM1};
+use crate::console::{self, SerialDevice};
+use crate::io;
 
 const SERIAL_IRQ: u8 = 36;
+
+pub struct Uart {
+	serial_port: uart_16550::SerialPort,
+}
+
+impl io::Read for Uart {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		for (i, byte) in buf.iter_mut().enumerate() {
+			match self.serial_port.try_receive() {
+				Ok(ok) => *byte = ok,
+				Err(_) => return Ok(i),
+			}
+		}
+		Ok(buf.len())
+	}
+}
+
+impl io::Write for Uart {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		for (i, byte) in buf.iter().copied().enumerate() {
+			match self.serial_port.try_send_raw(byte) {
+				Ok(()) => {}
+				Err(_) => return Ok(i),
+			}
+		}
+		Ok(buf.len())
+	}
+}
+
+impl SerialDevice for Uart {}
+
+pub struct Uhyve {
+	port: Port<u8>,
+}
+
+impl io::Read for Uhyve {
+	fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+		Ok(0)
+	}
+}
+
+impl io::Write for Uhyve {
+	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		for byte in buf.iter().copied() {
+			unsafe { self.port.write(byte) }
+		}
+		Ok(buf.len())
+	}
+}
+
+mod dispatch {
+	use alloc::string::String;
+	use alloc::vec::Vec;
+
+	use enum_dispatch::enum_dispatch;
+
+	use super::{Uart, Uhyve};
+	use crate::console::SerialDevice;
+	use crate::io::{Read, Result, Write};
+	use core::fmt;
+
+	#[enum_dispatch(Read, Write, SerialDevice)]
+	pub enum Serial {
+		Uart,
+		Uhyve,
+	}
+}
+
+pub use dispatch::Serial;
 
 enum SerialInner {
 	Uart(uart_16550::SerialPort),
@@ -83,7 +154,7 @@ impl SerialPort {
 }
 
 extern "x86-interrupt" fn serial_interrupt(_stack_frame: crate::interrupts::ExceptionStackFrame) {
-	COM1.lock().as_mut().unwrap().buffer_input();
+	console::buffer_input();
 	increment_irq_counter(SERIAL_IRQ);
 
 	apic::eoi();

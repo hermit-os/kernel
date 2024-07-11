@@ -2,14 +2,18 @@ use hermit_sync::Lazy;
 use simple_shell::*;
 
 use crate::arch::kernel::COM1;
+use crate::console::CONSOLE;
 use crate::interrupts::print_statistics;
-
-fn read() -> Option<u8> {
-	COM1.lock().as_mut().map(|s| s.read())?
-}
+use crate::io::Read;
 
 static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
-	let (print, read) = (|s: &str| print!("{}", s), read);
+	let print = |s: &str| print!("{}", s);
+	let read = || {
+		let mut buf = [0];
+		let n = CONSOLE.lock().read(&mut buf).unwrap();
+		char::from_u32()
+		(n == 1).then_some(buf[0])
+	};
 	let mut shell = Shell::new(print, read);
 
 	shell.commands.insert(
