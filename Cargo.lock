@@ -515,6 +515,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fuse-abi"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c311ed3856f2dc59387ddc411a4e5a80d5bbb359aa060c5724a26e30991724b8"
+dependencies = [
+ "num_enum",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -620,6 +629,7 @@ dependencies = [
  "fdt",
  "float-cmp",
  "free-list",
+ "fuse-abi",
  "hashbrown",
  "hermit-dtb",
  "hermit-entry",
