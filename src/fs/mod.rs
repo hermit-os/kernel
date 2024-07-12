@@ -1,6 +1,5 @@
 #[cfg(all(feature = "fuse", feature = "pci"))]
 pub(crate) mod fuse;
-mod fuse_abi;
 mod mem;
 mod uhyve;
 
