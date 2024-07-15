@@ -7,12 +7,12 @@ use endian_num::{le64, Le};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use pci_types::capability::PciCapabilityAddress;
 use pci_types::ConfigRegionAccess;
-use volatile::access::{ReadOnly, ReadWrite, RestrictAccess};
+use volatile::access::{ReadOnly, ReadWrite, Readable, RestrictAccess};
 use volatile::VolatilePtr;
 use volatile_macro::VolatileFieldAccess;
 
 use crate::volatile::WideVolatilePtr;
-use crate::{le16, le32, DeviceStatus};
+use crate::{le16, le32, DeviceConfigSpace, DeviceStatus};
 
 /// PCI Capability
 ///
@@ -427,6 +427,27 @@ impl_wide_field_access! {
         /// The driver writes the physical address of Device Area here.  See section _Basic Facilities of a Virtio Device / Virtqueues_.
         #[access(ReadWrite)]
         queue_device: queue_device_low, queue_device_high;
+    }
+}
+
+impl<'a, A> DeviceConfigSpace for VolatilePtr<'a, CommonCfg, A>
+where
+    A: RestrictAccess<ReadOnly>,
+    A::Restricted: Readable,
+{
+    fn read_config_with<F, T>(self, f: F) -> T
+    where
+        F: FnMut() -> T,
+    {
+        let mut f = f;
+        loop {
+            let before = self.config_generation().read();
+            let read = f();
+            let after = self.config_generation().read();
+            if after == before {
+                break read;
+            }
+        }
     }
 }
 

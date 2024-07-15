@@ -3,13 +3,13 @@
 use core::mem;
 
 use endian_num::{le16, le32};
-use volatile::access::{ReadOnly, ReadWrite, RestrictAccess, WriteOnly};
+use volatile::access::{ReadOnly, ReadWrite, Readable, RestrictAccess, WriteOnly};
 use volatile::VolatilePtr;
 
 #[doc(inline)]
 pub use super::pci::NotificationData;
 use crate::volatile::{OveralignedVolatilePtr, WideVolatilePtr};
-use crate::{DeviceStatus, Id};
+use crate::{DeviceConfigSpace, DeviceStatus, Id};
 
 /// MMIO Device Registers
 #[repr(transparent)]
@@ -556,6 +556,27 @@ impl_wide_field_access! {
         #[doc(alias = "SHMBase")]
         #[access(ReadOnly)]
         shm_base: shm_base_low, shm_base_high;
+    }
+}
+
+impl<'a, A> DeviceConfigSpace for VolatilePtr<'a, DeviceRegisters, A>
+where
+    A: RestrictAccess<ReadOnly>,
+    A::Restricted: Readable,
+{
+    fn read_config_with<F, T>(self, f: F) -> T
+    where
+        F: FnMut() -> T,
+    {
+        let mut f = f;
+        loop {
+            let before = self.config_generation().read();
+            let read = f();
+            let after = self.config_generation().read();
+            if after == before {
+                break read;
+            }
+        }
     }
 }
 
