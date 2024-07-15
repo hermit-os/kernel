@@ -313,7 +313,7 @@ pub enum FileType {
 	Whiteout = 14,       // DT_WHT
 }
 
-#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum SeekWhence {
 	Set = 0,
 	Cur = 1,

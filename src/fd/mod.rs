@@ -151,7 +151,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
-	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
+	async fn async_lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
 		Err(io::Error::EINVAL)
 	}
 
@@ -287,6 +287,12 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 			Ok(x) => Ok(x),
 		}
 	}
+}
+
+pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	let obj = get_object(fd)?;
+
+	block_on(obj.async_lseek(offset, whence), None)
 }
 
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
