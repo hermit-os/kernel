@@ -13,7 +13,8 @@ use virtio::pci::{
 	IsrStatus as IsrStatusRaw, NotificationData,
 };
 use virtio::{le16, le32, DeviceStatus};
-use volatile::VolatileRef;
+use volatile::access::ReadOnly;
+use volatile::{VolatilePtr, VolatileRef};
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::arch::kernel::interrupts::*;
@@ -365,8 +366,8 @@ impl ComCfg {
 		}
 	}
 
-	pub fn config_generation(&self) -> u32 {
-		self.com_cfg.as_ptr().config_generation().read().into()
+	pub fn device_config_space(&self) -> VolatilePtr<'_, CommonCfg, ReadOnly> {
+		self.com_cfg.as_ptr()
 	}
 
 	/// Returns the device status field.

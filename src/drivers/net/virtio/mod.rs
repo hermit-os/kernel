@@ -20,7 +20,7 @@ use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
-use virtio::FeatureBits;
+use virtio::{DeviceConfigSpace, FeatureBits};
 use volatile::access::ReadOnly;
 use volatile::VolatileRef;
 
@@ -368,14 +368,9 @@ impl NetworkDriver for VirtioNetDriver {
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
 		if self.dev_cfg.features.contains(virtio::net::F::MAC) {
-			loop {
-				let before = self.com_cfg.config_generation();
-				let mac = self.dev_cfg.raw.as_ptr().mac().read();
-				let after = self.com_cfg.config_generation();
-				if before == after {
-					break mac;
-				}
-			}
+			self.com_cfg
+				.device_config_space()
+				.read_config_with(|| self.dev_cfg.raw.as_ptr().mac().read())
 		} else {
 			unreachable!("Currently VIRTIO_NET_F_MAC must be negotiated!")
 		}
