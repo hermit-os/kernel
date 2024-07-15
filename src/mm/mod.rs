@@ -208,8 +208,12 @@ pub(crate) fn init() {
 		// Afterwards, we already use the heap and map the rest into
 		// the virtual address space.
 
+		#[cfg(not(feature = "mmap"))]
 		let virt_size: usize =
 			(available_memory - stack_reserve).align_down(LargePageSize::SIZE as usize);
+		#[cfg(feature = "mmap")]
+		let virt_size: usize = ((available_memory * 75) / 100).align_down(LargePageSize::SIZE as usize);
+
 		let virt_addr =
 			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize)
 				.unwrap();
