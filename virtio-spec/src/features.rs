@@ -40,13 +40,11 @@ where
     /// # use virtio_spec as virtio;
     /// use virtio::FeatureBits;
     ///
-    /// assert!((virtio::net::F::GUEST_TSO4
-    ///     | virtio::net::F::GUEST_CSUM)
-    ///         .requirements_satisfied());
-    /// assert!((virtio::net::F::GUEST_ECN
-    ///     | virtio::net::F::GUEST_TSO4
-    ///     | virtio::net::F::GUEST_CSUM)
-    ///     .requirements_satisfied());
+    /// assert!((virtio::net::F::GUEST_TSO4 | virtio::net::F::GUEST_CSUM).requirements_satisfied());
+    /// assert!(
+    ///     (virtio::net::F::GUEST_ECN | virtio::net::F::GUEST_TSO4 | virtio::net::F::GUEST_CSUM)
+    ///         .requirements_satisfied()
+    /// );
     /// ```
     fn requirements_satisfied(&self) -> bool {
         self.iter()

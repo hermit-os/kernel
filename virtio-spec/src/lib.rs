@@ -244,3 +244,36 @@ impl RingEventFlags {
         self as u8
     }
 }
+
+/// Common device configuration space functionality.
+pub trait DeviceConfigSpace: Sized {
+    /// Read from device configuration space.
+    ///
+    /// This function should be used when reading from fields greater than
+    /// 32 bits wide or when reading from multiple fields.
+    ///
+    /// As described in _Driver Requirements: Device Configuration Space_,
+    /// this method checks the configuration atomicity value of the device
+    /// and only returns once the value was the same before and after the
+    /// provided function.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use virtio_spec as virtio;
+    /// use virtio::net::ConfigVolatileFieldAccess;
+    /// use virtio::DeviceConfigSpace;
+    /// use volatile::access::ReadOnly;
+    /// use volatile::VolatilePtr;
+    ///
+    /// fn read_mac(
+    ///     common_cfg: VolatilePtr<'_, virtio::pci::CommonCfg, ReadOnly>,
+    ///     net_cfg: VolatilePtr<'_, virtio::net::Config, ReadOnly>,
+    /// ) -> [u8; 6] {
+    ///     common_cfg.read_config_with(|| net_cfg.mac().read())
+    /// }
+    /// ```
+    fn read_config_with<F, T>(self, f: F) -> T
+    where
+        F: FnMut() -> T;
+}

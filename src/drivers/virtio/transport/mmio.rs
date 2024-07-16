@@ -10,7 +10,8 @@ use virtio::mmio::{
 	InterruptStatus, NotificationData,
 };
 use virtio::{le32, DeviceStatus};
-use volatile::VolatileRef;
+use volatile::access::ReadOnly;
+use volatile::{VolatilePtr, VolatileRef};
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::arch::kernel::interrupts::*;
@@ -94,8 +95,8 @@ impl ComCfg {
 		ComCfg { com_cfg: raw, rank }
 	}
 
-	pub fn config_generation(&self) -> u32 {
-		self.com_cfg.as_ptr().config_generation().read().to_ne()
+	pub fn device_config_space(&self) -> VolatilePtr<'_, DeviceRegisters, ReadOnly> {
+		self.com_cfg.as_ptr()
 	}
 
 	/// Select a queue via an index. If queue does NOT exist returns `None`, else
