@@ -150,7 +150,7 @@ riscv = "0.11"
 sbi-rt = "0.0.3"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.9", optional = true }
-trapframe = "0.9"
+trapframe = "0.10"
 
 [dev-dependencies]
 float-cmp = "0.9"
