@@ -570,14 +570,8 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
-	let obj = get_object(fd);
-	obj.map_or_else(
-		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).lseek(offset, num::FromPrimitive::from_i32(whence).unwrap())
-				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)
-		},
-	)
+	crate::fd::lseek(fd, offset, num::FromPrimitive::from_i32(whence).unwrap())
+		.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)
 }
 
 #[repr(C)]

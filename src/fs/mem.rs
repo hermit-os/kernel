@@ -21,7 +21,7 @@ use async_trait::async_trait;
 
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, PollEvent};
-use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
+use crate::fs::{DirectoryEntry, FileAttr, NodeKind, SeekWhence, VfsNode};
 use crate::time::timespec;
 use crate::{arch, io};
 
@@ -89,6 +89,32 @@ impl ObjectInterface for RomFileInterface {
 		*pos_guard = pos + len;
 
 		Ok(len)
+	}
+
+	async fn async_lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		let guard = self.inner.read().await;
+		let mut pos_guard = self.pos.lock().await;
+
+		let new_pos: isize = if whence == SeekWhence::Set {
+			if offset < 0 {
+				return Err(io::Error::EINVAL);
+			}
+
+			offset
+		} else if whence == SeekWhence::End {
+			guard.data.len() as isize + offset
+		} else if whence == SeekWhence::Cur {
+			(*pos_guard as isize) + offset
+		} else {
+			return Err(io::Error::EINVAL);
+		};
+
+		if new_pos <= guard.data.len().try_into().unwrap() {
+			*pos_guard = new_pos.try_into().unwrap();
+			Ok(new_pos)
+		} else {
+			Err(io::Error::EBADF)
+		}
 	}
 }
 
@@ -191,6 +217,33 @@ impl ObjectInterface for RamFileInterface {
 		*pos_guard = pos + buf.len();
 
 		Ok(buf.len())
+	}
+
+	async fn async_lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		let mut guard = self.inner.write().await;
+		let mut pos_guard = self.pos.lock().await;
+
+		let new_pos: isize = if whence == SeekWhence::Set {
+			if offset < 0 {
+				return Err(io::Error::EINVAL);
+			}
+
+			offset
+		} else if whence == SeekWhence::End {
+			guard.data.len() as isize + offset
+		} else if whence == SeekWhence::Cur {
+			(*pos_guard as isize) + offset
+		} else {
+			return Err(io::Error::EINVAL);
+		};
+
+		if new_pos > guard.data.len().try_into().unwrap() {
+			guard.data.resize(new_pos.try_into().unwrap(), 0);
+			guard.attr.st_size = guard.data.len().try_into().unwrap();
+		}
+		*pos_guard = new_pos.try_into().unwrap();
+
+		Ok(new_pos)
 	}
 }
 

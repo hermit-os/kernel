@@ -725,8 +725,8 @@ impl ObjectInterface for FuseFileHandle {
 		self.0.lock().await.write(buf)
 	}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
+	async fn async_lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		self.0.lock().await.lseek(offset, whence)
 	}
 }
 
