@@ -112,7 +112,7 @@ impl Qemu {
 			_ => {}
 		}
 
-		let status = qemu.0.wait_timeout(Duration::from_secs(60 * 2))?;
+		let status = qemu.0.wait_timeout(Duration::from_secs(60 * 6))?;
 		let Some(status) = status else {
 			bail!("QEMU timeout")
 		};
@@ -217,7 +217,7 @@ impl Qemu {
 			memory *= 4;
 		}
 		if self.build.cargo_build.artifact.profile() == "dev" {
-			memory *= 4;
+			memory *= 16;
 		}
 		memory *= self.smp;
 		if self.netdev.is_some() {
