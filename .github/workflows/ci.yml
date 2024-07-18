@@ -161,6 +161,8 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add llvm-tools
         working-directory: .
+      - run: rustup target add wasm32-wasi
+        working-directory: .
       - uses: mkroening/rust-toolchain-toml@main
         with:
           toolchain-file: 'kernel/rust-toolchain.toml'
@@ -184,6 +186,8 @@ jobs:
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package wasmtime-demo --features ci
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features --microvm
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --virtiofsd
