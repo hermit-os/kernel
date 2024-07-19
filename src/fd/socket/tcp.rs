@@ -84,35 +84,25 @@ impl Socket {
 	}
 
 	async fn async_close(&self) -> io::Result<()> {
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
-				_ => {
-					if socket.send_queue() > 0 {
-						socket.register_send_waker(cx.waker());
-						Poll::Pending
-					} else {
-						socket.close();
-						Poll::Ready(Ok(()))
-					}
+		future::poll_fn(|_cx| {
+			self.with(|socket| {
+				if socket.is_active() {
+					socket.close();
+					Poll::Ready(Ok(()))
+				} else {
+					Poll::Ready(Err(io::Error::EIO))
 				}
 			})
 		})
 		.await?;
 
 		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Ok(())),
-				_ => {
+			self.with(|socket| {
+				if !socket.is_active() {
+					Poll::Ready(Ok(()))
+				} else {
 					socket.register_send_waker(cx.waker());
+					socket.register_recv_waker(cx.waker());
 					Poll::Pending
 				}
 			})
@@ -243,9 +233,7 @@ impl ObjectInterface for Socket {
 	async fn async_read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
-					Poll::Ready(Ok(0))
-				}
+				tcp::State::Closed => Poll::Ready(Ok(0)),
 				tcp::State::FinWait1
 				| tcp::State::FinWait2
 				| tcp::State::Listen
