@@ -810,16 +810,19 @@ impl VirtioNetDriver {
 		if self.dev_cfg.features.contains(virtio::net::F::CSUM)
 			&& self.dev_cfg.features.contains(virtio::net::F::GUEST_CSUM)
 		{
+			self.checksums.ipv4 = Checksum::None;
 			self.checksums.udp = Checksum::None;
 			self.checksums.tcp = Checksum::None;
 		} else if self.dev_cfg.features.contains(virtio::net::F::CSUM) {
+			self.checksums.ipv4 = Checksum::Rx;
 			self.checksums.udp = Checksum::Rx;
 			self.checksums.tcp = Checksum::Rx;
 		} else if self.dev_cfg.features.contains(virtio::net::F::GUEST_CSUM) {
+			self.checksums.ipv4 = Checksum::Tx;
 			self.checksums.udp = Checksum::Tx;
 			self.checksums.tcp = Checksum::Tx;
 		}
-		debug!("{:?}", self.checksums);
+		info!("{:?}", self.checksums);
 
 		if self.dev_cfg.features.contains(virtio::net::F::MTU) {
 			self.mtu = self.dev_cfg.raw.as_ptr().mtu().read().to_ne();
