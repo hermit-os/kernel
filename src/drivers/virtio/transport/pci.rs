@@ -31,6 +31,8 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::VirtioError;
+#[cfg(feature = "vsock")]
+use crate::drivers::vsock::VirtioVsockDriver;
 
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
@@ -915,6 +917,20 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "vsock")]
+		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
+			Ok(virt_sock_drv) => {
+				info!("Virtio sock driver initialized.");
+				Ok(VirtioDriver::Vsock(virt_sock_drv))
+			}
+			Err(virtio_error) => {
+				error!(
+					"Virtio sock driver could not be initialized with device: {:x}",
+					device_id
+				);
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "fuse")]
 		virtio::Id::Fs => {
 			// TODO: check subclass
@@ -956,6 +972,8 @@ pub(crate) fn init_device(
 
 					Ok(drv)
 				}
+				#[cfg(feature = "vsock")]
+				VirtioDriver::Vsock(_) => Ok(drv),
 				#[cfg(feature = "fuse")]
 				VirtioDriver::FileSystem(_) => Ok(drv),
 			}
@@ -967,6 +985,8 @@ pub(crate) fn init_device(
 pub(crate) enum VirtioDriver {
 	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	Network(VirtioNetDriver),
+	#[cfg(feature = "vsock")]
+	Vsock(VirtioVsockDriver),
 	#[cfg(feature = "fuse")]
 	FileSystem(VirtioFsDriver),
 }

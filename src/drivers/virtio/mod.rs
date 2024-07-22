@@ -14,6 +14,8 @@ pub mod error {
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
+	#[cfg(feature = "vsock")]
+	pub use crate::drivers::vsock::error::VirtioVsockError;
 
 	#[allow(dead_code)]
 	#[derive(Debug)]
@@ -25,6 +27,8 @@ pub mod error {
 		NetDriver(VirtioNetError),
 		#[cfg(feature = "fuse")]
 		FsDriver(VirtioFsError),
+		#[cfg(feature = "vsock")]
+		VsockDriver(VirtioVsockError),
 		#[cfg(not(feature = "pci"))]
 		Unknown,
 	}
@@ -71,6 +75,20 @@ pub mod error {
 					VirtioFsError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}", ),
 					VirtioFsError::Unknown => write!(f, "Virtio filesystem failed, driver failed due unknown reason!"),
 				},
+				#[cfg(feature = "vsock")]
+ 				VirtioError::VsockDriver(vsock_error) => match vsock_error {
+					#[cfg(feature = "pci")]
+ 					VirtioVsockError::NoDevCfg(id) => write!(f, "Virtio socket device driver failed, for device {id:x}, due to a missing or malformed device config!"),
+					 #[cfg(feature = "pci")]
+ 					VirtioVsockError::NoComCfg(id) =>  write!(f, "Virtio socket device driver failed, for device {id:x}, due to a missing or malformed common config!"),
+					 #[cfg(feature = "pci")]
+ 					VirtioVsockError::NoIsrCfg(id) =>  write!(f, "Virtio socket device driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
+					 #[cfg(feature = "pci")]
+                    VirtioVsockError::NoNotifCfg(id) =>  write!(f, "Virtio socket device driver failed, for device {id:x}, due to a missing or malformed notification config!"),
+ 					VirtioVsockError::FailFeatureNeg(id) => write!(f, "Virtio socket device driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
+					VirtioVsockError::FeatureRequirementsNotMet(features) => write!(f, "Virtio socket driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"),
+					VirtioVsockError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"),
+ 				},
             }
 		}
 	}

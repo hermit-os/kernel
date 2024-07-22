@@ -45,7 +45,7 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse"]
+default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "vsock"]
 acpi = []
 dhcpv4 = [
     "smoltcp",
@@ -54,6 +54,7 @@ dhcpv4 = [
 ]
 fs = ["fuse"]
 fuse = ["pci", "dep:fuse-abi", "fuse-abi/num_enum"]
+vsock = []
 fsgsbase = []
 gem-net = ["tcp", "dep:tock-registers"]
 newlib = []

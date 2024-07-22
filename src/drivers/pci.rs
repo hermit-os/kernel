@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 use hermit_sync::InterruptTicketMutex;
 use pci_types::capability::CapabilityIterator;
 use pci_types::{
@@ -22,14 +22,18 @@ use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fuse"
+	feature = "fuse",
+	feature = "vsock"
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fuse"
+	feature = "fuse",
+	feature = "vsock"
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
+#[cfg(feature = "vsock")]
+use crate::drivers::vsock::VirtioVsockDriver;
 
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
@@ -297,6 +301,8 @@ pub(crate) fn print_information() {
 pub(crate) enum PciDriver {
 	#[cfg(feature = "fuse")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
+	#[cfg(feature = "vsock")]
+	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
 	#[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
@@ -373,12 +379,17 @@ pub(crate) fn init_drivers() {
 
 			#[cfg(any(
 				all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-				feature = "fuse"
+				feature = "fuse",
+				feature = "vsock"
 			))]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+				}
+				#[cfg(feature = "vsock")]
+				Ok(VirtioDriver::Vsock(drv)) => {
+					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)))
 				}
 				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
