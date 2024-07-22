@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[cfg(feature = "pci")]
 pub mod pci;
 
