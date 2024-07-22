@@ -159,12 +159,11 @@ impl DescrRing {
 		// need to move [Self::used_ring_ref] lines into a separate scope.
 		loop {
 			let used_elem;
-			let cur_ring_index;
 			{
 				if self.read_idx == self.used_ring().idx.to_ne() {
 					break;
 				} else {
-					cur_ring_index = self.read_idx as usize % self.token_ring.len();
+					let cur_ring_index = self.read_idx as usize % self.token_ring.len();
 					used_elem = self.used_ring().ring()[cur_ring_index];
 				}
 			}
@@ -184,7 +183,7 @@ impl DescrRing {
 				queue.try_send(tkn.buff_tkn).unwrap()
 			}
 
-			let mut id_ret_idx = u16::try_from(cur_ring_index).unwrap();
+			let mut id_ret_idx = u16::try_from(used_elem.id.to_ne()).unwrap();
 			loop {
 				self.mem_pool.ret_id(super::MemDescrId(id_ret_idx));
 				let cur_chain_elem =
