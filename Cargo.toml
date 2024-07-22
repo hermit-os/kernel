@@ -54,7 +54,7 @@ dhcpv4 = [
 ]
 fs = ["fuse"]
 fuse = ["pci", "dep:fuse-abi", "fuse-abi/num_enum"]
-vsock = []
+vsock = ["pci"]
 fsgsbase = []
 gem-net = ["tcp", "dep:tock-registers"]
 newlib = []
