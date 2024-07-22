@@ -434,9 +434,9 @@ checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 
 [[package]]
 name = "endian-num"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ad847bb2094f110bbdd6fa564894ca4556fd978958e93985420d680d3cb6d14"
+checksum = "f8f59926911ef34d1efb9ea1ee8ca78385df62ce700ccf2bcb149011bd226888"
 dependencies = [
  "bitflags 2.6.0",
  "zerocopy",
