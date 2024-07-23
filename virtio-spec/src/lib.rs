@@ -13,11 +13,14 @@ extern crate alloc;
 mod bitflags;
 #[macro_use]
 pub mod volatile;
+#[cfg(any(feature = "mmio", feature = "pci"))]
 mod driver_notifications;
 mod features;
 pub mod fs;
+#[cfg(feature = "mmio")]
 pub mod mmio;
 pub mod net;
+#[cfg(feature = "pci")]
 pub mod pci;
 pub mod pvirtq;
 pub mod virtq;
