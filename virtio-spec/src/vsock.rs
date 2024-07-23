@@ -4,6 +4,7 @@ use endian_num::{le16, le32};
 use num_enum::{IntoPrimitive, TryFromPrimitive, UnsafeFromPrimitive};
 use volatile_macro::VolatileFieldAccess;
 
+pub use super::features::vsock::F;
 use crate::le64;
 
 /// Socket Device Configuration Layout
