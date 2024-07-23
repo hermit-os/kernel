@@ -7,16 +7,10 @@ pub mod virtio;
 
 use smoltcp::phy::ChecksumCapabilities;
 
-#[cfg(target_arch = "x86_64")]
-use crate::arch::kernel::apic;
 #[allow(unused_imports)]
 use crate::arch::kernel::core_local::*;
-#[cfg(target_arch = "x86_64")]
-use crate::arch::kernel::interrupts::ExceptionStackFrame;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
-#[cfg(target_arch = "aarch64")]
-use crate::arch::scheduler::State;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::executor::device::{RxToken, TxToken};
@@ -47,7 +41,7 @@ pub(crate) trait NetworkDriver {
 }
 
 #[inline]
-fn _irqhandler() -> bool {
+pub(crate) fn network_irqhandler() -> bool {
 	let result = if let Some(driver) = hardware::get_network_driver() {
 		driver.lock().handle_interrupt()
 	} else {
@@ -59,36 +53,4 @@ fn _irqhandler() -> bool {
 	crate::executor::run();
 
 	result
-}
-
-#[cfg(target_arch = "aarch64")]
-pub(crate) fn network_irqhandler(_state: &State) -> bool {
-	debug!("Receive network interrupt");
-	_irqhandler()
-}
-
-#[cfg(target_arch = "x86_64")]
-pub(crate) extern "x86-interrupt" fn network_irqhandler(stack_frame: ExceptionStackFrame) {
-	crate::arch::x86_64::swapgs(&stack_frame);
-	use crate::scheduler::PerCoreSchedulerExt;
-
-	debug!("Receive network interrupt");
-	apic::eoi();
-	let _ = _irqhandler();
-
-	core_scheduler().reschedule();
-	crate::arch::x86_64::swapgs(&stack_frame);
-}
-
-#[cfg(target_arch = "riscv64")]
-pub fn network_irqhandler() {
-	use crate::scheduler::PerCoreSchedulerExt;
-
-	debug!("Receive network interrupt");
-
-	// PLIC end of interrupt
-	crate::arch::kernel::interrupts::external_eoi();
-	let _ = _irqhandler();
-
-	core_scheduler().reschedule();
 }

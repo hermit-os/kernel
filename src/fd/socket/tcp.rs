@@ -8,11 +8,13 @@ use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
-use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
+use smoltcp::wire::{IpEndpoint, IpVersion};
 
 use crate::executor::block_on;
 use crate::executor::network::{now, Handle, NetworkState, NIC};
-use crate::fd::{IoCtl, ObjectInterface, PollEvent, SocketOption};
+use crate::fd::{
+	AddressFamily, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption,
+};
 use crate::{io, DEFAULT_KEEP_ALIVE_INTERVAL};
 
 /// further receives will be disallowed
@@ -304,45 +306,59 @@ impl ObjectInterface for Socket {
 		Ok(pos)
 	}
 
-	fn bind(&self, endpoint: IpListenEndpoint) -> io::Result<()> {
-		self.port.store(endpoint.port, Ordering::Release);
-		Ok(())
-	}
-
-	fn connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
-		if self.nonblocking.load(Ordering::Acquire) {
-			block_on(self.async_connect(endpoint), Some(Duration::ZERO.into())).map_err(|x| {
-				if x == io::Error::ETIME {
-					io::Error::EAGAIN
-				} else {
-					x
-				}
-			})
+	fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+		#[allow(irrefutable_let_patterns)]
+		if let ListenEndpoint::Ip(endpoint) = endpoint {
+			self.port.store(endpoint.port, Ordering::Release);
+			Ok(())
 		} else {
-			block_on(self.async_connect(endpoint), None)
+			Err(io::Error::EIO)
 		}
 	}
 
-	fn accept(&self) -> io::Result<IpEndpoint> {
-		if self.is_nonblocking() {
+	fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+		#[allow(irrefutable_let_patterns)]
+		if let Endpoint::Ip(endpoint) = endpoint {
+			if self.nonblocking.load(Ordering::Acquire) {
+				block_on(self.async_connect(endpoint), Some(Duration::ZERO.into())).map_err(|x| {
+					if x == io::Error::ETIME {
+						io::Error::EAGAIN
+					} else {
+						x
+					}
+				})
+			} else {
+				block_on(self.async_connect(endpoint), None)
+			}
+		} else {
+			Err(io::Error::EIO)
+		}
+	}
+
+	fn accept(&self) -> io::Result<Endpoint> {
+		let endpoint = if self.is_nonblocking() {
 			block_on(self.async_accept(), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == io::Error::ETIME {
 					io::Error::EAGAIN
 				} else {
 					x
 				}
-			})
+			})?
 		} else {
-			block_on(self.async_accept(), None)
-		}
+			block_on(self.async_accept(), None)?
+		};
+
+		Ok(Endpoint::Ip(endpoint))
 	}
 
-	fn getpeername(&self) -> Option<IpEndpoint> {
+	fn getpeername(&self) -> Option<Endpoint> {
 		self.with(|socket| socket.remote_endpoint())
+			.map(Endpoint::Ip)
 	}
 
-	fn getsockname(&self) -> Option<IpEndpoint> {
+	fn getsockname(&self) -> Option<Endpoint> {
 		self.with(|socket| socket.local_endpoint())
+			.map(Endpoint::Ip)
 	}
 
 	fn is_nonblocking(&self) -> bool {
@@ -410,6 +426,17 @@ impl ObjectInterface for Socket {
 		} else {
 			Err(io::Error::EINVAL)
 		}
+	}
+
+	fn get_address_family(&self) -> Option<AddressFamily> {
+		self.with(|socket| {
+			socket
+				.local_endpoint()
+				.map(|endpoint| match endpoint.addr.version() {
+					IpVersion::Ipv4 => AddressFamily::INET,
+					IpVersion::Ipv6 => AddressFamily::INET6,
+				})
+		})
 	}
 }
 

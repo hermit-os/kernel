@@ -6,6 +6,7 @@ pub mod pci;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 
+use pci_types::InterruptLine;
 use virtio::FeatureBits;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
@@ -23,7 +24,7 @@ use crate::drivers::vsock::pci::VsockDevCfgRaw;
 pub(crate) struct VsockDevCfg {
 	pub raw: &'static VsockDevCfgRaw,
 	pub dev_id: u16,
-	pub features: virtio::net::F,
+	pub features: virtio::vsock::F,
 }
 
 pub(crate) struct VirtioVsockDriver {
@@ -31,6 +32,7 @@ pub(crate) struct VirtioVsockDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
+	pub(super) irq: InterruptLine,
 	pub(super) vqueues: Vec<Rc<dyn Virtq>>,
 }
 

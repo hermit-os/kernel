@@ -9,11 +9,11 @@ use crossbeam_utils::atomic::AtomicCell;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::time::Duration;
-use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
+use smoltcp::wire::{IpEndpoint, IpVersion};
 
 use crate::executor::network::{now, Handle, NetworkState, NIC};
 use crate::executor::{block_on, poll_on};
-use crate::fd::{IoCtl, ObjectInterface, PollEvent};
+use crate::fd::{AddressFamily, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -51,7 +51,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_recvfrom(&self, buffer: &mut [u8]) -> io::Result<(usize, IpEndpoint)> {
+	async fn async_recvfrom(&self, buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -81,6 +81,7 @@ impl Socket {
 			})
 		})
 		.await
+		.map(|(len, endpoint)| (len, Endpoint::Ip(endpoint)))
 	}
 
 	async fn async_write_with_meta(&self, buffer: &[u8], meta: &UdpMetadata) -> io::Result<usize> {
@@ -154,29 +155,44 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	fn bind(&self, endpoint: IpListenEndpoint) -> io::Result<()> {
-		self.with(|socket| socket.bind(endpoint).map_err(|_| io::Error::EADDRINUSE))
-	}
-
-	fn connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
-		self.endpoint.store(Some(endpoint));
-		Ok(())
-	}
-
-	fn sendto(&self, buf: &[u8], endpoint: IpEndpoint) -> io::Result<usize> {
-		let meta = UdpMetadata::from(endpoint);
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(
-				self.async_write_with_meta(buf, &meta),
-				Some(Duration::ZERO.into()),
-			)
+	fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+		#[allow(irrefutable_let_patterns)]
+		if let ListenEndpoint::Ip(endpoint) = endpoint {
+			self.with(|socket| socket.bind(endpoint).map_err(|_| io::Error::EADDRINUSE))
 		} else {
-			poll_on(self.async_write_with_meta(buf, &meta), None)
+			Err(io::Error::EIO)
 		}
 	}
 
-	fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, IpEndpoint)> {
+	fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+		#[allow(irrefutable_let_patterns)]
+		if let Endpoint::Ip(endpoint) = endpoint {
+			self.endpoint.store(Some(endpoint));
+			Ok(())
+		} else {
+			Err(io::Error::EIO)
+		}
+	}
+
+	fn sendto(&self, buf: &[u8], endpoint: Endpoint) -> io::Result<usize> {
+		#[allow(irrefutable_let_patterns)]
+		if let Endpoint::Ip(endpoint) = endpoint {
+			let meta = UdpMetadata::from(endpoint);
+
+			if self.nonblocking.load(Ordering::Acquire) {
+				poll_on(
+					self.async_write_with_meta(buf, &meta),
+					Some(Duration::ZERO.into()),
+				)
+			} else {
+				poll_on(self.async_write_with_meta(buf, &meta), None)
+			}
+		} else {
+			Err(io::Error::EIO)
+		}
+	}
+
+	fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		if self.nonblocking.load(Ordering::Acquire) {
 			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == io::Error::ETIME {
@@ -252,6 +268,15 @@ impl ObjectInterface for Socket {
 		} else {
 			Err(io::Error::EINVAL)
 		}
+	}
+
+	fn get_address_family(&self) -> Option<AddressFamily> {
+		self.endpoint
+			.load()
+			.map(|endpoint| match endpoint.addr.version() {
+				IpVersion::Ipv4 => AddressFamily::INET,
+				IpVersion::Ipv6 => AddressFamily::INET6,
+			})
 	}
 }
 

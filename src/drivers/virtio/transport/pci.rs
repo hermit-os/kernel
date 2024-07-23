@@ -16,7 +16,10 @@ use virtio::{le16, le32, DeviceStatus};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
-#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(
+	not(feature = "rtl8139"),
+	any(feature = "tcp", feature = "udp", feature = "vsock")
+))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
@@ -25,12 +28,11 @@ use crate::drivers::error::DriverError;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-use crate::drivers::net::network_irqhandler;
-#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::virtio_irqhandler;
 #[cfg(feature = "vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
@@ -967,13 +969,21 @@ pub(crate) fn init_device(
 					let irq = device.get_irq().unwrap();
 					info!("Install virtio interrupt handler at line {}", irq);
 					// Install interrupt handler
-					irq_install_handler(irq, network_irqhandler);
-					add_irq_name(irq, "virtio_net");
+					irq_install_handler(irq, virtio_irqhandler);
+					add_irq_name(irq, "virtio");
 
 					Ok(drv)
 				}
 				#[cfg(feature = "vsock")]
-				VirtioDriver::Vsock(_) => Ok(drv),
+				VirtioDriver::Vsock(_) => {
+					let irq = device.get_irq().unwrap();
+					info!("Install virtio interrupt handler at line {}", irq);
+					// Install interrupt handler
+					irq_install_handler(irq, virtio_irqhandler);
+					add_irq_name(irq, "virtio");
+
+					Ok(drv)
+				}
 				#[cfg(feature = "fuse")]
 				VirtioDriver::FileSystem(_) => Ok(drv),
 			}

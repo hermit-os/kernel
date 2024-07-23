@@ -18,10 +18,9 @@ use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::PhysAddr;
 use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::network_irqhandler;
-#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::virtio_irqhandler;
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
@@ -386,14 +385,32 @@ pub(crate) fn init_device(
 				Ok(virt_net_drv) => {
 					info!("Virtio network driver initialized.");
 					// Install interrupt handler
-					irq_install_handler(irq_no, network_irqhandler);
+					irq_install_handler(irq_no, virtio_irqhandler);
 					#[cfg(not(target_arch = "riscv64"))]
-					add_irq_name(irq_no, "virtio_net");
+					add_irq_name(irq_no, "virtio");
 
 					Ok(VirtioDriver::Network(virt_net_drv))
 				}
 				Err(virtio_error) => {
 					error!("Virtio network driver could not be initialized with device");
+					Err(DriverError::InitVirtioDevFail(virtio_error))
+				}
+			}
+		}
+		#[cfg(feature = "vsock")]
+		virtio::Id::Vsock => {
+			match VirtioVsockDriver::init(dev_id, registers, irq_no) {
+				Ok(virt_net_drv) => {
+					info!("Virtio sock driver initialized.");
+					// Install interrupt handler
+					irq_install_handler(irq_no, virtio_irqhandler);
+					#[cfg(not(target_arch = "riscv64"))]
+					add_irq_name(irq_no, "virtio");
+
+					Ok(VirtioDriver::Vsock(virt_vsock_drv))
+				}
+				Err(virtio_error) => {
+					error!("Virtio sock driver could not be initialized with device");
 					Err(DriverError::InitVirtioDevFail(virtio_error))
 				}
 			}

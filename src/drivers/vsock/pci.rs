@@ -83,6 +83,7 @@ impl VirtioVsockDriver {
 			com_cfg,
 			isr_stat,
 			notif_cfg,
+			irq: device.get_irq().unwrap(),
 			vqueues: Vec::new(),
 		})
 	}

@@ -197,6 +197,18 @@ pub enum GEMError {
 	Unknown,
 }
 
+fn gem_irqhandler() {
+	use crate::scheduler::PerCoreSchedulerExt;
+
+	debug!("Receive network interrupt");
+
+	// PLIC end of interrupt
+	crate::arch::kernel::interrupts::external_eoi();
+	let _ = network_irqhandler();
+
+	core_scheduler().reschedule();
+}
+
 /// GEM network driver struct.
 ///
 /// Struct allows to control device queus as also
@@ -674,9 +686,9 @@ pub fn init_device(
 		// Configure Interrupts
 		debug!(
 			"Install interrupt handler for GEM at {:x}",
-			network_irqhandler as usize
+			gem_irqhandler as usize
 		);
-		irq_install_handler(irq, network_irqhandler);
+		irq_install_handler(irq, gem_irqhandler);
 		(*gem).int_enable.write(Interrupts::FRAMERX::SET); // + Interrupts::TXCOMPL::SET
 
 		// Enable the Controller (again?)
