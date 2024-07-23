@@ -3,7 +3,6 @@
 use core::mem;
 
 use bitfield_struct::bitfield;
-use endian_num::{le64, Le};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use pci_types::capability::PciCapabilityAddress;
 use pci_types::ConfigRegionAccess;
@@ -12,7 +11,7 @@ use volatile::VolatilePtr;
 use volatile_macro::VolatileFieldAccess;
 
 use crate::volatile::WideVolatilePtr;
-use crate::{le16, le32, DeviceConfigSpace, DeviceStatus};
+use crate::{le16, le32, le64, DeviceConfigSpace, DeviceStatus, Le};
 
 /// PCI Capability
 ///

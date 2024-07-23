@@ -1,9 +1,8 @@
 //! Packed virtqueue definitions
 
 use bitfield_struct::bitfield;
-use endian_num::{le16, le32, le64};
 
-use crate::{virtq, RingEventFlags};
+use crate::{le16, le32, le64, virtq, RingEventFlags};
 
 /// Packed Virtqueue Descriptor
 #[doc(alias = "pvirtq_desc")]

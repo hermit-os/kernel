@@ -21,7 +21,7 @@ pub mod pci;
 pub mod pvirtq;
 pub mod virtq;
 
-pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
+pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64, Be, Le};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 pub use self::features::{FeatureBits, F};
