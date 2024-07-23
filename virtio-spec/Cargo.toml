@@ -14,7 +14,7 @@ bitfield-struct = "0.8"
 bitflags = "2"
 endian-num = { version = "0.1", features = ["bitflags", "linux-types"] }
 num_enum = { version = "0.7", default-features = false }
-pci_types = "0.10"
+pci_types = { version = "0.10", optional = true }
 volatile = "0.6"
 volatile-macro = "0.6"
 zerocopy = { version = "0.7", optional = true, default-features = false }
@@ -22,5 +22,7 @@ zerocopy-derive = { version = "0.7", optional = true }
 
 [features]
 alloc = ["dep:allocator-api2"]
+mmio = []
 nightly = ["allocator-api2/nightly"]
+pci = ["dep:pci_types"]
 zerocopy = ["dep:zerocopy", "dep:zerocopy-derive", "endian-num/zerocopy"]

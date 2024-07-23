@@ -9,6 +9,9 @@ use core::sync::atomic::{fence, Ordering};
 use core::{iter, mem, ops, ptr};
 
 use align_address::Align;
+#[cfg(not(feature = "pci"))]
+use virtio::mmio::NotificationData;
+#[cfg(feature = "pci")]
 use virtio::pci::NotificationData;
 use virtio::pvirtq::{EventSuppressDesc, EventSuppressFlags};
 use virtio::virtq::DescF;

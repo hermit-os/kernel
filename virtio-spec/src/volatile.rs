@@ -5,7 +5,6 @@ use core::marker::PhantomData;
 use volatile::access::{Readable, Writable};
 use volatile::VolatilePtr;
 
-use crate::mmio::InterruptStatus;
 use crate::{be32, be64, le16, le32, le64, DeviceStatus, Id};
 
 /// A wide volatile pointer for 64-bit fields.
@@ -112,6 +111,7 @@ impl<'a, A> WideVolatilePtr<'a, be32, A> {
     }
 }
 
+#[cfg(any(feature = "mmio", feature = "pci"))]
 macro_rules! impl_wide_field_access {
     (
         $(#[$outer:meta])*
@@ -283,7 +283,8 @@ impl OveralignedField<le32> for DeviceStatus {
     }
 }
 
-impl OveralignedField<le32> for InterruptStatus {
+#[cfg(feature = "mmio")]
+impl OveralignedField<le32> for crate::mmio::InterruptStatus {
     fn from_field(field: le32) -> Self {
         Self::from_bits_retain(u8::from_field(field))
     }
@@ -294,7 +295,6 @@ impl OveralignedField<le32> for InterruptStatus {
 }
 
 mod private {
-    use crate::mmio::InterruptStatus;
     use crate::{le16, le32, DeviceStatus, Id};
 
     pub trait Sealed<T> {}
@@ -304,5 +304,6 @@ mod private {
     impl Sealed<le32> for le16 {}
     impl Sealed<le32> for Id {}
     impl Sealed<le32> for DeviceStatus {}
-    impl Sealed<le32> for InterruptStatus {}
+    #[cfg(feature = "mmio")]
+    impl Sealed<le32> for crate::mmio::InterruptStatus {}
 }

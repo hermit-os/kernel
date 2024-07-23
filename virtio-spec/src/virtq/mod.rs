@@ -7,7 +7,7 @@ use core::alloc::Layout;
 use core::ptr::{addr_of_mut, NonNull};
 use core::{mem, ptr};
 
-use endian_num::{le16, le32, le64};
+use crate::{le16, le32, le64};
 
 /// Split Virtqueue Descriptor
 #[doc(alias = "virtq_desc")]

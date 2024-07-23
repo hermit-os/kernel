@@ -7,6 +7,9 @@ use core::cell::{RefCell, UnsafeCell};
 use core::mem::{self, MaybeUninit};
 use core::{iter, ptr};
 
+#[cfg(not(feature = "pci"))]
+use virtio::mmio::NotificationData;
+#[cfg(feature = "pci")]
 use virtio::pci::NotificationData;
 use virtio::{le16, virtq};
 

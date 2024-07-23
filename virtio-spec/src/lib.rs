@@ -13,15 +13,19 @@ extern crate alloc;
 mod bitflags;
 #[macro_use]
 pub mod volatile;
+#[cfg(any(feature = "mmio", feature = "pci"))]
+mod driver_notifications;
 mod features;
 pub mod fs;
+#[cfg(feature = "mmio")]
 pub mod mmio;
 pub mod net;
+#[cfg(feature = "pci")]
 pub mod pci;
 pub mod pvirtq;
 pub mod virtq;
 
-pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64};
+pub use endian_num::{be128, be16, be32, be64, le128, le16, le32, le64, Be, Le};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 pub use self::features::{FeatureBits, F};

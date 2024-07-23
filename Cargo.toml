@@ -57,7 +57,7 @@ fuse = ["pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 fsgsbase = []
 gem-net = ["tcp", "dep:tock-registers"]
 newlib = []
-pci = []
+pci = ["virtio/pci"]
 rtl8139 = ["tcp", "pci"]
 smp = []
 tcp = ["smoltcp", "smoltcp/socket-tcp"]
@@ -74,7 +74,7 @@ mmap = []
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
-virtio = { package = "virtio-spec", path = "virtio-spec", features = ["alloc", "nightly", "zerocopy"] }
+virtio = { package = "virtio-spec", path = "virtio-spec", features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }
