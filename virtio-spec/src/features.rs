@@ -476,6 +476,26 @@ pub mod fs {
     impl crate::FeatureBits for F {}
 }
 
+pub mod vsock {
+    use crate::le128;
+
+    feature_bits! {
+        /// Socket Device Feature Bits
+        #[doc(alias = "VIRTIO_VSOCK_F")]
+        pub struct F: le128 {
+            /// stream socket type is supported.
+            #[doc(alias = "VIRTIO_VSOCK_F_STREAM")]
+            const STREAM = 1 << 0;
+
+            /// seqpacket socket type is supported.
+            #[doc(alias = "VIRTIO_VSOCK_F_SEQPACKET")]
+            const SEQPACKET = 1 << 1;
+        }
+    }
+
+    impl crate::FeatureBits for F {}
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
