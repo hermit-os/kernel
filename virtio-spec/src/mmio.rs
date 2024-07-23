@@ -6,7 +6,7 @@ use volatile::access::{ReadOnly, ReadWrite, Readable, RestrictAccess, WriteOnly}
 use volatile::VolatilePtr;
 
 #[doc(inline)]
-pub use super::pci::NotificationData;
+pub use crate::driver_notifications::NotificationData;
 use crate::volatile::{OveralignedVolatilePtr, WideVolatilePtr};
 use crate::{le16, le32, DeviceConfigSpace, DeviceStatus, Id};
 

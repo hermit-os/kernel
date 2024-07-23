@@ -13,6 +13,7 @@ extern crate alloc;
 mod bitflags;
 #[macro_use]
 pub mod volatile;
+mod driver_notifications;
 mod features;
 pub mod fs;
 pub mod mmio;
