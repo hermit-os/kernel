@@ -89,7 +89,7 @@ crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
-fuse-abi = { version = "0.1", optional = true }
+fuse-abi = { version = "0.1", features = ["zerocopy"], optional = true }
 hashbrown = { version = "0.14", default-features = false }
 hermit-entry = { version = "0.10", features = ["kernel"] }
 hermit-sync = "0.1"

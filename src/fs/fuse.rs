@@ -12,6 +12,7 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
 use num_traits::FromPrimitive;
+use zerocopy::FromBytes;
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -374,14 +375,16 @@ pub(crate) mod ops {
 		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_LOOKUP;
 		type InStruct = ();
 		type InPayload = CString;
-		type OutStruct = fuse_entry_out;
-		type OutPayload = ();
+		type OutStruct = ();
+		// Lookups return [fuse_entry_out] only when there actually is a result. For this reason,
+		// it is not part of the header (since all other headers are always there).
+		type OutPayload = [u8];
 	}
 
 	impl Lookup {
 		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(FUSE_ROOT_ID.into(), (), name);
-			(cmd, 0)
+			(cmd, size_of::<fuse_entry_out>().try_into().unwrap())
 		}
 	}
 }
@@ -520,7 +523,8 @@ fn lookup(name: CString) -> Option<u64> {
 		.send_command(cmd, rsp_payload_len)
 		.ok()?;
 	if rsp.headers.out_header.error == 0 {
-		Some(rsp.headers.op_header.nodeid)
+		let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap()).unwrap();
+		Some(entry_out.nodeid)
 	} else {
 		None
 	}
@@ -972,13 +976,15 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error != 0 {
 			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
 		} else {
-			let rsp = rsp.headers.op_header;
-			let attr = rsp.attr;
+			let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+				.ok_or(io::Error::EIO)
+				.unwrap();
+			let attr = entry_out.attr;
 
 			if attr.mode & S_IFMT != S_IFLNK {
 				Ok(FileAttr::from(attr))
 			} else {
-				let path = readlink(rsp.nodeid)?;
+				let path = readlink(entry_out.nodeid)?;
 				let mut components: Vec<&str> = path.split('/').collect();
 				self.traverse_stat(&mut components)
 			}
@@ -999,8 +1005,10 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error != 0 {
 			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
 		} else {
-			let attr = rsp.headers.op_header.attr;
-			Ok(FileAttr::from(attr))
+			let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+				.ok_or(io::Error::EIO)
+				.unwrap();
+			Ok(FileAttr::from(entry_out.attr))
 		}
 	}
 
@@ -1028,7 +1036,10 @@ impl VfsNode for FuseDirectory {
 				.send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error == 0 {
-				let attr = FileAttr::from(rsp.headers.op_header.attr);
+				let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+					.ok_or(io::Error::EIO)
+					.unwrap();
+				let attr = FileAttr::from(entry_out.attr);
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
 					let mut path = path.into_string().unwrap();
 					path.remove(0);
@@ -1220,7 +1231,10 @@ pub(crate) fn init() {
 					.unwrap();
 
 				assert_eq!(rsp.headers.out_header.error, 0);
-				let attr = rsp.headers.op_header.attr;
+				let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+					.ok_or(io::Error::EIO)
+					.unwrap();
+				let attr = entry_out.attr;
 				let attr = FileAttr::from(attr);
 
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
