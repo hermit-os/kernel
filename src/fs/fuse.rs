@@ -11,6 +11,7 @@ use core::task::Poll;
 use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
+use num_traits::FromPrimitive;
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -969,19 +970,18 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
-			// TODO: Correct error handling
-			return Err(io::Error::EIO);
-		}
-
-		let rsp = rsp.headers.op_header;
-		let attr = rsp.attr;
-
-		if attr.mode & S_IFMT != S_IFLNK {
-			Ok(FileAttr::from(attr))
+			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
 		} else {
-			let path = readlink(rsp.nodeid)?;
-			let mut components: Vec<&str> = path.split('/').collect();
-			self.traverse_stat(&mut components)
+			let rsp = rsp.headers.op_header;
+			let attr = rsp.attr;
+
+			if attr.mode & S_IFMT != S_IFLNK {
+				Ok(FileAttr::from(attr))
+			} else {
+				let path = readlink(rsp.nodeid)?;
+				let mut components: Vec<&str> = path.split('/').collect();
+				self.traverse_stat(&mut components)
+			}
 		}
 	}
 
@@ -996,8 +996,12 @@ impl VfsNode for FuseDirectory {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let attr = rsp.headers.op_header.attr;
-		Ok(FileAttr::from(attr))
+		if rsp.headers.out_header.error != 0 {
+			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
+		} else {
+			let attr = rsp.headers.op_header.attr;
+			Ok(FileAttr::from(attr))
+		}
 	}
 
 	fn traverse_open(
@@ -1008,28 +1012,34 @@ impl VfsNode for FuseDirectory {
 	) -> io::Result<Arc<dyn ObjectInterface>> {
 		let path = self.traversal_path(components);
 
-		debug!("FUSE lstat: {path:#?}");
-
-		let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
-		let rsp = get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
-
-		let attr = FileAttr::from(rsp.headers.op_header.attr);
-		let is_dir = attr.st_mode.contains(AccessPermission::S_IFDIR);
-
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
 
-		if is_dir {
-			let mut path = path.into_string().unwrap();
-			path.remove(0);
-			Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
-		} else {
-			if opt.contains(OpenOption::O_DIRECTORY) {
-				return Err(io::Error::ENOTDIR);
+		if opt.contains(OpenOption::O_DIRECTORY) {
+			if opt.contains(OpenOption::O_CREAT) {
+				// See https://lwn.net/Articles/926782/
+				warn!("O_DIRECTORY and O_CREAT are together invalid as open options.");
+				return Err(io::Error::EINVAL);
 			}
 
+			let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
+			let rsp = get_filesystem_driver()
+				.unwrap()
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+
+			if rsp.headers.out_header.error == 0 {
+				let attr = FileAttr::from(rsp.headers.op_header.attr);
+				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
+					let mut path = path.into_string().unwrap();
+					path.remove(0);
+					Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
+				} else {
+					Err(io::Error::ENOTDIR)
+				}
+			} else {
+				Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
+			}
+		} else {
 			let file = FuseFileHandle::new();
 
 			// 1.FUSE_INIT to create session
@@ -1111,7 +1121,7 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(rsp.headers.out_header.error).unwrap())
+			Err(num::FromPrimitive::from_i32(-rsp.headers.out_header.error).unwrap())
 		}
 	}
 }
@@ -1209,6 +1219,7 @@ pub(crate) fn init() {
 					.send_command(cmd, rsp_payload_len)
 					.unwrap();
 
+				assert_eq!(rsp.headers.out_header.error, 0);
 				let attr = rsp.headers.op_header.attr;
 				let attr = FileAttr::from(attr);
 
