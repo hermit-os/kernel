@@ -14,9 +14,11 @@ pub mod packed;
 pub mod split;
 
 use alloc::boxed::Box;
+use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::cell::RefCell;
+use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
 use async_channel::TryRecvError;
@@ -86,7 +88,7 @@ impl From<VqSize> for u16 {
 	}
 }
 
-type BufferTokenSender = async_channel::Sender<BufferToken>;
+type UsedBufferTokenSender = async_channel::Sender<UsedBufferToken>;
 
 // Public interface of Virtq
 
@@ -104,8 +106,8 @@ pub trait Virtq {
 	/// updated notification flags before finishing transfers!
 	fn dispatch(
 		&self,
-		tkn: BufferToken,
-		sender: Option<BufferTokenSender>,
+		tkn: AvailBufferToken,
+		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError>;
@@ -113,7 +115,7 @@ pub trait Virtq {
 	/// Dispatches the provided TransferToken to the respective queue and does
 	/// return when, the queue finished the transfer.
 	///
-	/// The returned [BufferToken] can be reused, copied from
+	/// The returned [UsedBufferToken] can be copied from
 	/// or return the underlying buffers.
 	///
 	/// **INFO:**
@@ -121,15 +123,15 @@ pub trait Virtq {
 	/// Upon finish notifications are enabled again.
 	fn dispatch_blocking(
 		&self,
-		tkn: BufferToken,
+		tkn: AvailBufferToken,
 		buffer_type: BufferType,
-	) -> Result<BufferToken, VirtqError> {
+	) -> Result<UsedBufferToken, VirtqError> {
 		let (sender, receiver) = async_channel::bounded(1);
 		self.dispatch(tkn, Some(sender), false, buffer_type)?;
 
 		self.disable_notifs();
 
-		let result: BufferToken;
+		let result: UsedBufferToken;
 		// Keep Spinning until the receive queue is filled
 		loop {
 			match receiver.try_recv() {
@@ -160,7 +162,7 @@ pub trait Virtq {
 	///   these queues.
 	fn poll(&self);
 
-	/// Dispatches a batch of [BufferToken]s. The buffers are provided to the queue in
+	/// Dispatches a batch of [AvailBufferToken]s. The buffers are provided to the queue in
 	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
@@ -169,11 +171,11 @@ pub trait Virtq {
 	/// updated notification flags before finishing transfers!
 	fn dispatch_batch(
 		&self,
-		tkns: Vec<(BufferToken, BufferType)>,
+		tkns: Vec<(AvailBufferToken, BufferType)>,
 		notif: bool,
 	) -> Result<(), VirtqError>;
 
-	/// Dispatches a batch of [BufferToken]s. The tokens will be placed in to the `await_queue`
+	/// Dispatches a batch of [AvailBufferToken]s. The tokens will be placed in to the `await_queue`
 	/// upon finish.
 	///
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
@@ -187,8 +189,8 @@ pub trait Virtq {
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	fn dispatch_batch_await(
 		&self,
-		tkns: Vec<(BufferToken, BufferType)>,
-		await_queue: BufferTokenSender,
+		tkns: Vec<(AvailBufferToken, BufferType)>,
+		await_queue: UsedBufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError>;
 
@@ -226,13 +228,13 @@ trait VirtqPrivate {
 		recv: &[BufferElem],
 	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
 
-	/// Consumes the [BufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
+	/// Consumes the [AvailBufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
 	///
 	/// After this call, the buffers are no longer writable.
 	fn transfer_token_from_buffer_token(
 		&self,
-		buff_tkn: BufferToken,
-		await_queue: Option<BufferTokenSender>,
+		buff_tkn: AvailBufferToken,
+		await_queue: Option<UsedBufferTokenSender>,
 		buffer_type: BufferType,
 	) -> TransferToken<Self::Descriptor> {
 		let ctrl_desc = match buffer_type {
@@ -256,12 +258,12 @@ trait VirtqPrivate {
 pub struct TransferToken<Descriptor> {
 	/// Must be some in order to prevent drop
 	/// upon reuse.
-	buff_tkn: BufferToken,
+	buff_tkn: AvailBufferToken,
 	/// Structure which allows to await Transfers
 	/// If Some, finished TransferTokens will be placed here
 	/// as finished `Transfers`. If None, only the state
 	/// of the Token will be changed.
-	await_queue: Option<BufferTokenSender>,
+	await_queue: Option<UsedBufferTokenSender>,
 	// Contains the [MemDescr] for the indirect table if the transfer is indirect.
 	ctrl_desc: Option<Box<[Descriptor]>>,
 }
@@ -288,28 +290,6 @@ pub enum BufferElem {
 }
 
 impl BufferElem {
-	pub fn downcast<T>(self) -> Result<Box<T, DeviceAlloc>, Self>
-	where
-		T: Any,
-	{
-		if let Self::Sized(sized) = self {
-			match sized.downcast() {
-				Ok(cast) => Ok(cast),
-				Err(sized) => Err(Self::Sized(sized)),
-			}
-		} else {
-			Err(self)
-		}
-	}
-
-	pub fn try_into_vec(self) -> Option<Vec<u8, DeviceAlloc>> {
-		if let Self::Vector(vec) = self {
-			Some(vec)
-		} else {
-			None
-		}
-	}
-
 	// Returns the initialized length of the element. Assumes [Self::Sized] to
 	// be initialized, since the type of the object is erased and we cannot
 	// detect if the content is actuallly a [MaybeUninit]. However, this function
@@ -368,45 +348,87 @@ impl BufferElem {
 /// Each of these descriptors consumes one "element" of the
 /// respective virtqueue.
 /// The maximum number of descriptors per buffer is bounded by the size of the virtqueue.
-pub struct BufferToken {
+pub struct AvailBufferToken {
 	pub(crate) send_buff: Vec<BufferElem>,
 	pub(crate) recv_buff: Vec<BufferElem>,
 }
 
+pub(crate) struct UsedDeviceWritableBuffer {
+	elems: VecDeque<BufferElem>,
+	remaining_written_len: u32,
+}
+
+impl UsedDeviceWritableBuffer {
+	pub fn pop_front_downcast<T>(&mut self) -> Option<Box<T, DeviceAlloc>>
+	where
+		T: Any,
+	{
+		if self.remaining_written_len < u32::try_from(size_of::<T>()).unwrap() {
+			return None;
+		}
+
+		let elem = self.elems.pop_front()?;
+		if let BufferElem::Sized(sized) = elem {
+			match sized.downcast::<MaybeUninit<T>>() {
+				Ok(cast) => {
+					self.remaining_written_len -= u32::try_from(size_of::<T>()).unwrap();
+					Some(unsafe { cast.assume_init() })
+				}
+				Err(sized) => {
+					self.elems.push_front(BufferElem::Sized(sized));
+					None
+				}
+			}
+		} else {
+			self.elems.push_front(elem);
+			None
+		}
+	}
+
+	pub fn pop_front_vec(&mut self) -> Option<Vec<u8, DeviceAlloc>> {
+		let elem = self.elems.pop_front()?;
+		if let BufferElem::Vector(mut vector) = elem {
+			let new_len = u32::min(
+				vector.capacity().try_into().unwrap(),
+				self.remaining_written_len,
+			);
+			self.remaining_written_len -= new_len;
+			unsafe { vector.set_len(new_len.try_into().unwrap()) };
+			Some(vector)
+		} else {
+			self.elems.push_front(elem);
+			None
+		}
+	}
+}
+
+pub(crate) struct UsedBufferToken {
+	pub send_buff: Vec<BufferElem>,
+	pub used_recv_buff: UsedDeviceWritableBuffer,
+}
+
+impl UsedBufferToken {
+	fn from_avail_buffer_token(tkn: AvailBufferToken, written_len: u32) -> Self {
+		Self {
+			send_buff: tkn.send_buff,
+			used_recv_buff: UsedDeviceWritableBuffer {
+				elems: tkn.recv_buff.into(),
+				remaining_written_len: written_len,
+			},
+		}
+	}
+}
+
 // Private interface of BufferToken
-impl BufferToken {
+impl AvailBufferToken {
 	/// Returns the overall number of descriptors.
 	fn num_descr(&self) -> u16 {
 		u16::try_from(self.send_buff.len() + self.recv_buff.len()).unwrap()
 	}
-
-	/// Updates the len of the byte vectors accessible by the drivers to be consistent with
-	/// the amount of data written by the device.
-	fn set_device_written_len(&mut self, len: u32) -> Result<(), VirtqError> {
-		let mut remaining_len = usize::try_from(len).unwrap();
-		for elem in &mut self.recv_buff {
-			match elem {
-				BufferElem::Sized(sized) => {
-					let object_size = mem::size_of_val(sized.as_ref());
-					// Partially initialized sized objects are invalid
-					if remaining_len < object_size {
-						return Err(VirtqError::IncompleteWrite);
-					}
-					remaining_len -= object_size;
-				}
-				BufferElem::Vector(vec) => {
-					let new_len = vec.capacity().min(remaining_len);
-					unsafe { vec.set_len(new_len) }
-					remaining_len -= new_len;
-				}
-			}
-		}
-		Ok(())
-	}
 }
 
 // Public interface of BufferToken
-impl BufferToken {
+impl AvailBufferToken {
 	/// **Parameters**
 	/// * send: The slices that will make up the elements of the driver-writable buffer.
 	/// * recv: The slices that will make up the elements of the device-writable buffer.
@@ -436,7 +458,7 @@ impl BufferToken {
 }
 
 pub enum BufferType {
-	/// As many descriptors get consumed in the descriptor table as the sum of the numbers of slices in [BufferToken::send_buff] and [BufferToken::recv_buff].
+	/// As many descriptors get consumed in the descriptor table as the sum of the numbers of slices in [AvailBufferToken::send_buff] and [AvailBufferToken::recv_buff].
 	Direct,
 	/// Results in one descriptor in the queue, hence consumes one element in the main descriptor table. The queue will merge the send and recv buffers as follows:
 	/// ```text

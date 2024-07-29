@@ -36,7 +36,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	BufferElem, BufferToken, BufferType, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq, VqIndex, VqSize,
 };
 use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -60,8 +60,8 @@ impl CtrlQueue {
 
 pub struct RxQueues {
 	vqs: Vec<Rc<dyn Virtq>>,
-	poll_sender: async_channel::Sender<BufferToken>,
-	poll_receiver: async_channel::Receiver<BufferToken>,
+	poll_sender: async_channel::Sender<UsedBufferToken>,
+	poll_receiver: async_channel::Receiver<UsedBufferToken>,
 	is_multi: bool,
 	packet_size: u32,
 }
@@ -91,13 +91,13 @@ impl RxQueues {
 	/// This currently include nothing. But in the future it might include among others:
 	/// * Calculating missing checksums
 	/// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
-	fn post_processing(_buffer_tkn: &mut BufferToken) -> Result<(), VirtioNetError> {
+	fn post_processing(_buffer_tkn: &mut UsedBufferToken) -> Result<(), VirtioNetError> {
 		Ok(())
 	}
 
 	fn fill_queue(&self, vq: Rc<dyn Virtq>, num_buff: u16) {
 		for _ in 0..num_buff {
-			let buff_tkn = match BufferToken::new(
+			let buff_tkn = match AvailBufferToken::new(
 				vec![],
 				vec![
 					BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
@@ -144,7 +144,7 @@ impl RxQueues {
 		}
 	}
 
-	fn get_next(&mut self) -> Option<BufferToken> {
+	fn get_next(&mut self) -> Option<UsedBufferToken> {
 		let transfer = self.poll_receiver.try_recv();
 
 		transfer
@@ -362,7 +362,7 @@ impl NetworkDriver for VirtioNetDriver {
 			.into();
 		}
 
-		let buff_tkn = BufferToken::new(
+		let buff_tkn = AvailBufferToken::new(
 			vec![BufferElem::Sized(header), BufferElem::Vector(packet)],
 			vec![],
 		)
@@ -380,16 +380,8 @@ impl NetworkDriver for VirtioNetDriver {
 		RxQueues::post_processing(&mut buffer_tkn)
 			.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
 			.ok()?;
-		let first_packet = buffer_tkn.recv_buff.pop().unwrap().try_into_vec()?;
-		let first_header = unsafe {
-			buffer_tkn
-				.recv_buff
-				.pop()
-				.unwrap()
-				.downcast::<MaybeUninit<Hdr>>()
-				.ok()?
-				.assume_init()
-		};
+		let first_header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 		trace!("Header: {first_header:?}");
 
 		let num_buffers = first_header.num_buffers.to_ne();
@@ -402,7 +394,8 @@ impl NetworkDriver for VirtioNetDriver {
 			RxQueues::post_processing(&mut buffer_tkn)
 				.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
 				.ok()?;
-			let packet = buffer_tkn.recv_buff.pop().unwrap().try_into_vec()?;
+			let _header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 			packets.push(packet);
 		}
 		self.recv_vqs

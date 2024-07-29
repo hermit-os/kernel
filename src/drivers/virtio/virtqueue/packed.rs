@@ -23,8 +23,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BufferElem, BufferToken, BufferTokenSender, BufferType, MemDescrId, MemPool, TransferToken,
-	Virtq, VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken,
+	UsedBufferTokenSender, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -128,14 +128,19 @@ impl DescriptorRing {
 	}
 
 	/// Polls poll index and sets the state of any finished TransferTokens.
-	/// If [TransferToken::await_queue] is available, the [BufferToken] will be moved to the queue.
+	/// If [TransferToken::await_queue] is available, the [UsedBufferToken] will be moved to the queue.
 	fn poll(&mut self) {
 		let mut ctrl = self.get_read_ctrler();
 
-		if let Some(mut tkn) = ctrl.poll_next() {
+		if let Some((mut tkn, written_len)) = ctrl.poll_next() {
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue.try_send(tkn.buff_tkn).unwrap();
+				queue
+					.try_send(UsedBufferToken::from_avail_buffer_token(
+						tkn.buff_tkn,
+						written_len,
+					))
+					.unwrap();
 			}
 		}
 	}
@@ -353,18 +358,16 @@ struct ReadCtrl<'a> {
 impl<'a> ReadCtrl<'a> {
 	/// Polls the ring for a new finished buffer. If buffer is marked as finished, takes care of
 	/// updating the queue and returns the respective TransferToken.
-	fn poll_next(&mut self) -> Option<Box<TransferToken<pvirtq::Desc>>> {
+	fn poll_next(&mut self) -> Option<(Box<TransferToken<pvirtq::Desc>>, u32)> {
 		// Check if descriptor has been marked used.
 		let desc = &self.desc_ring.ring[usize::from(self.position)];
 		if self.desc_ring.is_marked_used(desc.flags) {
 			let buff_id = desc.id.to_ne();
-			let mut tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
+			let tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
 				.take()
 				.expect(
 					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 				);
-
-			let recv_buff = &tkn.buff_tkn.recv_buff;
 
 			// Retrieve if any has been written to the queue. If this is the case, we calculate the overall length
 			// This is necessary in order to provide the drivers with the correct access, to usable data.
@@ -392,13 +395,7 @@ impl<'a> ReadCtrl<'a> {
 			}
 			self.desc_ring.mem_pool.ret_id(MemDescrId(buff_id));
 
-			// ID return and ctrl advancement should happen whether the written length is valid or not and thus
-			// should happen before this potentially returning if statement.
-			if !recv_buff.is_empty() {
-				tkn.buff_tkn.set_device_written_len(write_len).ok()?;
-			}
-
-			Some(tkn)
+			Some((tkn, write_len))
 		} else {
 			None
 		}
@@ -600,7 +597,7 @@ impl Virtq for PackedVq {
 
 	fn dispatch_batch(
 		&self,
-		buffer_tkns: Vec<(BufferToken, BufferType)>,
+		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
 		notif: bool,
 	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
@@ -638,8 +635,8 @@ impl Virtq for PackedVq {
 
 	fn dispatch_batch_await(
 		&self,
-		buffer_tkns: Vec<(BufferToken, BufferType)>,
-		await_queue: super::BufferTokenSender,
+		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
+		await_queue: super::UsedBufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
@@ -681,8 +678,8 @@ impl Virtq for PackedVq {
 
 	fn dispatch(
 		&self,
-		buffer_tkn: BufferToken,
-		sender: Option<BufferTokenSender>,
+		buffer_tkn: AvailBufferToken,
+		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {

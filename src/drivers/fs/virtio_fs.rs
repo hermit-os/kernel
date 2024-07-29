@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 use core::str;
 
 use pci_types::InterruptLine;
@@ -20,7 +19,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	BufferElem, BufferToken, BufferType, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, Virtq, VqIndex, VqSize,
 };
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -180,23 +179,12 @@ impl FuseInterface for VirtioFsDriver {
 			]
 		};
 
-		let buffer_tkn = BufferToken::new(send, recv).unwrap();
+		let buffer_tkn = AvailBufferToken::new(send, recv).unwrap();
 		let mut transfer_result =
 			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
 
-		let payload = if rsp_payload_len > 0 {
-			let rsp_payload_elem = transfer_result.recv_buff.pop().unwrap();
-			Some(rsp_payload_elem.try_into_vec().unwrap())
-		} else {
-			None
-		};
-		let maybe_rsp_headers = transfer_result
-			.recv_buff
-			.pop()
-			.unwrap()
-			.downcast::<MaybeUninit<RspHeader<O>>>()
-			.unwrap();
-		let headers = unsafe { maybe_rsp_headers.assume_init() };
+		let headers = transfer_result.used_recv_buff.pop_front_downcast().unwrap();
+		let payload = transfer_result.used_recv_buff.pop_front_vec();
 		Ok(Rsp { headers, payload })
 	}
 

@@ -19,8 +19,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	BufferElem, BufferToken, BufferTokenSender, BufferType, MemPool, TransferToken, Virtq,
-	VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, MemPool, TransferToken, UsedBufferToken,
+	UsedBufferTokenSender, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
@@ -106,7 +106,7 @@ impl DescrRing {
 
 			// We need to handle the last descriptor (the first for the reversed iterator) specially to not set the next flag.
 			{
-				// If the [BufferToken] is empty, we panic
+				// If the [AvailBufferToken] is empty, we panic
 				let descriptor = rev_all_desc_iter.next().unwrap();
 
 				index = self
@@ -170,13 +170,13 @@ impl DescrRing {
 					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 				);
 
-			if !tkn.buff_tkn.recv_buff.is_empty() {
-				tkn.buff_tkn
-					.set_device_written_len(used_elem.len.to_ne())
-					.unwrap();
-			}
 			if let Some(queue) = tkn.await_queue.take() {
-				queue.try_send(tkn.buff_tkn).unwrap()
+				queue
+					.try_send(UsedBufferToken::from_avail_buffer_token(
+						tkn.buff_tkn,
+						used_elem.len.to_ne(),
+					))
+					.unwrap()
 			}
 
 			let mut id_ret_idx = u16::try_from(used_elem.id.to_ne()).unwrap();
@@ -237,7 +237,7 @@ impl Virtq for SplitVq {
 
 	fn dispatch_batch(
 		&self,
-		_tkns: Vec<(BufferToken, BufferType)>,
+		_tkns: Vec<(AvailBufferToken, BufferType)>,
 		_notif: bool,
 	) -> Result<(), VirtqError> {
 		unimplemented!();
@@ -245,8 +245,8 @@ impl Virtq for SplitVq {
 
 	fn dispatch_batch_await(
 		&self,
-		_tkns: Vec<(BufferToken, BufferType)>,
-		_await_queue: super::BufferTokenSender,
+		_tkns: Vec<(AvailBufferToken, BufferType)>,
+		_await_queue: super::UsedBufferTokenSender,
 		_notif: bool,
 	) -> Result<(), VirtqError> {
 		unimplemented!()
@@ -254,8 +254,8 @@ impl Virtq for SplitVq {
 
 	fn dispatch(
 		&self,
-		buffer_tkn: BufferToken,
-		sender: Option<BufferTokenSender>,
+		buffer_tkn: AvailBufferToken,
+		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
