@@ -47,14 +47,16 @@ impl VirtioNetDriver {
 			1514
 		};
 
+		let send_vqs = TxQueues::new(Vec::<Rc<dyn Virtq>>::new(), false, &dev_cfg);
+		let recv_vqs = RxQueues::new(Vec::<Rc<dyn Virtq>>::new(), false, &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),
 			isr_stat,
 			notif_cfg,
 			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs: RxQueues::new(Vec::<Rc<dyn Virtq>>::new(), false),
-			send_vqs: TxQueues::new(Vec::<Rc<dyn Virtq>>::new(), Vec::new(), false),
+			recv_vqs,
+			send_vqs,
 			num_vqs: 0,
 			irq,
 			mtu,

@@ -11,6 +11,8 @@ use core::task::Poll;
 use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
+use num_traits::FromPrimitive;
+use zerocopy::FromBytes;
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -18,13 +20,13 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
-use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
 };
+use crate::mm::device_alloc::DeviceAlloc;
 use crate::time::{time_t, timespec};
 use crate::{arch, io};
 
@@ -41,7 +43,7 @@ const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
 pub(crate) trait FuseInterface {
-	fn send_command<O: ops::Op>(
+	fn send_command<O: ops::Op + 'static>(
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
@@ -373,14 +375,16 @@ pub(crate) mod ops {
 		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_LOOKUP;
 		type InStruct = ();
 		type InPayload = CString;
-		type OutStruct = fuse_entry_out;
-		type OutPayload = ();
+		type OutStruct = ();
+		// Lookups return [fuse_entry_out] only when there actually is a result. For this reason,
+		// it is not part of the header (since all other headers are always there).
+		type OutPayload = [u8];
 	}
 
 	impl Lookup {
 		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(FUSE_ROOT_ID.into(), (), name);
-			(cmd, 0)
+			(cmd, size_of::<fuse_entry_out>().try_into().unwrap())
 		}
 	}
 }
@@ -450,11 +454,9 @@ impl<O: ops::Op> CmdHeader<O> {
 	}
 }
 
-impl<O: ops::Op> AsSliceU8 for CmdHeader<O> {}
-
 pub(crate) struct Cmd<O: ops::Op> {
-	pub headers: Box<CmdHeader<O>>,
-	pub payload: Option<Box<[u8]>>,
+	pub headers: Box<CmdHeader<O>, DeviceAlloc>,
+	pub payload: Option<Vec<u8, DeviceAlloc>>,
 }
 
 impl<O: ops::Op> Cmd<O>
@@ -463,7 +465,7 @@ where
 {
 	fn new(nodeid: u64, op_header: O::InStruct) -> Self {
 		Self {
-			headers: Box::new(CmdHeader::new(nodeid, op_header)),
+			headers: Box::new_in(CmdHeader::new(nodeid, op_header), DeviceAlloc),
 			payload: None,
 		}
 	}
@@ -474,13 +476,12 @@ where
 	O: ops::Op<InPayload = CString>,
 {
 	fn with_cstring(nodeid: u64, op_header: O::InStruct, cstring: CString) -> Self {
-		let cstring_bytes = cstring.into_bytes_with_nul().into_boxed_slice();
+		let cstring_bytes = cstring.into_bytes_with_nul().to_vec_in(DeviceAlloc);
 		Self {
-			headers: Box::new(CmdHeader::with_payload_size(
-				nodeid,
-				op_header,
-				cstring_bytes.len(),
-			)),
+			headers: Box::new_in(
+				CmdHeader::with_payload_size(nodeid, op_header, cstring_bytes.len()),
+				DeviceAlloc,
+			),
 			payload: Some(cstring_bytes),
 		}
 	}
@@ -491,9 +492,14 @@ where
 	O: ops::Op<InPayload = [u8]>,
 {
 	fn with_boxed_slice(nodeid: u64, op_header: O::InStruct, slice: Box<[u8]>) -> Self {
+		let mut device_slice = Vec::with_capacity_in(slice.len(), DeviceAlloc);
+		device_slice.extend_from_slice(&slice);
 		Self {
-			headers: Box::new(CmdHeader::with_payload_size(nodeid, op_header, slice.len())),
-			payload: Some(slice),
+			headers: Box::new_in(
+				CmdHeader::with_payload_size(nodeid, op_header, slice.len()),
+				DeviceAlloc,
+			),
+			payload: Some(device_slice),
 		}
 	}
 }
@@ -507,8 +513,8 @@ pub(crate) struct RspHeader<O: ops::Op> {
 
 #[derive(Debug)]
 pub(crate) struct Rsp<O: ops::Op> {
-	pub headers: Box<RspHeader<O>>,
-	pub payload: Option<Box<[u8]>>,
+	pub headers: Box<RspHeader<O>, DeviceAlloc>,
+	pub payload: Option<Vec<u8, DeviceAlloc>>,
 }
 
 fn lookup(name: CString) -> Option<u64> {
@@ -519,7 +525,8 @@ fn lookup(name: CString) -> Option<u64> {
 		.send_command(cmd, rsp_payload_len)
 		.ok()?;
 	if rsp.headers.out_header.error == 0 {
-		Some(rsp.headers.op_header.nodeid)
+		let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap()).unwrap();
+		Some(entry_out.nodeid)
 	} else {
 		None
 	}
@@ -969,19 +976,20 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
-			// TODO: Correct error handling
-			return Err(io::Error::EIO);
-		}
-
-		let rsp = rsp.headers.op_header;
-		let attr = rsp.attr;
-
-		if attr.mode & S_IFMT != S_IFLNK {
-			Ok(FileAttr::from(attr))
+			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
 		} else {
-			let path = readlink(rsp.nodeid)?;
-			let mut components: Vec<&str> = path.split('/').collect();
-			self.traverse_stat(&mut components)
+			let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+				.ok_or(io::Error::EIO)
+				.unwrap();
+			let attr = entry_out.attr;
+
+			if attr.mode & S_IFMT != S_IFLNK {
+				Ok(FileAttr::from(attr))
+			} else {
+				let path = readlink(entry_out.nodeid)?;
+				let mut components: Vec<&str> = path.split('/').collect();
+				self.traverse_stat(&mut components)
+			}
 		}
 	}
 
@@ -996,8 +1004,14 @@ impl VfsNode for FuseDirectory {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let attr = rsp.headers.op_header.attr;
-		Ok(FileAttr::from(attr))
+		if rsp.headers.out_header.error != 0 {
+			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
+		} else {
+			let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+				.ok_or(io::Error::EIO)
+				.unwrap();
+			Ok(FileAttr::from(entry_out.attr))
+		}
 	}
 
 	fn traverse_open(
@@ -1008,28 +1022,37 @@ impl VfsNode for FuseDirectory {
 	) -> io::Result<Arc<dyn ObjectInterface>> {
 		let path = self.traversal_path(components);
 
-		debug!("FUSE lstat: {path:#?}");
-
-		let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
-		let rsp = get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
-
-		let attr = FileAttr::from(rsp.headers.op_header.attr);
-		let is_dir = attr.st_mode.contains(AccessPermission::S_IFDIR);
-
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
 
-		if is_dir {
-			let mut path = path.into_string().unwrap();
-			path.remove(0);
-			Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
-		} else {
-			if opt.contains(OpenOption::O_DIRECTORY) {
-				return Err(io::Error::ENOTDIR);
+		if opt.contains(OpenOption::O_DIRECTORY) {
+			if opt.contains(OpenOption::O_CREAT) {
+				// See https://lwn.net/Articles/926782/
+				warn!("O_DIRECTORY and O_CREAT are together invalid as open options.");
+				return Err(io::Error::EINVAL);
 			}
 
+			let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
+			let rsp = get_filesystem_driver()
+				.unwrap()
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+
+			if rsp.headers.out_header.error == 0 {
+				let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+					.ok_or(io::Error::EIO)
+					.unwrap();
+				let attr = FileAttr::from(entry_out.attr);
+				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
+					let mut path = path.into_string().unwrap();
+					path.remove(0);
+					Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
+				} else {
+					Err(io::Error::ENOTDIR)
+				}
+			} else {
+				Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
+			}
+		} else {
 			let file = FuseFileHandle::new();
 
 			// 1.FUSE_INIT to create session
@@ -1111,7 +1134,7 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(rsp.headers.out_header.error).unwrap())
+			Err(num::FromPrimitive::from_i32(-rsp.headers.out_header.error).unwrap())
 		}
 	}
 }
@@ -1209,7 +1232,11 @@ pub(crate) fn init() {
 					.send_command(cmd, rsp_payload_len)
 					.unwrap();
 
-				let attr = rsp.headers.op_header.attr;
+				assert_eq!(rsp.headers.out_header.error, 0);
+				let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
+					.ok_or(io::Error::EIO)
+					.unwrap();
+				let attr = entry_out.attr;
 				let attr = FileAttr::from(attr);
 
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {

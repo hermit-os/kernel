@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 use core::str;
 
 use pci_types::InterruptLine;
@@ -20,9 +19,10 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BufferToken, BufferType, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, Virtq, VqIndex, VqSize,
 };
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
+use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
@@ -150,7 +150,7 @@ impl VirtioFsDriver {
 }
 
 impl FuseInterface for VirtioFsDriver {
-	fn send_command<O: fuse::ops::Op>(
+	fn send_command<O: fuse::ops::Op + 'static>(
 		&mut self,
 		cmd: fuse::Cmd<O>,
 		rsp_payload_len: u32,
@@ -159,33 +159,33 @@ impl FuseInterface for VirtioFsDriver {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
 		} = cmd;
-		let send: &[&[u8]] = if let Some(cmd_payload) = cmd_payload_opt.as_deref() {
-			&[cmd_headers.as_slice_u8(), cmd_payload]
+		let send = if let Some(cmd_payload) = cmd_payload_opt {
+			vec![
+				BufferElem::Sized(cmd_headers),
+				BufferElem::Vector(cmd_payload),
+			]
 		} else {
-			&[cmd_headers.as_slice_u8()]
+			vec![BufferElem::Sized(cmd_headers)]
 		};
 
-		let mut rsp_headers = Box::<RspHeader<O>>::new_uninit();
-		let mut rsp_payload_opt;
-		let recv: &[&mut [MaybeUninit<u8>]] = if rsp_payload_len == 0 {
-			rsp_payload_opt = None;
-			&[rsp_headers.as_bytes_mut()]
+		let rsp_headers = Box::<RspHeader<O>, _>::new_uninit_in(DeviceAlloc);
+		let recv = if rsp_payload_len == 0 {
+			vec![BufferElem::Sized(rsp_headers)]
 		} else {
-			rsp_payload_opt = Some(Box::new_uninit_slice(rsp_payload_len as usize));
-			&[
-				rsp_headers.as_bytes_mut(),
-				rsp_payload_opt.as_mut().unwrap(),
+			let rsp_payload = Vec::with_capacity_in(rsp_payload_len as usize, DeviceAlloc);
+			vec![
+				BufferElem::Sized(rsp_headers),
+				BufferElem::Vector(rsp_payload),
 			]
 		};
 
-		let buffer_tkn = BufferToken::from_existing(send, recv).unwrap();
-		self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
-		Ok(unsafe {
-			Rsp {
-				headers: rsp_headers.assume_init(),
-				payload: rsp_payload_opt.map(|slice| Box::<[MaybeUninit<_>]>::assume_init(slice)),
-			}
-		})
+		let buffer_tkn = AvailBufferToken::new(send, recv).unwrap();
+		let mut transfer_result =
+			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
+
+		let headers = transfer_result.used_recv_buff.pop_front_downcast().unwrap();
+		let payload = transfer_result.used_recv_buff.pop_front_vec();
+		Ok(Rsp { headers, payload })
 	}
 
 	fn get_mount_point(&self) -> String {

@@ -521,6 +521,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c311ed3856f2dc59387ddc411a4e5a80d5bbb359aa060c5724a26e30991724b8"
 dependencies = [
  "num_enum",
+ "zerocopy",
+ "zerocopy-derive",
 ]
 
 [[package]]

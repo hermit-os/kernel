@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 use core::sync::atomic::{fence, Ordering};
-use core::{iter, mem, ops, ptr};
+use core::{mem, ops, ptr};
 
 use align_address::Align;
 #[cfg(not(feature = "pci"))]
@@ -23,8 +23,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	Buffer, BufferToken, BufferTokenSender, BufferType, MemDescr, MemDescrId, MemPool,
-	TransferToken, Virtq, VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken,
+	UsedBufferTokenSender, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -128,14 +128,19 @@ impl DescriptorRing {
 	}
 
 	/// Polls poll index and sets the state of any finished TransferTokens.
-	/// If [TransferToken::await_queue] is available, the [BufferToken] will be moved to the queue.
+	/// If [TransferToken::await_queue] is available, the [UsedBufferToken] will be moved to the queue.
 	fn poll(&mut self) {
 		let mut ctrl = self.get_read_ctrler();
 
-		if let Some(mut tkn) = ctrl.poll_next() {
+		if let Some((mut tkn, written_len)) = ctrl.poll_next() {
 			if let Some(queue) = tkn.await_queue.take() {
 				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue.try_send(tkn.buff_tkn).unwrap();
+				queue
+					.try_send(UsedBufferToken::from_avail_buffer_token(
+						tkn.buff_tkn,
+						written_len,
+					))
+					.unwrap();
 			}
 		}
 	}
@@ -222,27 +227,21 @@ impl DescriptorRing {
 			let send_desc_iter = tkn
 				.buff_tkn
 				.send_buff
-				.as_ref()
-				.map(|send_buff| send_buff.as_slice().iter())
-				.into_iter()
-				.flatten()
-				.zip(iter::repeat(virtq::DescF::empty()));
+				.iter()
+				.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
 			let recv_desc_iter = tkn
 				.buff_tkn
 				.recv_buff
-				.as_ref()
-				.map(|recv_buff| recv_buff.as_slice().iter())
-				.into_iter()
-				.flatten()
-				.zip(iter::repeat(virtq::DescF::WRITE));
+				.iter()
+				.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
 			let mut all_desc_iter =
 				send_desc_iter
 					.chain(recv_desc_iter)
-					.map(|(mem_desc, incomplete_flags)| pvirtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64))
+					.map(|(mem_desc, len, incomplete_flags)| pvirtq::Desc {
+						addr: paging::virt_to_phys(VirtAddr::from(mem_desc.addr() as u64))
 							.as_u64()
 							.into(),
-						len: (mem_desc.len as u32).into(),
+						len: (len as u32).into(),
 						id: 0.into(),
 						flags: incomplete_flags | virtq::DescF::NEXT,
 					});
@@ -359,25 +358,16 @@ struct ReadCtrl<'a> {
 impl<'a> ReadCtrl<'a> {
 	/// Polls the ring for a new finished buffer. If buffer is marked as finished, takes care of
 	/// updating the queue and returns the respective TransferToken.
-	fn poll_next(&mut self) -> Option<Box<TransferToken<pvirtq::Desc>>> {
+	fn poll_next(&mut self) -> Option<(Box<TransferToken<pvirtq::Desc>>, u32)> {
 		// Check if descriptor has been marked used.
 		let desc = &self.desc_ring.ring[usize::from(self.position)];
 		if self.desc_ring.is_marked_used(desc.flags) {
 			let buff_id = desc.id.to_ne();
-			let mut tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
+			let tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
 				.take()
 				.expect(
 					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
 				);
-
-			let (send_buff, recv_buff) = {
-				let BufferToken {
-					send_buff,
-					recv_buff,
-					..
-				} = &mut tkn.buff_tkn;
-				(recv_buff.as_mut(), send_buff.as_mut())
-			};
 
 			// Retrieve if any has been written to the queue. If this is the case, we calculate the overall length
 			// This is necessary in order to provide the drivers with the correct access, to usable data.
@@ -396,80 +386,18 @@ impl<'a> ReadCtrl<'a> {
 			// INFO:
 			// Due to the behaviour of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
 			// flag correctly upon writes. Hence we omit it, in order to receive data.
+
+			// We need to read the written length before advancing the position.
 			let write_len = desc.len.to_ne();
 
-			if tkn.ctrl_desc.is_some() {
-				if let Some(recv_buff) = recv_buff {
-					self.update_indirect(recv_buff, write_len);
-				}
-			} else {
-				if let Some(send_buff) = send_buff {
-					self.update_send(send_buff);
-				}
-				if let Some(recv_buff) = recv_buff {
-					self.update_recv((recv_buff, write_len));
-				}
+			for _ in 0..tkn.num_consuming_descr() {
+				self.incrmt();
 			}
 			self.desc_ring.mem_pool.ret_id(MemDescrId(buff_id));
-			Some(tkn)
+
+			Some((tkn, write_len))
 		} else {
 			None
-		}
-	}
-
-	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
-	/// the amount of data written by the device.
-	///
-	/// Indirect descriptor tables are read-only for devices. Hence all information comes from the
-	/// used descriptor in the actual ring.
-	fn update_indirect(&mut self, recv_buff: &mut Buffer, write_len: u32) {
-		let mut write_len = usize::try_from(write_len).unwrap();
-
-		recv_buff.restr_len(write_len);
-
-		for desc in recv_buff.as_mut_slice() {
-			if write_len >= desc.len {
-				// Complete length has been written but reduce len_written for next one
-				write_len -= desc.len;
-			} else {
-				desc.len = write_len;
-				write_len -= desc.len;
-				assert_eq!(write_len, 0);
-			}
-		}
-		self.incrmt();
-	}
-
-	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
-	/// the amount of data written by the device.
-	/// Updates the descriptor flags inside the actual ring if necessary and
-	/// increments the poll_index by one.
-	///
-	/// The given buffer must NEVER be an indirect buffer.
-	fn update_recv(&mut self, recv_buff_spec: (&mut Buffer, u32)) {
-		let (recv_buff, write_len) = recv_buff_spec;
-		let mut write_len = usize::try_from(write_len).unwrap();
-
-		recv_buff.restr_len(write_len);
-
-		for desc in recv_buff.as_mut_slice() {
-			if write_len >= desc.len {
-				// Complete length has been written but reduce len_written for next one
-				write_len -= desc.len;
-			} else {
-				desc.len = write_len;
-				write_len -= desc.len;
-				assert_eq!(write_len, 0);
-			}
-			self.incrmt();
-		}
-	}
-
-	/// Updates the descriptor flags inside the actual ring if necessary and
-	/// increments the poll_index by one.
-	fn update_send(&mut self, send_buff: &Buffer) {
-		for _desc in send_buff.as_slice() {
-			self.incrmt();
 		}
 	}
 
@@ -669,7 +597,7 @@ impl Virtq for PackedVq {
 
 	fn dispatch_batch(
 		&self,
-		buffer_tkns: Vec<(BufferToken, BufferType)>,
+		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
 		notif: bool,
 	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
@@ -707,8 +635,8 @@ impl Virtq for PackedVq {
 
 	fn dispatch_batch_await(
 		&self,
-		buffer_tkns: Vec<(BufferToken, BufferType)>,
-		await_queue: super::BufferTokenSender,
+		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
+		await_queue: super::UsedBufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
@@ -748,15 +676,14 @@ impl Virtq for PackedVq {
 		Ok(())
 	}
 
-	fn dispatch_await(
+	fn dispatch(
 		&self,
-		buffer_tkn: BufferToken,
-		sender: BufferTokenSender,
+		buffer_tkn: AvailBufferToken,
+		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
-		let transfer_tkn =
-			self.transfer_token_from_buffer_token(buffer_tkn, Some(sender), buffer_type);
+		let transfer_tkn = self.transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
 		let next_idx = self.descr_ring.borrow_mut().push(transfer_tkn)?;
 
 		if notif {
@@ -882,25 +809,23 @@ impl VirtqPrivate for PackedVq {
 
 	fn create_indirect_ctrl(
 		&self,
-		send: Option<&[MemDescr]>,
-		recv: Option<&[MemDescr]>,
+		send: &[BufferElem],
+		recv: &[BufferElem],
 	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
 		let send_desc_iter = send
 			.iter()
-			.flat_map(|descriptors| descriptors.iter())
-			.zip(iter::repeat(virtq::DescF::empty()));
+			.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
 		let recv_desc_iter = recv
 			.iter()
-			.flat_map(|descriptors| descriptors.iter())
-			.zip(iter::repeat(virtq::DescF::WRITE));
+			.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
 		let all_desc_iter =
 			send_desc_iter
 				.chain(recv_desc_iter)
-				.map(|(mem_descr, incomplete_flags)| pvirtq::Desc {
-					addr: paging::virt_to_phys(VirtAddr::from(mem_descr.ptr as u64))
+				.map(|(mem_descr, len, incomplete_flags)| pvirtq::Desc {
+					addr: paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
 						.as_u64()
 						.into(),
-					len: (mem_descr.len as u32).into(),
+					len: (len as u32).into(),
 					id: 0.into(),
 					flags: incomplete_flags | virtq::DescF::NEXT,
 				});

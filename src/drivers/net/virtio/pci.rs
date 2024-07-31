@@ -86,15 +86,16 @@ impl VirtioNetDriver {
 			1514
 		};
 
+		let send_vqs = TxQueues::new(Vec::new(), false, &dev_cfg);
+		let recv_vqs = RxQueues::new(Vec::new(), false, &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg,
 			isr_stat,
 			notif_cfg,
-
 			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs: RxQueues::new(Vec::new(), false),
-			send_vqs: TxQueues::new(Vec::new(), Vec::new(), false),
+			recv_vqs,
+			send_vqs,
 			num_vqs: 0,
 			irq: device.get_irq().unwrap(),
 			mtu,
