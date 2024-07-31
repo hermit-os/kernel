@@ -11,7 +11,6 @@ cfg_if::cfg_if! {
 }
 
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 
@@ -50,16 +49,16 @@ pub(crate) struct NetDevCfg {
 	pub features: virtio::net::F,
 }
 
-pub struct CtrlQueue(Option<Rc<dyn Virtq>>);
+pub struct CtrlQueue(Option<Box<dyn Virtq>>);
 
 impl CtrlQueue {
-	pub fn new(vq: Option<Rc<dyn Virtq>>) -> Self {
+	pub fn new(vq: Option<Box<dyn Virtq>>) -> Self {
 		CtrlQueue(vq)
 	}
 }
 
 pub struct RxQueues {
-	vqs: Vec<Rc<dyn Virtq>>,
+	vqs: Vec<Box<dyn Virtq>>,
 	poll_sender: async_channel::Sender<UsedBufferToken>,
 	poll_receiver: async_channel::Receiver<UsedBufferToken>,
 	is_multi: bool,
@@ -67,7 +66,7 @@ pub struct RxQueues {
 }
 
 impl RxQueues {
-	pub fn new(vqs: Vec<Rc<dyn Virtq>>, is_multi: bool, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new(vqs: Vec<Box<dyn Virtq>>, is_multi: bool, dev_cfg: &NetDevCfg) -> Self {
 		let (poll_sender, poll_receiver) = async_channel::unbounded();
 
 		// See Virtio specification v1.1 - 5.1.6.3.1
@@ -95,50 +94,18 @@ impl RxQueues {
 		Ok(())
 	}
 
-	fn fill_queue(&self, vq: Rc<dyn Virtq>, num_packets: u16) {
-		for _ in 0..num_packets {
-			let buff_tkn = match AvailBufferToken::new(
-				vec![],
-				vec![
-					BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-					BufferElem::Vector(Vec::with_capacity_in(
-						self.packet_size.try_into().unwrap(),
-						DeviceAlloc,
-					)),
-				],
-			) {
-				Ok(tkn) => tkn,
-				Err(_vq_err) => {
-					error!("Setup of network queue failed, which should not happen!");
-					panic!("setup of network queue failed!");
-				}
-			};
-
-			// BufferTokens are directly provided to the queue
-			// TransferTokens are directly dispatched
-			// Transfers will be awaited at the queue
-			match vq.dispatch(
-				buff_tkn,
-				Some(self.poll_sender.clone()),
-				false,
-				BufferType::Direct,
-			) {
-				Ok(_) => (),
-				Err(err) => {
-					error!("{:#?}", err);
-					break;
-				}
-			}
-		}
-	}
-
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, vq: Rc<dyn Virtq>) {
+	fn add(&mut self, mut vq: Box<dyn Virtq>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		self.fill_queue(vq.clone(), num_packets);
+		fill_queue(
+			vq.as_mut(),
+			num_packets,
+			self.packet_size,
+			self.poll_sender.clone(),
+		);
 		self.vqs.push(vq);
 		if self.vqs.len() > 1 {
 			self.is_multi = true;
@@ -158,9 +125,9 @@ impl RxQueues {
 			.ok()
 	}
 
-	fn poll(&self) {
+	fn poll(&mut self) {
 		if self.is_multi {
-			for vq in &self.vqs {
+			for vq in &mut self.vqs {
 				vq.poll();
 			}
 		} else {
@@ -168,9 +135,9 @@ impl RxQueues {
 		}
 	}
 
-	fn enable_notifs(&self) {
+	fn enable_notifs(&mut self) {
 		if self.is_multi {
-			for vq in &self.vqs {
+			for vq in &mut self.vqs {
 				vq.enable_notifs();
 			}
 		} else {
@@ -178,13 +145,59 @@ impl RxQueues {
 		}
 	}
 
-	fn disable_notifs(&self) {
+	fn disable_notifs(&mut self) {
 		if self.is_multi {
-			for vq in &self.vqs {
+			for vq in &mut self.vqs {
 				vq.disable_notifs();
 			}
 		} else {
 			self.vqs[0].disable_notifs();
+		}
+	}
+
+	fn has_packet(&self) -> bool {
+		self.vqs.iter().any(|vq| vq.has_used_buffers())
+	}
+}
+
+fn fill_queue(
+	vq: &mut dyn Virtq,
+	num_packets: u16,
+	packet_size: u32,
+	poll_sender: async_channel::Sender<UsedBufferToken>,
+) {
+	for _ in 0..num_packets {
+		let buff_tkn = match AvailBufferToken::new(
+			vec![],
+			vec![
+				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+				BufferElem::Vector(Vec::with_capacity_in(
+					packet_size.try_into().unwrap(),
+					DeviceAlloc,
+				)),
+			],
+		) {
+			Ok(tkn) => tkn,
+			Err(_vq_err) => {
+				error!("Setup of network queue failed, which should not happen!");
+				panic!("setup of network queue failed!");
+			}
+		};
+
+		// BufferTokens are directly provided to the queue
+		// TransferTokens are directly dispatched
+		// Transfers will be awaited at the queue
+		match vq.dispatch(
+			buff_tkn,
+			Some(poll_sender.clone()),
+			false,
+			BufferType::Direct,
+		) {
+			Ok(_) => (),
+			Err(err) => {
+				error!("{:#?}", err);
+				break;
+			}
 		}
 	}
 }
@@ -192,7 +205,7 @@ impl RxQueues {
 /// Structure which handles transmission of packets and delegation
 /// to the respective queue structures.
 pub struct TxQueues {
-	vqs: Vec<Rc<dyn Virtq>>,
+	vqs: Vec<Box<dyn Virtq>>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
 	is_multi: bool,
@@ -200,7 +213,7 @@ pub struct TxQueues {
 }
 
 impl TxQueues {
-	pub fn new(vqs: Vec<Rc<dyn Virtq>>, is_multi: bool, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new(vqs: Vec<Box<dyn Virtq>>, is_multi: bool, dev_cfg: &NetDevCfg) -> Self {
 		let packet_length = if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
@@ -217,9 +230,9 @@ impl TxQueues {
 		}
 	}
 	#[allow(dead_code)]
-	fn enable_notifs(&self) {
+	fn enable_notifs(&mut self) {
 		if self.is_multi {
-			for vq in &self.vqs {
+			for vq in &mut self.vqs {
 				vq.enable_notifs();
 			}
 		} else {
@@ -228,9 +241,9 @@ impl TxQueues {
 	}
 
 	#[allow(dead_code)]
-	fn disable_notifs(&self) {
+	fn disable_notifs(&mut self) {
 		if self.is_multi {
-			for vq in &self.vqs {
+			for vq in &mut self.vqs {
 				vq.disable_notifs();
 			}
 		} else {
@@ -238,9 +251,9 @@ impl TxQueues {
 		}
 	}
 
-	fn poll(&self) {
+	fn poll(&mut self) {
 		if self.is_multi {
-			for vq in &self.vqs {
+			for vq in &mut self.vqs {
 				vq.poll();
 			}
 		} else {
@@ -248,9 +261,9 @@ impl TxQueues {
 		}
 	}
 
-	fn add(&mut self, vq: Rc<dyn Virtq>) {
+	fn add(&mut self, vq: Box<dyn Virtq>) {
 		// Safe virtqueue
-		self.vqs.push(vq.clone());
+		self.vqs.push(vq);
 		if self.vqs.len() != 1 {
 			self.is_multi = true;
 			// Currently we are doing nothing with the additional queues. They are inactive and might be used in the
@@ -304,8 +317,7 @@ impl NetworkDriver for VirtioNetDriver {
 
 	#[allow(dead_code)]
 	fn has_packet(&self) -> bool {
-		self.recv_vqs.poll();
-		!self.recv_vqs.poll_receiver.is_empty()
+		self.recv_vqs.has_packet()
 	}
 
 	/// Provides smoltcp a slice to copy the IP packet and transfer the packet
@@ -399,8 +411,13 @@ impl NetworkDriver for VirtioNetDriver {
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 			packets.push(packet);
 		}
-		self.recv_vqs
-			.fill_queue(self.recv_vqs.vqs[0].clone(), num_buffers);
+
+		fill_queue(
+			self.recv_vqs.vqs[0].as_mut(),
+			num_buffers,
+			self.recv_vqs.packet_size,
+			self.recv_vqs.poll_sender.clone(),
+		);
 
 		let vec_data = packets.into_iter().flatten().collect();
 
@@ -506,13 +523,13 @@ impl VirtioNetDriver {
 		}
 	}
 
-	pub fn disable_interrupts(&self) {
+	pub fn disable_interrupts(&mut self) {
 		// For send and receive queues?
 		// Only for receive? Because send is off anyway?
 		self.recv_vqs.disable_notifs();
 	}
 
-	pub fn enable_interrupts(&self) {
+	pub fn enable_interrupts(&mut self) {
 		// For send and receive queues?
 		// Only for receive? Because send is off anyway?
 		self.recv_vqs.enable_notifs();
@@ -698,7 +715,7 @@ impl VirtioNetDriver {
 		// Add a control if feature is negotiated
 		if self.dev_cfg.features.contains(virtio::net::F::CTRL_VQ) {
 			if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
-				self.ctrl_vq = CtrlQueue(Some(Rc::new(
+				self.ctrl_vq = CtrlQueue(Some(Box::new(
 					PackedVq::new(
 						&mut self.com_cfg,
 						&self.notif_cfg,
@@ -709,7 +726,7 @@ impl VirtioNetDriver {
 					.unwrap(),
 				)));
 			} else {
-				self.ctrl_vq = CtrlQueue(Some(Rc::new(
+				self.ctrl_vq = CtrlQueue(Some(Box::new(
 					SplitVq::new(
 						&mut self.com_cfg,
 						&self.notif_cfg,
@@ -721,7 +738,7 @@ impl VirtioNetDriver {
 				)));
 			}
 
-			self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
+			self.ctrl_vq.0.as_mut().unwrap().enable_notifs();
 		}
 
 		Ok(())
@@ -774,7 +791,7 @@ impl VirtioNetDriver {
 
 		for i in 0..(self.num_vqs / 2) {
 			if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
-				let vq = PackedVq::new(
+				let mut vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
@@ -785,9 +802,9 @@ impl VirtioNetDriver {
 				// Interrupt for receiving packets is wanted
 				vq.enable_notifs();
 
-				self.recv_vqs.add(Rc::from(vq));
+				self.recv_vqs.add(Box::from(vq));
 
-				let vq = PackedVq::new(
+				let mut vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
@@ -798,9 +815,9 @@ impl VirtioNetDriver {
 				// Interrupt for comunicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
-				self.send_vqs.add(Rc::from(vq));
+				self.send_vqs.add(Box::from(vq));
 			} else {
-				let vq = SplitVq::new(
+				let mut vq = SplitVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
@@ -811,9 +828,9 @@ impl VirtioNetDriver {
 				// Interrupt for receiving packets is wanted
 				vq.enable_notifs();
 
-				self.recv_vqs.add(Rc::from(vq));
+				self.recv_vqs.add(Box::from(vq));
 
-				let vq = SplitVq::new(
+				let mut vq = SplitVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
@@ -824,7 +841,7 @@ impl VirtioNetDriver {
 				// Interrupt for comunicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
-				self.send_vqs.add(Rc::from(vq));
+				self.send_vqs.add(Box::from(vq));
 			}
 		}
 

@@ -2,7 +2,7 @@
 //!
 //! The module contains ...
 
-use alloc::rc::Rc;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::str::FromStr;
 
@@ -47,8 +47,8 @@ impl VirtioNetDriver {
 			1514
 		};
 
-		let send_vqs = TxQueues::new(Vec::<Rc<dyn Virtq>>::new(), false, &dev_cfg);
-		let recv_vqs = RxQueues::new(Vec::<Rc<dyn Virtq>>::new(), false, &dev_cfg);
+		let send_vqs = TxQueues::new(Vec::<Box<dyn Virtq>>::new(), false, &dev_cfg);
+		let recv_vqs = RxQueues::new(Vec::<Box<dyn Virtq>>::new(), false, &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),

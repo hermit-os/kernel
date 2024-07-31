@@ -4,7 +4,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::cell::{Cell, RefCell};
+use core::cell::Cell;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ops, ptr};
 
@@ -271,12 +271,7 @@ impl DescriptorRing {
 	/// Returns an initialized write controller in order
 	/// to write the queue correctly.
 	fn get_write_ctrler(&mut self) -> Result<WriteCtrl<'_>, VirtqError> {
-		let desc_id = self
-			.mem_pool
-			.pool
-			.borrow_mut()
-			.pop()
-			.ok_or(VirtqError::NoDescrAvail)?;
+		let desc_id = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
 		Ok(WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
@@ -562,9 +557,9 @@ impl DevNotif {
 pub struct PackedVq {
 	/// Ring which allows easy access to the raw ring structure of the
 	/// specfification
-	descr_ring: RefCell<DescriptorRing>,
+	descr_ring: DescriptorRing,
 	/// Allows to tell the device if notifications are wanted
-	drv_event: RefCell<DrvNotif>,
+	drv_event: DrvNotif,
 	/// Allows to check, if the device wants a notification
 	dev_event: DevNotif,
 	/// Actually notify device about avail buffers
@@ -580,23 +575,21 @@ pub struct PackedVq {
 
 // Public interface of PackedVq
 // This interface is also public in order to allow people to use the PackedVq directly!
-// This is currently unlikely, as the Tokens hold a Rc<Virtq> for refering to their origin
-// queue. This could be eased
 impl Virtq for PackedVq {
-	fn enable_notifs(&self) {
-		self.drv_event.borrow_mut().enable_notif();
+	fn enable_notifs(&mut self) {
+		self.drv_event.enable_notif();
 	}
 
-	fn disable_notifs(&self) {
-		self.drv_event.borrow_mut().disable_notif();
+	fn disable_notifs(&mut self) {
+		self.drv_event.disable_notif();
 	}
 
-	fn poll(&self) {
-		self.descr_ring.borrow_mut().poll();
+	fn poll(&mut self) {
+		self.descr_ring.poll();
 	}
 
 	fn dispatch_batch(
-		&self,
+		&mut self,
 		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
 		notif: bool,
 	) -> Result<(), VirtqError> {
@@ -610,10 +603,10 @@ impl Virtq for PackedVq {
 			})
 			.collect();
 
-		let next_idx = self.descr_ring.borrow_mut().push_batch(transfer_tkns)?;
+		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
 
 		if notif {
-			self.drv_event.borrow_mut().enable_specific(next_idx);
+			self.drv_event.enable_specific(next_idx);
 		}
 
 		let range = self.last_next.get()..next_idx;
@@ -634,7 +627,7 @@ impl Virtq for PackedVq {
 	}
 
 	fn dispatch_batch_await(
-		&self,
+		&mut self,
 		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
 		await_queue: super::UsedBufferTokenSender,
 		notif: bool,
@@ -653,10 +646,10 @@ impl Virtq for PackedVq {
 			})
 			.collect();
 
-		let next_idx = self.descr_ring.borrow_mut().push_batch(transfer_tkns)?;
+		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
 
 		if notif {
-			self.drv_event.borrow_mut().enable_specific(next_idx);
+			self.drv_event.enable_specific(next_idx);
 		}
 
 		let range = self.last_next.get()..next_idx;
@@ -677,17 +670,17 @@ impl Virtq for PackedVq {
 	}
 
 	fn dispatch(
-		&self,
+		&mut self,
 		buffer_tkn: AvailBufferToken,
 		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
 		let transfer_tkn = self.transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
-		let next_idx = self.descr_ring.borrow_mut().push(transfer_tkn)?;
+		let next_idx = self.descr_ring.push(transfer_tkn)?;
 
 		if notif {
-			self.drv_event.borrow_mut().enable_specific(next_idx);
+			self.drv_event.enable_specific(next_idx);
 		}
 
 		let notif_specific = self.dev_event.notif_specific() == Some(self.last_next.get());
@@ -742,7 +735,7 @@ impl Virtq for PackedVq {
 			vq_handler.set_vq_size(size.0)
 		};
 
-		let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
+		let descr_ring = DescriptorRing::new(vq_size);
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len =
 			core::mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
@@ -754,7 +747,7 @@ impl Virtq for PackedVq {
 
 		// Provide memory areas of the queues data structures to the device
 		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
-			descr_ring.borrow().raw_addr() as u64,
+			descr_ring.raw_addr() as u64
 		)));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
 		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(drv_event_ptr as u64)));
@@ -764,10 +757,10 @@ impl Virtq for PackedVq {
 
 		let dev_event: &'static mut pvirtq::EventSuppress = unsafe { &mut *(dev_event_ptr) };
 
-		let drv_event = RefCell::new(DrvNotif {
+		let mut drv_event = DrvNotif {
 			f_notif_idx: false,
 			raw: drv_event,
-		});
+		};
 
 		let dev_event = DevNotif {
 			f_notif_idx: false,
@@ -781,7 +774,7 @@ impl Virtq for PackedVq {
 		}
 
 		if features.contains(virtio::F::EVENT_IDX) {
-			drv_event.borrow_mut().f_notif_idx = true;
+			drv_event.f_notif_idx = true;
 		}
 
 		vq_handler.enable_queue();
@@ -801,6 +794,11 @@ impl Virtq for PackedVq {
 
 	fn size(&self) -> VqSize {
 		self.size
+	}
+
+	fn has_used_buffers(&self) -> bool {
+		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
+		self.descr_ring.is_marked_used(desc.flags)
 	}
 }
 
