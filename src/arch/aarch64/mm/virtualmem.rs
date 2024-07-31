@@ -145,3 +145,9 @@ pub fn print_information() {
 	let free_list = KERNEL_FREE_LIST.lock();
 	info!("Virtual memory free list:\n{free_list}");
 }
+
+#[cfg(feature = "newlib")]
+#[inline]
+pub const fn kernel_heap_end() -> VirtAddr {
+	KERNEL_VIRTUAL_MEMORY_END
+}
