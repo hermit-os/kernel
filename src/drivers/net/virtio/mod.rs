@@ -95,8 +95,8 @@ impl RxQueues {
 		Ok(())
 	}
 
-	fn fill_queue(&self, vq: Rc<dyn Virtq>, num_buff: u16) {
-		for _ in 0..num_buff {
+	fn fill_queue(&self, vq: Rc<dyn Virtq>, num_packets: u16) {
+		for _ in 0..num_packets {
 			let buff_tkn = match AvailBufferToken::new(
 				vec![],
 				vec![
@@ -124,8 +124,8 @@ impl RxQueues {
 				BufferType::Direct,
 			) {
 				Ok(_) => (),
-				Err(_) => {
-					error!("Descriptor IDs were exhausted earlier than expected.");
+				Err(err) => {
+					error!("{:#?}", err);
 					break;
 				}
 			}
@@ -136,8 +136,9 @@ impl RxQueues {
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, vq: Rc<dyn Virtq>) {
-		let num_buff: u16 = vq.size().into();
-		self.fill_queue(vq.clone(), num_buff);
+		const BUFF_PER_PACKET: u16 = 2;
+		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		self.fill_queue(vq.clone(), num_packets);
 		self.vqs.push(vq);
 		if self.vqs.len() > 1 {
 			self.is_multi = true;
