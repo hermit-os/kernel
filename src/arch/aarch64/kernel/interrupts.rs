@@ -327,9 +327,9 @@ pub(crate) fn init() {
 					panic!("Invalid interrupt type");
 				};
 				gic.set_interrupt_priority(timer_irqid, 0x00);
-				if irqflags == 4 || irqflags == 8 {
+				if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
 					gic.set_trigger(timer_irqid, Trigger::Level);
-				} else if irqflags == 2 || irqflags == 1 {
+				} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
 					gic.set_trigger(timer_irqid, Trigger::Edge);
 				} else {
 					panic!("Invalid interrupt level!");
