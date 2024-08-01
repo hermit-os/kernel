@@ -202,9 +202,8 @@ fn boot_processor_main() -> ! {
 	extern "C" {
 		static mut __bss_start: u8;
 	}
-	info!("BSS starts at {:p}", unsafe {
-		core::ptr::addr_of_mut!(__bss_start)
-	});
+	let bss_ptr = core::ptr::addr_of_mut!(__bss_start);
+	info!("BSS starts at {bss_ptr:p}");
 	info!("tls_info = {:#x?}", kernel::boot_info().load_info.tls_info);
 	arch::boot_processor_init();
 
