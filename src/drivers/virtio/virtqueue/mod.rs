@@ -17,7 +17,6 @@ use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
 use core::any::Any;
-use core::cell::RefCell;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
@@ -105,7 +104,7 @@ pub trait Virtq {
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
 	fn dispatch(
-		&self,
+		&mut self,
 		tkn: AvailBufferToken,
 		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
@@ -122,7 +121,7 @@ pub trait Virtq {
 	/// Currently this function is constantly polling the queue while keeping the notifications disabled.
 	/// Upon finish notifications are enabled again.
 	fn dispatch_blocking(
-		&self,
+		&mut self,
 		tkn: AvailBufferToken,
 		buffer_type: BufferType,
 	) -> Result<UsedBufferToken, VirtqError> {
@@ -150,17 +149,17 @@ pub trait Virtq {
 	}
 
 	/// Enables interrupts for this virtqueue upon receiving a transfer
-	fn enable_notifs(&self);
+	fn enable_notifs(&mut self);
 
 	/// Disables interrupts for this virtqueue upon receiving a transfer
-	fn disable_notifs(&self);
+	fn disable_notifs(&mut self);
 
 	/// Checks if new used descriptors have been written by the device.
 	/// This activates the queue and polls the descriptor ring of the queue.
 	///
 	/// * `TransferTokens` which hold an `await_queue` will be placed into
 	///   these queues.
-	fn poll(&self);
+	fn poll(&mut self);
 
 	/// Dispatches a batch of [AvailBufferToken]s. The buffers are provided to the queue in
 	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
@@ -170,7 +169,7 @@ pub trait Virtq {
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
 	fn dispatch_batch(
-		&self,
+		&mut self,
 		tkns: Vec<(AvailBufferToken, BufferType)>,
 		notif: bool,
 	) -> Result<(), VirtqError>;
@@ -188,7 +187,7 @@ pub trait Virtq {
 	///
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	fn dispatch_batch_await(
-		&self,
+		&mut self,
 		tkns: Vec<(AvailBufferToken, BufferType)>,
 		await_queue: UsedBufferTokenSender,
 		notif: bool,
@@ -215,6 +214,8 @@ pub trait Virtq {
 
 	// Returns the index (ID) of a Virtqueue.
 	fn index(&self) -> VqIndex;
+
+	fn has_used_buffers(&self) -> bool;
 }
 
 /// These methods are an implementation detail and are meant only for consumption by the default method
@@ -484,20 +485,20 @@ struct MemDescrId(pub u16);
 /// memory descriptor ids. As Virtqueus do only allow a limited amount of descriptors in their queue,
 /// the independent queues, can control the number of descriptors by this.
 struct MemPool {
-	pool: RefCell<Vec<MemDescrId>>,
+	pool: Vec<MemDescrId>,
 	limit: u16,
 }
 
 impl MemPool {
 	/// Returns a given id to the id pool
-	fn ret_id(&self, id: MemDescrId) {
-		self.pool.borrow_mut().push(id);
+	fn ret_id(&mut self, id: MemDescrId) {
+		self.pool.push(id);
 	}
 
 	/// Returns a new instance, with a pool of the specified size.
 	fn new(size: u16) -> MemPool {
 		MemPool {
-			pool: RefCell::new((0..size).map(MemDescrId).collect()),
+			pool: (0..size).map(MemDescrId).collect(),
 			limit: size,
 		}
 	}

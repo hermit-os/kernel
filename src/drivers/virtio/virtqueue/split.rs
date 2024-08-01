@@ -3,7 +3,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::cell::{RefCell, UnsafeCell};
+use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 use core::ptr;
 
@@ -72,13 +72,7 @@ impl DescrRing {
 				next: 0.into(),
 			};
 
-			index = self
-				.mem_pool
-				.pool
-				.borrow_mut()
-				.pop()
-				.ok_or(VirtqError::NoDescrAvail)?
-				.0;
+			index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
 			self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 		} else {
 			let send_desc_iter = tkn
@@ -109,13 +103,7 @@ impl DescrRing {
 				// If the [AvailBufferToken] is empty, we panic
 				let descriptor = rev_all_desc_iter.next().unwrap();
 
-				index = self
-					.mem_pool
-					.pool
-					.borrow_mut()
-					.pop()
-					.ok_or(VirtqError::NoDescrAvail)?
-					.0;
+				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
 				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			for mut descriptor in rev_all_desc_iter {
@@ -123,13 +111,7 @@ impl DescrRing {
 				// We have not updated `index` yet, so it is at this point the index of the previous descriptor that had been written.
 				descriptor.next = le16::from(index);
 
-				index = self
-					.mem_pool
-					.pool
-					.borrow_mut()
-					.pop()
-					.ok_or(VirtqError::NoDescrAvail)?
-					.0;
+				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
 				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			// At this point, `index` is the index of the last element of the reversed iterator,
@@ -215,7 +197,7 @@ impl DescrRing {
 
 /// Virtio's split virtqueue structure
 pub struct SplitVq {
-	ring: RefCell<DescrRing>,
+	ring: DescrRing,
 	size: VqSize,
 	index: VqIndex,
 
@@ -223,20 +205,20 @@ pub struct SplitVq {
 }
 
 impl Virtq for SplitVq {
-	fn enable_notifs(&self) {
-		self.ring.borrow_mut().drv_enable_notif();
+	fn enable_notifs(&mut self) {
+		self.ring.drv_enable_notif();
 	}
 
-	fn disable_notifs(&self) {
-		self.ring.borrow_mut().drv_disable_notif();
+	fn disable_notifs(&mut self) {
+		self.ring.drv_disable_notif();
 	}
 
-	fn poll(&self) {
-		self.ring.borrow_mut().poll()
+	fn poll(&mut self) {
+		self.ring.poll()
 	}
 
 	fn dispatch_batch(
-		&self,
+		&mut self,
 		_tkns: Vec<(AvailBufferToken, BufferType)>,
 		_notif: bool,
 	) -> Result<(), VirtqError> {
@@ -244,7 +226,7 @@ impl Virtq for SplitVq {
 	}
 
 	fn dispatch_batch_await(
-		&self,
+		&mut self,
 		_tkns: Vec<(AvailBufferToken, BufferType)>,
 		_await_queue: super::UsedBufferTokenSender,
 		_notif: bool,
@@ -253,14 +235,14 @@ impl Virtq for SplitVq {
 	}
 
 	fn dispatch(
-		&self,
+		&mut self,
 		buffer_tkn: AvailBufferToken,
 		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
 		let transfer_tkn = self.transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
-		let next_idx = self.ring.borrow_mut().push(transfer_tkn)?;
+		let next_idx = self.ring.push(transfer_tkn)?;
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -268,7 +250,7 @@ impl Virtq for SplitVq {
 			unimplemented!();
 		}
 
-		if self.ring.borrow().dev_is_notif() {
+		if self.ring.dev_is_notif() {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index.0)
 				.with_next_idx(next_idx);
@@ -363,7 +345,7 @@ impl Virtq for SplitVq {
 		info!("Created SplitVq: idx={}, size={}", index.0, size);
 
 		Ok(SplitVq {
-			ring: RefCell::new(descr_ring),
+			ring: descr_ring,
 			notif_ctrl,
 			size: VqSize(size),
 			index,
@@ -372,6 +354,10 @@ impl Virtq for SplitVq {
 
 	fn size(&self) -> VqSize {
 		self.size
+	}
+
+	fn has_used_buffers(&self) -> bool {
+		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
 	}
 }
 

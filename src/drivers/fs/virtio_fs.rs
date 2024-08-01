@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
@@ -43,7 +42,7 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
-	pub(super) vqueues: Vec<Rc<dyn Virtq>>,
+	pub(super) vqueues: Vec<Box<dyn Virtq>>,
 	pub(super) irq: InterruptLine,
 }
 
@@ -139,7 +138,7 @@ impl VirtioFsDriver {
 				self.dev_cfg.features.into(),
 			)
 			.unwrap();
-			self.vqueues.push(Rc::new(vq));
+			self.vqueues.push(Box::new(vq));
 		}
 
 		// At this point the device is "live"
