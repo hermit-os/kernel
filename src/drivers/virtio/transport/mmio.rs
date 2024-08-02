@@ -6,7 +6,7 @@
 use core::mem;
 
 use virtio::mmio::{
-	DeviceRegisterVolatileFieldAccess, DeviceRegisterVolatileWideFieldAccess, DeviceRegisters,
+	DeviceRegisters, DeviceRegistersVolatileFieldAccess, DeviceRegistersVolatileWideFieldAccess,
 	InterruptStatus, NotificationData,
 };
 use virtio::{le32, DeviceStatus};

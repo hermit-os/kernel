@@ -5,7 +5,7 @@ use core::{ptr, str};
 
 use align_address::Align;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
-use virtio::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::arch::x86_64::mm::paging::{

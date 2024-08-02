@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use smoltcp::phy::ChecksumCapabilities;
-use virtio::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
