@@ -3,7 +3,7 @@ use core::ptr::NonNull;
 
 use fdt::Fdt;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
-use virtio::mmio::{DeviceRegisterVolatileFieldAccess, DeviceRegisters};
+use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use volatile::VolatileRef;
 

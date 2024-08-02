@@ -74,7 +74,7 @@ mmap = []
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
-virtio = { package = "virtio-spec", path = "virtio-spec", features = ["alloc", "mmio", "nightly", "zerocopy"] }
+virtio = { package = "virtio-spec", version = "0.1", features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }
@@ -165,7 +165,6 @@ llvm-tools = "0.1"
 [workspace]
 members = [
     "hermit-macro",
-    "virtio-spec",
 	"xtask",
 ]
 exclude = [
