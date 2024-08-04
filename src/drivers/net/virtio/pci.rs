@@ -86,8 +86,8 @@ impl VirtioNetDriver {
 			1514
 		};
 
-		let send_vqs = TxQueues::new(Vec::new(), false, &dev_cfg);
-		let recv_vqs = RxQueues::new(Vec::new(), false, &dev_cfg);
+		let send_vqs = TxQueues::new(Vec::new(), &dev_cfg);
+		let recv_vqs = RxQueues::new(Vec::new(), &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg,

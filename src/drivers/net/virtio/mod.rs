@@ -61,12 +61,11 @@ pub struct RxQueues {
 	vqs: Vec<Box<dyn Virtq>>,
 	poll_sender: async_channel::Sender<UsedBufferToken>,
 	poll_receiver: async_channel::Receiver<UsedBufferToken>,
-	is_multi: bool,
 	packet_size: u32,
 }
 
 impl RxQueues {
-	pub fn new(vqs: Vec<Box<dyn Virtq>>, is_multi: bool, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
 		let (poll_sender, poll_receiver) = async_channel::unbounded();
 
 		// See Virtio specification v1.1 - 5.1.6.3.1
@@ -81,7 +80,6 @@ impl RxQueues {
 			vqs,
 			poll_sender,
 			poll_receiver,
-			is_multi,
 			packet_size,
 		}
 	}
@@ -107,9 +105,6 @@ impl RxQueues {
 			self.poll_sender.clone(),
 		);
 		self.vqs.push(vq);
-		if self.vqs.len() > 1 {
-			self.is_multi = true;
-		}
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
@@ -126,32 +121,20 @@ impl RxQueues {
 	}
 
 	fn poll(&mut self) {
-		if self.is_multi {
-			for vq in &mut self.vqs {
-				vq.poll();
-			}
-		} else {
-			self.vqs[0].poll();
+		for vq in &mut self.vqs {
+			vq.poll();
 		}
 	}
 
 	fn enable_notifs(&mut self) {
-		if self.is_multi {
-			for vq in &mut self.vqs {
-				vq.enable_notifs();
-			}
-		} else {
-			self.vqs[0].enable_notifs();
+		for vq in &mut self.vqs {
+			vq.enable_notifs();
 		}
 	}
 
 	fn disable_notifs(&mut self) {
-		if self.is_multi {
-			for vq in &mut self.vqs {
-				vq.disable_notifs();
-			}
-		} else {
-			self.vqs[0].disable_notifs();
+		for vq in &mut self.vqs {
+			vq.disable_notifs();
 		}
 	}
 
@@ -208,12 +191,11 @@ pub struct TxQueues {
 	vqs: Vec<Box<dyn Virtq>>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
-	is_multi: bool,
 	packet_length: u32,
 }
 
 impl TxQueues {
-	pub fn new(vqs: Vec<Box<dyn Virtq>>, is_multi: bool, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
 		let packet_length = if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
@@ -223,52 +205,32 @@ impl TxQueues {
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
 		};
 
-		Self {
-			vqs,
-			is_multi,
-			packet_length,
-		}
+		Self { vqs, packet_length }
 	}
 	#[allow(dead_code)]
 	fn enable_notifs(&mut self) {
-		if self.is_multi {
-			for vq in &mut self.vqs {
-				vq.enable_notifs();
-			}
-		} else {
-			self.vqs[0].enable_notifs();
+		for vq in &mut self.vqs {
+			vq.enable_notifs();
 		}
 	}
 
 	#[allow(dead_code)]
 	fn disable_notifs(&mut self) {
-		if self.is_multi {
-			for vq in &mut self.vqs {
-				vq.disable_notifs();
-			}
-		} else {
-			self.vqs[0].disable_notifs();
+		for vq in &mut self.vqs {
+			vq.disable_notifs();
 		}
 	}
 
 	fn poll(&mut self) {
-		if self.is_multi {
-			for vq in &mut self.vqs {
-				vq.poll();
-			}
-		} else {
-			self.vqs[0].poll();
+		for vq in &mut self.vqs {
+			vq.poll();
 		}
 	}
 
 	fn add(&mut self, vq: Box<dyn Virtq>) {
-		// Safe virtqueue
+		// Currently we are doing nothing with the additional queues. They are inactive and might be used in the
+		// future
 		self.vqs.push(vq);
-		if self.vqs.len() != 1 {
-			self.is_multi = true;
-			// Currently we are doing nothing with the additional queues. They are inactive and might be used in the
-			// future
-		}
 	}
 }
 
