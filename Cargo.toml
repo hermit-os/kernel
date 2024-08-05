@@ -54,7 +54,7 @@ dhcpv4 = [
 ]
 fs = ["fuse"]
 fuse = ["pci", "dep:fuse-abi", "fuse-abi/num_enum"]
-vsock = ["pci"]
+vsock = ["pci", "endian-num"]
 fsgsbase = []
 gem-net = ["tcp", "dep:tock-registers"]
 newlib = []
@@ -88,6 +88,7 @@ build-time = "0.1.3"
 cfg-if = "1"
 crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
+endian-num = { version = "0.1", optional = true }
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.1", features = ["zerocopy"], optional = true }
