@@ -9,10 +9,6 @@ use smoltcp::phy::ChecksumCapabilities;
 
 #[allow(unused_imports)]
 use crate::arch::kernel::core_local::*;
-#[cfg(not(feature = "pci"))]
-use crate::arch::kernel::mmio as hardware;
-#[cfg(feature = "pci")]
-use crate::drivers::pci as hardware;
 use crate::executor::device::{RxToken, TxToken};
 
 /// A trait for accessing the network interface
@@ -37,20 +33,5 @@ pub(crate) trait NetworkDriver {
 	/// Enable / disable the polling mode of the network interface
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
-	fn handle_interrupt(&mut self) -> bool;
-}
-
-#[inline]
-pub(crate) fn network_irqhandler() -> bool {
-	let result = if let Some(driver) = hardware::get_network_driver() {
-		driver.lock().handle_interrupt()
-	} else {
-		debug!("Unable to handle interrupt!");
-		false
-	};
-
-	// TODO: do we need it?
-	crate::executor::run();
-
-	result
+	fn handle_interrupt(&mut self);
 }

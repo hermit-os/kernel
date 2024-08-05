@@ -16,7 +16,7 @@ use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::{network_irqhandler, NetworkDriver};
+use crate::drivers::net::NetworkDriver;
 use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
 
@@ -342,6 +342,8 @@ impl NetworkDriver for RTL8139Driver {
 
 		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
 
+		crate::executor::run();
+
 		unsafe {
 			outw(
 				self.iobase + ISR,
@@ -428,7 +430,11 @@ extern "x86-interrupt" fn rtl8139_irqhandler(stack_frame: ExceptionStackFrame) {
 
 	debug!("Receive network interrupt");
 	crate::arch::x86_64::kernel::apic::eoi();
-	let _ = network_irqhandler();
+	if let Some(driver) = hardware::get_network_driver() {
+		driver.lock().handle_interrupt()
+	} else {
+		debug!("Unable to handle interrupt!");
+	}
 
 	core_scheduler().reschedule();
 	crate::arch::x86_64::swapgs(&stack_frame);

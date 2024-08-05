@@ -19,7 +19,7 @@ use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::{network_irqhandler, NetworkDriver};
+use crate::drivers::net::NetworkDriver;
 use crate::executor::device::{RxToken, TxToken};
 
 //Base address of the control registers
@@ -202,9 +202,13 @@ fn gem_irqhandler() {
 
 	debug!("Receive network interrupt");
 
+	crate::executor::run();
+
 	// PLIC end of interrupt
 	crate::arch::kernel::interrupts::external_eoi();
-	let _ = network_irqhandler();
+	if let Some(driver) = hardware::get_network_driver() {
+		driver.lock().handle_interrupt()
+	}
 
 	core_scheduler().reschedule();
 }

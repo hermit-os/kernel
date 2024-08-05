@@ -14,7 +14,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 
-use pci_types::InterruptLine;
+use align_address::Align;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
@@ -24,8 +24,6 @@ use volatile::VolatileRef;
 
 use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
-#[cfg(not(target_arch = "riscv64"))]
-use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::NetworkDriver;
 #[cfg(not(feature = "pci"))]
@@ -249,8 +247,6 @@ pub(crate) struct VirtioNetDriver {
 	pub(super) send_vqs: TxQueues,
 
 	pub(super) num_vqs: u16,
-	#[cfg_attr(target_arch = "riscv64", allow(dead_code))]
-	pub(super) irq: InterruptLine,
 	pub(super) mtu: u16,
 	pub(super) checksums: ChecksumCapabilities,
 }
@@ -394,22 +390,15 @@ impl NetworkDriver for VirtioNetDriver {
 		}
 	}
 
-	fn handle_interrupt(&mut self) -> bool {
-		#[cfg(not(target_arch = "riscv64"))]
-		increment_irq_counter(32 + self.irq);
+	fn handle_interrupt(&mut self) {
+		let _ = self.isr_stat.is_interrupt();
 
-		let result = if self.isr_stat.is_interrupt() {
-			true
-		} else if self.isr_stat.is_cfg_change() {
+		if self.isr_stat.is_cfg_change() {
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
-		} else {
-			false
-		};
+		}
 
 		self.isr_stat.acknowledge();
-
-		result
 	}
 }
 
