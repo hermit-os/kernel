@@ -966,7 +966,11 @@ pub(crate) fn init_device(
 			match &drv {
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				VirtioDriver::Network(_) => {
+					use crate::drivers::virtio::transport::VIRTIO_IRQ;
+
 					let irq = device.get_irq().unwrap();
+					let _ = VIRTIO_IRQ.try_insert(irq);
+
 					info!("Install virtio interrupt handler at line {}", irq);
 					// Install interrupt handler
 					irq_install_handler(irq, virtio_irqhandler);
@@ -976,7 +980,11 @@ pub(crate) fn init_device(
 				}
 				#[cfg(feature = "vsock")]
 				VirtioDriver::Vsock(_) => {
+					use crate::drivers::virtio::transport::VIRTIO_IRQ;
+
 					let irq = device.get_irq().unwrap();
+					let _ = VIRTIO_IRQ.try_insert(irq);
+
 					info!("Install virtio interrupt handler at line {}", irq);
 					// Install interrupt handler
 					irq_install_handler(irq, virtio_irqhandler);

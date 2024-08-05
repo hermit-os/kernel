@@ -8,13 +8,11 @@ use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
-use smoltcp::wire::{IpEndpoint, IpVersion};
+use smoltcp::wire::IpEndpoint;
 
 use crate::executor::block_on;
 use crate::executor::network::{now, Handle, NetworkState, NIC};
-use crate::fd::{
-	AddressFamily, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption,
-};
+use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::{io, DEFAULT_KEEP_ALIVE_INTERVAL};
 
 /// further receives will be disallowed
@@ -426,17 +424,6 @@ impl ObjectInterface for Socket {
 		} else {
 			Err(io::Error::EINVAL)
 		}
-	}
-
-	fn get_address_family(&self) -> Option<AddressFamily> {
-		self.with(|socket| {
-			socket
-				.local_endpoint()
-				.map(|endpoint| match endpoint.addr.version() {
-					IpVersion::Ipv4 => AddressFamily::INET,
-					IpVersion::Ipv6 => AddressFamily::INET6,
-				})
-		})
 	}
 }
 

@@ -13,7 +13,7 @@ use smoltcp::wire::{IpEndpoint, IpVersion};
 
 use crate::executor::network::{now, Handle, NetworkState, NIC};
 use crate::executor::{block_on, poll_on};
-use crate::fd::{AddressFamily, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -268,15 +268,6 @@ impl ObjectInterface for Socket {
 		} else {
 			Err(io::Error::EINVAL)
 		}
-	}
-
-	fn get_address_family(&self) -> Option<AddressFamily> {
-		self.endpoint
-			.load()
-			.map(|endpoint| match endpoint.addr.version() {
-				IpVersion::Ipv4 => AddressFamily::INET,
-				IpVersion::Ipv6 => AddressFamily::INET6,
-			})
 	}
 }
 

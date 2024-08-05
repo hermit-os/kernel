@@ -18,7 +18,7 @@ use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
 use crate::fd::socket::udp;
 #[cfg(feature = "vsock")]
-use crate::fd::socket::vsock::{self, VsockListenEndpoint};
+use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
 	get_object, insert_object, replace_object, Endpoint, ListenEndpoint, ObjectInterface,
 	SocketOption,
@@ -117,9 +117,36 @@ pub struct sockaddr_vm {
 impl From<sockaddr_vm> for VsockListenEndpoint {
 	fn from(addr: sockaddr_vm) -> VsockListenEndpoint {
 		let port = addr.svm_port;
-		let cid = addr.svm_cid;
+		let cid = if addr.svm_cid < u32::MAX {
+			Some(addr.svm_cid)
+		} else {
+			None
+		};
 
 		VsockListenEndpoint::new(port, cid)
+	}
+}
+
+#[cfg(feature = "vsock")]
+impl From<sockaddr_vm> for VsockEndpoint {
+	fn from(addr: sockaddr_vm) -> VsockEndpoint {
+		let port = addr.svm_port;
+		let cid = addr.svm_cid;
+
+		VsockEndpoint::new(port, cid)
+	}
+}
+
+#[cfg(feature = "vsock")]
+impl From<VsockEndpoint> for sockaddr_vm {
+	fn from(endpoint: VsockEndpoint) -> Self {
+		Self {
+			svm_len: core::mem::size_of::<sockaddr_vm>().try_into().unwrap(),
+			svm_family: AF_VSOCK.try_into().unwrap(),
+			svm_port: endpoint.port,
+			svm_cid: endpoint.cid,
+			..Default::default()
+		}
 	}
 }
 
@@ -383,7 +410,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
-	info!(
+	debug!(
 		"sys_socket: domain {}, type {:?}, protocol {}",
 		domain, type_, protocol
 	);
@@ -489,21 +516,20 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 						new_fd
 					}
 					#[cfg(feature = "vsock")]
-					Endpoint::Vsock(_) => {
+					Endpoint::Vsock(endpoint) => {
 						let new_obj = dyn_clone::clone_box(&*v);
 						replace_object(fd, Arc::from(new_obj)).unwrap();
 						let new_fd = insert_object(v).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
-							let addrlen = unsafe { &*addrlen };
+							let addrlen = unsafe { &mut *addrlen };
 
 							if *addrlen >= size_of::<sockaddr_vm>().try_into().unwrap() {
 								let addr = unsafe { &mut *(addr as *mut sockaddr_vm) };
-								*addr = sockaddr_vm::default();
+								*addr = sockaddr_vm::from(endpoint);
+								*addrlen = size_of::<sockaddr_vm>().try_into().unwrap();
 							}
 						}
-
-						warn!("unsupported device");
 
 						new_fd
 					}
@@ -600,7 +626,9 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 			if namelen < size_of::<sockaddr_vm>().try_into().unwrap() {
 				return -crate::errno::EINVAL;
 			}
-			Endpoint::Vsock(())
+			Endpoint::Vsock(VsockEndpoint::from(unsafe {
+				*(name as *const sockaddr_vm)
+			}))
 		}
 		_ => {
 			return -crate::errno::EINVAL;

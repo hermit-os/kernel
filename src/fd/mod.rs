@@ -25,24 +25,12 @@ pub(crate) const STDOUT_FILENO: FileDescriptor = 1;
 pub(crate) const STDERR_FILENO: FileDescriptor = 2;
 
 #[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-#[allow(clippy::upper_case_acronyms, dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum AddressFamily {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	INET,
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	INET6,
-	#[cfg(feature = "vsock")]
-	VSOCK,
-}
-
-#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 #[derive(Debug)]
 pub(crate) enum Endpoint {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	Ip(IpEndpoint),
 	#[cfg(feature = "vsock")]
-	Vsock(()),
+	Vsock(socket::vsock::VsockEndpoint),
 }
 
 #[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
@@ -292,13 +280,6 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// files.
 	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
-	}
-
-	/// Sockets returns the supported address family
-	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	#[allow(dead_code)]
-	fn get_address_family(&self) -> Option<AddressFamily> {
-		None
 	}
 }
 

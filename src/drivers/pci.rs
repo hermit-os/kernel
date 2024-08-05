@@ -135,6 +135,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			}
 		};
 
+		if address == 0 {
+			return None;
+		}
+
 		debug!(
 			"Mapping bar {} at {:#x} with length {:#x}",
 			index, address, size
@@ -329,6 +333,15 @@ impl PciDriver {
 		}
 	}
 
+	#[cfg(feature = "vsock")]
+	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioVsock(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
 	#[cfg(feature = "fuse")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
@@ -355,6 +368,11 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL81
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
+#[cfg(feature = "vsock")]
+pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
+	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_vsock_driver()) }
+}
+
 #[cfg(feature = "fuse")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
 	unsafe {
@@ -374,7 +392,7 @@ pub(crate) fn init_drivers() {
 			})
 		} {
 			info!(
-				"Found virtio network device with device id {:#x}",
+				"Found virtio device with device id {:#x}",
 				adapter.device_id()
 			);
 
