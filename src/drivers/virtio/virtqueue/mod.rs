@@ -8,7 +8,6 @@
 //! Drivers who need a more fine grained access to the specific queues must
 //! use the respective virtqueue structs directly.
 #![allow(dead_code)]
-#![allow(clippy::type_complexity)]
 
 pub mod packed;
 pub mod split;
@@ -21,12 +20,14 @@ use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
 use async_channel::TryRecvError;
+use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
 #[cfg(not(feature = "pci"))]
 use super::transport::mmio::{ComCfg, NotifCfg};
 #[cfg(feature = "pci")]
 use super::transport::pci::{ComCfg, NotifCfg};
+use crate::arch::mm::{paging, VirtAddr};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
@@ -98,7 +99,6 @@ type UsedBufferTokenSender = async_channel::Sender<UsedBufferToken>;
 /// might not provide the complete feature set of each queue. Drivers who
 /// do need these features should refrain from providing support for both
 /// Virtqueue types and use the structs directly instead.
-#[allow(private_bounds)]
 pub trait Virtq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
@@ -221,35 +221,109 @@ pub trait Virtq {
 /// These methods are an implementation detail and are meant only for consumption by the default method
 /// implementations in [Virtq].
 trait VirtqPrivate {
-	type Descriptor;
+	type Descriptor: VirtqDescriptor;
 
 	fn create_indirect_ctrl(
-		&self,
-		send: &[BufferElem],
-		recv: &[BufferElem],
+		buffer_tkn: &AvailBufferToken,
 	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
+
+	fn indirect_desc(table: &[Self::Descriptor]) -> Self::Descriptor {
+		Self::Descriptor::incomplete_desc(
+			paging::virt_to_phys(VirtAddr::from(table.as_ptr() as u64))
+				.as_u64()
+				.into(),
+			(mem::size_of_val(table) as u32).into(),
+			virtq::DescF::INDIRECT,
+		)
+	}
 
 	/// Consumes the [AvailBufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
 	///
 	/// After this call, the buffers are no longer writable.
 	fn transfer_token_from_buffer_token(
-		&self,
 		buff_tkn: AvailBufferToken,
 		await_queue: Option<UsedBufferTokenSender>,
 		buffer_type: BufferType,
 	) -> TransferToken<Self::Descriptor> {
 		let ctrl_desc = match buffer_type {
 			BufferType::Direct => None,
-			BufferType::Indirect => Some(
-				self.create_indirect_ctrl(&buff_tkn.send_buff, &buff_tkn.recv_buff)
-					.unwrap(),
-			),
+			BufferType::Indirect => Some(Self::create_indirect_ctrl(&buff_tkn).unwrap()),
 		};
 
 		TransferToken {
 			buff_tkn,
 			await_queue,
 			ctrl_desc,
+		}
+	}
+
+	// The descriptors returned by the iterator will be incomplete, as they do not
+	// have all the information necessary.
+	fn descriptor_iter<'a>(
+		buffer_tkn: &AvailBufferToken,
+	) -> Result<impl DoubleEndedIterator<Item = Self::Descriptor>, VirtqError> {
+		let send_desc_iter = buffer_tkn
+			.send_buff
+			.iter()
+			.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
+		let recv_desc_iter = buffer_tkn
+			.recv_buff
+			.iter()
+			.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
+		let mut all_desc_iter =
+			send_desc_iter
+				.chain(recv_desc_iter)
+				.map(|(mem_descr, len, incomplete_flags)| {
+					Self::Descriptor::incomplete_desc(
+						paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
+							.as_u64()
+							.into(),
+						(len as u32).into(),
+						incomplete_flags | virtq::DescF::NEXT,
+					)
+				});
+
+		let mut last_desc = all_desc_iter
+			.next_back()
+			.ok_or(VirtqError::BufferNotSpecified)?;
+		*last_desc.flags_mut() -= virtq::DescF::NEXT;
+
+		Ok(all_desc_iter.chain([last_desc]))
+	}
+}
+
+trait VirtqDescriptor {
+	fn flags_mut(&mut self) -> &mut virtq::DescF;
+
+	fn incomplete_desc(addr: virtio::le64, len: virtio::le32, flags: virtq::DescF) -> Self;
+}
+
+impl VirtqDescriptor for virtq::Desc {
+	fn flags_mut(&mut self) -> &mut virtq::DescF {
+		&mut self.flags
+	}
+
+	fn incomplete_desc(addr: le64, len: le32, flags: virtq::DescF) -> Self {
+		Self {
+			addr,
+			len,
+			flags,
+			next: 0.into(),
+		}
+	}
+}
+
+impl VirtqDescriptor for pvirtq::Desc {
+	fn flags_mut(&mut self) -> &mut virtq::DescF {
+		&mut self.flags
+	}
+
+	fn incomplete_desc(addr: le64, len: le32, flags: virtq::DescF) -> Self {
+		Self {
+			addr,
+			len,
+			flags,
+			id: 0.into(),
 		}
 	}
 }

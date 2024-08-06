@@ -19,8 +19,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AvailBufferToken, BufferElem, BufferType, MemPool, TransferToken, UsedBufferToken,
-	UsedBufferTokenSender, Virtq, VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, UsedBufferTokenSender,
+	Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
@@ -59,44 +59,12 @@ impl DescrRing {
 	fn push(&mut self, tkn: TransferToken<virtq::Desc>) -> Result<u16, VirtqError> {
 		let mut index;
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
-			let indirect_table_slice_ref = ctrl_desc.as_ref();
-
-			let descriptor = virtq::Desc {
-				addr: paging::virt_to_phys(
-					VirtAddr::from(indirect_table_slice_ref.as_ptr() as u64),
-				)
-				.as_u64()
-				.into(),
-				len: (mem::size_of_val(indirect_table_slice_ref) as u32).into(),
-				flags: virtq::DescF::INDIRECT,
-				next: 0.into(),
-			};
+			let descriptor = SplitVq::indirect_desc(ctrl_desc.as_ref());
 
 			index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
 			self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 		} else {
-			let send_desc_iter = tkn
-				.buff_tkn
-				.send_buff
-				.iter()
-				.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
-			let recv_desc_iter = tkn
-				.buff_tkn
-				.recv_buff
-				.iter()
-				.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
-			let mut rev_all_desc_iter =
-				send_desc_iter
-					.chain(recv_desc_iter)
-					.rev()
-					.map(|(mem_descr, len, flags)| virtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
-							.as_u64()
-							.into(),
-						len: (len as u32).into(),
-						flags,
-						next: 0.into(),
-					});
+			let mut rev_all_desc_iter = SplitVq::descriptor_iter(&tkn.buff_tkn)?.rev();
 
 			// We need to handle the last descriptor (the first for the reversed iterator) specially to not set the next flag.
 			{
@@ -107,7 +75,6 @@ impl DescrRing {
 				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			for mut descriptor in rev_all_desc_iter {
-				descriptor.flags |= virtq::DescF::NEXT;
 				// We have not updated `index` yet, so it is at this point the index of the previous descriptor that had been written.
 				descriptor.next = le16::from(index);
 
@@ -241,7 +208,7 @@ impl Virtq for SplitVq {
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
-		let transfer_tkn = self.transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
+		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
 		let next_idx = self.ring.push(transfer_tkn)?;
 
 		if notif {
@@ -364,33 +331,15 @@ impl Virtq for SplitVq {
 impl VirtqPrivate for SplitVq {
 	type Descriptor = virtq::Desc;
 	fn create_indirect_ctrl(
-		&self,
-		send: &[BufferElem],
-		recv: &[BufferElem],
+		buffer_tkn: &AvailBufferToken,
 	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		let send_desc_iter = send
-			.iter()
-			.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
-		let recv_desc_iter = recv
-			.iter()
-			.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
-		let all_desc_iter = send_desc_iter.chain(recv_desc_iter).zip(1u16..).map(
-			|((mem_descr, len, incomplete_flags), next_idx)| virtq::Desc {
-				addr: paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
-					.as_u64()
-					.into(),
-				len: (len as u32).into(),
-				flags: incomplete_flags | virtq::DescF::NEXT,
-				next: next_idx.into(),
-			},
-		);
-
-		let mut indirect_table: Vec<_> = all_desc_iter.collect();
-		let last_desc = indirect_table
-			.last_mut()
-			.ok_or(VirtqError::BufferNotSpecified)?;
-		last_desc.flags -= virtq::DescF::NEXT;
-		last_desc.next = 0.into();
-		Ok(indirect_table.into_boxed_slice())
+		Ok(Self::descriptor_iter(buffer_tkn)?
+			.zip(1..)
+			.map(|(descriptor, next_id)| Self::Descriptor {
+				next: next_id.into(),
+				..descriptor
+			})
+			.collect::<Vec<_>>()
+			.into_boxed_slice())
 	}
 }
