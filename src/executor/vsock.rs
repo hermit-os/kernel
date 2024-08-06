@@ -108,9 +108,14 @@ async fn vsock_run() {
 					} else if (raw.state == VsockState::Connected
 						|| raw.state == VsockState::Shutdown)
 						&& type_ == Type::Stream
+						&& op == Op::Rw
 					{
 						raw.buffer.extend_from_slice(data);
 						raw.waker.wake();
+					} else if op == Op::CreditUpdate {
+						debug!("CrediteUpdate currently not supported: {:?}", header);
+					} else if op == Op::Shutdown {
+						raw.state = VsockState::Shutdown;
 					} else {
 						hdr = Some(*header);
 						if op == Op::CreditRequest {
@@ -176,6 +181,10 @@ impl VsockMap {
 
 	pub fn get_mut_socket(&mut self, port: u32) -> Option<&mut RawSocket> {
 		self.port_map.get_mut(&port)
+	}
+
+	pub fn remove_socket(&mut self, port: u32) {
+		let _ = self.port_map.remove(&port);
 	}
 }
 

@@ -183,6 +183,18 @@ impl ObjectInterface for Socket {
 						Poll::Ready(Ok(len))
 					}
 				}
+				VsockState::Shutdown => {
+					let len = core::cmp::min(buffer.len(), raw.buffer.len());
+
+					if len == 0 {
+						Poll::Ready(Ok(0))
+					} else {
+						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
+						buffer[..len].copy_from_slice(tmp.as_slice());
+
+						Poll::Ready(Ok(len))
+					}
+				}
 				_ => Poll::Ready(Err(Error::EIO)),
 			}
 		})
@@ -213,7 +225,7 @@ impl ObjectInterface for Socket {
 					response.flags = le32::from_ne(0);
 					response.buf_alloc =
 						le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
-					response.fwd_cnt = le32::from_ne(0);
+					response.fwd_cnt = le32::from_ne(raw.buffer.len().try_into().unwrap());
 
 					virtio_buffer[HEADER_SIZE..].copy_from_slice(buffer);
 				});
@@ -232,5 +244,13 @@ impl Clone for Socket {
 			cid: AtomicU32::new(self.cid.load(Ordering::Acquire)),
 			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
 		}
+	}
+}
+
+impl Drop for Socket {
+	fn drop(&mut self) {
+		let port = self.port.load(Ordering::Acquire);
+		let mut guard = VSOCK_MAP.lock();
+		guard.remove_socket(port);
 	}
 }
