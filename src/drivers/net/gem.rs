@@ -16,10 +16,14 @@ use tock_registers::{register_bitfields, register_structs};
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::interrupts::*;
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+use crate::arch::kernel::mmio as hardware;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
+#[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
+use crate::drivers::pci as hardware;
 use crate::executor::device::{RxToken, TxToken};
 
 //Base address of the control registers
@@ -202,13 +206,13 @@ fn gem_irqhandler() {
 
 	debug!("Receive network interrupt");
 
-	crate::executor::run();
-
 	// PLIC end of interrupt
 	crate::arch::kernel::interrupts::external_eoi();
 	if let Some(driver) = hardware::get_network_driver() {
 		driver.lock().handle_interrupt()
 	}
+
+	crate::executor::run();
 
 	core_scheduler().reschedule();
 }
@@ -365,7 +369,7 @@ impl NetworkDriver for GEMDriver {
 		}
 	}
 
-	fn handle_interrupt(&mut self) -> bool {
+	fn handle_interrupt(&mut self) {
 		let int_status = unsafe { (*self.gem).int_status.extract() };
 
 		let receive_status = unsafe { (*self.gem).receive_status.extract() };
@@ -409,8 +413,8 @@ impl NetworkDriver for GEMDriver {
 			// handle incoming packets
 			todo!();
 		}
-		// increment_irq_counter((32 + self.irq).into());
-		ret
+
+		//increment_irq_counter((32 + self.irq).into());
 	}
 }
 

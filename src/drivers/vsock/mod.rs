@@ -3,14 +3,13 @@
 #[cfg(feature = "pci")]
 pub mod pci;
 
-use alloc::rc::Rc;
+use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::cmp::Ordering;
 use core::mem;
+use core::mem::MaybeUninit;
 
-use align_address::Align;
 use pci_types::InterruptLine;
-use virtio::vsock::{Event, Hdr};
+use virtio::vsock::Hdr;
 use virtio::FeatureBits;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
@@ -19,17 +18,59 @@ use crate::drivers::virtio::error::VirtioVsockError;
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	BuffSpec, BufferToken, BufferType, Bytes, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq, VqIndex, VqSize,
 };
 #[cfg(feature = "pci")]
 use crate::drivers::vsock::pci::VsockDevCfgRaw;
+use crate::mm::device_alloc::DeviceAlloc;
 
-const MTU: usize = 65536;
+fn fill_queue(
+	vq: &mut dyn Virtq,
+	num_packets: u16,
+	packet_size: u32,
+	poll_sender: async_channel::Sender<UsedBufferToken>,
+) {
+	for _ in 0..num_packets {
+		let buff_tkn = match AvailBufferToken::new(
+			vec![],
+			vec![
+				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+				BufferElem::Vector(Vec::with_capacity_in(
+					packet_size.try_into().unwrap(),
+					DeviceAlloc,
+				)),
+			],
+		) {
+			Ok(tkn) => tkn,
+			Err(_vq_err) => {
+				error!("Setup of network queue failed, which should not happen!");
+				panic!("setup of network queue failed!");
+			}
+		};
+
+		// BufferTokens are directly provided to the queue
+		// TransferTokens are directly dispatched
+		// Transfers will be awaited at the queue
+		match vq.dispatch(
+			buff_tkn,
+			Some(poll_sender.clone()),
+			false,
+			BufferType::Direct,
+		) {
+			Ok(_) => (),
+			Err(err) => {
+				error!("{:#?}", err);
+				break;
+			}
+		}
+	}
+}
 
 pub(crate) struct RxQueue {
-	vq: Option<Rc<dyn Virtq>>,
-	poll_sender: async_channel::Sender<BufferToken>,
-	poll_receiver: async_channel::Receiver<BufferToken>,
+	vq: Option<Box<dyn Virtq>>,
+	poll_sender: async_channel::Sender<UsedBufferToken>,
+	poll_receiver: async_channel::Receiver<UsedBufferToken>,
+	packet_size: u32,
 }
 
 impl RxQueue {
@@ -40,57 +81,37 @@ impl RxQueue {
 			vq: None,
 			poll_sender,
 			poll_receiver,
+			packet_size: 8192u32 + mem::size_of::<Hdr>() as u32,
 		}
 	}
 
-	pub fn add(&mut self, vq: Rc<dyn Virtq>) {
-		let num_buff: u16 = vq.size().into();
-		let rx_size = (MTU + mem::size_of::<Hdr>())
-			.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>());
-		let spec = BuffSpec::Single(Bytes::new(rx_size).unwrap());
-
-		for _ in 0..num_buff {
-			let buff_tkn = match BufferToken::new(None, Some(spec.clone())) {
-				Ok(tkn) => tkn,
-				Err(_vq_err) => {
-					error!("Setup of vsock queue failed, which should not happen!");
-					panic!("setup of vsock queue failed!");
-				}
-			};
-
-			// BufferTokens are directly provided to the queue
-			// TransferTokens are directly dispatched
-			// Transfers will be awaited at the queue
-			match vq.dispatch_await(
-				buff_tkn,
-				self.poll_sender.clone(),
-				false,
-				BufferType::Direct,
-			) {
-				Ok(_) => (),
-				Err(_) => {
-					error!("Descriptor IDs were exhausted earlier than expected.");
-					break;
-				}
-			}
-		}
+	pub fn add(&mut self, mut vq: Box<dyn Virtq>) {
+		const BUFF_PER_PACKET: u16 = 2;
+		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		info!("num_packets {}", num_packets);
+		fill_queue(
+			vq.as_mut(),
+			num_packets,
+			self.packet_size,
+			self.poll_sender.clone(),
+		);
 
 		self.vq = Some(vq);
 	}
 
-	pub fn enable_notifs(&self) {
-		if let Some(ref vq) = self.vq {
+	pub fn enable_notifs(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.enable_notifs();
 		}
 	}
 
-	pub fn disable_notifs(&self) {
-		if let Some(ref vq) = self.vq {
+	pub fn disable_notifs(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.disable_notifs();
 		}
 	}
 
-	fn get_next(&mut self) -> Option<BufferToken> {
+	fn get_next(&mut self) -> Option<UsedBufferToken> {
 		let transfer = self.poll_receiver.try_recv();
 
 		transfer
@@ -103,8 +124,8 @@ impl RxQueue {
 			.ok()
 	}
 
-	fn poll(&self) {
-		if let Some(ref vq) = self.vq {
+	fn poll(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.poll();
 		}
 	}
@@ -113,40 +134,17 @@ impl RxQueue {
 	where
 		F: FnMut(&Hdr, &[u8]),
 	{
-		const HEADER_SIZE: usize = mem::size_of::<Hdr>();
-
 		while let Some(mut buffer_tkn) = self.get_next() {
-			let (_, recv_data_opt) = buffer_tkn.as_slices().unwrap();
-			let mut recv_data = recv_data_opt.unwrap();
+			let header = buffer_tkn
+				.used_recv_buff
+				.pop_front_downcast::<Hdr>()
+				.unwrap();
+			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
 
-			if recv_data.len() == 1 {
-				let packet = recv_data.pop().unwrap();
+			if let Some(ref mut vq) = self.vq {
+				f(&header, &packet[..]);
 
-				// drop packets with invalid packet size
-				if packet.len() < HEADER_SIZE {
-					panic!("Invalid packet size!");
-				}
-
-				if let Some(ref vq) = self.vq {
-					let header = unsafe {
-						core::mem::transmute::<[u8; HEADER_SIZE], Hdr>(
-							packet[..HEADER_SIZE].try_into().unwrap(),
-						)
-					};
-
-					f(&header, &packet[HEADER_SIZE..]);
-
-					buffer_tkn.reset();
-					vq.dispatch_await(
-						buffer_tkn,
-						self.poll_sender.clone(),
-						false,
-						BufferType::Direct,
-					)
-					.unwrap();
-				} else {
-					panic!("Unable to get receive queue");
-				}
+				fill_queue(vq.as_mut(), 1, self.packet_size, self.poll_sender.clone());
 			} else {
 				panic!("Invalid length of receive queue");
 			}
@@ -155,141 +153,70 @@ impl RxQueue {
 }
 
 pub(crate) struct TxQueue {
-	vq: Option<Rc<dyn Virtq>>,
-	poll_sender: async_channel::Sender<BufferToken>,
-	poll_receiver: async_channel::Receiver<BufferToken>,
-	ready_queue: Vec<BufferToken>,
+	vq: Option<Box<dyn Virtq>>,
+	/// Indicates, whether the Driver/Device are using multiple
+	/// queues for communication.
+	packet_length: u32,
 }
 
 impl TxQueue {
 	pub fn new() -> Self {
-		let (poll_sender, poll_receiver) = async_channel::unbounded();
-
 		Self {
 			vq: None,
-			poll_sender,
-			poll_receiver,
-			ready_queue: Vec::new(),
+			packet_length: 8192u32 + mem::size_of::<Hdr>() as u32,
 		}
 	}
 
-	pub fn add(&mut self, vq: Rc<dyn Virtq>) {
-		let tx_size = (1514 + mem::size_of::<Hdr>())
-			.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>());
-		let buff_def = Bytes::new(tx_size).unwrap();
-		let spec = BuffSpec::Single(buff_def);
-		let num_buff: u16 = vq.size().into();
-
-		for _ in 0..num_buff {
-			let mut buffer_tkn = BufferToken::new(Some(spec.clone()), None).unwrap();
-			buffer_tkn
-				.write_seq(Some(&Hdr::default()), None::<&Hdr>)
-				.unwrap();
-			self.ready_queue.push(buffer_tkn)
-		}
-
+	pub fn add(&mut self, vq: Box<dyn Virtq>) {
 		self.vq = Some(vq);
 	}
 
-	pub fn enable_notifs(&self) {
-		if let Some(ref vq) = self.vq {
+	pub fn enable_notifs(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.enable_notifs();
 		}
 	}
 
-	pub fn disable_notifs(&self) {
-		if let Some(ref vq) = self.vq {
+	pub fn disable_notifs(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.disable_notifs();
 		}
 	}
 
-	fn poll(&self) {
-		if let Some(ref vq) = self.vq {
+	fn poll(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.poll();
 		}
 	}
 
-	/// Returns either a BufferToken and the corresponding index of the
-	/// virtqueue it is coming from. (Index in the TxQueues.vqs vector)
-	///
-	/// OR returns None, if no BufferToken could be generated
-	fn get_tkn(&mut self, len: usize) -> Option<(BufferToken, usize)> {
-		// Check all ready token, for correct size.
-		// Drop token if not so
-		//
-		// All Tokens inside the ready_queue are coming from the main queue with index 0.
-		while let Some(mut tkn) = self.ready_queue.pop() {
-			let (send_len, _) = tkn.len();
-
-			match send_len.cmp(&len) {
-				Ordering::Less => {}
-				Ordering::Equal => return Some((tkn, 0)),
-				Ordering::Greater => {
-					tkn.restr_size(Some(len), None).unwrap();
-					return Some((tkn, 0));
-				}
-			}
-		}
-
-		if self.poll_receiver.is_empty() {
-			self.poll();
-		}
-
-		while let Ok(mut buffer_token) = self.poll_receiver.try_recv() {
-			buffer_token.reset();
-			let (send_len, _) = buffer_token.len();
-
-			match send_len.cmp(&len) {
-				Ordering::Less => {}
-				Ordering::Equal => return Some((buffer_token, 0)),
-				Ordering::Greater => {
-					buffer_token.restr_size(Some(len), None).unwrap();
-					return Some((buffer_token, 0));
-				}
-			}
-		}
-
-		// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-		let spec = BuffSpec::Single(Bytes::new(len).unwrap());
-
-		match BufferToken::new(Some(spec), None) {
-			Ok(tkn) => Some((tkn, 0)),
-			Err(_) => {
-				// Here it is possible if multiple queues are enabled to get another buffertoken from them!
-				// Info the queues are disabled upon initialization and should be enabled somehow!
-				None
-			}
-		}
-	}
-
 	/// Provides a slice to copy the packet and transfer the packet
-	/// to the send queue. The caller has to creatde the header
+	/// to the send queue. The caller has to create the header
 	/// for the vsock interface.
 	pub fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		if let Some((mut buff_tkn, _vq_index)) = self.get_tkn(len) {
-			let (send_ptrs, _) = buff_tkn.raw_ptrs();
-			let (buff_ptr, _) = send_ptrs.unwrap()[0];
+		// We need to poll to get the queue to remove elements from the table and make space for
+		// what we are about to add
+		if let Some(ref mut vq) = self.vq {
+			vq.poll();
 
-			let buf_slice: &'static mut [u8] =
-				unsafe { core::slice::from_raw_parts_mut(buff_ptr, len) };
-			let result = f(buf_slice);
+			assert!(len < usize::try_from(self.packet_length).unwrap());
+			let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
+			let result = unsafe {
+				let result = f(MaybeUninit::slice_assume_init_mut(
+					packet.spare_capacity_mut(),
+				));
+				packet.set_len(len);
+				result
+			};
 
-			if let Some(ref vq) = self.vq {
-				vq.dispatch_await(
-					buff_tkn,
-					self.poll_sender.clone(),
-					false,
-					BufferType::Direct,
-				)
+			let buff_tkn = AvailBufferToken::new(vec![BufferElem::Vector(packet)], vec![]).unwrap();
+
+			vq.dispatch(buff_tkn, None, false, BufferType::Direct)
 				.unwrap();
 
-				result
-			} else {
-				panic!("Unable to get token for send queue");
-			}
+			result
 		} else {
 			panic!("Unable to get send queue");
 		}
@@ -297,9 +224,10 @@ impl TxQueue {
 }
 
 pub(crate) struct EventQueue {
-	vq: Option<Rc<dyn Virtq>>,
-	poll_sender: async_channel::Sender<BufferToken>,
-	poll_receiver: async_channel::Receiver<BufferToken>,
+	vq: Option<Box<dyn Virtq>>,
+	poll_sender: async_channel::Sender<UsedBufferToken>,
+	poll_receiver: async_channel::Receiver<UsedBufferToken>,
+	packet_size: u32,
 }
 
 impl EventQueue {
@@ -310,52 +238,33 @@ impl EventQueue {
 			vq: None,
 			poll_sender,
 			poll_receiver,
+			packet_size: 1024u32,
 		}
 	}
 
-	pub fn add(&mut self, vq: Rc<dyn Virtq>) {
-		let num_buff: u16 = vq.size().into();
-		let event_size = mem::size_of::<Event>()
-			.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>());
-		let spec = BuffSpec::Single(Bytes::new(event_size).unwrap());
-
-		for _ in 0..num_buff {
-			let buff_tkn = match BufferToken::new(None, Some(spec.clone())) {
-				Ok(tkn) => tkn,
-				Err(_vq_err) => {
-					error!("Setup of vsock queue failed, which should not happen!");
-					panic!("setup of vsock queue failed!");
-				}
-			};
-
-			// BufferTokens are directly provided to the queue
-			// TransferTokens are directly dispatched
-			// Transfers will be awaited at the queue
-			match vq.dispatch_await(
-				buff_tkn,
-				self.poll_sender.clone(),
-				false,
-				BufferType::Direct,
-			) {
-				Ok(_) => (),
-				Err(_) => {
-					error!("Descriptor IDs were exhausted earlier than expected.");
-					break;
-				}
-			}
-		}
-
+	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
+	///
+	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
+	fn add(&mut self, mut vq: Box<dyn Virtq>) {
+		const BUFF_PER_PACKET: u16 = 2;
+		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		fill_queue(
+			vq.as_mut(),
+			num_packets,
+			self.packet_size,
+			self.poll_sender.clone(),
+		);
 		self.vq = Some(vq);
 	}
 
-	pub fn enable_notifs(&self) {
-		if let Some(ref vq) = self.vq {
+	pub fn enable_notifs(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.enable_notifs();
 		}
 	}
 
-	pub fn disable_notifs(&self) {
-		if let Some(ref vq) = self.vq {
+	pub fn disable_notifs(&mut self) {
+		if let Some(ref mut vq) = self.vq {
 			vq.disable_notifs();
 		}
 	}
@@ -398,13 +307,13 @@ impl VirtioVsockDriver {
 		self.com_cfg.set_failed();
 	}
 
-	pub fn disable_interrupts(&self) {
+	pub fn disable_interrupts(&mut self) {
 		// For send and receive queues?
 		// Only for receive? Because send is off anyway?
 		self.recv_vq.disable_notifs();
 	}
 
-	pub fn enable_interrupts(&self) {
+	pub fn enable_interrupts(&mut self) {
 		// For send and receive queues?
 		// Only for receive? Because send is off anyway?
 		self.recv_vq.enable_notifs();
@@ -482,7 +391,7 @@ impl VirtioVsockDriver {
 		}
 
 		// create the queues and tell device about them
-		self.recv_vq.add(Rc::new(
+		self.recv_vq.add(Box::new(
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
@@ -495,7 +404,7 @@ impl VirtioVsockDriver {
 		// Interrupt for receiving packets is wanted
 		self.recv_vq.enable_notifs();
 
-		self.send_vq.add(Rc::new(
+		self.send_vq.add(Box::new(
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
@@ -509,7 +418,7 @@ impl VirtioVsockDriver {
 		self.send_vq.disable_notifs();
 
 		// create the queues and tell device about them
-		self.event_vq.add(Rc::new(
+		self.event_vq.add(Box::new(
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
@@ -560,9 +469,9 @@ pub mod error {
 		FailFeatureNeg(u16),
 		/// Set of features does not adhere to the requirements of features
 		/// indicated by the specification
-		FeatureRequirementsNotMet(virtio::net::F),
+		FeatureRequirementsNotMet(virtio::vsock::F),
 		/// The first u64 contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second u64.
-		IncompatibleFeatureSets(virtio::net::F, virtio::net::F),
+		IncompatibleFeatureSets(virtio::vsock::F, virtio::vsock::F),
 	}
 }

@@ -381,13 +381,16 @@ pub(crate) fn init_device(
 	match registers.as_ptr().device_id().read() {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		virtio::Id::Net => {
-			match VirtioNetDriver::init(dev_id, registers, irq_no) {
+			match VirtioNetDriver::init(dev_id, registers) {
 				Ok(virt_net_drv) => {
+					use crate::drivers::virtio::transport::VIRTIO_IRQ;
+
 					info!("Virtio network driver initialized.");
 					// Install interrupt handler
 					irq_install_handler(irq_no, virtio_irqhandler);
 					#[cfg(not(target_arch = "riscv64"))]
 					add_irq_name(irq_no, "virtio");
+					let _ = VIRTIO_IRQ.try_insert(irq_no);
 
 					Ok(VirtioDriver::Network(virt_net_drv))
 				}
@@ -399,13 +402,16 @@ pub(crate) fn init_device(
 		}
 		#[cfg(feature = "vsock")]
 		virtio::Id::Vsock => {
-			match VirtioVsockDriver::init(dev_id, registers, irq_no) {
+			match VirtioVsockDriver::init(dev_id, registers) {
 				Ok(virt_net_drv) => {
+					use crate::drivers::virtio::transport::VIRTIO_IRQ;
+
 					info!("Virtio sock driver initialized.");
 					// Install interrupt handler
 					irq_install_handler(irq_no, virtio_irqhandler);
 					#[cfg(not(target_arch = "riscv64"))]
 					add_irq_name(irq_no, "virtio");
+					let _ = VIRTIO_IRQ.try_insert(irq_no);
 
 					Ok(VirtioDriver::Vsock(virt_vsock_drv))
 				}

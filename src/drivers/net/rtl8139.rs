@@ -17,6 +17,7 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
+use crate::drivers::pci as hardware;
 use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
 
@@ -319,7 +320,7 @@ impl NetworkDriver for RTL8139Driver {
 		}
 	}
 
-	fn handle_interrupt(&mut self) -> bool {
+	fn handle_interrupt(&mut self) {
 		increment_irq_counter(32 + self.irq);
 
 		let isr_contents = unsafe { inw(self.iobase + ISR) };
@@ -340,18 +341,12 @@ impl NetworkDriver for RTL8139Driver {
 			trace!("RTL88139: RX overflow detected!\n");
 		}
 
-		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
-
-		crate::executor::run();
-
 		unsafe {
 			outw(
 				self.iobase + ISR,
 				isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
 			);
 		}
-
-		ret
 	}
 }
 
@@ -435,6 +430,8 @@ extern "x86-interrupt" fn rtl8139_irqhandler(stack_frame: ExceptionStackFrame) {
 	} else {
 		debug!("Unable to handle interrupt!");
 	}
+
+	crate::executor::run();
 
 	core_scheduler().reschedule();
 	crate::arch::x86_64::swapgs(&stack_frame);

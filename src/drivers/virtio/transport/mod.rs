@@ -15,13 +15,19 @@ use hermit_sync::OnceCell;
 use crate::arch::kernel::core_local::increment_irq_counter;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::interrupts::ExceptionStackFrame;
-#[cfg(all(feature = "vsock", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "vsock", feature = "tcp", feature = "udp"),
+	not(feature = "pci")
+))]
 use crate::arch::kernel::mmio as hardware;
 #[cfg(target_arch = "aarch64")]
 use crate::arch::scheduler::State;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::NetworkDriver;
-#[cfg(all(feature = "vsock", feature = "pci"))]
+#[cfg(all(
+	any(feature = "vsock", feature = "tcp", feature = "udp"),
+	feature = "pci"
+))]
 use crate::drivers::pci as hardware;
 
 /// All virtio devices share the interrupt number `VIRTIO_IRQ`
@@ -31,7 +37,7 @@ static VIRTIO_IRQ: OnceCell<u8> = OnceCell::new();
 pub(crate) fn virtio_irqhandler(_state: &State) -> bool {
 	debug!("Receive virtio interrupt");
 
-	crate::executor::run();
+	increment_irq_counter(32 + VIRTIO_IRQ.get().unwrap());
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	if let Some(driver) = hardware::get_network_driver() {
@@ -42,6 +48,10 @@ pub(crate) fn virtio_irqhandler(_state: &State) -> bool {
 	if let Some(driver) = hardware::get_vsock_driver() {
 		driver.lock().handle_interrupt();
 	}
+
+	crate::executor::run();
+
+	true
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -54,7 +64,6 @@ pub(crate) extern "x86-interrupt" fn virtio_irqhandler(stack_frame: ExceptionSta
 
 	increment_irq_counter(32 + VIRTIO_IRQ.get().unwrap());
 
-	crate::executor::run();
 	crate::kernel::apic::eoi();
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -67,6 +76,8 @@ pub(crate) extern "x86-interrupt" fn virtio_irqhandler(stack_frame: ExceptionSta
 		driver.lock().handle_interrupt();
 	}
 
+	crate::executor::run();
+
 	core_scheduler().reschedule();
 	crate::arch::x86_64::swapgs(&stack_frame);
 }
@@ -77,10 +88,6 @@ pub(crate) fn virtio_irqhandler() {
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	debug!("Receive virtio interrupt");
-
-	increment_irq_counter(32 + VIRTIO_IRQ.get().unwrap());
-
-	crate::executor::run();
 
 	// PLIC end of interrupt
 	crate::arch::kernel::interrupts::external_eoi();
@@ -93,6 +100,8 @@ pub(crate) fn virtio_irqhandler() {
 	if let Some(driver) = hardware::get_vsock_driver() {
 		driver.lock().handle_interrupt();
 	}
+
+	crate::executor::run();
 
 	core_scheduler().reschedule();
 }

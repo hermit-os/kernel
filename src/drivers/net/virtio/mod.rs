@@ -14,7 +14,6 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 
-use align_address::Align;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};

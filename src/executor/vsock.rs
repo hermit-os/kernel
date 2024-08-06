@@ -55,7 +55,9 @@ impl WakerRegistration {
 
 	/// Wake the registered waker, if any.
 	pub fn wake(&mut self) {
-		self.waker.take().map(|w| w.wake());
+		if let Some(w) = self.waker.take() {
+			w.wake()
+		}
 	}
 }
 
@@ -88,6 +90,7 @@ async fn vsock_run() {
 			const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
 			let mut driver_guard = driver.lock();
 			let mut hdr: Option<Hdr> = None;
+			let mut fwd_cnt: Option<u32> = None;
 
 			driver_guard.process_packet(|header, data| {
 				let op = Op::try_from(header.op.to_ne()).unwrap();
@@ -100,7 +103,7 @@ async fn vsock_run() {
 					{
 						raw.state = VsockState::ReceiveRequest;
 						raw.remote_cid = header.src_cid.to_ne().try_into().unwrap();
-						raw.remote_port = header.src_port.to_ne().try_into().unwrap();
+						raw.remote_port = header.src_port.to_ne();
 						raw.waker.wake();
 					} else if (raw.state == VsockState::Connected
 						|| raw.state == VsockState::Shutdown)
@@ -110,12 +113,14 @@ async fn vsock_run() {
 						raw.waker.wake();
 					} else {
 						hdr = Some(*header);
+						if op == Op::CreditRequest {
+							fwd_cnt = Some(raw.buffer.len().try_into().unwrap());
+						}
 					}
 				}
 			});
 
 			if let Some(hdr) = hdr {
-				// reset connection
 				driver_guard.send_packet(HEADER_SIZE, |buffer| {
 					let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
 
@@ -125,10 +130,17 @@ async fn vsock_run() {
 					response.dst_port = hdr.src_port;
 					response.len = le32::from_ne(0);
 					response.type_ = hdr.type_;
-					response.op = le16::from_ne(Op::Rst.into());
+					if let Some(fwd_cnt) = fwd_cnt {
+						// update fwd_cnt
+						response.op = le16::from_ne(Op::CreditUpdate.into());
+						response.fwd_cnt = le32::from_ne(fwd_cnt);
+					} else {
+						// reset connection
+						response.op = le16::from_ne(Op::Rst.into());
+						response.fwd_cnt = le32::from_ne(0);
+					}
 					response.flags = le32::from_ne(0);
 					response.buf_alloc = le32::from_ne(RAW_SOCKET_BUFFER_SIZE as u32);
-					response.fwd_cnt = le32::from_ne(0);
 				});
 			}
 
