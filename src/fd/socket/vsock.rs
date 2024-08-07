@@ -13,7 +13,7 @@ use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::executor::vsock::{VsockState, VSOCK_MAP};
-use crate::fd::{block_on, Endpoint, IoCtl, ListenEndpoint, ObjectInterface};
+use crate::fd::{block_on, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 
 #[derive(Debug)]
@@ -59,6 +59,77 @@ impl Socket {
 
 #[async_trait]
 impl ObjectInterface for Socket {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
+		let port = self.port.load(Ordering::Acquire);
+
+		future::poll_fn(|cx| {
+			let mut guard = VSOCK_MAP.lock();
+			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+
+			match raw.state {
+				VsockState::Shutdown | VsockState::ReceiveRequest => {
+					let available = PollEvent::POLLOUT
+						| PollEvent::POLLWRNORM
+						| PollEvent::POLLWRBAND
+						| PollEvent::POLLIN
+						| PollEvent::POLLRDNORM
+						| PollEvent::POLLRDBAND;
+
+					let ret = event & available;
+
+					if ret.is_empty() {
+						Poll::Ready(Ok(PollEvent::POLLHUP))
+					} else {
+						Poll::Ready(Ok(ret))
+					}
+				}
+				VsockState::Listen | VsockState::Connecting => {
+					raw.rx_waker.register(cx.waker());
+					raw.tx_waker.register(cx.waker());
+					Poll::Pending
+				}
+				VsockState::Connected => {
+					let mut available = PollEvent::empty();
+
+					if !raw.buffer.is_empty() {
+						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
+						available.insert(
+							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
+						);
+					}
+
+					let diff = raw.tx_cnt.abs_diff(raw.peer_fwd_cnt);
+					if diff < raw.peer_buf_alloc {
+						available.insert(
+							PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+						);
+					}
+
+					let ret = event & available;
+
+					if ret.is_empty() {
+						if event.intersects(
+							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
+						) {
+							raw.rx_waker.register(cx.waker());
+						}
+
+						if event.intersects(
+							PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+						) {
+							raw.tx_waker.register(cx.waker());
+						}
+
+						Poll::Pending
+					} else {
+						Poll::Ready(Ok(ret))
+					}
+				}
+			}
+		})
+		.await
+	}
+
 	fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
@@ -142,6 +213,10 @@ impl ObjectInterface for Socket {
 		)?;
 
 		Ok(Endpoint::Vsock(endpoint))
+	}
+
+	fn shutdown(&self, _how: i32) -> io::Result<()> {
+		Ok(())
 	}
 
 	fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
