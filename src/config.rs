@@ -14,3 +14,6 @@ pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = 1024;
 /// Default keep alive interval in milliseconds
 #[cfg(feature = "tcp")]
 pub(crate) const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 75000;
+
+#[cfg(feature = "vsock")]
+pub(crate) const VSOCK_PACKET_SIZE: u32 = 8192;

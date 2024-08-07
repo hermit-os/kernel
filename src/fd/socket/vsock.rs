@@ -95,7 +95,7 @@ impl ObjectInterface for Socket {
 
 					match raw.state {
 						VsockState::Listen => {
-							raw.waker.register(cx.waker());
+							raw.rx_waker.register(cx.waker());
 							Poll::Pending
 						}
 						VsockState::ReceiveRequest => {
@@ -123,7 +123,7 @@ impl ObjectInterface for Socket {
 									response.buf_alloc = le32::from_ne(
 										crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
 									);
-									response.fwd_cnt = le32::from_ne(0);
+									response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
 								});
 
 								raw.state = VsockState::Connected;
@@ -174,7 +174,7 @@ impl ObjectInterface for Socket {
 					let len = core::cmp::min(buffer.len(), raw.buffer.len());
 
 					if len == 0 {
-						raw.waker.register(cx.waker());
+						raw.rx_waker.register(cx.waker());
 						Poll::Pending
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
@@ -203,37 +203,54 @@ impl ObjectInterface for Socket {
 
 	async fn async_write(&self, buffer: &[u8]) -> io::Result<usize> {
 		let port = self.port.load(Ordering::Acquire);
-		let guard = VSOCK_MAP.lock();
-		let raw = guard.get_socket(port).ok_or(Error::EINVAL)?;
+		future::poll_fn(|cx| {
+			let mut guard = VSOCK_MAP.lock();
+			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+			let diff = raw.tx_cnt.abs_diff(raw.peer_fwd_cnt);
 
-		match raw.state {
-			VsockState::Connected => {
-				const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
-				let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
-				let local_cid = driver_guard.get_cid();
+			match raw.state {
+				VsockState::Connected => {
+					if diff >= raw.peer_buf_alloc {
+						raw.tx_waker.register(cx.waker());
+						Poll::Pending
+					} else {
+						const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
+						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
+						let local_cid = driver_guard.get_cid();
+						let len = core::cmp::min(
+							buffer.len(),
+							usize::try_from(raw.peer_buf_alloc - diff).unwrap(),
+						);
 
-				driver_guard.send_packet(HEADER_SIZE + buffer.len(), |virtio_buffer| {
-					let response = unsafe { &mut *(virtio_buffer.as_mut_ptr() as *mut Hdr) };
+						driver_guard.send_packet(HEADER_SIZE + len, |virtio_buffer| {
+							let response =
+								unsafe { &mut *(virtio_buffer.as_mut_ptr() as *mut Hdr) };
 
-					response.src_cid = le64::from_ne(local_cid);
-					response.dst_cid = le64::from_ne(raw.remote_cid as u64);
-					response.src_port = le32::from_ne(port);
-					response.dst_port = le32::from_ne(raw.remote_port);
-					response.len = le32::from_ne(buffer.len().try_into().unwrap());
-					response.type_ = le16::from_ne(Type::Stream.into());
-					response.op = le16::from_ne(Op::Rw.into());
-					response.flags = le32::from_ne(0);
-					response.buf_alloc =
-						le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
-					response.fwd_cnt = le32::from_ne(raw.buffer.len().try_into().unwrap());
+							raw.tx_cnt = raw.tx_cnt.wrapping_add(len.try_into().unwrap());
+							response.src_cid = le64::from_ne(local_cid);
+							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
+							response.src_port = le32::from_ne(port);
+							response.dst_port = le32::from_ne(raw.remote_port);
+							response.len = le32::from_ne(len.try_into().unwrap());
+							response.type_ = le16::from_ne(Type::Stream.into());
+							response.op = le16::from_ne(Op::Rw.into());
+							response.flags = le32::from_ne(0);
+							response.buf_alloc = le32::from_ne(
+								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
+							);
+							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
 
-					virtio_buffer[HEADER_SIZE..].copy_from_slice(buffer);
-				});
+							virtio_buffer[HEADER_SIZE..HEADER_SIZE + len]
+								.copy_from_slice(&buffer[..len]);
+						});
 
-				Ok(buffer.len())
+						Poll::Ready(Ok(len))
+					}
+				}
+				_ => Poll::Ready(Err(Error::EIO)),
 			}
-			_ => Err(Error::EIO),
-		}
+		})
+		.await
 	}
 }
 

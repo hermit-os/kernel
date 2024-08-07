@@ -81,7 +81,7 @@ impl RxQueue {
 			vq: None,
 			poll_sender,
 			poll_receiver,
-			packet_size: 8192u32 + mem::size_of::<Hdr>() as u32,
+			packet_size: crate::VSOCK_PACKET_SIZE + mem::size_of::<Hdr>() as u32,
 		}
 	}
 
@@ -163,7 +163,7 @@ impl TxQueue {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
-			packet_length: 8192u32 + mem::size_of::<Hdr>() as u32,
+			packet_length: crate::VSOCK_PACKET_SIZE + mem::size_of::<Hdr>() as u32,
 		}
 	}
 
@@ -238,7 +238,7 @@ impl EventQueue {
 			vq: None,
 			poll_sender,
 			poll_receiver,
-			packet_size: 1024u32,
+			packet_size: 128u32,
 		}
 	}
 

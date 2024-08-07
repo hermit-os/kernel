@@ -67,8 +67,13 @@ pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;
 pub(crate) struct RawSocket {
 	pub remote_cid: u32,
 	pub remote_port: u32,
+	pub fwd_cnt: u32,
+	pub peer_fwd_cnt: u32,
+	pub peer_buf_alloc: u32,
+	pub tx_cnt: u32,
 	pub state: VsockState,
-	pub waker: WakerRegistration,
+	pub rx_waker: WakerRegistration,
+	pub tx_waker: WakerRegistration,
 	pub buffer: Vec<u8>,
 }
 
@@ -77,8 +82,13 @@ impl RawSocket {
 		Self {
 			remote_cid: 0,
 			remote_port: 0,
+			fwd_cnt: 0,
+			peer_fwd_cnt: 0,
+			peer_buf_alloc: 0,
+			tx_cnt: 0,
 			state,
-			waker: WakerRegistration::new(),
+			rx_waker: WakerRegistration::new(),
+			tx_waker: WakerRegistration::new(),
 			buffer: Vec::with_capacity(RAW_SOCKET_BUFFER_SIZE),
 		}
 	}
@@ -90,7 +100,7 @@ async fn vsock_run() {
 			const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
 			let mut driver_guard = driver.lock();
 			let mut hdr: Option<Hdr> = None;
-			let mut fwd_cnt: Option<u32> = None;
+			let mut fwd_cnt: u32 = 0;
 
 			driver_guard.process_packet(|header, data| {
 				let op = Op::try_from(header.op.to_ne()).unwrap();
@@ -104,23 +114,28 @@ async fn vsock_run() {
 						raw.state = VsockState::ReceiveRequest;
 						raw.remote_cid = header.src_cid.to_ne().try_into().unwrap();
 						raw.remote_port = header.src_port.to_ne();
-						raw.waker.wake();
+						raw.peer_buf_alloc = header.buf_alloc.to_ne();
+						raw.rx_waker.wake();
 					} else if (raw.state == VsockState::Connected
 						|| raw.state == VsockState::Shutdown)
 						&& type_ == Type::Stream
 						&& op == Op::Rw
 					{
 						raw.buffer.extend_from_slice(data);
-						raw.waker.wake();
+						raw.fwd_cnt = raw.fwd_cnt.wrapping_add(u32::try_from(data.len()).unwrap());
+						raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
+						raw.tx_waker.wake();
+						raw.rx_waker.wake();
+						hdr = Some(*header);
+						fwd_cnt = raw.fwd_cnt;
 					} else if op == Op::CreditUpdate {
-						debug!("CrediteUpdate currently not supported: {:?}", header);
+						raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
+						raw.tx_waker.wake();
 					} else if op == Op::Shutdown {
 						raw.state = VsockState::Shutdown;
 					} else {
 						hdr = Some(*header);
-						if op == Op::CreditRequest {
-							fwd_cnt = Some(raw.buffer.len().try_into().unwrap());
-						}
+						fwd_cnt = raw.fwd_cnt;
 					}
 				}
 			});
@@ -135,17 +150,16 @@ async fn vsock_run() {
 					response.dst_port = hdr.src_port;
 					response.len = le32::from_ne(0);
 					response.type_ = hdr.type_;
-					if let Some(fwd_cnt) = fwd_cnt {
-						// update fwd_cnt
+					if hdr.op.to_ne() == Op::CreditRequest.into() || hdr.op.to_ne() == Op::Rw.into()
+					{
 						response.op = le16::from_ne(Op::CreditUpdate.into());
-						response.fwd_cnt = le32::from_ne(fwd_cnt);
 					} else {
 						// reset connection
 						response.op = le16::from_ne(Op::Rst.into());
-						response.fwd_cnt = le32::from_ne(0);
 					}
 					response.flags = le32::from_ne(0);
 					response.buf_alloc = le32::from_ne(RAW_SOCKET_BUFFER_SIZE as u32);
+					response.fwd_cnt = le32::from_ne(fwd_cnt);
 				});
 			}
 
