@@ -3,7 +3,6 @@ use std::env::{self, VarError};
 
 use anyhow::Result;
 use clap::Args;
-use xshell::cmd;
 
 use crate::cargo_build::CargoBuild;
 
@@ -34,13 +33,17 @@ impl Build {
 		};
 
 		eprintln!("Building kernel");
-		cmd!(sh, "cargo")
+		let mut cargo = crate::cargo();
+		cargo
 			.args(careful)
 			.arg("build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.arch.cargo_args())
-			.args(self.cargo_build.cargo_build_args())
-			.run()?;
+			.args(self.cargo_build.cargo_build_args());
+
+		eprintln!("$ {cargo:?}");
+		let status = cargo.status()?;
+		assert!(status.success());
 
 		let build_archive = self.cargo_build.artifact.build_archive();
 		let dist_archive = self.cargo_build.artifact.dist_archive();
@@ -56,11 +59,16 @@ impl Build {
 		self.export_syms()?;
 
 		eprintln!("Building hermit-builtins");
-		cmd!(sh, "cargo build --release")
+		let mut cargo = crate::cargo();
+		cargo
+			.args(["build", "--release"])
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
-			.args(self.cargo_build.builtins_target_dir_arg())
-			.run()?;
+			.args(self.cargo_build.builtins_target_dir_arg());
+
+		eprintln!("$ {cargo:?}");
+		let status = cargo.status()?;
+		assert!(status.success());
 
 		eprintln!("Exporting hermit-builtins symbols");
 		let builtins = self.cargo_build.artifact.builtins_archive();
