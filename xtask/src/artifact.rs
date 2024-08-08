@@ -44,10 +44,13 @@ impl Artifact {
 			.unwrap_or_else(|| Path::new("target"))
 	}
 
+	pub fn builtins_target_dir(&self) -> PathBuf {
+		self.target_dir().join("hermit-builtins")
+	}
+
 	pub fn builtins_archive(&self) -> Archive {
 		[
-			"hermit-builtins".as_ref(),
-			self.target_dir(),
+			self.builtins_target_dir().as_path(),
 			self.arch.hermit_triple().as_ref(),
 			"release".as_ref(),
 			"libhermit_builtins.a".as_ref(),

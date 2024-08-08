@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 use clap::Args;
 
 use crate::artifact::Artifact;
@@ -43,6 +45,13 @@ impl CargoBuild {
 		} else {
 			vec![]
 		}
+	}
+
+	pub fn builtins_target_dir_arg(&self) -> [OsString; 2] {
+		[
+			OsString::from("--target-dir"),
+			self.artifact.builtins_target_dir().into_os_string(),
+		]
 	}
 
 	fn release_args(&self) -> &'static [&'static str] {
