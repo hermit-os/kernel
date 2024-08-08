@@ -1,22 +1,48 @@
+use std::io;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
-use anyhow::{anyhow, Result};
+pub fn binutil(name: &str) -> Option<PathBuf> {
+	static LLVM_TOOLS: LazyLock<LlvmTools> = LazyLock::new(|| LlvmTools::new().unwrap());
 
-pub fn binutil(name: &str) -> Result<PathBuf> {
+	LLVM_TOOLS.tool(name)
+}
+
+struct LlvmTools {
+	bin: PathBuf,
+}
+
+impl LlvmTools {
+	pub fn new() -> io::Result<Self> {
+		let mut rustc = crate::rustc();
+		rustc.args(["--print", "sysroot"]);
+
+		eprintln!("$ {rustc:?}");
+		let output = rustc.output()?;
+		assert!(output.status.success());
+
+		let sysroot = String::from_utf8(output.stdout).unwrap();
+		let rustlib = [sysroot.trim_end(), "lib", "rustlib"]
+			.iter()
+			.collect::<PathBuf>();
+
+		let example_exe = exe("objdump");
+		for entry in rustlib.read_dir()? {
+			let bin = entry?.path().join("bin");
+			if bin.join(&example_exe).exists() {
+				return Ok(Self { bin });
+			}
+		}
+		unreachable!()
+	}
+
+	pub fn tool(&self, name: &str) -> Option<PathBuf> {
+		let path = self.bin.join(exe(name));
+		path.exists().then_some(path)
+	}
+}
+
+fn exe(name: &str) -> String {
 	let exe_suffix = std::env::consts::EXE_SUFFIX;
-	let exe = format!("llvm-{name}{exe_suffix}");
-
-	let path = llvm_tools::LlvmTools::new()
-		.map_err(|err| match err {
-			llvm_tools::Error::NotFound => anyhow!(
-				"Could not find llvm-tools component\n\
-				\n\
-				Maybe the rustup component `llvm-tools` is missing? Install it through: `rustup component add llvm-tools`"
-			),
-			err => anyhow!("{err:?}"),
-		})?
-		.tool(&exe)
-		.ok_or_else(|| anyhow!("could not find {exe}"))?;
-
-	Ok(path)
+	format!("llvm-{name}{exe_suffix}")
 }

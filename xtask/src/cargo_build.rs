@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 use clap::Args;
 
 use crate::artifact::Artifact;
@@ -35,14 +37,25 @@ impl CargoBuild {
 	}
 
 	pub fn target_dir_args(&self) -> Vec<String> {
-		if let Some(target_dir) = &self.artifact.target_dir {
+		if self.artifact.target_dir.is_some() {
 			vec![
 				"--target-dir".to_string(),
-				target_dir.to_str().unwrap().to_string(),
+				self.artifact
+					.target_dir()
+					.into_os_string()
+					.into_string()
+					.unwrap(),
 			]
 		} else {
 			vec![]
 		}
+	}
+
+	pub fn builtins_target_dir_arg(&self) -> [OsString; 2] {
+		[
+			OsString::from("--target-dir"),
+			self.artifact.builtins_target_dir().into_os_string(),
+		]
 	}
 
 	fn release_args(&self) -> &'static [&'static str] {

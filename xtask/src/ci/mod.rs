@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::Result;
 use clap::Subcommand;
 
@@ -28,4 +30,8 @@ impl Ci {
 
 fn in_ci() -> bool {
 	std::env::var_os("CI") == Some("true".into())
+}
+
+pub fn parent_root() -> &'static Path {
+	crate::project_root().parent().unwrap()
 }

@@ -1,9 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::{self, PathBuf};
 
 use clap::Args;
 
 use crate::arch::Arch;
 use crate::archive::Archive;
+use crate::ci;
 
 #[derive(Args)]
 pub struct Artifact {
@@ -14,6 +15,10 @@ pub struct Artifact {
 	/// Directory for all generated artifacts.
 	#[arg(long, id = "DIRECTORY")]
 	pub target_dir: Option<PathBuf>,
+
+	/// Copy final artifacts to this directory
+	#[arg(long, id = "PATH")]
+	pub artifact_dir: Option<PathBuf>,
 
 	/// Build artifacts in release mode, with optimizations.
 	#[arg(short, long)]
@@ -38,16 +43,21 @@ impl Artifact {
 		}
 	}
 
-	pub fn target_dir(&self) -> &Path {
-		self.target_dir
-			.as_deref()
-			.unwrap_or_else(|| Path::new("target"))
+	pub fn target_dir(&self) -> PathBuf {
+		if let Some(target_dir) = &self.target_dir {
+			return path::absolute(target_dir).unwrap();
+		}
+
+		crate::project_root().join("target")
+	}
+
+	pub fn builtins_target_dir(&self) -> PathBuf {
+		self.target_dir().join("hermit-builtins")
 	}
 
 	pub fn builtins_archive(&self) -> Archive {
 		[
-			"hermit-builtins".as_ref(),
-			self.target_dir(),
+			self.builtins_target_dir().as_path(),
 			self.arch.hermit_triple().as_ref(),
 			"release".as_ref(),
 			"libhermit_builtins.a".as_ref(),
@@ -59,7 +69,7 @@ impl Artifact {
 
 	pub fn build_archive(&self) -> Archive {
 		[
-			self.target_dir(),
+			self.target_dir().as_path(),
 			self.arch.triple().as_ref(),
 			self.profile_path_component().as_ref(),
 			"libhermit.a".as_ref(),
@@ -69,22 +79,28 @@ impl Artifact {
 		.into()
 	}
 
-	pub fn dist_archive(&self) -> Archive {
+	fn artifact_dir(&self) -> PathBuf {
+		if let Some(artifact_dir) = &self.artifact_dir {
+			return path::absolute(artifact_dir).unwrap();
+		}
+
 		[
-			self.target_dir(),
+			self.target_dir().as_path(),
 			self.arch.name().as_ref(),
 			self.profile_path_component().as_ref(),
-			"libhermit.a".as_ref(),
 		]
 		.iter()
-		.collect::<PathBuf>()
-		.into()
+		.collect()
+	}
+
+	pub fn dist_archive(&self) -> Archive {
+		self.artifact_dir().join("libhermit.a").into()
 	}
 
 	pub fn ci_image(&self, package: &str) -> PathBuf {
 		[
-			"..".as_ref(),
-			self.target_dir(),
+			ci::parent_root(),
+			"target".as_ref(),
 			self.arch.hermit_triple().as_ref(),
 			self.profile_path_component().as_ref(),
 			package.as_ref(),
