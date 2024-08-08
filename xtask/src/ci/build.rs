@@ -33,7 +33,7 @@ impl Build {
 		};
 
 		cargo
-			.current_dir("..")
+			.current_dir(super::parent_root())
 			.arg("build")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.args(self.cargo_build.cargo_build_args())

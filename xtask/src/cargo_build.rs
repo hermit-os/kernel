@@ -37,10 +37,14 @@ impl CargoBuild {
 	}
 
 	pub fn target_dir_args(&self) -> Vec<String> {
-		if let Some(target_dir) = &self.artifact.target_dir {
+		if self.artifact.target_dir.is_some() {
 			vec![
 				"--target-dir".to_string(),
-				target_dir.to_str().unwrap().to_string(),
+				self.artifact
+					.target_dir()
+					.into_os_string()
+					.into_string()
+					.unwrap(),
 			]
 		} else {
 			vec![]
