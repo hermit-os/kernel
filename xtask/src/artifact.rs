@@ -16,6 +16,10 @@ pub struct Artifact {
 	#[arg(long, id = "DIRECTORY")]
 	pub target_dir: Option<PathBuf>,
 
+	/// Copy final artifacts to this directory
+	#[arg(long, id = "PATH")]
+	pub artifact_dir: Option<PathBuf>,
+
 	/// Build artifacts in release mode, with optimizations.
 	#[arg(short, long)]
 	pub release: bool,
@@ -75,16 +79,22 @@ impl Artifact {
 		.into()
 	}
 
-	pub fn dist_archive(&self) -> Archive {
+	fn artifact_dir(&self) -> PathBuf {
+		if let Some(artifact_dir) = &self.artifact_dir {
+			return path::absolute(artifact_dir).unwrap();
+		}
+
 		[
 			self.target_dir().as_path(),
 			self.arch.name().as_ref(),
 			self.profile_path_component().as_ref(),
-			"libhermit.a".as_ref(),
 		]
 		.iter()
-		.collect::<PathBuf>()
-		.into()
+		.collect()
+	}
+
+	pub fn dist_archive(&self) -> Archive {
+		self.artifact_dir().join("libhermit.a").into()
 	}
 
 	pub fn ci_image(&self, package: &str) -> PathBuf {
