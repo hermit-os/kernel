@@ -1,9 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::path::{self, PathBuf};
 
 use clap::Args;
 
 use crate::arch::Arch;
 use crate::archive::Archive;
+use crate::ci;
 
 #[derive(Args)]
 pub struct Artifact {
@@ -38,10 +39,12 @@ impl Artifact {
 		}
 	}
 
-	pub fn target_dir(&self) -> &Path {
-		self.target_dir
-			.as_deref()
-			.unwrap_or_else(|| Path::new("target"))
+	pub fn target_dir(&self) -> PathBuf {
+		if let Some(target_dir) = &self.target_dir {
+			return path::absolute(target_dir).unwrap();
+		}
+
+		crate::project_root().join("target")
 	}
 
 	pub fn builtins_target_dir(&self) -> PathBuf {
@@ -62,7 +65,7 @@ impl Artifact {
 
 	pub fn build_archive(&self) -> Archive {
 		[
-			self.target_dir(),
+			self.target_dir().as_path(),
 			self.arch.triple().as_ref(),
 			self.profile_path_component().as_ref(),
 			"libhermit.a".as_ref(),
@@ -74,7 +77,7 @@ impl Artifact {
 
 	pub fn dist_archive(&self) -> Archive {
 		[
-			self.target_dir(),
+			self.target_dir().as_path(),
 			self.arch.name().as_ref(),
 			self.profile_path_component().as_ref(),
 			"libhermit.a".as_ref(),
@@ -86,8 +89,8 @@ impl Artifact {
 
 	pub fn ci_image(&self, package: &str) -> PathBuf {
 		[
-			"..".as_ref(),
-			self.target_dir(),
+			ci::parent_root(),
+			"target".as_ref(),
 			self.arch.hermit_triple().as_ref(),
 			self.profile_path_component().as_ref(),
 			package.as_ref(),
