@@ -59,7 +59,7 @@ impl Build {
 		cmd!(sh, "cargo build --release")
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
-			.args(self.cargo_build.target_dir_args())
+			.args(self.cargo_build.builtins_target_dir_arg())
 			.run()?;
 
 		eprintln!("Exporting hermit-builtins symbols");
