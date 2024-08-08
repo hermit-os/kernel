@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 use hermit_sync::InterruptTicketMutex;
 use pci_types::capability::CapabilityIterator;
 use pci_types::{
@@ -22,14 +22,18 @@ use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fuse"
+	feature = "fuse",
+	feature = "vsock"
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fuse"
+	feature = "fuse",
+	feature = "vsock"
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
+#[cfg(feature = "vsock")]
+use crate::drivers::vsock::VirtioVsockDriver;
 
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
@@ -130,6 +134,10 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 				return None;
 			}
 		};
+
+		if address == 0 {
+			return None;
+		}
 
 		debug!(
 			"Mapping bar {} at {:#x} with length {:#x}",
@@ -294,9 +302,12 @@ pub(crate) fn print_information() {
 }
 
 #[allow(clippy::large_enum_variant)]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum PciDriver {
 	#[cfg(feature = "fuse")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
+	#[cfg(feature = "vsock")]
+	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
 	#[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
@@ -318,6 +329,15 @@ impl PciDriver {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::RTL8139Net(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "vsock")]
+	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioVsock(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -348,6 +368,11 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL81
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
+#[cfg(feature = "vsock")]
+pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
+	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_vsock_driver()) }
+}
+
 #[cfg(feature = "fuse")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
 	unsafe {
@@ -367,18 +392,23 @@ pub(crate) fn init_drivers() {
 			})
 		} {
 			info!(
-				"Found virtio network device with device id {:#x}",
+				"Found virtio device with device id {:#x}",
 				adapter.device_id()
 			);
 
 			#[cfg(any(
 				all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-				feature = "fuse"
+				feature = "fuse",
+				feature = "vsock"
 			))]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+				}
+				#[cfg(feature = "vsock")]
+				Ok(VirtioDriver::Vsock(drv)) => {
+					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)))
 				}
 				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
