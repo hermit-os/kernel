@@ -75,6 +75,8 @@ fn sanitize(cmd: &str) -> Command {
 
 	let mut cmd = Command::new(cmd);
 
+	cmd.current_dir(project_root());
+
 	// Remove rust-toolchain-specific environment variables from kernel cargo
 	cmd.env_remove("LD_LIBRARY_PATH");
 	env::vars()
