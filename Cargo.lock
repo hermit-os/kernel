@@ -1876,7 +1876,6 @@ dependencies = [
  "anyhow",
  "clap",
  "goblin",
- "llvm-tools",
  "sysinfo",
  "ureq",
  "wait-timeout",
