@@ -46,9 +46,12 @@ fn main() -> Result<()> {
 
 pub fn sh() -> Result<Shell> {
 	let sh = Shell::new()?;
-	let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-	sh.change_dir(project_root);
+	sh.change_dir(project_root());
 	Ok(sh)
+}
+
+pub fn project_root() -> &'static Path {
+	Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
 pub fn cargo() -> Command {
