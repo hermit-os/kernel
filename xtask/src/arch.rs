@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::ValueEnum;
-use xshell::cmd;
 
 /// Target architecture.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
@@ -20,9 +19,13 @@ impl Arch {
 	}
 
 	pub fn install(&self) -> Result<()> {
-		let sh = crate::sh()?;
-		let triple = self.triple();
-		cmd!(sh, "rustup target add {triple}").run()?;
+		let mut rustup = crate::rustup();
+		rustup.args(["target", "add", self.triple()]);
+
+		eprintln!("$ {rustup:?}");
+		let status = rustup.status()?;
+		assert!(status.success());
+
 		Ok(())
 	}
 

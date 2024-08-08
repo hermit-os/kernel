@@ -54,6 +54,10 @@ pub fn project_root() -> &'static Path {
 	Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
+pub fn rustup() -> Command {
+	sanitize("rustup")
+}
+
 pub fn rustc() -> Command {
 	sanitize("rustc")
 }
