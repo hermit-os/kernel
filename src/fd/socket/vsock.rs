@@ -146,6 +146,26 @@ impl ObjectInterface for Socket {
 		}
 	}
 
+	fn getpeername(&self) -> Option<Endpoint> {
+		let port = self.port.load(Ordering::Acquire);
+		let guard = VSOCK_MAP.lock();
+		let raw = guard.get_socket(port)?;
+
+		Some(Endpoint::Vsock(VsockEndpoint::new(
+			raw.remote_port,
+			raw.remote_cid,
+		)))
+	}
+
+	fn getsockname(&self) -> Option<Endpoint> {
+		let local_cid = hardware::get_vsock_driver().unwrap().lock().get_cid();
+
+		Some(Endpoint::Vsock(VsockEndpoint::new(
+			self.port.load(Ordering::Acquire),
+			local_cid.try_into().unwrap(),
+		)))
+	}
+
 	fn is_nonblocking(&self) -> bool {
 		self.nonblocking.load(Ordering::Acquire)
 	}
