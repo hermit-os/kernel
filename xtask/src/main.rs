@@ -52,8 +52,12 @@ pub fn sh() -> Result<Shell> {
 }
 
 pub fn cargo() -> Command {
-	let cargo = {
-		let exe = format!("cargo{}", env::consts::EXE_SUFFIX);
+	sanitize("cargo")
+}
+
+fn sanitize(cmd: &str) -> Command {
+	let cmd = {
+		let exe = format!("{cmd}{}", env::consts::EXE_SUFFIX);
 		// On windows, the userspace toolchain ends up in front of the rustup proxy in $PATH.
 		// To reach the rustup proxy nonetheless, we explicitly query $CARGO_HOME.
 		let mut cargo_home = PathBuf::from(env::var_os("CARGO_HOME").unwrap());
@@ -66,18 +70,18 @@ pub fn cargo() -> Command {
 		}
 	};
 
-	let mut cargo = Command::new(cargo);
+	let mut cmd = Command::new(cmd);
 
 	// Remove rust-toolchain-specific environment variables from kernel cargo
-	cargo.env_remove("LD_LIBRARY_PATH");
+	cmd.env_remove("LD_LIBRARY_PATH");
 	env::vars()
 		.filter(|(key, _value)| {
 			key.starts_with("CARGO") && !key.starts_with("CARGO_HOME")
 				|| key.starts_with("RUST") && !key.starts_with("RUSTUP_HOME")
 		})
 		.for_each(|(key, _value)| {
-			cargo.env_remove(&key);
+			cmd.env_remove(&key);
 		});
 
-	cargo
+	cmd
 }
