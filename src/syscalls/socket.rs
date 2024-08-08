@@ -517,9 +517,9 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 					}
 					#[cfg(feature = "vsock")]
 					Endpoint::Vsock(endpoint) => {
-						let new_obj = dyn_clone::clone_box(&*v);
-						replace_object(fd, Arc::from(new_obj)).unwrap();
-						let new_fd = insert_object(v).unwrap();
+						//let new_obj = dyn_clone::clone_box(&*v);
+						//replace_object(fd, Arc::from(new_obj)).unwrap();
+						let new_fd = insert_object(v.clone()).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
 							let addrlen = unsafe { &mut *addrlen };
