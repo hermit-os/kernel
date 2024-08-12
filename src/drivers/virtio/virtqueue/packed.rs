@@ -6,7 +6,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
 use core::sync::atomic::{fence, Ordering};
-use core::{mem, ops, ptr};
+use core::{ops, ptr};
 
 use align_address::Align;
 #[cfg(not(feature = "pci"))]
@@ -23,7 +23,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AvailBufferToken, BufferElem, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken,
+	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken,
 	UsedBufferTokenSender, Virtq, VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
@@ -147,25 +147,29 @@ impl DescriptorRing {
 
 	fn push_batch(
 		&mut self,
-		tkn_lst: Vec<TransferToken<pvirtq::Desc>>,
+		tkn_lst: impl IntoIterator<Item = TransferToken<pvirtq::Desc>>,
 	) -> Result<RingIdx, VirtqError> {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
-		assert!(!tkn_lst.is_empty());
 
-		let mut first_ctrl_settings = (0, MemDescrId(0), DescF::empty());
-		let mut first_buffer = None;
+		let first_ctrl_settings;
+		let first_buffer;
+		let mut ctrl;
 
-		for (i, tkn) in tkn_lst.into_iter().enumerate() {
-			let mut ctrl = self.push_without_making_available(&tkn)?;
-			if i == 0 {
-				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
-				first_buffer = Some(Box::new(tkn));
-			} else {
-				// Update flags of the first descriptor and set new write_index
-				ctrl.make_avail(Box::new(tkn));
-			}
+		let mut tkn_iterator = tkn_lst.into_iter();
+		if let Some(first_tkn) = tkn_iterator.next() {
+			ctrl = self.push_without_making_available(&first_tkn)?;
+			first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
+			first_buffer = Some(Box::new(first_tkn));
+		} else {
+			// Empty batches are an error
+			return Err(VirtqError::BufferNotSpecified);
 		}
+		// Push the remaining tokens (if any)
+		for tkn in tkn_iterator {
+			ctrl.make_avail(Box::new(tkn));
+		}
+
 		// Manually make the first buffer available lastly
 		//
 		// Providing the first buffer in the list manually
@@ -182,14 +186,7 @@ impl DescriptorRing {
 	}
 
 	fn push(&mut self, tkn: TransferToken<pvirtq::Desc>) -> Result<RingIdx, VirtqError> {
-		let mut ctrl = self.push_without_making_available(&tkn)?;
-		// Update flags of the first descriptor and set new write_index
-		ctrl.make_avail(Box::new(tkn));
-
-		Ok(RingIdx {
-			off: self.write_index,
-			wrap: self.drv_wc.0.into(),
-		})
+		self.push_batch([tkn])
 	}
 
 	fn push_without_making_available(
@@ -210,52 +207,10 @@ impl DescriptorRing {
 
 		// The buffer uses indirect descriptors if the ctrl_desc field is Some.
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
-			let indirect_table_slice_ref = ctrl_desc.as_ref();
-			// One indirect descriptor with only flag indirect set
-			let desc = pvirtq::Desc {
-				addr: paging::virt_to_phys(
-					VirtAddr::from(indirect_table_slice_ref.as_ptr() as u64),
-				)
-				.as_u64()
-				.into(),
-				len: (mem::size_of_val(indirect_table_slice_ref) as u32).into(),
-				id: 0.into(),
-				flags: virtq::DescF::INDIRECT,
-			};
+			let desc = PackedVq::indirect_desc(ctrl_desc.as_ref());
 			ctrl.write_desc(desc);
 		} else {
-			let send_desc_iter = tkn
-				.buff_tkn
-				.send_buff
-				.iter()
-				.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
-			let recv_desc_iter = tkn
-				.buff_tkn
-				.recv_buff
-				.iter()
-				.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
-			let mut all_desc_iter =
-				send_desc_iter
-					.chain(recv_desc_iter)
-					.map(|(mem_desc, len, incomplete_flags)| pvirtq::Desc {
-						addr: paging::virt_to_phys(VirtAddr::from(mem_desc.addr() as u64))
-							.as_u64()
-							.into(),
-						len: (len as u32).into(),
-						id: 0.into(),
-						flags: incomplete_flags | virtq::DescF::NEXT,
-					});
-			// We take all but the last pair to be able to remove the [virtq::DescF::NEXT] flag in the last one.
-			for incomplete_desc in all_desc_iter
-				.by_ref()
-				.take(usize::from(tkn.buff_tkn.num_descr()) - 1)
-			{
-				ctrl.write_desc(incomplete_desc);
-			}
-			{
-				// The iterator should have left the last element, as we took one less than what is available.
-				let mut incomplete_desc = all_desc_iter.next().unwrap();
-				incomplete_desc.flags -= virtq::DescF::NEXT;
+			for incomplete_desc in PackedVq::descriptor_iter(&tkn.buff_tkn)? {
 				ctrl.write_desc(incomplete_desc);
 			}
 		}
@@ -596,12 +551,9 @@ impl Virtq for PackedVq {
 		// Zero transfers are not allowed
 		assert!(!buffer_tkns.is_empty());
 
-		let transfer_tkns = buffer_tkns
-			.into_iter()
-			.map(|(buffer_tkn, buffer_type)| {
-				self.transfer_token_from_buffer_token(buffer_tkn, None, buffer_type)
-			})
-			.collect();
+		let transfer_tkns = buffer_tkns.into_iter().map(|(buffer_tkn, buffer_type)| {
+			Self::transfer_token_from_buffer_token(buffer_tkn, None, buffer_type)
+		});
 
 		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
 
@@ -635,16 +587,13 @@ impl Virtq for PackedVq {
 		// Zero transfers are not allowed
 		assert!(!buffer_tkns.is_empty());
 
-		let transfer_tkns = buffer_tkns
-			.into_iter()
-			.map(|(buffer_tkn, buffer_type)| {
-				self.transfer_token_from_buffer_token(
-					buffer_tkn,
-					Some(await_queue.clone()),
-					buffer_type,
-				)
-			})
-			.collect();
+		let transfer_tkns = buffer_tkns.into_iter().map(|(buffer_tkn, buffer_type)| {
+			Self::transfer_token_from_buffer_token(
+				buffer_tkn,
+				Some(await_queue.clone()),
+				buffer_type,
+			)
+		});
 
 		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
 
@@ -676,7 +625,7 @@ impl Virtq for PackedVq {
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
-		let transfer_tkn = self.transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
+		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
 		let next_idx = self.descr_ring.push(transfer_tkn)?;
 
 		if notif {
@@ -806,33 +755,10 @@ impl VirtqPrivate for PackedVq {
 	type Descriptor = pvirtq::Desc;
 
 	fn create_indirect_ctrl(
-		&self,
-		send: &[BufferElem],
-		recv: &[BufferElem],
+		buffer_tkn: &AvailBufferToken,
 	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		let send_desc_iter = send
-			.iter()
-			.map(|elem| (elem, elem.len(), virtq::DescF::empty()));
-		let recv_desc_iter = recv
-			.iter()
-			.map(|elem| (elem, elem.capacity(), virtq::DescF::WRITE));
-		let all_desc_iter =
-			send_desc_iter
-				.chain(recv_desc_iter)
-				.map(|(mem_descr, len, incomplete_flags)| pvirtq::Desc {
-					addr: paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
-						.as_u64()
-						.into(),
-					len: (len as u32).into(),
-					id: 0.into(),
-					flags: incomplete_flags | virtq::DescF::NEXT,
-				});
-
-		let mut indirect_table: Vec<_> = all_desc_iter.collect();
-		let last_desc = indirect_table
-			.last_mut()
-			.ok_or(VirtqError::BufferNotSpecified)?;
-		last_desc.flags -= virtq::DescF::NEXT;
-		Ok(indirect_table.into_boxed_slice())
+		Ok(Self::descriptor_iter(buffer_tkn)?
+			.collect::<Vec<_>>()
+			.into_boxed_slice())
 	}
 }
