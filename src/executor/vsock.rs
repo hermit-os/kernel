@@ -147,6 +147,10 @@ async fn vsock_run() {
 						} else {
 							trace!("Receive message from invalid source {}", header_cid);
 						}
+					} else if op == Op::Response && type_ == Type::Stream {
+						if raw.remote_cid == header_cid && raw.state == VsockState::Connecting {
+							raw.state = VsockState::Connected;
+						}
 					} else if raw.remote_cid == header_cid {
 						hdr = Some(*header);
 						fwd_cnt = raw.fwd_cnt;
@@ -201,6 +205,20 @@ impl VsockMap {
 			.try_insert(port, RawSocket::new(VsockState::Listen))
 			.map_err(|_| EADDRINUSE)?;
 		Ok(())
+	}
+
+	pub fn connect(&mut self, port: u32, cid: u32) -> io::Result<u32> {
+		for i in u32::MAX / 4..u32::MAX {
+			let mut raw = RawSocket::new(VsockState::Connecting);
+			raw.remote_cid = cid;
+			raw.remote_port = port;
+
+			if self.port_map.try_insert(i, raw).is_ok() {
+				return Ok(i);
+			}
+		}
+
+		Err(io::Error::EBADF)
 	}
 
 	pub fn get_socket(&self, port: u32) -> Option<&RawSocket> {

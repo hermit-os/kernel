@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use core::future;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::Poll;
+use core::time::Duration;
 
 use async_trait::async_trait;
 use endian_num::{le16, le32, le64};
@@ -140,6 +141,60 @@ impl ObjectInterface for Socket {
 					self.cid.store(u32::MAX, Ordering::Release);
 				}
 				VSOCK_MAP.lock().bind(ep.port)
+			}
+			#[cfg(any(feature = "tcp", feature = "udp"))]
+			_ => Err(io::Error::EINVAL),
+		}
+	}
+
+	fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+		match endpoint {
+			Endpoint::Vsock(ep) => {
+				const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
+				let port = VSOCK_MAP.lock().connect(ep.port, ep.cid)?;
+				self.port.store(port, Ordering::Release);
+				self.port.store(ep.cid, Ordering::Release);
+
+				let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
+				let local_cid = driver_guard.get_cid();
+
+				driver_guard.send_packet(HEADER_SIZE, |buffer| {
+					let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+
+					response.src_cid = le64::from_ne(local_cid);
+					response.dst_cid = le64::from_ne(ep.cid as u64);
+					response.src_port = le32::from_ne(port);
+					response.dst_port = le32::from_ne(ep.port);
+					response.len = le32::from_ne(0);
+					response.type_ = le16::from_ne(Type::Stream.into());
+					response.op = le16::from_ne(Op::Request.into());
+					response.flags = le32::from_ne(0);
+					response.buf_alloc =
+						le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+					response.fwd_cnt = le32::from_ne(0);
+				});
+
+				drop(driver_guard);
+
+				block_on(
+					async {
+						future::poll_fn(|cx| {
+							let mut guard = VSOCK_MAP.lock();
+							let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+
+							match raw.state {
+								VsockState::Connected => Poll::Ready(Ok(())),
+								VsockState::Connecting => {
+									raw.rx_waker.register(cx.waker());
+									Poll::Pending
+								}
+								_ => Poll::Ready(Err(io::Error::EBADF)),
+							}
+						})
+						.await
+					},
+					Some(Duration::from_millis(1000)),
+				)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			_ => Err(io::Error::EINVAL),
