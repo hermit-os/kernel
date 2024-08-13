@@ -14,7 +14,7 @@ use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::executor::vsock::{VsockState, VSOCK_MAP};
-use crate::fd::{block_on, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{block_on, poll_on, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 
 #[derive(Debug)]
@@ -176,7 +176,7 @@ impl ObjectInterface for Socket {
 
 				drop(driver_guard);
 
-				block_on(
+				poll_on(
 					async {
 						future::poll_fn(|cx| {
 							let mut guard = VSOCK_MAP.lock();
