@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "hermit-loader"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aarch64-cpu",
  "align-address",
