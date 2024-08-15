@@ -73,8 +73,8 @@ For 64-bit RISC-V, we need a recent version of [OpenSBI].
 To download the release asset with [GitHub CLI] and extract the correct binary, run:
 
 ```bash
-gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
-tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+gh release download v1.5.1 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
+tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.5.1-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
 ```
 
 [OpenSBI]: https://github.com/riscv-software-src/opensbi
@@ -89,7 +89,7 @@ qemu-system-riscv64 \
     -smp 1 \
     -m 128M \
     -display none -serial stdio \
-    -bios opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+    -bios opensbi-1.5.1-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
     -kernel <LOADER>
     -initrd <APP> 
 ```
