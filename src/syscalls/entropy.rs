@@ -1,3 +1,4 @@
+#[cfg(not(feature = "newlib"))]
 use core::mem::size_of;
 use core::slice;
 
