@@ -6,8 +6,6 @@ use core::ops::Range;
 
 use align_address::Align;
 use hermit_sync::Lazy;
-#[cfg(feature = "newlib")]
-use hermit_sync::OnceCell;
 
 use self::allocator::LockedAllocator;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
@@ -16,8 +14,6 @@ use crate::arch::mm::paging::HugePageSize;
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::mm::physicalmem::total_memory_size;
-#[cfg(feature = "newlib")]
-use crate::arch::mm::virtualmem::kernel_heap_end;
 #[cfg(feature = "pci")]
 use crate::arch::mm::PhysAddr;
 use crate::arch::mm::VirtAddr;
@@ -38,26 +34,12 @@ static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
 	}
 });
 
-#[cfg(feature = "newlib")]
-/// User heap address range.
-static HEAP_ADDR_RANGE: OnceCell<Range<VirtAddr>> = OnceCell::new();
-
 pub(crate) fn kernel_start_address() -> VirtAddr {
 	KERNEL_ADDR_RANGE.start
 }
 
 pub(crate) fn kernel_end_address() -> VirtAddr {
 	KERNEL_ADDR_RANGE.end
-}
-
-#[cfg(feature = "newlib")]
-pub(crate) fn task_heap_start() -> VirtAddr {
-	HEAP_ADDR_RANGE.get().unwrap().start
-}
-
-#[cfg(feature = "newlib")]
-pub(crate) fn task_heap_end() -> VirtAddr {
-	HEAP_ADDR_RANGE.get().unwrap().end
 }
 
 #[cfg(target_os = "none")]
@@ -111,48 +93,7 @@ pub(crate) fn init() {
 
 	let heap_start_addr;
 
-	#[cfg(all(feature = "newlib", not(feature = "common-os")))]
-	{
-		// we reserve 10% of the memory for stack allocations
-		let stack_reserve: usize = (available_memory * 10) / 100;
-
-		info!("An application with a C-based runtime is running on top of Hermit!");
-		let kernel_heap_size = 10 * LargePageSize::SIZE as usize;
-
-		unsafe {
-			let start = {
-				let physical_address = arch::mm::physicalmem::allocate(kernel_heap_size).unwrap();
-				let virtual_address = arch::mm::virtualmem::allocate(kernel_heap_size).unwrap();
-
-				let count = kernel_heap_size / BasePageSize::SIZE as usize;
-				let mut flags = PageTableEntryFlags::empty();
-				flags.normal().writable().execute_disable();
-				arch::mm::paging::map::<BasePageSize>(
-					virtual_address,
-					physical_address,
-					count,
-					flags,
-				);
-
-				virtual_address
-			};
-			ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
-
-			info!("Kernel heap starts at {:#x}", start);
-		}
-
-		info!("Kernel heap size: {} MB", kernel_heap_size >> 20);
-		let user_heap_size =
-			(available_memory - kernel_heap_size - stack_reserve - LargePageSize::SIZE as usize)
-				.align_down(LargePageSize::SIZE as usize);
-		info!("User-space heap size: {} MB", user_heap_size >> 20);
-
-		map_addr = kernel_heap_end();
-		map_size = user_heap_size;
-		heap_start_addr = map_addr;
-	}
-
-	#[cfg(all(not(feature = "newlib"), feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	{
 		info!("Using HermitOS as common OS!");
 
@@ -197,12 +138,10 @@ pub(crate) fn init() {
 		}
 	}
 
-	#[cfg(all(not(feature = "newlib"), not(feature = "common-os")))]
+	#[cfg(not(feature = "common-os"))]
 	{
 		// we reserve 10% of the memory for stack allocations
 		let stack_reserve: usize = (available_memory * 10) / 100;
-
-		info!("A pure Rust application is running on top of Hermit!");
 
 		// At first, we map only a small part into the heap.
 		// Afterwards, we already use the heap and map the rest into
@@ -297,7 +236,6 @@ pub(crate) fn init() {
 
 	let heap_end_addr = map_addr;
 
-	#[cfg(not(feature = "newlib"))]
 	unsafe {
 		ALLOCATOR.init(
 			heap_start_addr.as_mut_ptr(),
@@ -307,8 +245,6 @@ pub(crate) fn init() {
 
 	let heap_addr_range = heap_start_addr..heap_end_addr;
 	info!("Heap is located at {heap_addr_range:#x?} ({map_size} Bytes unmapped)");
-	#[cfg(feature = "newlib")]
-	HEAP_ADDR_RANGE.set(heap_addr_range).unwrap();
 }
 
 pub(crate) fn print_information() {

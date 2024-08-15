@@ -1,6 +1,4 @@
 use alloc::collections::BTreeMap;
-#[cfg(feature = "newlib")]
-use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hermit_sync::InterruptTicketMutex;
 
@@ -8,8 +6,6 @@ use crate::arch::core_local::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::*;
-#[cfg(feature = "newlib")]
-use crate::mm::{task_heap_end, task_heap_start};
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::time::timespec;
@@ -67,34 +63,6 @@ pub extern "C" fn sys_thread_exit(status: i32) -> ! {
 #[no_mangle]
 pub extern "C" fn sys_abort() -> ! {
 	exit(-1)
-}
-
-#[cfg(feature = "newlib")]
-static SBRK_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-#[cfg(feature = "newlib")]
-pub fn sbrk_init() {
-	SBRK_COUNTER.store(task_heap_start().as_usize(), Ordering::SeqCst);
-}
-
-#[cfg(feature = "newlib")]
-#[hermit_macro::system]
-#[no_mangle]
-pub extern "C" fn sys_sbrk(incr: isize) -> usize {
-	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
-	let task_heap_start = task_heap_start();
-	let task_heap_end = task_heap_end();
-	let old_end;
-
-	if incr >= 0 {
-		old_end = SBRK_COUNTER.fetch_add(incr as usize, Ordering::SeqCst);
-		assert!(task_heap_end.as_usize() >= old_end + incr as usize);
-	} else {
-		old_end = SBRK_COUNTER.fetch_sub(incr.unsigned_abs(), Ordering::SeqCst);
-		assert!(task_heap_start.as_usize() < old_end - incr.unsigned_abs());
-	}
-
-	old_end
 }
 
 pub(super) fn usleep(usecs: u64) {
