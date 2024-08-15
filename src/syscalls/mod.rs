@@ -5,8 +5,6 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{c_char, CStr};
 use core::marker::PhantomData;
 
-#[cfg(feature = "newlib")]
-use hermit_sync::InterruptTicketMutex;
 use hermit_sync::Lazy;
 
 pub use self::condvar::*;
