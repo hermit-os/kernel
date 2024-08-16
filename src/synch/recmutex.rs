@@ -88,3 +88,9 @@ impl RecursiveMutex {
 		}
 	}
 }
+
+impl Default for RecursiveMutex {
+	fn default() -> Self {
+		Self::new()
+	}
+}

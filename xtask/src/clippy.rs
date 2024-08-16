@@ -36,12 +36,10 @@ impl Clippy {
 					.run()?;
 			}
 
-			// TODO: Enable clippy for newlib
-			// https://github.com/hermit-os/kernel/issues/470
-			// cmd!(sh, "cargo clippy --target={triple}")
-			// 	.arg("--no-default-features")
-			// 	.arg("--features=acpi,fsgsbase,newlib,smp,vga")
-			// 	.run()?;
+			cmd!(sh, "cargo clippy --target={triple}")
+				.arg("--no-default-features")
+				.arg("--features=acpi,fsgsbase,newlib,smp,vga")
+				.run()?;
 		}
 
 		cmd!(sh, "cargo clippy")

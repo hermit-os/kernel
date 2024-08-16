@@ -28,7 +28,7 @@ pub extern "C" fn sys_getpid() -> Tid {
 #[cfg(feature = "newlib")]
 #[hermit_macro::system]
 #[no_mangle]
-pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
+pub unsafe extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let task = core_scheduler().get_current_task_handle();
 
 	if id.is_null() || unsafe { *id } == task.get_id().into() {
@@ -41,7 +41,7 @@ pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 #[cfg(feature = "newlib")]
 #[hermit_macro::system]
 #[no_mangle]
-pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
+pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
 }
 
@@ -152,7 +152,7 @@ pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timesp
 #[cfg(feature = "newlib")]
 #[hermit_macro::system]
 #[no_mangle]
-pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
+pub unsafe extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
 	let task_id = core_scheduler().clone(func, arg);
 
 	if !id.is_null() {
