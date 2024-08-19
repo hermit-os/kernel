@@ -628,7 +628,6 @@ dependencies = [
  "cfg-if",
  "crossbeam-utils",
  "dyn-clone",
- "endian-num",
  "fdt",
  "float-cmp",
  "free-list",

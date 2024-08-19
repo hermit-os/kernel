@@ -6,8 +6,8 @@ use core::task::Poll;
 use core::time::Duration;
 
 use async_trait::async_trait;
-use endian_num::{le16, le32, le64};
 use virtio::vsock::{Hdr, Op, Type};
+use virtio::{le16, le32, le64};
 
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
