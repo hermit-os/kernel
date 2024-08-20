@@ -41,12 +41,6 @@ dependencies = [
 
 [[package]]
 name = "align-address"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d39c09fbfba977f4842e1f6bdc48b979112b64f8886993a34e051bc5f3c5c288"
-
-[[package]]
-name = "align-address"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ac6c08a67736554282858203cd9b7ff53cf55f54c34e85689962748a350cbf0"
@@ -509,7 +503,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "810f338a4ef98f319a279c9199f35d7ec366c6002ca6a8f18fdcc94cfef9afab"
 dependencies = [
- "align-address 0.3.0",
+ "align-address",
  "smallvec",
  "x86_64",
 ]
@@ -601,11 +595,11 @@ checksum = "89e0de208fa9b99664812350b33072d0d9b3a63caaebb03eeb23316eeedfb8d0"
 
 [[package]]
 name = "hermit-entry"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8da8546263459c84a24582eacf3b7b6d818a12f606e920bcfe5485235dac63"
+checksum = "4dd7fbcca1989c93500b0028a83bce0f8d33558ed7a4223294d60387bd3dfd41"
 dependencies = [
- "align-address 0.1.0",
+ "align-address",
  "time",
 ]
 
@@ -615,7 +609,7 @@ version = "0.8.0"
 dependencies = [
  "aarch64",
  "ahash",
- "align-address 0.3.0",
+ "align-address",
  "anstyle",
  "anyhow",
  "arm-gic",
