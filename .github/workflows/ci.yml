@@ -234,7 +234,7 @@ jobs:
 
   run-x86_64-kvm:
     name: Run (x86_64, kvm)
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: kernel
@@ -254,16 +254,14 @@ jobs:
     - name: Install QEMU
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends qemu-system-x86
+        sudo apt-get install qemu-system-x86
     - name: Check KVM availability
       shell: bash
       run: |
           lscpu
           kvm-ok
     - name: Download loader (x86_64, x86_64-fc)
-      run: |
-        sudo apt-get install -y --no-install-recommends gh
-        gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64 --pattern hermit-loader-x86_64-fc
+      run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64 --pattern hermit-loader-x86_64-fc
     - name: Install firecracker
       run: |
         # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
@@ -273,11 +271,11 @@ jobs:
         curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
         | tar -xz
         
-        # Rename the binary to "firecracker"
-        mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
-        echo "$PWD" >> $GITHUB_PATH
+        mkdir -p $HOME/.local/bin
+        mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
+        echo $HOME/.local/bin >> $GITHUB_PATH
 
-        ./firecracker --version
+        $HOME/.local/bin/firecracker --version
     - uses: dtolnay/rust-toolchain@stable
     - run: cargo +stable install --locked uhyve
     - uses: mkroening/rust-toolchain-toml@main
@@ -292,12 +290,12 @@ jobs:
           kernel
           kernel/hermit-builtins
     - name: rusty_demo on Uhyve
-      run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo
+      run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci uhyve --arch x86_64 --package rusty_demo --sudo
     - name: rusty_demo on Uhyve (release)
-      run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo --release
+      run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci uhyve --arch x86_64 --package rusty_demo --sudo --release
     - name: rusty_demo on QEMU (with KVM)
-      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel
+      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel --sudo
     - name: rusty_demo on QEMU (with KVM, release)
-      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel --release
+      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel --sudo --release
     - name: hello_world on Firecracker
-      run: cargo xtask ci firecracker --arch x86_64 --package hello_world --no-default-features
+      run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --arch x86_64 --package hello_world --sudo --no-default-features
