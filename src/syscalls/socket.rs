@@ -421,17 +421,15 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 
 	#[cfg(feature = "vsock")]
 	if domain == AF_VSOCK && type_.intersects(SockType::SOCK_STREAM) {
-		if type_.contains(SockType::SOCK_STREAM) {
-			let socket = vsock::Socket::new();
+		let socket = vsock::Socket::new();
 
-			if type_.contains(SockType::SOCK_NONBLOCK) {
-				socket.ioctl(IoCtl::NonBlocking, true).unwrap();
-			}
-
-			let fd = insert_object(Arc::new(socket)).expect("FD is already used");
-
-			return fd;
+		if type_.contains(SockType::SOCK_NONBLOCK) {
+			socket.ioctl(IoCtl::NonBlocking, true).unwrap();
 		}
+
+		let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+
+		return fd;
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
