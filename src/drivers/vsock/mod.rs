@@ -81,7 +81,7 @@ impl RxQueue {
 			vq: None,
 			poll_sender,
 			poll_receiver,
-			packet_size: crate::VSOCK_PACKET_SIZE + mem::size_of::<Hdr>() as u32,
+			packet_size: crate::VSOCK_PACKET_SIZE,
 		}
 	}
 
