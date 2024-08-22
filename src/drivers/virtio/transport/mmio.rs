@@ -335,7 +335,7 @@ impl IsrStatus {
 		Self { raw }
 	}
 
-	pub fn is_interrupt(&self) -> bool {
+	pub fn is_queue_interrupt(&self) -> bool {
 		self.raw
 			.as_ptr()
 			.interrupt_status()

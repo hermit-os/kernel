@@ -320,7 +320,7 @@ impl VirtioVsockDriver {
 	}
 
 	pub fn handle_interrupt(&mut self) {
-		let _ = self.isr_stat.is_interrupt();
+		let _ = self.isr_stat.is_queue_interrupt();
 
 		if self.isr_stat.is_cfg_change() {
 			info!("Configuration changes are not possible! Aborting");
