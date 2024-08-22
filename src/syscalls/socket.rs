@@ -415,16 +415,52 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 		domain, type_, protocol
 	);
 
-	if (domain != AF_INET && domain != AF_INET6 && domain != AF_VSOCK)
-		|| !type_.intersects(SockType::SOCK_STREAM | SockType::SOCK_DGRAM)
-		|| protocol != 0
+	if protocol != 0 {
+		return -EINVAL;
+	}
+
+	#[cfg(feature = "vsock")]
+	if domain == AF_VSOCK && type_.intersects(SockType::SOCK_STREAM) {
+		if type_.contains(SockType::SOCK_STREAM) {
+			let socket = vsock::Socket::new();
+
+			if type_.contains(SockType::SOCK_NONBLOCK) {
+				socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+			}
+
+			let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+
+			return fd;
+		}
+	}
+
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	if (domain == AF_INET || domain == AF_INET6)
+		&& type_.intersects(SockType::SOCK_STREAM | SockType::SOCK_DGRAM)
 	{
-		-EINVAL
-	} else {
-		#[cfg(feature = "vsock")]
-		{
+		let mut guard = NIC.lock();
+
+		if let NetworkState::Initialized(nic) = guard.deref_mut() {
+			#[cfg(feature = "udp")]
+			if type_.contains(SockType::SOCK_DGRAM) {
+				let handle = nic.create_udp_handle().unwrap();
+				drop(guard);
+				let socket = udp::Socket::new(handle);
+
+				if type_.contains(SockType::SOCK_NONBLOCK) {
+					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+				}
+
+				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+
+				return fd;
+			}
+
+			#[cfg(feature = "tcp")]
 			if type_.contains(SockType::SOCK_STREAM) {
-				let socket = vsock::Socket::new();
+				let handle = nic.create_tcp_handle().unwrap();
+				drop(guard);
+				let socket = tcp::Socket::new(handle);
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
 					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
@@ -435,45 +471,9 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 				return fd;
 			}
 		}
-		#[cfg(any(feature = "tcp", feature = "udp"))]
-		{
-			let mut guard = NIC.lock();
-
-			if let NetworkState::Initialized(nic) = guard.deref_mut() {
-				#[cfg(feature = "udp")]
-				if type_.contains(SockType::SOCK_DGRAM) {
-					let handle = nic.create_udp_handle().unwrap();
-					drop(guard);
-					let socket = udp::Socket::new(handle);
-
-					if type_.contains(SockType::SOCK_NONBLOCK) {
-						socket.ioctl(IoCtl::NonBlocking, true).unwrap();
-					}
-
-					let fd = insert_object(Arc::new(socket)).expect("FD is already used");
-
-					return fd;
-				}
-
-				#[cfg(feature = "tcp")]
-				if type_.contains(SockType::SOCK_STREAM) {
-					let handle = nic.create_tcp_handle().unwrap();
-					drop(guard);
-					let socket = tcp::Socket::new(handle);
-
-					if type_.contains(SockType::SOCK_NONBLOCK) {
-						socket.ioctl(IoCtl::NonBlocking, true).unwrap();
-					}
-
-					let fd = insert_object(Arc::new(socket)).expect("FD is already used");
-
-					return fd;
-				}
-			}
-		}
-
-		-EINVAL
 	}
+
+	-EINVAL
 }
 
 #[hermit_macro::system]
