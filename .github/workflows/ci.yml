@@ -132,6 +132,7 @@ jobs:
             hermit-careful: 1
           - arch: x86_64
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
+            flags: --accel --sudo
           - arch: aarch64
             packages: qemu-system-aarch64
           - arch: riscv64
@@ -175,128 +176,79 @@ jobs:
             kernel
             kernel/hermit-builtins
       - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-${{ matrix.arch }}
+        run: gh release download --repo hermit-os/loader --pattern 'hermit-loader-${{ matrix.arch }}*'
       - name: Dowload OpenSBI
         if: matrix.arch == 'riscv64'
         run: |
           gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+      - name: Install Firecracker
+        run: |
+          # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
+          ARCH="$(uname -m)"
+          release_url="https://github.com/firecracker-microvm/firecracker/releases"
+          latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
+          curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
+          | tar -xz
+          
+          mkdir -p $HOME/.local/bin
+          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
+          echo $HOME/.local/bin >> $GITHUB_PATH
+
+          $HOME/.local/bin/firecracker --version
+        if: matrix.arch == 'x86_64'
+      - run: cargo +stable install --locked uhyve
+        if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package wasmtime-demo --features ci
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package wasmtime-demo --features ci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features --microvm
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --virtiofsd
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --features fs --virtiofsd
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --virtiofsd --smp 4
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --features fs --virtiofsd --smp 4
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --virtiofsd --no-default-virtio-features
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --features fs --virtiofsd --no-default-virtio-features
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --virtiofsd --no-default-virtio-features --smp 4
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --features fs --virtiofsd --no-default-virtio-features --smp 4
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --smp 4
         # https://github.com/hermit-os/kernel/issues/737
         if: matrix.arch != 'aarch64'
         # https://github.com/hermit-os/kernel/issues/1286
         continue-on-error: ${{ matrix.arch == 'riscv64' }}
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rftrace-example --virtiofsd
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rftrace-example --virtiofsd
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci --no-default-virtio-features
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci --no-default-virtio-features
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --no-default-features --microvm --features ci,hermit/dhcpv4,hermit/tcp --netdev virtio-net-mmio
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --no-default-features --microvm --features ci,hermit/dhcpv4,hermit/tcp --netdev virtio-net-mmio
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4 --netdev virtio-net-pci
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package testudp --features hermit/udp,hermit/dhcpv4 --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package testudp --features hermit/udp,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --features hermit/dhcpv4 --netdev virtio-net-pci
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package miotcp --features hermit/dhcpv4 --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --features hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package miotcp --features hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4 --netdev virtio-net-pci
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package poll --features hermit/dhcpv4 --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package poll --features hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4 --netdev virtio-net-pci
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features hermit/udp,hermit/dhcpv4 --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features hermit/udp,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
         if: matrix.arch == 'x86_64'
-
-  run-x86_64-kvm:
-    name: Run (x86_64, kvm)
-    runs-on: [self-hosted]
-    defaults:
-      run:
-        working-directory: kernel
-    steps:
-    - name: Checkout hermit-rs
-      uses: actions/checkout@v4
-      with:
-        repository: hermit-os/hermit-rs
-        submodules: true
-    - name: Remove hermit-kernel submodule
-      run: git rm -r kernel
-      working-directory: .
-    - name: Checkout hermit-kernel
-      uses: actions/checkout@v4
-      with:
-        path: kernel
-    - name: Install QEMU
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends qemu-system-x86
-    - name: Check KVM availability
-      shell: bash
-      run: |
-          lscpu
-          kvm-ok
-    - name: Download loader (x86_64, x86_64-fc)
-      run: |
-        sudo apt-get install -y --no-install-recommends gh
-        gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64 --pattern hermit-loader-x86_64-fc
-    - name: Install firecracker
-      run: |
-        # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
-        ARCH="$(uname -m)"
-        release_url="https://github.com/firecracker-microvm/firecracker/releases"
-        latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
-        curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
-        | tar -xz
-        
-        # Rename the binary to "firecracker"
-        mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
-        echo "$PWD" >> $GITHUB_PATH
-
-        ./firecracker --version
-    - uses: dtolnay/rust-toolchain@stable
-    - run: cargo +stable install --locked uhyve
-    - uses: mkroening/rust-toolchain-toml@main
-    - uses: mkroening/rust-toolchain-toml@main
-      with:
-        toolchain-file: 'kernel/rust-toolchain.toml'
-    - uses: Swatinem/rust-cache@v2
-      with:
-        save-if: ${{ github.ref == 'refs/heads/main' }}
-        workspaces: |
-          .
-          kernel
-          kernel/hermit-builtins
-    - name: rusty_demo on Uhyve
-      run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo
-    - name: rusty_demo on Uhyve (release)
-      run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo --release
-    - name: rusty_demo on QEMU (with KVM)
-      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel
-    - name: rusty_demo on QEMU (with KVM, release)
-      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel --release
-    - name: hello_world on Firecracker
-      run: cargo xtask ci firecracker --arch x86_64 --package hello_world --no-default-features
+      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci uhyve --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --sudo --package rusty_demo
+        if: matrix.arch == 'x86_64'
+      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --sudo --package hello_world --no-default-features
+        if: matrix.arch == 'x86_64'
