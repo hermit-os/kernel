@@ -22,6 +22,10 @@ pub struct Qemu {
 	#[arg(long)]
 	accel: bool,
 
+	/// Run QEMU using `sudo`.
+	#[arg(long)]
+	sudo: bool,
+
 	/// Enable the `microvm` machine type.
 	#[arg(long)]
 	microvm: bool,
@@ -74,9 +78,11 @@ impl Qemu {
 		}
 
 		let arch = self.build.cargo_build.artifact.arch.name();
-		let qemu = env::var_os("QEMU").unwrap_or_else(|| format!("qemu-system-{arch}").into());
+		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{arch}"));
+		let program = if self.sudo { "sudo" } else { qemu.as_str() };
+		let arg = self.sudo.then_some(qemu.as_str());
 
-		let qemu = cmd!(sh, "{qemu}")
+		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
 			.args(&["-kernel", format!("hermit-loader-{arch}").as_ref()])
