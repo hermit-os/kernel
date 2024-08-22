@@ -9,7 +9,7 @@ use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
 use x86_64::instructions::interrupts::enable_and_hlt;
 pub use x86_64::instructions::interrupts::{disable, enable};
 use x86_64::set_general_handler;
-#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
+#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp", feature = "vsock"))]
 use x86_64::structures::idt;
 use x86_64::structures::idt::InterruptDescriptorTable;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
@@ -155,7 +155,7 @@ pub(crate) fn install() {
 	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
-#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp"))]
+#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp", feature = "vsock"))]
 pub fn irq_install_handler(irq_number: u8, handler: idt::HandlerFunc) {
 	debug!("Install handler for interrupt {}", irq_number);
 

@@ -38,7 +38,7 @@ mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 pub mod socket;
 mod spinlock;
 mod system;

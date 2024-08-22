@@ -16,13 +16,31 @@ use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
 use crate::io;
 
 mod eventfd;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 pub(crate) mod socket;
 pub(crate) mod stdio;
 
 pub(crate) const STDIN_FILENO: FileDescriptor = 0;
 pub(crate) const STDOUT_FILENO: FileDescriptor = 1;
 pub(crate) const STDERR_FILENO: FileDescriptor = 2;
+
+#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+#[derive(Debug)]
+pub(crate) enum Endpoint {
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	Ip(IpEndpoint),
+	#[cfg(feature = "vsock")]
+	Vsock(socket::vsock::VsockEndpoint),
+}
+
+#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+#[derive(Debug)]
+pub(crate) enum ListenEndpoint {
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	Ip(IpListenEndpoint),
+	#[cfg(feature = "vsock")]
+	Vsock(socket::vsock::VsockListenEndpoint),
+}
 
 #[allow(dead_code)]
 #[derive(Debug, PartialEq)]
@@ -186,57 +204,57 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `accept` a connection on a socket
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn accept(&self) -> io::Result<IpEndpoint> {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+	fn accept(&self) -> io::Result<Endpoint> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// initiate a connection on a socket
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn connect(&self, _endpoint: IpEndpoint) -> io::Result<()> {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+	fn connect(&self, _endpoint: Endpoint) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `bind` a name to a socket
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn bind(&self, _name: IpListenEndpoint) -> io::Result<()> {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+	fn bind(&self, _name: ListenEndpoint) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `listen` for connections on a socket
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	fn listen(&self, _backlog: i32) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `setsockopt` sets options on sockets
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockname` gets socket name
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn getsockname(&self) -> Option<IpEndpoint> {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+	fn getsockname(&self) -> Option<Endpoint> {
 		None
 	}
 
 	/// `getpeername` get address of connected peer
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	#[allow(dead_code)]
-	fn getpeername(&self) -> Option<IpEndpoint> {
+	fn getpeername(&self) -> Option<Endpoint> {
 		None
 	}
 
 	/// receive a message from a socket
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, IpEndpoint)> {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+	fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -247,13 +265,13 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// If a peer address has been prespecified, either the message shall
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> io::Result<usize> {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+	fn sendto(&self, _buffer: &[u8], _endpoint: Endpoint) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// shut down part of a full-duplex connection
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	fn shutdown(&self, _how: i32) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}

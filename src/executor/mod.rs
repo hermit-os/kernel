@@ -5,6 +5,8 @@ pub(crate) mod device;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) mod network;
 pub(crate) mod task;
+#[cfg(feature = "vsock")]
+pub(crate) mod vsock;
 
 use alloc::sync::Arc;
 use alloc::task::Wake;
@@ -91,6 +93,8 @@ where
 pub fn init() {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	crate::executor::network::init();
+	#[cfg(feature = "vsock")]
+	crate::executor::vsock::init();
 }
 
 #[inline]

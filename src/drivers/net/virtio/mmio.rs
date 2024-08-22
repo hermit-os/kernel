@@ -20,7 +20,6 @@ impl VirtioNetDriver {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
-		irq: u8,
 	) -> Result<Self, VirtioNetError> {
 		let dev_cfg_raw: &'static virtio::net::Config = unsafe {
 			&*registers
@@ -58,7 +57,6 @@ impl VirtioNetDriver {
 			recv_vqs,
 			send_vqs,
 			num_vqs: 0,
-			irq,
 			mtu,
 			checksums: ChecksumCapabilities::default(),
 		})
@@ -79,9 +77,8 @@ impl VirtioNetDriver {
 	pub fn init(
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
-		irq_no: u8,
 	) -> Result<VirtioNetDriver, VirtioError> {
-		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq_no) {
+		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers) {
 			match drv.init_dev() {
 				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
 				_ => {

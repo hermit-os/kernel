@@ -16,6 +16,7 @@
 #![feature(asm_const)]
 #![feature(exposed_provenance)]
 #![feature(linked_list_cursors)]
+#![feature(map_try_insert)]
 #![feature(maybe_uninit_as_bytes)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]

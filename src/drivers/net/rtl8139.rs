@@ -9,12 +9,15 @@ use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86::io::*;
 
 use crate::arch::kernel::core_local::increment_irq_counter;
+#[cfg(target_arch = "x86_64")]
+use crate::arch::kernel::interrupts::ExceptionStackFrame;
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::{network_irqhandler, NetworkDriver};
+use crate::drivers::net::NetworkDriver;
+use crate::drivers::pci as hardware;
 use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
 
@@ -317,7 +320,7 @@ impl NetworkDriver for RTL8139Driver {
 		}
 	}
 
-	fn handle_interrupt(&mut self) -> bool {
+	fn handle_interrupt(&mut self) {
 		increment_irq_counter(32 + self.irq);
 
 		let isr_contents = unsafe { inw(self.iobase + ISR) };
@@ -338,16 +341,12 @@ impl NetworkDriver for RTL8139Driver {
 			trace!("RTL88139: RX overflow detected!\n");
 		}
 
-		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
-
 		unsafe {
 			outw(
 				self.iobase + ISR,
 				isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
 			);
 		}
-
-		ret
 	}
 }
 
@@ -417,6 +416,25 @@ impl Drop for RTL8139Driver {
 			outb(self.iobase + CR, CR_RST);
 		}
 	}
+}
+
+extern "x86-interrupt" fn rtl8139_irqhandler(stack_frame: ExceptionStackFrame) {
+	crate::arch::x86_64::swapgs(&stack_frame);
+	use crate::arch::kernel::core_local::core_scheduler;
+	use crate::scheduler::PerCoreSchedulerExt;
+
+	debug!("Receive network interrupt");
+	crate::arch::x86_64::kernel::apic::eoi();
+	if let Some(driver) = hardware::get_network_driver() {
+		driver.lock().handle_interrupt()
+	} else {
+		debug!("Unable to handle interrupt!");
+	}
+
+	crate::executor::run();
+
+	core_scheduler().reschedule();
+	crate::arch::x86_64::swapgs(&stack_frame);
 }
 
 pub(crate) fn init_device(
@@ -573,7 +591,7 @@ pub(crate) fn init_device(
 
 	// Install interrupt handler for RTL8139
 	debug!("Install interrupt handler for RTL8139 at {}", irq);
-	irq_install_handler(irq, network_irqhandler);
+	irq_install_handler(irq, rtl8139_irqhandler);
 	add_irq_name(irq, "rtl8139_net");
 
 	Ok(RTL8139Driver {
