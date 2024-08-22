@@ -335,20 +335,8 @@ impl IsrStatus {
 		Self { raw }
 	}
 
-	pub fn is_queue_interrupt(&self) -> bool {
-		self.raw
-			.as_ptr()
-			.interrupt_status()
-			.read()
-			.contains(InterruptStatus::USED_BUFFER_NOTIFICATION)
-	}
-
-	pub fn is_cfg_change(&self) -> bool {
-		self.raw
-			.as_ptr()
-			.interrupt_status()
-			.read()
-			.contains(InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION)
+	pub fn is_queue_interrupt(&self) -> InterruptStatus {
+		self.raw.as_ptr().interrupt_status().read()
 	}
 
 	pub fn acknowledge(&mut self) {
