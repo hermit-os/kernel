@@ -3,6 +3,7 @@
 //! The module contains ...
 #![allow(dead_code)]
 
+use alloc::boxed::Box;
 use core::mem;
 
 use virtio::mmio::{
@@ -20,7 +21,8 @@ use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::virtio_irqhandler;
+#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+use crate::drivers::virtio::transport::hardware;
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
@@ -383,14 +385,18 @@ pub(crate) fn init_device(
 		virtio::Id::Net => {
 			match VirtioNetDriver::init(dev_id, registers) {
 				Ok(virt_net_drv) => {
-					use crate::drivers::virtio::transport::VIRTIO_IRQ;
-
 					info!("Virtio network driver initialized.");
 					// Install interrupt handler
-					irq_install_handler(irq_no, virtio_irqhandler);
+					let network_handler = || {
+						use crate::drivers::net::NetworkDriver;
+						if let Some(driver) = hardware::get_network_driver() {
+							driver.lock().handle_interrupt()
+						}
+					};
+					irq_install_handler(irq_no, Box::new(network_handler));
+
 					#[cfg(not(target_arch = "riscv64"))]
 					add_irq_name(irq_no, "virtio");
-					let _ = VIRTIO_IRQ.try_insert(irq_no);
 
 					Ok(VirtioDriver::Network(virt_net_drv))
 				}
@@ -404,11 +410,14 @@ pub(crate) fn init_device(
 		virtio::Id::Vsock => {
 			match VirtioVsockDriver::init(dev_id, registers) {
 				Ok(virt_net_drv) => {
-					use crate::drivers::virtio::transport::VIRTIO_IRQ;
-
 					info!("Virtio sock driver initialized.");
 					// Install interrupt handler
-					irq_install_handler(irq_no, virtio_irqhandler);
+					let vsock_handler = || {
+						if let Some(driver) = hardware::get_vsock_driver() {
+							driver.lock().handle_interrupt();
+						}
+					};
+					irq_install_handler(irq_no, Box::new(vsock_handler));
 					#[cfg(not(target_arch = "riscv64"))]
 					add_irq_name(irq_no, "virtio");
 					let _ = VIRTIO_IRQ.try_insert(irq_no);

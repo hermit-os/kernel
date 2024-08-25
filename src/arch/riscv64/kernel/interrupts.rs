@@ -1,6 +1,8 @@
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 
-use hermit_sync::SpinMutex;
+use hermit_sync::{InterruptSpinMutex, SpinMutex};
 use riscv::asm::wfi;
 use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
@@ -16,9 +18,9 @@ static PLIC_CONTEXT: SpinMutex<u16> = SpinMutex::new(0x0);
 /// PLIC context for new interrupt handlers
 static CURRENT_INTERRUPTS: SpinMutex<Vec<u32>> = SpinMutex::new(Vec::new());
 
-const MAX_IRQ: usize = 69;
-
-static mut IRQ_HANDLERS: [usize; MAX_IRQ] = [0; MAX_IRQ];
+type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
+static INTERRUPT_HANDLERS: InterruptSpinMutex<BTreeMap<u8, InterruptHandlerQueue>> =
+	InterruptSpinMutex::new(BTreeMap::new());
 
 /// Init Interrupts
 pub fn install() {
@@ -108,7 +110,7 @@ pub fn disable() {
 
 /// Currently not needed because we use the trapframe crate
 #[cfg(feature = "tcp")]
-pub fn irq_install_handler(irq_number: u8, handler: fn()) {
+pub fn irq_install_handler(irq_number: u8, handler: Box<dyn Fn() + core::marker::Send>) {
 	unsafe {
 		let base_ptr = PLIC_BASE.lock();
 		let context = PLIC_CONTEXT.lock();
@@ -116,7 +118,16 @@ pub fn irq_install_handler(irq_number: u8, handler: fn()) {
 			"Install handler for interrupt {}, context {}",
 			irq_number, *context
 		);
-		IRQ_HANDLERS[irq_number as usize - 1] = handler as usize;
+
+		let mut guard = INTERRUPT_HANDLERS.lock();
+		if let Some(queue) = guard.get_mut(&irq_number) {
+			queue.push_back(handler);
+		} else {
+			let mut queue = VecDeque::new();
+			queue.push_back(handler);
+			guard.insert(irq_number, queue);
+		}
+
 		// Set priority to 7 (highest on FU740)
 		let prio_address = *base_ptr + irq_number as usize * 4;
 		core::ptr::write_volatile(prio_address as *mut u32, 1);
@@ -172,45 +183,40 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 
 /// Handles external interrupts
 fn external_handler() {
-	unsafe {
-		let handler: Option<fn()> = {
-			// Claim interrupt
-			let base_ptr = PLIC_BASE.lock();
-			let context = PLIC_CONTEXT.lock();
-			//let claim_address = *base_ptr + 0x20_2004;
-			let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
-			let irq = core::ptr::read_volatile(claim_address as *mut u32);
-			if irq != 0 {
-				debug!("External INT: {}", irq);
-				let mut cur_int = CURRENT_INTERRUPTS.lock();
-				cur_int.push(irq);
-				if cur_int.len() > 1 {
-					warn!("More than one external interrupt is pending!");
-				}
+	use crate::arch::kernel::core_local::core_scheduler;
+	use crate::scheduler::PerCoreSchedulerExt;
 
-				// Call handler
-				if IRQ_HANDLERS[irq as usize - 1] != 0 {
-					let ptr = IRQ_HANDLERS[irq as usize - 1] as *const ();
-					let handler: fn() = core::mem::transmute(ptr);
-					Some(handler)
-				} else {
-					error!("Interrupt handler not installed");
-					None
-				}
-			} else {
-				None
-			}
-		};
+	// Claim interrupt
+	let base_ptr = PLIC_BASE.lock();
+	let context = PLIC_CONTEXT.lock();
+	//let claim_address = *base_ptr + 0x20_2004;
+	let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
+	let irq = unsafe { core::ptr::read_volatile(claim_address as *mut u32) };
 
-		if let Some(handler) = handler {
-			handler();
+	external_eoi();
+
+	if irq != 0 {
+		debug!("External INT: {}", irq);
+		let mut cur_int = CURRENT_INTERRUPTS.lock();
+		cur_int.push(irq);
+		if cur_int.len() > 1 {
+			warn!("More than one external interrupt is pending!");
 		}
+
+		// Call handler
+		if let Some(queue) = INTERRUPT_HANDLERS.lock().get(&u8::try_from(irq).unwrap()) {
+			for handler in queue.iter() {
+				handler();
+			}
+		}
+		crate::executor::run();
+
+		core_scheduler().reschedule();
 	}
 }
 
 /// End of external interrupt
-#[cfg(feature = "tcp")]
-pub fn external_eoi() {
+fn external_eoi() {
 	unsafe {
 		let base_ptr = PLIC_BASE.lock();
 		let context = PLIC_CONTEXT.lock();

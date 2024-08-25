@@ -5,6 +5,7 @@
 
 #![allow(unused)]
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::convert::TryInto;
 use core::{mem, slice};
@@ -199,22 +200,6 @@ pub enum GEMError {
 	ResetFailed,
 	NoPhyFound,
 	Unknown,
-}
-
-fn gem_irqhandler() {
-	use crate::scheduler::PerCoreSchedulerExt;
-
-	debug!("Receive network interrupt");
-
-	// PLIC end of interrupt
-	crate::arch::kernel::interrupts::external_eoi();
-	if let Some(driver) = hardware::get_network_driver() {
-		driver.lock().handle_interrupt()
-	}
-
-	crate::executor::run();
-
-	core_scheduler().reschedule();
 }
 
 /// GEM network driver struct.
@@ -692,11 +677,13 @@ pub fn init_device(
 		(*gem).tx_qbar.set(tx_qbar);
 
 		// Configure Interrupts
-		debug!(
-			"Install interrupt handler for GEM at {:x}",
-			gem_irqhandler as usize
-		);
-		irq_install_handler(irq, gem_irqhandler);
+		debug!("Install interrupt handler for GEM");
+		let network_handler = || {
+			if let Some(driver) = hardware::get_network_driver() {
+				driver.lock().handle_interrupt()
+			}
+		};
+		irq_install_handler(irq, Box::new(network_handler));
 		(*gem).int_enable.write(Interrupts::FRAMERX::SET); // + Interrupts::TXCOMPL::SET
 
 		// Enable the Controller (again?)

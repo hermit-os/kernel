@@ -1,4 +1,5 @@
-use alloc::collections::BTreeMap;
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::ptr;
@@ -19,8 +20,6 @@ use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
 use crate::core_scheduler;
 use crate::scheduler::{self, CoreId};
 
-/// maximum number of interrupt handlers
-const MAX_HANDLERS: usize = 256;
 /// The ID of the first Private Peripheral Interrupt.
 const PPI_START: u8 = 16;
 /// The ID of the first Shared Peripheral Interrupt.
@@ -29,31 +28,15 @@ const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
 
+type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
+
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
-/// A handler function for an interrupt.
-///
-/// Returns true if we should reschedule.
-type HandlerFunc = fn(state: &State) -> bool;
 /// Possible interrupt handlers
-static mut INTERRUPT_HANDLERS: [Option<HandlerFunc>; MAX_HANDLERS] = [None; MAX_HANDLERS];
+static INTERRUPT_HANDLERS: InterruptSpinMutex<BTreeMap<u8, InterruptHandlerQueue>> =
+	InterruptSpinMutex::new(BTreeMap::new());
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
-
-fn timer_handler(_state: &State) -> bool {
-	debug!("Handle timer interrupt");
-
-	// disable timer
-	unsafe {
-		asm!(
-			"msr cntp_cval_el0, xzr",
-			"msr cntp_ctl_el0, xzr",
-			options(nostack, nomem),
-		);
-	}
-
-	true
-}
 
 /// Enable all interrupts
 #[inline]
@@ -95,80 +78,66 @@ pub fn disable() {
 }
 
 #[allow(dead_code)]
-pub(crate) fn irq_install_handler(irq_number: u8, handler: HandlerFunc) {
+pub(crate) fn irq_install_handler(irq_number: u8, handler: Box<dyn Fn() + core::marker::Send>) {
 	debug!("Install handler for interrupt {}", irq_number);
-	unsafe {
-		INTERRUPT_HANDLERS[irq_number as usize + SPI_START as usize] = Some(handler);
+	let irq_number = irq_number + SPI_START;
+	let mut guard = INTERRUPT_HANDLERS.lock();
+	if let Some(queue) = guard.get_mut(&irq_number) {
+		queue.push_back(handler);
+	} else {
+		let mut queue = VecDeque::new();
+		queue.push_back(handler);
+		guard.insert(irq_number, queue);
 	}
 }
 
 #[no_mangle]
-pub(crate) extern "C" fn do_fiq(state: &State) -> *mut usize {
+pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
-		let mut reschedule: bool = false;
-		let vector: usize = u32::from(irqid).try_into().unwrap();
+		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive fiq {}", vector);
-		increment_irq_counter(vector.try_into().unwrap());
+		increment_irq_counter(vector);
 
-		if vector < MAX_HANDLERS {
-			unsafe {
-				if let Some(handler) = INTERRUPT_HANDLERS[vector] {
-					reschedule = handler(state);
-				}
+		if let Some(queue) = INTERRUPT_HANDLERS.lock().get(&vector) {
+			for handler in queue.iter() {
+				handler();
 			}
 		}
-
+		crate::executor::run();
 		core_scheduler().handle_waiting_tasks();
 
 		GicV3::end_interrupt(irqid);
 
-		if unsafe {
-			reschedule
-				|| vector == TIMER_INTERRUPT.try_into().unwrap()
-				|| vector == SGI_RESCHED.into()
-		} {
-			// a timer interrupt may have caused unblocking of tasks
-			return core_scheduler()
-				.scheduler()
-				.unwrap_or(core::ptr::null_mut());
-		}
+		return core_scheduler()
+			.scheduler()
+			.unwrap_or(core::ptr::null_mut());
 	}
 
 	core::ptr::null_mut()
 }
 
 #[no_mangle]
-pub(crate) extern "C" fn do_irq(state: &State) -> *mut usize {
+pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
-		let mut reschedule: bool = false;
-		let vector: usize = u32::from(irqid).try_into().unwrap();
+		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive interrupt {}", vector);
-		increment_irq_counter(vector.try_into().unwrap());
+		increment_irq_counter(vector);
 
-		if vector < MAX_HANDLERS {
-			unsafe {
-				if let Some(handler) = INTERRUPT_HANDLERS[vector] {
-					reschedule = handler(state);
-				}
+		if let Some(queue) = INTERRUPT_HANDLERS.lock().get(&vector) {
+			for handler in queue.iter() {
+				handler();
 			}
 		}
-
+		crate::executor::run();
 		core_scheduler().handle_waiting_tasks();
 
 		GicV3::end_interrupt(irqid);
 
-		if unsafe {
-			reschedule
-				|| vector == TIMER_INTERRUPT.try_into().unwrap()
-				|| vector == SGI_RESCHED.into()
-		} {
-			// a timer interrupt may have caused unblocking of tasks
-			return core_scheduler()
-				.scheduler()
-				.unwrap_or(core::ptr::null_mut());
-		}
+		return core_scheduler()
+			.scheduler()
+			.unwrap_or(core::ptr::null_mut());
 	}
 
 	core::ptr::null_mut()
@@ -311,9 +280,24 @@ pub(crate) fn init() {
 					"Timer interrupt: {}, type {}, flags {}",
 					irq, irqtype, irqflags
 				);
-				unsafe {
-					INTERRUPT_HANDLERS[irq as usize + PPI_START as usize] = Some(timer_handler);
-				}
+				let timer_handler = || {
+					debug!("Handle timer interrupt");
+
+					// disable timer
+					unsafe {
+						asm!(
+							"msr cntp_cval_el0, xzr",
+							"msr cntp_ctl_el0, xzr",
+							options(nostack, nomem),
+						);
+					}
+				};
+				let mut queue: VecDeque<Box<(dyn Fn() + core::marker::Send + 'static)>> =
+					VecDeque::new();
+				queue.push_back(Box::new(timer_handler));
+				INTERRUPT_HANDLERS
+					.lock()
+					.insert(u8::try_from(irq).unwrap() + PPI_START, queue);
 				IRQ_NAMES
 					.lock()
 					.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
