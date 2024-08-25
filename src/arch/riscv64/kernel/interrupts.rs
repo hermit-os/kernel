@@ -1,7 +1,9 @@
 use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, SpinMutex};
 use riscv::asm::wfi;
 use riscv::register::{scause, sie, sip, sstatus, stval};
@@ -19,8 +21,8 @@ static PLIC_CONTEXT: SpinMutex<u16> = SpinMutex::new(0x0);
 static CURRENT_INTERRUPTS: SpinMutex<Vec<u32>> = SpinMutex::new(Vec::new());
 
 type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
-static INTERRUPT_HANDLERS: InterruptSpinMutex<BTreeMap<u8, InterruptHandlerQueue>> =
-	InterruptSpinMutex::new(BTreeMap::new());
+static INTERRUPT_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
+	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
 /// Init Interrupts
 pub fn install() {

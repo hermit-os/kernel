@@ -20,8 +20,10 @@ use crate::arch::x86_64::swapgs;
 use crate::scheduler::{self, CoreId};
 
 type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
-static IRQ_HANDLERS: InterruptSpinMutex<BTreeMap<u8, InterruptHandlerQueue>> =
-	InterruptSpinMutex::new(BTreeMap::new());
+static IRQ_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
+	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
+	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
 pub(crate) const IST_ENTRIES: usize = 4;
 pub(crate) const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
@@ -345,9 +347,6 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 	error!("Virtualization (#VE) Exception: {:#?}", stack_frame);
 	scheduler::abort();
 }
-
-static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
-	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);

@@ -33,8 +33,8 @@ type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
 /// Possible interrupt handlers
-static INTERRUPT_HANDLERS: InterruptSpinMutex<BTreeMap<u8, InterruptHandlerQueue>> =
-	InterruptSpinMutex::new(BTreeMap::new());
+static INTERRUPT_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
+	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
 
