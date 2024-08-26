@@ -156,12 +156,6 @@ pub fn boot_processor_init() {
 	finish_processor_init();
 }
 
-/// Boots all available Application Processors on bare-metal or QEMU.
-/// Called after the Boot Processor has been fully initialized along with its scheduler.
-pub fn boot_application_processors() {
-	// Nothing to do here yet.
-}
-
 /// Application Processor initialization
 #[allow(dead_code)]
 pub fn application_processor_init() {
@@ -171,7 +165,9 @@ pub fn application_processor_init() {
 
 fn finish_processor_init() {
 	debug!("Initialized Processor");
+}
 
+pub fn boot_next_processor() {
 	CPU_ONLINE.fetch_add(1, Ordering::Release);
 }
 

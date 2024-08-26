@@ -19,7 +19,6 @@ cfg_if::cfg_if! {
 		#[cfg(feature = "smp")]
 		pub(crate) use self::aarch64::kernel::application_processor_init;
 		pub(crate) use self::aarch64::kernel::{
-			boot_application_processors,
 			get_processor_count,
 			message_output_init,
 			output_message_buf,
@@ -44,10 +43,7 @@ cfg_if::cfg_if! {
 		pub(crate) use self::x86_64::kernel::scheduler;
 		pub(crate) use self::x86_64::kernel::switch;
 		#[cfg(target_os = "none")]
-		pub(crate) use self::x86_64::kernel::{
-			boot_application_processors,
-			boot_processor_init,
-		};
+		pub(crate) use self::x86_64::kernel::boot_processor_init;
 		pub(crate) use self::x86_64::kernel::{
 			get_processor_count,
 			message_output_init,
@@ -68,7 +64,6 @@ cfg_if::cfg_if! {
 		pub(crate) use self::riscv64::kernel::pci;
 		pub(crate) use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
 		pub(crate) use self::riscv64::kernel::{
-			boot_application_processors,
 			boot_processor_init,
 			core_local,
 			get_processor_count,

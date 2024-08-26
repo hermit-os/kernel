@@ -194,15 +194,6 @@ pub fn boot_processor_init() {
 	interrupts::enable();
 }
 
-/// Boots all available Application Processors on bare-metal or QEMU.
-/// Called after the Boot Processor has been fully initialized along with its scheduler.
-#[cfg(target_os = "none")]
-pub fn boot_application_processors() {
-	#[cfg(feature = "smp")]
-	apic::boot_application_processors();
-	apic::print_information();
-}
-
 /// Application Processor initialization
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn application_processor_init() {
@@ -231,10 +222,23 @@ fn finish_processor_init() {
 		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
 		apic::init_next_processor_variables();
 	}
+}
 
+pub fn boot_next_processor() {
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
-	CPU_ONLINE.fetch_add(1, Ordering::Release);
+	let cpu_online = CPU_ONLINE.fetch_add(1, Ordering::Release);
+
+	if !env::is_uhyve() {
+		if cpu_online == 0 {
+			#[cfg(all(target_os = "none", feature = "smp"))]
+			apic::boot_application_processors();
+		}
+
+		if !cfg!(feature = "smp") {
+			apic::print_information();
+		}
+	}
 }
 
 pub fn print_statistics() {

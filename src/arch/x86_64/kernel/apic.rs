@@ -804,6 +804,8 @@ pub fn boot_application_processors() {
 			}
 		}
 	}
+
+	print_information();
 }
 
 #[cfg(feature = "smp")]
