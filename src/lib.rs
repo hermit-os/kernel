@@ -211,9 +211,7 @@ fn boot_processor_main() -> ! {
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
-	if !env::is_uhyve() {
-		arch::boot_application_processors();
-	}
+	arch::kernel::boot_next_processor();
 
 	#[cfg(feature = "smp")]
 	synch_all_cores();
@@ -253,6 +251,7 @@ fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
+	arch::kernel::boot_next_processor();
 
 	debug!("Entering idle loop for application processor");
 

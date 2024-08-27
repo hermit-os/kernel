@@ -141,12 +141,6 @@ pub fn boot_processor_init() {
 	interrupts::enable();
 }
 
-/// Boots all available Application Processors on bare-metal or QEMU.
-/// Called after the Boot Processor has been fully initialized along with its scheduler.
-pub fn boot_application_processors() {
-	// Nothing to do here yet.
-}
-
 /// Application Processor initialization
 #[cfg(feature = "smp")]
 pub fn application_processor_init() {
@@ -179,6 +173,10 @@ fn finish_processor_init() {
 	// Remove current hart from the hart_mask
 	let new_hart_mask = get_hart_mask() & (u64::MAX - (1 << current_hart_id));
 	HART_MASK.store(new_hart_mask, Ordering::Relaxed);
+}
+
+pub fn boot_next_processor() {
+	let new_hart_mask = HART_MASK.load(Ordering::Relaxed);
 
 	let next_hart_index = lsb(new_hart_mask);
 
