@@ -74,8 +74,6 @@ pub(crate) fn init() {
 	SYS.init();
 
 	init_entropy();
-	#[cfg(feature = "newlib")]
-	sbrk_init();
 }
 
 /// Interface to allocate memory from system heap
