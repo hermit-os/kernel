@@ -625,18 +625,8 @@ impl IsrStatus {
 		}
 	}
 
-	pub fn is_interrupt(&self) -> bool {
-		self.isr_stat
-			.as_ptr()
-			.read()
-			.contains(IsrStatusRaw::QUEUE_INTERRUPT)
-	}
-
-	pub fn is_cfg_change(&self) -> bool {
-		self.isr_stat
-			.as_ptr()
-			.read()
-			.contains(IsrStatusRaw::DEVICE_CONFIGURATION_INTERRUPT)
+	pub fn is_queue_interrupt(&self) -> IsrStatusRaw {
+		self.isr_stat.as_ptr().read()
 	}
 
 	pub fn acknowledge(&mut self) {

@@ -81,7 +81,7 @@ impl RxQueue {
 			vq: None,
 			poll_sender,
 			poll_receiver,
-			packet_size: crate::VSOCK_PACKET_SIZE + mem::size_of::<Hdr>() as u32,
+			packet_size: crate::VSOCK_PACKET_SIZE,
 		}
 	}
 
@@ -320,9 +320,16 @@ impl VirtioVsockDriver {
 	}
 
 	pub fn handle_interrupt(&mut self) {
-		let _ = self.isr_stat.is_interrupt();
+		let status = self.isr_stat.is_queue_interrupt();
 
-		if self.isr_stat.is_cfg_change() {
+		#[cfg(not(feature = "pci"))]
+		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
+			info!("Configuration changes are not possible! Aborting");
+			todo!("Implement possibility to change config on the fly...")
+		}
+
+		#[cfg(feature = "pci")]
+		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
