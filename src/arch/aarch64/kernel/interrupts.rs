@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 use core::arch::asm;
@@ -28,7 +27,7 @@ const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
 
-type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
+type InterruptHandlerQueue = VecDeque<fn()>;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
@@ -78,7 +77,7 @@ pub fn disable() {
 }
 
 #[allow(dead_code)]
-pub(crate) fn irq_install_handler(irq_number: u8, handler: Box<dyn Fn() + core::marker::Send>) {
+pub(crate) fn irq_install_handler(irq_number: u8, handler: fn()) {
 	debug!("Install handler for interrupt {}", irq_number);
 	let irq_number = irq_number + SPI_START;
 	let mut guard = INTERRUPT_HANDLERS.lock();
@@ -280,7 +279,8 @@ pub(crate) fn init() {
 					"Timer interrupt: {}, type {}, flags {}",
 					irq, irqtype, irqflags
 				);
-				let timer_handler = || {
+
+				fn timer_handler() {
 					debug!("Handle timer interrupt");
 
 					// disable timer
@@ -291,10 +291,10 @@ pub(crate) fn init() {
 							options(nostack, nomem),
 						);
 					}
-				};
-				let mut queue: VecDeque<Box<(dyn Fn() + core::marker::Send + 'static)>> =
-					VecDeque::new();
-				queue.push_back(Box::new(timer_handler));
+				}
+
+				let mut queue = VecDeque::<fn()>::new();
+				queue.push_back(timer_handler);
 				INTERRUPT_HANDLERS
 					.lock()
 					.insert(u8::try_from(irq).unwrap() + PPI_START, queue);

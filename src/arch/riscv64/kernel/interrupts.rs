@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
@@ -20,7 +19,7 @@ static PLIC_CONTEXT: SpinMutex<u16> = SpinMutex::new(0x0);
 /// PLIC context for new interrupt handlers
 static CURRENT_INTERRUPTS: SpinMutex<Vec<u32>> = SpinMutex::new(Vec::new());
 
-type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
+type InterruptHandlerQueue = VecDeque<fn()>;
 static INTERRUPT_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
 	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
@@ -112,7 +111,7 @@ pub fn disable() {
 
 /// Currently not needed because we use the trapframe crate
 #[cfg(feature = "tcp")]
-pub fn irq_install_handler(irq_number: u8, handler: Box<dyn Fn() + core::marker::Send>) {
+pub fn irq_install_handler(irq_number: u8, handler: fn()) {
 	unsafe {
 		let base_ptr = PLIC_BASE.lock();
 		let context = PLIC_CONTEXT.lock();

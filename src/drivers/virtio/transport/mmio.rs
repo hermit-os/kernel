@@ -3,7 +3,6 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-use alloc::boxed::Box;
 use core::mem;
 
 use virtio::mmio::{
@@ -382,54 +381,52 @@ pub(crate) fn init_device(
 	// Verify the device-ID to find the network card
 	match registers.as_ptr().device_id().read() {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		virtio::Id::Net => {
-			match VirtioNetDriver::init(dev_id, registers) {
-				Ok(virt_net_drv) => {
-					info!("Virtio network driver initialized.");
-					// Install interrupt handler
-					let network_handler = || {
-						use crate::drivers::net::NetworkDriver;
-						if let Some(driver) = hardware::get_network_driver() {
-							driver.lock().handle_interrupt()
-						}
-					};
-					irq_install_handler(irq_no, Box::new(network_handler));
+		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers) {
+			Ok(virt_net_drv) => {
+				info!("Virtio network driver initialized.");
 
-					#[cfg(not(target_arch = "riscv64"))]
-					add_irq_name(irq_no, "virtio");
+				fn network_handler() {
+					use crate::drivers::net::NetworkDriver;
+					if let Some(driver) = hardware::get_network_driver() {
+						driver.lock().handle_interrupt()
+					}
+				}
 
-					Ok(VirtioDriver::Network(virt_net_drv))
-				}
-				Err(virtio_error) => {
-					error!("Virtio network driver could not be initialized with device");
-					Err(DriverError::InitVirtioDevFail(virtio_error))
-				}
+				irq_install_handler(irq_no, network_handler);
+
+				#[cfg(not(target_arch = "riscv64"))]
+				add_irq_name(irq_no, "virtio");
+
+				Ok(VirtioDriver::Network(virt_net_drv))
 			}
-		}
+			Err(virtio_error) => {
+				error!("Virtio network driver could not be initialized with device");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "vsock")]
-		virtio::Id::Vsock => {
-			match VirtioVsockDriver::init(dev_id, registers) {
-				Ok(virt_net_drv) => {
-					info!("Virtio sock driver initialized.");
-					// Install interrupt handler
-					let vsock_handler = || {
-						if let Some(driver) = hardware::get_vsock_driver() {
-							driver.lock().handle_interrupt();
-						}
-					};
-					irq_install_handler(irq_no, Box::new(vsock_handler));
-					#[cfg(not(target_arch = "riscv64"))]
-					add_irq_name(irq_no, "virtio");
-					let _ = VIRTIO_IRQ.try_insert(irq_no);
+		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers) {
+			Ok(virt_net_drv) => {
+				info!("Virtio sock driver initialized.");
 
-					Ok(VirtioDriver::Vsock(virt_vsock_drv))
+				fn vsock_handler() {
+					if let Some(driver) = hardware::get_vsock_driver() {
+						driver.lock().handle_interrupt();
+					}
 				}
-				Err(virtio_error) => {
-					error!("Virtio sock driver could not be initialized with device");
-					Err(DriverError::InitVirtioDevFail(virtio_error))
-				}
+
+				irq_install_handler(irq_no, vsock_handler);
+				#[cfg(not(target_arch = "riscv64"))]
+				add_irq_name(irq_no, "virtio");
+				let _ = VIRTIO_IRQ.try_insert(irq_no);
+
+				Ok(VirtioDriver::Vsock(virt_vsock_drv))
 			}
-		}
+			Err(virtio_error) => {
+				error!("Virtio sock driver could not be initialized with device");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		device_id => {
 			error!("Device with id {device_id:?} is currently not supported!");
 			// Return Driver error inidacting device is not supported

@@ -3,7 +3,6 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -973,13 +972,15 @@ pub(crate) fn init_device(
 				let irq = device.get_irq().unwrap();
 
 				info!("Install virtio interrupt handler at line {}", irq);
-				let network_handler = || {
+
+				fn network_handler() {
 					use crate::drivers::net::NetworkDriver;
 					if let Some(driver) = hardware::get_network_driver() {
 						driver.lock().handle_interrupt()
 					}
-				};
-				irq_install_handler(irq, Box::new(network_handler));
+				}
+
+				irq_install_handler(irq, network_handler);
 				add_irq_name(irq, "virtio");
 
 				Ok(drv)
@@ -989,12 +990,14 @@ pub(crate) fn init_device(
 				let irq = device.get_irq().unwrap();
 
 				info!("Install virtio interrupt handler at line {}", irq);
-				let vsock_handler = || {
+
+				fn vsock_handler() {
 					if let Some(driver) = hardware::get_vsock_driver() {
 						driver.lock().handle_interrupt();
 					}
-				};
-				irq_install_handler(irq, Box::new(vsock_handler));
+				}
+
+				irq_install_handler(irq, vsock_handler);
 				add_irq_name(irq, "virtio");
 
 				Ok(drv)

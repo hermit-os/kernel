@@ -678,12 +678,14 @@ pub fn init_device(
 
 		// Configure Interrupts
 		debug!("Install interrupt handler for GEM");
-		let network_handler = || {
+
+		fn network_handler() {
 			if let Some(driver) = hardware::get_network_driver() {
 				driver.lock().handle_interrupt()
 			}
-		};
-		irq_install_handler(irq, Box::new(network_handler));
+		}
+
+		irq_install_handler(irq, network_handler);
 		(*gem).int_enable.write(Interrupts::FRAMERX::SET); // + Interrupts::TXCOMPL::SET
 
 		// Enable the Controller (again?)

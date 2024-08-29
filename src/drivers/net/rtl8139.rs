@@ -570,12 +570,14 @@ pub(crate) fn init_device(
 
 	// Install interrupt handler for RTL8139
 	debug!("Install interrupt handler for RTL8139 at {}", irq);
-	let network_handler = || {
+
+	fn network_handler() {
 		if let Some(driver) = hardware::get_network_driver() {
 			driver.lock().handle_interrupt()
 		}
-	};
-	irq_install_handler(irq, Box::new(network_handler));
+	}
+
+	irq_install_handler(irq, network_handler);
 	add_irq_name(irq, "rtl8139_net");
 
 	Ok(RTL8139Driver {

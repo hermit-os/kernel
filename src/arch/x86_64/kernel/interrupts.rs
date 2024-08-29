@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -19,7 +18,7 @@ use crate::arch::x86_64::mm::paging::{page_fault_handler, BasePageSize, PageSize
 use crate::arch::x86_64::swapgs;
 use crate::scheduler::{self, CoreId};
 
-type InterruptHandlerQueue = VecDeque<Box<dyn Fn() + core::marker::Send>>;
+type InterruptHandlerQueue = VecDeque<fn()>;
 static IRQ_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
 	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
@@ -160,7 +159,7 @@ pub(crate) fn install() {
 }
 
 #[cfg(any(feature = "fuse", feature = "tcp", feature = "udp", feature = "vsock"))]
-pub fn irq_install_handler(irq_number: u8, handler: Box<dyn Fn() + core::marker::Send>) {
+pub fn irq_install_handler(irq_number: u8, handler: fn()) {
 	debug!("Install handler for interrupt {}", irq_number);
 
 	let mut guard = IRQ_HANDLERS.lock();
