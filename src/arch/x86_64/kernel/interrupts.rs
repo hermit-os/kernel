@@ -1,4 +1,4 @@
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -9,8 +9,6 @@ use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
 use x86_64::instructions::interrupts::enable_and_hlt;
 pub use x86_64::instructions::interrupts::{disable, enable};
 use x86_64::set_general_handler;
-#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp", feature = "vsock"))]
-use x86_64::structures::idt;
 use x86_64::structures::idt::InterruptDescriptorTable;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 
@@ -19,6 +17,12 @@ use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{page_fault_handler, BasePageSize, PageSize};
 use crate::arch::x86_64::swapgs;
 use crate::scheduler::{self, CoreId};
+
+type InterruptHandlerQueue = VecDeque<fn()>;
+static IRQ_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
+	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
+	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
 pub(crate) const IST_ENTRIES: usize = 4;
 pub(crate) const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
@@ -83,8 +87,7 @@ pub(crate) fn install() {
 	let mut idt = IDT.lock();
 
 	set_general_handler!(&mut *idt, abort, 0..32);
-	set_general_handler!(&mut *idt, unhandle, 32..64);
-	set_general_handler!(&mut *idt, unknown, 64..);
+	set_general_handler!(&mut *idt, handle_interrupt, 32..);
 
 	unsafe {
 		for i in 32..=255 {
@@ -156,17 +159,40 @@ pub(crate) fn install() {
 }
 
 #[cfg(any(feature = "fuse", feature = "tcp", feature = "udp", feature = "vsock"))]
-pub fn irq_install_handler(irq_number: u8, handler: idt::HandlerFunc) {
+pub fn irq_install_handler(irq_number: u8, handler: fn()) {
 	debug!("Install handler for interrupt {}", irq_number);
 
-	let mut idt = IDT.lock();
-	unsafe {
-		idt[32 + irq_number]
-			.set_handler_addr(x86_64::VirtAddr::new(
-				u64::try_from(handler as usize).unwrap(),
-			))
-			.set_stack_index(0);
+	let mut guard = IRQ_HANDLERS.lock();
+	if let Some(map) = guard.get_mut(&irq_number) {
+		map.push_back(handler);
+	} else {
+		let mut map = VecDeque::new();
+		map.push_back(handler);
+		guard.insert(irq_number, map);
 	}
+}
+
+fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
+	crate::arch::x86_64::swapgs(&stack_frame);
+	use crate::arch::kernel::core_local::core_scheduler;
+	use crate::scheduler::PerCoreSchedulerExt;
+
+	if let Some(map) = IRQ_HANDLERS.lock().get(&(index - 32)) {
+		debug!("received interrupt {index}");
+		for handler in map.iter() {
+			handler();
+		}
+	} else {
+		warn!("received unhandled interrupt {index}");
+	}
+
+	apic::eoi();
+	increment_irq_counter(index);
+
+	crate::executor::run();
+
+	core_scheduler().reschedule();
+	crate::arch::x86_64::swapgs(&stack_frame);
 }
 
 fn abort(stack_frame: ExceptionStackFrame, index: u8, error_code: Option<u64>) {
@@ -174,17 +200,6 @@ fn abort(stack_frame: ExceptionStackFrame, index: u8, error_code: Option<u64>) {
 	error!("Error code: {error_code:?}");
 	error!("Stack frame: {stack_frame:#?}");
 	scheduler::abort();
-}
-
-fn unhandle(_stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
-	warn!("received unhandled irq {index}");
-	apic::eoi();
-	increment_irq_counter(index);
-}
-
-fn unknown(_stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
-	warn!("unknown interrupt {index}");
-	apic::eoi();
 }
 
 extern "x86-interrupt" fn divide_error_exception(stack_frame: ExceptionStackFrame) {
@@ -331,9 +346,6 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 	error!("Virtualization (#VE) Exception: {:#?}", stack_frame);
 	scheduler::abort();
 }
-
-static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
-	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);

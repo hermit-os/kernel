@@ -32,7 +32,11 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::virtio_irqhandler;
+#[cfg(all(
+	not(feature = "rtl8139"),
+	any(feature = "tcp", feature = "udp", feature = "vsock")
+))]
+use crate::drivers::virtio::transport::hardware;
 #[cfg(feature = "vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
@@ -952,40 +956,45 @@ pub(crate) fn init_device(
 	};
 
 	match virt_drv {
-		Ok(drv) => {
-			match &drv {
-				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-				VirtioDriver::Network(_) => {
-					use crate::drivers::virtio::transport::VIRTIO_IRQ;
+		Ok(drv) => match &drv {
+			#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
+			VirtioDriver::Network(_) => {
+				let irq = device.get_irq().unwrap();
 
-					let irq = device.get_irq().unwrap();
-					let _ = VIRTIO_IRQ.try_insert(irq);
+				info!("Install virtio interrupt handler at line {}", irq);
 
-					info!("Install virtio interrupt handler at line {}", irq);
-					// Install interrupt handler
-					irq_install_handler(irq, virtio_irqhandler);
-					add_irq_name(irq, "virtio");
-
-					Ok(drv)
+				fn network_handler() {
+					use crate::drivers::net::NetworkDriver;
+					if let Some(driver) = hardware::get_network_driver() {
+						driver.lock().handle_interrupt()
+					}
 				}
-				#[cfg(feature = "vsock")]
-				VirtioDriver::Vsock(_) => {
-					use crate::drivers::virtio::transport::VIRTIO_IRQ;
 
-					let irq = device.get_irq().unwrap();
-					let _ = VIRTIO_IRQ.try_insert(irq);
+				irq_install_handler(irq, network_handler);
+				add_irq_name(irq, "virtio");
 
-					info!("Install virtio interrupt handler at line {}", irq);
-					// Install interrupt handler
-					irq_install_handler(irq, virtio_irqhandler);
-					add_irq_name(irq, "virtio");
-
-					Ok(drv)
-				}
-				#[cfg(feature = "fuse")]
-				VirtioDriver::FileSystem(_) => Ok(drv),
+				Ok(drv)
 			}
-		}
+			#[cfg(feature = "vsock")]
+			VirtioDriver::Vsock(_) => {
+				let irq = device.get_irq().unwrap();
+
+				info!("Install virtio interrupt handler at line {}", irq);
+
+				fn vsock_handler() {
+					if let Some(driver) = hardware::get_vsock_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				irq_install_handler(irq, vsock_handler);
+				add_irq_name(irq, "virtio");
+
+				Ok(drv)
+			}
+			#[cfg(feature = "fuse")]
+			VirtioDriver::FileSystem(_) => Ok(drv),
+		},
 		Err(virt_err) => Err(virt_err),
 	}
 }

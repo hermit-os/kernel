@@ -9,8 +9,6 @@ use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86::io::*;
 
 use crate::arch::kernel::core_local::increment_irq_counter;
-#[cfg(target_arch = "x86_64")]
-use crate::arch::kernel::interrupts::ExceptionStackFrame;
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
@@ -418,25 +416,6 @@ impl Drop for RTL8139Driver {
 	}
 }
 
-extern "x86-interrupt" fn rtl8139_irqhandler(stack_frame: ExceptionStackFrame) {
-	crate::arch::x86_64::swapgs(&stack_frame);
-	use crate::arch::kernel::core_local::core_scheduler;
-	use crate::scheduler::PerCoreSchedulerExt;
-
-	debug!("Receive network interrupt");
-	crate::arch::x86_64::kernel::apic::eoi();
-	if let Some(driver) = hardware::get_network_driver() {
-		driver.lock().handle_interrupt()
-	} else {
-		debug!("Unable to handle interrupt!");
-	}
-
-	crate::executor::run();
-
-	core_scheduler().reschedule();
-	crate::arch::x86_64::swapgs(&stack_frame);
-}
-
 pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
 ) -> Result<RTL8139Driver, DriverError> {
@@ -591,7 +570,14 @@ pub(crate) fn init_device(
 
 	// Install interrupt handler for RTL8139
 	debug!("Install interrupt handler for RTL8139 at {}", irq);
-	irq_install_handler(irq, rtl8139_irqhandler);
+
+	fn network_handler() {
+		if let Some(driver) = hardware::get_network_driver() {
+			driver.lock().handle_interrupt()
+		}
+	}
+
+	irq_install_handler(irq, network_handler);
 	add_irq_name(irq, "rtl8139_net");
 
 	Ok(RTL8139Driver {
