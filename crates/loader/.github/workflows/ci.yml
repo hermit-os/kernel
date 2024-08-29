@@ -113,12 +113,12 @@ jobs:
 
   run-kvm:
     name: Run (KVM)
-    runs-on: [self-hosted]
+    runs-on: ubuntu-latest
     steps:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends qemu-system-x86
+          sudo apt-get install qemu-system-x86
       - uses: actions/checkout@v4
         with:
             lfs: true
@@ -131,29 +131,29 @@ jobs:
           curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
           | tar -xz
           
-          # Rename the binary to "firecracker"
-          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
-          echo "$PWD" >> $GITHUB_PATH
-  
-          ./firecracker --version
+          mkdir -p $HOME/.local/bin
+          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
+          echo $HOME/.local/bin >> $GITHUB_PATH
+
+          $HOME/.local/bin/firecracker --version
       - name: Download OVMF
         run: |
           gh release download edk2-stable202408-r1 --repo rust-osdev/ovmf-prebuilt --pattern 'edk2-stable*-bin.tar.xz'
           tar -xvf edk2-stable*-bin.tar.xz edk2-stable202408-r1-bin/x64
       - uses: dtolnay/rust-toolchain@stable
       - name: Run QEMU (hello_world, dev)
-        run: cargo xtask ci qemu --target x86_64 --accel
+        run: cargo xtask ci qemu --target x86_64 --accel --sudo
       - name: Run QEMU (hello_world, release)
-        run: cargo xtask ci qemu --target x86_64 --accel --release
+        run: cargo xtask ci qemu --target x86_64 --accel --sudo --release
       - name: Run QEMU (hello_world-microvm, dev)
-        run: cargo xtask ci qemu --target x86_64 --accel --microvm
+        run: cargo xtask ci qemu --target x86_64 --accel --microvm --sudo
       - name: Run QEMU (hello_world-microvm, release)
-        run: cargo xtask ci qemu --target x86_64 --accel --microvm --release
+        run: cargo xtask ci qemu --target x86_64 --accel --microvm --sudo --release
       - name: Run UEFI (dev)
-        run: cargo xtask ci qemu --target x86_64-uefi --accel
+        run: cargo xtask ci qemu --target x86_64-uefi --accel --sudo
       - name: Run UEFI (release)
-        run: cargo xtask ci qemu --target x86_64-uefi --accel --release
+        run: cargo xtask ci qemu --target x86_64-uefi --accel --sudo --release
       - name: Run Firecracker (hello_world, dev)
-        run: cargo xtask ci firecracker --target x86_64-fc
+        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target x86_64-fc --sudo
       - name: Run Firecracker (hello_world, release)
-        run: cargo xtask ci firecracker --target x86_64-fc --release
+        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target x86_64-fc --sudo --release
