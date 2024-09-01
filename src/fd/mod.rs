@@ -365,6 +365,8 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 	.await
 }
 
+/// Wait for some event on a file descriptor.
+///
 /// The unix-like `poll` waits for one of a set of file descriptors
 /// to become ready to perform I/O. The set of file descriptors to be
 /// monitored is specified in the `fds` argument, which is an array
@@ -383,6 +385,8 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	result
 }
 
+/// Wait for some event on a file descriptor.
+///
 /// `eventfd` creates an linux-like "eventfd object" that can be used
 /// as an event wait/notify mechanism by user-space applications, and by
 /// the kernel to notify user-space applications of events. The
