@@ -112,6 +112,9 @@ pub mod error {
 pub(crate) trait Driver {
 	/// Returns the interrupt number of the device
 	fn get_interrupt_number(&self) -> InterruptLine;
+
+	/// Returns the device driver name
+	fn get_name(&self) -> &'static str;
 }
 
 pub(crate) fn init() {

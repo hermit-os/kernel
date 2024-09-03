@@ -369,8 +369,9 @@ pub(crate) fn init_device(
 		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
-				#[cfg(not(target_arch = "riscv64"))]
+
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
+				info!("Virtio interrupt handler at line {}", irq_no);
 
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}
@@ -383,8 +384,9 @@ pub(crate) fn init_device(
 		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
 				info!("Virtio sock driver initialized.");
-				#[cfg(not(target_arch = "riscv64"))]
+
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
+				info!("Virtio interrupt handler at line {}", irq_no);
 
 				Ok(VirtioDriver::Vsock(virt_vsock_drv))
 			}

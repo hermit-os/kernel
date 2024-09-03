@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::{OnceCell, SpinMutex};
+use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
 use riscv::asm::wfi;
 use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
@@ -27,7 +27,7 @@ static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomSta
 	OnceCell::new();
 
 /// Init Interrupts
-pub fn install() {
+pub(crate) fn install() {
 	unsafe {
 		// Intstall trap handler
 		trapframe::init();
@@ -37,28 +37,32 @@ pub fn install() {
 }
 
 /// Init PLIC
-pub fn init_plic(base: usize, context: u16) {
+pub(crate) fn init_plic(base: usize, context: u16) {
 	*PLIC_BASE.lock() = base;
 	*PLIC_CONTEXT.lock() = context;
 }
 
 /// Enable Interrupts
 #[inline]
-pub fn enable() {
+pub(crate) fn enable() {
 	unsafe {
 		sstatus::set_sie();
 	}
 }
 
-#[cfg(all(feature = "pci", feature = "tcp"))]
-pub fn add_irq_name(irq_number: u8, name: &'static str) {
-	warn!("add_irq_name({irq_number}, {name}) called but not implemented");
+static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
+	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+
+#[allow(dead_code)]
+pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
+	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
+	IRQ_NAMES.lock().insert(irq_number, name);
 }
 
 /// Waits for the next interrupt (Only Supervisor-level software/timer interrupt for now)
 /// and calls the specific handler
 #[inline]
-pub fn enable_and_wait() {
+pub(crate) fn enable_and_wait() {
 	unsafe {
 		//Enable Supervisor-level software interrupts
 		sie::set_ssoft();
@@ -108,7 +112,7 @@ pub fn enable_and_wait() {
 
 /// Disable Interrupts
 #[inline]
-pub fn disable() {
+pub(crate) fn disable() {
 	unsafe { sstatus::clear_sie() };
 }
 
@@ -231,3 +235,5 @@ fn external_eoi() {
 		}
 	}
 }
+
+pub(crate) fn print_statistics() {}

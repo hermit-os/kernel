@@ -406,6 +406,10 @@ impl Driver for GEMDriver {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}
+
+	fn get_name(&self) -> &'static str {
+		"gem"
+	}
 }
 
 impl GEMDriver {

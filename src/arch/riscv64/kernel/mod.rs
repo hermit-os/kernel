@@ -29,7 +29,7 @@ use crate::env;
 
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
-pub static mut HARTS_AVAILABLE: Vec<usize> = Vec::new();
+pub(crate) static mut HARTS_AVAILABLE: Vec<usize> = Vec::new();
 
 /// Kernel header to announce machine features
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
@@ -211,4 +211,6 @@ pub fn boot_next_processor() {
 	}
 }
 
-pub fn print_statistics() {}
+pub fn print_statistics() {
+	interrupts::print_statistics();
+}

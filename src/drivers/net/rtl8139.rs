@@ -349,6 +349,10 @@ impl Driver for RTL8139Driver {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}
+
+	fn get_name(&self) -> &'static str {
+		"rtl8139"
+	}
 }
 
 impl RTL8139Driver {
@@ -571,9 +575,8 @@ pub(crate) fn init_device(
 		);
 	}
 
-	// Install interrupt handler for RTL8139
-	debug!("Install interrupt handler for RTL8139 at {}", irq);
-	add_irq_name(irq, "rtl8139_net");
+	info!("RTL8139 use interrupt line {}", irq);
+	add_irq_name(irq, "rtl8139");
 
 	Ok(RTL8139Driver {
 		iobase,

@@ -888,11 +888,16 @@ pub(crate) fn init_device(
 
 	let id = virtio::Id::from(u8::try_from(device_id - 0x1040).unwrap());
 
-	let virt_drv = match id {
+	match id {
 		#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 		virtio::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
+
+				let irq = device.get_irq().unwrap();
+				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {}", irq);
+
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}
 			Err(virtio_error) => {
@@ -907,6 +912,11 @@ pub(crate) fn init_device(
 		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
 			Ok(virt_sock_drv) => {
 				info!("Virtio sock driver initialized.");
+
+				let irq = device.get_irq().unwrap();
+				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {}", irq);
+
 				Ok(VirtioDriver::Vsock(virt_sock_drv))
 			}
 			Err(virtio_error) => {
@@ -943,32 +953,6 @@ pub(crate) fn init_device(
 				VirtioError::DevNotSupported(device_id),
 			))
 		}
-	};
-
-	match virt_drv {
-		Ok(drv) => match &drv {
-			#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
-			VirtioDriver::Network(_) => {
-				let irq = device.get_irq().unwrap();
-
-				info!("Install virtio interrupt handler at line {}", irq);
-				crate::arch::interrupts::add_irq_name(irq, "virtio");
-
-				Ok(drv)
-			}
-			#[cfg(feature = "vsock")]
-			VirtioDriver::Vsock(_) => {
-				let irq = device.get_irq().unwrap();
-
-				info!("Install virtio interrupt handler at line {}", irq);
-				crate::arch::interrupts::add_irq_name(irq, "virtio");
-
-				Ok(drv)
-			}
-			#[cfg(feature = "fuse")]
-			VirtioDriver::FileSystem(_) => Ok(drv),
-		},
-		Err(virt_err) => Err(virt_err),
 	}
 }
 

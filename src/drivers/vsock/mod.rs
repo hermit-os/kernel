@@ -296,6 +296,10 @@ impl Driver for VirtioVsockDriver {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}
+
+	fn get_name(&self) -> &'static str {
+		"virtio"
+	}
 }
 
 impl VirtioVsockDriver {
