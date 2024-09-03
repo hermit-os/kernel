@@ -20,6 +20,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, Virtq, VqIndex, VqSize,
 };
+use crate::drivers::Driver;
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -192,6 +193,12 @@ impl FuseInterface for VirtioFsDriver {
 		let tag = str::from_utf8(&tag).unwrap();
 		let tag = tag.split('\0').next().unwrap();
 		tag.to_string()
+	}
+}
+
+impl Driver for VirtioFsDriver {
+	fn get_interrupt_number(&self) -> InterruptLine {
+		self.irq
 	}
 }
 

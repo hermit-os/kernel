@@ -17,6 +17,15 @@ pub mod virtio;
 #[cfg(feature = "vsock")]
 pub mod vsock;
 
+use alloc::collections::VecDeque;
+
+#[cfg(feature = "pci")]
+pub(crate) use pci_types::InterruptLine;
+#[cfg(not(feature = "pci"))]
+pub(crate) type InterruptLine = u8;
+
+pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
+
 /// A common error module for drivers.
 /// [DriverError](error::DriverError) values will be
 /// passed on to higher layers.
@@ -96,4 +105,25 @@ pub mod error {
 			}
 		}
 	}
+}
+
+/// A trait to determine general driver information
+#[allow(dead_code)]
+pub(crate) trait Driver {
+	/// Returns the interrupt number of the device
+	fn get_interrupt_number(&self) -> InterruptLine;
+}
+
+pub(crate) fn init() {
+	// Initialize PCI Drivers
+	#[cfg(feature = "pci")]
+	crate::drivers::pci::init();
+	#[cfg(all(
+		not(feature = "pci"),
+		target_arch = "x86_64",
+		any(feature = "tcp", feature = "udp")
+	))]
+	crate::arch::x86_64::kernel::mmio::init_drivers();
+
+	crate::arch::interrupts::install_handlers();
 }

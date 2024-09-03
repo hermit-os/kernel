@@ -139,7 +139,7 @@ extern "C" fn initd(_arg: usize) {
 	}
 
 	// Initialize Drivers
-	arch::init_drivers();
+	drivers::init();
 	crate::executor::init();
 
 	// Initialize MMIO Drivers if on riscv64

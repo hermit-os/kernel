@@ -17,6 +17,11 @@ use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
 use crate::core_scheduler;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::mmio::get_interrupt_handlers;
+#[cfg(feature = "pci")]
+use crate::drivers::pci::get_interrupt_handlers;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::scheduler::{self, CoreId};
 
 /// The ID of the first Private Peripheral Interrupt.
@@ -27,13 +32,11 @@ const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
 
-type InterruptHandlerQueue = VecDeque<fn()>;
-
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
 /// Possible interrupt handlers
-static INTERRUPT_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
-	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> =
+	OnceCell::new();
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
 
@@ -76,18 +79,39 @@ pub fn disable() {
 	}
 }
 
-#[allow(dead_code)]
-pub(crate) fn irq_install_handler(irq_number: u8, handler: fn()) {
-	debug!("Install handler for interrupt {}", irq_number);
-	let irq_number = irq_number + SPI_START;
-	let mut guard = INTERRUPT_HANDLERS.lock();
-	if let Some(queue) = guard.get_mut(&irq_number) {
-		queue.push_back(handler);
-	} else {
-		let mut queue = VecDeque::new();
-		queue.push_back(handler);
-		guard.insert(irq_number, queue);
+pub(crate) fn install_handlers() {
+	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
+		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
+
+	fn timer_handler() {
+		debug!("Handle timer interrupt");
+
+		// disable timer
+		unsafe {
+			asm!(
+				"msr cntp_cval_el0, xzr",
+				"msr cntp_ctl_el0, xzr",
+				options(nostack, nomem),
+			);
+		}
 	}
+
+	for (key, value) in get_interrupt_handlers().into_iter() {
+		handlers.insert(key + SPI_START, value);
+	}
+
+	unsafe {
+		if let Some(queue) = handlers.get_mut(&(u8::try_from(TIMER_INTERRUPT).unwrap() + PPI_START))
+		{
+			queue.push_back(timer_handler);
+		} else {
+			let mut queue = VecDeque::<fn()>::new();
+			queue.push_back(timer_handler);
+			handlers.insert(u8::try_from(TIMER_INTERRUPT).unwrap() + PPI_START, queue);
+		}
+	}
+
+	INTERRUPT_HANDLERS.set(handlers).unwrap();
 }
 
 #[no_mangle]
@@ -98,9 +122,11 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 		debug!("Receive fiq {}", vector);
 		increment_irq_counter(vector);
 
-		if let Some(queue) = INTERRUPT_HANDLERS.lock().get(&vector) {
-			for handler in queue.iter() {
-				handler();
+		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
+			if let Some(queue) = handlers.get(&vector) {
+				for handler in queue.iter() {
+					handler();
+				}
 			}
 		}
 		crate::executor::run();
@@ -124,9 +150,11 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 		debug!("Receive interrupt {}", vector);
 		increment_irq_counter(vector);
 
-		if let Some(queue) = INTERRUPT_HANDLERS.lock().get(&vector) {
-			for handler in queue.iter() {
-				handler();
+		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
+			if let Some(queue) = handlers.get(&vector) {
+				for handler in queue.iter() {
+					handler();
+				}
 			}
 		}
 		crate::executor::run();
@@ -280,24 +308,6 @@ pub(crate) fn init() {
 					irq, irqtype, irqflags
 				);
 
-				fn timer_handler() {
-					debug!("Handle timer interrupt");
-
-					// disable timer
-					unsafe {
-						asm!(
-							"msr cntp_cval_el0, xzr",
-							"msr cntp_ctl_el0, xzr",
-							options(nostack, nomem),
-						);
-					}
-				}
-
-				let mut queue = VecDeque::<fn()>::new();
-				queue.push_back(timer_handler);
-				INTERRUPT_HANDLERS
-					.lock()
-					.insert(u8::try_from(irq).unwrap() + PPI_START, queue);
 				IRQ_NAMES
 					.lock()
 					.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");

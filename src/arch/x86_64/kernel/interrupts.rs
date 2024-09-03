@@ -1,10 +1,10 @@
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::BTreeMap;
 use core::arch::asm;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
+use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
 #[cfg(not(feature = "idle-poll"))]
 use x86_64::instructions::interrupts::enable_and_hlt;
 pub use x86_64::instructions::interrupts::{disable, enable};
@@ -16,11 +16,14 @@ use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_coun
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{page_fault_handler, BasePageSize, PageSize};
 use crate::arch::x86_64::swapgs;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::mmio::get_interrupt_handlers;
+#[cfg(feature = "pci")]
+use crate::drivers::pci::get_interrupt_handlers;
+use crate::drivers::InterruptHandlerQueue;
 use crate::scheduler::{self, CoreId};
 
-type InterruptHandlerQueue = VecDeque<fn()>;
-static IRQ_HANDLERS: InterruptSpinMutex<HashMap<u8, InterruptHandlerQueue, RandomState>> =
-	InterruptSpinMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static IRQ_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> = OnceCell::new();
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
@@ -158,18 +161,8 @@ pub(crate) fn install() {
 	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
-#[cfg(any(feature = "fuse", feature = "tcp", feature = "udp", feature = "vsock"))]
-pub fn irq_install_handler(irq_number: u8, handler: fn()) {
-	debug!("Install handler for interrupt {}", irq_number);
-
-	let mut guard = IRQ_HANDLERS.lock();
-	if let Some(map) = guard.get_mut(&irq_number) {
-		map.push_back(handler);
-	} else {
-		let mut map = VecDeque::new();
-		map.push_back(handler);
-		guard.insert(irq_number, map);
-	}
+pub(crate) fn install_handlers() {
+	IRQ_HANDLERS.set(get_interrupt_handlers()).unwrap();
 }
 
 fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
@@ -177,13 +170,13 @@ fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Op
 	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
-	if let Some(map) = IRQ_HANDLERS.lock().get(&(index - 32)) {
-		debug!("received interrupt {index}");
-		for handler in map.iter() {
-			handler();
+	if let Some(handlers) = IRQ_HANDLERS.get() {
+		if let Some(map) = handlers.get(&(index - 32)) {
+			debug!("received interrupt {index}");
+			for handler in map.iter() {
+				handler();
+			}
 		}
-	} else {
-		warn!("received unhandled interrupt {index}");
 	}
 
 	apic::eoi();
