@@ -255,7 +255,7 @@ where
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
 			Err(UnmapError::PageNotMapped) => {
-				info!("Tried to unmap {page:?}, which was not mapped.")
+				debug!("Tried to unmap {page:?}, which was not mapped.")
 			}
 			Err(err) => panic!("{err:?}"),
 		}
