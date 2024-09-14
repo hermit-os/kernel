@@ -299,11 +299,7 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 			}
 		})
 	} else {
-		match poll_on(obj.async_read(buf), Some(Duration::from_secs(2))) {
-			Err(io::Error::ETIME) => block_on(obj.async_read(buf), None),
-			Err(x) => Err(x),
-			Ok(x) => Ok(x),
-		}
+		block_on(obj.async_read(buf), None)
 	}
 }
 
@@ -329,11 +325,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 			}
 		})
 	} else {
-		match poll_on(obj.async_write(buf), Some(Duration::from_secs(2))) {
-			Err(io::Error::ETIME) => block_on(obj.async_write(buf), None),
-			Err(x) => Err(x),
-			Ok(x) => Ok(x),
-		}
+		block_on(obj.async_write(buf), None)
 	}
 }
 

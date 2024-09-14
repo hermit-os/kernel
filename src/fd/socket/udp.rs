@@ -185,7 +185,7 @@ impl ObjectInterface for Socket {
 					Some(Duration::ZERO.into()),
 				)
 			} else {
-				poll_on(self.async_write_with_meta(buf, &meta), None)
+				block_on(self.async_write_with_meta(buf, &meta), None)
 			}
 		} else {
 			Err(io::Error::EIO)
@@ -202,14 +202,7 @@ impl ObjectInterface for Socket {
 				}
 			})
 		} else {
-			match poll_on(
-				self.async_recvfrom(buf),
-				Some(Duration::from_secs(2).into()),
-			) {
-				Err(io::Error::ETIME) => block_on(self.async_recvfrom(buf), None),
-				Err(x) => Err(x),
-				Ok(x) => Ok(x),
-			}
+			block_on(self.async_recvfrom(buf), None)
 		}
 	}
 
