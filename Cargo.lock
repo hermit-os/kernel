@@ -1269,9 +1269,9 @@ dependencies = [
 
 [[package]]
 name = "semihosting"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e11f0f8bcc4088e72905fcd826b820e72de6113218c22f1734cd94a3a5cf9172"
+checksum = "3f69d4d7b8d5f6595ac8901b8c4ede3339b1b4c8565f9d3180d20fc046cca177"
 
 [[package]]
 name = "shell-words"
