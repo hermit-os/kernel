@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{parse_quote, Abi, Attribute, Item, ItemFn, Pat, Result, Signature, Visibility};
+use syn::{parse_quote, Abi, Attribute, FnArg, Item, ItemFn, Pat, Result, Signature, Visibility};
 
 fn validate_vis(vis: &Visibility) -> Result<()> {
 	if !matches!(vis, Visibility::Public(_)) {
@@ -96,6 +96,38 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 	func.vis = Visibility::Inherited;
 	func.attrs.clear();
 
+	let input_idents = sig
+		.inputs
+		.iter()
+		.map(|fn_arg| match fn_arg {
+			FnArg::Typed(pat_type) => match &*pat_type.pat {
+				Pat::Ident(pat_ident) => &pat_ident.ident,
+				_ => unreachable!(),
+			},
+			_ => unreachable!(),
+		})
+		.collect::<Vec<_>>();
+	let input_format = input_idents
+		.iter()
+		.map(|ident| format!("{ident} = {{:?}}"))
+		.collect::<Vec<_>>()
+		.join(", ");
+	let strace_format = format!("{}({input_format}) = ", sig.ident);
+
+	let block = func.block;
+	func.block = parse_quote! {{
+		#[allow(unreachable_code)]
+		#[allow(clippy::diverging_sub_expression)]
+		{
+			#[cfg(feature = "strace")]
+			print!(#strace_format, #(#input_idents),*);
+			let ret = #block;
+			#[cfg(feature = "strace")]
+			println!("{ret:?}");
+			ret
+		}
+	}};
+
 	let func_call = quote! {
 		kernel_function!(#ident(#(#args),*))
 	};
@@ -156,8 +188,19 @@ mod tests {
 			#[no_mangle]
 			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
-					let c = i16::from(a) + b;
-					i32::from(c)
+					#[allow(unreachable_code)]
+					#[allow(clippy::diverging_sub_expression)]
+					{
+						#[cfg(feature = "strace")]
+						print!("sys_test(a = {:?}, b = {:?}) = ", a, b);
+						let ret = {
+							let c = i16::from(a) + b;
+							i32::from(c)
+						};
+						#[cfg(feature = "strace")]
+						println!("{ret:?}");
+						ret
+					}
 				}
 
 				kernel_function!(__sys_test(a, b))
@@ -193,8 +236,19 @@ mod tests {
 			#[no_mangle]
 			pub unsafe extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				unsafe extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
-					let c = i16::from(a) + b;
-					i32::from(c)
+					#[allow(unreachable_code)]
+					#[allow(clippy::diverging_sub_expression)]
+					{
+						#[cfg(feature = "strace")]
+						print!("sys_test(a = {:?}, b = {:?}) = ", a, b);
+						let ret = {
+							let c = i16::from(a) + b;
+							i32::from(c)
+						};
+						#[cfg(feature = "strace")]
+						println!("{ret:?}");
+						ret
+					}
 				}
 
 				unsafe { kernel_function!(__sys_test(a, b)) }
