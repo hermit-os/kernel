@@ -158,6 +158,8 @@ extern "C" fn initd(_arg: usize) {
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();
 
+	info!("Jumping into application");
+
 	#[cfg(not(test))]
 	unsafe {
 		// And finally start the application.
