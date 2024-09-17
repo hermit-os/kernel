@@ -45,6 +45,12 @@ riscv = "0.11"
 sbi-rt = "0.0.3"
 sptr = "0.3"
 
+[profile.dev]
+# This is a workaround for the loader growing too large to boot with QEMU's multiboot.
+# This broke last with nightly-2024-06-29 (https://github.com/rust-lang/rust/compare/9c3bc805dd9cb84019c124b9a50fdff1e62a7ec9...e9e6e2e444c30c23a9c878a88fbc3978c2acad95)
+# We should fix this properly, allowing larger loaders to still function correctly.
+opt-level = 1
+
 [profile.release]
 strip = "debuginfo"
 lto = true
