@@ -24,12 +24,7 @@ use crate::drivers::virtio::virtqueue::{
 use crate::drivers::vsock::pci::VsockDevCfgRaw;
 use crate::mm::device_alloc::DeviceAlloc;
 
-fn fill_queue(
-	vq: &mut dyn Virtq,
-	num_packets: u16,
-	packet_size: u32,
-	poll_sender: async_channel::Sender<UsedBufferToken>,
-) {
+fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(
 			vec![],
@@ -51,12 +46,7 @@ fn fill_queue(
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
 		// Transfers will be awaited at the queue
-		match vq.dispatch(
-			buff_tkn,
-			Some(poll_sender.clone()),
-			false,
-			BufferType::Direct,
-		) {
+		match vq.dispatch(buff_tkn, false, BufferType::Direct) {
 			Ok(_) => (),
 			Err(err) => {
 				error!("{:#?}", err);
@@ -68,19 +58,14 @@ fn fill_queue(
 
 pub(crate) struct RxQueue {
 	vq: Option<Box<dyn Virtq>>,
-	poll_sender: async_channel::Sender<UsedBufferToken>,
-	poll_receiver: async_channel::Receiver<UsedBufferToken>,
 	packet_size: u32,
 }
 
 impl RxQueue {
 	pub fn new() -> Self {
-		let (poll_sender, poll_receiver) = async_channel::unbounded();
-
 		Self {
 			vq: None,
-			poll_sender,
-			poll_receiver,
+
 			packet_size: crate::VSOCK_PACKET_SIZE,
 		}
 	}
@@ -89,12 +74,7 @@ impl RxQueue {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
 		info!("num_packets {}", num_packets);
-		fill_queue(
-			vq.as_mut(),
-			num_packets,
-			self.packet_size,
-			self.poll_sender.clone(),
-		);
+		fill_queue(vq.as_mut(), num_packets, self.packet_size);
 
 		self.vq = Some(vq);
 	}
@@ -112,22 +92,7 @@ impl RxQueue {
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
-		let transfer = self.poll_receiver.try_recv();
-
-		transfer
-			.or_else(|_| {
-				// Check if any not yet provided transfers are in the queue.
-				self.poll();
-
-				self.poll_receiver.try_recv()
-			})
-			.ok()
-	}
-
-	fn poll(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.poll();
-		}
+		self.vq.as_mut().unwrap().try_recv().ok()
 	}
 
 	pub fn process_packet<F>(&mut self, mut f: F)
@@ -144,7 +109,7 @@ impl RxQueue {
 			if let Some(ref mut vq) = self.vq {
 				f(&header, &packet[..]);
 
-				fill_queue(vq.as_mut(), 1, self.packet_size, self.poll_sender.clone());
+				fill_queue(vq.as_mut(), 1, self.packet_size);
 			} else {
 				panic!("Invalid length of receive queue");
 			}
@@ -185,7 +150,7 @@ impl TxQueue {
 
 	fn poll(&mut self) {
 		if let Some(ref mut vq) = self.vq {
-			vq.poll();
+			while vq.try_recv().is_ok() {}
 		}
 	}
 
@@ -198,9 +163,8 @@ impl TxQueue {
 	{
 		// We need to poll to get the queue to remove elements from the table and make space for
 		// what we are about to add
+		self.poll();
 		if let Some(ref mut vq) = self.vq {
-			vq.poll();
-
 			assert!(len < usize::try_from(self.packet_length).unwrap());
 			let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
 			let result = unsafe {
@@ -213,8 +177,7 @@ impl TxQueue {
 
 			let buff_tkn = AvailBufferToken::new(vec![BufferElem::Vector(packet)], vec![]).unwrap();
 
-			vq.dispatch(buff_tkn, None, false, BufferType::Direct)
-				.unwrap();
+			vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
 
 			result
 		} else {
@@ -225,19 +188,13 @@ impl TxQueue {
 
 pub(crate) struct EventQueue {
 	vq: Option<Box<dyn Virtq>>,
-	poll_sender: async_channel::Sender<UsedBufferToken>,
-	poll_receiver: async_channel::Receiver<UsedBufferToken>,
 	packet_size: u32,
 }
 
 impl EventQueue {
 	pub fn new() -> Self {
-		let (poll_sender, poll_receiver) = async_channel::unbounded();
-
 		Self {
 			vq: None,
-			poll_sender,
-			poll_receiver,
 			packet_size: 128u32,
 		}
 	}
@@ -248,12 +205,7 @@ impl EventQueue {
 	fn add(&mut self, mut vq: Box<dyn Virtq>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		fill_queue(
-			vq.as_mut(),
-			num_packets,
-			self.packet_size,
-			self.poll_sender.clone(),
-		);
+		fill_queue(vq.as_mut(), num_packets, self.packet_size);
 		self.vq = Some(vq);
 	}
 
