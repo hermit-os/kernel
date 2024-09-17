@@ -54,6 +54,4 @@ pub fn exit_boot_services() {
 	let bump = BumpAllocator::from(mem);
 
 	*ALLOCATOR.0.lock() = GlobalAllocator::Bump(bump);
-
-	uefi::allocator::exit_boot_services();
 }

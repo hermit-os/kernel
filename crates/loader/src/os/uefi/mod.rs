@@ -14,21 +14,17 @@ pub use self::console::CONSOLE;
 
 // Entry Point of the Uefi Loader
 #[entry]
-fn loader_main(_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
+fn main() -> Status {
 	uefi::helpers::init().unwrap();
-	unsafe {
-		uefi::allocator::init(&mut system_table);
-	}
 	crate::log::init();
 
-	let app = read_app(system_table.boot_services());
+	let app = read_app();
 
 	let string = String::from_utf8(app).unwrap();
 	println!("{string}");
 
 	allocator::exit_boot_services();
-	let (_runtime_system_table, _memory_map) =
-		unsafe { system_table.exit_boot_services(MemoryType::LOADER_DATA) };
+	let _memory_map = unsafe { boot::exit_boot_services(MemoryType::LOADER_DATA) };
 
 	println!("Exited boot services!");
 	println!("Allocations still {}!", String::from("work"));
@@ -38,10 +34,9 @@ fn loader_main(_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
 	qemu_exit_handle.exit_success()
 }
 
-fn read_app(bt: &BootServices) -> Vec<u8> {
-	let fs = bt
-		.get_image_file_system(bt.image_handle())
-		.expect("should open file system");
+fn read_app() -> Vec<u8> {
+	let image_handle = boot::image_handle();
+	let fs = boot::get_image_file_system(image_handle).expect("should open file system");
 
 	let path = Path::new(cstr16!(r"\efi\boot\hermit-app"));
 
