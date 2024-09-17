@@ -19,7 +19,6 @@ use core::any::Any;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
-use async_channel::TryRecvError;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
@@ -88,8 +87,6 @@ impl From<VqSize> for u16 {
 	}
 }
 
-type UsedBufferTokenSender = async_channel::Sender<UsedBufferToken>;
-
 // Public interface of Virtq
 
 /// The Virtq trait unifies access to the two different Virtqueue types
@@ -106,7 +103,6 @@ pub trait Virtq {
 	fn dispatch(
 		&mut self,
 		tkn: AvailBufferToken,
-		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError>;
@@ -125,21 +121,20 @@ pub trait Virtq {
 		tkn: AvailBufferToken,
 		buffer_type: BufferType,
 	) -> Result<UsedBufferToken, VirtqError> {
-		let (sender, receiver) = async_channel::bounded(1);
-		self.dispatch(tkn, Some(sender), false, buffer_type)?;
+		self.dispatch(tkn, false, buffer_type)?;
 
 		self.disable_notifs();
 
 		let result: UsedBufferToken;
 		// Keep Spinning until the receive queue is filled
 		loop {
-			match receiver.try_recv() {
-				Ok(buffer_tkn) => {
-					result = buffer_tkn;
-					break;
-				}
-				Err(TryRecvError::Closed) => return Err(VirtqError::General),
-				Err(TryRecvError::Empty) => self.poll(),
+			// TODO: normally, we should check if the used buffer in question is the one
+			// we just made available. However, this shouldn't be a problem as the queue this
+			// function is called on makes use of this blocking dispatch function exclusively
+			// and thus dispatches cannot be interleaved.
+			if let Ok(buffer_tkn) = self.try_recv() {
+				result = buffer_tkn;
+				break;
 			}
 		}
 
@@ -156,10 +151,7 @@ pub trait Virtq {
 
 	/// Checks if new used descriptors have been written by the device.
 	/// This activates the queue and polls the descriptor ring of the queue.
-	///
-	/// * `TransferTokens` which hold an `await_queue` will be placed into
-	///   these queues.
-	fn poll(&mut self);
+	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError>;
 
 	/// Dispatches a batch of [AvailBufferToken]s. The buffers are provided to the queue in
 	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
@@ -189,7 +181,6 @@ pub trait Virtq {
 	fn dispatch_batch_await(
 		&mut self,
 		tkns: Vec<(AvailBufferToken, BufferType)>,
-		await_queue: UsedBufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError>;
 
@@ -242,7 +233,6 @@ trait VirtqPrivate {
 	/// After this call, the buffers are no longer writable.
 	fn transfer_token_from_buffer_token(
 		buff_tkn: AvailBufferToken,
-		await_queue: Option<UsedBufferTokenSender>,
 		buffer_type: BufferType,
 	) -> TransferToken<Self::Descriptor> {
 		let ctrl_desc = match buffer_type {
@@ -252,7 +242,6 @@ trait VirtqPrivate {
 
 		TransferToken {
 			buff_tkn,
-			await_queue,
 			ctrl_desc,
 		}
 	}
@@ -334,11 +323,6 @@ pub struct TransferToken<Descriptor> {
 	/// Must be some in order to prevent drop
 	/// upon reuse.
 	buff_tkn: AvailBufferToken,
-	/// Structure which allows to await Transfers
-	/// If Some, finished TransferTokens will be placed here
-	/// as finished `Transfers`. If None, only the state
-	/// of the Token will be changed.
-	await_queue: Option<UsedBufferTokenSender>,
 	// Contains the [MemDescr] for the indirect table if the transfer is indirect.
 	ctrl_desc: Option<Box<[Descriptor]>>,
 }
@@ -616,6 +600,7 @@ pub mod error {
 		FeatureNotSupported(virtio::F),
 		AllocationError,
 		IncompleteWrite,
+		NoNewUsed,
 	}
 
 	impl core::fmt::Debug for VirtqError {
@@ -644,6 +629,9 @@ pub mod error {
 				),
 				VirtqError::IncompleteWrite => {
 					write!(f, "A sized object was partially initialized.")
+				}
+				VirtqError::NoNewUsed => {
+					write!(f, "The queue does not contain any new used buffers.")
 				}
 			}
 		}
