@@ -4,7 +4,7 @@ use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
 
-use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
+use crate::arch::x86_64::kernel::{boot_info, get_fdt, get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::{env, mm};
@@ -110,36 +110,45 @@ fn detect_from_uhyve() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let limit = get_limit();
-	assert_ne!(limit, 0);
+	let physmem_end = get_limit();
+	assert_ne!(physmem_end, 0);
 	let mut free_list = PHYSICAL_FREE_LIST.lock();
 	let total_memory;
 
+	let kernel_end = mm::kernel_end_address().as_usize();
 	// add gap for the APIC
-	if limit > KVM_32BIT_GAP_START {
-		let range =
-			PageRange::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START).unwrap();
+	assert!(
+		!(KVM_32BIT_GAP_START..=KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE).contains(&kernel_end),
+		"Kernel was loaded into the KVM 32BIT GAP"
+	);
+	if physmem_end > KVM_32BIT_GAP_START && kernel_end < KVM_32BIT_GAP_START {
+		let range = PageRange::new(kernel_end, KVM_32BIT_GAP_START).unwrap();
 		unsafe {
 			free_list.deallocate(range).unwrap();
 		}
-		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
-			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
+		if physmem_end > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
+			let range =
+				PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, physmem_end).unwrap();
 			unsafe {
 				free_list.deallocate(range).unwrap();
 			}
-			total_memory = limit - KVM_32BIT_GAP_SIZE;
+			total_memory = boot_info().hardware_info.phys_addr_range.end
+				- boot_info().hardware_info.phys_addr_range.start
+				- KVM_32BIT_GAP_SIZE as u64;
 		} else {
-			total_memory = KVM_32BIT_GAP_START;
+			total_memory =
+				KVM_32BIT_GAP_START as u64 - boot_info().hardware_info.phys_addr_range.start;
 		}
 	} else {
-		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
+		let range = PageRange::new(kernel_end, physmem_end).unwrap();
 		unsafe {
 			free_list.deallocate(range).unwrap();
 		}
-		total_memory = limit;
+		total_memory = boot_info().hardware_info.phys_addr_range.end
+			- boot_info().hardware_info.phys_addr_range.start;
 	}
 
-	TOTAL_MEMORY.store(total_memory, Ordering::Relaxed);
+	TOTAL_MEMORY.store(total_memory as usize, Ordering::Relaxed);
 
 	Ok(())
 }
