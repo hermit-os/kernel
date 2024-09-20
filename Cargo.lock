@@ -4,6 +4,16 @@ version = 4
 
 [[package]]
 name = "aarch64"
+version = "0.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0adf345d8b4e2861016511db094993ee8a9f74195f55ccf62d1305d35ab91bfa"
+dependencies = [
+ "aarch64-cpu",
+ "tock-registers 0.8.1",
+]
+
+[[package]]
+name = "aarch64"
 version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9dfa8287e400aa9af0c4e0c93967882634f7972b94b74fd5110507b486a1ced4"
@@ -598,7 +608,7 @@ dependencies = [
 name = "hermit-kernel"
 version = "0.8.0"
 dependencies = [
- "aarch64",
+ "aarch64 0.0.13",
  "ahash",
  "align-address",
  "anstyle",
@@ -644,6 +654,7 @@ dependencies = [
  "tock-registers 0.9.0",
  "trapframe",
  "uart_16550",
+ "uhyve-interface",
  "virtio-spec",
  "volatile 0.6.1",
  "x86",
@@ -1674,6 +1685,18 @@ dependencies = [
  "bitflags 2.6.0",
  "rustversion",
  "x86",
+]
+
+[[package]]
+name = "uhyve-interface"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a2459b911a74b04f4b4b0659aad453a3672d5997589d1aed3b0053af12c22e6"
+dependencies = [
+ "aarch64 0.0.11",
+ "memory_addresses",
+ "num_enum",
+ "x86_64",
 ]
 
 [[package]]
