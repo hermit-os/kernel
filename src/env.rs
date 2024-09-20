@@ -100,12 +100,22 @@ impl Default for Cli {
 					env_vars.insert(String::from("UHYVE_MOUNT"), gateway);
 				}
 				"--" => args.extend(&mut words),
+				word if word.contains('=') => {
+					let (arg, value) = word.split_once('=').unwrap();
+
+					match arg {
+						"env" => {
+							let Some((key, value)) = value.split_once('=') else {
+								error!("could not parse bootarg: {word}");
+								continue;
+							};
+							env_vars.insert(key.to_string(), value.to_string());
+						}
+						_ => error!("could not parse bootarg: {word}"),
+					}
+				}
 				_ if image_path.is_none() => image_path = Some(word),
-				word => warn!(
-					"Found argument '{word}' which wasn't expected, or isn't valid in this context
-			
- 		If you tried to supply `{word}` as a value rather than a flag, use `-- {word}`"
-				),
+				word => error!("could not parse bootarg: {word}"),
 			};
 		}
 
