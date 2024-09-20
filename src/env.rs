@@ -2,9 +2,10 @@
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::str;
+use core::{ptr, str};
 
 use ahash::RandomState;
+use fdt::Fdt;
 use hashbrown::hash_map::Iter;
 use hashbrown::HashMap;
 use hermit_entry::boot_info::PlatformInfo;
@@ -36,6 +37,17 @@ pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
+pub fn fdt() -> Option<Fdt<'static>> {
+	kernel::boot_info().hardware_info.device_tree.map(|fdt| {
+		let ptr = ptr::with_exposed_provenance(fdt.get().try_into().unwrap());
+		unsafe { Fdt::from_ptr(ptr).unwrap() }
+	})
+}
+
+pub fn fdt_args() -> Option<&'static str> {
+	fdt().and_then(|fdt| fdt.chosen().bootargs())
+}
+
 impl Default for Cli {
 	fn default() -> Self {
 		let mut image_path = None;
@@ -44,11 +56,10 @@ impl Default for Cli {
 		let mut env_vars = HashMap::<String, String, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
-		let mut args = Vec::new();
-		let mut mmio = Vec::new();
 
-		let words = shell_words::split(kernel::args().unwrap_or_default()).unwrap();
-		debug!("cli_words = {words:?}");
+		let args = kernel::args().or_else(fdt_args).unwrap_or_default();
+		info!("bootargs = {args}");
+		let words = shell_words::split(args).unwrap();
 
 		let mut words = words.into_iter();
 		let expect_arg = |arg: Option<String>, name: &str| {
@@ -56,6 +67,9 @@ impl Default for Cli {
 				panic!("The argument '{name}' requires a value but none was supplied")
 			})
 		};
+
+		let mut args = Vec::new();
+		let mut mmio = Vec::new();
 		while let Some(word) = words.next() {
 			if word.as_str().starts_with("virtio_mmio.device=") {
 				let v: Vec<&str> = word.as_str().split('=').collect();
