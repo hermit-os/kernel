@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 use core::ptr;
+use core::task::Waker;
 
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
@@ -156,6 +157,7 @@ pub struct SplitVq {
 	index: VqIndex,
 
 	notif_ctrl: NotifCtrl,
+	waker_registrar: Box<dyn Fn(Waker)>,
 }
 
 impl Virtq for SplitVq {
@@ -221,6 +223,7 @@ impl Virtq for SplitVq {
 		size: VqSize,
 		index: VqIndex,
 		features: virtio::F,
+		waker_registrar: Box<dyn Fn(Waker)>,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
 		let mut vq_handler = match com_cfg.select_vq(index.into()) {
@@ -301,6 +304,7 @@ impl Virtq for SplitVq {
 			notif_ctrl,
 			size: VqSize(size),
 			index,
+			waker_registrar,
 		})
 	}
 
@@ -310,6 +314,10 @@ impl Virtq for SplitVq {
 
 	fn has_used_buffers(&self) -> bool {
 		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
+	}
+
+	fn register_waker(&self, waker: Waker) {
+		(self.waker_registrar)(waker)
 	}
 }
 

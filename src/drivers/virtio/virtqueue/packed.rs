@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
 use core::sync::atomic::{fence, Ordering};
+use core::task::Waker;
 use core::{ops, ptr};
 
 use align_address::Align;
@@ -519,6 +520,7 @@ pub struct PackedVq {
 	/// device and is unique on a per device basis.
 	index: VqIndex,
 	last_next: Cell<RingIdx>,
+	waker_registrar: Box<dyn Fn(Waker)>,
 }
 
 // Public interface of PackedVq
@@ -642,6 +644,7 @@ impl Virtq for PackedVq {
 		size: VqSize,
 		index: VqIndex,
 		features: virtio::F,
+		waker_registrar: Box<dyn Fn(Waker)>,
 	) -> Result<Self, VirtqError> {
 		// Currently we do not have support for in order use.
 		// This steems from the fact, that the packedVq ReadCtrl currently is not
@@ -725,6 +728,7 @@ impl Virtq for PackedVq {
 			size: VqSize::from(vq_size),
 			index,
 			last_next: Default::default(),
+			waker_registrar,
 		})
 	}
 
@@ -735,6 +739,10 @@ impl Virtq for PackedVq {
 	fn has_used_buffers(&self) -> bool {
 		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
 		self.descr_ring.is_marked_used(desc.flags)
+	}
+
+	fn register_waker(&self, waker: core::task::Waker) {
+		(self.waker_registrar)(waker);
 	}
 }
 

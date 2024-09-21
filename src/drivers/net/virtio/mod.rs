@@ -641,6 +641,7 @@ impl VirtioNetDriver {
 						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 						VqIndex::from(self.num_vqs),
 						self.dev_cfg.features.into(),
+						Box::new(|_waker| {}),
 					)
 					.unwrap(),
 				)));
@@ -652,6 +653,7 @@ impl VirtioNetDriver {
 						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 						VqIndex::from(self.num_vqs),
 						self.dev_cfg.features.into(),
+						Box::new(|_waker| {}),
 					)
 					.unwrap(),
 				)));
@@ -716,6 +718,7 @@ impl VirtioNetDriver {
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i),
 					self.dev_cfg.features.into(),
+					Box::new(|_waker| {}),
 				)
 				.unwrap();
 				// Interrupt for receiving packets is wanted
@@ -729,6 +732,7 @@ impl VirtioNetDriver {
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i + 1),
 					self.dev_cfg.features.into(),
+					Box::new(|_waker| {}),
 				)
 				.unwrap();
 				// Interrupt for comunicating that a sended packet left, is not needed
@@ -742,6 +746,7 @@ impl VirtioNetDriver {
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i),
 					self.dev_cfg.features.into(),
+					Box::new(|_waker| {}),
 				)
 				.unwrap();
 				// Interrupt for receiving packets is wanted
@@ -755,6 +760,7 @@ impl VirtioNetDriver {
 					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 					VqIndex::from(2 * i + 1),
 					self.dev_cfg.features.into(),
+					Box::new(|_waker| {}),
 				)
 				.unwrap();
 				// Interrupt for comunicating that a sended packet left, is not needed

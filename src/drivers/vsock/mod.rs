@@ -357,6 +357,7 @@ impl VirtioVsockDriver {
 				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 				VqIndex::from(0u16),
 				self.dev_cfg.features.into(),
+				Box::new(|_waker| {}),
 			)
 			.unwrap(),
 		));
@@ -370,6 +371,7 @@ impl VirtioVsockDriver {
 				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 				VqIndex::from(1u16),
 				self.dev_cfg.features.into(),
+				Box::new(|_waker| {}),
 			)
 			.unwrap(),
 		));
@@ -384,6 +386,7 @@ impl VirtioVsockDriver {
 				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 				VqIndex::from(2u16),
 				self.dev_cfg.features.into(),
+				Box::new(|_waker| {}),
 			)
 			.unwrap(),
 		));

@@ -18,7 +18,7 @@ use volatile::{VolatilePtr, VolatileRef};
 
 #[cfg(all(
 	not(feature = "rtl8139"),
-	any(feature = "tcp", feature = "udp", feature = "vsock")
+	any(feature = "tcp", feature = "udp", feature = "vsock", feature = "fuse")
 ))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::memory_barrier;
@@ -34,7 +34,7 @@ use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::VirtioError;
 #[cfg(all(
 	not(feature = "rtl8139"),
-	any(feature = "tcp", feature = "udp", feature = "vsock")
+	any(feature = "tcp", feature = "udp", feature = "vsock", feature = "fuse")
 ))]
 use crate::drivers::virtio::transport::hardware;
 #[cfg(feature = "vsock")]
@@ -993,7 +993,22 @@ pub(crate) fn init_device(
 				Ok(drv)
 			}
 			#[cfg(feature = "fuse")]
-			VirtioDriver::FileSystem(_) => Ok(drv),
+			VirtioDriver::FileSystem(_) => {
+				let irq = device.get_irq().unwrap();
+
+				info!("Install virtio interrupt handler at line {}", irq);
+
+				fn file_system_handler() {
+					if let Some(driver) = hardware::get_filesystem_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				irq_install_handler(irq, file_system_handler);
+				add_irq_name(irq, "virtio file system");
+
+				Ok(drv)
+			}
 		},
 		Err(virt_err) => Err(virt_err),
 	}

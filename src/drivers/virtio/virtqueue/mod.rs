@@ -14,11 +14,15 @@ pub mod split;
 
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
+use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::any::Any;
+use core::future::Future;
 use core::mem::MaybeUninit;
+use core::task::{Poll, Waker};
 use core::{mem, ptr};
 
+use hermit_sync::SpinMutex;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
@@ -88,6 +92,8 @@ impl From<VqSize> for u16 {
 }
 
 // Public interface of Virtq
+
+pub(crate) type VirtqMutex = Rc<SpinMutex<Box<dyn Virtq>>>;
 
 /// The Virtq trait unifies access to the two different Virtqueue types
 /// [packed::PackedVq] and [split::SplitVq].
@@ -195,6 +201,7 @@ pub trait Virtq {
 		size: VqSize,
 		index: VqIndex,
 		features: virtio::F,
+		waker_registrar: Box<dyn Fn(Waker)>,
 	) -> Result<Self, VirtqError>
 	where
 		Self: Sized;
@@ -207,6 +214,34 @@ pub trait Virtq {
 	fn index(&self) -> VqIndex;
 
 	fn has_used_buffers(&self) -> bool;
+
+	fn recv(&mut self, mutex_self: VirtqMutex) -> Recv {
+		Recv { vq: mutex_self }
+	}
+
+	fn register_waker(&self, waker: Waker);
+}
+
+pub(crate) struct Recv {
+	vq: Rc<SpinMutex<Box<dyn Virtq>>>,
+}
+
+impl Future for Recv {
+	type Output = Result<UsedBufferToken, VirtqError>;
+
+	fn poll(
+		self: core::pin::Pin<&mut Self>,
+		cx: &mut core::task::Context<'_>,
+	) -> Poll<Self::Output> {
+		let mut vq = self.vq.lock();
+		let try_result = vq.try_recv();
+		if let Err(VirtqError::NoNewUsed) = try_result {
+			vq.register_waker(cx.waker().clone());
+			Poll::Pending
+		} else {
+			Poll::Ready(try_result)
+		}
+	}
 }
 
 /// These methods are an implementation detail and are meant only for consumption by the default method

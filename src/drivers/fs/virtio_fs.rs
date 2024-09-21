@@ -1,8 +1,11 @@
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
+use core::task::Waker;
 
+use hermit_sync::SpinMutex;
 use pci_types::InterruptLine;
 use virtio::fs::ConfigVolatileFieldAccess;
 use virtio::FeatureBits;
@@ -10,6 +13,7 @@ use volatile::access::ReadOnly;
 use volatile::VolatileRef;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::error::VirtioFsError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -18,9 +22,11 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, Virtq, VirtqMutex, VqIndex, VqSize,
 };
+use crate::executor::block_on;
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
+use crate::io;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -42,8 +48,9 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
-	pub(super) vqueues: Vec<Box<dyn Virtq>>,
+	pub(super) vqueues: Vec<VirtqMutex>,
 	pub(super) irq: InterruptLine,
+	pub(super) waker: Option<Waker>,
 }
 
 // Backend-independent interface for Virtio network driver
@@ -136,15 +143,38 @@ impl VirtioFsDriver {
 				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
 				VqIndex::from(i),
 				self.dev_cfg.features.into(),
+				Box::new(|waker| get_filesystem_driver().unwrap().lock().waker = Some(waker)),
 			)
 			.unwrap();
-			self.vqueues.push(Box::new(vq));
+			self.vqueues.push(Rc::new(SpinMutex::new(Box::new(vq))));
 		}
 
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
 		Ok(())
+	}
+
+	pub(crate) fn handle_interrupt(&mut self) {
+		let status = self.isr_stat.is_queue_interrupt();
+
+		#[cfg(not(feature = "pci"))]
+		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
+			info!("Configuration changes are not possible! Aborting");
+			todo!("Implement possibility to change config on the fly...")
+		}
+
+		#[cfg(feature = "pci")]
+		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
+			info!("Configuration changes are not possible! Aborting");
+			todo!("Implement possibility to change config on the fly...")
+		}
+
+		if let Some(waker) = &self.waker {
+			waker.wake_by_ref();
+		}
+
+		self.isr_stat.acknowledge();
 	}
 }
 
@@ -179,8 +209,17 @@ impl FuseInterface for VirtioFsDriver {
 		};
 
 		let buffer_tkn = AvailBufferToken::new(send, recv).unwrap();
+		let vq = &mut self.vqueues[1];
+		let vq_clone = vq.clone();
+		let recv_future = {
+			let mut vq_guard = vq.lock();
+			vq_guard.dispatch(buffer_tkn, false, BufferType::Direct)?;
+			dbg!();
+			vq_guard.recv(vq_clone)
+		};
 		let mut transfer_result =
-			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
+			block_on(async { recv_future.await.or(Err(io::Error::EIO)) }, None)
+				.or(Err(VirtqError::General))?;
 
 		let headers = transfer_result.used_recv_buff.pop_front_downcast().unwrap();
 		let payload = transfer_result.used_recv_buff.pop_front_vec();

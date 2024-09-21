@@ -15,7 +15,7 @@ pub mod pci;
 ))]
 use crate::arch::kernel::mmio as hardware;
 #[cfg(all(
-	any(feature = "vsock", feature = "tcp", feature = "udp"),
+	any(feature = "vsock", feature = "tcp", feature = "udp", feature = "fuse"),
 	feature = "pci"
 ))]
 use crate::drivers::pci as hardware;
