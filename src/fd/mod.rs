@@ -152,109 +152,91 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn async_read(&self, _buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	async fn async_write(&self, _buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, _buf: &[u8]) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
+	}
+
+	/// `lseek` function repositions the offset of the file descriptor fildes
+	async fn lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
+		Err(io::Error::EINVAL)
 	}
 
 	/// `is_nonblocking` returns `true`, if `read`, `write`, `recv` and send operations
 	/// don't block.
-	fn is_nonblocking(&self) -> bool {
-		false
-	}
-
-	/// `lseek` function repositions the offset of the file descriptor fildes
-	async fn async_lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
-		Err(io::Error::EINVAL)
+	async fn is_nonblocking(&self) -> io::Result<bool> {
+		Ok(false)
 	}
 
 	/// `fstat`
-	fn fstat(&self, _stat: &mut FileAttr) -> io::Result<()> {
-		Err(io::Error::EINVAL)
-	}
-
-	/// `unlink` removes file entry
-	#[allow(dead_code)]
-	fn unlink(&self, _path: &str) -> io::Result<()> {
-		Err(io::Error::EINVAL)
-	}
-
-	/// `rmdir` removes directory entry
-	#[allow(dead_code)]
-	fn rmdir(&self, _path: &str) -> io::Result<()> {
+	async fn fstat(&self) -> io::Result<FileAttr> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
-		Err(io::Error::EINVAL)
-	}
-
-	/// `mkdir` creates a directory entry
-	#[allow(dead_code)]
-	fn mkdir(&self, _path: &str, _mode: u32) -> io::Result<()> {
+	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn accept(&self) -> io::Result<Endpoint> {
+	async fn accept(&self) -> io::Result<Endpoint> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn connect(&self, _endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&self, _endpoint: Endpoint) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn bind(&self, _name: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&self, _name: ListenEndpoint) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `listen` for connections on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn listen(&self, _backlog: i32) -> io::Result<()> {
+	async fn listen(&self, _backlog: i32) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
+	async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
+	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
 		Err(io::Error::EINVAL)
 	}
 
 	/// `getsockname` gets socket name
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn getsockname(&self) -> Option<Endpoint> {
-		None
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
+		Ok(None)
 	}
 
 	/// `getpeername` get address of connected peer
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	#[allow(dead_code)]
-	fn getpeername(&self) -> Option<Endpoint> {
-		None
+	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
+		Ok(None)
 	}
 
 	/// receive a message from a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -266,19 +248,19 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn sendto(&self, _buffer: &[u8], _endpoint: Endpoint) -> io::Result<usize> {
+	async fn sendto(&self, _buffer: &[u8], _endpoint: Endpoint) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// shut down part of a full-duplex connection
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	fn shutdown(&self, _how: i32) -> io::Result<()> {
+	async fn shutdown(&self, _how: i32) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
 
 	/// The `ioctl` function manipulates the underlying device parameters of special
 	/// files.
-	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
+	async fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
 }
@@ -290,8 +272,8 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	if obj.is_nonblocking() {
-		poll_on(obj.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
+	if block_on(obj.is_nonblocking(), None)? {
+		poll_on(obj.read(buf), Some(Duration::ZERO)).map_err(|x| {
 			if x == io::Error::ETIME {
 				io::Error::EAGAIN
 			} else {
@@ -299,14 +281,14 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 			}
 		})
 	} else {
-		block_on(obj.async_read(buf), None)
+		block_on(obj.read(buf), None)
 	}
 }
 
 pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 	let obj = get_object(fd)?;
 
-	block_on(obj.async_lseek(offset, whence), None)
+	block_on(obj.lseek(offset, whence), None)
 }
 
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
@@ -316,8 +298,8 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	if obj.is_nonblocking() {
-		poll_on(obj.async_write(buf), Some(Duration::ZERO)).map_err(|x| {
+	if block_on(obj.is_nonblocking(), None)? {
+		poll_on(obj.write(buf), Some(Duration::ZERO)).map_err(|x| {
 			if x == io::Error::ETIME {
 				io::Error::EAGAIN
 			} else {
@@ -325,7 +307,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 			}
 		})
 	} else {
-		block_on(obj.async_write(buf), None)
+		block_on(obj.write(buf), None)
 	}
 }
 
@@ -375,6 +357,11 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	}
 
 	result
+}
+
+pub fn fstat(fd: FileDescriptor) -> io::Result<FileAttr> {
+	let obj = get_object(fd)?;
+	block_on(obj.fstat(), None)
 }
 
 /// Wait for some event on a file descriptor.

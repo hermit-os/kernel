@@ -18,6 +18,7 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+use crate::executor::block_on;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, EventFlags, FileDescriptor, IoCtl,
 	OpenOption, PollFd,
@@ -345,13 +346,15 @@ pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> 
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
-	let stat = unsafe { &mut *stat };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	if stat.is_null() {
+		return -crate::errno::EINVAL;
+	}
+
+	crate::fd::fstat(fd).map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-		|v| {
-			(*v).fstat(stat)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		|v| unsafe {
+			*stat = v;
+			0
 		},
 	)
 }
@@ -529,7 +532,7 @@ pub unsafe extern "C" fn sys_ioctl(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				(*v).ioctl(IoCtl::NonBlocking, value != 0)
+				block_on((*v).ioctl(IoCtl::NonBlocking, value != 0), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			},
 		)
@@ -554,7 +557,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				(*v).ioctl(IoCtl::NonBlocking, true)
+				block_on((*v).ioctl(IoCtl::NonBlocking, true), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			},
 		)
@@ -603,7 +606,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	obj.map_or_else(
 		|_| -crate::errno::EINVAL as i64,
 		|v| {
-			(*v).readdir().map_or_else(
+			block_on((*v).readdir(), None).map_or_else(
 				|e| -num::ToPrimitive::to_i64(&e).unwrap(),
 				|v| {
 					for i in v.iter() {
