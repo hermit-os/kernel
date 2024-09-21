@@ -52,12 +52,11 @@ fn detect_from_fdt() -> Result<(), ()> {
 		}
 	}
 
-	assert!(
-		found_ram,
-		"Could not find any available RAM in the Devicetree Memory Map"
-	);
-
-	Ok(())
+	if found_ram {
+		Ok(())
+	} else {
+		Err(())
+	}
 }
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
