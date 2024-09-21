@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 use core::future;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::Poll;
-use core::time::Duration;
 
 use async_trait::async_trait;
 use virtio::vsock::{Hdr, Op, Type};
@@ -14,7 +13,7 @@ use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::executor::vsock::{VsockState, VSOCK_MAP};
-use crate::fd::{block_on, poll_on, Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 
 #[derive(Debug)]
@@ -131,7 +130,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
 				self.port.store(ep.port, Ordering::Release);
@@ -147,7 +146,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
 		match endpoint {
 			Endpoint::Vsock(ep) => {
 				const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
@@ -155,146 +154,143 @@ impl ObjectInterface for Socket {
 				self.port.store(port, Ordering::Release);
 				self.port.store(ep.cid, Ordering::Release);
 
-				let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
-				let local_cid = driver_guard.get_cid();
+				future::poll_fn(|_cx| {
+					if let Some(mut driver_guard) = hardware::get_vsock_driver().unwrap().try_lock()
+					{
+						let local_cid = driver_guard.get_cid();
 
-				driver_guard.send_packet(HEADER_SIZE, |buffer| {
-					let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+						driver_guard.send_packet(HEADER_SIZE, |buffer| {
+							let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
 
-					response.src_cid = le64::from_ne(local_cid);
-					response.dst_cid = le64::from_ne(ep.cid as u64);
-					response.src_port = le32::from_ne(port);
-					response.dst_port = le32::from_ne(ep.port);
-					response.len = le32::from_ne(0);
-					response.type_ = le16::from_ne(Type::Stream.into());
-					response.op = le16::from_ne(Op::Request.into());
-					response.flags = le32::from_ne(0);
-					response.buf_alloc =
-						le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
-					response.fwd_cnt = le32::from_ne(0);
-				});
+							response.src_cid = le64::from_ne(local_cid);
+							response.dst_cid = le64::from_ne(ep.cid as u64);
+							response.src_port = le32::from_ne(port);
+							response.dst_port = le32::from_ne(ep.port);
+							response.len = le32::from_ne(0);
+							response.type_ = le16::from_ne(Type::Stream.into());
+							response.op = le16::from_ne(Op::Request.into());
+							response.flags = le32::from_ne(0);
+							response.buf_alloc = le32::from_ne(
+								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
+							);
+							response.fwd_cnt = le32::from_ne(0);
+						});
 
-				drop(driver_guard);
+						Poll::Ready(())
+					} else {
+						Poll::Pending
+					}
+				})
+				.await;
 
-				poll_on(
-					async {
-						future::poll_fn(|cx| {
-							let mut guard = VSOCK_MAP.lock();
-							let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+				future::poll_fn(|cx| {
+					let mut guard = VSOCK_MAP.lock();
+					let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
 
-							match raw.state {
-								VsockState::Connected => Poll::Ready(Ok(())),
-								VsockState::Connecting => {
-									raw.rx_waker.register(cx.waker());
-									Poll::Pending
-								}
-								_ => Poll::Ready(Err(io::Error::EBADF)),
-							}
-						})
-						.await
-					},
-					Some(Duration::from_millis(1000)),
-				)
+					match raw.state {
+						VsockState::Connected => Poll::Ready(Ok(())),
+						VsockState::Connecting => {
+							raw.rx_waker.register(cx.waker());
+							Poll::Pending
+						}
+						_ => Poll::Ready(Err(io::Error::EBADF)),
+					}
+				})
+				.await
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			_ => Err(io::Error::EINVAL),
 		}
 	}
 
-	fn getpeername(&self) -> Option<Endpoint> {
+	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
 		let port = self.port.load(Ordering::Acquire);
 		let guard = VSOCK_MAP.lock();
-		let raw = guard.get_socket(port)?;
+		let raw = guard.get_socket(port).ok_or(Error::EINVAL)?;
 
-		Some(Endpoint::Vsock(VsockEndpoint::new(
+		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
 			raw.remote_port,
 			raw.remote_cid,
-		)))
+		))))
 	}
 
-	fn getsockname(&self) -> Option<Endpoint> {
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
 		let local_cid = hardware::get_vsock_driver().unwrap().lock().get_cid();
 
-		Some(Endpoint::Vsock(VsockEndpoint::new(
+		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
 			self.port.load(Ordering::Acquire),
 			local_cid.try_into().unwrap(),
-		)))
+		))))
 	}
 
-	fn is_nonblocking(&self) -> bool {
-		self.nonblocking.load(Ordering::Acquire)
+	async fn is_nonblocking(&self) -> io::Result<bool> {
+		Ok(self.nonblocking.load(Ordering::Acquire))
 	}
 
-	fn listen(&self, _backlog: i32) -> io::Result<()> {
+	async fn listen(&self, _backlog: i32) -> io::Result<()> {
 		Ok(())
 	}
 
-	fn accept(&self) -> io::Result<Endpoint> {
+	async fn accept(&self) -> io::Result<Endpoint> {
 		let port = self.port.load(Ordering::Acquire);
 		let cid = self.cid.load(Ordering::Acquire);
 
-		let endpoint = block_on(
-			async {
-				future::poll_fn(|cx| {
-					let mut guard = VSOCK_MAP.lock();
-					let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+		let endpoint = future::poll_fn(|cx| {
+			let mut guard = VSOCK_MAP.lock();
+			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
 
-					match raw.state {
-						VsockState::Listen => {
-							raw.rx_waker.register(cx.waker());
-							Poll::Pending
-						}
-						VsockState::ReceiveRequest => {
-							let result = {
-								const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
-								let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
-								let local_cid = driver_guard.get_cid();
+			match raw.state {
+				VsockState::Listen => {
+					raw.rx_waker.register(cx.waker());
+					Poll::Pending
+				}
+				VsockState::ReceiveRequest => {
+					let result = {
+						const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
+						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
+						let local_cid = driver_guard.get_cid();
 
-								driver_guard.send_packet(HEADER_SIZE, |buffer| {
-									let response =
-										unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+						driver_guard.send_packet(HEADER_SIZE, |buffer| {
+							let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
 
-									response.src_cid = le64::from_ne(local_cid);
-									response.dst_cid = le64::from_ne(raw.remote_cid as u64);
-									response.src_port = le32::from_ne(port);
-									response.dst_port = le32::from_ne(raw.remote_port);
-									response.len = le32::from_ne(0);
-									response.type_ = le16::from_ne(Type::Stream.into());
-									if local_cid != cid.into() && cid != u32::MAX {
-										response.op = le16::from_ne(Op::Rst.into())
-									} else {
-										response.op = le16::from_ne(Op::Response.into());
-									}
-									response.flags = le32::from_ne(0);
-									response.buf_alloc = le32::from_ne(
-										crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
-									);
-									response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
-								});
+							response.src_cid = le64::from_ne(local_cid);
+							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
+							response.src_port = le32::from_ne(port);
+							response.dst_port = le32::from_ne(raw.remote_port);
+							response.len = le32::from_ne(0);
+							response.type_ = le16::from_ne(Type::Stream.into());
+							if local_cid != cid.into() && cid != u32::MAX {
+								response.op = le16::from_ne(Op::Rst.into())
+							} else {
+								response.op = le16::from_ne(Op::Response.into());
+							}
+							response.flags = le32::from_ne(0);
+							response.buf_alloc = le32::from_ne(
+								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
+							);
+							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
+						});
 
-								raw.state = VsockState::Connected;
+						raw.state = VsockState::Connected;
 
-								Ok(VsockEndpoint::new(raw.remote_port, raw.remote_cid))
-							};
+						Ok(VsockEndpoint::new(raw.remote_port, raw.remote_cid))
+					};
 
-							Poll::Ready(result)
-						}
-						_ => Poll::Ready(Err(Error::EBADF)),
-					}
-				})
-				.await
-			},
-			None,
-		)?;
+					Poll::Ready(result)
+				}
+				_ => Poll::Ready(Err(Error::EBADF)),
+			}
+		})
+		.await?;
 
 		Ok(Endpoint::Vsock(endpoint))
 	}
 
-	fn shutdown(&self, _how: i32) -> io::Result<()> {
+	async fn shutdown(&self, _how: i32) -> io::Result<()> {
 		Ok(())
 	}
 
-	fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
+	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				trace!("set vsock device to nonblocking mode");
@@ -313,7 +309,7 @@ impl ObjectInterface for Socket {
 	// TODO: Remove allow once fixed:
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		let port = self.port.load(Ordering::Acquire);
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -351,7 +347,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
 		let port = self.port.load(Ordering::Acquire);
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();

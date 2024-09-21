@@ -5,6 +5,7 @@ use core::ffi::{c_char, c_void};
 use core::mem::size_of;
 #[allow(unused_imports)]
 use core::ops::DerefMut;
+use core::time::Duration;
 
 use cfg_if::cfg_if;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -23,7 +24,8 @@ use crate::fd::{
 	get_object, insert_object, replace_object, Endpoint, ListenEndpoint, ObjectInterface,
 	SocketOption,
 };
-use crate::syscalls::IoCtl;
+use crate::io;
+use crate::syscalls::{block_on, IoCtl};
 
 pub const AF_INET: i32 = 0;
 pub const AF_INET6: i32 = 1;
@@ -424,7 +426,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 		let socket = vsock::Socket::new();
 
 		if type_.contains(SockType::SOCK_NONBLOCK) {
-			socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+			block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 		}
 
 		let fd = insert_object(Arc::new(socket)).expect("FD is already used");
@@ -446,7 +448,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 				let socket = udp::Socket::new(handle);
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
-					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 				}
 
 				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
@@ -461,7 +463,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 				let socket = tcp::Socket::new(handle);
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
-					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 				}
 
 				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
@@ -481,7 +483,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).accept().map_or_else(
+			block_on((*v).accept(), None).map_or_else(
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 				|endpoint| match endpoint {
 					#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -544,7 +546,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).listen(backlog)
+			block_on((*v).listen(backlog), None)
 				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
@@ -569,7 +571,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in) });
-				(*v).bind(ListenEndpoint::Ip(endpoint))
+				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -578,7 +580,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in6) });
-				(*v).bind(ListenEndpoint::Ip(endpoint))
+				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			}
 			#[cfg(feature = "vsock")]
@@ -587,7 +589,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *(name as *const sockaddr_vm) });
-				(*v).bind(ListenEndpoint::Vsock(endpoint))
+				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			}
 			_ => -crate::errno::EINVAL,
@@ -637,8 +639,25 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).connect(endpoint)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+			let non_blocking = block_on((*v).is_nonblocking(), None).unwrap();
+			let timeout = if non_blocking {
+				Some(Duration::ZERO)
+			} else {
+				None
+			};
+
+			block_on((*v).connect(endpoint), timeout).map_or_else(
+				|e| {
+					let e = if e == io::Error::ETIME {
+						io::Error::EAGAIN
+					} else {
+						e
+					};
+
+					-num::ToPrimitive::to_i32(&e).unwrap()
+				},
+				|_| 0,
+			)
 		},
 	)
 }
@@ -654,7 +673,7 @@ pub unsafe extern "C" fn sys_getsockname(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			if let Some(endpoint) = (*v).getsockname() {
+			if let Ok(Some(endpoint)) = block_on((*v).getsockname(), None) {
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
@@ -727,7 +746,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				(*v).setsockopt(SocketOption::TcpNoDelay, value != 0)
+				block_on((*v).setsockopt(SocketOption::TcpNoDelay, value != 0), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			},
 		)
@@ -763,7 +782,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				(*v).getsockopt(SocketOption::TcpNoDelay).map_or_else(
+				block_on((*v).getsockopt(SocketOption::TcpNoDelay), None).map_or_else(
 					|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 					|value| {
 						if value {
@@ -794,7 +813,7 @@ pub unsafe extern "C" fn sys_getpeername(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			if let Some(endpoint) = (*v).getpeername() {
+			if let Ok(Some(endpoint)) = block_on((*v).getpeername(), None) {
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
@@ -865,7 +884,7 @@ fn shutdown(sockfd: i32, how: i32) -> i32 {
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).shutdown(how)
+			block_on((*v).shutdown(how), None)
 				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
@@ -944,8 +963,23 @@ pub unsafe extern "C" fn sys_sendto(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 			|v| {
-				(*v).sendto(slice, endpoint).map_or_else(
-					|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+				let non_blocking = block_on((*v).is_nonblocking(), None).unwrap();
+				let timeout = if non_blocking {
+					Some(Duration::ZERO)
+				} else {
+					None
+				};
+
+				block_on((*v).sendto(slice, endpoint), timeout).map_or_else(
+					|e| {
+						let e = if non_blocking && e == io::Error::ETIME {
+							io::Error::EAGAIN
+						} else {
+							e
+						};
+
+						-num::ToPrimitive::to_isize(&e).unwrap()
+					},
 					|v| v.try_into().unwrap(),
 				)
 			},
@@ -970,8 +1004,23 @@ pub unsafe extern "C" fn sys_recvfrom(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			(*v).recvfrom(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			let non_blocking = block_on((*v).is_nonblocking(), None).unwrap();
+			let timeout = if non_blocking {
+				Some(Duration::ZERO)
+			} else {
+				None
+			};
+
+			block_on((*v).recvfrom(slice), timeout).map_or_else(
+				|e| {
+					let e = if non_blocking && e == io::Error::ETIME {
+						io::Error::EAGAIN
+					} else {
+						e
+					};
+
+					-num::ToPrimitive::to_isize(&e).unwrap()
+				},
 				|(len, endpoint)| {
 					if !addr.is_null() && !addrlen.is_null() {
 						#[allow(unused_variables)]
