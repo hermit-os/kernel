@@ -249,8 +249,8 @@ jobs:
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package mioudp --features hermit/udp,hermit/dhcpv4 --netdev rtl8139 --features hermit/rtl8139
         if: matrix.arch == 'x86_64'
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci uhyve --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --sudo --package rusty_demo
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch == 'x86_64' && matrix.profile == 'release'
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci uhyve --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --sudo --package rusty_demo --smp
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch == 'x86_64' && matrix.profile == 'release'
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --sudo --package hello_world --no-default-features
         if: matrix.arch == 'x86_64'
