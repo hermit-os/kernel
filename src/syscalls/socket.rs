@@ -21,8 +21,7 @@ use crate::fd::socket::udp;
 #[cfg(feature = "vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	get_object, insert_object, replace_object, Endpoint, ListenEndpoint, ObjectInterface,
-	SocketOption,
+	get_object, insert_object, Endpoint, ListenEndpoint, ObjectInterface, SocketOption,
 };
 use crate::io;
 use crate::syscalls::{block_on, IoCtl};
@@ -423,13 +422,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 
 	#[cfg(feature = "vsock")]
 	if domain == AF_VSOCK && type_.intersects(SockType::SOCK_STREAM) {
-		let socket = vsock::Socket::new();
+		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
 
 		if type_.contains(SockType::SOCK_NONBLOCK) {
 			block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 		}
 
-		let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+		let fd = insert_object(socket).expect("FD is already used");
 
 		return fd;
 	}
@@ -445,13 +444,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
-				let socket = udp::Socket::new(handle);
+				let socket = Arc::new(udp::Socket::new(handle));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
 					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 				}
 
-				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+				let fd = insert_object(socket).expect("FD is already used");
 
 				return fd;
 			}
@@ -460,13 +459,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			if type_.contains(SockType::SOCK_STREAM) {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
-				let socket = tcp::Socket::new(handle);
+				let socket = Arc::new(async_lock::RwLock::new(tcp::Socket::new(handle)));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
 					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 				}
 
-				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+				let fd = insert_object(socket).expect("FD is already used");
 
 				return fd;
 			}
@@ -485,12 +484,10 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 		|v| {
 			block_on((*v).accept(), None).map_or_else(
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-				|endpoint| match endpoint {
+				|(obj, endpoint)| match endpoint {
 					#[cfg(any(feature = "tcp", feature = "udp"))]
 					Endpoint::Ip(endpoint) => {
-						let new_obj = dyn_clone::clone_box(&*v);
-						replace_object(fd, Arc::from(new_obj)).unwrap();
-						let new_fd = insert_object(v).unwrap();
+						let new_fd = insert_object(obj).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
 							let addrlen = unsafe { &mut *addrlen };
@@ -517,8 +514,6 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 					}
 					#[cfg(feature = "vsock")]
 					Endpoint::Vsock(endpoint) => {
-						//let new_obj = dyn_clone::clone_box(&*v);
-						//replace_object(fd, Arc::from(new_obj)).unwrap();
 						let new_fd = insert_object(v.clone()).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
