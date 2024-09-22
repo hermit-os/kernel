@@ -7,7 +7,7 @@ use core::task::{ready, Poll, Waker};
 use async_lock::Mutex;
 use async_trait::async_trait;
 
-use crate::fd::{block_on, EventFlags, ObjectInterface, PollEvent};
+use crate::fd::{EventFlags, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -31,16 +31,6 @@ impl EventState {
 pub(crate) struct EventFd {
 	state: Mutex<EventState>,
 	flags: EventFlags,
-}
-
-impl Clone for EventFd {
-	fn clone(&self) -> Self {
-		let counter = block_on(async { Ok(self.state.lock().await.counter) }, None).unwrap();
-		Self {
-			state: Mutex::new(EventState::new(counter)),
-			flags: self.flags,
-		}
-	}
 }
 
 impl EventFd {
