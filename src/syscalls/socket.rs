@@ -444,7 +444,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
-				let socket = Arc::new(udp::Socket::new(handle));
+				let socket = Arc::new(async_lock::RwLock::new(udp::Socket::new(handle)));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
 					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
