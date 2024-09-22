@@ -6,7 +6,6 @@ use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
 use async_trait::async_trait;
-use dyn_clone::DynClone;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
@@ -144,7 +143,7 @@ impl Default for AccessPermission {
 }
 
 #[async_trait]
-pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
+pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	/// check if an IO event is possible
 	async fn poll(&self, _event: PollEvent) -> io::Result<PollEvent> {
 		Ok(PollEvent::empty())
@@ -187,7 +186,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	async fn accept(&self) -> io::Result<Endpoint> {
+	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
 		Err(io::Error::EINVAL)
 	}
 
@@ -396,11 +395,6 @@ pub(crate) fn get_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterfa
 
 pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
 	block_on(core_scheduler().insert_object(obj), None)
-}
-
-#[allow(dead_code)]
-pub(crate) fn replace_object(fd: FileDescriptor, obj: Arc<dyn ObjectInterface>) -> io::Result<()> {
-	block_on(core_scheduler().replace_object(fd, obj), None)
 }
 
 // The dup system call allocates a new file descriptor that refers

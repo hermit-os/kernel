@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use core::task::Poll;
 
 use async_trait::async_trait;
@@ -17,7 +17,7 @@ use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 
 #[derive(Debug)]
-pub(crate) struct VsockListenEndpoint {
+pub struct VsockListenEndpoint {
 	pub port: u32,
 	pub cid: Option<u32>,
 }
@@ -29,7 +29,7 @@ impl VsockListenEndpoint {
 }
 
 #[derive(Debug)]
-pub(crate) struct VsockEndpoint {
+pub struct VsockEndpoint {
 	pub port: u32,
 	pub cid: u32,
 }
@@ -41,30 +41,37 @@ impl VsockEndpoint {
 }
 
 #[derive(Debug)]
+pub struct NullSocket;
+
+impl NullSocket {
+	pub const fn new() -> Self {
+		Self {}
+	}
+}
+
+#[async_trait]
+impl ObjectInterface for async_lock::RwLock<NullSocket> {}
+
+#[derive(Debug)]
 pub struct Socket {
-	port: AtomicU32,
-	cid: AtomicU32,
-	nonblocking: AtomicBool,
+	port: u32,
+	cid: u32,
+	nonblocking: bool,
 }
 
 impl Socket {
 	pub fn new() -> Self {
 		Self {
-			port: AtomicU32::new(0),
-			cid: AtomicU32::new(u32::MAX),
-			nonblocking: AtomicBool::new(false),
+			port: 0,
+			cid: u32::MAX,
+			nonblocking: false,
 		}
 	}
-}
 
-#[async_trait]
-impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let port = self.port.load(Ordering::Acquire);
-
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+			let raw = guard.get_mut_socket(self.port).ok_or(Error::EINVAL)?;
 
 			match raw.state {
 				VsockState::Shutdown | VsockState::ReceiveRequest => {
@@ -130,14 +137,14 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
-				self.port.store(ep.port, Ordering::Release);
+				self.port = ep.port;
 				if let Some(cid) = ep.cid {
-					self.cid.store(cid, Ordering::Release);
+					self.cid = cid;
 				} else {
-					self.cid.store(u32::MAX, Ordering::Release);
+					self.cid = u32::MAX;
 				}
 				VSOCK_MAP.lock().bind(ep.port)
 			}
@@ -146,13 +153,13 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		match endpoint {
 			Endpoint::Vsock(ep) => {
 				const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
 				let port = VSOCK_MAP.lock().connect(ep.port, ep.cid)?;
-				self.port.store(port, Ordering::Release);
-				self.port.store(ep.cid, Ordering::Release);
+				self.port = port;
+				self.port = ep.cid;
 
 				future::poll_fn(|_cx| {
 					if let Some(mut driver_guard) = hardware::get_vsock_driver().unwrap().try_lock()
@@ -204,9 +211,8 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
-		let port = self.port.load(Ordering::Acquire);
 		let guard = VSOCK_MAP.lock();
-		let raw = guard.get_socket(port).ok_or(Error::EINVAL)?;
+		let raw = guard.get_socket(self.port).ok_or(Error::EINVAL)?;
 
 		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
 			raw.remote_port,
@@ -218,22 +224,22 @@ impl ObjectInterface for Socket {
 		let local_cid = hardware::get_vsock_driver().unwrap().lock().get_cid();
 
 		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
-			self.port.load(Ordering::Acquire),
+			self.port,
 			local_cid.try_into().unwrap(),
 		))))
 	}
 
 	async fn is_nonblocking(&self) -> io::Result<bool> {
-		Ok(self.nonblocking.load(Ordering::Acquire))
+		Ok(self.nonblocking)
 	}
 
 	async fn listen(&self, _backlog: i32) -> io::Result<()> {
 		Ok(())
 	}
 
-	async fn accept(&self) -> io::Result<Endpoint> {
-		let port = self.port.load(Ordering::Acquire);
-		let cid = self.cid.load(Ordering::Acquire);
+	async fn accept(&mut self) -> io::Result<(NullSocket, Endpoint)> {
+		let port = self.port;
+		let cid = self.cid;
 
 		let endpoint = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -283,21 +289,21 @@ impl ObjectInterface for Socket {
 		})
 		.await?;
 
-		Ok(Endpoint::Vsock(endpoint))
+		Ok((NullSocket::new(), Endpoint::Vsock(endpoint)))
 	}
 
 	async fn shutdown(&self, _how: i32) -> io::Result<()> {
 		Ok(())
 	}
 
-	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
+	async fn ioctl(&mut self, cmd: IoCtl, value: bool) -> io::Result<()> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				trace!("set vsock device to nonblocking mode");
-				self.nonblocking.store(true, Ordering::Release);
+				self.nonblocking = true;
 			} else {
 				trace!("set vsock device to blocking mode");
-				self.nonblocking.store(false, Ordering::Release);
+				self.nonblocking = false;
 			}
 
 			Ok(())
@@ -310,7 +316,7 @@ impl ObjectInterface for Socket {
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
 	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
-		let port = self.port.load(Ordering::Acquire);
+		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
@@ -348,7 +354,7 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
-		let port = self.port.load(Ordering::Acquire);
+		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
@@ -400,20 +406,61 @@ impl ObjectInterface for Socket {
 	}
 }
 
-impl Clone for Socket {
-	fn clone(&self) -> Self {
-		Self {
-			port: AtomicU32::new(self.port.load(Ordering::Acquire)),
-			cid: AtomicU32::new(self.cid.load(Ordering::Acquire)),
-			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
-		}
+impl Drop for Socket {
+	fn drop(&mut self) {
+		let mut guard = VSOCK_MAP.lock();
+		guard.remove_socket(self.port);
 	}
 }
 
-impl Drop for Socket {
-	fn drop(&mut self) {
-		let port = self.port.load(Ordering::Acquire);
-		let mut guard = VSOCK_MAP.lock();
-		guard.remove_socket(port);
+#[async_trait]
+impl ObjectInterface for async_lock::RwLock<Socket> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
+		self.read().await.poll(event).await
+	}
+
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+		self.read().await.read(buffer).await
+	}
+
+	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+		self.read().await.write(buffer).await
+	}
+
+	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+		self.write().await.bind(endpoint).await
+	}
+
+	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+		self.write().await.connect(endpoint).await
+	}
+
+	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
+		let (handle, endpoint) = self.write().await.accept().await?;
+		Ok((Arc::new(async_lock::RwLock::new(handle)), endpoint))
+	}
+
+	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
+		self.read().await.getpeername().await
+	}
+
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
+		self.read().await.getsockname().await
+	}
+
+	async fn is_nonblocking(&self) -> io::Result<bool> {
+		self.read().await.is_nonblocking().await
+	}
+
+	async fn listen(&self, backlog: i32) -> io::Result<()> {
+		self.write().await.listen(backlog).await
+	}
+
+	async fn shutdown(&self, how: i32) -> io::Result<()> {
+		self.read().await.shutdown(how).await
+	}
+
+	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
+		self.write().await.ioctl(cmd, value).await
 	}
 }
