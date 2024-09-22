@@ -67,7 +67,7 @@ fn uhyve_send<T>(_port: u16, _data: &mut T) {
 	todo!()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericStdin;
 
 impl ObjectInterface for GenericStdin {}
@@ -78,7 +78,7 @@ impl GenericStdin {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericStdout;
 
 #[async_trait]
@@ -102,7 +102,7 @@ impl GenericStdout {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericStderr;
 
 #[async_trait]
@@ -126,7 +126,7 @@ impl GenericStderr {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UhyveStdin;
 
 impl ObjectInterface for UhyveStdin {}
@@ -137,7 +137,7 @@ impl UhyveStdin {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UhyveStdout;
 
 #[async_trait]
@@ -161,7 +161,7 @@ impl UhyveStdout {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UhyveStderr;
 
 #[async_trait]
