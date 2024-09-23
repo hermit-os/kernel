@@ -5,7 +5,6 @@ use core::ffi::{c_char, c_void};
 use core::mem::size_of;
 #[allow(unused_imports)]
 use core::ops::DerefMut;
-use core::time::Duration;
 
 use cfg_if::cfg_if;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -23,7 +22,6 @@ use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
 	get_object, insert_object, Endpoint, ListenEndpoint, ObjectInterface, SocketOption,
 };
-use crate::io;
 use crate::syscalls::{block_on, IoCtl};
 
 pub const AF_INET: i32 = 0;
@@ -634,25 +632,8 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			let non_blocking = block_on((*v).is_nonblocking(), None).unwrap();
-			let timeout = if non_blocking {
-				Some(Duration::ZERO)
-			} else {
-				None
-			};
-
-			block_on((*v).connect(endpoint), timeout).map_or_else(
-				|e| {
-					let e = if e == io::Error::ETIME {
-						io::Error::EAGAIN
-					} else {
-						e
-					};
-
-					-num::ToPrimitive::to_i32(&e).unwrap()
-				},
-				|_| 0,
-			)
+			block_on((*v).connect(endpoint), None)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
 }
@@ -958,23 +939,8 @@ pub unsafe extern "C" fn sys_sendto(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 			|v| {
-				let non_blocking = block_on((*v).is_nonblocking(), None).unwrap();
-				let timeout = if non_blocking {
-					Some(Duration::ZERO)
-				} else {
-					None
-				};
-
-				block_on((*v).sendto(slice, endpoint), timeout).map_or_else(
-					|e| {
-						let e = if non_blocking && e == io::Error::ETIME {
-							io::Error::EAGAIN
-						} else {
-							e
-						};
-
-						-num::ToPrimitive::to_isize(&e).unwrap()
-					},
+				block_on((*v).sendto(slice, endpoint), None).map_or_else(
+					|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 					|v| v.try_into().unwrap(),
 				)
 			},
@@ -999,23 +965,8 @@ pub unsafe extern "C" fn sys_recvfrom(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			let non_blocking = block_on((*v).is_nonblocking(), None).unwrap();
-			let timeout = if non_blocking {
-				Some(Duration::ZERO)
-			} else {
-				None
-			};
-
-			block_on((*v).recvfrom(slice), timeout).map_or_else(
-				|e| {
-					let e = if non_blocking && e == io::Error::ETIME {
-						io::Error::EAGAIN
-					} else {
-						e
-					};
-
-					-num::ToPrimitive::to_isize(&e).unwrap()
-				},
+			block_on((*v).recvfrom(slice), None).map_or_else(
+				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 				|(len, endpoint)| {
 					if !addr.is_null() && !addrlen.is_null() {
 						#[allow(unused_variables)]

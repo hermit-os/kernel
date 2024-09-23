@@ -56,7 +56,7 @@ impl ObjectInterface for async_lock::RwLock<NullSocket> {}
 pub struct Socket {
 	port: u32,
 	cid: u32,
-	nonblocking: bool,
+	is_nonblocking: bool,
 }
 
 impl Socket {
@@ -64,7 +64,7 @@ impl Socket {
 		Self {
 			port: 0,
 			cid: u32::MAX,
-			nonblocking: false,
+			is_nonblocking: false,
 		}
 	}
 
@@ -229,10 +229,6 @@ impl Socket {
 		))))
 	}
 
-	async fn is_nonblocking(&self) -> io::Result<bool> {
-		Ok(self.nonblocking)
-	}
-
 	async fn listen(&self, _backlog: i32) -> io::Result<()> {
 		Ok(())
 	}
@@ -247,8 +243,12 @@ impl Socket {
 
 			match raw.state {
 				VsockState::Listen => {
-					raw.rx_waker.register(cx.waker());
-					Poll::Pending
+					if self.is_nonblocking {
+						Poll::Ready(Err(io::Error::EAGAIN))
+					} else {
+						raw.rx_waker.register(cx.waker());
+						Poll::Pending
+					}
 				}
 				VsockState::ReceiveRequest => {
 					let result = {
@@ -300,10 +300,10 @@ impl Socket {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				trace!("set vsock device to nonblocking mode");
-				self.nonblocking = true;
+				self.is_nonblocking = true;
 			} else {
 				trace!("set vsock device to blocking mode");
-				self.nonblocking = false;
+				self.is_nonblocking = false;
 			}
 
 			Ok(())
@@ -326,8 +326,12 @@ impl Socket {
 					let len = core::cmp::min(buffer.len(), raw.buffer.len());
 
 					if len == 0 {
-						raw.rx_waker.register(cx.waker());
-						Poll::Pending
+						if self.is_nonblocking {
+							Poll::Ready(Err(io::Error::EAGAIN))
+						} else {
+							raw.rx_waker.register(cx.waker());
+							Poll::Pending
+						}
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
 						buffer[..len].copy_from_slice(tmp.as_slice());
@@ -363,8 +367,12 @@ impl Socket {
 			match raw.state {
 				VsockState::Connected => {
 					if diff >= raw.peer_buf_alloc {
-						raw.tx_waker.register(cx.waker());
-						Poll::Pending
+						if self.is_nonblocking {
+							Poll::Ready(Err(io::Error::EAGAIN))
+						} else {
+							raw.tx_waker.register(cx.waker());
+							Poll::Pending
+						}
 					} else {
 						const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
 						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
@@ -446,10 +454,6 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
 		self.read().await.getsockname().await
-	}
-
-	async fn is_nonblocking(&self) -> io::Result<bool> {
-		self.read().await.is_nonblocking().await
 	}
 
 	async fn listen(&self, backlog: i32) -> io::Result<()> {

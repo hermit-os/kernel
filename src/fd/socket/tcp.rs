@@ -197,6 +197,8 @@ impl Socket {
 								})
 								.map_err(|_| io::Error::EIO),
 						)
+					} else if self.is_nonblocking {
+						Poll::Ready(Err(io::Error::EAGAIN))
 					} else {
 						socket.register_recv_waker(cx.waker());
 						Poll::Pending
@@ -232,6 +234,8 @@ impl Socket {
 								// we already send some data => return 0 as signal to stop the
 								// async write
 								Poll::Ready(Ok(0))
+							} else if self.is_nonblocking {
+								Poll::Ready(Err(io::Error::EAGAIN))
 							} else {
 								socket.register_send_waker(cx.waker());
 								Poll::Pending
@@ -374,12 +378,9 @@ impl Socket {
 			.map(Endpoint::Ip))
 	}
 
-	async fn is_nonblocking(&self) -> io::Result<bool> {
-		Ok(self.is_nonblocking)
-	}
-
 	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
-		let nagle_enabled = self.with(|socket| socket.nagle_enabled());
+		let (nagle_enabled, ack_delay) =
+			self.with(|socket| (socket.nagle_enabled(), socket.ack_delay()));
 
 		self.with(|socket| {
 			if !socket.is_open() {
@@ -407,24 +408,31 @@ impl Socket {
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 			s.set_nagle_enabled(nagle_enabled);
+			s.set_ack_delay(ack_delay);
 			s.listen(self.port)
 				.map(|_| ())
 				.map_err(|_| io::Error::EIO)?;
 		}
+		nic.poll_common(now());
 
 		Ok(())
 	}
 
 	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
 		if opt == SocketOption::TcpNoDelay {
-			self.with(|socket| {
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+
+			for i in self.handle.iter() {
+				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
 				socket.set_nagle_enabled(optval);
 				if optval {
 					socket.set_ack_delay(None);
 				} else {
 					socket.set_ack_delay(Some(Duration::from_millis(10)));
 				}
-			});
+			}
+
 			Ok(())
 		} else {
 			Err(io::Error::EINVAL)
@@ -433,7 +441,11 @@ impl Socket {
 
 	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
 		if opt == SocketOption::TcpNoDelay {
-			self.with(|socket| Ok(socket.nagle_enabled()))
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.front().unwrap());
+
+			Ok(socket.nagle_enabled())
 		} else {
 			Err(io::Error::EINVAL)
 		}
@@ -509,10 +521,6 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
 		self.read().await.getsockname().await
-	}
-
-	async fn is_nonblocking(&self) -> io::Result<bool> {
-		self.read().await.is_nonblocking().await
 	}
 
 	async fn listen(&self, backlog: i32) -> io::Result<()> {

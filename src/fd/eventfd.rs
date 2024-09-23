@@ -79,6 +79,8 @@ impl ObjectInterface for EventFd {
 						cx.wake_by_ref();
 					}
 					Poll::Ready(Ok(len))
+				} else if self.flags.contains(EventFlags::EFD_NONBLOCK) {
+					Poll::Ready(Err(io::Error::EAGAIN))
 				} else {
 					guard.read_queue.push_back(cx.waker().clone());
 					Poll::Pending
@@ -115,6 +117,8 @@ impl ObjectInterface for EventFd {
 				}
 
 				Poll::Ready(Ok(len))
+			} else if self.flags.contains(EventFlags::EFD_NONBLOCK) {
+				Poll::Ready(Err(io::Error::EAGAIN))
 			} else {
 				guard.write_queue.push_back(cx.waker().clone());
 				Poll::Pending
@@ -162,9 +166,5 @@ impl ObjectInterface for EventFd {
 			}
 		})
 		.await
-	}
-
-	async fn is_nonblocking(&self) -> io::Result<bool> {
-		Ok(self.flags.contains(EventFlags::EFD_NONBLOCK))
 	}
 }
