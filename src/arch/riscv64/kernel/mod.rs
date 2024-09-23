@@ -84,10 +84,7 @@ pub fn get_base_address() -> VirtAddr {
 }
 
 pub fn args() -> Option<&'static str> {
-	unsafe {
-		let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
-		fdt.chosen().bootargs()
-	}
+	None
 }
 
 pub fn get_dtb_ptr() -> *const u8 {

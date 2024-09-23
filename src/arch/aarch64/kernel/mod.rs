@@ -91,15 +91,7 @@ pub fn get_processor_count() -> u32 {
 }
 
 pub fn args() -> Option<&'static str> {
-	let dtb = unsafe {
-		hermit_dtb::Dtb::from_raw(ptr::with_exposed_provenance(
-			boot_info().hardware_info.device_tree.unwrap().get() as usize,
-		))
-		.expect(".dtb file has invalid header")
-	};
-
-	dtb.get_property("/chosen", "bootargs")
-		.map(|property| str::from_utf8(property).unwrap())
+	None
 }
 
 /// Earliest initialization function called by the Boot Processor.
