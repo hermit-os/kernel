@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::arch::kernel::core_local::core_scheduler;
-use crate::executor::{block_on, poll_on};
+use crate::executor::block_on;
 use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
 use crate::io;
 
@@ -166,12 +166,6 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(io::Error::EINVAL)
 	}
 
-	/// `is_nonblocking` returns `true`, if `read`, `write`, `recv` and send operations
-	/// don't block.
-	async fn is_nonblocking(&self) -> io::Result<bool> {
-		Ok(false)
-	}
-
 	/// `fstat`
 	async fn fstat(&self) -> io::Result<FileAttr> {
 		Err(io::Error::EINVAL)
@@ -271,17 +265,7 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	if block_on(obj.is_nonblocking(), None)? {
-		poll_on(obj.read(buf), Some(Duration::ZERO)).map_err(|x| {
-			if x == io::Error::ETIME {
-				io::Error::EAGAIN
-			} else {
-				x
-			}
-		})
-	} else {
-		block_on(obj.read(buf), None)
-	}
+	block_on(obj.read(buf), None)
 }
 
 pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io::Result<isize> {
@@ -297,17 +281,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	if block_on(obj.is_nonblocking(), None)? {
-		poll_on(obj.write(buf), Some(Duration::ZERO)).map_err(|x| {
-			if x == io::Error::ETIME {
-				io::Error::EAGAIN
-			} else {
-				x
-			}
-		})
-	} else {
-		block_on(obj.write(buf), None)
-	}
+	block_on(obj.write(buf), None)
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
