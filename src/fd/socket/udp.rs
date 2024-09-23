@@ -238,6 +238,7 @@ impl Socket {
 impl Drop for Socket {
 	fn drop(&mut self) {
 		let _ = block_on(self.close(), None);
+		NIC.lock().as_nic_mut().unwrap().destroy_socket(self.handle);
 	}
 }
 
