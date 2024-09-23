@@ -292,16 +292,20 @@ impl Socket {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed => {
 					let _ = socket.listen(self.port);
-					Poll::Ready(())
+					Poll::Ready(Ok(()))
 				}
-				tcp::State::Listen | tcp::State::Established => Poll::Ready(()),
+				tcp::State::Listen | tcp::State::Established => Poll::Ready(Ok(())),
 				_ => {
-					socket.register_recv_waker(cx.waker());
-					Poll::Pending
+					if self.is_nonblocking {
+						Poll::Ready(Err(io::Error::EAGAIN))
+					} else {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					}
 				}
 			})
 		})
-		.await;
+		.await?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -314,8 +318,12 @@ impl Socket {
 						| tcp::State::FinWait1
 						| tcp::State::FinWait2 => Poll::Ready(Err(io::Error::EIO)),
 						_ => {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
+							if self.is_nonblocking {
+								Poll::Ready(Err(io::Error::EAGAIN))
+							} else {
+								socket.register_recv_waker(cx.waker());
+								Poll::Pending
+							}
 						}
 					}
 				}
@@ -491,8 +499,8 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 	}
 
 	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
-		let (handle, endpoint) = self.write().await.accept().await?;
-		Ok((Arc::new(async_lock::RwLock::new(handle)), endpoint))
+		let (socket, endpoint) = self.write().await.accept().await?;
+		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
