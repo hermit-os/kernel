@@ -22,6 +22,12 @@ pub mod error {
 	pub enum VirtioError {
 		#[cfg(feature = "pci")]
 		FromPci(PciError),
+		#[cfg(feature = "pci")]
+		NoComCfg(u16),
+		#[cfg(feature = "pci")]
+		NoIsrCfg(u16),
+		#[cfg(feature = "pci")]
+		NoNotifCfg(u16),
 		DevNotSupported(u16),
 		#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 		NetDriver(VirtioNetError),
@@ -45,17 +51,17 @@ pub mod error {
                     PciError::NoCapPtr(id) => write!(f, "Driver failed to initialize device with id: {id:#x}. Reason: No Capabilities pointer found."),
                     PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initialize device with id: {id:#x}. Reason: No Virtio capabilities were found."),
                 },
+				#[cfg(feature = "pci")]
+				VirtioError::NoComCfg(id) =>  write!(f, "Virtio driver failed, for device {id:x}, due to a missing or malformed common config!"),
+				#[cfg(feature = "pci")]
+				VirtioError::NoIsrCfg(id) =>  write!(f, "Virtio driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
+				#[cfg(feature = "pci")]
+				VirtioError::NoNotifCfg(id) =>  write!(f, "Virtio driver failed, for device {id:x}, due to a missing or malformed notification config!"),
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {id:#x} not supported."),
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
                 VirtioError::NetDriver(net_error) => match net_error {
 					#[cfg(feature = "pci")]
 					VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),
-					#[cfg(feature = "pci")]
-                    VirtioNetError::NoComCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed common config!"),
-					#[cfg(feature = "pci")]
-                    VirtioNetError::NoIsrCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
-					#[cfg(feature = "pci")]
-                    VirtioNetError::NoNotifCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed notification config!"),
                     VirtioNetError::FailFeatureNeg(id) => write!(f, "Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
                     VirtioNetError::FeatureRequirementsNotMet(features) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"),
                     VirtioNetError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"),
@@ -64,12 +70,6 @@ pub mod error {
 				VirtioError::FsDriver(fs_error) => match fs_error {
 					#[cfg(feature = "pci")]
 					VirtioFsError::NoDevCfg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed device config!"),
-					#[cfg(feature = "pci")]
-					VirtioFsError::NoComCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed common config!"),
-					#[cfg(feature = "pci")]
-					VirtioFsError::NoIsrCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
-					#[cfg(feature = "pci")]
-                    VirtioFsError::NoNotifCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed notification config!"),
 					VirtioFsError::FailFeatureNeg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
                     VirtioFsError::FeatureRequirementsNotMet(features) => write!(f, "Virtio filesystem driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"),
 					VirtioFsError::IncompatibleFeatureSets(driver_features, device_features) => write!(f, "Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}", ),

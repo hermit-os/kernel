@@ -37,46 +37,24 @@ impl VirtioNetDriver {
 	/// Instantiates a new (VirtioNetDriver)[VirtioNetDriver] struct, by checking the available
 	/// configuration structures and moving them into the struct.
 	pub(crate) fn new(
-		mut caps_coll: UniCapsColl,
+		caps_coll: UniCapsColl,
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioNetError> {
 		let device_id = device.device_id();
-		let com_cfg = match caps_coll.get_com_cfg() {
-			Some(com_cfg) => com_cfg,
-			None => {
-				error!("No common config. Aborting!");
-				return Err(error::VirtioNetError::NoComCfg(device_id));
-			}
-		};
+		let UniCapsColl {
+			com_cfg,
+			notif_cfg,
+			isr_cfg,
+			dev_cfg_list,
+			..
+		} = caps_coll;
 
-		let isr_stat = match caps_coll.get_isr_cfg() {
-			Some(isr_stat) => isr_stat,
-			None => {
-				error!("No ISR status config. Aborting!");
-				return Err(error::VirtioNetError::NoIsrCfg(device_id));
-			}
-		};
-
-		let notif_cfg = match caps_coll.get_notif_cfg() {
-			Some(notif_cfg) => notif_cfg,
-			None => {
-				error!("No notif config. Aborting!");
-				return Err(error::VirtioNetError::NoNotifCfg(device_id));
-			}
-		};
-
-		let dev_cfg = loop {
-			match caps_coll.get_dev_cfg() {
-				Some(cfg) => {
-					if let Some(dev_cfg) = VirtioNetDriver::map_cfg(&cfg) {
-						break dev_cfg;
-					}
-				}
-				None => {
-					error!("No dev config. Aborting!");
-					return Err(error::VirtioNetError::NoDevCfg(device_id));
-				}
-			}
+		let dev_cfg = if let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg)
+		{
+			dev_cfg
+		} else {
+			error!("No dev config. Aborting!");
+			return Err(error::VirtioNetError::NoDevCfg(device_id));
 		};
 
 		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
@@ -91,7 +69,7 @@ impl VirtioNetDriver {
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg,
-			isr_stat,
+			isr_stat: isr_cfg,
 			notif_cfg,
 			ctrl_vq: CtrlQueue::new(None),
 			recv_vqs,
@@ -124,9 +102,9 @@ impl VirtioNetDriver {
 					return Err(VirtioError::NetDriver(vnet_err));
 				}
 			},
-			Err(pci_error) => {
+			Err(err) => {
 				error!("Mapping capabilities failed. Aborting!");
-				return Err(VirtioError::FromPci(pci_error));
+				return Err(err);
 			}
 		};
 

@@ -202,12 +202,6 @@ pub mod error {
 	pub enum VirtioFsError {
 		#[cfg(feature = "pci")]
 		NoDevCfg(u16),
-		#[cfg(feature = "pci")]
-		NoComCfg(u16),
-		#[cfg(feature = "pci")]
-		NoIsrCfg(u16),
-		#[cfg(feature = "pci")]
-		NoNotifCfg(u16),
 		FailFeatureNeg(u16),
 		/// The first field contains the feature bits wanted by the driver.
 		/// but which are incompatible with the device feature set, second field.
