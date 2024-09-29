@@ -180,28 +180,35 @@ impl Socket {
 	#[allow(clippy::needless_pass_by_ref_mut)]
 	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed => Poll::Ready(Ok(0)),
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Listen
-				| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
-				_ => {
-					if socket.can_recv() {
-						Poll::Ready(
-							socket
-								.recv(|data| {
-									let len = core::cmp::min(buffer.len(), data.len());
-									buffer[..len].copy_from_slice(&data[..len]);
-									(len, len)
-								})
-								.map_err(|_| io::Error::EIO),
-						)
-					} else if self.is_nonblocking {
-						Poll::Ready(Err(io::Error::EAGAIN))
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
+			self.with(|socket| {
+				let state = socket.state();
+				match state {
+					tcp::State::Closed => Poll::Ready(Ok(0)),
+					tcp::State::FinWait1
+					| tcp::State::FinWait2
+					| tcp::State::Listen
+					| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
+					_ => {
+						if socket.can_recv() {
+							Poll::Ready(
+								socket
+									.recv(|data| {
+										let len = core::cmp::min(buffer.len(), data.len());
+										buffer[..len].copy_from_slice(&data[..len]);
+										(len, len)
+									})
+									.map_err(|_| io::Error::EIO),
+							)
+						} else if state == tcp::State::CloseWait {
+							// The local end-point has received a connection termination request
+							// and not data are in the receive buffer => return 0 to close the connection
+							Poll::Ready(Ok(0))
+						} else if self.is_nonblocking {
+							Poll::Ready(Err(io::Error::EAGAIN))
+						} else {
+							socket.register_recv_waker(cx.waker());
+							Poll::Pending
+						}
 					}
 				}
 			})
