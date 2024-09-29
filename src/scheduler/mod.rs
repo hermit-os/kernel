@@ -468,7 +468,7 @@ impl PerCoreScheduler {
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
 
 				let guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.get(&fd).cloned().ok_or(io::Error::EINVAL))
+				Ready(guard.get(&fd).cloned().ok_or(io::Error::EBADF))
 			})
 		})
 		.await
@@ -579,7 +579,7 @@ impl PerCoreScheduler {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.remove(&fd).ok_or(io::Error::EINVAL))
+				Ready(guard.remove(&fd).ok_or(io::Error::EBADF))
 			})
 		})
 		.await
