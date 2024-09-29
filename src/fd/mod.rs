@@ -205,13 +205,13 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
-		Err(io::Error::EINVAL)
+		Err(io::Error::ENOTSOCK)
 	}
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
-		Err(io::Error::EINVAL)
+		Err(io::Error::ENOTSOCK)
 	}
 
 	/// `getsockname` gets socket name
