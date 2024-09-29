@@ -52,7 +52,7 @@ impl<'a> NetworkInterface<'a> {
 			return NetworkState::InitializationFailed;
 		};
 
-		let mut device = HermitNet::new(mtu, checksums);
+		let mut device = HermitNet::new(mtu, checksums.clone());
 
 		if hermit_var!("HERMIT_IP").is_some() {
 			warn!("A static IP address is specified with the environment variable HERMIT_IP, but the device is configured to use DHCPv4!");
@@ -62,6 +62,7 @@ impl<'a> NetworkInterface<'a> {
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 
 		info!("MAC address {}", hardware_addr);
+		info!("{:?}", checksums);
 		info!("MTU: {} bytes", mtu);
 
 		let dhcp = dhcpv4::Socket::new();
@@ -100,7 +101,7 @@ impl<'a> NetworkInterface<'a> {
 			return NetworkState::InitializationFailed;
 		};
 
-		let mut device = HermitNet::new(mtu, checksums);
+		let mut device = HermitNet::new(mtu, checksums.clone());
 
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
@@ -141,6 +142,7 @@ impl<'a> NetworkInterface<'a> {
 		info!("MAC address {}", hardware_addr);
 		info!("Configure network interface with address {}", ip_addrs[0]);
 		info!("Configure gateway with address {}", mygw);
+		info!("{:?}", checksums);
 		info!("MTU: {} bytes", mtu);
 
 		// use the current time based on the wall-clock time as seed
