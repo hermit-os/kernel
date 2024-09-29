@@ -386,8 +386,7 @@ impl Socket {
 	}
 
 	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
-		let (nagle_enabled, ack_delay) =
-			self.with(|socket| (socket.nagle_enabled(), socket.ack_delay()));
+		let nagle_enabled = self.with(|socket| socket.nagle_enabled());
 
 		self.with(|socket| {
 			if !socket.is_open() {
@@ -415,7 +414,6 @@ impl Socket {
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 			s.set_nagle_enabled(nagle_enabled);
-			s.set_ack_delay(ack_delay);
 			s.listen(self.port)
 				.map(|_| ())
 				.map_err(|_| io::Error::EIO)?;
@@ -433,11 +431,6 @@ impl Socket {
 			for i in self.handle.iter() {
 				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
 				socket.set_nagle_enabled(optval);
-				if optval {
-					socket.set_ack_delay(None);
-				} else {
-					socket.set_ack_delay(Some(Duration::from_millis(10)));
-				}
 			}
 
 			Ok(())
