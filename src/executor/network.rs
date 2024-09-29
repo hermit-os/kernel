@@ -96,6 +96,80 @@ pub(crate) fn now() -> Instant {
 	Instant::from_micros_const(arch::kernel::systemtime::now_micros().try_into().unwrap())
 }
 
+#[cfg(feature = "dhcpv4")]
+async fn dhcpv4_run() {
+	let dhcp_handle = NIC.lock().as_nic_mut().unwrap().dhcp_handle;
+
+	future::poll_fn(|cx| {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let socket = nic.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp_handle);
+
+		socket.register_waker(cx.waker());
+
+		match socket.poll() {
+			None => {}
+			Some(dhcpv4::Event::Configured(config)) => {
+				info!("DHCP config acquired!");
+				info!("IP address:      {}", config.address);
+				nic.iface.update_ip_addrs(|addrs| {
+					if let Some(dest) = addrs.iter_mut().next() {
+						*dest = IpCidr::Ipv4(config.address);
+					} else if addrs.push(IpCidr::Ipv4(config.address)).is_err() {
+						info!("Unable to update IP address");
+					}
+				});
+				if let Some(router) = config.router {
+					info!("Default gateway: {}", router);
+					nic.iface
+						.routes_mut()
+						.add_default_ipv4_route(router)
+						.unwrap();
+				} else {
+					info!("Default gateway: None");
+					nic.iface.routes_mut().remove_default_ipv4_route();
+				}
+
+				#[cfg(feature = "dns")]
+				let mut dns_servers: Vec<IpAddress> = Vec::new();
+				for (i, s) in config.dns_servers.iter().enumerate() {
+					info!("DNS server {}:    {}", i, s);
+					#[cfg(feature = "dns")]
+					dns_servers.push(IpAddress::Ipv4(*s));
+				}
+
+				#[cfg(feature = "dns")]
+				if dns_servers.len() > 0 {
+					let dns_socket = dns::Socket::new(dns_servers.as_slice(), vec![]);
+					nic.dns_handle = Some(nic.sockets.add(dns_socket));
+				}
+			}
+			Some(dhcpv4::Event::Deconfigured) => {
+				info!("DHCP lost config!");
+				let cidr = Ipv4Cidr::new(Ipv4Address::UNSPECIFIED, 0);
+				nic.iface.update_ip_addrs(|addrs| {
+					if let Some(dest) = addrs.iter_mut().next() {
+						*dest = IpCidr::Ipv4(cidr);
+					}
+				});
+				nic.iface.routes_mut().remove_default_ipv4_route();
+
+				#[cfg(feature = "dns")]
+				{
+					if let Some(dns_handle) = nic.dns_handle {
+						nic.sockets.remove(dns_handle);
+					}
+
+					nic.dns_handle = None;
+				}
+			}
+		};
+
+		Poll::Pending
+	})
+	.await
+}
+
 async fn network_run() {
 	future::poll_fn(|_cx| {
 		if let Some(mut guard) = NIC.try_lock() {
@@ -161,6 +235,8 @@ pub(crate) fn init() {
 		crate::core_scheduler().add_network_timer(wakeup_time);
 
 		spawn(network_run());
+		#[cfg(feature = "dhcpv4")]
+		spawn(dhcpv4_run());
 	}
 }
 
@@ -192,69 +268,6 @@ impl<'a> NetworkInterface<'a> {
 		let _ = self
 			.iface
 			.poll(timestamp, &mut self.device, &mut self.sockets);
-
-		#[cfg(feature = "dhcpv4")]
-		match self
-			.sockets
-			.get_mut::<dhcpv4::Socket<'_>>(self.dhcp_handle)
-			.poll()
-		{
-			None => {}
-			Some(dhcpv4::Event::Configured(config)) => {
-				info!("DHCP config acquired!");
-				info!("IP address:      {}", config.address);
-				self.iface.update_ip_addrs(|addrs| {
-					if let Some(dest) = addrs.iter_mut().next() {
-						*dest = IpCidr::Ipv4(config.address);
-					} else if addrs.push(IpCidr::Ipv4(config.address)).is_err() {
-						info!("Unable to update IP address");
-					}
-				});
-				if let Some(router) = config.router {
-					info!("Default gateway: {}", router);
-					self.iface
-						.routes_mut()
-						.add_default_ipv4_route(router)
-						.unwrap();
-				} else {
-					info!("Default gateway: None");
-					self.iface.routes_mut().remove_default_ipv4_route();
-				}
-
-				#[cfg(feature = "dns")]
-				let mut dns_servers: Vec<IpAddress> = Vec::new();
-				for (i, s) in config.dns_servers.iter().enumerate() {
-					info!("DNS server {}:    {}", i, s);
-					#[cfg(feature = "dns")]
-					dns_servers.push(IpAddress::Ipv4(*s));
-				}
-
-				#[cfg(feature = "dns")]
-				if dns_servers.len() > 0 {
-					let dns_socket = dns::Socket::new(dns_servers.as_slice(), vec![]);
-					self.dns_handle = Some(self.sockets.add(dns_socket));
-				}
-			}
-			Some(dhcpv4::Event::Deconfigured) => {
-				info!("DHCP lost config!");
-				let cidr = Ipv4Cidr::new(Ipv4Address::UNSPECIFIED, 0);
-				self.iface.update_ip_addrs(|addrs| {
-					if let Some(dest) = addrs.iter_mut().next() {
-						*dest = IpCidr::Ipv4(cidr);
-					}
-				});
-				self.iface.routes_mut().remove_default_ipv4_route();
-
-				#[cfg(feature = "dns")]
-				{
-					if let Some(dns_handle) = self.dns_handle {
-						self.sockets.remove(dns_handle);
-					}
-
-					self.dns_handle = None;
-				}
-			}
-		};
 	}
 
 	pub(crate) fn poll_delay(&mut self, timestamp: Instant) -> Option<Duration> {
