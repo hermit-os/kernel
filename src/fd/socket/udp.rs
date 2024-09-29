@@ -8,7 +8,7 @@ use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::wire::IpEndpoint;
 
 use crate::executor::block_on;
-use crate::executor::network::{now, Handle, NIC};
+use crate::executor::network::{Handle, NIC};
 use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
@@ -31,10 +31,7 @@ impl Socket {
 	fn with<R>(&self, f: impl FnOnce(&mut udp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let result = f(nic.get_mut_socket::<udp::Socket<'_>>(self.handle));
-		nic.poll_common(now());
-
-		result
+		f(nic.get_mut_socket::<udp::Socket<'_>>(self.handle))
 	}
 
 	async fn close(&self) -> io::Result<()> {

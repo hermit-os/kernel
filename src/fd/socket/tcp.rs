@@ -11,7 +11,7 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 
 use crate::executor::block_on;
-use crate::executor::network::{now, Handle, NIC};
+use crate::executor::network::{Handle, NIC};
 use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::{io, DEFAULT_KEEP_ALIVE_INTERVAL};
 
@@ -52,20 +52,14 @@ impl Socket {
 	fn with<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let result = f(nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.front().unwrap()));
-		nic.poll_common(now());
-
-		result
+		f(nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.front().unwrap()))
 	}
 
 	fn with_context<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>, &mut iface::Context) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
 		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(*self.handle.front().unwrap());
-		let result = f(s, cx);
-		nic.poll_common(now());
-
-		result
+		f(s, cx)
 	}
 
 	async fn close(&self) -> io::Result<()> {
@@ -418,7 +412,6 @@ impl Socket {
 				.map(|_| ())
 				.map_err(|_| io::Error::EIO)?;
 		}
-		nic.poll_common(now());
 
 		Ok(())
 	}

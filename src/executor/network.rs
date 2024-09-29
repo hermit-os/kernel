@@ -264,10 +264,9 @@ impl<'a> NetworkInterface<'a> {
 		Ok(tcp_handle)
 	}
 
-	pub(crate) fn poll_common(&mut self, timestamp: Instant) {
-		let _ = self
-			.iface
-			.poll(timestamp, &mut self.device, &mut self.sockets);
+	pub(crate) fn poll_common(&mut self, timestamp: Instant) -> bool {
+		self.iface
+			.poll(timestamp, &mut self.device, &mut self.sockets)
 	}
 
 	pub(crate) fn poll_delay(&mut self, timestamp: Instant) -> Option<Duration> {
@@ -320,22 +319,4 @@ impl<'a> NetworkInterface<'a> {
 		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
 		Ok(self.sockets.get_mut(dns_handle))
 	}
-}
-
-#[inline]
-pub(crate) fn network_delay(timestamp: Instant) -> Option<Duration> {
-	crate::executor::network::NIC
-		.lock()
-		.as_nic_mut()
-		.unwrap()
-		.poll_delay(timestamp)
-}
-
-#[inline]
-fn network_poll(timestamp: Instant) {
-	crate::executor::network::NIC
-		.lock()
-		.as_nic_mut()
-		.unwrap()
-		.poll_common(timestamp);
 }
