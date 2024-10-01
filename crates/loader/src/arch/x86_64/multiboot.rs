@@ -153,17 +153,21 @@ pub fn find_kernel() -> &'static [u8] {
 	assert!(start_address > 0);
 	info!("Found an ELF module at {:#x}", start_address);
 	let page_address = start_address.align_down(Size4KiB::SIZE as usize) + Size4KiB::SIZE as usize;
-	let counter =
-		(start_address.align_up(Size2MiB::SIZE as usize) - page_address) / Size4KiB::SIZE as usize;
-	paging::map::<Size4KiB>(page_address, page_address, counter, PageTableFlags::empty());
+	paging::map_range::<Size4KiB>(
+		page_address,
+		page_address,
+		start_address.align_up(Size2MiB::SIZE as usize),
+		PageTableFlags::empty(),
+	);
 
 	// map also the rest of the module
 	let address = start_address.align_up(Size2MiB::SIZE as usize);
-	let counter =
-		(end_address.align_up(Size2MiB::SIZE as usize) - address) / Size2MiB::SIZE as usize;
-	if counter > 0 {
-		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::empty());
-	}
+	paging::map_range::<Size2MiB>(
+		address,
+		address,
+		end_address.align_up(Size2MiB::SIZE as usize),
+		PageTableFlags::empty(),
+	);
 
 	unsafe { slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len) }
 }
