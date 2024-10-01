@@ -37,6 +37,7 @@ use crate::drivers::virtio::error::VirtioError;
 	any(feature = "tcp", feature = "udp", feature = "vsock")
 ))]
 use crate::drivers::virtio::transport::hardware;
+use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
 #[cfg(feature = "vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
@@ -765,10 +766,7 @@ impl PciBar {
 ///
 /// Returns ONLY Virtio specific capabilities, which allow to locate the actual capability
 /// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
-fn read_caps(
-	device: &PciDevice<PciConfigRegion>,
-	bars: &[PciBar],
-) -> Result<Vec<PciCap>, PciError> {
+fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciError> {
 	let device_id = device.device_id();
 
 	let capabilities = device
@@ -780,10 +778,14 @@ fn read_caps(
 		})
 		.map(|addr| CapData::read(addr, device.access()).unwrap())
 		.filter(|cap| cap.cfg_type != CapCfgType::Pci)
-		.map(|cap| PciCap {
-			bar: *bars.iter().find(|bar| bar.index == cap.bar).unwrap(),
-			dev_id: device_id,
-			cap,
+		.map(|cap| {
+			let slot = cap.bar;
+			let (addr, size) = device.memory_map_bar(slot, true).unwrap();
+			PciCap {
+				bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
+				dev_id: device_id,
+				cap,
+			}
 		})
 		.collect::<Vec<_>>();
 
@@ -793,11 +795,6 @@ fn read_caps(
 	} else {
 		Ok(capabilities)
 	}
-}
-
-/// Maps memory areas indicated by devices BAR's into virtual address space.
-fn map_bars(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciBar>, PciError> {
-	crate::drivers::virtio::env::pci::map_bar_mem(device)
 }
 
 /// Checks if minimal set of capabilities is present.
@@ -821,14 +818,8 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 		return Err(PciError::NoCapPtr(device_id));
 	}
 
-	// Mapped memory areas are reachable through PciBar structs.
-	let bar_list = match map_bars(device) {
-		Ok(list) => list,
-		Err(pci_error) => return Err(pci_error),
-	};
-
 	// Get list of PciCaps pointing to capabilities
-	let cap_list = match read_caps(device, &bar_list) {
+	let cap_list = match read_caps(device) {
 		Ok(list) => list,
 		Err(pci_error) => return Err(pci_error),
 	};
