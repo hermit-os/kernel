@@ -100,8 +100,7 @@ pub fn find_kernel() -> &'static [u8] {
 		assert!(mb_info > 0, "Could not find Multiboot information");
 		info!("Found Multiboot information at {:#x}", mb_info);
 	}
-	let page_address = unsafe { mb_info.align_down(Size4KiB::SIZE as usize) };
-	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
+	unsafe { paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty()) };
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
@@ -146,10 +145,9 @@ pub fn find_kernel() -> &'static [u8] {
 	);
 	assert!(start_address > 0);
 	info!("Found an ELF module at {:#x}", start_address);
-	let page_address = start_address.align_down(Size4KiB::SIZE as usize);
 	paging::map_range::<Size4KiB>(
-		page_address,
-		page_address,
+		start_address,
+		start_address,
 		start_address.align_up(Size2MiB::SIZE as usize),
 		PageTableFlags::empty(),
 	);
