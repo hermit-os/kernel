@@ -78,7 +78,7 @@ align-address = "0.3"
 anstyle = { version = "1", default-features = false }
 async-channel = { version = "2.3", default-features = false }
 async-lock = { version = "3.4.0", default-features = false }
-async-trait = "0.1.82"
+async-trait = "0.1.83"
 bit_field = "0.10"
 bitflags = "2.6"
 build-time = "0.1.3"
