@@ -138,19 +138,19 @@ pub fn find_kernel() -> &'static [u8] {
 	PhysAlloc::init(free_memory_address);
 
 	// Identity-map the ELF header of the first module.
+	let first_module_mapping_end = start_address.align_up(Size2MiB::SIZE as usize);
 	paging::map_range::<Size4KiB>(
 		start_address,
 		start_address,
-		start_address.align_up(Size2MiB::SIZE as usize),
+		first_module_mapping_end,
 		PageTableFlags::empty(),
 	);
 
 	// map also the rest of the module
-	let address = start_address.align_up(Size2MiB::SIZE as usize);
 	paging::map_range::<Size2MiB>(
-		address,
-		address,
-		end_address.align_up(Size2MiB::SIZE as usize),
+		first_module_mapping_end,
+		first_module_mapping_end,
+		free_memory_address,
 		PageTableFlags::empty(),
 	);
 
