@@ -22,6 +22,8 @@ pub const SHUT_RD: i32 = 0;
 pub const SHUT_WR: i32 = 1;
 /// further sends and receives will be disallowed
 pub const SHUT_RDWR: i32 = 2;
+/// The default queue size for incoming connections
+pub const DEFAULT_BACKLOG: i32 = 128;
 
 fn get_ephemeral_port() -> u16 {
 	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
@@ -294,6 +296,10 @@ impl Socket {
 	}
 
 	async fn accept(&mut self) -> io::Result<(Socket, Endpoint)> {
+		if !self.is_listen {
+			self.listen(DEFAULT_BACKLOG).await?;
+		}
+
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_active() {
