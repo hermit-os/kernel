@@ -32,7 +32,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex, VqSize,
 };
 use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -46,23 +46,23 @@ pub(crate) struct NetDevCfg {
 	pub features: virtio::net::F,
 }
 
-pub struct CtrlQueue(Option<Box<dyn Virtq>>);
+pub struct CtrlQueue(Option<VirtQueue>);
 
 impl CtrlQueue {
-	pub fn new(vq: Option<Box<dyn Virtq>>) -> Self {
+	pub fn new(vq: Option<VirtQueue>) -> Self {
 		CtrlQueue(vq)
 	}
 }
 
 pub struct RxQueues {
-	vqs: Vec<Box<dyn Virtq>>,
+	vqs: Vec<VirtQueue>,
 	poll_sender: async_channel::Sender<UsedBufferToken>,
 	poll_receiver: async_channel::Receiver<UsedBufferToken>,
 	packet_size: u32,
 }
 
 impl RxQueues {
-	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		let (poll_sender, poll_receiver) = async_channel::unbounded();
 
 		// See Virtio specification v1.1 - 5.1.6.3.1
@@ -92,11 +92,11 @@ impl RxQueues {
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, mut vq: Box<dyn Virtq>) {
+	fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
 		fill_queue(
-			vq.as_mut(),
+			&mut vq,
 			num_packets,
 			self.packet_size,
 			self.poll_sender.clone(),
@@ -185,14 +185,14 @@ fn fill_queue(
 /// Structure which handles transmission of packets and delegation
 /// to the respective queue structures.
 pub struct TxQueues {
-	vqs: Vec<Box<dyn Virtq>>,
+	vqs: Vec<VirtQueue>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
 	packet_length: u32,
 }
 
 impl TxQueues {
-	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		let packet_length = if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
@@ -224,7 +224,7 @@ impl TxQueues {
 		}
 	}
 
-	fn add(&mut self, vq: Box<dyn Virtq>) {
+	fn add(&mut self, vq: VirtQueue) {
 		// Currently we are doing nothing with the additional queues. They are inactive and might be used in the
 		// future
 		self.vqs.push(vq);
@@ -370,7 +370,7 @@ impl NetworkDriver for VirtioNetDriver {
 		}
 
 		fill_queue(
-			self.recv_vqs.vqs[0].as_mut(),
+			&mut self.recv_vqs.vqs[0],
 			num_buffers,
 			self.recv_vqs.packet_size,
 			self.recv_vqs.poll_sender.clone(),
@@ -672,7 +672,7 @@ impl VirtioNetDriver {
 		// Add a control if feature is negotiated
 		if self.dev_cfg.features.contains(virtio::net::F::CTRL_VQ) {
 			if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
-				self.ctrl_vq = CtrlQueue(Some(Box::new(
+				self.ctrl_vq = CtrlQueue(Some(VirtQueue::Packed(
 					PackedVq::new(
 						&mut self.com_cfg,
 						&self.notif_cfg,
@@ -683,7 +683,7 @@ impl VirtioNetDriver {
 					.unwrap(),
 				)));
 			} else {
-				self.ctrl_vq = CtrlQueue(Some(Box::new(
+				self.ctrl_vq = CtrlQueue(Some(VirtQueue::Split(
 					SplitVq::new(
 						&mut self.com_cfg,
 						&self.notif_cfg,
@@ -759,7 +759,7 @@ impl VirtioNetDriver {
 				// Interrupt for receiving packets is wanted
 				vq.enable_notifs();
 
-				self.recv_vqs.add(Box::from(vq));
+				self.recv_vqs.add(VirtQueue::Packed(vq));
 
 				let mut vq = PackedVq::new(
 					&mut self.com_cfg,
@@ -772,7 +772,7 @@ impl VirtioNetDriver {
 				// Interrupt for comunicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
-				self.send_vqs.add(Box::from(vq));
+				self.send_vqs.add(VirtQueue::Packed(vq));
 			} else {
 				let mut vq = SplitVq::new(
 					&mut self.com_cfg,
@@ -785,7 +785,7 @@ impl VirtioNetDriver {
 				// Interrupt for receiving packets is wanted
 				vq.enable_notifs();
 
-				self.recv_vqs.add(Box::from(vq));
+				self.recv_vqs.add(VirtQueue::Split(vq));
 
 				let mut vq = SplitVq::new(
 					&mut self.com_cfg,
@@ -798,7 +798,7 @@ impl VirtioNetDriver {
 				// Interrupt for comunicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
-				self.send_vqs.add(Box::from(vq));
+				self.send_vqs.add(VirtQueue::Split(vq));
 			}
 		}
 

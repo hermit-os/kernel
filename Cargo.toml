@@ -107,6 +107,7 @@ talc = { version = "4" }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
 zerocopy = { version = "0.7", default-features = false }
+enum_dispatch = "0.3.13"
 
 [dependencies.smoltcp]
 version = "0.11"

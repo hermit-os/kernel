@@ -2,7 +2,6 @@
 //!
 //! The module contains ...
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::str::FromStr;
 
@@ -13,7 +12,7 @@ use volatile::VolatileRef;
 use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-use crate::drivers::virtio::virtqueue::Virtq;
+use crate::drivers::virtio::virtqueue::VirtQueue;
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
@@ -46,8 +45,8 @@ impl VirtioNetDriver {
 			1514
 		};
 
-		let send_vqs = TxQueues::new(Vec::<Box<dyn Virtq>>::new(), &dev_cfg);
-		let recv_vqs = RxQueues::new(Vec::<Box<dyn Virtq>>::new(), &dev_cfg);
+		let send_vqs = TxQueues::new(Vec::<VirtQueue>::new(), &dev_cfg);
+		let recv_vqs = RxQueues::new(Vec::<VirtQueue>::new(), &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),
