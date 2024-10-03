@@ -216,7 +216,33 @@ impl Virtq for SplitVq {
 		self.index
 	}
 
-	fn new(
+	fn size(&self) -> VqSize {
+		self.size
+	}
+
+	fn has_used_buffers(&self) -> bool {
+		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
+	}
+}
+
+impl VirtqPrivate for SplitVq {
+	type Descriptor = virtq::Desc;
+	fn create_indirect_ctrl(
+		buffer_tkn: &AvailBufferToken,
+	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
+		Ok(Self::descriptor_iter(buffer_tkn)?
+			.zip(1..)
+			.map(|(descriptor, next_id)| Self::Descriptor {
+				next: next_id.into(),
+				..descriptor
+			})
+			.collect::<Vec<_>>()
+			.into_boxed_slice())
+	}
+}
+
+impl SplitVq {
+	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: VqSize,
@@ -302,29 +328,5 @@ impl Virtq for SplitVq {
 			size: VqSize(size),
 			index,
 		})
-	}
-
-	fn size(&self) -> VqSize {
-		self.size
-	}
-
-	fn has_used_buffers(&self) -> bool {
-		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
-	}
-}
-
-impl VirtqPrivate for SplitVq {
-	type Descriptor = virtq::Desc;
-	fn create_indirect_ctrl(
-		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		Ok(Self::descriptor_iter(buffer_tkn)?
-			.zip(1..)
-			.map(|(descriptor, next_id)| Self::Descriptor {
-				next: next_id.into(),
-				..descriptor
-			})
-			.collect::<Vec<_>>()
-			.into_boxed_slice())
 	}
 }

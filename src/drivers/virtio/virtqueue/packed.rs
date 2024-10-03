@@ -637,7 +637,30 @@ impl Virtq for PackedVq {
 		self.index
 	}
 
-	fn new(
+	fn size(&self) -> VqSize {
+		self.size
+	}
+
+	fn has_used_buffers(&self) -> bool {
+		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
+		self.descr_ring.is_marked_used(desc.flags)
+	}
+}
+
+impl VirtqPrivate for PackedVq {
+	type Descriptor = pvirtq::Desc;
+
+	fn create_indirect_ctrl(
+		buffer_tkn: &AvailBufferToken,
+	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
+		Ok(Self::descriptor_iter(buffer_tkn)?
+			.collect::<Vec<_>>()
+			.into_boxed_slice())
+	}
+}
+
+impl PackedVq {
+	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: VqSize,
@@ -725,26 +748,5 @@ impl Virtq for PackedVq {
 			index,
 			last_next: Cell::default(),
 		})
-	}
-
-	fn size(&self) -> VqSize {
-		self.size
-	}
-
-	fn has_used_buffers(&self) -> bool {
-		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
-		self.descr_ring.is_marked_used(desc.flags)
-	}
-}
-
-impl VirtqPrivate for PackedVq {
-	type Descriptor = pvirtq::Desc;
-
-	fn create_indirect_ctrl(
-		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		Ok(Self::descriptor_iter(buffer_tkn)?
-			.collect::<Vec<_>>()
-			.into_boxed_slice())
 	}
 }
