@@ -99,8 +99,8 @@ pub fn find_kernel() -> &'static [u8] {
 	unsafe {
 		assert!(mb_info > 0, "Could not find Multiboot information");
 		info!("Found Multiboot information at {:#x}", mb_info);
+		paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty())
 	}
-	unsafe { paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty()) };
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
@@ -111,46 +111,47 @@ pub fn find_kernel() -> &'static [u8] {
 	let mut module_iter = multiboot
 		.modules()
 		.expect("Could not find a memory map in the Multiboot information");
-	let start_address;
-	let mut end_address;
 
-	if let Some(first_module) = module_iter.next() {
-		start_address = first_module.start as usize;
-		info!("Found an ELF module at {:#x}", start_address);
-		end_address = first_module.end as usize;
-	} else {
-		panic!("Could not find a single module in the Multiboot information")
-	}
-	// Find the maximum end address from the remaining modules
-	for m in module_iter {
-		end_address = usize::max(end_address, m.end as usize);
-	}
-
-	info!("Found module: [{:#x} - {:#x}]", start_address, end_address);
-	let elf_start = start_address;
-	let elf_len = end_address - start_address;
+	let first_module = module_iter
+		.next()
+		.expect("Could not find a single module in the Multiboot information");
+	info!(
+		"Found an ELF module at [{:#x} - {:#x}]",
+		first_module.start, first_module.end
+	);
+	let elf_start = first_module.start as usize;
+	let elf_len = (first_module.end - first_module.start) as usize;
 	info!("Module length: {:#x}", elf_len);
 
-	let free_memory_address = end_address.align_up(Size2MiB::SIZE as usize);
+	// Find the maximum end address from the remaining modules
+	let mut end_address = first_module.end;
+	for m in module_iter {
+		end_address = cmp::max(end_address, m.end);
+	}
+
+	let modules_mapping_end = end_address.align_up(Size2MiB::SIZE) as usize;
 	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
-	let free_memory_address = cmp::max(free_memory_address, 0x800000);
+	let free_memory_address = cmp::max(modules_mapping_end, 0x800000);
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	PhysAlloc::init(free_memory_address);
 
-	// Identity-map the ELF header of the first module.
-	let first_module_mapping_end = start_address.align_up(Size2MiB::SIZE as usize);
+	// Identity-map the ELF header of the first module and until the 2 MiB
+	// mapping starts. We cannot start the 2 MiB mapping right from
+	// `first_module.end` because when it is aligned down, the
+	// resulting mapping range may overlap with the 4 KiB mapping.
+	let first_module_mapping_end = first_module.start.align_up(Size2MiB::SIZE) as usize;
 	paging::map_range::<Size4KiB>(
-		start_address,
-		start_address,
+		first_module.start as usize,
+		first_module.start as usize,
 		first_module_mapping_end,
 		PageTableFlags::empty(),
 	);
 
-	// map also the rest of the module
+	// map also the rest of the modules
 	paging::map_range::<Size2MiB>(
 		first_module_mapping_end,
 		first_module_mapping_end,
-		free_memory_address,
+		modules_mapping_end,
 		PageTableFlags::empty(),
 	);
 
