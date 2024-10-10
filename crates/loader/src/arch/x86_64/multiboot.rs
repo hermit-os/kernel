@@ -100,38 +100,30 @@ pub fn find_kernel() -> &'static [u8] {
 		assert!(mb_info > 0, "Could not find Multiboot information");
 		info!("Found Multiboot information at {:#x}", mb_info);
 	}
-	let page_address = unsafe { mb_info.align_down(Size4KiB::SIZE as usize) };
-	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
+	unsafe { paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty()) };
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
-	let modules_address = multiboot
-		.modules()
-		.expect("Could not find a memory map in the Multiboot information")
-		.next()
-		.expect("Could not find first map address")
-		.start as usize;
-	let page_address = modules_address.align_down(Size4KiB::SIZE as usize);
-	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
-	let modules = multiboot.modules().unwrap();
-	let mut found_module = false;
-	let mut start_address = 0;
-	let mut end_address = 0;
+	let mut module_iter = multiboot
+		.modules()
+		.expect("Could not find a memory map in the Multiboot information");
+	let start_address;
+	let mut end_address;
 
-	for m in modules {
-		found_module = true;
-
-		if start_address == 0 {
-			start_address = m.start as usize;
-		}
-
-		if m.end as usize > end_address {
-			end_address = m.end as usize;
-		}
+	if let Some(first_module) = module_iter.next() {
+		start_address = first_module.start as usize;
+		info!("Found an ELF module at {:#x}", start_address);
+		end_address = first_module.end as usize;
+	} else {
+		panic!("Could not find a single module in the Multiboot information")
+	}
+	// Find the maximum end address from the remaining modules
+	for m in module_iter {
+		end_address = usize::max(end_address, m.end as usize);
 	}
 
 	info!("Found module: [{:#x} - {:#x}]", start_address, end_address);
@@ -146,24 +138,21 @@ pub fn find_kernel() -> &'static [u8] {
 	PhysAlloc::init(free_memory_address);
 
 	// Identity-map the ELF header of the first module.
-	assert!(
-		found_module,
-		"Could not find a single module in the Multiboot information"
+	let first_module_mapping_end = start_address.align_up(Size2MiB::SIZE as usize);
+	paging::map_range::<Size4KiB>(
+		start_address,
+		start_address,
+		first_module_mapping_end,
+		PageTableFlags::empty(),
 	);
-	assert!(start_address > 0);
-	info!("Found an ELF module at {:#x}", start_address);
-	let page_address = start_address.align_down(Size4KiB::SIZE as usize) + Size4KiB::SIZE as usize;
-	let counter =
-		(start_address.align_up(Size2MiB::SIZE as usize) - page_address) / Size4KiB::SIZE as usize;
-	paging::map::<Size4KiB>(page_address, page_address, counter, PageTableFlags::empty());
 
 	// map also the rest of the module
-	let address = start_address.align_up(Size2MiB::SIZE as usize);
-	let counter =
-		(end_address.align_up(Size2MiB::SIZE as usize) - address) / Size2MiB::SIZE as usize;
-	if counter > 0 {
-		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::empty());
-	}
+	paging::map_range::<Size2MiB>(
+		first_module_mapping_end,
+		first_module_mapping_end,
+		free_memory_address,
+		PageTableFlags::empty(),
+	);
 
 	unsafe { slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len) }
 }
