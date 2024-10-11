@@ -8,14 +8,3 @@
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
-
-#[cfg(all(
-	any(feature = "vsock", feature = "tcp", feature = "udp"),
-	not(feature = "pci")
-))]
-use crate::arch::kernel::mmio as hardware;
-#[cfg(all(
-	any(feature = "vsock", feature = "tcp", feature = "udp"),
-	feature = "pci"
-))]
-use crate::drivers::pci as hardware;

@@ -34,6 +34,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq, VqIndex, VqSize,
 };
+use crate::drivers::{Driver, InterruptLine};
 use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -247,6 +248,7 @@ pub(crate) struct VirtioNetDriver {
 
 	pub(super) num_vqs: u16,
 	pub(super) mtu: u16,
+	pub(super) irq: InterruptLine,
 	pub(super) checksums: ChecksumCapabilities,
 }
 
@@ -405,6 +407,16 @@ impl NetworkDriver for VirtioNetDriver {
 		}
 
 		self.isr_stat.acknowledge();
+	}
+}
+
+impl Driver for VirtioNetDriver {
+	fn get_interrupt_number(&self) -> InterruptLine {
+		self.irq
+	}
+
+	fn get_name(&self) -> &'static str {
+		"virtio"
 	}
 }
 

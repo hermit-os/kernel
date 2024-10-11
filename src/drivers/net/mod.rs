@@ -9,10 +9,11 @@ use smoltcp::phy::ChecksumCapabilities;
 
 #[allow(unused_imports)]
 use crate::arch::kernel::core_local::*;
+use crate::drivers::Driver;
 use crate::executor::device::{RxToken, TxToken};
 
 /// A trait for accessing the network interface
-pub(crate) trait NetworkDriver {
+pub(crate) trait NetworkDriver: Driver {
 	/// Returns smoltcp's checksum capabilities
 	fn get_checksums(&self) -> ChecksumCapabilities {
 		ChecksumCapabilities::default()

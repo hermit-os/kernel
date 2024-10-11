@@ -7,9 +7,3 @@ pub mod mm;
 pub(crate) fn memory_barrier() {
 	riscv::asm::sfence_vma_all()
 }
-
-pub fn init_drivers() {
-	// Initialize PCI Drivers
-	#[cfg(feature = "pci")]
-	crate::drivers::pci::init_drivers();
-}

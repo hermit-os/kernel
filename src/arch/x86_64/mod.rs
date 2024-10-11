@@ -32,11 +32,3 @@ pub(crate) fn memory_barrier() {
 		asm!("mfence", options(nostack, nomem, preserves_flags),);
 	}
 }
-
-pub fn init_drivers() {
-	// Initialize PCI Drivers
-	#[cfg(feature = "pci")]
-	crate::drivers::pci::init_drivers();
-	#[cfg(all(not(feature = "pci"), any(feature = "tcp", feature = "udp")))]
-	crate::arch::x86_64::kernel::mmio::init_drivers();
-}

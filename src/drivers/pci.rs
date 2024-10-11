@@ -1,8 +1,11 @@
 #![allow(dead_code)]
 
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt;
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 use hermit_sync::InterruptTicketMutex;
@@ -20,6 +23,8 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(any(feature = "tcp", feature = "udp"))]
+use crate::drivers::net::NetworkDriver;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 	feature = "fuse",
@@ -34,6 +39,8 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+#[allow(unused_imports)]
+use crate::drivers::{Driver, InterruptHandlerQueue};
 
 pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
@@ -350,12 +357,83 @@ impl PciDriver {
 			_ => None,
 		}
 	}
+
+	fn get_interrupt_handler(&self) -> (InterruptLine, fn()) {
+		#[allow(unreachable_patterns)]
+		match self {
+			#[cfg(feature = "vsock")]
+			Self::VirtioVsock(drv) => {
+				fn vsock_handler() {
+					if let Some(driver) = get_vsock_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				let irq_number = drv.lock().get_interrupt_number();
+
+				(irq_number, vsock_handler)
+			}
+			#[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
+			Self::RTL8139Net(drv) => {
+				fn rtl8139_handler() {
+					if let Some(driver) = get_network_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				let irq_number = drv.lock().get_interrupt_number();
+
+				(irq_number, rtl8139_handler)
+			}
+			#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
+			Self::VirtioNet(drv) => {
+				fn network_handler() {
+					if let Some(driver) = get_network_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				let irq_number = drv.lock().get_interrupt_number();
+
+				(irq_number, network_handler)
+			}
+			#[cfg(feature = "fuse")]
+			Self::VirtioFs(drv) => {
+				fn fuse_handler() {}
+
+				let irq_number = drv.lock().get_interrupt_number();
+
+				(irq_number, fuse_handler)
+			}
+			_ => todo!(),
+		}
+	}
 }
 
 pub(crate) fn register_driver(drv: PciDriver) {
 	unsafe {
 		PCI_DRIVERS.push(drv);
 	}
+}
+
+pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandlerQueue, RandomState>
+{
+	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
+		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
+
+	for drv in unsafe { PCI_DRIVERS.iter() } {
+		let (irq_number, handler) = drv.get_interrupt_handler();
+
+		if let Some(map) = handlers.get_mut(&irq_number) {
+			map.push_back(handler);
+		} else {
+			let mut map: InterruptHandlerQueue = VecDeque::new();
+			map.push_back(handler);
+			handlers.insert(irq_number, map);
+		}
+	}
+
+	handlers
 }
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
@@ -382,7 +460,7 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 	}
 }
 
-pub(crate) fn init_drivers() {
+pub(crate) fn init() {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
 		for adapter in unsafe {

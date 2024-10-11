@@ -14,12 +14,14 @@ use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, Virt
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::Virtq;
+use crate::drivers::InterruptLine;
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
+		irq: InterruptLine,
 	) -> Result<Self, VirtioNetError> {
 		let dev_cfg_raw: &'static virtio::net::Config = unsafe {
 			&*registers
@@ -58,6 +60,7 @@ impl VirtioNetDriver {
 			send_vqs,
 			num_vqs: 0,
 			mtu,
+			irq,
 			checksums: ChecksumCapabilities::default(),
 		})
 	}
@@ -77,8 +80,9 @@ impl VirtioNetDriver {
 	pub fn init(
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
+		irq: InterruptLine,
 	) -> Result<VirtioNetDriver, VirtioError> {
-		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers) {
+		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq) {
 			match drv.init_dev() {
 				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
 				_ => {

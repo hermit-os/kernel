@@ -25,6 +25,7 @@ use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci as hardware;
+use crate::drivers::{Driver, InterruptLine};
 use crate::executor::device::{RxToken, TxToken};
 
 //Base address of the control registers
@@ -398,8 +399,16 @@ impl NetworkDriver for GEMDriver {
 			// handle incoming packets
 			todo!();
 		}
+	}
+}
 
-		//increment_irq_counter((32 + self.irq).into());
+impl Driver for GEMDriver {
+	fn get_interrupt_number(&self) -> InterruptLine {
+		self.irq
+	}
+
+	fn get_name(&self) -> &'static str {
+		"gem"
 	}
 }
 
@@ -679,13 +688,6 @@ pub fn init_device(
 		// Configure Interrupts
 		debug!("Install interrupt handler for GEM");
 
-		fn network_handler() {
-			if let Some(driver) = hardware::get_network_driver() {
-				driver.lock().handle_interrupt()
-			}
-		}
-
-		irq_install_handler(irq, network_handler);
 		(*gem).int_enable.write(Interrupts::FRAMERX::SET); // + Interrupts::TXCOMPL::SET
 
 		// Enable the Controller (again?)

@@ -22,6 +22,7 @@ use crate::drivers::virtio::virtqueue::{
 };
 #[cfg(feature = "pci")]
 use crate::drivers::vsock::pci::VsockDevCfgRaw;
+use crate::drivers::Driver;
 use crate::mm::device_alloc::DeviceAlloc;
 
 fn fill_queue(
@@ -289,6 +290,16 @@ pub(crate) struct VirtioVsockDriver {
 	pub(super) event_vq: EventQueue,
 	pub(super) recv_vq: RxQueue,
 	pub(super) send_vq: TxQueue,
+}
+
+impl Driver for VirtioVsockDriver {
+	fn get_interrupt_number(&self) -> InterruptLine {
+		self.irq
+	}
+
+	fn get_name(&self) -> &'static str {
+		"virtio"
+	}
 }
 
 impl VirtioVsockDriver {

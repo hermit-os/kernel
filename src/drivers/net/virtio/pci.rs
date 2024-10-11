@@ -98,6 +98,7 @@ impl VirtioNetDriver {
 			send_vqs,
 			num_vqs: 0,
 			mtu,
+			irq: device.get_irq().unwrap(),
 			checksums: ChecksumCapabilities::default(),
 		})
 	}

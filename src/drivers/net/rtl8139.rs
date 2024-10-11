@@ -8,15 +8,14 @@ use core::mem;
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86::io::*;
 
-use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
-use crate::drivers::pci as hardware;
 use crate::drivers::pci::PciDevice;
+use crate::drivers::Driver;
 use crate::executor::device::{RxToken, TxToken};
 
 /// size of the receive buffer
@@ -319,8 +318,6 @@ impl NetworkDriver for RTL8139Driver {
 	}
 
 	fn handle_interrupt(&mut self) {
-		increment_irq_counter(32 + self.irq);
-
 		let isr_contents = unsafe { inw(self.iobase + ISR) };
 
 		if (isr_contents & ISR_TOK) == ISR_TOK {
@@ -345,6 +342,16 @@ impl NetworkDriver for RTL8139Driver {
 				isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
 			);
 		}
+	}
+}
+
+impl Driver for RTL8139Driver {
+	fn get_interrupt_number(&self) -> InterruptLine {
+		self.irq
+	}
+
+	fn get_name(&self) -> &'static str {
+		"rtl8139"
 	}
 }
 
@@ -568,17 +575,8 @@ pub(crate) fn init_device(
 		);
 	}
 
-	// Install interrupt handler for RTL8139
-	debug!("Install interrupt handler for RTL8139 at {}", irq);
-
-	fn network_handler() {
-		if let Some(driver) = hardware::get_network_driver() {
-			driver.lock().handle_interrupt()
-		}
-	}
-
-	irq_install_handler(irq, network_handler);
-	add_irq_name(irq, "rtl8139_net");
+	info!("RTL8139 use interrupt line {}", irq);
+	add_irq_name(irq, "rtl8139");
 
 	Ok(RTL8139Driver {
 		iobase,
