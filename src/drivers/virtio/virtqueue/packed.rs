@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
 use core::sync::atomic::{fence, Ordering};
+use core::task::Waker;
 use core::{ops, ptr};
 
 use align_address::Align;
@@ -23,8 +24,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken,
-	UsedBufferTokenSender, Virtq, VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
+	VirtqPrivate, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -128,21 +129,14 @@ impl DescriptorRing {
 	}
 
 	/// Polls poll index and sets the state of any finished TransferTokens.
-	/// If [TransferToken::await_queue] is available, the [UsedBufferToken] will be moved to the queue.
-	fn poll(&mut self) {
+	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
 		let mut ctrl = self.get_read_ctrler();
 
-		if let Some((mut tkn, written_len)) = ctrl.poll_next() {
-			if let Some(queue) = tkn.await_queue.take() {
-				// Place the TransferToken in a Transfer, which will hold ownership of the token
-				queue
-					.try_send(UsedBufferToken::from_avail_buffer_token(
-						tkn.buff_tkn,
-						written_len,
-					))
-					.unwrap();
-			}
-		}
+		ctrl.poll_next()
+			.map(|(tkn, written_len)| {
+				UsedBufferToken::from_avail_buffer_token(tkn.buff_tkn, written_len)
+			})
+			.ok_or(VirtqError::NoNewUsed)
 	}
 
 	fn push_batch(
@@ -526,6 +520,7 @@ pub struct PackedVq {
 	/// device and is unique on a per device basis.
 	index: VqIndex,
 	last_next: Cell<RingIdx>,
+	waker_registrar: Box<dyn Fn(Waker)>,
 }
 
 // Public interface of PackedVq
@@ -539,8 +534,8 @@ impl Virtq for PackedVq {
 		self.drv_event.disable_notif();
 	}
 
-	fn poll(&mut self) {
-		self.descr_ring.poll();
+	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
+		self.descr_ring.try_recv()
 	}
 
 	fn dispatch_batch(
@@ -552,7 +547,7 @@ impl Virtq for PackedVq {
 		assert!(!buffer_tkns.is_empty());
 
 		let transfer_tkns = buffer_tkns.into_iter().map(|(buffer_tkn, buffer_type)| {
-			Self::transfer_token_from_buffer_token(buffer_tkn, None, buffer_type)
+			Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type)
 		});
 
 		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
@@ -581,18 +576,13 @@ impl Virtq for PackedVq {
 	fn dispatch_batch_await(
 		&mut self,
 		buffer_tkns: Vec<(AvailBufferToken, BufferType)>,
-		await_queue: super::UsedBufferTokenSender,
 		notif: bool,
 	) -> Result<(), VirtqError> {
 		// Zero transfers are not allowed
 		assert!(!buffer_tkns.is_empty());
 
 		let transfer_tkns = buffer_tkns.into_iter().map(|(buffer_tkn, buffer_type)| {
-			Self::transfer_token_from_buffer_token(
-				buffer_tkn,
-				Some(await_queue.clone()),
-				buffer_type,
-			)
+			Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type)
 		});
 
 		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
@@ -621,11 +611,10 @@ impl Virtq for PackedVq {
 	fn dispatch(
 		&mut self,
 		buffer_tkn: AvailBufferToken,
-		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
-		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
+		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type);
 		let next_idx = self.descr_ring.push(transfer_tkn)?;
 
 		if notif {
@@ -655,6 +644,7 @@ impl Virtq for PackedVq {
 		size: VqSize,
 		index: VqIndex,
 		features: virtio::F,
+		waker_registrar: Box<dyn Fn(Waker)>,
 	) -> Result<Self, VirtqError> {
 		// Currently we do not have support for in order use.
 		// This steems from the fact, that the packedVq ReadCtrl currently is not
@@ -738,6 +728,7 @@ impl Virtq for PackedVq {
 			size: VqSize::from(vq_size),
 			index,
 			last_next: Default::default(),
+			waker_registrar,
 		})
 	}
 
@@ -748,6 +739,10 @@ impl Virtq for PackedVq {
 	fn has_used_buffers(&self) -> bool {
 		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
 		self.descr_ring.is_marked_used(desc.flags)
+	}
+
+	fn register_waker(&self, waker: core::task::Waker) {
+		(self.waker_registrar)(waker);
 	}
 }
 

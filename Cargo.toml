@@ -76,7 +76,6 @@ virtio = { package = "virtio-spec", version = "0.1", features = ["alloc", "mmio"
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }
-async-channel = { version = "2.3", default-features = false }
 async-lock = { version = "3.4.0", default-features = false }
 async-trait = "0.1.83"
 bit_field = "0.10"

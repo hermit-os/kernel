@@ -78,6 +78,7 @@ impl VirtioFsDriver {
 			notif_cfg,
 			vqueues: Vec::new(),
 			irq: device.get_irq().unwrap(),
+			waker: None,
 		})
 	}
 
