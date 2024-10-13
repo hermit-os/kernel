@@ -36,7 +36,7 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "version_check",
- "zerocopy",
+ "zerocopy 0.7.35",
 ]
 
 [[package]]
@@ -184,9 +184,9 @@ checksum = "dc827186963e592360843fb5ba4b973e145841266c1357f7180c43526f2e5b61"
 
 [[package]]
 name = "bitfield-struct"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de05f8756f1c68937349406d4632ae96ae35901019b5e59c508d9c38c64715fb"
+checksum = "45ced5210f4878484de1a151cbef1cbff7afe0c1a005e4448e8a4ec76275c7a0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -428,13 +428,13 @@ checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 
 [[package]]
 name = "endian-num"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8f59926911ef34d1efb9ea1ee8ca78385df62ce700ccf2bcb149011bd226888"
+checksum = "2b4a54dfedecb1dc004776a597db0c858cf6c31579296734511309291b8399ce"
 dependencies = [
  "bitflags 2.6.0",
- "zerocopy",
- "zerocopy-derive",
+ "zerocopy 0.8.5",
+ "zerocopy-derive 0.8.5",
 ]
 
 [[package]]
@@ -510,13 +510,13 @@ dependencies = [
 
 [[package]]
 name = "fuse-abi"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c311ed3856f2dc59387ddc411a4e5a80d5bbb359aa060c5724a26e30991724b8"
+checksum = "19976a6994b6ebda45b4d02a46dc5a9b2af17d46a43d9f76404c333f0b38f7d7"
 dependencies = [
  "num_enum",
- "zerocopy",
- "zerocopy-derive",
+ "zerocopy 0.8.5",
+ "zerocopy-derive 0.8.5",
 ]
 
 [[package]]
@@ -658,7 +658,7 @@ dependencies = [
  "volatile 0.6.1",
  "x86",
  "x86_64",
- "zerocopy",
+ "zerocopy 0.8.5",
 ]
 
 [[package]]
@@ -1551,9 +1551,9 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "virtio-spec"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d93a09b1c5e4df5cb0251ce5b19ab95064584a01665117b378d692eb39b84b0b"
+checksum = "49c4d9057347dd68d5c3f9ac5ec5d76adfe59d7378c4ae44f022795aa42953e6"
 dependencies = [
  "allocator-api2",
  "bitfield-struct",
@@ -1563,8 +1563,8 @@ dependencies = [
  "pci_types",
  "volatile 0.6.1",
  "volatile-macro",
- "zerocopy",
- "zerocopy-derive",
+ "zerocopy 0.8.5",
+ "zerocopy-derive 0.8.5",
 ]
 
 [[package]]
@@ -1882,7 +1882,16 @@ version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b9b4fd18abc82b8136838da5d50bae7bdea537c574d8dc1a34ed098d6c166f0"
 dependencies = [
- "zerocopy-derive",
+ "zerocopy-derive 0.7.35",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6129d25825e874589a0e529175dd060c13dab4f3d960c6a0b711e5535b598bb2"
+dependencies = [
+ "zerocopy-derive 0.8.5",
 ]
 
 [[package]]
@@ -1890,6 +1899,17 @@ name = "zerocopy-derive"
 version = "0.7.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d917df3784b4e2f5deb708d14623b2c02833890e1aa7a5dd1088998e8e9402b1"
 dependencies = [
  "proc-macro2",
  "quote",
