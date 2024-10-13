@@ -72,7 +72,7 @@ vsock = ["pci"]
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
-virtio = { package = "virtio-spec", version = "0.1", features = ["alloc", "mmio", "nightly", "zerocopy"] }
+virtio = { package = "virtio-spec", version = "0.2", features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }
@@ -87,7 +87,7 @@ crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
-fuse-abi = { version = "0.1", features = ["zerocopy"], optional = true }
+fuse-abi = { version = "0.2", features = ["linux", "zerocopy"], optional = true }
 hashbrown = { version = "0.15", default-features = false }
 hermit-entry = { version = "0.10", features = ["kernel"] }
 hermit-sync = "0.1"
@@ -106,7 +106,7 @@ take-static = "0.1"
 talc = { version = "4" }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
-zerocopy = { version = "0.7", default-features = false }
+zerocopy = { version = "0.8", default-features = false }
 
 [dependencies.smoltcp]
 version = "0.11"

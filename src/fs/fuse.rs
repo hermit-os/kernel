@@ -93,7 +93,7 @@ pub(crate) mod ops {
 	impl Init {
 		pub(crate) fn create() -> (Cmd<Self>, u32) {
 			let cmd = Cmd::new(
-				FUSE_ROOT_ID.into(),
+				FUSE_ROOT_ID,
 				fuse_init_in {
 					major: 7,
 					minor: 31,
@@ -119,7 +119,7 @@ pub(crate) mod ops {
 		#[allow(clippy::self_named_constructors)]
 		pub(crate) fn create(path: CString, flags: u32, mode: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(
-				FUSE_ROOT_ID.into(),
+				FUSE_ROOT_ID,
 				fuse_create_in {
 					flags,
 					mode,
@@ -321,7 +321,7 @@ pub(crate) mod ops {
 	impl Mkdir {
 		pub(crate) fn create(path: CString, mode: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(
-				FUSE_ROOT_ID.into(),
+				FUSE_ROOT_ID,
 				fuse_mkdir_in {
 					mode,
 					..Default::default()
@@ -345,7 +345,7 @@ pub(crate) mod ops {
 
 	impl Unlink {
 		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::with_cstring(FUSE_ROOT_ID.into(), (), name);
+			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
 			(cmd, 0)
 		}
 	}
@@ -363,7 +363,7 @@ pub(crate) mod ops {
 
 	impl Rmdir {
 		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::with_cstring(FUSE_ROOT_ID.into(), (), name);
+			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
 			(cmd, 0)
 		}
 	}
@@ -383,7 +383,7 @@ pub(crate) mod ops {
 
 	impl Lookup {
 		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::with_cstring(FUSE_ROOT_ID.into(), (), name);
+			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
 			(cmd, size_of::<fuse_entry_out>().try_into().unwrap())
 		}
 	}
@@ -525,7 +525,7 @@ fn lookup(name: CString) -> Option<u64> {
 		.send_command(cmd, rsp_payload_len)
 		.ok()?;
 	if rsp.headers.out_header.error == 0 {
-		let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap()).unwrap();
+		let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
 		Some(entry_out.nodeid)
 	} else {
 		None
@@ -978,9 +978,7 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error != 0 {
 			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
 		} else {
-			let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
-				.ok_or(io::Error::EIO)
-				.unwrap();
+			let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
 			let attr = entry_out.attr;
 
 			if attr.mode & S_IFMT != S_IFLNK {
@@ -1007,9 +1005,7 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error != 0 {
 			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
 		} else {
-			let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
-				.ok_or(io::Error::EIO)
-				.unwrap();
+			let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
 			Ok(FileAttr::from(entry_out.attr))
 		}
 	}
@@ -1038,9 +1034,8 @@ impl VfsNode for FuseDirectory {
 				.send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error == 0 {
-				let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
-					.ok_or(io::Error::EIO)
-					.unwrap();
+				let entry_out =
+					fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
 				let attr = FileAttr::from(entry_out.attr);
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
 					let mut path = path.into_string().unwrap();
@@ -1233,9 +1228,8 @@ pub(crate) fn init() {
 					.unwrap();
 
 				assert_eq!(rsp.headers.out_header.error, 0);
-				let entry_out = fuse_entry_out::ref_from(rsp.payload.as_ref().unwrap())
-					.ok_or(io::Error::EIO)
-					.unwrap();
+				let entry_out =
+					fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
 				let attr = entry_out.attr;
 				let attr = FileAttr::from(attr);
 
