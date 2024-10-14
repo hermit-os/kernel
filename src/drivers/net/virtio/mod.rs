@@ -57,15 +57,11 @@ impl CtrlQueue {
 
 pub struct RxQueues {
 	vqs: Vec<Box<dyn Virtq>>,
-	poll_sender: async_channel::Sender<UsedBufferToken>,
-	poll_receiver: async_channel::Receiver<UsedBufferToken>,
 	packet_size: u32,
 }
 
 impl RxQueues {
 	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
-		let (poll_sender, poll_receiver) = async_channel::unbounded();
-
 		// See Virtio specification v1.1 - 5.1.6.3.1
 		//
 		let packet_size = if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
@@ -74,12 +70,7 @@ impl RxQueues {
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
 		};
 
-		Self {
-			vqs,
-			poll_sender,
-			poll_receiver,
-			packet_size,
-		}
+		Self { vqs, packet_size }
 	}
 
 	/// Takes care of handling packets correctly which need some processing after being received.
@@ -96,32 +87,12 @@ impl RxQueues {
 	fn add(&mut self, mut vq: Box<dyn Virtq>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		fill_queue(
-			vq.as_mut(),
-			num_packets,
-			self.packet_size,
-			self.poll_sender.clone(),
-		);
+		fill_queue(vq.as_mut(), num_packets, self.packet_size);
 		self.vqs.push(vq);
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
-		let transfer = self.poll_receiver.try_recv();
-
-		transfer
-			.or_else(|_| {
-				// Check if any not yet provided transfers are in the queue.
-				self.poll();
-
-				self.poll_receiver.try_recv()
-			})
-			.ok()
-	}
-
-	fn poll(&mut self) {
-		for vq in &mut self.vqs {
-			vq.poll();
-		}
+		self.vqs[0].try_recv().ok()
 	}
 
 	fn enable_notifs(&mut self) {
@@ -141,12 +112,7 @@ impl RxQueues {
 	}
 }
 
-fn fill_queue(
-	vq: &mut dyn Virtq,
-	num_packets: u16,
-	packet_size: u32,
-	poll_sender: async_channel::Sender<UsedBufferToken>,
-) {
+fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(
 			vec![],
@@ -168,12 +134,7 @@ fn fill_queue(
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
 		// Transfers will be awaited at the queue
-		match vq.dispatch(
-			buff_tkn,
-			Some(poll_sender.clone()),
-			false,
-			BufferType::Direct,
-		) {
+		match vq.dispatch(buff_tkn, false, BufferType::Direct) {
 			Ok(_) => (),
 			Err(err) => {
 				error!("{:#?}", err);
@@ -221,7 +182,9 @@ impl TxQueues {
 
 	fn poll(&mut self) {
 		for vq in &mut self.vqs {
-			vq.poll();
+			// We don't do anything with the buffers but we need to receive them for the
+			// ring slots to be emptied and the memory from the previous transfers to be freed.
+			while vq.try_recv().is_ok() {}
 		}
 	}
 
@@ -341,7 +304,7 @@ impl NetworkDriver for VirtioNetDriver {
 		.unwrap();
 
 		self.send_vqs.vqs[0]
-			.dispatch(buff_tkn, None, false, BufferType::Direct)
+			.dispatch(buff_tkn, false, BufferType::Direct)
 			.unwrap();
 
 		result
@@ -375,7 +338,6 @@ impl NetworkDriver for VirtioNetDriver {
 			self.recv_vqs.vqs[0].as_mut(),
 			num_buffers,
 			self.recv_vqs.packet_size,
-			self.recv_vqs.poll_sender.clone(),
 		);
 
 		let vec_data = packets.into_iter().flatten().collect();

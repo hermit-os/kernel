@@ -19,8 +19,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, UsedBufferTokenSender,
-	Virtq, VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
+	VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::{paging, VirtAddr};
@@ -98,51 +98,38 @@ impl DescrRing {
 		Ok(next_idx)
 	}
 
-	fn poll(&mut self) {
-		// We cannot use a simple while loop here because Rust cannot tell that [Self::used_ring_ref],
-		// [Self::read_idx] and [Self::token_ring] access separate fields of `self`. For this reason we
-		// need to move [Self::used_ring_ref] lines into a separate scope.
-		loop {
-			let used_elem;
-			{
-				if self.read_idx == self.used_ring().idx.to_ne() {
-					break;
-				} else {
-					let cur_ring_index = self.read_idx as usize % self.token_ring.len();
-					used_elem = self.used_ring().ring()[cur_ring_index];
-				}
-			}
-
-			let mut tkn = self.token_ring[used_elem.id.to_ne() as usize]
-				.take()
-				.expect(
-					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
-				);
-
-			if let Some(queue) = tkn.await_queue.take() {
-				queue
-					.try_send(UsedBufferToken::from_avail_buffer_token(
-						tkn.buff_tkn,
-						used_elem.len.to_ne(),
-					))
-					.unwrap()
-			}
-
-			let mut id_ret_idx = u16::try_from(used_elem.id.to_ne()).unwrap();
-			loop {
-				self.mem_pool.ret_id(super::MemDescrId(id_ret_idx));
-				let cur_chain_elem =
-					unsafe { self.descr_table_mut()[usize::from(id_ret_idx)].assume_init() };
-				if cur_chain_elem.flags.contains(virtq::DescF::NEXT) {
-					id_ret_idx = cur_chain_elem.next.to_ne();
-				} else {
-					break;
-				}
-			}
-
-			memory_barrier();
-			self.read_idx = self.read_idx.wrapping_add(1);
+	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
+		if self.read_idx == self.used_ring().idx.to_ne() {
+			return Err(VirtqError::NoNewUsed);
 		}
+		let cur_ring_index = self.read_idx as usize % self.token_ring.len();
+		let used_elem = self.used_ring().ring()[cur_ring_index];
+
+		let tkn = self.token_ring[used_elem.id.to_ne() as usize]
+			.take()
+			.expect(
+				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
+			);
+
+		// We return the indices of the now freed ring slots back to `mem_pool.`
+		let mut id_ret_idx = u16::try_from(used_elem.id.to_ne()).unwrap();
+		loop {
+			self.mem_pool.ret_id(super::MemDescrId(id_ret_idx));
+			let cur_chain_elem =
+				unsafe { self.descr_table_mut()[usize::from(id_ret_idx)].assume_init() };
+			if cur_chain_elem.flags.contains(virtq::DescF::NEXT) {
+				id_ret_idx = cur_chain_elem.next.to_ne();
+			} else {
+				break;
+			}
+		}
+
+		memory_barrier();
+		self.read_idx = self.read_idx.wrapping_add(1);
+		Ok(UsedBufferToken::from_avail_buffer_token(
+			tkn.buff_tkn,
+			used_elem.len.to_ne(),
+		))
 	}
 
 	fn drv_enable_notif(&mut self) {
@@ -180,8 +167,8 @@ impl Virtq for SplitVq {
 		self.ring.drv_disable_notif();
 	}
 
-	fn poll(&mut self) {
-		self.ring.poll()
+	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
+		self.ring.try_recv()
 	}
 
 	fn dispatch_batch(
@@ -195,7 +182,6 @@ impl Virtq for SplitVq {
 	fn dispatch_batch_await(
 		&mut self,
 		_tkns: Vec<(AvailBufferToken, BufferType)>,
-		_await_queue: super::UsedBufferTokenSender,
 		_notif: bool,
 	) -> Result<(), VirtqError> {
 		unimplemented!()
@@ -204,11 +190,10 @@ impl Virtq for SplitVq {
 	fn dispatch(
 		&mut self,
 		buffer_tkn: AvailBufferToken,
-		sender: Option<UsedBufferTokenSender>,
 		notif: bool,
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
-		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, sender, buffer_type);
+		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type);
 		let next_idx = self.ring.push(transfer_tkn)?;
 
 		if notif {
