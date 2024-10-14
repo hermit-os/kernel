@@ -4,7 +4,7 @@ use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
 
-use crate::arch::x86_64::kernel::{get_fdt, get_limit, get_mbinfo};
+use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::{env, mm};
@@ -18,7 +18,7 @@ const KVM_32BIT_GAP_SIZE: usize = 768 << 20;
 const KVM_32BIT_GAP_START: usize = KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE;
 
 fn detect_from_fdt() -> Result<(), ()> {
-	let fdt = get_fdt().ok_or(())?;
+	let fdt = env::fdt().ok_or(())?;
 
 	let mems = fdt.find_all_nodes("/memory");
 	let all_regions = mems.map(|m| m.reg().unwrap().next().unwrap());

@@ -196,8 +196,7 @@ fn boot_processor_main() -> ! {
 	info!("Welcome to Hermit {}", env!("CARGO_PKG_VERSION"));
 	info!("Kernel starts at {:p}", env::get_base_address());
 
-	#[cfg(target_arch = "x86_64")]
-	if let Some(fdt) = kernel::get_fdt() {
+	if let Some(fdt) = env::fdt() {
 		info!("FDT:\n{fdt:#?}");
 	}
 
