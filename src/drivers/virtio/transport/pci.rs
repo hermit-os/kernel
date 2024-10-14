@@ -164,103 +164,12 @@ impl PciCap {
 /// [PciCap] objects, to allow the driver to map its
 /// device specific configurations independently.
 pub struct UniCapsColl {
-	com_cfg_list: Vec<ComCfg>,
-	notif_cfg_list: Vec<NotifCfg>,
-	isr_stat_list: Vec<IsrStatus>,
-	sh_mem_cfg_list: Vec<ShMemCfg>,
-	dev_cfg_list: Vec<PciCap>,
+	pub(crate) com_cfg: ComCfg,
+	pub(crate) notif_cfg: NotifCfg,
+	pub(crate) isr_cfg: IsrStatus,
+	pub(crate) sh_mem_cfg_list: Vec<ShMemCfg>,
+	pub(crate) dev_cfg_list: Vec<PciCap>,
 }
-
-impl UniCapsColl {
-	/// Returns an Caps with empty lists.
-	fn new() -> Self {
-		UniCapsColl {
-			com_cfg_list: Vec::new(),
-			notif_cfg_list: Vec::new(),
-			isr_stat_list: Vec::new(),
-			sh_mem_cfg_list: Vec::new(),
-			dev_cfg_list: Vec::new(),
-		}
-	}
-
-	fn add_cfg_common(&mut self, com: ComCfg) {
-		self.com_cfg_list.push(com);
-		// Resort array
-		//
-		// This should not be to expensive, as "rational" devices will hold an
-		// acceptibal amount of configuration structures.
-		self.com_cfg_list.sort_by(|a, b| b.rank.cmp(&a.rank));
-	}
-
-	fn add_cfg_notif(&mut self, notif: NotifCfg) {
-		self.notif_cfg_list.push(notif);
-		// Resort array
-		//
-		// This should not be to expensive, as "rational" devices will hold an
-		// acceptable amount of configuration structures.
-		self.notif_cfg_list.sort_by(|a, b| b.rank.cmp(&a.rank));
-	}
-
-	fn add_cfg_isr(&mut self, isr_stat: IsrStatus) {
-		self.isr_stat_list.push(isr_stat);
-		// Resort array
-		//
-		// This should not be to expensive, as "rational" devices will hold an
-		// acceptable amount of configuration structures.
-		self.isr_stat_list.sort_by(|a, b| b.rank.cmp(&a.rank));
-	}
-
-	fn add_cfg_sh_mem(&mut self, sh_mem: ShMemCfg) {
-		self.sh_mem_cfg_list.push(sh_mem);
-		// Resort array
-		//
-		// This should not be to expensive, as "rational" devices will hold an
-		// acceptable amount of configuration structures.
-		self.sh_mem_cfg_list.sort_by(|a, b| b.id.cmp(&a.id));
-	}
-
-	fn add_cfg_dev(&mut self, pci_cap: PciCap) {
-		self.dev_cfg_list.push(pci_cap);
-		// Resort array
-		//
-		// This should not be to expensive, as "rational" devices will hold an
-		// acceptable amount of configuration structures.
-		self.dev_cfg_list.sort_by(|a, b| b.cap.id.cmp(&a.cap.id));
-	}
-}
-
-// Public interface of UniCapsCollection
-impl UniCapsColl {
-	/// Returns the highest prioritized PciCap that indiactes a
-	/// Virito device configuration.
-	///
-	/// INFO: This function removes the capability and returns ownership.
-	pub fn get_dev_cfg(&mut self) -> Option<PciCap> {
-		self.dev_cfg_list.pop()
-	}
-
-	/// Returns the highest prioritized common configuration structure.
-	///
-	/// INFO: This function removes the capability and returns ownership.
-	pub fn get_com_cfg(&mut self) -> Option<ComCfg> {
-		self.com_cfg_list.pop()
-	}
-
-	/// Returns the highest prioritized ISR status configuration structure.
-	///
-	/// INFO: This function removes the Capability and returns ownership.
-	pub fn get_isr_cfg(&mut self) -> Option<IsrStatus> {
-		self.isr_stat_list.pop()
-	}
-
-	/// Returns the highest prioritized notification structure.
-	///
-	/// INFO: This function removes the Capability and returns ownership.
-	pub fn get_notif_cfg(&mut self) -> Option<NotifCfg> {
-		self.notif_cfg_list.pop()
-	}
-}
-
 /// Wraps a [`CommonCfg`] in order to preserve
 /// the original structure.
 ///
@@ -790,72 +699,65 @@ fn map_bars(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciBar>, PciError
 	crate::drivers::virtio::env::pci::map_bar_mem(device)
 }
 
-/// Checks if minimal set of capabilities is present.
-///
-/// INFO: Currently only checks if at least one common config struct has been found and mapped.
-fn check_caps(caps: UniCapsColl) -> Result<UniCapsColl, PciError> {
-	if caps.com_cfg_list.is_empty() {
-		error!("Device with unknown id, does not have a common config structure!");
-		return Err(PciError::General(0));
-	}
-
-	Ok(caps)
-}
-
-pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, PciError> {
+pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, VirtioError> {
 	let device_id = device.device_id();
 
 	// In case caplist pointer is not used, abort as it is essential
 	if !device.status().has_capability_list() {
 		error!("Found virtio device without capability list. Aborting!");
-		return Err(PciError::NoCapPtr(device_id));
+		return Err(VirtioError::FromPci(PciError::NoCapPtr(device_id)));
 	}
 
 	// Mapped memory areas are reachable through PciBar structs.
 	let bar_list = match map_bars(device) {
 		Ok(list) => list,
-		Err(pci_error) => return Err(pci_error),
+		Err(pci_error) => return Err(VirtioError::FromPci(pci_error)),
 	};
 
 	// Get list of PciCaps pointing to capabilities
 	let cap_list = match read_caps(device, &bar_list) {
 		Ok(list) => list,
-		Err(pci_error) => return Err(pci_error),
+		Err(pci_error) => return Err(VirtioError::FromPci(pci_error)),
 	};
 
-	let mut caps = UniCapsColl::new();
+	let mut com_cfg = None;
+	let mut notif_cfg = None;
+	let mut isr_cfg = None;
+	let mut sh_mem_cfg_list = Vec::new();
+	let mut dev_cfg_list = Vec::new();
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
 		match pci_cap.cap.cfg_type {
-			CapCfgType::Common => match pci_cap.map_common_cfg() {
-				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.cap.id)),
-				None => error!(
-					"Common config capability with id {}, of device {:x}, could not be mapped!",
-					pci_cap.cap.id, device_id
-				),
-			},
-			CapCfgType::Notify => match NotifCfg::new(&pci_cap) {
-				Some(notif) => caps.add_cfg_notif(notif),
-				None => error!(
-					"Notification config capability with id {}, of device {:x} could not be used!",
-					pci_cap.cap.id, device_id
-				),
-			},
-			CapCfgType::Isr => match pci_cap.map_isr_status() {
-				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.cap.id)),
-				None => error!(
-					"ISR status config capability with id {}, of device {:x} could not be used!",
-					pci_cap.cap.id, device_id
-				),
-			},
+			CapCfgType::Common => {
+				if com_cfg.is_none() {
+					match pci_cap.map_common_cfg() {
+						Some(cap) => com_cfg = Some(ComCfg::new(cap, pci_cap.cap.id)),
+						None => error!("Common config capability with id {}, of device {:x}, could not be mapped!", pci_cap.cap.id, device_id),
+					}
+				}
+			}
+			CapCfgType::Notify => {
+				if notif_cfg.is_none() {
+					match NotifCfg::new(&pci_cap) {
+						Some(notif) => notif_cfg = Some(notif),
+						None => error!("Notification config capability with id {}, of device {device_id:x} could not be used!", pci_cap.cap.id),
+					}
+				}
+			}
+			CapCfgType::Isr => {
+				if isr_cfg.is_none() {
+					match pci_cap.map_isr_status() {
+						Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat, pci_cap.cap.id)),
+						None => error!("ISR status config capability with id {}, of device {device_id:x} could not be used!", pci_cap.cap.id),
+					}
+				}
+			}
 			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
-				Some(sh_mem) => caps.add_cfg_sh_mem(sh_mem),
-				None => error!(
-					"Shared Memory config capability with id {}, of device {:x} could not be used!",
-					pci_cap.cap.id, device_id
+				Some(sh_mem) => sh_mem_cfg_list.push(sh_mem),
+				None => error!("Shared Memory config capability with id {}, of device {device_id:x} could not be used!", pci_cap.cap.id, 
 				),
 			},
-			CapCfgType::Device => caps.add_cfg_dev(pci_cap),
+			CapCfgType::Device => dev_cfg_list.push(pci_cap),
 
 			// PCI's configuration space is allowed to hold other structures, which are not virtio specific and are therefore ignored
 			// in the following
@@ -863,7 +765,13 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 		}
 	}
 
-	check_caps(caps)
+	Ok(UniCapsColl {
+		com_cfg: com_cfg.ok_or(VirtioError::NoComCfg(device_id))?,
+		notif_cfg: notif_cfg.ok_or(VirtioError::NoNotifCfg(device_id))?,
+		isr_cfg: isr_cfg.ok_or(VirtioError::NoIsrCfg(device_id))?,
+		sh_mem_cfg_list,
+		dev_cfg_list,
+	})
 }
 
 /// Checks existing drivers for support of given device. Upon match, provides
