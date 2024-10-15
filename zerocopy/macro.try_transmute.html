@@ -1,0 +1,35 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Conditionally transmutes a value of one type to a value of another type of the same size."><title>try_transmute in zerocopy - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-46f98efaafac5295.ttf.woff2,FiraSans-Regular-018c141bf0843ffd.woff2,FiraSans-Medium-8f9a781e4970d388.woff2,SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2,SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../static.files/rustdoc-492a78a4a87dcc01.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="zerocopy" data-themes="" data-resource-suffix="" data-rustdoc-version="1.82.0-nightly (a7399ba69 2024-08-31)" data-channel="nightly" data-search-js="search-a99f1315e7cc5121.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../static.files/storage-118b08c4c78b968e.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-921df33f47b8780c.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-3b12f09e550e0385.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc macro"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../zerocopy/index.html">zerocopy</a><span class="version">0.8.5</span></h2></div><div class="sidebar-elems"></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Macro <a href="index.html">zerocopy</a>::<wbr><a class="macro" href="#">try_transmute</a><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><span class="out-of-band"><a class="src" href="../src/zerocopy/macros.rs.html#440-463">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><pre class="rust item-decl"><span class="macro">macro_rules!</span> try_transmute {
+    (<span class="macro-nonterminal">$e</span>:expr) =&gt; { ... };
+}</pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Conditionally transmutes a value of one type to a value of another type of
+the same size.</p>
+<p>This macro behaves like an invocation of this function:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">fn </span>try_transmute&lt;Src, Dst&gt;(src: Src) -&gt; <span class="prelude-ty">Result</span>&lt;Dst, ValidityError&lt;Src, Dst&gt;&gt;
+<span class="kw">where
+    </span>Src: IntoBytes,
+    Dst: TryFromBytes,
+    size_of::&lt;Src&gt;() == size_of::&lt;Dst&gt;(),
+{
+    ...
+}</code></pre></div>
+<p>However, unlike a function, this macro can only be invoked when the types of
+<code>Src</code> and <code>Dst</code> are completely concrete. The types <code>Src</code> and <code>Dst</code> are
+inferred from the calling context; they cannot be explicitly specified in
+the macro invocation.</p>
+<p>Note that the <code>Src</code> produced by the expression <code>$e</code> will <em>not</em> be dropped.
+Semantically, its bits will be copied into a new value of type <code>Dst</code>, the
+original <code>Src</code> will be forgotten, and the value of type <code>Dst</code> will be
+returned.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// 0u8 → bool = false
+</span><span class="macro">assert_eq!</span>(<span class="macro">try_transmute!</span>(<span class="number">0u8</span>), <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>));
+
+<span class="comment">// 1u8 → bool = true
+ </span><span class="macro">assert_eq!</span>(<span class="macro">try_transmute!</span>(<span class="number">1u8</span>), <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>));
+
+<span class="comment">// 2u8 → bool = error
+</span><span class="macro">assert!</span>(<span class="macro">matches!</span>(
+    <span class="macro">try_transmute!</span>(<span class="number">2u8</span>),
+    <span class="prelude-ty">Result</span>::&lt;bool, <span class="kw">_</span>&gt;::Err(ValidityError { .. })
+));</code></pre></div>
+</div></details></section></div></main></body></html>
