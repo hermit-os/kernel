@@ -44,10 +44,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 		};
 
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
-		let _ = TOTAL_MEMORY.fetch_add(
-			(end_address - start_address.as_u64()) as usize,
-			Ordering::Relaxed,
-		);
+		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 		}
@@ -88,10 +85,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			(m.base_address() + m.length()) as usize,
 		)
 		.unwrap();
-		let _ = TOTAL_MEMORY.fetch_add(
-			(m.base_address() + m.length() - start_address.as_u64()) as usize,
-			Ordering::Relaxed,
-		);
+		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 		}
