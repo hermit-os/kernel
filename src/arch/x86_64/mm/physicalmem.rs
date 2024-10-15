@@ -20,8 +20,9 @@ const KVM_32BIT_GAP_START: usize = KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE;
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
 
-	let mems = fdt.find_all_nodes("/memory");
-	let all_regions = mems.map(|m| m.reg().unwrap().next().unwrap());
+	let all_regions = fdt
+		.find_all_nodes("/memory")
+		.map(|m| m.reg().unwrap().next().unwrap());
 
 	let mut found_ram = false;
 
