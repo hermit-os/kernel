@@ -67,7 +67,7 @@ fn uhyve_send<T>(_port: u16, _data: &mut T) {
 	todo!()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericStdin;
 
 impl ObjectInterface for GenericStdin {}
@@ -78,7 +78,7 @@ impl GenericStdin {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericStdout;
 
 #[async_trait]
@@ -88,7 +88,7 @@ impl ObjectInterface for GenericStdout {
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let _guard = IO_LOCK.lock().await;
 		arch::output_message_buf(buf);
 
@@ -102,7 +102,7 @@ impl GenericStdout {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct GenericStderr;
 
 #[async_trait]
@@ -112,7 +112,7 @@ impl ObjectInterface for GenericStderr {
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let _guard = IO_LOCK.lock().await;
 		arch::output_message_buf(buf);
 
@@ -126,7 +126,7 @@ impl GenericStderr {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UhyveStdin;
 
 impl ObjectInterface for UhyveStdin {}
@@ -137,7 +137,7 @@ impl UhyveStdin {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UhyveStdout;
 
 #[async_trait]
@@ -147,7 +147,7 @@ impl ObjectInterface for UhyveStdout {
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
@@ -161,7 +161,7 @@ impl UhyveStdout {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct UhyveStderr;
 
 #[async_trait]
@@ -171,7 +171,7 @@ impl ObjectInterface for UhyveStderr {
 		Ok(event & available)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let mut syswrite = SysWrite::new(STDERR_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
