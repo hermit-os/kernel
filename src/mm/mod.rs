@@ -70,8 +70,12 @@ pub(crate) fn init() {
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
-	let min_mem =
-		kernel_addr_range.end.as_usize() - env::get_ram_address().as_usize() + reserved_space;
+	let min_mem = if env::is_uefi() {
+		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
+		reserved_space
+	} else {
+		kernel_addr_range.end.as_usize() - env::get_ram_address().as_usize() + reserved_space
+	};
 	info!("Minimum memory size: {}", min_mem >> 20);
 	let avail_mem = total_mem
 		.checked_sub(min_mem)
