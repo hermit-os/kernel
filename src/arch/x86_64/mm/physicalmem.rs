@@ -3,6 +3,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
+use x86_64::structures::paging::frame::PhysFrameRange;
+use x86_64::structures::paging::PhysFrame;
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
@@ -169,6 +171,45 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 			.try_into()
 			.unwrap(),
 	))
+}
+
+pub fn allocate_outside_of(
+	size: usize,
+	align: usize,
+	forbidden_range: PhysFrameRange,
+) -> Result<PhysFrame, AllocError> {
+	//general sanity checks
+	assert!(size > 0);
+	assert!(align > 0);
+	assert_eq!(
+		size % align,
+		0,
+		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
+	);
+	assert_eq!(
+		align % BasePageSize::SIZE as usize,
+		0,
+		"Alignment {:#X} is not a multiple of {:#X}",
+		align,
+		BasePageSize::SIZE
+	);
+
+	let layout = PageLayout::from_size_align(size, align).unwrap();
+	let forbidden_range = PageRange::new(
+		forbidden_range.start.start_address().as_u64() as usize,
+		forbidden_range.end.start_address().as_u64() as usize + 4096,
+	)
+	.unwrap();
+
+	Ok(PhysFrame::from_start_address(x86_64::addr::PhysAddr::new(
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate_outside_of(layout, forbidden_range)?
+			.start()
+			.try_into()
+			.unwrap(),
+	))
+	.unwrap())
 }
 
 pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
