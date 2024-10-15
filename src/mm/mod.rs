@@ -13,10 +13,9 @@ use crate::arch::mm::paging::HugePageSize;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::mm::physicalmem::total_memory_size;
 #[cfg(feature = "pci")]
 use crate::arch::mm::PhysAddr;
-use crate::arch::mm::VirtAddr;
+use crate::arch::mm::{physicalmem, VirtAddr};
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -51,16 +50,14 @@ pub(crate) fn init() {
 	arch::mm::init();
 	arch::mm::init_page_tables();
 
-	info!("Total memory size: {} MB", total_memory_size() >> 20);
-	info!(
-		"Kernel region: [{:p} - {:p}]",
-		kernel_start_address(),
-		kernel_end_address()
-	);
+	let total_mem = physicalmem::total_memory_size();
+	let kernel_addr_range = KERNEL_ADDR_RANGE.clone();
+	info!("Total memory size: {} MiB", total_mem >> 20);
+	info!("Kernel region: {kernel_addr_range:?}",);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
-	let npages = total_memory_size() / BasePageSize::SIZE as usize;
+	let npages = total_mem / BasePageSize::SIZE as usize;
 	let npage_3tables = npages / (BasePageSize::SIZE as usize / mem::align_of::<usize>()) + 1;
 	let npage_2tables =
 		npage_3tables / (BasePageSize::SIZE as usize / mem::align_of::<usize>()) + 1;
@@ -73,24 +70,16 @@ pub(crate) fn init() {
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
-	//info!("reserved space {} KB", reserved_space >> 10);
-
-	if total_memory_size()
-		< kernel_end_address().as_usize() - env::get_ram_address().as_usize()
-			+ reserved_space
-			+ LargePageSize::SIZE as usize
-	{
-		panic!("No enough memory available!");
-	}
-
-	let mut map_addr: VirtAddr;
-	let mut map_size: usize;
-
-	let available_memory = (total_memory_size()
-		- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
-		- reserved_space)
+	let min_mem =
+		kernel_addr_range.end.as_usize() - env::get_ram_address().as_usize() + reserved_space;
+	info!("Minimum memory size: {}", min_mem >> 20);
+	let avail_mem = total_mem
+		.checked_sub(min_mem)
+		.unwrap_or_else(|| panic!("Not enough memory available!"))
 		.align_down(LargePageSize::SIZE as usize);
 
+	let mut map_addr;
+	let mut map_size;
 	let heap_start_addr;
 
 	#[cfg(feature = "common-os")]
@@ -98,7 +87,7 @@ pub(crate) fn init() {
 		info!("Using HermitOS as common OS!");
 
 		// we reserve at least 75% of the memory for the user space
-		let reserve: usize = (available_memory * 75) / 100;
+		let reserve: usize = (avail_mem * 75) / 100;
 		// 64 MB is enough as kernel heap
 		let reserve = core::cmp::min(reserve, 0x4000000);
 
@@ -141,17 +130,16 @@ pub(crate) fn init() {
 	#[cfg(not(feature = "common-os"))]
 	{
 		// we reserve 10% of the memory for stack allocations
-		let stack_reserve: usize = (available_memory * 10) / 100;
+		let stack_reserve: usize = (avail_mem * 10) / 100;
 
 		// At first, we map only a small part into the heap.
 		// Afterwards, we already use the heap and map the rest into
 		// the virtual address space.
 
 		#[cfg(not(feature = "mmap"))]
-		let virt_size: usize =
-			(available_memory - stack_reserve).align_down(LargePageSize::SIZE as usize);
+		let virt_size: usize = (avail_mem - stack_reserve).align_down(LargePageSize::SIZE as usize);
 		#[cfg(feature = "mmap")]
-		let virt_size: usize = ((available_memory * 75) / 100).align_down(LargePageSize::SIZE as usize);
+		let virt_size: usize = ((avail_mem * 75) / 100).align_down(LargePageSize::SIZE as usize);
 
 		let virt_addr =
 			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize)
