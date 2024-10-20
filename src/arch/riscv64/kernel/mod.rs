@@ -16,7 +16,7 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use fdt::Fdt;
-use hermit_entry::boot_info::{BootInfo, RawBootInfo};
+use hermit_entry::boot_info::BootInfo;
 use hermit_sync::OnceCell;
 use riscv::register::sstatus;
 
@@ -33,7 +33,6 @@ pub(crate) static mut HARTS_AVAILABLE: Vec<usize> = Vec::new();
 
 /// Kernel header to announce machine features
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
-static RAW_BOOT_INFO: AtomicPtr<RawBootInfo> = AtomicPtr::new(ptr::null_mut());
 static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 static CURRENT_BOOT_ID: AtomicU32 = AtomicU32::new(0);
 static CURRENT_STACK_ADDRESS: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());

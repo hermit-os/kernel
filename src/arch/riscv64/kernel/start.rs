@@ -5,7 +5,7 @@ use fdt::Fdt;
 use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
 
-use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS, RAW_BOOT_INFO};
+use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
 use crate::arch::riscv64::kernel::{BootInfo, BOOT_INFO, CURRENT_STACK_ADDRESS};
@@ -54,7 +54,6 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
 		unsafe {
-			RAW_BOOT_INFO.store(boot_info.unwrap() as *const _ as *mut _, Ordering::Relaxed);
 			BOOT_INFO.set(BootInfo::from(*boot_info.unwrap())).unwrap();
 			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
 			// Init HART_MASK

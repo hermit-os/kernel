@@ -16,7 +16,7 @@ use core::arch::global_asm;
 use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use hermit_entry::boot_info::{BootInfo, RawBootInfo};
+use hermit_entry::boot_info::BootInfo;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
@@ -37,7 +37,6 @@ pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
-static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
 static mut BOOT_INFO: Option<BootInfo> = None;
 
 pub fn boot_info() -> &'static BootInfo {

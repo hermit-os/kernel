@@ -4,7 +4,7 @@ use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_entry::Entry;
 
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
-use crate::arch::aarch64::kernel::{BOOT_INFO, RAW_BOOT_INFO};
+use crate::arch::aarch64::kernel::BOOT_INFO;
 use crate::KERNEL_STACK_SIZE;
 
 extern "C" {
@@ -71,7 +71,6 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 
 	if cpu_id == 0 {
 		unsafe {
-			RAW_BOOT_INFO = boot_info;
 			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
 		}
 		crate::boot_processor_main()

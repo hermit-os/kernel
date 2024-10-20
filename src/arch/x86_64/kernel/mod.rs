@@ -38,7 +38,6 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
 static mut BOOT_INFO: Option<BootInfo> = None;
 
 pub fn boot_info() -> &'static BootInfo {
@@ -258,7 +257,6 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 
 	if cpu_id == 0 {
 		unsafe {
-			RAW_BOOT_INFO = boot_info;
 			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
 		}
 
