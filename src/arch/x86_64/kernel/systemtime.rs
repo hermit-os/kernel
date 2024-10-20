@@ -5,7 +5,8 @@ use hermit_sync::{without_interrupts, OnceCell};
 use time::OffsetDateTime;
 use x86::io::*;
 
-use crate::arch::x86_64::kernel::{boot_info, processor};
+use crate::arch::x86_64::kernel::processor;
+use crate::env;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
 const CMOS_DATA_PORT: u16 = 0x71;
@@ -173,7 +174,7 @@ impl Rtc {
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
 
 pub fn init() {
-	let boot_time = match boot_info().platform_info {
+	let boot_time = match env::boot_info().platform_info {
 		PlatformInfo::Uhyve { boot_time, .. } => boot_time,
 		_ => {
 			// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.

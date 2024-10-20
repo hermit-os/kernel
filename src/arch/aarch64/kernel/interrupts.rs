@@ -11,18 +11,17 @@ use hashbrown::HashMap;
 use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
 
-use crate::arch::aarch64::kernel::boot_info;
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
-use crate::core_scheduler;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::scheduler::{self, CoreId};
+use crate::{core_scheduler, env};
 
 /// The ID of the first Private Peripheral Interrupt.
 const PPI_START: u8 = 16;
@@ -229,7 +228,7 @@ pub(crate) fn init() {
 
 	let dtb = unsafe {
 		Dtb::from_raw(ptr::with_exposed_provenance(
-			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")
 	};

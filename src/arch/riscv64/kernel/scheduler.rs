@@ -5,13 +5,12 @@ use core::{mem, ptr};
 
 use align_address::Align;
 
-use crate::arch::riscv64::kernel::boot_info;
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::riscv64::mm::{PhysAddr, VirtAddr};
 use crate::scheduler::task::{Task, TaskFrame};
-use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
@@ -272,7 +271,7 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	pub fn from_environment() -> Option<Box<Self>> {
-		let tls_info = boot_info().load_info.tls_info?;
+		let tls_info = env::boot_info().load_info.tls_info?;
 		assert_ne!(tls_info.memsz, 0);
 
 		let tls_size = tls_info.memsz as usize;

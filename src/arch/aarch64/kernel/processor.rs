@@ -5,7 +5,6 @@ use aarch64::regs::{Readable, CNTFRQ_EL0};
 use hermit_dtb::Dtb;
 use hermit_sync::{without_interrupts, Lazy};
 
-use crate::arch::aarch64::kernel::boot_info;
 use crate::env;
 
 // System counter frequency in Hz
@@ -253,7 +252,7 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 pub fn print_information() {
 	let dtb = unsafe {
 		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")
 	};

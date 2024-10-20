@@ -205,7 +205,7 @@ fn boot_processor_main() -> ! {
 	}
 	let bss_ptr = core::ptr::addr_of_mut!(__bss_start);
 	info!("BSS starts at {bss_ptr:p}");
-	info!("tls_info = {:#x?}", kernel::boot_info().load_info.tls_info);
+	info!("tls_info = {:#x?}", env::boot_info().load_info.tls_info);
 	arch::boot_processor_init();
 
 	#[cfg(not(target_arch = "riscv64"))]

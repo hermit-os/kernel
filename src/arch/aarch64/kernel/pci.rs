@@ -13,7 +13,7 @@ use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
 use crate::drivers::pci::{PciDevice, PCI_DEVICES};
-use crate::kernel::boot_info;
+use crate::env;
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 const PCI_MAX_FUNCTION_NUMBER: u8 = 8;
@@ -224,7 +224,7 @@ fn detect_interrupt(
 pub fn init() {
 	let dtb = unsafe {
 		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")
 	};

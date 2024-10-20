@@ -15,7 +15,7 @@ use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::scheduler::task::{Task, TaskFrame};
 #[cfg(target_os = "none")]
 use crate::scheduler::PerCoreSchedulerExt;
-use crate::{kernel, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -266,7 +266,7 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	fn from_environment() -> Option<Box<Self>> {
-		let tls_info = kernel::boot_info().load_info.tls_info?;
+		let tls_info = env::boot_info().load_info.tls_info?;
 		assert_ne!(tls_info.memsz, 0);
 
 		// Get TLS initialization image

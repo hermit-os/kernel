@@ -8,11 +8,21 @@ use ahash::RandomState;
 use fdt::Fdt;
 use hashbrown::hash_map::Iter;
 use hashbrown::HashMap;
-use hermit_entry::boot_info::PlatformInfo;
+use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
 pub(crate) use crate::arch::kernel::{self, get_base_address, get_image_size, get_ram_address};
-use crate::kernel::boot_info;
+
+static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
+
+pub fn boot_info() -> &'static BootInfo {
+	BOOT_INFO.get().unwrap()
+}
+
+pub fn set_boot_info(raw_boot_info: RawBootInfo) {
+	let boot_info = BootInfo::from(raw_boot_info);
+	BOOT_INFO.set(boot_info).unwrap()
+}
 
 static CLI: OnceCell<Cli> = OnceCell::new();
 
@@ -38,7 +48,7 @@ pub fn is_uhyve() -> bool {
 }
 
 pub fn fdt() -> Option<Fdt<'static>> {
-	kernel::boot_info().hardware_info.device_tree.map(|fdt| {
+	boot_info().hardware_info.device_tree.map(|fdt| {
 		let ptr = ptr::with_exposed_provenance(fdt.get().try_into().unwrap());
 		unsafe { Fdt::from_ptr(ptr).unwrap() }
 	})
