@@ -13,8 +13,8 @@ pub mod switch;
 pub mod systemtime;
 
 use core::arch::global_asm;
+use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use core::{ptr, str};
 
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 
@@ -42,14 +42,6 @@ static mut BOOT_INFO: Option<BootInfo> = None;
 
 pub fn boot_info() -> &'static BootInfo {
 	unsafe { BOOT_INFO.as_ref().unwrap() }
-}
-
-pub fn raw_boot_info() -> &'static RawBootInfo {
-	unsafe { RAW_BOOT_INFO.unwrap() }
-}
-
-pub fn get_boot_info_address() -> VirtAddr {
-	VirtAddr(ptr::from_ref(raw_boot_info()).addr() as u64)
 }
 
 pub fn is_uhyve_with_pci() -> bool {
