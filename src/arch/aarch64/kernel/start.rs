@@ -14,10 +14,19 @@ extern "C" {
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
+pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// validate signatures
-	const _START: Entry = _start;
-	const _PRE_INIT: Entry = pre_init;
+	// `_Start` is compatible to `Entry`
+	{
+		unsafe extern "C" fn _entry(_boot_info: &'static RawBootInfo, _cpu_id: u32) -> ! {
+			unreachable!()
+		}
+		pub type _Start =
+			unsafe extern "C" fn(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> !;
+		const _ENTRY: Entry = _entry;
+		const _START: _Start = _start;
+		const _PRE_INIT: _Start = pre_init;
+	}
 
 	unsafe {
 		asm!(
@@ -44,7 +53,7 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) ->
 
 #[inline(never)]
 #[no_mangle]
-unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
+unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// set exception table
 	unsafe {
 		asm!(
@@ -62,8 +71,8 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 
 	if cpu_id == 0 {
 		unsafe {
-			RAW_BOOT_INFO = Some(boot_info);
-			BOOT_INFO = Some(BootInfo::from(*boot_info));
+			RAW_BOOT_INFO = boot_info;
+			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
 		}
 		crate::boot_processor_main()
 	} else {

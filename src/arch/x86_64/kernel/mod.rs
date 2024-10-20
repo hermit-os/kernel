@@ -253,7 +253,7 @@ pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut()
 #[cfg(target_os = "none")]
 #[inline(never)]
 #[no_mangle]
-unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
+unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// Enable caching
 	unsafe {
 		let mut cr0 = cr0();
@@ -263,8 +263,8 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 
 	if cpu_id == 0 {
 		unsafe {
-			RAW_BOOT_INFO = Some(boot_info);
-			BOOT_INFO = Some(BootInfo::from(*boot_info));
+			RAW_BOOT_INFO = boot_info;
+			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
 		}
 
 		crate::boot_processor_main()
