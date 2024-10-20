@@ -38,18 +38,10 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-/// Kernel header to announce machine features
-#[cfg_attr(target_os = "none", link_section = ".data")]
-static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
 static mut BOOT_INFO: Option<BootInfo> = None;
 
 pub fn boot_info() -> &'static BootInfo {
 	unsafe { BOOT_INFO.as_ref().unwrap() }
-}
-
-#[cfg(feature = "smp")]
-pub fn raw_boot_info() -> &'static RawBootInfo {
-	unsafe { RAW_BOOT_INFO.unwrap() }
 }
 
 /// Serial port to print kernel messages
@@ -255,7 +247,7 @@ pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut()
 #[cfg(target_os = "none")]
 #[inline(never)]
 #[no_mangle]
-unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
+unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// Enable caching
 	unsafe {
 		let mut cr0 = cr0();
@@ -263,12 +255,11 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 		cr0_write(cr0);
 	}
 
-	unsafe {
-		RAW_BOOT_INFO = Some(boot_info);
-		BOOT_INFO = Some(BootInfo::from(*boot_info));
-	}
-
 	if cpu_id == 0 {
+		unsafe {
+			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
+		}
+
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]

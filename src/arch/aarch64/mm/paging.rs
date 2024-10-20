@@ -6,9 +6,7 @@ use core::{fmt, mem, ptr};
 
 use align_address::Align;
 
-use crate::arch::aarch64::kernel::{
-	get_base_address, get_boot_info_address, get_image_size, get_ram_address, processor,
-};
+use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
 use crate::arch::aarch64::mm::{physicalmem, virtualmem, PhysAddr, VirtAddr};
 use crate::env::is_uhyve;
 use crate::{mm, scheduler, KERNEL_STACK_SIZE};

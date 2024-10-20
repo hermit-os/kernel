@@ -25,7 +25,6 @@ _start:
 .align 8
     entry_point:    .8byte 0xDEADC0DE
     cpu_id:         .4byte 0xC0DECAFE
-    boot_info:      .8byte 0xBEEFBEEF
     pml4:           .4byte 0xDEADBEEF
     pad:            .4byte 0
 
@@ -151,8 +150,7 @@ stublet:
 .code64
 .align 8
 start64:
-    # forward address to boot info
-    mov rdi, [boot_info]
+    # call `_start`
+    xor rdi, rdi
     mov esi, [cpu_id]
-    # Jump to _start
     jmp [entry_point]

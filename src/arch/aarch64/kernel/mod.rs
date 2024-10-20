@@ -13,10 +13,10 @@ pub mod switch;
 pub mod systemtime;
 
 use core::arch::global_asm;
+use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use core::{ptr, str};
 
-use hermit_entry::boot_info::{BootInfo, RawBootInfo};
+use hermit_entry::boot_info::BootInfo;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
@@ -37,21 +37,10 @@ pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
-/// Kernel header to announce machine features
-#[cfg_attr(target_os = "none", link_section = ".data")]
-static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
 static mut BOOT_INFO: Option<BootInfo> = None;
 
 pub fn boot_info() -> &'static BootInfo {
 	unsafe { BOOT_INFO.as_ref().unwrap() }
-}
-
-pub fn raw_boot_info() -> &'static RawBootInfo {
-	unsafe { RAW_BOOT_INFO.unwrap() }
-}
-
-pub fn get_boot_info_address() -> VirtAddr {
-	VirtAddr(ptr::from_ref(raw_boot_info()).addr() as u64)
 }
 
 pub fn is_uhyve_with_pci() -> bool {

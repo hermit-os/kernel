@@ -3,8 +3,9 @@ use core::sync::atomic::Ordering;
 
 use fdt::Fdt;
 use hermit_entry::boot_info::RawBootInfo;
+use hermit_entry::Entry;
 
-use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS, RAW_BOOT_INFO};
+use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
 use crate::arch::riscv64::kernel::{BootInfo, BOOT_INFO, CURRENT_STACK_ADDRESS};
@@ -15,7 +16,20 @@ use crate::KERNEL_STACK_SIZE;
 /// Entrypoint - Initalize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start() -> ! {
+pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {
+	// validate signatures
+	// `_Start` is compatible to `Entry`
+	{
+		unsafe extern "C" fn _entry(_hart_id: usize, _boot_info: &'static RawBootInfo) -> ! {
+			unreachable!()
+		}
+		pub type _Start =
+			unsafe extern "C" fn(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> !;
+		const _ENTRY: Entry = _entry;
+		const _START: _Start = _start;
+		const _PRE_INIT: _Start = pre_init;
+	}
+
 	unsafe {
 		asm!(
 			// Use stack pointer from `CURRENT_STACK_ADDRESS` if set
@@ -35,13 +49,12 @@ pub unsafe extern "C" fn _start() -> ! {
 	}
 }
 
-unsafe extern "C" fn pre_init(hart_id: usize, boot_info: &'static RawBootInfo) -> ! {
+unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {
 	CURRENT_BOOT_ID.store(hart_id as u32, Ordering::Relaxed);
 
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
 		unsafe {
-			RAW_BOOT_INFO.store(boot_info as *const _ as *mut _, Ordering::Relaxed);
-			BOOT_INFO.set(BootInfo::from(*boot_info)).unwrap();
+			BOOT_INFO.set(BootInfo::from(*boot_info.unwrap())).unwrap();
 			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
 			// Init HART_MASK
 			let mut hart_mask = 0;

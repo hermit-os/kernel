@@ -82,9 +82,7 @@ const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
 #[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_CPU_ID: usize = SMP_BOOT_CODE_OFFSET_ENTRY + 0x08;
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = SMP_BOOT_CODE_OFFSET_CPU_ID + 0x04;
-#[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_PML4: usize = SMP_BOOT_CODE_OFFSET_BOOTINFO + 0x08;
+const SMP_BOOT_CODE_OFFSET_PML4: usize = SMP_BOOT_CODE_OFFSET_CPU_ID + 0x04;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
@@ -699,7 +697,7 @@ pub fn init_next_processor_variables() {
 pub fn boot_application_processors() {
 	use core::hint;
 
-	use super::{raw_boot_info, start};
+	use super::start;
 
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
 
@@ -743,10 +741,6 @@ pub fn boot_application_processors() {
 		ptr::write_unaligned(
 			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr(),
 			start::_start as usize,
-		);
-		ptr::write_unaligned(
-			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr(),
-			ptr::from_ref(raw_boot_info()).addr() as u64,
 		);
 	}
 

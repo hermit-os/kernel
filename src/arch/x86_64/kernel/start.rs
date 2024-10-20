@@ -9,12 +9,21 @@ use crate::KERNEL_STACK_SIZE;
 
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start(_boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
+pub unsafe extern "C" fn _start(_boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// boot_info is in the `rdi` register
 
 	// validate signatures
-	const _START: Entry = _start;
-	const _PRE_INIT: Entry = pre_init;
+	// `_Start` is compatible to `Entry`
+	{
+		unsafe extern "C" fn _entry(_boot_info: &'static RawBootInfo, _cpu_id: u32) -> ! {
+			unreachable!()
+		}
+		pub type _Start =
+			unsafe extern "C" fn(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> !;
+		const _ENTRY: Entry = _entry;
+		const _START: _Start = _start;
+		const _PRE_INIT: _Start = pre_init;
+	}
 
 	unsafe {
 		asm!(
