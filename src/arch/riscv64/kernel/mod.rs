@@ -195,12 +195,7 @@ pub fn boot_next_processor() {
 
 		//When running bare-metal/QEMU we use the firmware to start the next hart
 		if !env::is_uhyve() {
-			sbi_rt::hart_start(
-				next_hart_id as usize,
-				start::_start as usize,
-				RAW_BOOT_INFO.load(Ordering::Relaxed) as usize,
-			)
-			.unwrap();
+			sbi_rt::hart_start(next_hart_id as usize, start::_start as usize, 0).unwrap();
 		}
 	} else {
 		info!("All processors are initialized");

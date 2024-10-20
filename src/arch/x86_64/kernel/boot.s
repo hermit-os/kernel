@@ -151,8 +151,7 @@ stublet:
 .code64
 .align 8
 start64:
-    # forward address to boot info
-    mov rdi, [boot_info]
+    # call `_start`
+    xor rdi, rdi
     mov esi, [cpu_id]
-    # Jump to _start
     jmp [entry_point]
