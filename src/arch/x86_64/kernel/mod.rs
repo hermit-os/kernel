@@ -261,12 +261,12 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 		cr0_write(cr0);
 	}
 
-	unsafe {
-		RAW_BOOT_INFO = Some(boot_info);
-		BOOT_INFO = Some(BootInfo::from(*boot_info));
-	}
-
 	if cpu_id == 0 {
+		unsafe {
+			RAW_BOOT_INFO = Some(boot_info);
+			BOOT_INFO = Some(BootInfo::from(*boot_info));
+		}
+
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
