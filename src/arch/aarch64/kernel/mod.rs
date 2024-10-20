@@ -17,6 +17,7 @@ use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use hermit_entry::boot_info::BootInfo;
+use hermit_sync::OnceCell;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
@@ -37,10 +38,10 @@ pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
-static mut BOOT_INFO: Option<BootInfo> = None;
+static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
 pub fn boot_info() -> &'static BootInfo {
-	unsafe { BOOT_INFO.as_ref().unwrap() }
+	BOOT_INFO.get().unwrap()
 }
 
 pub fn is_uhyve_with_pci() -> bool {

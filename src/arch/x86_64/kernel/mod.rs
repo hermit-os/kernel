@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use fdt::Fdt;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
-use hermit_sync::InterruptSpinMutex;
+use hermit_sync::{InterruptSpinMutex, OnceCell};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use self::serial::SerialPort;
@@ -38,10 +38,10 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-static mut BOOT_INFO: Option<BootInfo> = None;
+static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
 pub fn boot_info() -> &'static BootInfo {
-	unsafe { BOOT_INFO.as_ref().unwrap() }
+	BOOT_INFO.get().unwrap()
 }
 
 /// Serial port to print kernel messages
@@ -256,9 +256,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	}
 
 	if cpu_id == 0 {
-		unsafe {
-			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
-		}
+		BOOT_INFO.set(BootInfo::from(*boot_info.unwrap())).unwrap();
 
 		crate::boot_processor_main()
 	} else {
