@@ -3,6 +3,7 @@ use core::sync::atomic::Ordering;
 
 use fdt::Fdt;
 use hermit_entry::boot_info::RawBootInfo;
+use hermit_entry::Entry;
 
 use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS, RAW_BOOT_INFO};
 #[cfg(not(feature = "smp"))]
@@ -15,7 +16,11 @@ use crate::KERNEL_STACK_SIZE;
 /// Entrypoint - Initalize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start() -> ! {
+pub unsafe extern "C" fn _start(hart_id: usize, boot_info: &'static RawBootInfo) -> ! {
+	// validate signatures
+	const _START: Entry = _start;
+	const _PRE_INIT: Entry = pre_init;
+
 	unsafe {
 		asm!(
 			// Use stack pointer from `CURRENT_STACK_ADDRESS` if set
