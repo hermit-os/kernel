@@ -19,8 +19,7 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
-#[cfg(not(feature = "common-os"))]
-use crate::kernel;
+use crate::env;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::PerCoreSchedulerExt;
 
@@ -252,7 +251,7 @@ impl TaskTLS {
 	// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
 	// https://akkadia.org/drepper/tls.pdf
 	fn from_environment() -> Option<Box<Self>> {
-		let tls_info = kernel::boot_info().load_info.tls_info?;
+		let tls_info = env::boot_info().load_info.tls_info?;
 		assert_ne!(tls_info.memsz, 0);
 
 		// Get TLS initialization image

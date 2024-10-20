@@ -10,7 +10,7 @@ use time::OffsetDateTime;
 
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
-use crate::kernel::boot_info;
+use crate::env;
 
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
@@ -47,7 +47,7 @@ fn rtc_read(off: usize) -> u32 {
 pub fn init() {
 	let dtb = unsafe {
 		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
 		))
 		.expect(".dtb file has invalid header")
 	};

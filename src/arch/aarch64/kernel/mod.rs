@@ -16,8 +16,6 @@ use core::arch::global_asm;
 use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use hermit_entry::boot_info::BootInfo;
-
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
@@ -37,31 +35,25 @@ pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
-static mut BOOT_INFO: Option<BootInfo> = None;
-
-pub fn boot_info() -> &'static BootInfo {
-	unsafe { BOOT_INFO.as_ref().unwrap() }
-}
-
 pub fn is_uhyve_with_pci() -> bool {
 	false
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(boot_info().hardware_info.phys_addr_range.start)
+	PhysAddr(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(boot_info().load_info.kernel_image_addr_range.start)
+	VirtAddr(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
-	let range = &boot_info().load_info.kernel_image_addr_range;
+	let range = &env::boot_info().load_info.kernel_image_addr_range;
 	(range.end - range.start) as usize
 }
 
 pub fn get_limit() -> usize {
-	boot_info().hardware_info.phys_addr_range.end as usize
+	env::boot_info().hardware_info.phys_addr_range.end as usize
 }
 
 #[cfg(feature = "smp")]
@@ -88,7 +80,7 @@ pub fn message_output_init() {
 	CoreLocal::install();
 
 	unsafe {
-		COM1.port_address = boot_info()
+		COM1.port_address = env::boot_info()
 			.hardware_info
 			.serial_port_base
 			.map(|uartport| uartport.get())

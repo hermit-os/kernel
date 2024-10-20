@@ -5,7 +5,7 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use fdt::Fdt;
-use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
+use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use hermit_sync::InterruptSpinMutex;
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
@@ -38,34 +38,28 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-static mut BOOT_INFO: Option<BootInfo> = None;
-
-pub fn boot_info() -> &'static BootInfo {
-	unsafe { BOOT_INFO.as_ref().unwrap() }
-}
-
 /// Serial port to print kernel messages
 pub(crate) static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(boot_info().hardware_info.phys_addr_range.start)
+	PhysAddr(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(boot_info().load_info.kernel_image_addr_range.start)
+	VirtAddr(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
-	let range = &boot_info().load_info.kernel_image_addr_range;
+	let range = &env::boot_info().load_info.kernel_image_addr_range;
 	(range.end - range.start) as usize
 }
 
 pub fn get_limit() -> usize {
-	boot_info().hardware_info.phys_addr_range.end as usize
+	env::boot_info().hardware_info.phys_addr_range.end as usize
 }
 
 pub fn get_mbinfo() -> Option<NonZeroU64> {
-	match boot_info().platform_info {
+	match env::boot_info().platform_info {
 		PlatformInfo::Multiboot {
 			multiboot_info_addr,
 			..
@@ -75,7 +69,7 @@ pub fn get_mbinfo() -> Option<NonZeroU64> {
 }
 
 pub fn get_fdt() -> Option<Fdt<'static>> {
-	boot_info().hardware_info.device_tree.map(|fdt| {
+	env::boot_info().hardware_info.device_tree.map(|fdt| {
 		let ptr = ptr::with_exposed_provenance(fdt.get().try_into().unwrap());
 		unsafe { Fdt::from_ptr(ptr).unwrap() }
 	})
@@ -85,7 +79,7 @@ pub fn get_fdt() -> Option<Fdt<'static>> {
 pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
 
-	match boot_info().platform_info {
+	match env::boot_info().platform_info {
 		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
 		PlatformInfo::Uhyve { num_cpus, .. } => cmp::max(
 			u32::try_from(num_cpus.get()).unwrap(),
@@ -107,13 +101,13 @@ pub fn get_processor_count() -> u32 {
 
 pub fn is_uhyve_with_pci() -> bool {
 	matches!(
-		boot_info().platform_info,
+		env::boot_info().platform_info,
 		PlatformInfo::Uhyve { has_pci: true, .. }
 	)
 }
 
 pub fn args() -> Option<&'static str> {
-	match boot_info().platform_info {
+	match env::boot_info().platform_info {
 		PlatformInfo::Multiboot { command_line, .. } => command_line,
 		PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
 		_ => None,
@@ -126,7 +120,11 @@ pub fn args() -> Option<&'static str> {
 pub fn message_output_init() {
 	CoreLocal::install();
 
-	let base = boot_info().hardware_info.serial_port_base.unwrap().get();
+	let base = env::boot_info()
+		.hardware_info
+		.serial_port_base
+		.unwrap()
+		.get();
 	let serial_port = unsafe { SerialPort::new(base) };
 	*COM1.lock() = Some(serial_port);
 }
@@ -256,9 +254,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	}
 
 	if cpu_id == 0 {
-		unsafe {
-			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
-		}
+		env::set_boot_info(*boot_info.unwrap());
 
 		crate::boot_processor_main()
 	} else {

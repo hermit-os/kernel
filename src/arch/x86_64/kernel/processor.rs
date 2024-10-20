@@ -23,7 +23,7 @@ use x86_64::VirtAddr;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::{boot_info, interrupts, pic, pit};
+use crate::arch::x86_64::kernel::{interrupts, pic, pit};
 use crate::env;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -374,7 +374,7 @@ impl CpuFrequency {
 
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		fn detect_from_uhyve() -> Result<u16, ()> {
-			match boot_info().platform_info {
+			match env::boot_info().platform_info {
 				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
 					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
 				)

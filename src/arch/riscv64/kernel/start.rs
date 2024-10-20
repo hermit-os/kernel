@@ -8,8 +8,8 @@ use hermit_entry::Entry;
 use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
-use crate::arch::riscv64::kernel::{BootInfo, BOOT_INFO, CURRENT_STACK_ADDRESS};
-use crate::KERNEL_STACK_SIZE;
+use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
+use crate::{env, KERNEL_STACK_SIZE};
 
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
@@ -54,7 +54,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
 		unsafe {
-			BOOT_INFO.set(BootInfo::from(*boot_info.unwrap())).unwrap();
+			env::set_boot_info(*boot_info.unwrap());
 			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
 			// Init HART_MASK
 			let mut hart_mask = 0;

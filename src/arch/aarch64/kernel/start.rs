@@ -1,11 +1,10 @@
 use core::arch::asm;
 
-use hermit_entry::boot_info::{BootInfo, RawBootInfo};
+use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
 
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
-use crate::arch::aarch64::kernel::BOOT_INFO;
-use crate::KERNEL_STACK_SIZE;
+use crate::{env, KERNEL_STACK_SIZE};
 
 extern "C" {
 	static vector_table: u8;
@@ -70,9 +69,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	}
 
 	if cpu_id == 0 {
-		unsafe {
-			BOOT_INFO = Some(BootInfo::from(*boot_info.unwrap()));
-		}
+		env::set_boot_info(*boot_info.unwrap());
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]

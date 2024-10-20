@@ -16,8 +16,6 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use fdt::Fdt;
-use hermit_entry::boot_info::BootInfo;
-use hermit_sync::OnceCell;
 use riscv::register::sstatus;
 
 use crate::arch::riscv64::kernel::core_local::{core_id, CoreLocal};
@@ -32,7 +30,6 @@ use crate::env;
 pub(crate) static mut HARTS_AVAILABLE: Vec<usize> = Vec::new();
 
 /// Kernel header to announce machine features
-static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 static CURRENT_BOOT_ID: AtomicU32 = AtomicU32::new(0);
 static CURRENT_STACK_ADDRESS: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
@@ -41,26 +38,22 @@ static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
 
 // FUNCTIONS
 
-pub fn boot_info() -> &'static BootInfo {
-	BOOT_INFO.get().unwrap()
-}
-
 pub fn is_uhyve_with_pci() -> bool {
 	false
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(boot_info().hardware_info.phys_addr_range.start)
+	PhysAddr(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
-	(boot_info().load_info.kernel_image_addr_range.end
-		- boot_info().load_info.kernel_image_addr_range.start) as usize
+	(env::boot_info().load_info.kernel_image_addr_range.end
+		- env::boot_info().load_info.kernel_image_addr_range.start) as usize
 }
 
 pub fn get_limit() -> usize {
-	(boot_info().hardware_info.phys_addr_range.end
-		- boot_info().hardware_info.phys_addr_range.start) as usize
+	(env::boot_info().hardware_info.phys_addr_range.end
+		- env::boot_info().hardware_info.phys_addr_range.start) as usize
 }
 
 #[cfg(feature = "smp")]
@@ -79,7 +72,7 @@ pub fn get_processor_count() -> u32 {
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(boot_info().load_info.kernel_image_addr_range.start)
+	VirtAddr(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn args() -> Option<&'static str> {
@@ -87,7 +80,7 @@ pub fn args() -> Option<&'static str> {
 }
 
 pub fn get_dtb_ptr() -> *const u8 {
-	boot_info().hardware_info.device_tree.unwrap().get() as _
+	env::boot_info().hardware_info.device_tree.unwrap().get() as _
 }
 
 pub fn get_hart_mask() -> u64 {
