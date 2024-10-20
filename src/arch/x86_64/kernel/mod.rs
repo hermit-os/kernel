@@ -45,11 +45,6 @@ pub fn boot_info() -> &'static BootInfo {
 	unsafe { BOOT_INFO.as_ref().unwrap() }
 }
 
-#[cfg(feature = "smp")]
-pub fn raw_boot_info() -> &'static RawBootInfo {
-	unsafe { RAW_BOOT_INFO.unwrap() }
-}
-
 /// Serial port to print kernel messages
 pub(crate) static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
 

@@ -25,7 +25,6 @@ _start:
 .align 8
     entry_point:    .8byte 0xDEADC0DE
     cpu_id:         .4byte 0xC0DECAFE
-    boot_info:      .8byte 0xBEEFBEEF
     pml4:           .4byte 0xDEADBEEF
     pad:            .4byte 0
 
