@@ -472,6 +472,9 @@ pub struct NotifCtrl {
 	notif_addr: *mut le32,
 }
 
+// FIXME: make `notif_addr` implement `Send` instead
+unsafe impl Send for NotifCtrl {}
+
 impl NotifCtrl {
 	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
 	/// are disabled.

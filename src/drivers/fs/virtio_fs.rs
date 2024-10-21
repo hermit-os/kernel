@@ -154,7 +154,11 @@ impl FuseInterface for VirtioFsDriver {
 		&mut self,
 		cmd: fuse::Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<fuse::Rsp<O>, VirtqError> {
+	) -> Result<fuse::Rsp<O>, VirtqError>
+	where
+		<O as fuse::ops::Op>::InStruct: Send,
+		<O as fuse::ops::Op>::OutStruct: Send,
+	{
 		let fuse::Cmd {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
