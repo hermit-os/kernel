@@ -62,9 +62,8 @@ pub(crate) fn init() {
 
 			let (device_id, vendor_id) = header.id(pci_config);
 			if device_id != u16::MAX && vendor_id != u16::MAX {
-				unsafe {
-					PCI_DEVICES.push(PciDevice::new(pci_address, pci_config));
-				}
+				let device = PciDevice::new(pci_address, pci_config);
+				PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(device));
 			}
 		}
 	}

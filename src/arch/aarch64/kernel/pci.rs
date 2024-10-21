@@ -339,9 +339,7 @@ pub fn init() {
 								dev.set_irq(pin, line);
 							}
 
-							unsafe {
-								PCI_DEVICES.push(dev);
-							}
+							PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(dev));
 						}
 					}
 				}
