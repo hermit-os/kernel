@@ -96,7 +96,7 @@ impl From<VqSize> for u16 {
 /// might not provide the complete feature set of each queue. Drivers who
 /// do need these features should refrain from providing support for both
 /// Virtqueue types and use the structs directly instead.
-pub trait Virtq {
+pub trait Virtq: Send {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
@@ -344,7 +344,7 @@ impl<Descriptor> TransferToken<Descriptor> {
 
 #[derive(Debug)]
 pub enum BufferElem {
-	Sized(Box<dyn Any, DeviceAlloc>),
+	Sized(Box<dyn Any + Send, DeviceAlloc>),
 	Vector(Vec<u8, DeviceAlloc>),
 }
 

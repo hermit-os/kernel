@@ -84,6 +84,7 @@ pub mod errno;
 mod executor;
 pub mod fd;
 pub mod fs;
+mod init_cell;
 pub mod io;
 mod mm;
 pub mod scheduler;
