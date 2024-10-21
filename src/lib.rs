@@ -6,6 +6,8 @@
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::uninlined_format_args)]
 #![warn(clippy::transmute_ptr_to_ptr)]
+#![warn(fuzzy_provenance_casts)]
+#![warn(lossy_provenance_casts)]
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
