@@ -41,8 +41,10 @@ use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
+use crate::init_cell::InitCell;
 
-pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
+pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigRegion>>> =
+	InitCell::new(Vec::new());
 static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
 #[derive(Copy, Clone, Debug)]
@@ -301,7 +303,7 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 pub(crate) fn print_information() {
 	infoheader!(" PCI BUS INFORMATION ");
 
-	for adapter in unsafe { PCI_DEVICES.iter() } {
+	for adapter in PCI_DEVICES.finalize().iter() {
 		info!("{}", adapter);
 	}
 
@@ -463,12 +465,10 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 pub(crate) fn init() {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
-		for adapter in unsafe {
-			PCI_DEVICES.iter().filter(|x| {
-				let (vendor_id, device_id) = x.id();
-				vendor_id == 0x1AF4 && (0x1000..=0x107F).contains(&device_id)
-			})
-		} {
+		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
+			let (vendor_id, device_id) = x.id();
+			vendor_id == 0x1AF4 && (0x1000..=0x107F).contains(&device_id)
+		}) {
 			info!(
 				"Found virtio device with device id {:#x}",
 				adapter.device_id()
@@ -498,12 +498,10 @@ pub(crate) fn init() {
 
 		// Searching for Realtek RTL8139, which is supported by Qemu
 		#[cfg(feature = "rtl8139")]
-		for adapter in unsafe {
-			PCI_DEVICES.iter().filter(|x| {
-				let (vendor_id, device_id) = x.id();
-				vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
-			})
-		} {
+		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
+			let (vendor_id, device_id) = x.id();
+			vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
+		}) {
 			info!(
 				"Found Realtek network device with device id {:#x}",
 				adapter.device_id()
