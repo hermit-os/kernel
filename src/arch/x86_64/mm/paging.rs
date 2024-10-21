@@ -10,11 +10,12 @@ use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
+	Mapper, Page, PhysFrame, RecursivePageTable, Size2MiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
+use crate::kernel::get_limit;
 use crate::{env, mm, scheduler};
 
 pub trait PageTableEntryFlagsExt {
@@ -305,11 +306,9 @@ pub fn init_page_tables() {
 		// See https://github.com/hermit-os/uhyve/issues/426
 		let kernel_end_addr = x86_64::VirtAddr::new(mm::kernel_end_address().as_u64());
 		let start_page = Page::<Size2MiB>::from_start_address(kernel_end_addr).unwrap();
-		let end_page = Page::from_page_table_indices_2mib(
-			start_page.p4_index(),
-			start_page.p3_index(),
-			PageTableIndex::new(511),
-		);
+		let end_page =
+			Page::<Size2MiB>::from_start_address(x86_64::VirtAddr::new(get_limit() as u64))
+				.unwrap();
 		let page_range = Page::range_inclusive(start_page, end_page);
 
 		let mut page_table = unsafe { recursive_page_table() };
