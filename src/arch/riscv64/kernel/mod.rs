@@ -151,11 +151,8 @@ fn finish_processor_init() {
 	unsafe {
 		// Add hart to HARTS_AVAILABLE, the hart id is stored in current_boot_id
 		HARTS_AVAILABLE.push(current_hart_id);
-		info!(
-			"Initialized CPU with hart_id {}",
-			HARTS_AVAILABLE[core_local::core_id() as usize]
-		);
 	}
+	info!("Initialized CPU with hart_id {current_hart_id}");
 
 	crate::scheduler::add_current_core();
 
