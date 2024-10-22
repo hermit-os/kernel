@@ -62,7 +62,7 @@ impl CoreLocal {
 		this.this = &*this;
 
 		unsafe {
-			asm!("msr tpidr_el1, {}", in(reg) this, options(nomem, nostack, preserves_flags));
+			asm!("msr tpidr_el1, {}", in(reg) this, options(nostack, preserves_flags));
 		}
 	}
 
