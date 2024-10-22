@@ -47,7 +47,10 @@ pub(crate) trait FuseInterface {
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<Rsp<O>, VirtqError>;
+	) -> Result<Rsp<O>, VirtqError>
+	where
+		<O as ops::Op>::InStruct: Send,
+		<O as ops::Op>::OutStruct: Send;
 
 	fn get_mount_point(&self) -> String;
 }

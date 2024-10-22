@@ -16,6 +16,8 @@ use core::arch::global_asm;
 use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
+use hermit_sync::SpinMutex;
+
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
@@ -23,7 +25,7 @@ use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
-static mut COM1: SerialPort = SerialPort::new(0x800);
+static COM1: SpinMutex<SerialPort> = SpinMutex::new(SerialPort::new(0x800));
 
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.
 ///
@@ -79,28 +81,24 @@ pub fn args() -> Option<&'static str> {
 pub fn message_output_init() {
 	CoreLocal::install();
 
-	unsafe {
-		COM1.port_address = env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.map(|uartport| uartport.get())
-			.unwrap_or_default()
-			.try_into()
-			.unwrap();
-	}
+	let mut com1 = COM1.lock();
+
+	com1.port_address = env::boot_info()
+		.hardware_info
+		.serial_port_base
+		.map(|uartport| uartport.get())
+		.unwrap_or_default()
+		.try_into()
+		.unwrap();
 
 	// We can only initialize the serial port here, because VGA requires processor
 	// configuration first.
-	unsafe {
-		COM1.init(SERIAL_PORT_BAUDRATE);
-	}
+	com1.init(SERIAL_PORT_BAUDRATE);
 }
 
 pub fn output_message_byte(byte: u8) {
 	// Output messages to the serial port.
-	unsafe {
-		COM1.write_byte(byte);
-	}
+	COM1.lock().write_byte(byte);
 }
 
 pub fn output_message_buf(buf: &[u8]) {

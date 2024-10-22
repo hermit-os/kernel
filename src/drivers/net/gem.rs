@@ -221,6 +221,9 @@ pub struct GEMDriver {
 	txbuffer_list: VirtAddr,
 }
 
+// FIXME: make `gem` implement `Send` instead
+unsafe impl Send for GEMDriver {}
+
 impl NetworkDriver for GEMDriver {
 	/// Returns the MAC address of the network interface
 	fn get_mac_address(&self) -> [u8; 6] {

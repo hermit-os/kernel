@@ -1,3 +1,4 @@
+use hermit_sync::SpinMutex;
 use x86::io::*;
 
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
@@ -14,7 +15,7 @@ const COLS: usize = 80;
 const ROWS: usize = 25;
 const VGA_BUFFER_ADDRESS: u64 = 0xB8000;
 
-static mut VGA_SCREEN: VgaScreen = VgaScreen::new();
+static VGA_SCREEN: SpinMutex<VgaScreen> = SpinMutex::new(VgaScreen::new());
 
 #[derive(Clone, Copy)]
 #[repr(C, packed)]
@@ -38,6 +39,9 @@ struct VgaScreen {
 	current_row: usize,
 	is_initialized: bool,
 }
+
+// FIXME: make `buffer` implement `Send` instead
+unsafe impl Send for VgaScreen {}
 
 impl VgaScreen {
 	const fn new() -> Self {
@@ -124,11 +128,9 @@ impl VgaScreen {
 }
 
 pub fn init() {
-	unsafe { VGA_SCREEN.init() };
+	VGA_SCREEN.lock().init();
 }
 
 pub fn write_byte(byte: u8) {
-	unsafe {
-		VGA_SCREEN.write_byte(byte);
-	}
+	VGA_SCREEN.lock().write_byte(byte);
 }

@@ -41,9 +41,11 @@ use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
+use crate::init_cell::InitCell;
 
-pub(crate) static mut PCI_DEVICES: Vec<PciDevice<PciConfigRegion>> = Vec::new();
-static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
+pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigRegion>>> =
+	InitCell::new(Vec::new());
+static PCI_DRIVERS: InitCell<Vec<PciDriver>> = InitCell::new(Vec::new());
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct PciDevice<T: ConfigRegionAccess> {
@@ -301,7 +303,7 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 pub(crate) fn print_information() {
 	infoheader!(" PCI BUS INFORMATION ");
 
-	for adapter in unsafe { PCI_DEVICES.iter() } {
+	for adapter in PCI_DEVICES.finalize().iter() {
 		info!("{}", adapter);
 	}
 
@@ -411,9 +413,7 @@ impl PciDriver {
 }
 
 pub(crate) fn register_driver(drv: PciDriver) {
-	unsafe {
-		PCI_DRIVERS.push(drv);
-	}
+	PCI_DRIVERS.with(|pci_drivers| pci_drivers.unwrap().push(drv));
 }
 
 pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandlerQueue, RandomState>
@@ -421,7 +421,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
 
-	for drv in unsafe { PCI_DRIVERS.iter() } {
+	for drv in PCI_DRIVERS.finalize().iter() {
 		let (irq_number, handler) = drv.get_interrupt_handler();
 
 		if let Some(map) = handlers.get_mut(&irq_number) {
@@ -438,37 +438,43 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
-	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
 
 #[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL8139Driver>> {
-	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
 
 #[cfg(feature = "vsock")]
 pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
-	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_vsock_driver()) }
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_vsock_driver())
 }
 
 #[cfg(feature = "fuse")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
-	unsafe {
-		PCI_DRIVERS
-			.iter()
-			.find_map(|drv| drv.get_filesystem_driver())
-	}
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_filesystem_driver())
 }
 
 pub(crate) fn init() {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
-		for adapter in unsafe {
-			PCI_DEVICES.iter().filter(|x| {
-				let (vendor_id, device_id) = x.id();
-				vendor_id == 0x1AF4 && (0x1000..=0x107F).contains(&device_id)
-			})
-		} {
+		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
+			let (vendor_id, device_id) = x.id();
+			vendor_id == 0x1AF4 && (0x1000..=0x107F).contains(&device_id)
+		}) {
 			info!(
 				"Found virtio device with device id {:#x}",
 				adapter.device_id()
@@ -498,12 +504,10 @@ pub(crate) fn init() {
 
 		// Searching for Realtek RTL8139, which is supported by Qemu
 		#[cfg(feature = "rtl8139")]
-		for adapter in unsafe {
-			PCI_DEVICES.iter().filter(|x| {
-				let (vendor_id, device_id) = x.id();
-				vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
-			})
-		} {
+		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
+			let (vendor_id, device_id) = x.id();
+			vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
+		}) {
 			info!(
 				"Found Realtek network device with device id {:#x}",
 				adapter.device_id()

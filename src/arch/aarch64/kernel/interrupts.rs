@@ -9,7 +9,7 @@ use ahash::RandomState;
 use arm_gic::gicv3::{GicV3, IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
-use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
+use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
 
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
@@ -37,7 +37,7 @@ static mut TIMER_INTERRUPT: u32 = 0;
 static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> =
 	OnceCell::new();
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
-pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
+pub(crate) static GIC: SpinMutex<Option<GicV3>> = SpinMutex::new(None);
 
 /// Enable all interrupts
 #[inline]
@@ -337,9 +337,7 @@ pub(crate) fn init() {
 	gic.enable_interrupt(reschedid, true);
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
-	unsafe {
-		GIC.set(gic).unwrap();
-	}
+	*GIC.lock() = Some(gic);
 }
 
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =

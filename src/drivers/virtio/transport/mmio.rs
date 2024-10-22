@@ -266,6 +266,9 @@ pub struct NotifCfg {
 	queue_notify: *mut le32,
 }
 
+// FIXME: make `queue_notify` implement `Send` instead
+unsafe impl Send for NotifCfg {}
+
 impl NotifCfg {
 	pub fn new(mut registers: VolatileRef<'_, DeviceRegisters>) -> Self {
 		let raw = registers.as_mut_ptr().queue_notify().as_raw_ptr().as_ptr();
@@ -286,6 +289,9 @@ pub struct NotifCtrl {
 	/// Where to write notification
 	notif_addr: *mut le32,
 }
+
+// FIXME: make `notif_addr` implement `Send` instead
+unsafe impl Send for NotifCtrl {}
 
 impl NotifCtrl {
 	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA

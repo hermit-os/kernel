@@ -6,8 +6,9 @@ use hermit_sync::InterruptSpinMutex;
 use crate::drivers::net::gem::GEMDriver;
 #[cfg(not(feature = "gem-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
+use crate::init_cell::InitCell;
 
-static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
+static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "gem-net")]
@@ -32,17 +33,21 @@ impl MmioDriver {
 	}
 }
 pub(crate) fn register_driver(drv: MmioDriver) {
-	unsafe {
-		MMIO_DRIVERS.push(drv);
-	}
+	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
 
 #[cfg(feature = "gem-net")]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptSpinMutex<GEMDriver>> {
-	unsafe { MMIO_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
 
 #[cfg(not(feature = "gem-net"))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptSpinMutex<VirtioNetDriver>> {
-	unsafe { MMIO_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
