@@ -168,7 +168,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
-	let mut new_stack = unsafe { ptr::addr_of!(loader_end) }
+	let mut new_stack = ptr::addr_of!(loader_end)
 		.addr()
 		.align_up(Size4KiB::SIZE as usize);
 
