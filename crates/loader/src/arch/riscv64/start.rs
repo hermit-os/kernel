@@ -22,7 +22,7 @@ pub fn get_fdt() -> Fdt<'static> {
 
 pub fn get_stack_ptr() -> *mut u8 {
 	// SAFETY: We only create a pointer here
-	let stack_top = unsafe { ptr::addr_of_mut!(STACK) };
+	let stack_top = ptr::addr_of_mut!(STACK);
 	// SAFETY: Pointing directly past the object is allowed
 	let stack_bottom = unsafe { stack_top.add(1) };
 	stack_bottom.cast::<u8>()
