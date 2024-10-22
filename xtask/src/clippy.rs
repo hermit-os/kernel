@@ -26,7 +26,7 @@ impl Clippy {
 				.run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
-				.arg("--features=acpi,fsgsbase,pci,smp,vga")
+				.arg("--features=acpi,fsgsbase,pci,shell,smp,vga")
 				.run()?;
 
 			if *arch == Arch::Riscv64 {
@@ -38,7 +38,7 @@ impl Clippy {
 
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
-				.arg("--features=acpi,fsgsbase,newlib,smp,vga")
+				.arg("--features=acpi,fsgsbase,newlib,shell,smp,vga")
 				.run()?;
 		}
 
