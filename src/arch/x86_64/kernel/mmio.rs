@@ -16,6 +16,7 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
+use crate::init_cell::InitCell;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 
@@ -23,7 +24,7 @@ pub const MMIO_START: usize = 0x00000000feb00000;
 pub const MMIO_END: usize = 0x00000000feb0ffff;
 const IRQ_NUMBER: u8 = 44 - 32;
 
-static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
+static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
@@ -189,13 +190,14 @@ fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'sta
 }
 
 pub(crate) fn register_driver(drv: MmioDriver) {
-	unsafe {
-		MMIO_DRIVERS.push(drv);
-	}
+	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
 
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
-	unsafe { MMIO_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
 
 pub(crate) fn init_drivers() {
@@ -215,5 +217,7 @@ pub(crate) fn init_drivers() {
 		} else {
 			warn!("Unable to find mmio device");
 		}
+
+		MMIO_DRIVERS.finalize();
 	});
 }

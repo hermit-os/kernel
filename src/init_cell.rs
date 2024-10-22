@@ -1,4 +1,10 @@
-#![cfg_attr(not(feature = "pci"), expect(dead_code))]
+#![cfg_attr(
+	all(
+		not(feature = "pci"),
+		not(all(target_arch = "x86_64", feature = "tcp")),
+	),
+	expect(dead_code)
+)]
 
 use hermit_sync::{OnceCell, SpinMutex};
 
