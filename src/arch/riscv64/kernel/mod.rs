@@ -24,10 +24,11 @@ use crate::arch::riscv64::kernel::processor::lsb;
 use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
+use crate::init_cell::InitCell;
 
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
-pub(crate) static mut HARTS_AVAILABLE: Vec<usize> = Vec::new();
+pub(crate) static HARTS_AVAILABLE: InitCell<Vec<usize>> = InitCell::new(Vec::new());
 
 /// Kernel header to announce machine features
 static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
@@ -148,10 +149,8 @@ fn finish_processor_init() {
 
 	let current_hart_id = get_current_boot_id() as usize;
 
-	unsafe {
-		// Add hart to HARTS_AVAILABLE, the hart id is stored in current_boot_id
-		HARTS_AVAILABLE.push(current_hart_id);
-	}
+	// Add hart to HARTS_AVAILABLE, the hart id is stored in current_boot_id
+	HARTS_AVAILABLE.with(|harts_available| harts_available.unwrap().push(current_hart_id));
 	info!("Initialized CPU with hart_id {current_hart_id}");
 
 	crate::scheduler::add_current_core();
