@@ -45,7 +45,7 @@ use crate::init_cell::InitCell;
 
 pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigRegion>>> =
 	InitCell::new(Vec::new());
-static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
+static PCI_DRIVERS: InitCell<Vec<PciDriver>> = InitCell::new(Vec::new());
 
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct PciDevice<T: ConfigRegionAccess> {
@@ -413,9 +413,7 @@ impl PciDriver {
 }
 
 pub(crate) fn register_driver(drv: PciDriver) {
-	unsafe {
-		PCI_DRIVERS.push(drv);
-	}
+	PCI_DRIVERS.with(|pci_drivers| pci_drivers.unwrap().push(drv));
 }
 
 pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandlerQueue, RandomState>
@@ -423,7 +421,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
 
-	for drv in unsafe { PCI_DRIVERS.iter() } {
+	for drv in PCI_DRIVERS.finalize().iter() {
 		let (irq_number, handler) = drv.get_interrupt_handler();
 
 		if let Some(map) = handlers.get_mut(&irq_number) {
@@ -440,26 +438,34 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 
 #[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
-	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
 
 #[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL8139Driver>> {
-	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_network_driver())
 }
 
 #[cfg(feature = "vsock")]
 pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
-	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_vsock_driver()) }
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_vsock_driver())
 }
 
 #[cfg(feature = "fuse")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
-	unsafe {
-		PCI_DRIVERS
-			.iter()
-			.find_map(|drv| drv.get_filesystem_driver())
-	}
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_filesystem_driver())
 }
 
 pub(crate) fn init() {

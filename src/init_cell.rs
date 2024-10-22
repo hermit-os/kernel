@@ -1,4 +1,4 @@
-#![cfg_attr(any(not(feature = "pci"), target_arch = "riscv64"), expect(dead_code))]
+#![cfg_attr(not(feature = "pci"), expect(dead_code))]
 
 use hermit_sync::{OnceCell, SpinMutex};
 
@@ -21,6 +21,11 @@ impl<T> InitCell<T> {
 	pub fn with(&self, f: impl FnOnce(Option<&mut T>)) {
 		let mut guard = self.init.lock();
 		f((*guard).as_mut())
+	}
+
+	#[cfg_attr(all(feature = "pci", not(feature = "tcp")), expect(dead_code))]
+	pub fn get(&self) -> Option<&T> {
+		self.once.get()
 	}
 
 	pub fn finalize(&self) -> &T {
