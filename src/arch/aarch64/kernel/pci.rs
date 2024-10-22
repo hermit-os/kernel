@@ -202,7 +202,8 @@ fn detect_interrupt(
 			if irq_type == 0 {
 				// enable interrupt
 				let irq_id = IntId::spi(irq_number);
-				let gic = unsafe { GIC.get_mut().unwrap() };
+				let mut gic = GIC.lock();
+				let gic = gic.as_mut().unwrap();
 				gic.set_interrupt_priority(irq_id, 0x10);
 				if irq_flags == 4 {
 					gic.set_trigger(irq_id, Trigger::Level);
