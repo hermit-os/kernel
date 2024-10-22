@@ -4,6 +4,7 @@ use ahash::RandomState;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
 use riscv::asm::wfi;
+use riscv::interrupt::{Exception, Interrupt, Trap};
 use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
 
@@ -151,9 +152,9 @@ pub(crate) fn install_handlers() {
 /// This function is called from `trap.S` which is in the trapframe crate.
 #[no_mangle]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
-	use self::scause::{Interrupt as I, Trap};
 	let scause = scause::read();
 	let cause = scause.cause();
+	let cause = Trap::<Interrupt, Exception>::try_from(cause).unwrap();
 	let stval = stval::read();
 	let sepc = tf.sepc;
 	trace!("Interrupt: {cause:?}");
@@ -163,10 +164,12 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 	trace!("SSTATUS FS = {:?}", sstatus::read().fs());
 
 	match cause {
-		Trap::Interrupt(I::SupervisorExternal) => external_handler(),
+		Trap::Interrupt(Interrupt::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
-		Trap::Interrupt(I::SupervisorSoft) => crate::arch::riscv64::kernel::scheduler::wakeup_handler(),
-		Trap::Interrupt(I::SupervisorTimer) => {
+		Trap::Interrupt(Interrupt::SupervisorSoft) => {
+			crate::arch::riscv64::kernel::scheduler::wakeup_handler()
+		}
+		Trap::Interrupt(Interrupt::SupervisorTimer) => {
 			crate::arch::riscv64::kernel::scheduler::timer_handler()
 		}
 		cause => {
