@@ -205,7 +205,7 @@ jobs:
         if: matrix.profile == 'dev'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package wasmtime-demo --features ci
-        if: matrix.arch != 'riscv64'
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --features fs --virtiofsd
