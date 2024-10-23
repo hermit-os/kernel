@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 
 use fdt::Fdt;
@@ -31,7 +31,7 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 	}
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			// Use stack pointer from `CURRENT_STACK_ADDRESS` if set
 			"ld      t0, {current_stack_pointer}",
 			"beqz    t0, 2f",
@@ -44,7 +44,6 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 			current_stack_pointer = sym CURRENT_STACK_ADDRESS,
 			top_offset = const KERNEL_STACK_SIZE,
 			pre_init = sym pre_init,
-			options(noreturn),
 		)
 	}
 }

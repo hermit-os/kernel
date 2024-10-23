@@ -2,7 +2,7 @@
 
 #[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
-use core::arch::asm;
+use core::arch::naked_asm;
 #[cfg(not(feature = "common-os"))]
 use core::mem::MaybeUninit;
 #[cfg(not(feature = "common-os"))]
@@ -316,12 +316,11 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 	// `user_stack` is in the `rdx` register
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			"mov rsp, rdx",
 			"sti",
 			"jmp {task_entry}",
 			task_entry = sym task_entry,
-			options(noreturn)
 		)
 	}
 }

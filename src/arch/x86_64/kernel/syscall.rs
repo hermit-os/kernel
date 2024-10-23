@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 use core::mem;
 
 use super::core_local::CoreLocal;
@@ -8,7 +8,7 @@ use crate::syscalls::table::SYSHANDLER_TABLE;
 #[naked]
 pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 	unsafe {
-		asm!(
+		naked_asm!(
 			// save context, see x86_64 ABI
 			"push rcx",
 			"push rdx",
@@ -46,7 +46,6 @@ pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 			"sysretq",
 			core_local_kernel_stack = const mem::offset_of!(CoreLocal, kernel_stack),
 			table = sym SYSHANDLER_TABLE,
-			options(noreturn)
 		);
 	}
 }
