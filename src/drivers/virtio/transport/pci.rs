@@ -195,7 +195,7 @@ pub struct VqCfgHandler<'a> {
 	raw: VolatileRef<'a, CommonCfg>,
 }
 
-impl<'a> VqCfgHandler<'a> {
+impl VqCfgHandler<'_> {
 	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
 	fn select_queue(&mut self) {
 		self.raw

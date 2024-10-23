@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 
 use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
@@ -26,7 +26,7 @@ pub unsafe extern "C" fn _start(_boot_info: Option<&'static RawBootInfo>, cpu_id
 	}
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			// use core::sync::atomic::{AtomicU32, Ordering};
 			//
 			// pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
@@ -61,7 +61,6 @@ pub unsafe extern "C" fn _start(_boot_info: Option<&'static RawBootInfo>, cpu_id
 			current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 			stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 			pre_init = sym pre_init,
-			options(noreturn)
 		)
 	}
 }

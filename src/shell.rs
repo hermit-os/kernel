@@ -1,4 +1,3 @@
-use hermit_sync::Lazy;
 use simple_shell::*;
 
 use crate::arch::kernel::COM1;
@@ -8,7 +7,7 @@ fn read() -> Option<u8> {
 	COM1.lock().as_mut().map(|s| s.read())?
 }
 
-static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
+pub(crate) fn init() {
 	let (print, read) = (|s: &str| print!("{}", s), read);
 	let mut shell = Shell::new(print, read);
 
@@ -43,10 +42,6 @@ static mut SHELL: Lazy<Shell<'_>> = Lazy::new(|| {
 		},
 	);
 
-	shell
-});
-
-pub(crate) fn init() {
 	// Also supports async
-	crate::executor::spawn(unsafe { SHELL.run_async() });
+	crate::executor::spawn(async move { shell.run_async().await });
 }

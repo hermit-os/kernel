@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 
 use crate::syscalls::*;
 
@@ -42,11 +42,10 @@ extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 #[naked]
 pub(crate) unsafe extern "C" fn sys_invalid() {
 	unsafe {
-		asm!(
+		naked_asm!(
 			"mov rdi, rax",
 			"call {}",
 			sym invalid_syscall,
-			options(noreturn)
 		);
 	}
 }

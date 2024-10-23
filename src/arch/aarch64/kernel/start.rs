@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::{asm, naked_asm};
 
 use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
@@ -28,7 +28,7 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 	}
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			"msr spsel, {l1}", // we want to use sp_el1
 			"adrp x8, {current_stack_address}",
 			"mov x4, sp",
@@ -45,7 +45,6 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 			stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 			current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 			pre_init = sym pre_init,
-			options(noreturn),
 		)
 	}
 }

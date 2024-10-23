@@ -1,4 +1,4 @@
-use core::arch::asm;
+use core::arch::{asm, naked_asm};
 use core::{mem, ptr};
 
 use crate::core_local::CoreLocal;
@@ -173,7 +173,7 @@ pub(crate) unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stac
 	// `new_stack` is in `rsi` register
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			save_context!(),
 			// Store the old `rsp` behind `old_stack`
 			"mov [rdi], rsp",
@@ -187,7 +187,6 @@ pub(crate) unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stac
 			"call {set_current_kernel_stack}",
 			restore_context!(),
 			set_current_kernel_stack = sym set_current_kernel_stack,
-			options(noreturn)
 		);
 	}
 }
@@ -200,7 +199,7 @@ pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new
 	// `new_stack` is in `rsi` register
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			save_context!(),
 			// Store the old `rsp` behind `old_stack`
 			"mov [rdi], rsp",
@@ -211,7 +210,6 @@ pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new
 			"call {set_current_kernel_stack}",
 			restore_context!(),
 			set_current_kernel_stack = sym set_current_kernel_stack,
-			options(noreturn),
 		);
 	}
 }

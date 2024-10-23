@@ -2,7 +2,7 @@
 
 use alloc::alloc::{alloc_zeroed, Layout};
 use alloc::boxed::Box;
-use core::arch::asm;
+use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 use core::{mem, ptr, slice};
 
@@ -329,7 +329,7 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	// `arg` is in the `x1` register
 
 	unsafe {
-		asm!(
+		naked_asm!(
 			"msr spsel, {l0}",
 			"mov x25, x0",
 			"mov x0, x1",
@@ -340,7 +340,6 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 			"br x4",
 			l0 = const 0,
 			exit = sym thread_exit,
-			options(noreturn)
 		)
 	}
 }
