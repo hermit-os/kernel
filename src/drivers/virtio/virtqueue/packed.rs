@@ -298,7 +298,7 @@ struct ReadCtrl<'a> {
 	desc_ring: &'a mut DescriptorRing,
 }
 
-impl<'a> ReadCtrl<'a> {
+impl ReadCtrl<'_> {
 	/// Polls the ring for a new finished buffer. If buffer is marked as finished, takes care of
 	/// updating the queue and returns the respective TransferToken.
 	fn poll_next(&mut self) -> Option<(Box<TransferToken<pvirtq::Desc>>, u32)> {
@@ -378,7 +378,7 @@ struct WriteCtrl<'a> {
 	desc_ring: &'a mut DescriptorRing,
 }
 
-impl<'a> WriteCtrl<'a> {
+impl WriteCtrl<'_> {
 	/// **This function MUST only be used within the WriteCtrl.write_desc() function!**
 	///
 	/// Incrementing index by one. The index wrappes around to zero when

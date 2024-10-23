@@ -96,7 +96,7 @@ pub struct AcpiTable<'a> {
 	allocated_length: usize,
 }
 
-impl<'a> AcpiTable<'a> {
+impl AcpiTable<'_> {
 	fn map(physical_address: PhysAddr) -> Self {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().read_only().execute_disable();
@@ -150,7 +150,7 @@ impl<'a> AcpiTable<'a> {
 	}
 }
 
-impl<'a> Drop for AcpiTable<'a> {
+impl Drop for AcpiTable<'_> {
 	fn drop(&mut self) {
 		virtualmem::deallocate(self.allocated_virtual_address, self.allocated_length);
 	}
