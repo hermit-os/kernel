@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Id","RingEventFlags"],"mod":["fs","mmio","net","pci","pvirtq","virtq","volatile","vsock"],"struct":["Be","DeviceStatus","F","Le"],"trait":["DeviceConfigSpace","FeatureBits"],"type":["be128","be16","be32","be64","le128","le16","le32","le64"]};

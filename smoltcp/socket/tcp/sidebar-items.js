@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConnectError","ListenError","RecvError","SendError","State"],"struct":["Socket"],"type":["SocketBuffer"]};

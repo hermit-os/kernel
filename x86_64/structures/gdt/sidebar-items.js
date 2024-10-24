@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Descriptor"],"struct":["DescriptorFlags","Entry","GlobalDescriptorTable"]};

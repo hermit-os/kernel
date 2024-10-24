@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PlatformInfo"],"struct":["BootInfo","HardwareInfo","LoadInfo","RawBootInfo","TlsInfo"],"type":["DeviceTreeAddress","SerialPortBase"]};
