@@ -63,7 +63,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -91,7 +91,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(len)
 	}
 
-	async fn async_lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let guard = self.inner.read().await;
 		let mut pos_guard = self.pos.lock().await;
 
@@ -169,7 +169,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -197,7 +197,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(len)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let mut guard = self.inner.write().await;
@@ -219,7 +219,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(buf.len())
 	}
 
-	async fn async_lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut guard = self.inner.write().await;
 		let mut pos_guard = self.pos.lock().await;
 
@@ -386,18 +386,13 @@ impl MemDirectoryInterface {
 
 #[async_trait]
 impl ObjectInterface for MemDirectoryInterface {
-	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
-		block_on(
-			async {
-				let mut entries: Vec<DirectoryEntry> = Vec::new();
-				for name in self.inner.read().await.keys() {
-					entries.push(DirectoryEntry::new(name.to_string()));
-				}
+	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
+		let mut entries: Vec<DirectoryEntry> = Vec::new();
+		for name in self.inner.read().await.keys() {
+			entries.push(DirectoryEntry::new(name.to_string()));
+		}
 
-				Ok(entries)
-			},
-			None,
-		)
+		Ok(entries)
 	}
 }
 

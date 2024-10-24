@@ -8,6 +8,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use async_trait::async_trait;
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
@@ -127,8 +128,9 @@ impl DirectoryReader {
 	}
 }
 
+#[async_trait]
 impl ObjectInterface for DirectoryReader {
-	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
+	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		Ok(self.0.clone())
 	}
 }

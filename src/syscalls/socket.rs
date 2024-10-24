@@ -20,10 +20,9 @@ use crate::fd::socket::udp;
 #[cfg(feature = "vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	get_object, insert_object, replace_object, Endpoint, ListenEndpoint, ObjectInterface,
-	SocketOption,
+	get_object, insert_object, Endpoint, ListenEndpoint, ObjectInterface, SocketOption,
 };
-use crate::syscalls::IoCtl;
+use crate::syscalls::{block_on, IoCtl};
 
 pub const AF_INET: i32 = 0;
 pub const AF_INET6: i32 = 1;
@@ -421,13 +420,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 
 	#[cfg(feature = "vsock")]
 	if domain == AF_VSOCK && type_.intersects(SockType::SOCK_STREAM) {
-		let socket = vsock::Socket::new();
+		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
 
 		if type_.contains(SockType::SOCK_NONBLOCK) {
-			socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+			block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 		}
 
-		let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+		let fd = insert_object(socket).expect("FD is already used");
 
 		return fd;
 	}
@@ -443,13 +442,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
-				let socket = udp::Socket::new(handle);
+				let socket = Arc::new(async_lock::RwLock::new(udp::Socket::new(handle)));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
-					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 				}
 
-				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+				let fd = insert_object(socket).expect("FD is already used");
 
 				return fd;
 			}
@@ -458,13 +457,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			if type_.contains(SockType::SOCK_STREAM) {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
-				let socket = tcp::Socket::new(handle);
+				let socket = Arc::new(async_lock::RwLock::new(tcp::Socket::new(handle)));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
-					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
 				}
 
-				let fd = insert_object(Arc::new(socket)).expect("FD is already used");
+				let fd = insert_object(socket).expect("FD is already used");
 
 				return fd;
 			}
@@ -481,14 +480,12 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).accept().map_or_else(
+			block_on((*v).accept(), None).map_or_else(
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-				|endpoint| match endpoint {
+				|(obj, endpoint)| match endpoint {
 					#[cfg(any(feature = "tcp", feature = "udp"))]
 					Endpoint::Ip(endpoint) => {
-						let new_obj = dyn_clone::clone_box(&*v);
-						replace_object(fd, Arc::from(new_obj)).unwrap();
-						let new_fd = insert_object(v).unwrap();
+						let new_fd = insert_object(obj).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
 							let addrlen = unsafe { &mut *addrlen };
@@ -515,8 +512,6 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 					}
 					#[cfg(feature = "vsock")]
 					Endpoint::Vsock(endpoint) => {
-						//let new_obj = dyn_clone::clone_box(&*v);
-						//replace_object(fd, Arc::from(new_obj)).unwrap();
 						let new_fd = insert_object(v.clone()).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
@@ -544,7 +539,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).listen(backlog)
+			block_on((*v).listen(backlog), None)
 				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
@@ -569,7 +564,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in) });
-				(*v).bind(ListenEndpoint::Ip(endpoint))
+				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -578,7 +573,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in6) });
-				(*v).bind(ListenEndpoint::Ip(endpoint))
+				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			}
 			#[cfg(feature = "vsock")]
@@ -587,7 +582,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *(name as *const sockaddr_vm) });
-				(*v).bind(ListenEndpoint::Vsock(endpoint))
+				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			}
 			_ => -crate::errno::EINVAL,
@@ -637,7 +632,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).connect(endpoint)
+			block_on((*v).connect(endpoint), None)
 				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
@@ -654,7 +649,7 @@ pub unsafe extern "C" fn sys_getsockname(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			if let Some(endpoint) = (*v).getsockname() {
+			if let Ok(Some(endpoint)) = block_on((*v).getsockname(), None) {
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
@@ -727,7 +722,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				(*v).setsockopt(SocketOption::TcpNoDelay, value != 0)
+				block_on((*v).setsockopt(SocketOption::TcpNoDelay, value != 0), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 			},
 		)
@@ -763,7 +758,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				(*v).getsockopt(SocketOption::TcpNoDelay).map_or_else(
+				block_on((*v).getsockopt(SocketOption::TcpNoDelay), None).map_or_else(
 					|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 					|value| {
 						if value {
@@ -794,7 +789,7 @@ pub unsafe extern "C" fn sys_getpeername(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			if let Some(endpoint) = (*v).getpeername() {
+			if let Ok(Some(endpoint)) = block_on((*v).getpeername(), None) {
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
@@ -865,7 +860,7 @@ fn shutdown(sockfd: i32, how: i32) -> i32 {
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			(*v).shutdown(how)
+			block_on((*v).shutdown(how), None)
 				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 		},
 	)
@@ -944,7 +939,7 @@ pub unsafe extern "C" fn sys_sendto(
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 			|v| {
-				(*v).sendto(slice, endpoint).map_or_else(
+				block_on((*v).sendto(slice, endpoint), None).map_or_else(
 					|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 					|v| v.try_into().unwrap(),
 				)
@@ -970,7 +965,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			(*v).recvfrom(slice).map_or_else(
+			block_on((*v).recvfrom(slice), None).map_or_else(
 				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 				|(len, endpoint)| {
 					if !addr.is_null() && !addrlen.is_null() {

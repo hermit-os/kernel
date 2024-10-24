@@ -212,15 +212,15 @@ impl UhyveFileHandle {
 
 #[async_trait]
 impl ObjectInterface for UhyveFileHandle {
-	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		self.0.lock().await.write(buf)
 	}
 
-	async fn async_lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		self.0.lock().await.lseek(offset, whence)
 	}
 }
