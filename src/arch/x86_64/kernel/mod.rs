@@ -4,7 +4,6 @@ use core::num::NonZeroU64;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
-use fdt::Fdt;
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use hermit_sync::InterruptSpinMutex;
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
@@ -66,13 +65,6 @@ pub fn get_mbinfo() -> Option<NonZeroU64> {
 		} => Some(multiboot_info_addr),
 		_ => None,
 	}
-}
-
-pub fn get_fdt() -> Option<Fdt<'static>> {
-	env::boot_info().hardware_info.device_tree.map(|fdt| {
-		let ptr = ptr::with_exposed_provenance(fdt.get().try_into().unwrap());
-		unsafe { Fdt::from_ptr(ptr).unwrap() }
-	})
 }
 
 #[cfg(feature = "smp")]
