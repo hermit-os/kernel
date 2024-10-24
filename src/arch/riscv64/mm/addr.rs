@@ -4,28 +4,7 @@ use core::convert::{From, Into};
 use core::hash::{Hash, Hasher};
 use core::{fmt, ops};
 
-/// Align address downwards.
-///
-/// Returns the greatest x with alignment `align` so that x <= addr.
-/// The alignment must be a power of 2.
-#[inline(always)]
-fn align_down(addr: u64, align: u64) -> u64 {
-	addr & !(align - 1)
-}
-
-/// Align address upwards.
-///
-/// Returns the smallest x with alignment `align` so that x >= addr.
-/// The alignment must be a power of 2.
-#[inline(always)]
-fn align_up(addr: u64, align: u64) -> u64 {
-	let align_mask = align - 1;
-	if addr & align_mask == 0 {
-		addr
-	} else {
-		(addr | align_mask) + 1
-	}
-}
+use align_address::Align;
 
 /// A wrapper for a physical address, which is in principle
 /// derived from the crate x86.
@@ -58,14 +37,14 @@ impl PhysAddr {
 	where
 		U: Into<u64>,
 	{
-		PhysAddr(align_up(self.0, align.into()))
+		PhysAddr(self.0.align_up(align.into()))
 	}
 
 	fn align_down<U>(self, align: U) -> Self
 	where
 		U: Into<u64>,
 	{
-		PhysAddr(align_down(self.0, align.into()))
+		PhysAddr(self.0.align_down(align.into()))
 	}
 
 	/// Is this address aligned to `align`?
@@ -338,14 +317,14 @@ impl VirtAddr {
 	where
 		U: Into<u64>,
 	{
-		VirtAddr(align_up(self.0, align.into()))
+		VirtAddr(self.0.align_up(align.into()))
 	}
 
 	fn align_down<U>(self, align: U) -> Self
 	where
 		U: Into<u64>,
 	{
-		VirtAddr(align_down(self.0, align.into()))
+		VirtAddr(self.0.align_down(align.into()))
 	}
 
 	/// Offset within the 4 KiB page.
