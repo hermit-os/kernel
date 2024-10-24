@@ -380,14 +380,16 @@ fn test_mioudp() -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let buf = "exit";
 	eprintln!("[CI] send {buf:?} via UDP to 127.0.0.1:9975");
-	let socket = UdpSocket::bind("127.0.0.1:0")?;
-	socket.connect("127.0.0.1:9975")?;
-	socket.send(buf.as_bytes())?;
+	let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+	socket.connect("127.0.0.1:9975").unwrap();
+	socket.send(buf.as_bytes()).unwrap();
 
-	socket.set_read_timeout(Some(Duration::from_secs(10)))?;
+	socket
+		.set_read_timeout(Some(Duration::from_secs(10)))
+		.unwrap();
 	let mut buf = [0; 128];
-	let received = socket.recv(&mut buf)?;
-	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+	let received = socket.recv(&mut buf).unwrap();
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received]).unwrap());
 
 	Ok(())
 }
