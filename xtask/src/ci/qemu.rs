@@ -621,14 +621,16 @@ fn test_mioudp(guest_ip: IpAddr) -> Result<()> {
 	let buf = "exit";
 	let socket_addr = SocketAddr::new(guest_ip, 9975);
 	eprintln!("[CI] send {buf:?} via UDP to {socket_addr}");
-	let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
-	socket.connect(socket_addr)?;
-	socket.send(buf.as_bytes())?;
+	let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+	socket.connect(socket_addr).unwrap();
+	socket.send(buf.as_bytes()).unwrap();
 
-	socket.set_read_timeout(Some(Duration::from_secs(10)))?;
+	socket
+		.set_read_timeout(Some(Duration::from_secs(10)))
+		.unwrap();
 	let mut buf = [0; 128];
-	let received = socket.recv(&mut buf)?;
-	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+	let received = socket.recv(&mut buf).unwrap();
+	eprintln!("[CI] receive: {}", from_utf8(&buf[..received]).unwrap());
 
 	Ok(())
 }
