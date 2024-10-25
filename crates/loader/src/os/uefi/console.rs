@@ -3,7 +3,7 @@ use core::fmt;
 use core::ptr::NonNull;
 
 use one_shot_mutex::OneShotMutex;
-use uefi::table::boot::{EventType, Tpl};
+use uefi::boot::{EventType, Tpl};
 use uefi::Event;
 
 use crate::arch;

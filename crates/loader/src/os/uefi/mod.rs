@@ -6,9 +6,9 @@ use alloc::vec::Vec;
 
 use log::info;
 use qemu_exit::QEMUExit;
+use uefi::boot::MemoryType;
 use uefi::fs::{FileSystem, Path};
 use uefi::prelude::*;
-use uefi::table::boot::MemoryType;
 
 pub use self::console::CONSOLE;
 
