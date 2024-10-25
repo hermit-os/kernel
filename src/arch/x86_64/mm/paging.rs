@@ -7,7 +7,9 @@ use x86_64::registers::control::Cr2;
 use x86_64::registers::segmentation::SegmentSelector;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
+use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
+use x86_64::structures::paging::page::PageRange;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
 	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
@@ -155,31 +157,36 @@ pub fn map<S>(
 
 	trace!("Mapping {pages:?} to {frames:?} with {flags:?}");
 
-	#[cfg(feature = "smp")]
-	let mut ipi_tlb_flush = false;
-
-	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
-	for (page, frame) in pages.zip(frames) {
-		unsafe {
+	unsafe fn map_pages<M, S>(
+		mapper: &mut M,
+		pages: PageRange<S>,
+		frames: PhysFrameRange<S>,
+		flags: PageTableEntryFlags,
+	) -> bool
+	where
+		M: Mapper<S>,
+		S: PageSize + Debug,
+	{
+		let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
+		let mut unmapped = false;
+		for (page, frame) in pages.zip(frames) {
 			// TODO: Require explicit unmaps
-			if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
-				#[cfg(feature = "smp")]
-				{
-					ipi_tlb_flush = true;
-				}
+			let unmap = mapper.unmap(page);
+			if let Ok((_frame, flush)) = unmap {
+				unmapped = true;
 				flush.flush();
 				debug!("Had to unmap page {page:?} before mapping.");
 			}
-			recursive_page_table()
-				.map_to(page, frame, flags, &mut *frame_allocator)
-				.unwrap()
-				.flush();
+			let map = unsafe { mapper.map_to(page, frame, flags, &mut *frame_allocator) };
+			map.unwrap().flush();
 		}
+		unmapped
 	}
-	drop(frame_allocator);
 
-	#[cfg(feature = "smp")]
-	if ipi_tlb_flush {
+	let unmapped = unsafe { map_pages(&mut recursive_page_table(), pages, frames, flags) };
+
+	if unmapped {
+		#[cfg(feature = "smp")]
 		crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
 	}
 }
