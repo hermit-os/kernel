@@ -71,10 +71,6 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 
 pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	assert!(
-		virtual_address >= VirtAddr(mm::kernel_end_address().as_u64()),
-		"Virtual address {virtual_address:p} is not >= KERNEL_END_ADDRESS"
-	);
-	assert!(
 		virtual_address < kernel_heap_end(),
 		"Virtual address {virtual_address:p} is not < kernel_heap_end()"
 	);
