@@ -384,7 +384,7 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 				break;
 			}
 			let indent = &"        "[0..2 * (4 - level)];
-			println!("{indent}L{level} Entry {i}: {entry:?}",);
+			println!("{indent}L{level} Entry {i}: {entry:?}");
 
 			if level > min_level && !entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
 				let phys = entry.frame().unwrap().start_address();
