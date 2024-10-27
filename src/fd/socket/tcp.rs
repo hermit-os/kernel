@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
-use alloc::collections::binary_heap::BinaryHeap;
+use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
-use core::cmp::Reverse;
 use core::future;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
@@ -33,7 +32,7 @@ fn get_ephemeral_port() -> u16 {
 
 #[derive(Debug)]
 pub struct Socket {
-	handle: BinaryHeap<Reverse<Handle>>,
+	handle: BTreeSet<Handle>,
 	port: u16,
 	is_nonblocking: bool,
 	is_listen: bool,
@@ -41,8 +40,8 @@ pub struct Socket {
 
 impl Socket {
 	pub fn new(h: Handle) -> Self {
-		let mut handle = BinaryHeap::new();
-		handle.push(Reverse(h));
+		let mut handle = BTreeSet::new();
+		handle.insert(h);
 
 		Self {
 			handle,
@@ -55,13 +54,13 @@ impl Socket {
 	fn with<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		f(nic.get_mut_socket::<tcp::Socket<'_>>(self.handle.peek().unwrap().0))
+		f(nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap()))
 	}
 
 	fn with_context<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>, &mut iface::Context) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(self.handle.peek().unwrap().0);
+		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 		f(s, cx)
 	}
 
@@ -83,7 +82,7 @@ impl Socket {
 			let nic = guard.as_nic_mut().unwrap();
 
 			for handle in self.handle.iter().skip(1) {
-				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(handle.0);
+				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
 				if socket.is_active() {
 					socket.close();
 				}
@@ -300,31 +299,38 @@ impl Socket {
 			self.listen(DEFAULT_BACKLOG).await?;
 		}
 
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if socket.is_active() {
-					Poll::Ready(Ok(()))
-				} else {
-					match socket.state() {
-						tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::FinWait1
-						| tcp::State::FinWait2 => Poll::Ready(Err(io::Error::EIO)),
-						_ => {
-							if self.is_nonblocking {
-								Poll::Ready(Err(io::Error::EAGAIN))
-							} else {
-								socket.register_recv_waker(cx.waker());
-								Poll::Pending
-							}
-						}
-					}
+		let connection_handle = future::poll_fn(|cx| {
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+			let mut socket_handle = None;
+
+			for handle in self.handle.iter() {
+				let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+
+				if s.is_active() {
+					socket_handle = Some(*handle);
+					break;
 				}
-			})
+			}
+
+			if let Some(handle) = socket_handle {
+				self.handle.remove(&handle);
+				Poll::Ready(Ok(handle))
+			} else {
+				if self.is_nonblocking {
+					Poll::Ready(Err(io::Error::EAGAIN))
+				} else {
+					for handle in self.handle.iter() {
+						let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+						s.register_recv_waker(cx.waker());
+					}
+
+					Poll::Pending
+				}
+			}
 		})
 		.await?;
 
-		let connection_handle = self.handle.pop().unwrap().0;
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().map_err(|_| io::Error::EIO)?;
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(connection_handle);
@@ -334,7 +340,7 @@ impl Socket {
 
 		// fill up queue for pending connections
 		let new_handle = nic.create_tcp_handle().unwrap();
-		self.handle.push(Reverse(new_handle));
+		self.handle.insert(new_handle);
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(new_handle);
 		socket.set_nagle_enabled(nagle_enabled);
 		socket
@@ -342,8 +348,8 @@ impl Socket {
 			.map(|_| ())
 			.map_err(|_| io::Error::EIO)?;
 
-		let mut handle = BinaryHeap::new();
-		handle.push(Reverse(connection_handle));
+		let mut handle = BTreeSet::new();
+		handle.insert(connection_handle);
 
 		let socket = Socket {
 			handle,
@@ -369,36 +375,34 @@ impl Socket {
 
 	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
 		let nagle_enabled = self.with(|socket| socket.nagle_enabled());
-
-		self.with(|socket| {
-			if !socket.is_open() {
-				if backlog > 0 {
-					socket
-						.listen(self.port)
-						.map(|_| ())
-						.map_err(|_| io::Error::EIO)?;
-
-					Ok(())
-				} else {
-					Err(io::Error::EINVAL)
-				}
-			} else {
-				Err(io::Error::EIO)
-			}
-		})?;
-		self.is_listen = true;
-
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
+
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+		if !socket.is_open() {
+			if backlog > 0 {
+				socket
+					.listen(self.port)
+					.map(|_| ())
+					.map_err(|_| io::Error::EIO)?;
+			} else {
+				return Err(io::Error::EINVAL);
+			}
+		} else {
+			return Err(io::Error::EIO);
+		}
+		self.is_listen = true;
+
 		for _ in 1..backlog {
 			let handle = nic.create_tcp_handle().unwrap();
-			self.handle.push(Reverse(handle));
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 			s.set_nagle_enabled(nagle_enabled);
 			s.listen(self.port)
 				.map(|_| ())
 				.map_err(|_| io::Error::EIO)?;
+
+			self.handle.insert(handle);
 		}
 
 		Ok(())
@@ -410,7 +414,7 @@ impl Socket {
 			let nic = guard.as_nic_mut().unwrap();
 
 			for i in self.handle.iter() {
-				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(i.0);
+				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
 				socket.set_nagle_enabled(optval);
 			}
 
@@ -424,7 +428,7 @@ impl Socket {
 		if opt == SocketOption::TcpNoDelay {
 			let mut guard = NIC.lock();
 			let nic = guard.as_nic_mut().unwrap();
-			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.handle.peek().unwrap().0);
+			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 
 			Ok(socket.nagle_enabled())
 		} else {
@@ -464,7 +468,7 @@ impl Drop for Socket {
 
 		let mut guard = NIC.lock();
 		for h in self.handle.iter() {
-			guard.as_nic_mut().unwrap().destroy_socket(h.0);
+			guard.as_nic_mut().unwrap().destroy_socket(*h);
 		}
 	}
 }
