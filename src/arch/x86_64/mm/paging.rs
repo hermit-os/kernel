@@ -356,9 +356,40 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 				print!("p{}: {}, ", 4 - i, u16::from(page_table_index));
 			}
 			println!();
+			unsafe {
+				print_page_table_entries(valid_indices);
+			}
 		}
 		TranslateResult::NotMapped => todo!(),
 		TranslateResult::InvalidFrameAddress(_) => todo!(),
+	}
+}
+
+#[allow(dead_code)]
+unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
+	assert!(page_table_indices.len() <= 4);
+
+	// Recursive
+	let recursive_page_table = unsafe { recursive_page_table() };
+	let mut pt = recursive_page_table.level_4_table();
+
+	// Identity mapped
+	// let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	// let level_4_table_ptr =
+	//	ptr::with_exposed_provenance::<PageTable>(level_4_table_addr.try_into().unwrap());
+	// let pt = identity_mapped_page_table.level_4_table();
+
+	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
+		let level = 4 - i;
+		let entry = &pt[page_table_index];
+
+		let indent = &"        "[0..2 * i];
+		let page_table_index = u16::from(page_table_index);
+		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
+
+		let phys = entry.frame().unwrap().start_address();
+		let virt = x86_64::VirtAddr::new(phys.as_u64());
+		pt = unsafe { &*virt.as_mut_ptr() };
 	}
 }
 
