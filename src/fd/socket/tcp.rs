@@ -316,17 +316,15 @@ impl Socket {
 			if let Some(handle) = socket_handle {
 				self.handle.remove(&handle);
 				Poll::Ready(Ok(handle))
+			} else if self.is_nonblocking {
+				Poll::Ready(Err(io::Error::EAGAIN))
 			} else {
-				if self.is_nonblocking {
-					Poll::Ready(Err(io::Error::EAGAIN))
-				} else {
-					for handle in self.handle.iter() {
-						let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
-						s.register_recv_waker(cx.waker());
-					}
-
-					Poll::Pending
+				for handle in self.handle.iter() {
+					let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+					s.register_recv_waker(cx.waker());
 				}
+
+				Poll::Pending
 			}
 		})
 		.await?;
