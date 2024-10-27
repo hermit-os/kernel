@@ -387,7 +387,7 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 			.enumerate()
 			.filter(|(_i, entry)| !entry.is_unused())
 		{
-			if level != min_level && i >= 1 {
+			if level < min_level {
 				break;
 			}
 			let indent = &"        "[0..2 * (4 - level)];
