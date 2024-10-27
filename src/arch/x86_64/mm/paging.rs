@@ -332,7 +332,6 @@ pub fn init_page_tables() {
 #[allow(dead_code)]
 unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
-	use x86_64::structures::paging::{Size1GiB, Size4KiB};
 
 	match pt.translate(virt_addr) {
 		TranslateResult::Mapped {
@@ -342,35 +341,21 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 		} => {
 			let phys_addr = frame.start_address() + offset;
 			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p}, flags: {flags:?}");
-			match frame {
-				MappedFrame::Size4KiB(_) => {
-					let page = Page::<Size4KiB>::containing_address(virt_addr);
-					println!(
-						"p4: {}, p3: {}, p2: {}, p1: {}",
-						u16::from(page.p4_index()),
-						u16::from(page.p3_index()),
-						u16::from(page.p2_index()),
-						u16::from(page.p1_index())
-					);
-				}
-				MappedFrame::Size2MiB(_) => {
-					let page = Page::<Size2MiB>::containing_address(virt_addr);
-					println!(
-						"p4: {}, p3: {}, p2: {}",
-						u16::from(page.p4_index()),
-						u16::from(page.p3_index()),
-						u16::from(page.p2_index()),
-					);
-				}
-				MappedFrame::Size1GiB(_) => {
-					let page = Page::<Size1GiB>::containing_address(virt_addr);
-					println!(
-						"p4: {}, p3: {}",
-						u16::from(page.p4_index()),
-						u16::from(page.p3_index()),
-					);
-				}
+			let indices = [
+				virt_addr.p4_index(),
+				virt_addr.p3_index(),
+				virt_addr.p2_index(),
+				virt_addr.p1_index(),
+			];
+			let valid_indices = match frame {
+				MappedFrame::Size4KiB(_) => &indices[..4],
+				MappedFrame::Size2MiB(_) => &indices[..3],
+				MappedFrame::Size1GiB(_) => &indices[..2],
+			};
+			for (i, page_table_index) in valid_indices.iter().copied().enumerate() {
+				print!("p{}: {}, ", 4 - i, u16::from(page_table_index));
 			}
+			println!();
 		}
 		TranslateResult::NotMapped => todo!(),
 		TranslateResult::InvalidFrameAddress(_) => todo!(),
