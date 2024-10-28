@@ -134,10 +134,10 @@ impl Qemu {
 					Target::X86_64Uefi => {
 						cpu_args.push("-drive".to_string());
 						cpu_args
-							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202405-r1-bin/x64/code.fd".to_string());
+							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/code.fd".to_string());
 						cpu_args.push("-drive".to_string());
 						cpu_args
-							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202405-r1-bin/x64/vars.fd".to_string());
+							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/vars.fd".to_string());
 						cpu_args.push("-drive".to_string());
 						cpu_args.push("format=raw,file=fat:rw:target/esp".to_string());
 					}
