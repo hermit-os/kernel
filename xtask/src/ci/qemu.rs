@@ -218,22 +218,17 @@ impl Qemu {
 	}
 
 	fn memory(&self) -> usize {
-		let mut memory = 32usize;
-		if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
-			memory *= 4;
+		if self.build.cargo_build.artifact.profile() == "release"
+			&& self.build.package == "hello_world"
+		{
+			return match self.build.cargo_build.artifact.arch {
+				Arch::X86_64 => 32,
+				Arch::Aarch64 => 144,
+				Arch::Riscv64 => 40,
+			};
 		}
-		if self.build.cargo_build.artifact.profile() == "dev" {
-			memory *= 16;
-		}
-		memory *= self.smp;
-		if self.netdev.is_some() {
-			memory = memory.max(1024);
-		}
-		if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
-			memory = memory.max(256);
-		}
-		memory = memory.max(64);
-		memory
+
+		1024
 	}
 
 	fn memory_args(&self) -> [String; 2] {
