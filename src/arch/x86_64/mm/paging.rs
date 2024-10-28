@@ -7,7 +7,9 @@ use x86_64::registers::control::Cr2;
 use x86_64::registers::segmentation::SegmentSelector;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
+use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
+use x86_64::structures::paging::page::PageRange;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
 	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
@@ -155,31 +157,36 @@ pub fn map<S>(
 
 	trace!("Mapping {pages:?} to {frames:?} with {flags:?}");
 
-	#[cfg(feature = "smp")]
-	let mut ipi_tlb_flush = false;
-
-	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
-	for (page, frame) in pages.zip(frames) {
-		unsafe {
+	unsafe fn map_pages<M, S>(
+		mapper: &mut M,
+		pages: PageRange<S>,
+		frames: PhysFrameRange<S>,
+		flags: PageTableEntryFlags,
+	) -> bool
+	where
+		M: Mapper<S>,
+		S: PageSize + Debug,
+	{
+		let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
+		let mut unmapped = false;
+		for (page, frame) in pages.zip(frames) {
 			// TODO: Require explicit unmaps
-			if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
-				#[cfg(feature = "smp")]
-				{
-					ipi_tlb_flush = true;
-				}
+			let unmap = mapper.unmap(page);
+			if let Ok((_frame, flush)) = unmap {
+				unmapped = true;
 				flush.flush();
 				debug!("Had to unmap page {page:?} before mapping.");
 			}
-			recursive_page_table()
-				.map_to(page, frame, flags, &mut *frame_allocator)
-				.unwrap()
-				.flush();
+			let map = unsafe { mapper.map_to(page, frame, flags, &mut *frame_allocator) };
+			map.unwrap().flush();
 		}
+		unmapped
 	}
-	drop(frame_allocator);
 
-	#[cfg(feature = "smp")]
-	if ipi_tlb_flush {
+	let unmapped = unsafe { map_pages(&mut recursive_page_table(), pages, frames, flags) };
+
+	if unmapped {
+		#[cfg(feature = "smp")]
 		crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
 	}
 }
@@ -325,7 +332,6 @@ pub fn init_page_tables() {
 #[allow(dead_code)]
 unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
-	use x86_64::structures::paging::{Size1GiB, Size4KiB};
 
 	match pt.translate(virt_addr) {
 		TranslateResult::Mapped {
@@ -335,38 +341,55 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 		} => {
 			let phys_addr = frame.start_address() + offset;
 			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p}, flags: {flags:?}");
-			match frame {
-				MappedFrame::Size4KiB(_) => {
-					let page = Page::<Size4KiB>::containing_address(virt_addr);
-					println!(
-						"p4: {}, p3: {}, p2: {}, p1: {}",
-						u16::from(page.p4_index()),
-						u16::from(page.p3_index()),
-						u16::from(page.p2_index()),
-						u16::from(page.p1_index())
-					);
-				}
-				MappedFrame::Size2MiB(_) => {
-					let page = Page::<Size2MiB>::containing_address(virt_addr);
-					println!(
-						"p4: {}, p3: {}, p2: {}",
-						u16::from(page.p4_index()),
-						u16::from(page.p3_index()),
-						u16::from(page.p2_index()),
-					);
-				}
-				MappedFrame::Size1GiB(_) => {
-					let page = Page::<Size1GiB>::containing_address(virt_addr);
-					println!(
-						"p4: {}, p3: {}",
-						u16::from(page.p4_index()),
-						u16::from(page.p3_index()),
-					);
-				}
+			let indices = [
+				virt_addr.p4_index(),
+				virt_addr.p3_index(),
+				virt_addr.p2_index(),
+				virt_addr.p1_index(),
+			];
+			let valid_indices = match frame {
+				MappedFrame::Size4KiB(_) => &indices[..4],
+				MappedFrame::Size2MiB(_) => &indices[..3],
+				MappedFrame::Size1GiB(_) => &indices[..2],
+			};
+			for (i, page_table_index) in valid_indices.iter().copied().enumerate() {
+				print!("p{}: {}, ", 4 - i, u16::from(page_table_index));
+			}
+			println!();
+			unsafe {
+				print_page_table_entries(valid_indices);
 			}
 		}
 		TranslateResult::NotMapped => todo!(),
 		TranslateResult::InvalidFrameAddress(_) => todo!(),
+	}
+}
+
+#[allow(dead_code)]
+unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
+	assert!(page_table_indices.len() <= 4);
+
+	// Recursive
+	let recursive_page_table = unsafe { recursive_page_table() };
+	let mut pt = recursive_page_table.level_4_table();
+
+	// Identity mapped
+	// let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	// let level_4_table_ptr =
+	//	ptr::with_exposed_provenance::<PageTable>(level_4_table_addr.try_into().unwrap());
+	// let pt = identity_mapped_page_table.level_4_table();
+
+	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
+		let level = 4 - i;
+		let entry = &pt[page_table_index];
+
+		let indent = &"        "[0..2 * i];
+		let page_table_index = u16::from(page_table_index);
+		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
+
+		let phys = entry.frame().unwrap().start_address();
+		let virt = x86_64::VirtAddr::new(phys.as_u64());
+		pt = unsafe { &*virt.as_mut_ptr() };
 	}
 }
 
@@ -380,11 +403,11 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 			.enumerate()
 			.filter(|(_i, entry)| !entry.is_unused())
 		{
-			if level != min_level && i >= 1 {
+			if level < min_level {
 				break;
 			}
 			let indent = &"        "[0..2 * (4 - level)];
-			println!("{indent}L{level} Entry {i}: {entry:?}",);
+			println!("{indent}L{level} Entry {i}: {entry:?}");
 
 			if level > min_level && !entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
 				let phys = entry.frame().unwrap().start_address();
