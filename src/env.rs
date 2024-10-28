@@ -47,11 +47,27 @@ pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
+pub fn is_uefi() -> bool {
+	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
+}
+
 pub fn fdt() -> Option<Fdt<'static>> {
 	boot_info().hardware_info.device_tree.map(|fdt| {
 		let ptr = ptr::with_exposed_provenance(fdt.get().try_into().unwrap());
 		unsafe { Fdt::from_ptr(ptr).unwrap() }
 	})
+}
+
+/// Returns the RSDP physical address if available.
+#[cfg(all(target_arch = "x86_64", feature = "acpi"))]
+pub fn rsdp() -> Option<core::num::NonZero<usize>> {
+	let rsdp = fdt()?
+		.find_node("/hermit,rsdp")?
+		.reg()?
+		.next()?
+		.starting_address
+		.addr();
+	core::num::NonZero::new(rsdp)
 }
 
 pub fn fdt_args() -> Option<&'static str> {

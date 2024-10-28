@@ -2,17 +2,18 @@ use core::fmt::Debug;
 use core::ptr;
 
 use x86_64::instructions::tlb;
-use x86_64::registers::control::Cr2;
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::structures::paging::frame::PhysFrameRange;
-use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
+use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
+	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
+	Size2MiB, Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
@@ -91,12 +92,24 @@ pub use x86_64::structures::paging::{
 	PageSize, Size1GiB as HugePageSize, Size2MiB as LargePageSize, Size4KiB as BasePageSize,
 };
 
+/// Returns a recursive page table mapping, its last entry is mapped to the table itself
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000;
 	let level_4_table_ptr = ptr::with_exposed_provenance_mut(level_4_table_addr);
 	unsafe {
 		let level_4_table = &mut *(level_4_table_ptr);
 		RecursivePageTable::new(level_4_table).unwrap()
+	}
+}
+
+/// Returns a mapping of the physical memory where physical address is equal to the virtual address (no offset)
+pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
+	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	let level_4_table_ptr =
+		ptr::with_exposed_provenance_mut::<PageTable>(level_4_table_addr.try_into().unwrap());
+	unsafe {
+		let level_4_table = level_4_table_ptr.as_mut().unwrap();
+		OffsetPageTable::new(level_4_table, x86_64::addr::VirtAddr::new(0x0))
 	}
 }
 
@@ -140,6 +153,7 @@ pub fn map<S>(
 ) where
 	S: PageSize + Debug,
 	RecursivePageTable<'static>: Mapper<S>,
+	OffsetPageTable<'static>: Mapper<S>,
 {
 	let pages = {
 		let start = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.0));
@@ -183,7 +197,11 @@ pub fn map<S>(
 		unmapped
 	}
 
-	let unmapped = unsafe { map_pages(&mut recursive_page_table(), pages, frames, flags) };
+	let unmapped = if env::is_uefi() {
+		unsafe { map_pages(&mut identity_mapped_page_table(), pages, frames, flags) }
+	} else {
+		unsafe { map_pages(&mut recursive_page_table(), pages, frames, flags) }
+	};
 
 	if unmapped {
 		#[cfg(feature = "smp")]
@@ -197,6 +215,7 @@ pub fn map_heap<S>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
 	S: PageSize + Debug,
 	RecursivePageTable<'static>: Mapper<S>,
+	OffsetPageTable<'static>: Mapper<S>,
 {
 	let flags = {
 		let mut flags = PageTableEntryFlags::empty();
@@ -302,7 +321,55 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	scheduler::abort();
 }
 
-pub fn init() {}
+pub fn init() {
+	make_p4_writable();
+}
+
+fn make_p4_writable() {
+	debug!("Making P4 table writable");
+
+	if !env::is_uefi() {
+		return;
+	}
+
+	let mut pt = unsafe { identity_mapped_page_table() };
+
+	let p4_page = {
+		let (p4_frame, _) = Cr3::read_raw();
+		let p4_addr = x86_64::VirtAddr::new(p4_frame.start_address().as_u64());
+		Page::<Size4KiB>::from_start_address(p4_addr).unwrap()
+	};
+
+	let TranslateResult::Mapped { frame, flags, .. } = pt.translate(p4_page.start_address()) else {
+		unreachable!()
+	};
+
+	let make_writable = || unsafe {
+		let flags = flags | PageTableEntryFlags::WRITABLE;
+		match frame {
+			MappedFrame::Size1GiB(_) => pt.set_flags_p3_entry(p4_page, flags).unwrap().ignore(),
+			MappedFrame::Size2MiB(_) => pt.set_flags_p2_entry(p4_page, flags).unwrap().ignore(),
+			MappedFrame::Size4KiB(_) => pt.update_flags(p4_page, flags).unwrap().ignore(),
+		}
+	};
+
+	unsafe fn without_protect<F, R>(f: F) -> R
+	where
+		F: FnOnce() -> R,
+	{
+		let cr0 = Cr0::read();
+		if cr0.contains(Cr0Flags::WRITE_PROTECT) {
+			unsafe { Cr0::write(cr0 - Cr0Flags::WRITE_PROTECT) }
+		}
+		let ret = f();
+		if cr0.contains(Cr0Flags::WRITE_PROTECT) {
+			unsafe { Cr0::write(cr0) }
+		}
+		ret
+	}
+
+	unsafe { without_protect(make_writable) }
+}
 
 pub fn init_page_tables() {
 	if env::is_uhyve() {
@@ -374,9 +441,7 @@ unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 	let mut pt = recursive_page_table.level_4_table();
 
 	// Identity mapped
-	// let level_4_table_addr = Cr3::read().0.start_address().as_u64();
-	// let level_4_table_ptr =
-	//	ptr::with_exposed_provenance::<PageTable>(level_4_table_addr.try_into().unwrap());
+	// let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
 	// let pt = identity_mapped_page_table.level_4_table();
 
 	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
@@ -424,10 +489,8 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 	let pt = recursive_page_table.level_4_table();
 
 	// Identity mapped
-	//let level_4_table_addr = Cr3::read().0.start_address().as_u64();
-	//let level_4_table_ptr =
-	//	ptr::with_exposed_provenance::<PageTable>(level_4_table_addr.try_into().unwrap());
-	//let pt = unsafe { &*level_4_table_ptr };
+	// let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
+	// let pt = identity_mapped_page_table.level_4_table();
 
 	print(pt, 4, 5 - levels);
 }

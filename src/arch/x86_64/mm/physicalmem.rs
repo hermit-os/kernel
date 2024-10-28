@@ -26,27 +26,43 @@ fn detect_from_fdt() -> Result<(), ()> {
 
 	let mut found_ram = false;
 
-	for m in all_regions {
-		let start_address = m.starting_address as u64;
-		let size = m.size.unwrap() as u64;
-		let end_address = start_address + size;
-
-		if end_address <= mm::kernel_end_address().as_u64() {
-			continue;
-		}
-
+	if env::is_uefi() {
+		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
 		found_ram = true;
 
-		let start_address = if start_address <= mm::kernel_start_address().as_u64() {
-			mm::kernel_end_address()
-		} else {
-			VirtAddr(start_address)
-		};
+		let range = PageRange::from_start_len(
+			biggest_region.starting_address.addr(),
+			biggest_region.size.unwrap(),
+		)
+		.unwrap();
 
-		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
+	} else {
+		for m in all_regions {
+			let start_address = m.starting_address as u64;
+			let size = m.size.unwrap() as u64;
+			let end_address = start_address + size;
+
+			if end_address <= mm::kernel_end_address().as_u64() {
+				continue;
+			}
+
+			found_ram = true;
+
+			let start_address = if start_address <= mm::kernel_start_address().as_u64() {
+				mm::kernel_end_address()
+			} else {
+				VirtAddr(start_address)
+			};
+
+			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
+			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
+			unsafe {
+				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			}
 		}
 	}
 
