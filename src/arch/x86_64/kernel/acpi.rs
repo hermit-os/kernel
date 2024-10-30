@@ -9,6 +9,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::env;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr(0x0000_040E);
@@ -98,6 +99,24 @@ pub struct AcpiTable<'a> {
 
 impl AcpiTable<'_> {
 	fn map(physical_address: PhysAddr) -> Self {
+		if env::is_uefi() {
+			// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
+			let allocated_virtual_address = VirtAddr(physical_address.0);
+			let header = unsafe {
+				allocated_virtual_address
+					.as_ptr::<AcpiSdtHeader>()
+					.as_ref()
+					.unwrap()
+			};
+			let allocated_length = usize::try_from(header.length).unwrap();
+
+			return Self {
+				header,
+				allocated_virtual_address,
+				allocated_length,
+			};
+		}
+
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().read_only().execute_disable();
 
@@ -152,7 +171,9 @@ impl AcpiTable<'_> {
 
 impl Drop for AcpiTable<'_> {
 	fn drop(&mut self) {
-		virtualmem::deallocate(self.allocated_virtual_address, self.allocated_length);
+		if !env::is_uefi() {
+			virtualmem::deallocate(self.allocated_virtual_address, self.allocated_length);
+		}
 	}
 }
 
@@ -308,6 +329,19 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
+	if let Some(rsdp) = env::rsdp() {
+		trace!("RSDP detected successfully at {rsdp:#x?}");
+		let rsdp = unsafe {
+			ptr::with_exposed_provenance::<AcpiRsdp>(rsdp.get())
+				.as_ref()
+				.unwrap()
+		};
+		if &rsdp.signature != b"RSD PTR " {
+			panic!("RSDP Address not valid!");
+		}
+		return Ok(rsdp);
+	}
+
 	// Get the address of the EBDA.
 	let frame =
 		PhysFrame::<BasePageSize>::containing_address(x86_64::PhysAddr::new(EBDA_PTR_LOCATION.0));

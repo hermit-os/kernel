@@ -259,13 +259,18 @@ pub fn local_apic_id_count() -> u32 {
 }
 
 fn init_ioapic_address(phys_addr: PhysAddr) {
-	let ioapic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-	IOAPIC_ADDRESS.set(ioapic_address).unwrap();
-	debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}",);
+	if env::is_uefi() {
+		// UEFI systems have already id mapped everything, so we can just set the physical address as the virtual one
+		IOAPIC_ADDRESS.set(VirtAddr(phys_addr.as_u64())).unwrap();
+	} else {
+		let ioapic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
+		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}",);
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().writable().execute_disable();
-	paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
+	}
 }
 
 #[cfg(not(feature = "acpi"))]
@@ -468,16 +473,23 @@ pub fn init() {
 	if !processor::supports_x2apic() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
-		let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
-		debug!(
-			"Mapping Local APIC at {:p} to virtual address {:p}",
-			local_apic_physical_address, local_apic_address
-		);
+		if env::is_uefi() {
+			//already id mapped in UEFI systems, just use the physical address as virtual one
+			LOCAL_APIC_ADDRESS
+				.set(VirtAddr(local_apic_physical_address.as_u64()))
+				.unwrap();
+		} else {
+			let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+			LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
+			debug!(
+				"Mapping Local APIC at {:p} to virtual address {:p}",
+				local_apic_physical_address, local_apic_address
+			);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
+			let mut flags = PageTableEntryFlags::empty();
+			flags.device().writable().execute_disable();
+			paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
+		}
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
@@ -697,6 +709,8 @@ pub fn init_next_processor_variables() {
 pub fn boot_application_processors() {
 	use core::hint;
 
+	use x86_64::structures::paging::Translate;
+
 	use super::start;
 
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
@@ -708,19 +722,30 @@ pub fn boot_application_processors() {
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 
-	// Identity-map the boot code page and copy over the code.
-	debug!(
-		"Mapping SMP boot code to physical and virtual address {:p}",
-		SMP_BOOT_CODE_ADDRESS
-	);
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
-	paging::map::<BasePageSize>(
-		SMP_BOOT_CODE_ADDRESS,
-		PhysAddr(SMP_BOOT_CODE_ADDRESS.as_u64()),
-		1,
-		flags,
-	);
+	if env::is_uefi() {
+		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
+		let pt = unsafe { crate::arch::mm::paging::identity_mapped_page_table() };
+		let virt_addr = SMP_BOOT_CODE_ADDRESS.0;
+		let phys_addr = pt
+			.translate_addr(x86_64::VirtAddr::new(virt_addr))
+			.unwrap()
+			.as_u64();
+		assert_eq!(phys_addr, virt_addr)
+	} else {
+		// Identity-map the boot code page and copy over the code.
+		debug!(
+			"Mapping SMP boot code to physical and virtual address {:p}",
+			SMP_BOOT_CODE_ADDRESS
+		);
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable();
+		paging::map::<BasePageSize>(
+			SMP_BOOT_CODE_ADDRESS,
+			PhysAddr(SMP_BOOT_CODE_ADDRESS.as_u64()),
+			1,
+			flags,
+		);
+	}
 	unsafe {
 		ptr::copy_nonoverlapping(
 			smp_boot_code.as_ptr(),

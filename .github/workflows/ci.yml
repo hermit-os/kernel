@@ -182,6 +182,13 @@ jobs:
         run: |
           gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+      - name: Download OVMF
+        run: |
+          sudo apt-get update
+          sudo apt-get install ovmf
+          mkdir -p edk2-stable202408-r1-bin/x64
+          cp /usr/share/OVMF/OVMF_CODE.fd edk2-stable202408-r1-bin/x64/code.fd
+          cp /usr/share/OVMF/OVMF_VARS.fd edk2-stable202408-r1-bin/x64/vars.fd
       - name: Install Firecracker
         run: |
           # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
@@ -204,6 +211,8 @@ jobs:
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --uefi
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package wasmtime-demo --features ci
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package hello_world --no-default-features --microvm
@@ -222,6 +231,8 @@ jobs:
         if: matrix.arch != 'aarch64'
         # https://github.com/hermit-os/kernel/issues/1286
         continue-on-error: ${{ matrix.arch == 'riscv64' }}
+      - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rusty_demo --smp 4 --uefi
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package rftrace-example --virtiofsd
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.flags }} --package httpd --features ci,hermit/dhcpv4 --netdev virtio-net-pci
