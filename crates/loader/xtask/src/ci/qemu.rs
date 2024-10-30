@@ -44,7 +44,10 @@ impl Qemu {
 		if self.build.target() == Target::X86_64Uefi {
 			sh.create_dir("target/esp/efi/boot")?;
 			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
-			sh.write_file("target/esp/efi/boot/hermit-app", "Hello, UEFI!\n")?;
+			sh.copy_file(
+				self.build.ci_image(&self.image),
+				"target/esp/efi/boot/hermit-app",
+			)?;
 		}
 
 		let target = self.build.target();
@@ -198,13 +201,10 @@ impl Qemu {
 	}
 
 	fn memory(&self) -> usize {
-		let mut memory = 32usize;
-		if self.image == "hello_c" {
-			memory = memory.max(64);
-		}
+		let mut memory = 64usize;
 		match self.build.target() {
 			Target::X86_64Uefi => {
-				memory = memory.max(64);
+				memory = memory.max(512);
 			}
 			Target::Aarch64 => {
 				memory = memory.max(256);

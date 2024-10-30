@@ -18,8 +18,7 @@ pub use console::Console;
 
 #[cfg(target_os = "none")]
 const KERNEL_STACK_SIZE: u64 = 32_768;
-#[cfg(target_os = "none")]
-const SERIAL_IO_PORT: u16 = 0x3F8;
+pub const SERIAL_IO_PORT: u16 = 0x3F8;
 
 #[cfg(target_os = "none")]
 unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
@@ -45,8 +44,7 @@ pub unsafe fn get_memory(memory_size: u64) -> u64 {
 	unsafe { map_memory(address, memory_size as usize) as u64 }
 }
 
-#[cfg(target_os = "none")]
-unsafe fn enter_kernel(
+pub unsafe fn enter_kernel(
 	stack: *mut u8,
 	entry: *const (),
 	raw_boot_info: &'static hermit_entry::boot_info::RawBootInfo,
