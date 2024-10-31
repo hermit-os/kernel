@@ -9,13 +9,13 @@ use hashbrown::HashMap;
 use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 use hermit_sync::InterruptTicketMutex;
+use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::capability::CapabilityIterator;
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
 	InterruptPin, PciAddress, PciHeader, StatusRegister, VendorId, MAX_BARS,
 };
 
-use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
@@ -167,9 +167,9 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		// Map bar into RW^X virtual memory
 		let physical_address = address;
 		let virtual_address = if env::is_uefi() {
-			VirtAddr::from(address)
+			VirtAddr::new(address)
 		} else {
-			crate::mm::map(PhysAddr::from(physical_address), size, true, true, no_cache)
+			crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache)
 		};
 
 		Some((virtual_address, size))

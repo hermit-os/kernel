@@ -2,10 +2,10 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
+use memory_addresses::arch::aarch64::PhysAddr;
 
 use crate::arch::aarch64::kernel::get_limit;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::aarch64::mm::PhysAddr;
 use crate::mm;
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
@@ -52,7 +52,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 
 	let layout = PageLayout::from_size(size).unwrap();
 
-	Ok(PhysAddr(
+	Ok(PhysAddr::new(
 		PHYSICAL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -80,7 +80,7 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocErro
 
 	let layout = PageLayout::from_size_align(size, align).unwrap();
 
-	Ok(PhysAddr(
+	Ok(PhysAddr::new(
 		PHYSICAL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -94,7 +94,7 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocErro
 /// Otherwise, it may fail due to an empty node pool (POOL.maintain() is called in virtualmem::deallocate)
 pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	assert!(
-		physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
+		physical_address >= PhysAddr::new(mm::kernel_end_address().as_u64()),
 		"Physical address {physical_address:p} is not >= KERNEL_END_ADDRESS"
 	);
 	assert!(size > 0);

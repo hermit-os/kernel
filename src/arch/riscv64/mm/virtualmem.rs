@@ -3,10 +3,11 @@ use core::convert::TryInto;
 use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptSpinMutex;
+use memory_addresses::VirtAddr;
 
 use crate::arch::riscv64::kernel::get_ram_address;
 use crate::arch::riscv64::mm::paging::{BasePageSize, HugePageSize, PageSize};
-use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
+use crate::arch::riscv64::mm::physicalmem;
 use crate::mm;
 
 static KERNEL_FREE_LIST: InterruptSpinMutex<FreeList<16>> =
@@ -14,13 +15,13 @@ static KERNEL_FREE_LIST: InterruptSpinMutex<FreeList<16>> =
 
 /// End of the virtual memory address space reserved for kernel memory (256 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.
-const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x4000000000);
+const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr::new(0x4000000000);
 
 pub fn init() {
 	let range = PageRange::new(
-		(get_ram_address() + PhysAddr(physicalmem::total_memory_size() as u64))
-			.as_usize()
-			.align_up(HugePageSize::SIZE as usize),
+		(get_ram_address() + physicalmem::total_memory_size())
+			.align_up(HugePageSize::SIZE)
+			.as_usize(),
 		KERNEL_VIRTUAL_MEMORY_END.as_usize(),
 	)
 	.unwrap();
@@ -41,7 +42,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 
 	let layout = PageLayout::from_size(size).unwrap();
 
-	Ok(VirtAddr(
+	Ok(VirtAddr::new(
 		KERNEL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -69,7 +70,7 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 
 	let layout = PageLayout::from_size_align(size, align).unwrap();
 
-	Ok(VirtAddr(
+	Ok(VirtAddr::new(
 		KERNEL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -88,9 +89,8 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
 		"Virtual address {virtual_address:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
 	);
-	assert_eq!(
-		virtual_address % BasePageSize::SIZE as usize,
-		0,
+	assert!(
+		virtual_address.is_aligned_to(BasePageSize::SIZE),
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE as usize

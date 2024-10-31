@@ -6,6 +6,9 @@ use core::ops::Range;
 
 use align_address::Align;
 use hermit_sync::Lazy;
+#[cfg(feature = "pci")]
+use memory_addresses::PhysAddr;
+use memory_addresses::VirtAddr;
 
 use self::allocator::LockedAllocator;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
@@ -13,9 +16,7 @@ use crate::arch::mm::paging::HugePageSize;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-#[cfg(feature = "pci")]
-use crate::arch::mm::PhysAddr;
-use crate::arch::mm::{physicalmem, VirtAddr};
+use crate::arch::mm::physicalmem;
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -26,8 +27,8 @@ pub static ALLOCATOR: LockedAllocator = LockedAllocator::new();
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
 	if cfg!(target_os = "none") {
 		// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
-		env::get_base_address().align_down_to_large_page()
-			..(env::get_base_address() + env::get_image_size()).align_up_to_large_page()
+		env::get_base_address().align_down(LargePageSize::SIZE)
+			..(env::get_base_address() + env::get_image_size()).align_up(LargePageSize::SIZE)
 	} else {
 		VirtAddr::zero()..VirtAddr::zero()
 	}
@@ -53,7 +54,10 @@ pub(crate) fn init() {
 	let total_mem = physicalmem::total_memory_size();
 	let kernel_addr_range = KERNEL_ADDR_RANGE.clone();
 	info!("Total memory size: {} MiB", total_mem >> 20);
-	info!("Kernel region: {kernel_addr_range:?}",);
+	info!(
+		"Kernel region: {:p}..{:p}",
+		kernel_addr_range.start, kernel_addr_range.end
+	);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
@@ -74,7 +78,8 @@ pub(crate) fn init() {
 		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
 		reserved_space
 	} else {
-		kernel_addr_range.end.as_usize() - env::get_ram_address().as_usize() + reserved_space
+		(kernel_addr_range.end.as_u64() - env::get_ram_address().as_u64() + reserved_space as u64)
+			as usize
 	};
 	info!("Minimum memory size: {}", min_mem >> 20);
 	let avail_mem = total_mem
@@ -110,14 +115,14 @@ pub(crate) fn init() {
 		#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 		if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
 			// Mount large pages to the next huge page boundary
-			let npages = (virt_addr.align_up_to_huge_page().as_usize() - virt_addr.as_usize())
+			let npages = (virt_addr.align_up(HugePageSize::SIZE) - virt_addr) as usize
 				/ LargePageSize::SIZE as usize;
 			if let Err(n) = paging::map_heap::<LargePageSize>(virt_addr, npages) {
-				map_addr = virt_addr + n * LargePageSize::SIZE as usize;
-				map_size = virt_size - (map_addr - virt_addr).as_usize();
+				map_addr = virt_addr + n as u64 * LargePageSize::SIZE;
+				map_size = virt_size - (map_addr - virt_addr) as usize;
 			} else {
-				map_addr = virt_addr.align_up_to_huge_page();
-				map_size = virt_size - (map_addr - virt_addr).as_usize();
+				map_addr = virt_addr.align_up(HugePageSize::SIZE);
+				map_size = virt_size - (map_addr - virt_addr) as usize;
 			}
 		} else {
 			map_addr = virt_addr;
@@ -159,14 +164,13 @@ pub(crate) fn init() {
 		#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 		if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
 			// Mount large pages to the next huge page boundary
-			let npages = (virt_addr.align_up_to_huge_page().as_usize() - virt_addr.as_usize())
-				/ LargePageSize::SIZE as usize;
-			if let Err(n) = paging::map_heap::<LargePageSize>(virt_addr, npages) {
-				map_addr = virt_addr + n * LargePageSize::SIZE as usize;
-				map_size = virt_size - (map_addr - virt_addr).as_usize();
+			let npages = (virt_addr.align_up(HugePageSize::SIZE) - virt_addr) / LargePageSize::SIZE;
+			if let Err(n) = paging::map_heap::<LargePageSize>(virt_addr, npages as usize) {
+				map_addr = virt_addr + n as u64 * LargePageSize::SIZE;
+				map_size = virt_size - (map_addr - virt_addr) as usize;
 			} else {
-				map_addr = virt_addr.align_up_to_huge_page();
-				map_size = virt_size - (map_addr - virt_addr).as_usize();
+				map_addr = virt_addr.align_up(HugePageSize::SIZE);
+				map_size = virt_size - (map_addr - virt_addr) as usize;
 			}
 		} else {
 			map_addr = virt_addr;
@@ -183,14 +187,14 @@ pub(crate) fn init() {
 	#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE as usize
-		&& map_addr.is_aligned(HugePageSize::SIZE)
+		&& map_addr.is_aligned_to(HugePageSize::SIZE)
 	{
 		let size = map_size.align_down(HugePageSize::SIZE as usize);
 		if let Err(num_pages) =
 			paging::map_heap::<HugePageSize>(map_addr, size / HugePageSize::SIZE as usize)
 		{
 			map_size -= num_pages * HugePageSize::SIZE as usize;
-			map_addr += num_pages * HugePageSize::SIZE as usize;
+			map_addr += num_pages as u64 * HugePageSize::SIZE;
 		} else {
 			map_size -= size;
 			map_addr += size;
@@ -199,27 +203,27 @@ pub(crate) fn init() {
 
 	if has_2mib_pages
 		&& map_size > LargePageSize::SIZE as usize
-		&& map_addr.is_aligned(LargePageSize::SIZE)
+		&& map_addr.is_aligned_to(LargePageSize::SIZE)
 	{
 		let size = map_size.align_down(LargePageSize::SIZE as usize);
 		if let Err(num_pages) =
 			paging::map_heap::<LargePageSize>(map_addr, size / LargePageSize::SIZE as usize)
 		{
 			map_size -= num_pages * LargePageSize::SIZE as usize;
-			map_addr += num_pages * LargePageSize::SIZE as usize;
+			map_addr += num_pages as u64 * LargePageSize::SIZE;
 		} else {
 			map_size -= size;
 			map_addr += size;
 		}
 	}
 
-	if map_size > BasePageSize::SIZE as usize && map_addr.is_aligned(BasePageSize::SIZE) {
+	if map_size > BasePageSize::SIZE as usize && map_addr.is_aligned_to(BasePageSize::SIZE) {
 		let size = map_size.align_down(BasePageSize::SIZE as usize);
 		if let Err(num_pages) =
 			paging::map_heap::<BasePageSize>(map_addr, size / BasePageSize::SIZE as usize)
 		{
 			map_size -= num_pages * BasePageSize::SIZE as usize;
-			map_addr += num_pages * BasePageSize::SIZE as usize;
+			map_addr += num_pages as u64 * BasePageSize::SIZE;
 		} else {
 			map_size -= size;
 			map_addr += size;
@@ -231,12 +235,11 @@ pub(crate) fn init() {
 	unsafe {
 		ALLOCATOR.init(
 			heap_start_addr.as_mut_ptr(),
-			(heap_end_addr - heap_start_addr).into(),
+			(heap_end_addr - heap_start_addr) as usize,
 		);
 	}
 
-	let heap_addr_range = heap_start_addr..heap_end_addr;
-	info!("Heap is located at {heap_addr_range:#x?} ({map_size} Bytes unmapped)");
+	info!("Heap is located at {heap_start_addr:p}..{heap_end_addr:p} ({map_size} Bytes unmapped)");
 }
 
 pub(crate) fn print_information() {

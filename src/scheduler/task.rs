@@ -16,9 +16,9 @@ use ahash::RandomState;
 use crossbeam_utils::CachePadded;
 use hashbrown::HashMap;
 use hermit_sync::OnceCell;
+use memory_addresses::VirtAddr;
 
 use crate::arch::core_local::*;
-use crate::arch::mm::VirtAddr;
 use crate::arch::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
 use crate::arch::scheduler::TaskTLS;
@@ -429,8 +429,8 @@ impl Task {
 			id: tid,
 			status: task_status,
 			prio: task_prio,
-			last_stack_pointer: VirtAddr(0u64),
-			user_stack_pointer: VirtAddr(0u64),
+			last_stack_pointer: VirtAddr::zero(),
+			user_stack_pointer: VirtAddr::zero(),
 			#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
@@ -494,8 +494,8 @@ impl Task {
 			id: tid,
 			status: TaskStatus::Idle,
 			prio: IDLE_PRIO,
-			last_stack_pointer: VirtAddr(0u64),
-			user_stack_pointer: VirtAddr(0u64),
+			last_stack_pointer: VirtAddr::zero(),
+			user_stack_pointer: VirtAddr::zero(),
 			#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,

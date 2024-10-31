@@ -1,3 +1,4 @@
+use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 
@@ -48,7 +49,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 
 	let layout = PageLayout::from_size(size).unwrap();
 
-	Ok(VirtAddr(
+	Ok(VirtAddr::new(
 		KERNEL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -76,7 +77,7 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 
 	let layout = PageLayout::from_size_align(size, align).unwrap();
 
-	Ok(VirtAddr(
+	Ok(VirtAddr::new(
 		KERNEL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -91,9 +92,8 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		virtual_address <= kernel_heap_end(),
 		"Virtual address {virtual_address:p} is not <= kernel_heap_end()"
 	);
-	assert_eq!(
-		virtual_address % BasePageSize::SIZE,
-		0,
+	assert!(
+		virtual_address.is_aligned_to(BasePageSize::SIZE),
 		"Virtual address {:p} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
@@ -107,7 +107,7 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+	let range = PageRange::from_start_len(virtual_address.as_u64() as usize, size).unwrap();
 
 	unsafe {
 		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -162,11 +162,11 @@ pub fn print_information() {
 #[cfg(not(feature = "common-os"))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr(0x7FFF_FFFF_FFFFu64)
+	VirtAddr::new(0x7FFF_FFFF_FFFFu64)
 }
 
 #[cfg(feature = "common-os")]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr(0x100_0000_0000u64)
+	VirtAddr::new(0x100_0000_0000u64)
 }

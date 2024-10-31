@@ -1,7 +1,7 @@
-use core::ptr;
+use memory_addresses::VirtAddr;
 
 use crate::arch;
-use crate::arch::mm::{paging, VirtAddr};
+use crate::arch::mm::paging;
 use crate::syscalls::interfaces::SyscallInterface;
 
 const UHYVE_PORT_EXIT: u16 = 0x540;
@@ -9,7 +9,7 @@ const UHYVE_PORT_EXIT: u16 = 0x540;
 /// forward a request to the hypervisor uhyve
 #[inline]
 fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let ptr = VirtAddr::from_ptr(data);
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	#[cfg(target_arch = "x86_64")]
@@ -28,7 +28,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 	}
 
 	#[cfg(target_arch = "riscv64")]
-	todo!("uhyve_send(port = {port}, physical_address = {physical_address})");
+	todo!("uhyve_send(port = {port}, physical_address = {physical_address:p})");
 }
 
 #[repr(C, packed)]

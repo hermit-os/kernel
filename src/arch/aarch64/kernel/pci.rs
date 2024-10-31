@@ -4,6 +4,7 @@ use core::str;
 use arm_gic::gicv3::{IntId, Trigger};
 use bit_field::BitField;
 use hermit_dtb::Dtb;
+use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, InterruptLine, InterruptPin, PciAddress, PciHeader,
 	MAX_BARS,
@@ -11,7 +12,7 @@ use pci_types::{
 
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
+use crate::arch::aarch64::mm::virtualmem;
 use crate::drivers::pci::{PciDevice, PCI_DEVICES};
 use crate::env;
 
@@ -240,7 +241,7 @@ pub fn init() {
 			{
 				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
 				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
-				let addr = PhysAddr(u64::from_be_bytes(slice.try_into().unwrap()));
+				let addr = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
 				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 

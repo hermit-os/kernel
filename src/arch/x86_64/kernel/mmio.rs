@@ -5,13 +5,14 @@ use core::{ptr, str};
 
 use align_address::Align;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
+use memory_addresses::PhysAddr;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
+use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{paging, PhysAddr};
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;

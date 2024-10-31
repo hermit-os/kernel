@@ -1,10 +1,10 @@
 use align_address::Align;
+use memory_addresses::VirtAddr;
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::mm::VirtAddr;
 
 bitflags! {
 	#[repr(transparent)]
@@ -55,7 +55,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
-	let virtual_address = VirtAddr::from_usize(ptr as usize);
+	let virtual_address = VirtAddr::from_ptr(ptr);
 	let size = size.align_up(BasePageSize::SIZE as usize);
 
 	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
@@ -88,7 +88,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		flags.execute_disable();
 	}
 
-	let virtual_address = VirtAddr::from_usize(ptr as usize);
+	let virtual_address = VirtAddr::from_ptr(ptr);
 
 	if let Some(physical_address) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);

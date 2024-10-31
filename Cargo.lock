@@ -4,11 +4,12 @@ version = 4
 
 [[package]]
 name = "aarch64"
-version = "0.0.10"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc85366f9bad15a101c93ca48d7907eba7610abe9fb9d7ab2fb55f74c8073baf"
+checksum = "9dfa8287e400aa9af0c4e0c93967882634f7972b94b74fd5110507b486a1ced4"
 dependencies = [
  "aarch64-cpu",
+ "memory_addresses",
  "tock-registers 0.8.1",
 ]
 
@@ -608,6 +609,7 @@ dependencies = [
  "llvm-tools",
  "lock_api",
  "log",
+ "memory_addresses",
  "multiboot",
  "num",
  "num-derive",
@@ -766,6 +768,19 @@ name = "memchr"
 version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8640c5d730cb13ebd907d8d04b52f55ac9a2eec55b440c8892f40d56c76c1d"
+
+[[package]]
+name = "memory_addresses"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5db6d43eee0b2d75f589a87a7426d23ae207736ba74e3b83002de02ec646ffff"
+dependencies = [
+ "align-address",
+ "cfg-if",
+ "paste",
+ "x86",
+ "x86_64",
+]
 
 [[package]]
 name = "minimal-lexical"

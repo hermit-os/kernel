@@ -115,9 +115,8 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
 	let page_table = unsafe { recursive_page_table() };
-	let translate = page_table.translate(virtual_address);
+	let translate = page_table.translate(virtual_address.into());
 
 	match translate {
 		TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
@@ -128,7 +127,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 			None
 		}
 		TranslateResult::Mapped { frame, offset, .. } => {
-			Some(PhysAddr((frame.start_address() + offset).as_u64()))
+			Some(PhysAddr::new((frame.start_address() + offset).as_u64()))
 		}
 	}
 }
@@ -156,13 +155,13 @@ pub fn map<S>(
 	OffsetPageTable<'static>: Mapper<S>,
 {
 	let pages = {
-		let start = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.0));
+		let start = Page::<S>::containing_address(virtual_address.into());
 		let end = start + count as u64;
 		Page::range(start, end)
 	};
 
 	let frames = {
-		let start = PhysFrame::<S>::containing_address(x86_64::PhysAddr::new(physical_address.0));
+		let start = PhysFrame::<S>::containing_address(physical_address.into());
 		let end = start + count as u64;
 		PhysFrame::range(start, end)
 	};
@@ -223,7 +222,7 @@ where
 		flags
 	};
 
-	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
+	let virt_addrs = (0..count).map(|n| virt_addr + n as u64 * S::SIZE);
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
 		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
@@ -241,7 +240,7 @@ where
 	RecursivePageTable<'static>: Mapper<S>,
 {
 	assert!(
-		frame.start_address().as_u64() < mm::kernel_start_address().0,
+		frame.start_address().as_u64() < mm::kernel_start_address().as_u64(),
 		"Address {:p} to be identity-mapped is not below Kernel start address",
 		frame.start_address()
 	);
@@ -270,7 +269,7 @@ where
 		count
 	);
 
-	let first_page = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.0));
+	let first_page = Page::<S>::containing_address(virtual_address.into());
 	let last_page = first_page + count as u64;
 	let range = Page::range(first_page, last_page);
 

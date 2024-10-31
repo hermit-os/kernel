@@ -9,6 +9,7 @@ use core::sync::atomic::{fence, Ordering};
 use core::{ops, ptr};
 
 use align_address::Align;
+use memory_addresses::VirtAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -26,8 +27,8 @@ use super::{
 	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
+use crate::arch::mm::paging;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, VirtAddr};
 use crate::mm::device_alloc::DeviceAlloc;
 
 #[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
@@ -677,9 +678,9 @@ impl Virtq for PackedVq {
 			core::mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event_ptr =
-			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).as_usize());
 		let dev_event_ptr =
-			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).0 as usize);
+			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).as_usize());
 
 		// Provide memory areas of the queues data structures to the device
 		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(

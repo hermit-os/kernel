@@ -7,11 +7,11 @@ use core::sync::atomic::Ordering;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
+use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::scheduler::task::{Task, TaskFrame};
 #[cfg(target_os = "none")]
 use crate::scheduler::PerCoreSchedulerExt;
@@ -160,8 +160,7 @@ impl TaskStacks {
 		// clear user stack
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE as usize)
-					.as_mut_ptr::<u8>(),
+				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE).as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
 			);
@@ -175,7 +174,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		let stack = VirtAddr::from_u64(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
+		let stack = VirtAddr::new(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
 		debug!("Using boot stack {:p}", stack);
 
 		TaskStacks::Boot(BootStack { stack })
@@ -192,7 +191,7 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE as usize
+				stacks.virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE
 			}
 		}
 	}
@@ -200,7 +199,7 @@ impl TaskStacks {
 	pub fn get_kernel_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
-			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE as usize,
+			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
 		}
 	}
 
@@ -358,7 +357,7 @@ impl TaskFrame for Task {
 			*stack.as_mut_ptr::<u64>() = 0xDEAD_BEEFu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack = stack - mem::size_of::<State>();
+			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());

@@ -1,8 +1,9 @@
+use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
+use memory_addresses::VirtAddr;
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::aarch64::mm::VirtAddr;
 use crate::mm;
 
 static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
@@ -10,7 +11,7 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 
 /// End of the virtual memory address space reserved for kernel memory (4 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.
-const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x1_0000_0000);
+const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr::new(0x1_0000_0000);
 
 pub fn init() {
 	let range = PageRange::new(
@@ -35,7 +36,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 
 	let layout = PageLayout::from_size(size).unwrap();
 
-	Ok(VirtAddr(
+	Ok(VirtAddr::new(
 		KERNEL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -63,7 +64,7 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 
 	let layout = PageLayout::from_size_align(size, align).unwrap();
 
-	Ok(VirtAddr(
+	Ok(VirtAddr::new(
 		KERNEL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -82,9 +83,8 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
 		"Virtual address {virtual_address:p} is not < KERNEL_VIRTUAL_MEMORY_END"
 	);
-	assert_eq!(
-		virtual_address % BasePageSize::SIZE,
-		0,
+	assert!(
+		virtual_address.is_aligned_to(BasePageSize::SIZE),
 		"Virtual address {:p} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
