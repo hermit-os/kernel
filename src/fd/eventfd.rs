@@ -7,7 +7,7 @@ use core::task::{ready, Poll, Waker};
 use async_lock::Mutex;
 use async_trait::async_trait;
 
-use crate::fd::{block_on, EventFlags, ObjectInterface, PollEvent};
+use crate::fd::{EventFlags, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -33,16 +33,6 @@ pub(crate) struct EventFd {
 	flags: EventFlags,
 }
 
-impl Clone for EventFd {
-	fn clone(&self) -> Self {
-		let counter = block_on(async { Ok(self.state.lock().await.counter) }, None).unwrap();
-		Self {
-			state: Mutex::new(EventState::new(counter)),
-			flags: self.flags,
-		}
-	}
-}
-
 impl EventFd {
 	pub fn new(initval: u64, flags: EventFlags) -> Self {
 		debug!("Create EventFd {}, {:?}", initval, flags);
@@ -55,7 +45,7 @@ impl EventFd {
 
 #[async_trait]
 impl ObjectInterface for EventFd {
-	async fn async_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
@@ -89,6 +79,8 @@ impl ObjectInterface for EventFd {
 						cx.wake_by_ref();
 					}
 					Poll::Ready(Ok(len))
+				} else if self.flags.contains(EventFlags::EFD_NONBLOCK) {
+					Poll::Ready(Err(io::Error::EAGAIN))
 				} else {
 					guard.read_queue.push_back(cx.waker().clone());
 					Poll::Pending
@@ -98,7 +90,7 @@ impl ObjectInterface for EventFd {
 		.await
 	}
 
-	async fn async_write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
@@ -125,6 +117,8 @@ impl ObjectInterface for EventFd {
 				}
 
 				Poll::Ready(Ok(len))
+			} else if self.flags.contains(EventFlags::EFD_NONBLOCK) {
+				Poll::Ready(Err(io::Error::EAGAIN))
 			} else {
 				guard.write_queue.push_back(cx.waker().clone());
 				Poll::Pending
@@ -172,9 +166,5 @@ impl ObjectInterface for EventFd {
 			}
 		})
 		.await
-	}
-
-	fn is_nonblocking(&self) -> bool {
-		self.flags.contains(EventFlags::EFD_NONBLOCK)
 	}
 }

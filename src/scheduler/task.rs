@@ -462,35 +462,32 @@ impl Task {
 				))))
 				.unwrap();
 			let objmap = OBJECT_MAP.get().unwrap().clone();
-			let _ = poll_on(
-				async {
-					let mut guard = objmap.write().await;
-					if env::is_uhyve() {
-						guard
-							.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
-							.map_err(|_| io::Error::EIO)?;
-						guard
-							.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
-							.map_err(|_| io::Error::EIO)?;
-						guard
-							.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
-							.map_err(|_| io::Error::EIO)?;
-					} else {
-						guard
-							.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
-							.map_err(|_| io::Error::EIO)?;
-						guard
-							.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
-							.map_err(|_| io::Error::EIO)?;
-						guard
-							.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
-							.map_err(|_| io::Error::EIO)?;
-					}
+			let _ = poll_on(async {
+				let mut guard = objmap.write().await;
+				if env::is_uhyve() {
+					guard
+						.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
+						.map_err(|_| io::Error::EIO)?;
+					guard
+						.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
+						.map_err(|_| io::Error::EIO)?;
+					guard
+						.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
+						.map_err(|_| io::Error::EIO)?;
+				} else {
+					guard
+						.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
+						.map_err(|_| io::Error::EIO)?;
+					guard
+						.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
+						.map_err(|_| io::Error::EIO)?;
+					guard
+						.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
+						.map_err(|_| io::Error::EIO)?;
+				}
 
-					Ok(())
-				},
-				None,
-			);
+				Ok(())
+			});
 		}
 
 		Task {

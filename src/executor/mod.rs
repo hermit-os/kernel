@@ -28,8 +28,6 @@ use crate::drivers::mmio::get_network_driver;
 use crate::drivers::net::NetworkDriver;
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci::get_network_driver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::executor::network::network_delay;
 use crate::executor::task::AsyncTask;
 use crate::io;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -97,30 +95,11 @@ pub fn init() {
 	crate::executor::vsock::init();
 }
 
-#[inline]
-pub(crate) fn now() -> u64 {
-	crate::arch::kernel::systemtime::now_micros()
-}
-
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result<T>
+pub(crate) fn poll_on<F, T>(future: F) -> io::Result<T>
 where
 	F: Future<Output = io::Result<T>>,
 {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let nic = get_network_driver();
-
-	// disable network interrupts
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let no_retransmission = if let Some(nic) = nic {
-		let mut guard = nic.lock();
-		guard.set_polling_mode(true);
-		guard.get_checksums().tcp.tx()
-	} else {
-		true
-	};
-
-	let start = now();
 	let mut cx = Context::from_waker(Waker::noop());
 	let mut future = pin!(future);
 
@@ -129,41 +108,7 @@ where
 		run();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			if !no_retransmission {
-				let wakeup_time =
-					network_delay(Instant::from_micros_const(now().try_into().unwrap()))
-						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(wakeup_time);
-			}
-
-			// allow network interrupts
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			if let Some(nic) = nic {
-				nic.lock().set_polling_mode(false);
-			}
-
 			return t;
-		}
-
-		if let Some(duration) = timeout {
-			if Duration::from_micros(now() - start) >= duration {
-				#[cfg(any(feature = "tcp", feature = "udp"))]
-				if !no_retransmission {
-					let wakeup_time =
-						network_delay(Instant::from_micros_const(now().try_into().unwrap()))
-							.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-					core_scheduler().add_network_timer(wakeup_time);
-				}
-
-				// allow network interrupts
-				#[cfg(any(feature = "tcp", feature = "udp"))]
-				if let Some(nic) = nic {
-					nic.lock().set_polling_mode(false);
-				}
-
-				return Err(io::Error::ETIME);
-			}
 		}
 	}
 }
@@ -174,43 +119,40 @@ where
 	F: Future<Output = io::Result<T>>,
 {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let nic = get_network_driver();
-
-	// disable network interrupts
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let no_retransmission = if let Some(nic) = nic {
-		let mut guard = nic.lock();
-		guard.set_polling_mode(true);
-		!guard.get_checksums().tcp.tx()
-	} else {
-		true
-	};
+	let device = get_network_driver();
 
 	let backoff = Backoff::new();
-	let start = now();
+	let start = crate::arch::kernel::systemtime::now_micros();
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.clone().into();
 	let mut cx = Context::from_waker(&waker);
 	let mut future = pin!(future);
 
 	loop {
-		// run background tasks
+		// check future
+		let result = future.as_mut().poll(&mut cx);
+
+		// run background all tasks, which poll also the network device
 		run();
 
-		let now = now();
-		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			if !no_retransmission {
-				let network_timer =
-					network_delay(Instant::from_micros_const(now.try_into().unwrap()))
-						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(network_timer);
-			}
-
+		let now = crate::arch::kernel::systemtime::now_micros();
+		if let Poll::Ready(t) = result {
 			// allow network interrupts
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			if let Some(nic) = nic {
-				nic.lock().set_polling_mode(false);
+			{
+				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
+					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+						.map(|d| d.total_micros())
+				} else {
+					None
+				};
+				core_scheduler().add_network_timer(
+					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
+				);
+
+				if let Some(device) = device {
+					device.lock().set_polling_mode(false);
+				}
 			}
 
 			return t;
@@ -218,18 +160,22 @@ where
 
 		if let Some(duration) = timeout {
 			if Duration::from_micros(now - start) >= duration {
-				#[cfg(any(feature = "tcp", feature = "udp"))]
-				if !no_retransmission {
-					let network_timer =
-						network_delay(Instant::from_micros_const(now.try_into().unwrap()))
-							.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-					core_scheduler().add_network_timer(network_timer);
-				}
-
 				// allow network interrupts
 				#[cfg(any(feature = "tcp", feature = "udp"))]
-				if let Some(nic) = nic {
-					nic.lock().set_polling_mode(false);
+				{
+					let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
+						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+							.map(|d| d.total_micros())
+					} else {
+						None
+					};
+					core_scheduler().add_network_timer(
+						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
+					);
+
+					if let Some(device) = device {
+						device.lock().set_polling_mode(false);
+					}
 				}
 
 				return Err(io::Error::ETIME);
@@ -237,35 +183,38 @@ where
 		}
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		{
-			let delay = network_delay(Instant::from_micros_const(now.try_into().unwrap()))
-				.map(|d| d.total_micros());
+		if backoff.is_completed() {
+			let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
+				nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+					.map(|d| d.total_micros())
+			} else {
+				None
+			};
 
-			if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
+			if delay.unwrap_or(10_000_000) > 10_000 {
+				core_scheduler().add_network_timer(
+					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
+				);
 				let wakeup_time =
 					timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
-				if !no_retransmission {
-					let ticks = crate::arch::processor::get_timer_ticks();
-					let network_timer = delay.map(|d| ticks + d);
-					core_scheduler().add_network_timer(network_timer);
-				}
 
 				// allow network interrupts
-				if let Some(nic) = nic {
-					nic.lock().set_polling_mode(false);
+				if let Some(device) = device {
+					device.lock().set_polling_mode(false);
 				}
 
 				// switch to another task
 				task_notify.wait(wakeup_time);
 
 				// restore default values
-				if let Some(nic) = nic {
-					nic.lock().set_polling_mode(true);
+				if let Some(device) = device {
+					device.lock().set_polling_mode(true);
 				}
+
 				backoff.reset();
-			} else {
-				backoff.snooze();
 			}
+		} else {
+			backoff.snooze();
 		}
 
 		#[cfg(not(any(feature = "tcp", feature = "udp")))]

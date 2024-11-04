@@ -468,7 +468,7 @@ impl PerCoreScheduler {
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
 
 				let guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.get(&fd).cloned().ok_or(io::Error::EINVAL))
+				Ready(guard.get(&fd).cloned().ok_or(io::Error::EBADF))
 			})
 		})
 		.await
@@ -537,26 +537,6 @@ impl PerCoreScheduler {
 		.await
 	}
 
-	/// Replace an existing IO interface by a new one
-	#[allow(dead_code)]
-	pub async fn replace_object(
-		&self,
-		fd: FileDescriptor,
-		obj: Arc<dyn ObjectInterface>,
-	) -> io::Result<()> {
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
-
-				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				guard.insert(fd, obj.clone());
-				Ready(Ok(()))
-			})
-		})
-		.await
-	}
-
 	/// Duplicate a IO interface and returns a new file descriptor as
 	/// identifier to the new copy
 	pub async fn dup_object(&self, fd: FileDescriptor) -> io::Result<FileDescriptor> {
@@ -599,7 +579,7 @@ impl PerCoreScheduler {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.remove(&fd).ok_or(io::Error::EINVAL))
+				Ready(guard.remove(&fd).ok_or(io::Error::EBADF))
 			})
 		})
 		.await

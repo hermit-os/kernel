@@ -1,17 +1,17 @@
 use alloc::boxed::Box;
+use alloc::collections::BTreeSet;
+use alloc::sync::Arc;
 use core::future;
-use core::ops::DerefMut;
-use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
+use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
 use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
-use smoltcp::wire::IpEndpoint;
 
 use crate::executor::block_on;
-use crate::executor::network::{now, Handle, NetworkState, NIC};
+use crate::executor::network::{Handle, NIC};
 use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::{io, DEFAULT_KEEP_ALIVE_INTERVAL};
 
@@ -21,6 +21,8 @@ pub const SHUT_RD: i32 = 0;
 pub const SHUT_WR: i32 = 1;
 /// further sends and receives will be disallowed
 pub const SHUT_RDWR: i32 = 2;
+/// The default queue size for incoming connections
+pub const DEFAULT_BACKLOG: i32 = 128;
 
 fn get_ephemeral_port() -> u16 {
 	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
@@ -30,60 +32,39 @@ fn get_ephemeral_port() -> u16 {
 
 #[derive(Debug)]
 pub struct Socket {
-	handle: Handle,
-	port: AtomicU16,
-	nonblocking: AtomicBool,
-	listen: AtomicBool,
+	handle: BTreeSet<Handle>,
+	port: u16,
+	is_nonblocking: bool,
+	is_listen: bool,
 }
 
 impl Socket {
-	pub fn new(handle: Handle) -> Self {
+	pub fn new(h: Handle) -> Self {
+		let mut handle = BTreeSet::new();
+		handle.insert(h);
+
 		Self {
 			handle,
-			port: AtomicU16::new(0),
-			nonblocking: AtomicBool::new(false),
-			listen: AtomicBool::new(false),
+			port: 0,
+			is_nonblocking: false,
+			is_listen: false,
 		}
 	}
 
 	fn with<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let result = f(nic.get_mut_socket::<tcp::Socket<'_>>(self.handle));
-		nic.poll_common(now());
-
-		result
+		f(nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap()))
 	}
 
 	fn with_context<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>, &mut iface::Context) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(self.handle);
-		let result = f(s, cx);
-		nic.poll_common(now());
-
-		result
+		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+		f(s, cx)
 	}
 
-	async fn async_connect(&self, endpoint: IpEndpoint) -> io::Result<()> {
-		self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
-			.map_err(|_| io::Error::EIO)?;
-
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(io::Error::EFAULT)),
-				tcp::State::Listen => Poll::Ready(Err(io::Error::EIO)),
-				tcp::State::SynSent | tcp::State::SynReceived => {
-					socket.register_send_waker(cx.waker());
-					Poll::Pending
-				}
-				_ => Poll::Ready(Ok(())),
-			})
-		})
-		.await
-	}
-
-	async fn async_close(&self) -> io::Result<()> {
+	async fn close(&self) -> io::Result<()> {
 		future::poll_fn(|_cx| {
 			self.with(|socket| {
 				if socket.is_active() {
@@ -95,6 +76,18 @@ impl Socket {
 			})
 		})
 		.await?;
+
+		if self.handle.len() > 1 {
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+
+			for handle in self.handle.iter().skip(1) {
+				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+				if socket.is_active() {
+					socket.close();
+				}
+			}
+		}
 
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -110,53 +103,6 @@ impl Socket {
 		.await
 	}
 
-	async fn async_accept(&self) -> io::Result<IpEndpoint> {
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed => {
-					let _ = socket.listen(self.port.load(Ordering::Acquire));
-					Poll::Ready(())
-				}
-				tcp::State::Listen | tcp::State::Established => Poll::Ready(()),
-				_ => {
-					socket.register_recv_waker(cx.waker());
-					Poll::Pending
-				}
-			})
-		})
-		.await;
-
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if socket.is_active() {
-					Poll::Ready(Ok(()))
-				} else {
-					match socket.state() {
-						tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::FinWait1
-						| tcp::State::FinWait2 => Poll::Ready(Err(io::Error::EIO)),
-						_ => {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
-						}
-					}
-				}
-			})
-		})
-		.await?;
-
-		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().map_err(|_| io::Error::EIO)?;
-		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.handle);
-		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
-
-		Ok(socket.remote_endpoint().unwrap())
-	}
-}
-
-#[async_trait]
-impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
@@ -187,9 +133,7 @@ impl ObjectInterface for Socket {
 				_ => {
 					let mut available = PollEvent::empty();
 
-					if socket.can_recv()
-						|| socket.may_recv() && self.listen.swap(false, Ordering::Relaxed)
-					{
+					if socket.can_recv() || socket.may_recv() && self.is_listen {
 						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
 						available.insert(
 							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
@@ -230,28 +174,37 @@ impl ObjectInterface for Socket {
 	// TODO: Remove allow once fixed:
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed => Poll::Ready(Ok(0)),
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Listen
-				| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
-				_ => {
-					if socket.can_recv() {
-						Poll::Ready(
-							socket
-								.recv(|data| {
-									let len = core::cmp::min(buffer.len(), data.len());
-									buffer[..len].copy_from_slice(&data[..len]);
-									(len, len)
-								})
-								.map_err(|_| io::Error::EIO),
-						)
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
+			self.with(|socket| {
+				let state = socket.state();
+				match state {
+					tcp::State::Closed => Poll::Ready(Ok(0)),
+					tcp::State::FinWait1
+					| tcp::State::FinWait2
+					| tcp::State::Listen
+					| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
+					_ => {
+						if socket.can_recv() {
+							Poll::Ready(
+								socket
+									.recv(|data| {
+										let len = core::cmp::min(buffer.len(), data.len());
+										buffer[..len].copy_from_slice(&data[..len]);
+										(len, len)
+									})
+									.map_err(|_| io::Error::EIO),
+							)
+						} else if state == tcp::State::CloseWait {
+							// The local end-point has received a connection termination request
+							// and not data are in the receive buffer => return 0 to close the connection
+							Poll::Ready(Ok(0))
+						} else if self.is_nonblocking {
+							Poll::Ready(Err(io::Error::EAGAIN))
+						} else {
+							socket.register_recv_waker(cx.waker());
+							Poll::Pending
+						}
 					}
 				}
 			})
@@ -259,7 +212,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
@@ -284,6 +237,8 @@ impl ObjectInterface for Socket {
 								// we already send some data => return 0 as signal to stop the
 								// async write
 								Poll::Ready(Ok(0))
+							} else if self.is_nonblocking {
+								Poll::Ready(Err(io::Error::EAGAIN))
 							} else {
 								socket.register_send_waker(cx.waker());
 								Poll::Pending
@@ -304,104 +259,182 @@ impl ObjectInterface for Socket {
 		Ok(pos)
 	}
 
-	fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let ListenEndpoint::Ip(endpoint) = endpoint {
-			self.port.store(endpoint.port, Ordering::Release);
+			self.port = endpoint.port;
 			Ok(())
 		} else {
 			Err(io::Error::EIO)
 		}
 	}
 
-	fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let Endpoint::Ip(endpoint) = endpoint {
-			if self.nonblocking.load(Ordering::Acquire) {
-				block_on(self.async_connect(endpoint), Some(Duration::ZERO.into())).map_err(|x| {
-					if x == io::Error::ETIME {
-						io::Error::EAGAIN
-					} else {
-						x
+			self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
+				.map_err(|_| io::Error::EIO)?;
+
+			future::poll_fn(|cx| {
+				self.with(|socket| match socket.state() {
+					tcp::State::Closed | tcp::State::TimeWait => {
+						Poll::Ready(Err(io::Error::EFAULT))
 					}
+					tcp::State::Listen => Poll::Ready(Err(io::Error::EIO)),
+					tcp::State::SynSent | tcp::State::SynReceived => {
+						socket.register_send_waker(cx.waker());
+						Poll::Pending
+					}
+					_ => Poll::Ready(Ok(())),
 				})
-			} else {
-				block_on(self.async_connect(endpoint), None)
-			}
+			})
+			.await
 		} else {
 			Err(io::Error::EIO)
 		}
 	}
 
-	fn accept(&self) -> io::Result<Endpoint> {
-		let endpoint = if self.is_nonblocking() {
-			block_on(self.async_accept(), Some(Duration::ZERO.into())).map_err(|x| {
-				if x == io::Error::ETIME {
-					io::Error::EAGAIN
-				} else {
-					x
+	async fn accept(&mut self) -> io::Result<(Socket, Endpoint)> {
+		if !self.is_listen {
+			self.listen(DEFAULT_BACKLOG).await?;
+		}
+
+		let connection_handle = future::poll_fn(|cx| {
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+			let mut socket_handle = None;
+
+			for handle in self.handle.iter() {
+				let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+
+				if s.is_active() {
+					socket_handle = Some(*handle);
+					break;
 				}
-			})?
-		} else {
-			block_on(self.async_accept(), None)?
-		};
+			}
 
-		Ok(Endpoint::Ip(endpoint))
-	}
-
-	fn getpeername(&self) -> Option<Endpoint> {
-		self.with(|socket| socket.remote_endpoint())
-			.map(Endpoint::Ip)
-	}
-
-	fn getsockname(&self) -> Option<Endpoint> {
-		self.with(|socket| socket.local_endpoint())
-			.map(Endpoint::Ip)
-	}
-
-	fn is_nonblocking(&self) -> bool {
-		self.nonblocking.load(Ordering::Acquire)
-	}
-
-	fn listen(&self, _backlog: i32) -> io::Result<()> {
-		self.with(|socket| {
-			if !socket.is_open() {
-				self.listen.store(true, Ordering::Relaxed);
-				socket
-					.listen(self.port.load(Ordering::Acquire))
-					.map(|_| ())
-					.map_err(|_| io::Error::EIO)
+			if let Some(handle) = socket_handle {
+				self.handle.remove(&handle);
+				Poll::Ready(Ok(handle))
+			} else if self.is_nonblocking {
+				Poll::Ready(Err(io::Error::EAGAIN))
 			} else {
-				Err(io::Error::EIO)
+				for handle in self.handle.iter() {
+					let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+					s.register_recv_waker(cx.waker());
+				}
+
+				Poll::Pending
 			}
 		})
+		.await?;
+
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().map_err(|_| io::Error::EIO)?;
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(connection_handle);
+		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
+		let endpoint = Endpoint::Ip(socket.remote_endpoint().unwrap());
+		let nagle_enabled = socket.nagle_enabled();
+
+		// fill up queue for pending connections
+		let new_handle = nic.create_tcp_handle().unwrap();
+		self.handle.insert(new_handle);
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(new_handle);
+		socket.set_nagle_enabled(nagle_enabled);
+		socket
+			.listen(self.port)
+			.map(|_| ())
+			.map_err(|_| io::Error::EIO)?;
+
+		let mut handle = BTreeSet::new();
+		handle.insert(connection_handle);
+
+		let socket = Socket {
+			handle,
+			port: self.port,
+			is_nonblocking: self.is_nonblocking,
+			is_listen: false,
+		};
+
+		Ok((socket, endpoint))
 	}
 
-	fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
+	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
+		Ok(self
+			.with(|socket| socket.remote_endpoint())
+			.map(Endpoint::Ip))
+	}
+
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
+		Ok(self
+			.with(|socket| socket.local_endpoint())
+			.map(Endpoint::Ip))
+	}
+
+	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
+		let nagle_enabled = self.with(|socket| socket.nagle_enabled());
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+		if !socket.is_open() {
+			if backlog > 0 {
+				socket
+					.listen(self.port)
+					.map(|_| ())
+					.map_err(|_| io::Error::EIO)?;
+			} else {
+				return Err(io::Error::EINVAL);
+			}
+		} else {
+			return Err(io::Error::EIO);
+		}
+		self.is_listen = true;
+
+		for _ in 1..backlog {
+			let handle = nic.create_tcp_handle().unwrap();
+
+			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
+			s.set_nagle_enabled(nagle_enabled);
+			s.listen(self.port)
+				.map(|_| ())
+				.map_err(|_| io::Error::EIO)?;
+
+			self.handle.insert(handle);
+		}
+
+		Ok(())
+	}
+
+	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
 		if opt == SocketOption::TcpNoDelay {
-			self.with(|socket| {
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+
+			for i in self.handle.iter() {
+				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
 				socket.set_nagle_enabled(optval);
-				if optval {
-					socket.set_ack_delay(None);
-				} else {
-					socket.set_ack_delay(Some(Duration::from_millis(10)));
-				}
-			});
+			}
+
 			Ok(())
 		} else {
 			Err(io::Error::EINVAL)
 		}
 	}
 
-	fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
+	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
 		if opt == SocketOption::TcpNoDelay {
-			self.with(|socket| Ok(socket.nagle_enabled()))
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+
+			Ok(socket.nagle_enabled())
 		} else {
 			Err(io::Error::EINVAL)
 		}
 	}
 
-	fn shutdown(&self, how: i32) -> io::Result<()> {
+	async fn shutdown(&self, how: i32) -> io::Result<()> {
 		match how {
 			SHUT_RD /* Read  */ |
 			SHUT_WR /* Write */ |
@@ -410,14 +443,14 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
+	async fn ioctl(&mut self, cmd: IoCtl, value: bool) -> io::Result<()> {
 		if cmd == IoCtl::NonBlocking {
 			if value {
 				trace!("set device to nonblocking mode");
-				self.nonblocking.store(true, Ordering::Release);
+				self.is_nonblocking = true;
 			} else {
 				trace!("set device to blocking mode");
-				self.nonblocking.store(false, Ordering::Release);
+				self.is_nonblocking = false;
 			}
 
 			Ok(())
@@ -427,36 +460,69 @@ impl ObjectInterface for Socket {
 	}
 }
 
-impl Clone for Socket {
-	fn clone(&self) -> Self {
+impl Drop for Socket {
+	fn drop(&mut self) {
+		let _ = block_on(self.close(), None);
+
 		let mut guard = NIC.lock();
-
-		let handle = if let NetworkState::Initialized(nic) = guard.deref_mut() {
-			nic.create_tcp_handle().unwrap()
-		} else {
-			panic!("Unable to create handle");
-		};
-
-		drop(guard);
-		let port = self.port.load(Ordering::Acquire);
-		let obj = Self {
-			handle,
-			port: AtomicU16::new(port),
-			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
-			listen: AtomicBool::new(false),
-		};
-
-		if port > 0 {
-			let _ = obj.listen(1024);
+		for h in self.handle.iter() {
+			guard.as_nic_mut().unwrap().destroy_socket(*h);
 		}
-
-		obj
 	}
 }
 
-impl Drop for Socket {
-	fn drop(&mut self) {
-		let _ = block_on(self.async_close(), None);
-		NIC.lock().as_nic_mut().unwrap().destroy_socket(self.handle);
+#[async_trait]
+impl ObjectInterface for async_lock::RwLock<Socket> {
+	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
+		self.read().await.poll(event).await
+	}
+
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+		self.read().await.read(buffer).await
+	}
+
+	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+		self.read().await.write(buffer).await
+	}
+
+	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+		self.write().await.bind(endpoint).await
+	}
+
+	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+		self.read().await.connect(endpoint).await
+	}
+
+	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
+		let (socket, endpoint) = self.write().await.accept().await?;
+		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
+	}
+
+	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
+		self.read().await.getpeername().await
+	}
+
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
+		self.read().await.getsockname().await
+	}
+
+	async fn listen(&self, backlog: i32) -> io::Result<()> {
+		self.write().await.listen(backlog).await
+	}
+
+	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
+		self.read().await.setsockopt(opt, optval).await
+	}
+
+	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
+		self.read().await.getsockopt(opt).await
+	}
+
+	async fn shutdown(&self, how: i32) -> io::Result<()> {
+		self.read().await.shutdown(how).await
+	}
+
+	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
+		self.write().await.ioctl(cmd, value).await
 	}
 }
