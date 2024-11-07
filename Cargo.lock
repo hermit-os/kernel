@@ -415,8 +415,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b4a54dfedecb1dc004776a597db0c858cf6c31579296734511309291b8399ce"
 dependencies = [
  "bitflags 2.6.0",
- "zerocopy 0.8.5",
- "zerocopy-derive 0.8.5",
+ "zerocopy 0.8.9",
+ "zerocopy-derive 0.8.9",
 ]
 
 [[package]]
@@ -497,8 +497,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19976a6994b6ebda45b4d02a46dc5a9b2af17d46a43d9f76404c333f0b38f7d7"
 dependencies = [
  "num_enum",
- "zerocopy 0.8.5",
- "zerocopy-derive 0.8.5",
+ "zerocopy 0.8.9",
+ "zerocopy-derive 0.8.9",
 ]
 
 [[package]]
@@ -632,7 +632,7 @@ dependencies = [
  "volatile 0.6.1",
  "x86",
  "x86_64",
- "zerocopy 0.8.5",
+ "zerocopy 0.8.9",
 ]
 
 [[package]]
@@ -1557,8 +1557,8 @@ dependencies = [
  "pci_types",
  "volatile 0.6.1",
  "volatile-macro",
- "zerocopy 0.8.5",
- "zerocopy-derive 0.8.5",
+ "zerocopy 0.8.9",
+ "zerocopy-derive 0.8.9",
 ]
 
 [[package]]
@@ -1881,11 +1881,11 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.5"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6129d25825e874589a0e529175dd060c13dab4f3d960c6a0b711e5535b598bb2"
+checksum = "f49e690f8f352f4a9ee8679a8c5921f42ffd0d6d6413a0a66b8e81cf524e109c"
 dependencies = [
- "zerocopy-derive 0.8.5",
+ "zerocopy-derive 0.8.9",
 ]
 
 [[package]]
@@ -1901,9 +1901,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.5"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d917df3784b4e2f5deb708d14623b2c02833890e1aa7a5dd1088998e8e9402b1"
+checksum = "fa732fcc881df7a6fbe8e3ed17baadece53b379ad58fe2633396b1a2b108a7b1"
 dependencies = [
  "proc-macro2",
  "quote",
