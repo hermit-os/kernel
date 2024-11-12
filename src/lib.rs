@@ -13,7 +13,6 @@
 )]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
-#![feature(exposed_provenance)]
 #![feature(linked_list_cursors)]
 #![feature(map_try_insert)]
 #![feature(maybe_uninit_as_bytes)]
@@ -27,7 +26,6 @@
 	any(target_arch = "aarch64", target_arch = "riscv64"),
 	feature(specialization)
 )]
-#![feature(strict_provenance)]
 #![feature(thread_local)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
