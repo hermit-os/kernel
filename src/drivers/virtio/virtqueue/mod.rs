@@ -248,7 +248,7 @@ trait VirtqPrivate {
 
 	// The descriptors returned by the iterator will be incomplete, as they do not
 	// have all the information necessary.
-	fn descriptor_iter<'a>(
+	fn descriptor_iter(
 		buffer_tkn: &AvailBufferToken,
 	) -> Result<impl DoubleEndedIterator<Item = Self::Descriptor>, VirtqError> {
 		let send_desc_iter = buffer_tkn
