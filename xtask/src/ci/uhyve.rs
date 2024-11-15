@@ -13,16 +13,12 @@ pub struct Uhyve {
 	#[arg(long)]
 	sudo: bool,
 
-	/// Run with multiple vCPUs.
-	#[arg(long)]
-	smp: bool,
-
 	#[command(flatten)]
 	build: Build,
 }
 
 impl Uhyve {
-	pub fn run(self) -> Result<()> {
+	pub fn run(mut self) -> Result<()> {
 		self.build.run()?;
 
 		let sh = crate::sh()?;
@@ -35,17 +31,14 @@ impl Uhyve {
 
 		cmd!(sh, "{program} {arg...} {image}")
 			.env("RUST_LOG", "debug")
-			.args(self.cpu_count_args())
+			.arg(self.cpu_count_arg())
 			.run()?;
 
 		Ok(())
 	}
 
-	fn cpu_count_args(&self) -> &'static [&'static str] {
-		if self.smp {
-			&["--cpu-count=4"]
-		} else {
-			&[]
-		}
+	fn cpu_count_arg(&self) -> String {
+		let smp = self.build.smp;
+		format!("--cpu-count={}", smp)
 	}
 }

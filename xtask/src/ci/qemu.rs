@@ -42,10 +42,6 @@ pub struct Qemu {
 	#[arg(long)]
 	no_default_virtio_features: bool,
 
-	/// Create multiple vCPUs.
-	#[arg(long, default_value_t = 1)]
-	smp: usize,
-
 	/// Enable the `virtiofsd` virtio-fs vhost-user device daemon.
 	#[arg(long)]
 	virtiofsd: bool,
@@ -63,13 +59,6 @@ pub enum NetworkDevice {
 
 impl Qemu {
 	pub fn run(mut self) -> Result<()> {
-		if self.smp > 1 {
-			self.build
-				.cargo_build
-				.features
-				.push("hermit/smp".to_string());
-		}
-
 		self.build.run()?;
 
 		let sh = crate::sh()?;
@@ -92,7 +81,7 @@ impl Qemu {
 			.args(self.image_args()?)
 			.args(self.machine_args())
 			.args(self.cpu_args())
-			.args(&["-smp", &self.smp.to_string()])
+			.args(&["-smp", &self.build.smp.to_string()])
 			.args(self.memory_args())
 			.args(self.netdev_args())
 			.args(self.virtiofsd_args());

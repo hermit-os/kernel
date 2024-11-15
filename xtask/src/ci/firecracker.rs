@@ -19,7 +19,7 @@ pub struct Firecracker {
 }
 
 impl Firecracker {
-	pub fn run(self) -> Result<()> {
+	pub fn run(mut self) -> Result<()> {
 		self.build.run()?;
 
 		let sh = crate::sh()?;
