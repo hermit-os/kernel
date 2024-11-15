@@ -20,7 +20,7 @@ pub enum Ci {
 impl Ci {
 	pub fn run(self) -> Result<()> {
 		match self {
-			Self::Build(build) => build.run(),
+			Self::Build(mut build) => build.run(),
 			Self::Firecracker(firecracker) => firecracker.run(),
 			Self::Qemu(qemu) => qemu.run(),
 			Self::Uhyve(uhyve) => uhyve.run(),

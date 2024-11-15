@@ -15,12 +15,20 @@ pub struct Build {
 	/// Package to build (see `cargo help pkgid`)
 	#[arg(short, long, id = "SPEC")]
 	pub package: String,
+
+	/// Create multiple vCPUs.
+	#[arg(long, default_value_t = 1)]
+	pub smp: usize,
 }
 
 impl Build {
-	pub fn run(&self) -> Result<()> {
+	pub fn run(&mut self) -> Result<()> {
 		if super::in_ci() {
 			eprintln!("::group::cargo build")
+		}
+
+		if self.smp > 1 {
+			self.cargo_build.features.push("hermit/smp".to_string());
 		}
 
 		let mut cargo = crate::cargo();
