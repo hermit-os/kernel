@@ -27,7 +27,8 @@ impl Firecracker {
 		let config = format!(
 			include_str!("firecracker_vm_config.json"),
 			kernel_image_path = "hermit-loader-x86_64-fc",
-			initrd_path = self.build.image().display()
+			initrd_path = self.build.image().display(),
+			vcpu_count = self.build.smp,
 		);
 		eprintln!("firecracker config");
 		eprintln!("{config}");
