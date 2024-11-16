@@ -1,6 +1,5 @@
 mod allocator;
 mod console;
-mod fdt;
 
 use alloc::vec::Vec;
 use core::ffi::c_void;
@@ -20,7 +19,7 @@ use uefi::prelude::*;
 use uefi::table::cfg;
 
 pub use self::console::CONSOLE;
-use self::fdt::Fdt;
+use crate::fdt::Fdt;
 use crate::{arch, BootInfoExt};
 
 // Entry Point of the Uefi Loader

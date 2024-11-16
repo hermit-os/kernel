@@ -13,6 +13,8 @@ mod macros;
 
 mod arch;
 mod bump_allocator;
+#[cfg(target_os = "uefi")]
+mod fdt;
 mod log;
 mod os;
 
