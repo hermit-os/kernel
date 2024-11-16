@@ -4,12 +4,13 @@ use core::ops::Range;
 
 use vm_fdt::{FdtWriter, FdtWriterNode, FdtWriterResult};
 
-pub struct Fdt {
+pub struct Fdt<'a> {
 	writer: FdtWriter,
 	root_node: FdtWriterNode,
+	bootargs: Option<&'a str>,
 }
 
-impl Fdt {
+impl<'a> Fdt<'a> {
 	pub fn new(platform: &str) -> FdtWriterResult<Self> {
 		let mut writer = FdtWriter::new()?;
 
@@ -18,16 +19,33 @@ impl Fdt {
 		writer.property_u32("#address-cells", 0x2)?;
 		writer.property_u32("#size-cells", 0x2)?;
 
-		Ok(Self { writer, root_node })
+		let bootargs = None;
+
+		Ok(Self {
+			writer,
+			root_node,
+			bootargs,
+		})
 	}
 
 	pub fn finish(mut self) -> FdtWriterResult<Vec<u8>> {
 		let chosen_node = self.writer.begin_node("chosen")?;
+		if let Some(bootargs) = self.bootargs {
+			self.writer.property_string("bootargs", bootargs)?;
+		}
 		self.writer.end_node(chosen_node)?;
 
 		self.writer.end_node(self.root_node)?;
 
 		self.writer.finish()
+	}
+
+	#[cfg_attr(target_os = "uefi", expect(unused))]
+	pub fn bootargs(mut self, bootargs: &'a str) -> FdtWriterResult<Self> {
+		assert!(self.bootargs.is_none());
+		self.bootargs = Some(bootargs);
+
+		Ok(self)
 	}
 
 	pub fn rsdp(mut self, rsdp: u64) -> FdtWriterResult<Self> {
@@ -61,7 +79,7 @@ mod uefi {
 	use uefi::mem::memory_map::{MemoryMap, MemoryMapMut};
 	use vm_fdt::FdtWriterResult;
 
-	impl super::Fdt {
+	impl super::Fdt<'_> {
 		pub fn memory_map(mut self, memory_map: &mut impl MemoryMapMut) -> FdtWriterResult<Self> {
 			memory_map.sort();
 			info!("Memory map:\n{}", memory_map.display());
