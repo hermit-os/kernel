@@ -13,15 +13,12 @@ mod macros;
 
 mod arch;
 mod bump_allocator;
-#[cfg(any(target_os = "uefi", all(target_arch = "x86_64", not(feature = "fc"))))]
+#[cfg(any(target_os = "uefi", target_arch = "x86_64"))]
 mod fdt;
 mod log;
 mod os;
 
-#[cfg(any(
-	target_os = "uefi",
-	all(target_arch = "x86_64", target_os = "none", not(feature = "fc"))
-))]
+#[cfg(any(target_os = "uefi", all(target_arch = "x86_64", target_os = "none")))]
 extern crate alloc;
 
 trait BootInfoExt {
