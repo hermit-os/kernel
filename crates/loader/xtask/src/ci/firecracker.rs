@@ -12,7 +12,7 @@ pub struct Firecracker {
 	#[command(flatten)]
 	build: Build,
 
-	#[arg(long, default_value_t = String::from("hello_world"))]
+	#[arg(long, default_value_t = String::from("hello_world-microvm"))]
 	image: String,
 }
 

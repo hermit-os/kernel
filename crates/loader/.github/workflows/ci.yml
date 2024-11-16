@@ -96,10 +96,10 @@ jobs:
         if: matrix.target == 'x86_64'
       - name: Run VM (hello_world-microvm, dev)
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-        run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_world-microvm --microvm
+        run: cargo xtask ci qemu --target ${{ matrix.target }} --microvm
       - name: Run VM (hello_world-microvm, release)
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-        run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_world-microvm --microvm --release
+        run: cargo xtask ci qemu --target ${{ matrix.target }} --microvm --release
       - name: Run VM (hello_c, dev)
         if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_c
@@ -142,14 +142,14 @@ jobs:
       - name: Run QEMU (hello_world, release)
         run: cargo xtask ci qemu --target x86_64 --accel --release
       - name: Run QEMU (hello_world-microvm, dev)
-        run: cargo xtask ci qemu --target x86_64 --accel --image hello_world-microvm --microvm
+        run: cargo xtask ci qemu --target x86_64 --accel --microvm
       - name: Run QEMU (hello_world-microvm, release)
-        run: cargo xtask ci qemu --target x86_64 --accel --image hello_world-microvm --microvm --release
+        run: cargo xtask ci qemu --target x86_64 --accel --microvm --release
       - name: Run UEFI (dev)
         run: cargo xtask ci qemu --target x86_64-uefi --accel
       - name: Run UEFI (release)
         run: cargo xtask ci qemu --target x86_64-uefi --accel --release
       - name: Run Firecracker (hello_world, dev)
-        run: cargo xtask ci firecracker --target x86_64-fc --features fc --image hello_world-microvm
+        run: cargo xtask ci firecracker --target x86_64-fc --features fc
       - name: Run Firecracker (hello_world, release)
-        run: cargo xtask ci firecracker --target x86_64-fc --features fc --image hello_world-microvm --release
+        run: cargo xtask ci firecracker --target x86_64-fc --features fc --release
