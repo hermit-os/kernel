@@ -1,10 +1,6 @@
 use alloc::format;
 use alloc::vec::Vec;
-use core::fmt::{self, Write};
 
-use log::info;
-use uefi::boot::{MemoryDescriptor, MemoryType, PAGE_SIZE};
-use uefi::mem::memory_map::{MemoryMap, MemoryMapMut};
 use vm_fdt::{FdtWriter, FdtWriterNode, FdtWriterResult};
 
 pub struct Fdt {
@@ -13,11 +9,11 @@ pub struct Fdt {
 }
 
 impl Fdt {
-	pub fn new() -> FdtWriterResult<Self> {
+	pub fn new(platform: &str) -> FdtWriterResult<Self> {
 		let mut writer = FdtWriter::new()?;
 
 		let root_node = writer.begin_node("")?;
-		writer.property_string("compatible", "hermit,uefi")?;
+		writer.property_string("compatible", &format!("hermit,{platform}"))?;
 		writer.property_u32("#address-cells", 0x2)?;
 		writer.property_u32("#size-cells", 0x2)?;
 
@@ -40,82 +36,96 @@ impl Fdt {
 
 		Ok(self)
 	}
-
-	pub fn memory_map(mut self, memory_map: &mut impl MemoryMapMut) -> FdtWriterResult<Self> {
-		memory_map.sort();
-		info!("Memory map:\n{}", memory_map.display());
-
-		let entries = memory_map
-			.entries()
-			.filter(|entry| entry.ty == MemoryType::CONVENTIONAL);
-
-		for entry in entries {
-			let memory_node = self
-				.writer
-				.begin_node(format!("memory@{:x}", entry.phys_start).as_str())?;
-			self.writer.property_string("device_type", "memory")?;
-			self.writer.property_array_u64(
-				"reg",
-				&[entry.phys_start, entry.page_count * PAGE_SIZE as u64],
-			)?;
-			self.writer.end_node(memory_node)?;
-		}
-
-		Ok(self)
-	}
 }
 
-trait MemoryMapExt: MemoryMap {
-	fn display(&self) -> MemoryMapDisplay<'_, Self> {
-		MemoryMapDisplay { inner: self }
-	}
-}
+#[cfg(target_os = "uefi")]
+mod uefi {
+	use alloc::format;
+	use core::fmt;
+	use core::fmt::Write;
 
-impl<T> MemoryMapExt for T where T: MemoryMap {}
+	use log::info;
+	use uefi::boot::{MemoryDescriptor, MemoryType, PAGE_SIZE};
+	use uefi::mem::memory_map::{MemoryMap, MemoryMapMut};
+	use vm_fdt::FdtWriterResult;
 
-struct MemoryMapDisplay<'a, T: ?Sized> {
-	inner: &'a T,
-}
+	impl super::Fdt {
+		pub fn memory_map(mut self, memory_map: &mut impl MemoryMapMut) -> FdtWriterResult<Self> {
+			memory_map.sort();
+			info!("Memory map:\n{}", memory_map.display());
 
-impl<'a, T> fmt::Display for MemoryMapDisplay<'a, T>
-where
-	T: MemoryMap,
-{
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let mut has_fields = false;
+			let entries = memory_map
+				.entries()
+				.filter(|entry| entry.ty == MemoryType::CONVENTIONAL);
 
-		for desc in self.inner.entries() {
-			if has_fields {
-				f.write_char('\n')?;
+			for entry in entries {
+				let memory_node = self
+					.writer
+					.begin_node(format!("memory@{:x}", entry.phys_start).as_str())?;
+				self.writer.property_string("device_type", "memory")?;
+				self.writer.property_array_u64(
+					"reg",
+					&[entry.phys_start, entry.page_count * PAGE_SIZE as u64],
+				)?;
+				self.writer.end_node(memory_node)?;
 			}
-			write!(f, "{}", desc.display())?;
 
-			has_fields = true;
+			Ok(self)
 		}
-		Ok(())
 	}
-}
 
-trait MemoryDescriptorExt {
-	fn display(&self) -> MemoryDescriptorDisplay<'_>;
-}
-
-impl MemoryDescriptorExt for MemoryDescriptor {
-	fn display(&self) -> MemoryDescriptorDisplay<'_> {
-		MemoryDescriptorDisplay { inner: self }
+	trait MemoryMapExt: MemoryMap {
+		fn display(&self) -> MemoryMapDisplay<'_, Self> {
+			MemoryMapDisplay { inner: self }
+		}
 	}
-}
 
-struct MemoryDescriptorDisplay<'a> {
-	inner: &'a MemoryDescriptor,
-}
+	impl<T> MemoryMapExt for T where T: MemoryMap {}
 
-impl<'a> fmt::Display for MemoryDescriptorDisplay<'a> {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(
-			f,
-			"start: {:#12x}, pages: {:#8x}, type: {:?}",
-			self.inner.phys_start, self.inner.page_count, self.inner.ty
-		)
+	struct MemoryMapDisplay<'a, T: ?Sized> {
+		inner: &'a T,
+	}
+
+	impl<'a, T> fmt::Display for MemoryMapDisplay<'a, T>
+	where
+		T: MemoryMap,
+	{
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			let mut has_fields = false;
+
+			for desc in self.inner.entries() {
+				if has_fields {
+					f.write_char('\n')?;
+				}
+				write!(f, "{}", desc.display())?;
+
+				has_fields = true;
+			}
+			Ok(())
+		}
+	}
+
+	trait MemoryDescriptorExt {
+		fn display(&self) -> MemoryDescriptorDisplay<'_>;
+	}
+
+	impl MemoryDescriptorExt for MemoryDescriptor {
+		fn display(&self) -> MemoryDescriptorDisplay<'_> {
+			MemoryDescriptorDisplay { inner: self }
+		}
+	}
+
+	struct MemoryDescriptorDisplay<'a> {
+		inner: &'a MemoryDescriptor,
+	}
+
+	impl<'a> fmt::Display for MemoryDescriptorDisplay<'a> {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			write!(
+				f,
+				"start: {:#12x}, pages: {:#8x}, type: {:?}",
+				self.inner.phys_start, self.inner.page_count, self.inner.ty
+			)
+		}
 	}
 }

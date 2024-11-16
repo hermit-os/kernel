@@ -40,7 +40,7 @@ fn main() -> Status {
 
 	drop(kernel_image);
 
-	let fdt = Fdt::new()
+	let fdt = Fdt::new("uefi")
 		.unwrap()
 		.rsdp(u64::try_from(rsdp.expose_addr()).unwrap())
 		.unwrap();
