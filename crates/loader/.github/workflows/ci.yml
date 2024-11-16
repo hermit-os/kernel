@@ -150,6 +150,6 @@ jobs:
       - name: Run UEFI (release)
         run: cargo xtask ci qemu --target x86_64-uefi --accel --release
       - name: Run Firecracker (hello_world, dev)
-        run: cargo xtask ci firecracker --target x86_64-fc --features fc
+        run: cargo xtask ci firecracker --target x86_64-fc
       - name: Run Firecracker (hello_world, release)
-        run: cargo xtask ci firecracker --target x86_64-fc --features fc --release
+        run: cargo xtask ci firecracker --target x86_64-fc --release
