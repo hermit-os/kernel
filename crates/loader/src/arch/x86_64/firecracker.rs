@@ -177,7 +177,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	// Load the boot_param memory-map information
 	let linux_e820_entries =
-		unsafe { *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET)) };
+		unsafe { *(sptr::from_exposed_addr::<u8>(boot_params + E820_ENTRIES_OFFSET)) };
 	info!("Number of e820-entries: {}", linux_e820_entries);
 
 	let mut found_entry = false;
