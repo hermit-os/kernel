@@ -1,4 +1,3 @@
-use alloc::format;
 use core::ptr::write_bytes;
 use core::{mem, ptr, slice};
 
@@ -8,14 +7,15 @@ use hermit_entry::boot_info::{
 };
 use hermit_entry::elf::LoadedKernel;
 use log::info;
-use multiboot::information::{MemoryManagement, MemoryType, Multiboot, PAddr};
+use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use sptr::Strict;
-use vm_fdt::{FdtWriter, FdtWriterResult};
+use vm_fdt::FdtWriterResult;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 use super::paging;
 use super::physicalmem::PhysAlloc;
 use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT};
+use crate::fdt::Fdt;
 use crate::BootInfoExt;
 
 extern "C" {
@@ -55,35 +55,15 @@ impl DeviceTree {
 		let mut mem = Mem;
 		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
-		let all_regions = multiboot
+		let memory_regions = multiboot
 			.memory_regions()
 			.expect("Could not find a memory map in the Multiboot information");
-		let ram_regions = all_regions.filter(|m| m.memory_type() == MemoryType::Available);
 
-		let mut fdt = FdtWriter::new()?;
-
-		let root_node = fdt.begin_node("")?;
-		fdt.property_string("compatible", "linux,dummy-virt")?;
-		fdt.property_u32("#address-cells", 0x2)?;
-		fdt.property_u32("#size-cells", 0x2)?;
+		let mut fdt = Fdt::new("multiboot")?.memory_regions(memory_regions)?;
 
 		if let Some(cmdline) = multiboot.command_line() {
-			let chosen_node = fdt.begin_node("chosen")?;
-			fdt.property_string("bootargs", cmdline)?;
-			fdt.end_node(chosen_node)?;
+			fdt = fdt.bootargs(cmdline)?;
 		}
-
-		for m in ram_regions {
-			let start_address = m.base_address();
-			let length = m.length();
-
-			let memory_node = fdt.begin_node(format!("memory@{:x}", start_address).as_str())?;
-			fdt.property_string("device_type", "memory")?;
-			fdt.property_array_u64("reg", &[start_address, length])?;
-			fdt.end_node(memory_node)?;
-		}
-
-		fdt.end_node(root_node)?;
 
 		let fdt = fdt.finish()?;
 

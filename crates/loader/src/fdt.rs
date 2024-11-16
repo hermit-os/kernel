@@ -48,6 +48,7 @@ impl<'a> Fdt<'a> {
 		Ok(self)
 	}
 
+	#[cfg_attr(all(target_arch = "x86_64", not(target_os = "uefi")), expect(unused))]
 	pub fn rsdp(mut self, rsdp: u64) -> FdtWriterResult<Self> {
 		let rsdp_node = self.writer.begin_node(&format!("hermit,rsdp@{rsdp:x}"))?;
 		self.writer.property_array_u64("reg", &[rsdp, 1])?;
@@ -66,6 +67,31 @@ impl<'a> Fdt<'a> {
 		self.writer.end_node(memory_node)?;
 
 		Ok(self)
+	}
+}
+
+#[cfg(all(target_arch = "x86_64", not(target_os = "uefi"), not(feature = "fc")))]
+mod x86_64 {
+	use multiboot::information::{MemoryMapIter, MemoryType};
+	use vm_fdt::FdtWriterResult;
+
+	impl super::Fdt<'_> {
+		pub fn memory_regions(
+			mut self,
+			memory_regions: MemoryMapIter<'_, '_>,
+		) -> FdtWriterResult<Self> {
+			let memory_regions =
+				memory_regions.filter(|m| m.memory_type() == MemoryType::Available);
+
+			for memory_region in memory_regions {
+				self = self.memory(
+					memory_region.base_address()
+						..memory_region.base_address() + memory_region.length(),
+				)?;
+			}
+
+			Ok(self)
+		}
 	}
 }
 
