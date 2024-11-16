@@ -144,7 +144,16 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			)
 		};
 
-		Some(core::str::from_utf8(slice).unwrap())
+		let s = core::str::from_utf8(slice)
+			.unwrap()
+			.strip_suffix('\0')
+			.unwrap();
+
+		if s.is_empty() {
+			None
+		} else {
+			Some(s)
+		}
 	} else {
 		None
 	};
