@@ -178,6 +178,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
+	let mut fdt = Fdt::new("firecracker").unwrap();
+
 	// Load the boot_param memory-map information
 	let linux_e820_entries =
 		unsafe { *(sptr::from_exposed_addr::<u8>(boot_params + E820_ENTRIES_OFFSET)) };
@@ -206,6 +208,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 		let entry_end = entry_start + entry_size;
 
+		fdt = fdt.memory(entry_start..entry_end).unwrap();
+
 		if start_address == 0 {
 			start_address = entry_start as usize;
 		}
@@ -222,11 +226,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		"Found available RAM: [0x{:x} - 0x{:x}]",
 		start_address, end_address
 	);
-
-	let mut fdt = Fdt::new("firecracker")
-		.unwrap()
-		.memory(start_address as u64..end_address as u64)
-		.unwrap();
 
 	if let Some(command_line) = command_line {
 		fdt = fdt.bootargs(command_line).unwrap();
