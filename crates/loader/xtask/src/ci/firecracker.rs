@@ -12,12 +12,14 @@ pub struct Firecracker {
 	#[command(flatten)]
 	build: Build,
 
-	#[arg(long, default_value_t = String::from("hello_world"))]
+	#[arg(long, default_value_t = String::from("hello_world-microvm"))]
 	image: String,
 }
 
 impl Firecracker {
-	pub fn run(self) -> Result<()> {
+	pub fn run(mut self) -> Result<()> {
+		self.build.cargo_build.features.push("fc".to_string());
+
 		self.build.run()?;
 
 		let sh = crate::sh()?;

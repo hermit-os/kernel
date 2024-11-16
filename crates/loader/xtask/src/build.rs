@@ -12,7 +12,7 @@ use crate::target::Target;
 #[derive(Args)]
 pub struct Build {
 	#[command(flatten)]
-	cargo_build: CargoBuild,
+	pub cargo_build: CargoBuild,
 }
 
 impl Build {

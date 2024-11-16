@@ -23,12 +23,20 @@ pub struct Qemu {
 	#[command(flatten)]
 	build: Build,
 
-	#[arg(long, default_value_t = String::from("hello_world"))]
-	image: String,
+	#[arg(long)]
+	image: Option<String>,
 }
 
 impl Qemu {
-	pub fn run(self) -> Result<()> {
+	pub fn run(mut self) -> Result<()> {
+		let default_image = if self.microvm {
+			"hello_world-microvm"
+		} else {
+			"hello_world"
+		};
+
+		self.image.get_or_insert_with(|| default_image.to_string());
+
 		if super::in_ci() {
 			eprintln!("::group::cargo build")
 		}
@@ -45,7 +53,7 @@ impl Qemu {
 			sh.create_dir("target/esp/efi/boot")?;
 			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
 			sh.copy_file(
-				self.build.ci_image(&self.image),
+				self.build.ci_image(self.image.as_deref().unwrap()),
 				"target/esp/efi/boot/hermit-app",
 			)?;
 		}
@@ -128,7 +136,7 @@ impl Qemu {
 						cpu_args.push("-initrd".to_string());
 						cpu_args.push(
 							self.build
-								.ci_image(&self.image)
+								.ci_image(self.image.as_deref().unwrap())
 								.into_os_string()
 								.into_string()
 								.unwrap(),
@@ -168,7 +176,9 @@ impl Qemu {
 				cpu_args.push("-device".to_string());
 				cpu_args.push(format!(
 					"guest-loader,addr=0x48000000,initrd={}",
-					self.build.ci_image(&self.image).display()
+					self.build
+						.ci_image(self.image.as_deref().unwrap())
+						.display()
 				));
 				cpu_args
 			}
@@ -190,7 +200,7 @@ impl Qemu {
 				cpu_args.push("-initrd".to_string());
 				cpu_args.push(
 					self.build
-						.ci_image(&self.image)
+						.ci_image(self.image.as_deref().unwrap())
 						.into_os_string()
 						.into_string()
 						.unwrap(),
