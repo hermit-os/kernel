@@ -1,5 +1,6 @@
 use alloc::format;
 use alloc::vec::Vec;
+use core::ops::Range;
 
 use vm_fdt::{FdtWriter, FdtWriterNode, FdtWriterResult};
 
@@ -36,11 +37,22 @@ impl Fdt {
 
 		Ok(self)
 	}
+
+	pub fn memory(mut self, memory: Range<u64>) -> FdtWriterResult<Self> {
+		let memory_node = self
+			.writer
+			.begin_node(format!("memory@{:x}", memory.start).as_str())?;
+		self.writer.property_string("device_type", "memory")?;
+		self.writer
+			.property_array_u64("reg", &[memory.start, memory.end - memory.start])?;
+		self.writer.end_node(memory_node)?;
+
+		Ok(self)
+	}
 }
 
 #[cfg(target_os = "uefi")]
 mod uefi {
-	use alloc::format;
 	use core::fmt;
 	use core::fmt::Write;
 
@@ -59,15 +71,9 @@ mod uefi {
 				.filter(|entry| entry.ty == MemoryType::CONVENTIONAL);
 
 			for entry in entries {
-				let memory_node = self
-					.writer
-					.begin_node(format!("memory@{:x}", entry.phys_start).as_str())?;
-				self.writer.property_string("device_type", "memory")?;
-				self.writer.property_array_u64(
-					"reg",
-					&[entry.phys_start, entry.page_count * PAGE_SIZE as u64],
+				self = self.memory(
+					entry.phys_start..entry.phys_start + entry.page_count * PAGE_SIZE as u64,
 				)?;
-				self.writer.end_node(memory_node)?;
 			}
 
 			Ok(self)
