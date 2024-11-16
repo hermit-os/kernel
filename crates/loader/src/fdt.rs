@@ -18,13 +18,13 @@ impl Fdt {
 		writer.property_u32("#address-cells", 0x2)?;
 		writer.property_u32("#size-cells", 0x2)?;
 
-		let chosen_node = writer.begin_node("chosen")?;
-		writer.end_node(chosen_node)?;
-
 		Ok(Self { writer, root_node })
 	}
 
 	pub fn finish(mut self) -> FdtWriterResult<Vec<u8>> {
+		let chosen_node = self.writer.begin_node("chosen")?;
+		self.writer.end_node(chosen_node)?;
+
 		self.writer.end_node(self.root_node)?;
 
 		self.writer.finish()
