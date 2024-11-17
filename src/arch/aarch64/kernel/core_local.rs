@@ -93,7 +93,7 @@ pub(crate) fn core_id() -> CoreId {
 
 #[inline]
 pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *CoreLocal::get().scheduler.get() }
+	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
 }
 
 pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
