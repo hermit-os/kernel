@@ -26,7 +26,7 @@ pub fn init() {
 	} else {
 		PageRange::new(
 			mm::kernel_end_address().as_usize(),
-			kernel_heap_end().as_usize(),
+			kernel_heap_end().as_usize() + 1,
 		)
 		.unwrap()
 	};
@@ -88,8 +88,8 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 
 pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	assert!(
-		virtual_address < kernel_heap_end(),
-		"Virtual address {virtual_address:p} is not < kernel_heap_end()"
+		virtual_address <= kernel_heap_end(),
+		"Virtual address {virtual_address:p} is not <= kernel_heap_end()"
 	);
 	assert_eq!(
 		virtual_address % BasePageSize::SIZE,
@@ -121,8 +121,8 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		virtual_address
 	);
 	assert!(
-		virtual_address < kernel_heap_end(),
-		"Virtual address {:#X} is not < kernel_heap_end()",
+		virtual_address <= kernel_heap_end(),
+		"Virtual address {:#X} is not <= kernel_heap_end()",
 		virtual_address
 	);
 	assert_eq!(
@@ -157,12 +157,12 @@ pub fn print_information() {
 	info!("Virtual memory free list:\n{free_list}");
 }
 
-/// End of the virtual memory address space reserved for kernel memory.
-/// This also marks the start of the virtual memory address space reserved for the task heap.
+/// End of the virtual memory address space reserved for kernel memory (inclusive).
+/// The virtual memory address space reserved for the task heap starts after this.
 #[cfg(not(feature = "common-os"))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr(0x8000_0000_0000u64)
+	VirtAddr(0x7FFF_FFFF_FFFFu64)
 }
 
 #[cfg(feature = "common-os")]
