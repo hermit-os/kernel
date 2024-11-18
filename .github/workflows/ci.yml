@@ -57,6 +57,13 @@ jobs:
       - run: rustup component add rustfmt
       - run: cargo fmt -- --check
 
+  typos:
+    name: Typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crate-ci/typos@master
+
   doc:
     name: Doc
     runs-on: ubuntu-latest
