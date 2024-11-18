@@ -4,11 +4,11 @@ use core::convert::TryInto;
 use core::{mem, ptr};
 
 use align_address::Align;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::riscv64::mm::{PhysAddr, VirtAddr};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
@@ -129,7 +129,7 @@ impl TaskStacks {
 
 		// map IST0 into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + BasePageSize::SIZE as usize,
+			virt_addr + BasePageSize::SIZE,
 			//virt_addr,
 			phys_addr,
 			KERNEL_STACK_SIZE / BasePageSize::SIZE as usize,
@@ -138,7 +138,7 @@ impl TaskStacks {
 
 		// map kernel stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE as usize,
+			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE,
 			//virt_addr + KERNEL_STACK_SIZE,
 			phys_addr + KERNEL_STACK_SIZE,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
@@ -147,7 +147,7 @@ impl TaskStacks {
 
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE as usize,
+			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			//virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
 			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
@@ -158,10 +158,7 @@ impl TaskStacks {
 		debug!("Clearing user stack...");
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr
-					+ KERNEL_STACK_SIZE
-					+ DEFAULT_STACK_SIZE
-					+ 3 * BasePageSize::SIZE as usize)
+				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
 					//(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE)
 					.as_mut_ptr::<u8>(),
 				0xAC,
@@ -197,10 +194,7 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
-				stacks.virt_addr
-					+ KERNEL_STACK_SIZE
-					+ DEFAULT_STACK_SIZE
-					+ 3 * BasePageSize::SIZE as usize
+				stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
 				//stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE
 			}
 		}
@@ -210,7 +204,7 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
 			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE as usize
+				stacks.virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE
 				//stacks.virt_addr + KERNEL_STACK_SIZE
 			}
 		}
@@ -277,7 +271,7 @@ impl TaskTLS {
 		let tls_size = tls_info.memsz as usize;
 		// determine the size of tdata (tls without tbss)
 		let tdata_size = tls_info.filesz as usize;
-		let tls_start = VirtAddr(tls_info.start);
+		let tls_start = VirtAddr::new(tls_info.start);
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
 		let tls_allocation_size = tls_size.align_up(32usize); // + mem::size_of::<usize>();
@@ -285,7 +279,7 @@ impl TaskTLS {
 		let memory_size = tls_allocation_size.align_up(128usize);
 		let layout =
 			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
-		let ptr = VirtAddr(unsafe { alloc(layout) as u64 });
+		let ptr = VirtAddr::new(unsafe { alloc(layout) as u64 });
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = ptr; // + tls_size.align_up(32);
@@ -394,7 +388,7 @@ impl TaskFrame for Task {
 			*stack.as_mut_ptr::<u64>() = 0xDEAD_BEEFu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack = stack - mem::size_of::<State>();
+			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());

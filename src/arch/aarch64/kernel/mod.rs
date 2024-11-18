@@ -17,10 +17,10 @@ use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use hermit_sync::SpinMutex;
+use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
-use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -42,11 +42,11 @@ pub fn is_uhyve_with_pci() -> bool {
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(env::boot_info().hardware_info.phys_addr_range.start)
+	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(env::boot_info().load_info.kernel_image_addr_range.start)
+	VirtAddr::new(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {

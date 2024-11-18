@@ -5,9 +5,10 @@ use core::marker::PhantomData;
 use core::{fmt, mem, ptr};
 
 use align_address::Align;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
-use crate::arch::aarch64::mm::{physicalmem, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::aarch64::mm::{physicalmem, virtualmem};
 use crate::env::is_uhyve;
 use crate::{mm, scheduler, KERNEL_STACK_SIZE};
 
@@ -15,7 +16,7 @@ use crate::{mm, scheduler, KERNEL_STACK_SIZE};
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.
 ///
 /// See entry.S and ARM Cortex-A Series Programmer's Guide for ARMv8-A, Version 1.0, PDF page 172
-const L0TABLE_ADDRESS: VirtAddr = VirtAddr(0x0000_FFFF_FFFF_F000u64);
+const L0TABLE_ADDRESS: VirtAddr = VirtAddr::new(0x0000_FFFF_FFFF_F000u64);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -121,16 +122,14 @@ impl PageTableEntryFlags {
 #[derive(Clone, Copy, Debug)]
 pub struct PageTableEntry {
 	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
-	physical_address_and_flags: PhysAddr,
+	physical_address_and_flags: u64,
 }
 
 impl PageTableEntry {
 	/// Return the stored physical address.
 	pub fn address(&self) -> PhysAddr {
-		PhysAddr(
-			self.physical_address_and_flags.as_u64()
-				& !(BasePageSize::SIZE - 1u64)
-				& !(u64::MAX << 48),
+		PhysAddr::new_truncate(
+			self.physical_address_and_flags & !(BasePageSize::SIZE - 1u64) & !(u64::MAX << 48),
 		)
 	}
 
@@ -147,9 +146,8 @@ impl PageTableEntry {
 	/// * `flags` - Flags from PageTableEntryFlags (note that the PRESENT, INNER_SHAREABLE, and ACCESSED flags are set automatically)
 	fn set(&mut self, physical_address: PhysAddr, flags: PageTableEntryFlags) {
 		// Verify that the offset bits for a 4 KiB page are zero.
-		assert_eq!(
-			physical_address % BasePageSize::SIZE,
-			0,
+		assert!(
+			physical_address.is_aligned_to(BasePageSize::SIZE),
 			"Physical address is not on a 4 KiB page boundary (physical_address = {physical_address:p})"
 		);
 
@@ -157,7 +155,7 @@ impl PageTableEntry {
 		flags_to_set.insert(PageTableEntryFlags::PRESENT);
 		flags_to_set.insert(PageTableEntryFlags::INNER_SHAREABLE);
 		flags_to_set.insert(PageTableEntryFlags::ACCESSED);
-		self.physical_address_and_flags = PhysAddr(physical_address.as_u64() | flags_to_set.bits());
+		self.physical_address_and_flags = physical_address | flags_to_set.bits();
 	}
 }
 
@@ -245,7 +243,7 @@ impl<S: PageSize> Page<S> {
 	/// The upper bits must always be 0 or 1 and indicate whether TBBR0 or TBBR1 contains the
 	/// base address. So always enforce 0 here.
 	fn is_valid_address(virtual_address: VirtAddr) -> bool {
-		virtual_address < VirtAddr(0x1_0000_0000_0000)
+		virtual_address < VirtAddr::new(0x1_0000_0000_0000)
 	}
 
 	/// Returns a Page including the given virtual address.
@@ -257,7 +255,7 @@ impl<S: PageSize> Page<S> {
 		);
 
 		Self {
-			virtual_address: VirtAddr(virtual_address.0.align_down(S::SIZE)),
+			virtual_address: virtual_address.align_down(S::SIZE),
 			size: PhantomData,
 		}
 	}
@@ -487,7 +485,7 @@ where
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
 				for entry in subtable.entries.iter_mut() {
-					entry.physical_address_and_flags = PhysAddr::zero();
+					entry.physical_address_and_flags = PhysAddr::zero().as_u64();
 				}
 			}
 
@@ -547,7 +545,7 @@ where
 #[inline]
 fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageIter<S> {
 	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE as usize);
+	let last_page = Page::<S>::including_address(virtual_address + (count as u64 - 1) * S::SIZE);
 	Page::range(first_page, last_page)
 }
 
@@ -566,7 +564,7 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<Ph
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	let address = root_pagetable.get_page_table_entry(page)?.address();
 	let offset = virtual_address & (S::SIZE - 1);
-	Some(PhysAddr(address.as_u64() | offset.as_u64()))
+	Some(PhysAddr::new(address | offset))
 }
 
 /// Translate a virtual memory address to a physical one.
@@ -608,7 +606,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 		flags
 	};
 
-	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
+	let virt_addrs = (0..count as u64).map(|n| virt_addr + n * S::SIZE);
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
 		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)

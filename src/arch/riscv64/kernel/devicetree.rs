@@ -2,18 +2,19 @@
 use core::ptr::NonNull;
 
 use fdt::Fdt;
+#[cfg(all(feature = "tcp", feature = "gem-net"))]
+use memory_addresses::VirtAddr;
+use memory_addresses::{AddrRange, PhysAddr};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use volatile::VolatileRef;
 
-#[cfg(feature = "gem-net")]
-use crate::arch::mm::VirtAddr;
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
-use crate::arch::riscv64::mm::{paging, PhysAddr};
+use crate::arch::riscv64::mm::paging;
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem;
 #[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
@@ -80,17 +81,18 @@ pub fn init_drivers() {
 					.next()
 					.unwrap();
 
+				let plic_region_start = PhysAddr::new(plic_region.starting_address as u64);
 				debug!(
 					"Init PLIC at {:p}, size: {:x}",
-					plic_region.starting_address,
+					plic_region_start,
 					plic_region.size.unwrap()
 				);
 				paging::identity_map::<paging::HugePageSize>(
-					PhysAddr(plic_region.starting_address as u64),
-					PhysAddr(
-						(plic_region.starting_address as usize + plic_region.size.unwrap() - 1)
-							as u64,
-					),
+					AddrRange::new(
+						plic_region_start,
+						plic_region_start + plic_region.size.unwrap() - 1_u64,
+					)
+					.unwrap(),
 				);
 
 				// TODO: Determine correct context via devicetree and allow more than one context
@@ -137,19 +139,20 @@ pub fn init_drivers() {
 					warn!("Expected ethernet-phy node, found something else");
 				}
 
+				let gem_region_start = PhysAddr::new(gem_region.starting_address as u64);
 				debug!(
 					"Init GEM at {:p}, irq: {}, phy_addr: {}",
-					gem_region.starting_address, irq, phy_addr
+					gem_region_start, irq, phy_addr
 				);
 				paging::identity_map::<paging::HugePageSize>(
-					PhysAddr(gem_region.starting_address as u64),
-					PhysAddr(
-						(gem_region.starting_address as usize + gem_region.size.unwrap() - 1)
-							as u64,
-					),
+					AddrRange::new(
+						gem_region_start,
+						gem_region_start + gem_region.size.unwrap() as u64 - 1_u64,
+					)
+					.unwrap(),
 				);
 				match gem::init_device(
-					VirtAddr(gem_region.starting_address as u64),
+					VirtAddr::new(gem_region_start.as_u64()),
 					irq.try_into().unwrap(),
 					phy_addr,
 					<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
@@ -176,16 +179,18 @@ pub fn init_drivers() {
 					.next()
 					.unwrap();
 
+				let virtio_region_start = PhysAddr::new(virtio_region.starting_address as u64);
+
 				debug!(
 					"Init virtio_mmio at {:p}, irq: {}",
-					virtio_region.starting_address, irq
+					virtio_region_start, irq
 				);
 				paging::identity_map::<paging::HugePageSize>(
-					PhysAddr(virtio_region.starting_address as u64),
-					PhysAddr(
-						(virtio_region.starting_address as usize + virtio_region.size.unwrap() - 1)
-							as u64,
-					),
+					AddrRange::new(
+						virtio_region_start,
+						virtio_region_start + virtio_region.size.unwrap() - 1_u64,
+					)
+					.unwrap(),
 				);
 
 				// Verify the first register value to find out if this is really an MMIO magic-value.

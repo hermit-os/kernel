@@ -8,10 +8,11 @@ use core::ptr;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
+use memory_addresses::{PhysAddr, VirtAddr};
 #[cfg(target_arch = "x86_64")]
 use x86::io::outl;
 
-use crate::arch::mm::{paging, PhysAddr, VirtAddr};
+use crate::arch::mm::paging;
 use crate::env::is_uhyve;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
@@ -22,7 +23,7 @@ use crate::io;
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let ptr = VirtAddr::from_ptr(ptr::from_mut(data));
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
@@ -36,7 +37,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 fn uhyve_send<T>(port: u16, data: &mut T) {
 	use core::arch::asm;
 
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let ptr = VirtAddr::from_ptr(ptr::from_mut(data));
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
@@ -273,7 +274,7 @@ impl VfsNode for UhyveDirectory {
 			path
 		};
 
-		let mut sysopen = SysOpen::new(VirtAddr(path.as_ptr() as u64), opt.bits(), mode.bits());
+		let mut sysopen = SysOpen::new(VirtAddr::from_ptr(path.as_ptr()), opt.bits(), mode.bits());
 		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
 
 		if sysopen.ret > 0 {
@@ -294,7 +295,7 @@ impl VfsNode for UhyveDirectory {
 				.collect()
 		};
 
-		let mut sysunlink = SysUnlink::new(VirtAddr(path.as_ptr() as u64));
+		let mut sysunlink = SysUnlink::new(VirtAddr::from_ptr(path.as_ptr()));
 		uhyve_send(UHYVE_PORT_UNLINK, &mut sysunlink);
 
 		if sysunlink.ret == 0 {

@@ -4,11 +4,13 @@ use core::ptr;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+use memory_addresses::VirtAddr;
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-use crate::arch::mm::{paging, VirtAddr};
+use crate::arch::mm::paging;
 use crate::fd::{ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO};
 use crate::{arch, io};
 
@@ -33,7 +35,7 @@ impl SysWrite {
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let ptr = VirtAddr::from_ptr(ptr::from_mut(data));
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
@@ -47,7 +49,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 fn uhyve_send<T>(port: u16, data: &mut T) {
 	use core::arch::asm;
 
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let ptr = VirtAddr::from_ptr(ptr::from_mut(data));
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {

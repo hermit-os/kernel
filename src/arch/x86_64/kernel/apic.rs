@@ -14,6 +14,7 @@ use align_address::Align;
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
 use hermit_sync::{without_interrupts, OnceCell, SpinMutex};
+use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
@@ -25,7 +26,7 @@ use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::scheduler::CoreId;
@@ -75,14 +76,14 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 /// and need an address in the CS:IP addressing scheme to jump to.
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr(0x8000);
+const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr::new(0x8000);
 
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
+const SMP_BOOT_CODE_OFFSET_ENTRY: u64 = 0x08;
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_CPU_ID: usize = SMP_BOOT_CODE_OFFSET_ENTRY + 0x08;
+const SMP_BOOT_CODE_OFFSET_CPU_ID: u64 = SMP_BOOT_CODE_OFFSET_ENTRY + 0x08;
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_PML4: usize = SMP_BOOT_CODE_OFFSET_CPU_ID + 0x04;
+const SMP_BOOT_CODE_OFFSET_PML4: u64 = SMP_BOOT_CODE_OFFSET_CPU_ID + 0x04;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
@@ -261,7 +262,9 @@ pub fn local_apic_id_count() -> u32 {
 fn init_ioapic_address(phys_addr: PhysAddr) {
 	if env::is_uefi() {
 		// UEFI systems have already id mapped everything, so we can just set the physical address as the virtual one
-		IOAPIC_ADDRESS.set(VirtAddr(phys_addr.as_u64())).unwrap();
+		IOAPIC_ADDRESS
+			.set(VirtAddr::new(phys_addr.as_u64()))
+			.unwrap();
 	} else {
 		let ioapic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
@@ -316,7 +319,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 					unsafe { &*(ptr::with_exposed_provenance::<IoApicRecord>(current_address)) };
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
-				init_ioapic_address(PhysAddr(ioapic_record.address.into()));
+				init_ioapic_address(PhysAddr::new(ioapic_record.address.into()));
 			}
 			_ => {
 				// Just ignore other entries for now.
@@ -328,19 +331,19 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 
 	// Successfully derived all information from the MADT.
 	// Return the physical address of the Local APIC.
-	Ok(PhysAddr(madt_header.local_apic_address.into()))
+	Ok(PhysAddr::new(madt_header.local_apic_address.into()))
 }
 
 /// Helper function to search Floating Pointer Structure of the Multiprocessing Specification
-fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP, ()> {
+fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static ApicMP, ()> {
 	let virtual_address = virtualmem::allocate(BasePageSize::SIZE as usize).map_err(|_| ())?;
 
-	for current_address in (start.as_usize()..end.as_usize()).step_by(BasePageSize::SIZE as usize) {
+	for current_address in memory_range.iter().step_by(BasePageSize::SIZE as usize) {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable();
 		paging::map::<BasePageSize>(
 			virtual_address,
-			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
+			current_address.align_down(BasePageSize::SIZE),
 			1,
 			flags,
 		);
@@ -365,9 +368,13 @@ fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP,
 
 /// Helper function to detect APIC by the Multiprocessor Specification
 fn detect_from_mp() -> Result<PhysAddr, ()> {
-	let mp_float = if let Ok(mpf) = search_mp_floating(PhysAddr(0x9F000u64), PhysAddr(0xA0000u64)) {
+	let mp_float = if let Ok(mpf) = search_mp_floating(
+		AddrRange::new(PhysAddr::new(0x9F000u64), PhysAddr::new(0xA0000u64)).unwrap(),
+	) {
 		Ok(mpf)
-	} else if let Ok(mpf) = search_mp_floating(PhysAddr(0xF0000u64), PhysAddr(0x100000u64)) {
+	} else if let Ok(mpf) = search_mp_floating(
+		AddrRange::new(PhysAddr::new(0xF0000u64), PhysAddr::new(0x100000u64)).unwrap(),
+	) {
 		Ok(mpf)
 	} else {
 		Err(())
@@ -397,8 +404,8 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		flags,
 	);
 
-	let mut addr: usize = virtual_address.as_usize()
-		| (mp_float.mp_config as usize & (BasePageSize::SIZE as usize - 1));
+	let mut addr: usize =
+		(virtual_address | (mp_float.mp_config as u64 & (BasePageSize::SIZE - 1))) as usize;
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("Invalid MP config table");
@@ -408,7 +415,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 
 	if mp_config.entry_count == 0 {
 		warn!("No MP table entries! Guess IO-APIC!");
-		let default_address = PhysAddr(0xFEC0_0000);
+		let default_address = PhysAddr::new(0xFEC0_0000);
 
 		init_ioapic_address(default_address);
 	} else {
@@ -428,7 +435,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				// IO-APIC entry
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
-					let ioapic = PhysAddr(io_entry.addr.into());
+					let ioapic = PhysAddr::new(io_entry.addr.into());
 					info!("Found IOAPIC at 0x{:p}", ioapic);
 
 					init_ioapic_address(ioapic);
@@ -442,13 +449,13 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		}
 	}
 
-	Ok(PhysAddr(mp_config.lapic as u64))
+	Ok(PhysAddr::new(mp_config.lapic as u64))
 }
 
 fn default_apic() -> PhysAddr {
 	warn!("Try to use default APIC address");
 
-	let default_address = PhysAddr(0xFEE0_0000);
+	let default_address = PhysAddr::new(0xFEE0_0000);
 
 	// currently, uhyve doesn't support an IO-APIC
 	if !env::is_uhyve() {
@@ -476,7 +483,7 @@ pub fn init() {
 		if env::is_uefi() {
 			//already id mapped in UEFI systems, just use the physical address as virtual one
 			LOCAL_APIC_ADDRESS
-				.set(VirtAddr(local_apic_physical_address.as_u64()))
+				.set(VirtAddr::new(local_apic_physical_address.as_u64()))
 				.unwrap();
 		} else {
 			let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
@@ -725,12 +732,9 @@ pub fn boot_application_processors() {
 	if env::is_uefi() {
 		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
 		let pt = unsafe { crate::arch::mm::paging::identity_mapped_page_table() };
-		let virt_addr = SMP_BOOT_CODE_ADDRESS.0;
-		let phys_addr = pt
-			.translate_addr(x86_64::VirtAddr::new(virt_addr))
-			.unwrap()
-			.as_u64();
-		assert_eq!(phys_addr, virt_addr)
+		let virt_addr = SMP_BOOT_CODE_ADDRESS;
+		let phys_addr = pt.translate_addr(virt_addr.into()).unwrap();
+		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64())
 	} else {
 		// Identity-map the boot code page and copy over the code.
 		debug!(
@@ -741,7 +745,7 @@ pub fn boot_application_processors() {
 		flags.normal().writable();
 		paging::map::<BasePageSize>(
 			SMP_BOOT_CODE_ADDRESS,
-			PhysAddr(SMP_BOOT_CODE_ADDRESS.as_u64()),
+			PhysAddr::new(SMP_BOOT_CODE_ADDRESS.as_u64()),
 			1,
 			flags,
 		);

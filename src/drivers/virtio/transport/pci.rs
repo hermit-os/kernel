@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
 
+use memory_addresses::PhysAddr;
 use pci_types::capability::PciCapability;
 use virtio::pci::{
 	CapCfgType, CapData, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
@@ -17,7 +18,6 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::memory_barrier;
-use crate::arch::mm::PhysAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "fuse")]

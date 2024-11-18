@@ -3,11 +3,12 @@ use core::ptr;
 
 use align_address::Align;
 use hermit_sync::SpinMutex;
+use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 use riscv::asm::sfence_vma;
 use riscv::register::satp;
 
 use crate::arch::riscv64::kernel::get_ram_address;
-use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
+use crate::arch::riscv64::mm::physicalmem;
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
 
@@ -101,7 +102,7 @@ pub struct PageTableEntry {
 impl PageTableEntry {
 	/// Return the stored physical address.
 	pub fn address(&self) -> PhysAddr {
-		PhysAddr(
+		PhysAddr::new(
 			(
 				self.physical_address_and_flags.as_u64() & !(0x3FFu64)
 				//& !(0x3FFu64 << 54)
@@ -142,9 +143,8 @@ impl PageTableEntry {
 	/// * `flags` - Flags from PageTableEntryFlags (note that the VALID, GLOBAL, DIRTY and ACCESSED flags are set)
 	fn set(&mut self, physical_address: PhysAddr, flags: PageTableEntryFlags) {
 		// Verify that the offset bits for a 4 KiB page are zero.
-		assert_eq!(
-			physical_address % BasePageSize::SIZE as usize,
-			0,
+		assert!(
+			physical_address.is_aligned_to(BasePageSize::SIZE),
 			"Physical address is not on a 4 KiB page boundary (physical_address = {physical_address:#X})"
 		);
 
@@ -152,7 +152,7 @@ impl PageTableEntry {
 		flags_to_set.insert(PageTableEntryFlags::VALID);
 		flags_to_set.insert(PageTableEntryFlags::GLOBAL);
 		self.physical_address_and_flags =
-			PhysAddr((physical_address.as_u64() >> 2) | flags_to_set.bits());
+			PhysAddr::new((physical_address.as_u64() >> 2) | flags_to_set.bits());
 	}
 }
 
@@ -242,7 +242,7 @@ impl<S: PageSize> Page<S> {
 		);
 
 		Self {
-			virtual_address: VirtAddr(virtual_address.0.align_down(S::SIZE)),
+			virtual_address: virtual_address.align_down(S::SIZE),
 			size: PhantomData,
 		}
 	}
@@ -503,7 +503,7 @@ where
 #[inline]
 fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageIter<S> {
 	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE as usize);
+	let last_page = Page::<S>::including_address(virtual_address + (count as u64 - 1) * S::SIZE);
 	Page::range(first_page, last_page)
 }
 
@@ -573,7 +573,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 				// );
 				phys_address |= ppn & (PAGE_MAP_MASK << (PAGE_BITS + j * PAGE_MAP_BITS)) as u64;
 			}
-			return Some(PhysAddr(phys_address));
+			return Some(PhysAddr::new(phys_address));
 		} else {
 			//PTE is a pointer to the next level of the page table
 			assert!(i != 0); //pte should be a leaf if i=0
@@ -617,7 +617,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 		flags
 	};
 
-	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
+	let virt_addrs = (0..count as u64).map(|n| virt_addr + n * S::SIZE);
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
 		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
@@ -644,9 +644,9 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
-pub fn identity_map<S: PageSize>(start_address: PhysAddr, end_address: PhysAddr) {
-	let first_page = Page::<S>::including_address(VirtAddr(start_address.as_u64()));
-	let last_page = Page::<S>::including_address(VirtAddr(end_address.as_u64()));
+pub fn identity_map<S: PageSize>(memory: AddrRange<PhysAddr>) {
+	let first_page = Page::<S>::including_address(VirtAddr::new(memory.start.as_u64()));
+	let last_page = Page::<S>::including_address(VirtAddr::new(memory.end.as_u64()));
 
 	trace!(
 		"identity_map address {:#X} to address {:#X}",
@@ -668,15 +668,18 @@ pub fn identity_map<S: PageSize>(start_address: PhysAddr, end_address: PhysAddr)
 	flags.normal().writable();
 	ROOT_PAGETABLE
 		.lock()
-		.map_pages(range, PhysAddr(first_page.address().as_u64()), flags);
+		.map_pages(range, PhysAddr::new(first_page.address().as_u64()), flags);
 }
 
 pub fn init_page_tables() {
 	trace!("Identity map the physical memory using HugePages");
 
 	identity_map::<HugePageSize>(
-		get_ram_address(),
-		get_ram_address() + PhysAddr(physicalmem::total_memory_size() as u64 - 1),
+		AddrRange::new(
+			get_ram_address(),
+			get_ram_address() + physicalmem::total_memory_size() as u64 - 1u64,
+		)
+		.unwrap(),
 	);
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
 	satp::write(0x8 << 60 | (ROOT_PAGETABLE.data_ptr().addr() >> 12));

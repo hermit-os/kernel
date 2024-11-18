@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use core::convert::TryInto;
 use core::{mem, slice};
 
+use memory_addresses::VirtAddr;
 use riscv::register::*;
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
@@ -20,7 +21,6 @@ use crate::arch::kernel::interrupts::*;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::arch::kernel::mmio as hardware;
 use crate::arch::mm::paging::virt_to_phys;
-use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
@@ -626,10 +626,10 @@ pub fn init_device(
 	// Allocate Transmit Buffer Descriptor List
 	let txbuffer_list = crate::mm::allocate((8 * TX_BUF_NUM) as usize, true);
 
-	if txbuffer.is_zero()
-		|| rxbuffer.is_zero()
-		|| rxbuffer_list.is_zero()
-		|| txbuffer_list.is_zero()
+	if txbuffer.is_null()
+		|| rxbuffer.is_null()
+		|| rxbuffer_list.is_null()
+		|| txbuffer_list.is_null()
 	{
 		error!("Unable to allocate buffers for GEM");
 		return Err(DriverError::InitGEMDevFail(GEMError::Unknown));

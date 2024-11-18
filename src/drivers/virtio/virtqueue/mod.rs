@@ -19,6 +19,7 @@ use core::any::Any;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
+use memory_addresses::VirtAddr;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
@@ -26,7 +27,7 @@ use self::error::VirtqError;
 use super::transport::mmio::{ComCfg, NotifCfg};
 #[cfg(feature = "pci")]
 use super::transport::pci::{ComCfg, NotifCfg};
-use crate::arch::mm::{paging, VirtAddr};
+use crate::arch::mm::paging;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
@@ -220,7 +221,7 @@ trait VirtqPrivate {
 
 	fn indirect_desc(table: &[Self::Descriptor]) -> Self::Descriptor {
 		Self::Descriptor::incomplete_desc(
-			paging::virt_to_phys(VirtAddr::from(table.as_ptr() as u64))
+			paging::virt_to_phys(VirtAddr::from_ptr(table.as_ptr()))
 				.as_u64()
 				.into(),
 			(mem::size_of_val(table) as u32).into(),
@@ -264,7 +265,7 @@ trait VirtqPrivate {
 				.chain(recv_desc_iter)
 				.map(|(mem_descr, len, incomplete_flags)| {
 					Self::Descriptor::incomplete_desc(
-						paging::virt_to_phys(VirtAddr::from(mem_descr.addr() as u64))
+						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
 							.as_u64()
 							.into(),
 						(len as u32).into(),

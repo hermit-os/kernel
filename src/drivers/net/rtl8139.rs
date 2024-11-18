@@ -5,12 +5,12 @@
 use alloc::boxed::Box;
 use core::mem;
 
+use memory_addresses::VirtAddr;
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86::io::*;
 
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
-use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
@@ -525,7 +525,7 @@ pub(crate) fn init_device(
 	);
 
 	let phys_addr = |p| {
-		virt_to_phys(VirtAddr::from_usize(p as _))
+		virt_to_phys(VirtAddr::from_ptr(p))
 			.as_u64()
 			.try_into()
 			.unwrap()

@@ -10,6 +10,7 @@ use core::slice;
 use core::{mem, ptr};
 
 use align_address::Align;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use super::interrupts::{IDT, IST_SIZE};
 use crate::arch::x86_64::kernel::core_local::*;
@@ -17,7 +18,6 @@ use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::env;
 use crate::scheduler::task::{Task, TaskFrame};
@@ -145,7 +145,7 @@ impl TaskStacks {
 		// clear user stack
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE as usize)
+				(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
 					.as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
@@ -161,12 +161,13 @@ impl TaskStacks {
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let tss = unsafe { &*CoreLocal::get().tss.get() };
-		let stack = VirtAddr::from_usize(
-			tss.privilege_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
+		let stack = VirtAddr::new(
+			tss.privilege_stack_table[0].as_u64() + Self::MARKER_SIZE as u64
+				- KERNEL_STACK_SIZE as u64,
 		);
 		debug!("Using boot stack {:p}", stack);
-		let ist1 = VirtAddr::from_usize(
-			tss.interrupt_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - IST_SIZE,
+		let ist1 = VirtAddr::new(
+			tss.interrupt_stack_table[0].as_u64() + Self::MARKER_SIZE as u64 - IST_SIZE as u64,
 		);
 		debug!("IST1 is located at {:p}", ist1);
 
@@ -354,7 +355,7 @@ impl TaskFrame for Task {
 			*stack.as_mut_ptr::<u64>() = 0xDEAD_BEEFu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack = stack - mem::size_of::<State>();
+			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());

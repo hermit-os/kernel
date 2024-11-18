@@ -7,6 +7,7 @@ use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 use core::ptr;
 
+use memory_addresses::VirtAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -23,7 +24,7 @@ use super::{
 	VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
-use crate::arch::mm::{paging, VirtAddr};
+use crate::arch::mm::paging;
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {

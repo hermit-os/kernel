@@ -5,6 +5,7 @@
 
 use core::mem;
 
+use memory_addresses::PhysAddr;
 use virtio::mmio::{
 	DeviceRegisters, DeviceRegistersVolatileFieldAccess, DeviceRegistersVolatileWideFieldAccess,
 	InterruptStatus, NotificationData,
@@ -13,7 +14,6 @@ use virtio::{le32, DeviceStatus};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
-use crate::arch::mm::PhysAddr;
 use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
@@ -51,19 +51,28 @@ impl VqCfgHandler<'_> {
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
 
-		self.raw.as_mut_ptr().queue_desc().write(addr.0.into());
+		self.raw
+			.as_mut_ptr()
+			.queue_desc()
+			.write(addr.as_u64().into());
 	}
 
 	pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
 
-		self.raw.as_mut_ptr().queue_driver().write(addr.0.into());
+		self.raw
+			.as_mut_ptr()
+			.queue_driver()
+			.write(addr.as_u64().into());
 	}
 
 	pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
 
-		self.raw.as_mut_ptr().queue_device().write(addr.0.into());
+		self.raw
+			.as_mut_ptr()
+			.queue_device()
+			.write(addr.as_u64().into());
 	}
 
 	pub fn enable_queue(&mut self) {

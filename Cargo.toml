@@ -135,12 +135,20 @@ multiboot = "0.8"
 uart_16550 = "0.3"
 x86 = { version = "0.52", default-features = false }
 x86_64 = "0.15"
+memory_addresses = { version = "0.2.2", default-features = false, features = [
+  "x86_64",
+  "conv-x86",
+  "conv-x86_64",
+] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
-aarch64 = { version = "0.0.10", default-features = false }
+aarch64 = { version = "0.0.13", default-features = false }
 arm-gic = { version = "0.1" }
 hermit-dtb = { version = "0.1" }
 semihosting = { version = "0.1", optional = true }
+memory_addresses = { version = "0.2.2", default-features = false, features = [
+  "aarch64",
+] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = "0.12"
@@ -148,6 +156,9 @@ sbi-rt = "0.0.3"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.9", optional = true }
 trapframe = "0.10"
+memory_addresses = { version = "0.2.2", default-features = false, features = [
+  "riscv64",
+] }
 
 [dev-dependencies]
 float-cmp = "0.10"

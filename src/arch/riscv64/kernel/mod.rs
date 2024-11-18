@@ -16,12 +16,13 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use fdt::Fdt;
+use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::sstatus;
 
 use crate::arch::riscv64::kernel::core_local::{core_id, CoreLocal};
 pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
 use crate::arch::riscv64::kernel::processor::lsb;
-use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
+use crate::arch::riscv64::mm::physicalmem;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
 use crate::init_cell::InitCell;
@@ -44,7 +45,7 @@ pub fn is_uhyve_with_pci() -> bool {
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(env::boot_info().hardware_info.phys_addr_range.start)
+	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
@@ -73,7 +74,7 @@ pub fn get_processor_count() -> u32 {
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(env::boot_info().load_info.kernel_image_addr_range.start)
+	VirtAddr::new(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn args() -> Option<&'static str> {

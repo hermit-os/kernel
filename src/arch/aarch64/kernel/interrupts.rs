@@ -10,11 +10,12 @@ use arm_gic::gicv3::{GicV3, IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
+use memory_addresses::arch::aarch64::PhysAddr;
 
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
+use crate::arch::aarch64::mm::virtualmem;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
@@ -235,11 +236,11 @@ pub(crate) fn init() {
 
 	let reg = dtb.get_property("/intc", "reg").unwrap();
 	let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
-	let gicd_start = PhysAddr(u64::from_be_bytes(slice.try_into().unwrap()));
+	let gicd_start = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
 	let (slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 	let gicd_size = u64::from_be_bytes(slice.try_into().unwrap());
 	let (slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
-	let gicc_start = PhysAddr(u64::from_be_bytes(slice.try_into().unwrap()));
+	let gicc_start = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
 	let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 	let gicc_size = u64::from_be_bytes(slice.try_into().unwrap());
 

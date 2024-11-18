@@ -6,7 +6,7 @@ use core::slice;
 
 #[cfg(feature = "common-os")]
 use align_address::Align;
-pub use x86::bits64::paging::{PAddr as PhysAddr, VAddr as VirtAddr};
+use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 #[cfg(feature = "common-os")]
 use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
@@ -53,7 +53,7 @@ pub fn create_new_root_page_table() -> usize {
 
 	let entry: u64 = unsafe {
 		let cr3 = x86::controlregs::cr3().align_down(BasePageSize::SIZE);
-		paging::map::<BasePageSize>(virtaddr, PhysAddr(cr3), 1, flags);
+		paging::map::<BasePageSize>(virtaddr, PhysAddr::new(cr3), 1, flags);
 		let entry: &u64 = &*virtaddr.as_ptr();
 
 		*entry

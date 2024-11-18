@@ -6,10 +6,10 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use hermit_sync::InterruptSpinMutex;
+use memory_addresses::{PhysAddr, VirtAddr};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use self::serial::SerialPort;
-use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::env::{self, is_uhyve};
 
@@ -41,11 +41,11 @@ mod vga;
 pub(crate) static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(env::boot_info().hardware_info.phys_addr_range.start)
+	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(env::boot_info().load_info.kernel_image_addr_range.start)
+	VirtAddr::new(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {

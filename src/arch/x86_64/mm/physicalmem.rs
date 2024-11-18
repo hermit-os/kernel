@@ -2,11 +2,12 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
+use memory_addresses::{PhysAddr, VirtAddr};
 use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::MultibootMemory;
 use crate::{env, mm};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
@@ -55,7 +56,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 			let start_address = if start_address <= mm::kernel_start_address().as_u64() {
 				mm::kernel_end_address()
 			} else {
-				VirtAddr(start_address)
+				VirtAddr::new(start_address)
 			};
 
 			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
@@ -93,11 +94,11 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		let start_address = if m.base_address() <= mm::kernel_start_address().as_u64() {
 			mm::kernel_end_address()
 		} else {
-			VirtAddr(m.base_address())
+			VirtAddr::new(m.base_address())
 		};
 
 		let range = PageRange::new(
-			start_address.as_usize(),
+			start_address.as_u64() as usize,
 			(m.base_address() + m.length()) as usize,
 		)
 		.unwrap();
@@ -127,8 +128,11 @@ fn detect_from_uhyve() -> Result<(), ()> {
 
 	// add gap for the APIC
 	if limit > KVM_32BIT_GAP_START {
-		let range =
-			PageRange::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START).unwrap();
+		let range = PageRange::new(
+			mm::kernel_end_address().as_u64() as usize,
+			KVM_32BIT_GAP_START,
+		)
+		.unwrap();
 		unsafe {
 			free_list.deallocate(range).unwrap();
 		}
@@ -142,7 +146,7 @@ fn detect_from_uhyve() -> Result<(), ()> {
 			total_memory = KVM_32BIT_GAP_START;
 		}
 	} else {
-		let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
+		let range = PageRange::new(mm::kernel_end_address().as_u64() as usize, limit).unwrap();
 		unsafe {
 			free_list.deallocate(range).unwrap();
 		}
@@ -177,7 +181,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 
 	let layout = PageLayout::from_size(size).unwrap();
 
-	Ok(PhysAddr(
+	Ok(PhysAddr::new(
 		PHYSICAL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -205,7 +209,7 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocErro
 
 	let layout = PageLayout::from_size_align(size, align).unwrap();
 
-	Ok(PhysAddr(
+	Ok(PhysAddr::new(
 		PHYSICAL_FREE_LIST
 			.lock()
 			.allocate(layout)?
@@ -227,7 +231,7 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	let range = PageRange::from_start_len(physical_address.as_usize(), size).unwrap();
+	let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
 
 	unsafe {
 		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
@@ -237,9 +241,9 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 #[allow(dead_code)]
 #[cfg(not(feature = "pci"))]
 pub fn reserve(physical_address: PhysAddr, size: usize) {
-	assert_eq!(
-		physical_address % BasePageSize::SIZE as usize,
-		0,
+	use align_address::Align;
+	assert!(
+		physical_address.is_aligned_to(BasePageSize::SIZE),
 		"Physical address {:p} is not a multiple of {:#X}",
 		physical_address,
 		BasePageSize::SIZE

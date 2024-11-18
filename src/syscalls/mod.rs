@@ -686,5 +686,5 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_image_start_addr() -> usize {
-	crate::mm::kernel_start_address().0.try_into().unwrap()
+	crate::mm::kernel_start_address().as_usize()
 }

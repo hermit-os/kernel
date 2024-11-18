@@ -2,25 +2,26 @@ use core::{mem, ptr, slice, str};
 
 use align_address::Align;
 use hermit_sync::OnceCell;
+use memory_addresses::{PhysAddr, VirtAddr};
 use x86::io::*;
 use x86_64::structures::paging::PhysFrame;
 
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::env;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
-const EBDA_PTR_LOCATION: PhysAddr = PhysAddr(0x0000_040E);
+const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040E);
 /// Minimum physical address where a valid EBDA must be located.
-const EBDA_MINIMUM_ADDRESS: PhysAddr = PhysAddr(0x400);
+const EBDA_MINIMUM_ADDRESS: PhysAddr = PhysAddr::new(0x400);
 /// The size of the EBDA window that is searched for an ACPI RSDP.
 const EBDA_WINDOW_SIZE: usize = 1024;
 /// The lower bound of the other address range, where the ACPI RSDP could be located.
-const RSDP_SEARCH_ADDRESS_LOW: PhysAddr = PhysAddr(0xE_0000);
+const RSDP_SEARCH_ADDRESS_LOW: PhysAddr = PhysAddr::new(0xE_0000);
 /// The upper bound of the other address range, where the ACPI RSDP could be located.
-const RSDP_SEARCH_ADDRESS_HIGH: PhysAddr = PhysAddr(0xF_FFFF);
+const RSDP_SEARCH_ADDRESS_HIGH: PhysAddr = PhysAddr::new(0xF_FFFF);
 /// Length in bytes of the structure, over which the basic (ACPI 1.0) checksum is calculated.
 const RSDP_CHECKSUM_LENGTH: usize = 20;
 /// Length in byte sof the structure, over which the extended (ACPI 2.0+) checksum is calculated.
@@ -101,7 +102,7 @@ impl AcpiTable<'_> {
 	fn map(physical_address: PhysAddr) -> Self {
 		if env::is_uefi() {
 			// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
-			let allocated_virtual_address = VirtAddr(physical_address.0);
+			let allocated_virtual_address = VirtAddr::new(physical_address.as_u64());
 			let header = unsafe {
 				allocated_virtual_address
 					.as_ptr::<AcpiSdtHeader>()
@@ -126,8 +127,8 @@ impl AcpiTable<'_> {
 		let mut allocated_length = 2 * BasePageSize::SIZE as usize;
 		let mut count = allocated_length / BasePageSize::SIZE as usize;
 
-		let physical_map_address = physical_address.align_down_to_base_page();
-		let offset: usize = (physical_address - physical_map_address).into();
+		let physical_map_address = physical_address.align_down(BasePageSize::SIZE);
+		let offset = (physical_address - physical_map_address) as usize;
 		let mut virtual_address = virtualmem::allocate(allocated_length).unwrap();
 		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
@@ -343,12 +344,11 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 	}
 
 	// Get the address of the EBDA.
-	let frame =
-		PhysFrame::<BasePageSize>::containing_address(x86_64::PhysAddr::new(EBDA_PTR_LOCATION.0));
+	let frame = PhysFrame::<BasePageSize>::containing_address(EBDA_PTR_LOCATION.into());
 	paging::identity_map(frame);
 	let ebda_ptr_location: &u16 =
 		unsafe { &*(VirtAddr::from(EBDA_PTR_LOCATION.as_u64()).as_ptr()) };
-	let ebda_address = PhysAddr((*ebda_ptr_location as u64) << 4);
+	let ebda_address = PhysAddr::new((*ebda_ptr_location as u64) << 4);
 
 	// Check if the pointed address is valid. This check is also done in ACPICA.
 	if ebda_address > EBDA_MINIMUM_ADDRESS {
@@ -442,9 +442,9 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	// Map the "Differentiated System Description Table" (DSDT).
 	let x_dsdt_field_address = ptr::addr_of!(fadt_table.x_dsdt) as usize;
 	let dsdt_address = if x_dsdt_field_address < fadt.table_end_address() && fadt_table.x_dsdt > 0 {
-		PhysAddr(fadt_table.x_dsdt)
+		PhysAddr::new(fadt_table.x_dsdt)
 	} else {
-		PhysAddr(fadt_table.dsdt.into())
+		PhysAddr::new(fadt_table.dsdt.into())
 	};
 	let dsdt = AcpiTable::map(dsdt_address);
 
@@ -500,9 +500,9 @@ pub fn init() {
 	// Both are called RSDT in the following.
 	let rsdp = detect_acpi().expect("Hermit requires an ACPI-compliant system");
 	let rsdt_physical_address = if rsdp.revision >= 2 {
-		PhysAddr(rsdp.xsdt_physical_address)
+		PhysAddr::new(rsdp.xsdt_physical_address)
 	} else {
-		PhysAddr(rsdp.rsdt_physical_address.into())
+		PhysAddr::new(rsdp.rsdt_physical_address.into())
 	};
 
 	// Map the RSDT.
@@ -516,13 +516,13 @@ pub fn init() {
 		// The XSDT contains 64-bit pointers whereas the RSDT has 32-bit pointers.
 		let table_physical_address = if rsdp.revision >= 2 {
 			let address = unsafe {
-				PhysAddr(ptr::with_exposed_provenance::<u64>(current_address).read_unaligned())
+				PhysAddr::new(ptr::with_exposed_provenance::<u64>(current_address).read_unaligned())
 			};
 			current_address += mem::size_of::<u64>();
 			address
 		} else {
 			let address = unsafe {
-				PhysAddr(
+				PhysAddr::new(
 					ptr::with_exposed_provenance::<u32>(current_address)
 						.read_unaligned()
 						.into(),

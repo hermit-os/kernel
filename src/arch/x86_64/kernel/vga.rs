@@ -1,8 +1,9 @@
 use hermit_sync::SpinMutex;
+use memory_addresses::{PhysAddr, VirtAddr};
 use x86::io::*;
 
+use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
-use crate::arch::x86_64::mm::{paging, PhysAddr, VirtAddr};
 
 const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
 const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
@@ -13,7 +14,7 @@ const ATTRIBUTE_BLACK: u8 = 0x00;
 const ATTRIBUTE_LIGHTGREY: u8 = 0x07;
 const COLS: usize = 80;
 const ROWS: usize = 25;
-const VGA_BUFFER_ADDRESS: u64 = 0xB8000;
+const VGA_BUFFER_ADDRESS: PhysAddr = PhysAddr::new(0xB8000);
 
 static VGA_SCREEN: SpinMutex<VgaScreen> = SpinMutex::new(VgaScreen::new());
 
@@ -46,7 +47,7 @@ unsafe impl Send for VgaScreen {}
 impl VgaScreen {
 	const fn new() -> Self {
 		Self {
-			buffer: VGA_BUFFER_ADDRESS as *mut _,
+			buffer: VGA_BUFFER_ADDRESS.as_u64() as *mut _,
 			current_col: 0,
 			current_row: 0,
 			is_initialized: false,
@@ -58,8 +59,8 @@ impl VgaScreen {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
 		paging::map::<BasePageSize>(
-			VirtAddr(VGA_BUFFER_ADDRESS),
-			PhysAddr(VGA_BUFFER_ADDRESS),
+			VirtAddr::new(VGA_BUFFER_ADDRESS.as_u64()),
+			VGA_BUFFER_ADDRESS,
 			1,
 			flags,
 		);
