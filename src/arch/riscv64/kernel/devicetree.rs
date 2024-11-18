@@ -206,7 +206,7 @@ pub fn init_drivers() {
 				}
 
 				if version != 2 {
-					warn!("Found a leagacy device, which isn't supported");
+					warn!("Found a legacy device, which isn't supported");
 				} else {
 					// We found a MMIO-device (whose 512-bit address in this structure).
 					trace!("Found a MMIO-device at {mmio:p}");

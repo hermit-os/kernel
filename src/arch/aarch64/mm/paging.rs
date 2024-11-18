@@ -598,7 +598,7 @@ pub fn map<S: PageSize>(
 }
 
 /// Maps `count` pages at address `virt_addr`. If the allocation of a physical memory failed,
-/// the number of successfull mapped pages are returned as error value.
+/// the number of successful mapped pages are returned as error value.
 pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), usize> {
 	let flags = {
 		let mut flags = PageTableEntryFlags::empty();

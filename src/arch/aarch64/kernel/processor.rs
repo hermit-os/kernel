@@ -262,7 +262,7 @@ pub fn print_information() {
 		.unwrap_or(b"unknown");
 
 	infoheader!(" CPU INFORMATION ");
-	infoentry!("Processor compatiblity", str::from_utf8(reg).unwrap());
+	infoentry!("Processor compatibility", str::from_utf8(reg).unwrap());
 	infoentry!("Counter frequency", *CPU_FREQUENCY);
 	if run_on_hypervisor() {
 		info!("Run on hypervisor");

@@ -254,7 +254,7 @@ impl ComCfg {
 	pub fn print_information(&mut self) {
 		let ptr = self.com_cfg.as_ptr();
 
-		infoheader!(" MMIO RREGISTER LAYOUT INFORMATION ");
+		infoheader!(" MMIO REGISTER LAYOUT INFORMATION ");
 
 		infoentry!("Device version", "{:#X}", ptr.version().read());
 		infoentry!("Device ID", "{:?}", ptr.device_id().read());

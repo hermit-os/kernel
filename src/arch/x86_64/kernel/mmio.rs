@@ -117,7 +117,7 @@ fn check_linux_args(
 				return Ok((mmio, irq));
 			}
 			_ => {
-				warn!("Inavlid prefix in {}", arg);
+				warn!("Invalid prefix in {}", arg);
 			}
 		}
 	}

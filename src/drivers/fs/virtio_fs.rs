@@ -91,7 +91,7 @@ impl VirtioFsDriver {
 		// Reset
 		self.com_cfg.reset_dev();
 
-		// Indiacte device, that OS noticed it
+		// Indicate device, that OS noticed it
 		self.com_cfg.ack_dev();
 
 		// Indicate device, that driver is able to handle it

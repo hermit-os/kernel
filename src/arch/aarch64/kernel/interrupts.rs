@@ -225,7 +225,7 @@ pub fn wakeup_core(_core_to_wakeup: CoreId) {
 }
 
 pub(crate) fn init() {
-	info!("Intialize generic interrupt controller");
+	info!("Initialize generic interrupt controller");
 
 	let dtb = unsafe {
 		Dtb::from_raw(ptr::with_exposed_provenance(

@@ -205,7 +205,7 @@ pub enum GEMError {
 
 /// GEM network driver struct.
 ///
-/// Struct allows to control device queus as also
+/// Struct allows to control device queues and also
 /// the device itself.
 pub struct GEMDriver {
 	// Pointer to the registers of the controller
@@ -322,7 +322,7 @@ impl NetworkDriver for GEMDriver {
 				let word1_entry =
 					unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
 				let length = word1_entry & 0x1FFF;
-				debug!("Recieved frame in buffer {}, length: {}", index, length);
+				debug!("Received frame in buffer {}, length: {}", index, length);
 
 				// Starting point to search for next frame
 				self.rx_counter = (index + 1) % RX_BUF_NUM;
@@ -432,7 +432,7 @@ impl GEMDriver {
 		}
 	}
 
-	/// Returns the index of the next recieved frame
+	/// Returns the index of the next received frame
 	fn next_rx_index(&self) -> Option<u32> {
 		// Scan the buffer descriptor queue starting from rx_count
 
@@ -580,7 +580,7 @@ pub fn init_device(
 		// This is PHY specific and may not work on all PHYs
 		let phy_status = phy_read(gem, phy_addr, PhyReg::Status);
 
-		// Chck for auto-negotiation ability
+		// Check for auto-negotiation ability
 		if (phy_status & PhyStatus::ANCapMask as u16) == 0 {
 			warn!("PHY does not support auto-negotiation");
 		// TODO

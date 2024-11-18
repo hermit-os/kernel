@@ -48,7 +48,7 @@ impl TaskNotify {
 
 	pub fn wait(&self, timeout: Option<u64>) {
 		// Wait for a futex and reset the value to zero. If the value
-		// is not zero, someone already wanted to wakeup a taks and stored another
+		// is not zero, someone already wanted to wakeup a task and stored another
 		// value to the futex address. In this case, the function directly returns
 		// and doesn't block.
 		let _ = futex_wait_and_set(&self.futex, 0, timeout, Flags::RELATIVE, 0);

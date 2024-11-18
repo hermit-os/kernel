@@ -1195,7 +1195,7 @@ pub(crate) fn init() {
 				};
 
 				offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
-				// Allign to dirent struct
+				// Align to dirent struct
 				offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
 				let name: &'static [u8] = unsafe {

@@ -279,7 +279,7 @@ impl NetworkDriver for RTL8139Driver {
 				let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
 
 				// do we reach the end of the receive buffers?
-				// in this case, we conact the two slices to one vec
+				// in this case, we contact the two slices to one vec
 				let vec_data = if pos + length as usize > RX_BUF_LEN {
 					let first = &self.rxbuffer[pos..RX_BUF_LEN];
 					let second = &self.rxbuffer[..length as usize - first.len()];

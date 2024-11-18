@@ -328,7 +328,7 @@ impl ReadCtrl<'_> {
 			//  };
 			//
 			// INFO:
-			// Due to the behaviour of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
+			// Due to the behavior of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
 			// flag correctly upon writes. Hence we omit it, in order to receive data.
 
 			// We need to read the written length before advancing the position.
@@ -350,7 +350,7 @@ impl ReadCtrl<'_> {
 			self.desc_ring.dev_wc.wrap()
 		}
 
-		// Increment capcity as we have one more free now!
+		// Increment capacity as we have one more free now!
 		assert!(self.desc_ring.capacity <= u16::try_from(self.desc_ring.ring.len()).unwrap());
 		self.desc_ring.capacity += 1;
 
