@@ -161,7 +161,7 @@ impl TaskStacks {
 		unsafe {
 			ptr::write_bytes(
 				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE).as_mut_ptr::<u8>(),
-				0xAC,
+				0,
 				user_stack_size,
 			);
 		}
@@ -360,8 +360,6 @@ impl TaskFrame for Task {
 			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
-			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
-
 			if let Some(tls) = &self.tls {
 				(*state).tpidr_el0 = tls.thread_ptr() as u64;
 			}

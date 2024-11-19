@@ -161,7 +161,7 @@ impl TaskStacks {
 				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
 					//(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE)
 					.as_mut_ptr::<u8>(),
-				0xAC,
+				0,
 				user_stack_size,
 			);
 		}
@@ -391,8 +391,6 @@ impl TaskFrame for Task {
 			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
-			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
-
 			if let Some(tls) = &self.tls {
 				(*state).tp = tls.tp().as_usize();
 			}
