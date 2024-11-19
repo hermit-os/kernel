@@ -2,7 +2,9 @@ use core::ptr::write_bytes;
 use core::{ptr, slice};
 
 use align_address::Align;
-use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, SerialPortBase};
+use hermit_entry::boot_info::{
+	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
+};
 use hermit_entry::elf::LoadedKernel;
 use hermit_entry::fc::{
 	BOOT_FLAG_OFFSET, CMD_LINE_PTR_OFFSET, CMD_LINE_SIZE_OFFSET, E820_ENTRIES_OFFSET,
@@ -15,6 +17,7 @@ use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 use super::physicalmem::PhysAlloc;
 use super::{paging, KERNEL_STACK_SIZE, SERIAL_IO_PORT};
+use crate::fdt::Fdt;
 use crate::BootInfoExt;
 
 extern "C" {
@@ -175,6 +178,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
+	let mut fdt = Fdt::new("firecracker").unwrap();
+
 	// Load the boot_param memory-map information
 	let linux_e820_entries =
 		unsafe { *(sptr::from_exposed_addr::<u8>(boot_params + E820_ENTRIES_OFFSET)) };
@@ -203,6 +208,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 		let entry_end = entry_start + entry_size;
 
+		fdt = fdt.memory(entry_start..entry_end).unwrap();
+
 		if start_address == 0 {
 			start_address = entry_start as usize;
 		}
@@ -220,11 +227,20 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		start_address, end_address
 	);
 
+	if let Some(command_line) = command_line {
+		fdt = fdt.bootargs(command_line).unwrap();
+	}
+
+	let fdt = fdt.finish().unwrap();
+
+	let device_tree =
+		DeviceTreeAddress::new(u64::try_from(fdt.leak().as_ptr().expose_addr()).unwrap());
+
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: start_address as u64..end_address as u64,
 			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-			device_tree: None,
+			device_tree,
 		},
 		load_info,
 		platform_info: PlatformInfo::LinuxBootParams {
