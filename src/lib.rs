@@ -208,6 +208,7 @@ fn boot_processor_main() -> ! {
 
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
+	interrupts::enable();
 
 	arch::kernel::boot_next_processor();
 
@@ -249,6 +250,7 @@ fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
+	interrupts::enable();
 	arch::kernel::boot_next_processor();
 
 	debug!("Entering idle loop for application processor");

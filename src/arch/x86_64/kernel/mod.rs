@@ -173,7 +173,6 @@ pub fn boot_processor_init() {
 	scheduler::install_timer_handler();
 	serial::install_serial_interrupt();
 	finish_processor_init();
-	interrupts::enable();
 }
 
 /// Application Processor initialization
@@ -188,7 +187,6 @@ pub fn application_processor_init() {
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
-	interrupts::enable();
 	finish_processor_init();
 }
 
