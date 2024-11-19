@@ -544,8 +544,9 @@ fn init_ioapic() {
 
 	// now lets turn everything else on
 	for i in 0..max_entry {
-		// now, we don't longer need the IOAPIC timer and turn it off
-		let enabled = i != 2;
+		// Turn off the Programmable Interrupt Timer Interrupt (IRQ 0) and
+		// the Real Time Clock (IRQ 2).
+		let enabled = !matches!(i, 0 | 2);
 		ioapic_set_interrupt(i, 0, enabled);
 	}
 }
