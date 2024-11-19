@@ -1,44 +1,31 @@
 use std::env;
+use std::path::Path;
 
 use anyhow::Result;
 use clap::Args;
 use xshell::cmd;
 
-use super::build::Build;
-
-/// Run hermit-rs images on Uhyve.
+/// Run image on Uhyve.
 #[derive(Args)]
 pub struct Uhyve {
 	/// Run Uhyve using `sudo`.
 	#[arg(long)]
 	sudo: bool,
-
-	#[command(flatten)]
-	build: Build,
 }
 
 impl Uhyve {
-	pub fn run(mut self) -> Result<()> {
-		self.build.run()?;
-
+	pub fn run(self, image: &Path, smp: usize) -> Result<()> {
 		let sh = crate::sh()?;
-
-		let image = self.build.image();
 
 		let uhyve = env::var("UHYVE").unwrap_or_else(|_| "uhyve".to_string());
 		let program = if self.sudo { "sudo" } else { uhyve.as_str() };
 		let arg = self.sudo.then_some(uhyve.as_str());
+		let smp_arg = format!("--cpu-count={smp}");
 
-		cmd!(sh, "{program} {arg...} --verbose {image}")
+		cmd!(sh, "{program} {arg...} --verbose {smp_arg} {image}")
 			.env("RUST_LOG", "debug")
-			.arg(self.cpu_count_arg())
 			.run()?;
 
 		Ok(())
-	}
-
-	fn cpu_count_arg(&self) -> String {
-		let smp = self.build.smp;
-		format!("--cpu-count={}", smp)
 	}
 }
