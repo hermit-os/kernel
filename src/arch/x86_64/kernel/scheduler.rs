@@ -147,7 +147,7 @@ impl TaskStacks {
 			ptr::write_bytes(
 				(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
 					.as_mut_ptr::<u8>(),
-				0xAC,
+				0,
 				user_stack_size,
 			);
 		}
@@ -358,8 +358,6 @@ impl TaskFrame for Task {
 			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
-			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
-
 			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
 				(*state).fs = tls.thread_ptr().addr() as u64;
