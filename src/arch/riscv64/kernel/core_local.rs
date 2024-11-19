@@ -76,7 +76,7 @@ pub fn core_id() -> CoreId {
 
 #[inline]
 pub fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *(CoreLocal::get().scheduler.get()) }
+	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
 }
 
 #[inline]
