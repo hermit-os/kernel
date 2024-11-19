@@ -166,13 +166,14 @@ pub(crate) fn install_handlers() {
 }
 
 fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
+	debug!("received interrupt {index}");
+
 	crate::arch::x86_64::swapgs(&stack_frame);
 	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	if let Some(handlers) = IRQ_HANDLERS.get() {
 		if let Some(map) = handlers.get(&(index - 32)) {
-			debug!("received interrupt {index}");
 			for handler in map.iter() {
 				handler();
 			}
