@@ -544,46 +544,26 @@ fn init_ioapic() {
 
 	// now lets turn everything else on
 	for i in 0..max_entry {
-		if i != 2 {
-			ioapic_inton(i, 0 /*apic_processors[boot_processor]->id*/).unwrap();
-		} else {
-			// now, we don't longer need the IOAPIC timer and turn it off
-			info!("Disable IOAPIC timer");
-			ioapic_intoff(2, 0 /*apic_processors[boot_processor]->id*/).unwrap();
-		}
+		// Turn off the Programmable Interrupt Timer Interrupt (IRQ 0) and
+		// the Real Time Clock (IRQ 2).
+		let enabled = !matches!(i, 0 | 2);
+		ioapic_set_interrupt(i, 0, enabled);
 	}
 }
 
-fn ioapic_inton(irq: u8, apicid: u8) -> Result<(), ()> {
-	if irq > 24 {
-		error!("IOAPIC: trying to turn on irq {} which is too high\n", irq);
-		return Err(());
-	}
+fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
+	assert!(irq <= 24);
 
 	let off = u32::from(irq * 2);
-	let ioredirect_upper: u32 = u32::from(apicid) << 24;
-	let ioredirect_lower: u32 = u32::from(0x20 + irq);
-
-	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
-	ioapic_write(IOAPIC_REG_TABLE + 1 + off, ioredirect_upper);
-
-	Ok(())
-}
-
-fn ioapic_intoff(irq: u32, apicid: u32) -> Result<(), ()> {
-	if irq > 24 {
-		error!("IOAPIC: trying to turn off irq {} which is too high\n", irq);
-		return Err(());
+	let ioredirect_upper = u32::from(apicid) << 24;
+	let mut ioredirect_lower = u32::from(0x20 + irq);
+	if !enabled {
+		debug!("Disabling irq {irq}");
+		ioredirect_lower |= 1 << 16;
 	}
 
-	let off = irq * 2;
-	let ioredirect_upper: u32 = apicid << 24;
-	let ioredirect_lower: u32 = (0x20 + irq) | (1 << 16); // turn it off (start masking)
-
 	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
-	ioapic_write(IOAPIC_REG_TABLE + 1 + off, ioredirect_upper);
-
-	Ok(())
+	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
 }
 
 pub fn init_local_apic() {
