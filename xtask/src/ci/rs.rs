@@ -1,14 +1,13 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::Args;
+use clap::{Args, Subcommand};
 
 use crate::cargo_build::CargoBuild;
 
-/// Build hermit-rs images.
+/// Work with hermit-rs images
 #[derive(Args)]
-#[command(next_help_heading = "Build options")]
-pub struct Build {
+pub struct Rs {
 	#[command(flatten)]
 	pub cargo_build: CargoBuild,
 
@@ -19,10 +18,38 @@ pub struct Build {
 	/// Create multiple vCPUs.
 	#[arg(long, default_value_t = 1)]
 	pub smp: usize,
+
+	#[command(subcommand)]
+	action: Action,
 }
 
-impl Build {
-	pub fn run(&mut self) -> Result<()> {
+#[derive(Subcommand)]
+pub enum Action {
+	/// Build image.
+	Build,
+	Firecracker(super::firecracker::Firecracker),
+	Qemu(super::qemu::Qemu),
+	Uhyve(super::uhyve::Uhyve),
+}
+
+impl Rs {
+	pub fn run(mut self) -> Result<()> {
+		let image = self.build()?;
+
+		match self.action {
+			Action::Build => Ok(()),
+			Action::Firecracker(firecracker) => firecracker.run(&image, self.smp),
+			Action::Qemu(qemu) => qemu.run(
+				&image,
+				self.smp,
+				self.cargo_build.artifact.arch,
+				self.cargo_build.artifact.profile(),
+			),
+			Action::Uhyve(uhyve) => uhyve.run(&image, self.smp),
+		}
+	}
+
+	pub fn build(&mut self) -> Result<PathBuf> {
 		if super::in_ci() {
 			eprintln!("::group::cargo build")
 		}
@@ -55,10 +82,6 @@ impl Build {
 			eprintln!("::endgroup::")
 		}
 
-		Ok(())
-	}
-
-	pub fn image(&self) -> PathBuf {
-		self.cargo_build.artifact.ci_image(&self.package)
+		Ok(self.cargo_build.artifact.ci_image(&self.package))
 	}
 }
