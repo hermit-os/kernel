@@ -712,7 +712,7 @@ impl VirtioNetDriver {
 		// The loop is running from 0 to num_vqs and the indexes are provided to the VqIndex::from function in this way
 		// in order to allow the indexes of the queues to be in a form of:
 		//
-		// index i for receiv queue
+		// index i for receive queue
 		// index i+1 for send queue
 		//
 		// as it is wanted by the network network device.
@@ -743,7 +743,7 @@ impl VirtioNetDriver {
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
-				// Interrupt for comunicating that a sended packet left, is not needed
+				// Interrupt for communicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
 				self.send_vqs.add(Box::from(vq));
@@ -769,7 +769,7 @@ impl VirtioNetDriver {
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
-				// Interrupt for comunicating that a sended packet left, is not needed
+				// Interrupt for communicating that a sended packet left, is not needed
 				vq.disable_notifs();
 
 				self.send_vqs.add(Box::from(vq));

@@ -510,7 +510,7 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	// panic!("Not impemented!");
+	// panic!("Not implemented!");
 	/* if virtual_address < mm::kernel_start_address() {
 		// Parts of the memory below the kernel image are identity-mapped.
 		// However, this range should never be used in a virtual_to_physical call.

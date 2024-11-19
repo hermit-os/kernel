@@ -54,7 +54,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
-	/// Helper function to create a new dirctory node
+	/// Helper function to create a new directory node
 	fn traverse_mkdir(
 		&self,
 		_components: &mut Vec<&str>,
@@ -63,7 +63,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
-	/// Helper function to delete a dirctory node
+	/// Helper function to delete a directory node
 	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}

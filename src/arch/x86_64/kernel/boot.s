@@ -60,7 +60,7 @@ _pmstart:
 
 # GDT for the protected mode
 .align 4
-gdtr:                           # descritor table
+gdtr:                           # descriptor table
     .2byte  gdt_end - gdt - 1   # limit
     .4byte  gdt                 # base address
 gdt:

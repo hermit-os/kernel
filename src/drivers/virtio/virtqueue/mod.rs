@@ -352,7 +352,7 @@ pub enum BufferElem {
 impl BufferElem {
 	// Returns the initialized length of the element. Assumes [Self::Sized] to
 	// be initialized, since the type of the object is erased and we cannot
-	// detect if the content is actuallly a [MaybeUninit]. However, this function
+	// detect if the content is actually a [MaybeUninit]. However, this function
 	// should be only relevant for read buffer elements, which should not be uninit.
 	// If the element belongs to a write buffer, it is likely that [Self::capacity]
 	// is more appropriate.

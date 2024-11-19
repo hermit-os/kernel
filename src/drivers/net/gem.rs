@@ -45,7 +45,7 @@ register_structs! {
 		(0x014 => transmit_status: ReadWrite<u32, TransmitStatus::Register>),
 		(0x018 => rx_qbar: ReadWrite<u32>),
 		(0x01c => tx_qbar: ReadWrite<u32>),
-		(0x020 => receive_status: ReadWrite<u32, RecieveStatus::Register>),
+		(0x020 => receive_status: ReadWrite<u32, ReceiveStatus::Register>),
 		(0x024 => int_status: ReadWrite<u32, Interrupts::Register>),
 		(0x028 => int_enable: WriteOnly<u32, Interrupts::Register>),
 		(0x02C => int_disable: WriteOnly<u32, Interrupts::Register>),
@@ -114,7 +114,7 @@ register_bitfields! [
 			INCR16 = 0b10000
 		],
 	],
-	RecieveStatus [
+	ReceiveStatus [
 		FRAMERX  OFFSET(1) NUMBITS(1) [],
 	],
 	TransmitStatus [
@@ -205,7 +205,7 @@ pub enum GEMError {
 
 /// GEM network driver struct.
 ///
-/// Struct allows to control device queus as also
+/// Struct allows to control device queues and also
 /// the device itself.
 pub struct GEMDriver {
 	// Pointer to the registers of the controller
@@ -322,7 +322,7 @@ impl NetworkDriver for GEMDriver {
 				let word1_entry =
 					unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
 				let length = word1_entry & 0x1FFF;
-				debug!("Recieved frame in buffer {}, length: {}", index, length);
+				debug!("Received frame in buffer {}, length: {}", index, length);
 
 				// Starting point to search for next frame
 				self.rx_counter = (index + 1) % RX_BUF_NUM;
@@ -386,7 +386,7 @@ impl NetworkDriver for GEMDriver {
 		}
 
 		let ret =
-			int_status.is_set(Interrupts::FRAMERX) && receive_status.is_set(RecieveStatus::FRAMERX);
+			int_status.is_set(Interrupts::FRAMERX) && receive_status.is_set(ReceiveStatus::FRAMERX);
 
 		if ret {
 			debug!("RX COMPLETE");
@@ -396,7 +396,7 @@ impl NetworkDriver for GEMDriver {
 					.modify_no_read(int_status, Interrupts::FRAMERX::SET);
 				(*self.gem)
 					.receive_status
-					.modify_no_read(receive_status, RecieveStatus::FRAMERX::SET);
+					.modify_no_read(receive_status, ReceiveStatus::FRAMERX::SET);
 			}
 
 			// handle incoming packets
@@ -432,7 +432,7 @@ impl GEMDriver {
 		}
 	}
 
-	/// Returns the index of the next recieved frame
+	/// Returns the index of the next received frame
 	fn next_rx_index(&self) -> Option<u32> {
 		// Scan the buffer descriptor queue starting from rx_count
 
@@ -580,7 +580,7 @@ pub fn init_device(
 		// This is PHY specific and may not work on all PHYs
 		let phy_status = phy_read(gem, phy_addr, PhyReg::Status);
 
-		// Chck for auto-negotiation ability
+		// Check for auto-negotiation ability
 		if (phy_status & PhyStatus::ANCapMask as u16) == 0 {
 			warn!("PHY does not support auto-negotiation");
 		// TODO

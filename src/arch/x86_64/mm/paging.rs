@@ -209,7 +209,7 @@ pub fn map<S>(
 }
 
 /// Maps `count` pages at address `virt_addr`. If the allocation of a physical memory failed,
-/// the number of successfull mapped pages are returned as error value.
+/// the number of successful mapped pages are returned as error value.
 pub fn map_heap<S>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
 	S: PageSize + Debug,

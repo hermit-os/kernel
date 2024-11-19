@@ -1,0 +1,13 @@
+[default]
+locale = "en-us"
+extend-ignore-identifiers-re = [
+    "IST",
+    "ist",
+    "sie",
+]
+
+[default.extend-identifiers]
+BARs = "BARs"
+BMCR_ANE = "BMCR_ANE"
+DT_WHT = "DT_WHT"
+RCR_AER = "RCR_AER"
