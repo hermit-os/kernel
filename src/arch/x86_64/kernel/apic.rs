@@ -544,13 +544,9 @@ fn init_ioapic() {
 
 	// now lets turn everything else on
 	for i in 0..max_entry {
-		if i != 2 {
-			ioapic_set_interrupt(i, 0 /*apic_processors[boot_processor]->id*/, true);
-		} else {
-			// now, we don't longer need the IOAPIC timer and turn it off
-			info!("Disable IOAPIC timer");
-			ioapic_set_interrupt(2, 0 /*apic_processors[boot_processor]->id*/, false);
-		}
+		// now, we don't longer need the IOAPIC timer and turn it off
+		let enabled = i != 2;
+		ioapic_set_interrupt(i, 0, enabled);
 	}
 }
 
@@ -561,6 +557,7 @@ fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
 	let ioredirect_upper = u32::from(apicid) << 24;
 	let mut ioredirect_lower = u32::from(0x20 + irq);
 	if !enabled {
+		debug!("Disabling irq {irq}");
 		ioredirect_lower |= 1 << 16;
 	}
 
