@@ -129,7 +129,6 @@ pub fn boot_processor_init() {
 	interrupts::install();
 
 	finish_processor_init();
-	interrupts::enable();
 }
 
 /// Application Processor initialization
@@ -139,7 +138,6 @@ pub fn application_processor_init() {
 	CoreLocal::install();
 	interrupts::install();
 	finish_processor_init();
-	interrupts::enable();
 }
 
 fn finish_processor_init() {

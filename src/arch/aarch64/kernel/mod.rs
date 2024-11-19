@@ -117,7 +117,6 @@ pub fn boot_processor_init() {
 	CoreLocal::get().add_irq_counter();
 	env::init();
 	interrupts::init();
-	interrupts::enable();
 	processor::detect_frequency();
 	processor::print_information();
 	systemtime::init();
