@@ -54,7 +54,7 @@ pub enum NetworkDevice {
 }
 
 impl Qemu {
-	pub fn run(self, image: &Path, smp: usize, arch: Arch, profile: &str) -> Result<()> {
+	pub fn run(self, image: &Path, smp: usize, arch: Arch, small: bool) -> Result<()> {
 		let sh = crate::sh()?;
 
 		let virtiofsd = self.virtiofsd.then(spawn_virtiofsd).transpose()?;
@@ -68,7 +68,7 @@ impl Qemu {
 		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{}", arch.name()));
 		let program = if self.sudo { "sudo" } else { qemu.as_str() };
 		let arg = self.sudo.then_some(qemu.as_str());
-		let memory = self.memory(image_name, arch, profile);
+		let memory = self.memory(image_name, arch, small);
 
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
@@ -236,8 +236,8 @@ impl Qemu {
 		}
 	}
 
-	fn memory(&self, image_name: &str, arch: Arch, profile: &str) -> usize {
-		if profile == "release" && image_name == "hello_world" {
+	fn memory(&self, image_name: &str, arch: Arch, small: bool) -> usize {
+		if small && image_name == "hello_world" {
 			return match arch {
 				Arch::X86_64 => {
 					if self.uefi {
