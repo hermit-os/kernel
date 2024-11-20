@@ -3,6 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
+mod c;
 mod firecracker;
 mod qemu;
 mod rs;
@@ -11,12 +12,14 @@ mod uhyve;
 /// Run CI tasks.
 #[derive(Subcommand)]
 pub enum Ci {
+	C(c::C),
 	Rs(rs::Rs),
 }
 
 impl Ci {
 	pub fn run(self) -> Result<()> {
 		match self {
+			Self::C(c) => c.run(),
 			Self::Rs(rs) => rs.run(),
 		}
 	}
