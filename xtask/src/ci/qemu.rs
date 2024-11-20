@@ -65,7 +65,7 @@ impl Qemu {
 			sh.create_dir("shared/tracedir")?;
 		}
 
-		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{}", arch.name()));
+		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{arch}"));
 		let program = if self.sudo { "sudo" } else { qemu.as_str() };
 		let arg = self.sudo.then_some(qemu.as_str());
 		let memory = self.memory(image_name, arch, small);
@@ -130,7 +130,7 @@ impl Qemu {
 
 	fn image_args(&self, image: &Path, arch: Arch) -> Result<Vec<String>> {
 		let exe_suffix = if self.uefi { ".efi" } else { "" };
-		let loader = format!("hermit-loader-{}{exe_suffix}", arch.name());
+		let loader = format!("hermit-loader-{arch}{exe_suffix}");
 
 		let image_args = if self.uefi {
 			let sh = crate::sh()?;
