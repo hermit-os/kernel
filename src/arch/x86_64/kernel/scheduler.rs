@@ -293,7 +293,7 @@ impl TaskTLS {
 		// thread_ptr = block_ptr + tls_offset
 		let thread_ptr = block[tls_offset..].as_mut_ptr().cast::<()>();
 		unsafe {
-			thread_ptr.cast::<*mut ()>().write(thread_ptr);
+			thread_ptr.cast::<*mut ()>().write_unaligned(thread_ptr);
 		}
 
 		let this = Self {
