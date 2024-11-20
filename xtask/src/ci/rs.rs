@@ -51,7 +51,7 @@ impl Rs {
 
 	pub fn build(&mut self) -> Result<PathBuf> {
 		if super::in_ci() {
-			eprintln!("::group::cargo build")
+			eprintln!("::group::cargo build");
 		}
 
 		if self.smp > 1 {
@@ -79,7 +79,7 @@ impl Rs {
 		assert!(status.success());
 
 		if super::in_ci() {
-			eprintln!("::endgroup::")
+			eprintln!("::endgroup::");
 		}
 
 		Ok(self.cargo_build.artifact.ci_image(&self.package))
