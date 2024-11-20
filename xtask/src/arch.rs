@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::Result;
 use clap::ValueEnum;
 
@@ -123,5 +125,11 @@ impl Arch {
 			Self::Aarch64 => &["-Crelocation-model=pic"],
 			Self::Riscv64 => &["-Cno-redzone", "-Crelocation-model=pic"],
 		}
+	}
+}
+
+impl fmt::Display for Arch {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(self.name())
 	}
 }
