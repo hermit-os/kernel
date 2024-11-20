@@ -36,11 +36,12 @@ impl Rs {
 	pub fn run(mut self) -> Result<()> {
 		let image = self.build()?;
 
+		let arch = self.cargo_build.artifact.arch;
 		let small = self.cargo_build.artifact.profile() == "release";
 		match self.action {
 			Action::Build => Ok(()),
 			Action::Firecracker(firecracker) => firecracker.run(&image, self.smp),
-			Action::Qemu(qemu) => qemu.run(&image, self.smp, self.cargo_build.artifact.arch, small),
+			Action::Qemu(qemu) => qemu.run(&image, self.smp, arch, small),
 			Action::Uhyve(uhyve) => uhyve.run(&image, self.smp),
 		}
 	}
