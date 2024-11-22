@@ -3,27 +3,24 @@ use std::path::Path;
 use anyhow::Result;
 use clap::Subcommand;
 
-mod build;
+mod c;
 mod firecracker;
 mod qemu;
+mod rs;
 mod uhyve;
 
 /// Run CI tasks.
 #[derive(Subcommand)]
 pub enum Ci {
-	Build(build::Build),
-	Firecracker(firecracker::Firecracker),
-	Qemu(qemu::Qemu),
-	Uhyve(uhyve::Uhyve),
+	C(c::C),
+	Rs(rs::Rs),
 }
 
 impl Ci {
 	pub fn run(self) -> Result<()> {
 		match self {
-			Self::Build(build) => build.run(),
-			Self::Firecracker(firecracker) => firecracker.run(),
-			Self::Qemu(qemu) => qemu.run(),
-			Self::Uhyve(uhyve) => uhyve.run(),
+			Self::C(c) => c.run(),
+			Self::Rs(rs) => rs.run(),
 		}
 	}
 }

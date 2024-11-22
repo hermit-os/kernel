@@ -5,29 +5,23 @@ use anyhow::Result;
 use clap::Args;
 use xshell::cmd;
 
-use super::build::Build;
-
-/// Run hermit-rs images on Firecracker.
+/// Run image on Firecracker.
 #[derive(Args)]
 pub struct Firecracker {
 	/// Run Firecracker using `sudo`.
 	#[arg(long)]
 	sudo: bool,
-
-	#[command(flatten)]
-	build: Build,
 }
 
 impl Firecracker {
-	pub fn run(self) -> Result<()> {
-		self.build.run()?;
-
+	pub fn run(self, image: &Path, smp: usize) -> Result<()> {
 		let sh = crate::sh()?;
 
 		let config = format!(
 			include_str!("firecracker_vm_config.json"),
 			kernel_image_path = "hermit-loader-x86_64-fc",
-			initrd_path = self.build.image().display()
+			initrd_path = image.display(),
+			vcpu_count = smp,
 		);
 		eprintln!("firecracker config");
 		eprintln!("{config}");
