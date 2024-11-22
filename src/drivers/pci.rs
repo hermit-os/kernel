@@ -1,8 +1,13 @@
 #![allow(dead_code)]
 
 use alloc::vec::Vec;
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 use core::fmt;
+#[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+use core::fmt::{self, Write};
+use core::ptr::addr_of;
 
+use fdt::Fdt;
 #[cfg(any(
 	feature = "virtio-fs",
 	feature = "virtio-rng",
@@ -38,6 +43,8 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+use crate::env;
+use crate::env::FdtStartInfo;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -358,6 +365,16 @@ pub(crate) fn print_information() {
 	}
 
 	infofooter!();
+
+	Ok(())
+}
+
+pub(crate) fn print_information() {
+	#[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+	print_from_fdt().or_else(|_e| print_from_pci()).unwrap();
+
+	#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+	print_from_pci().unwrap();
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -458,7 +475,49 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 	not(any(feature = "virtio", feature = "rtl8139")),
 	expect(unused_variables)
 )]
-pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
+pub(crate) fn init_from_fdt(fdt: &Fdt<'_>, _handlers: &mut InterruptHandlerMap) {
+	info!("Initializing PCI devices from FDT at {:#p}", addr_of!(*fdt));
+
+	for bridge in fdt.find_all_nodes("/pci") {
+		for dev in bridge.children() {
+			println!("PCI Device {dev:?}");
+		}
+	}
+
+	todo!();
+
+	#[cfg(feature = "rtl8139")]
+	if let Some(node) = fdt.find_compatible(&["realtek,rtl8139"]) {
+		info!(
+			"Found Realtek network device with device id {:#x}",
+			node.property("device-id").unwrap().as_usize().unwrap()
+		);
+
+		let reg = node.property("reg").unwrap().value;
+		let addr = u32::from_be_bytes(reg[0..4].try_into().unwrap());
+
+		let pci_config = PciConfigRegion::new();
+
+		let pci_address = PciAddress::new(
+			0,
+			((addr >> 16) & 0xff) as u8,
+			((addr >> 11) & 0x1f) as u8,
+			0,
+		);
+
+		let adapter = PciDevice::new(pci_address, pci_config);
+
+		if let Ok(drv) = rtl8139::init_device(&adapter) {
+			register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
+		}
+	}
+}
+
+#[cfg_attr(
+	not(any(feature = "virtio", feature = "rtl8139")),
+	expect(unused_variables)
+)]
+pub(crate) fn init_from_pci(handlers: &mut InterruptHandlerMap) {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
@@ -533,6 +592,14 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 
 		PCI_DRIVERS.finalize();
 	});
+}
+
+pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
+	if let Some(fdt) = env::start_info().fdt() {
+		init_from_fdt(&fdt, handlers);
+	} else {
+		init_from_pci(handlers);
+	}
 }
 
 #[cfg(feature = "virtio")]
