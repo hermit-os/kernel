@@ -124,8 +124,6 @@ jobs:
           ARCH="$(uname -m)"
           release_url="https://github.com/firecracker-microvm/firecracker/releases"
           latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
-          # FIXME: remove once 1.7.0 and above work
-          latest=v1.6.0
           curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
           | tar -xz
           
