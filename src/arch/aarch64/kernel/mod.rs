@@ -49,9 +49,7 @@ impl Console {
 	}
 
 	pub fn write(&mut self, buf: &[u8]) {
-		for byte in buf {
-			self.serial_port.write_byte(*byte);
-		}
+		self.serial_port.write_buf(buf);
 	}
 
 	pub fn read(&mut self) -> Option<u8> {

@@ -114,6 +114,7 @@ fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", features = ["linux", "zerocopy"], optional = true }
 hashbrown = { version = "0.15", default-features = false }
+heapless = "0.8"
 hermit-entry = { version = "0.10", features = ["kernel"] }
 hermit-sync = "0.1"
 lock_api = "0.4"

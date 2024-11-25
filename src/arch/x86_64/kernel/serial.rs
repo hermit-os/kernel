@@ -1,23 +1,17 @@
 use alloc::collections::VecDeque;
 use core::task::Waker;
 
-use memory_addresses::VirtAddr;
-use uhyve_interface::Hypercall;
-use uhyve_interface::parameters::SerialWriteBufferParams;
-use x86_64::instructions::port::Port;
-
-use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::core_local::increment_irq_counter;
 use crate::arch::x86_64::kernel::interrupts::{self, IDT};
 use crate::executor::WakerRegistration;
-use crate::syscalls::interfaces::uhyve_hypercall;
+use crate::syscalls::interfaces::serial_buf_hypercall;
 
 const SERIAL_IRQ: u8 = 36;
 
 enum SerialInner {
 	Uart(uart_16550::SerialPort),
-	Uhyve(Port<u8>),
+	Uhyve,
 }
 
 pub struct SerialPort {
@@ -29,9 +23,8 @@ pub struct SerialPort {
 impl SerialPort {
 	pub unsafe fn new(base: u16) -> Self {
 		if crate::env::is_uhyve() {
-			let serial = Port::new(base);
 			Self {
-				inner: SerialInner::Uhyve(serial),
+				inner: SerialInner::Uhyve,
 				buffer: VecDeque::new(),
 				waker: WakerRegistration::new(),
 			}
@@ -72,14 +65,7 @@ impl SerialPort {
 
 	pub fn send(&mut self, buf: &[u8]) {
 		match &mut self.inner {
-			SerialInner::Uhyve(_s) => {
-				let p = SerialWriteBufferParams {
-					buf: virtual_to_physical(VirtAddr::from_ptr(core::ptr::from_ref::<[u8]>(buf)))
-						.unwrap(),
-					len: buf.len(),
-				};
-				uhyve_hypercall(Hypercall::SerialWriteBuffer(&p));
-			}
+			SerialInner::Uhyve => serial_buf_hypercall(buf),
 			SerialInner::Uart(s) => {
 				for &data in buf {
 					s.send(data);
@@ -90,7 +76,7 @@ impl SerialPort {
 }
 
 extern "x86-interrupt" fn serial_interrupt(_stack_frame: crate::interrupts::ExceptionStackFrame) {
-	crate::console::CONSOLE.lock().0.buffer_input();
+	crate::console::CONSOLE.lock().inner.buffer_input();
 	increment_irq_counter(SERIAL_IRQ);
 	crate::executor::run();
 

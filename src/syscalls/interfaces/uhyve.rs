@@ -1,12 +1,23 @@
 use core::ptr;
 
 use memory_addresses::VirtAddr;
-use uhyve_interface::parameters::ExitParams;
+use uhyve_interface::parameters::{ExitParams, SerialWriteBufferParams};
 use uhyve_interface::{Hypercall, HypercallAddress};
 
 use crate::arch;
-use crate::arch::mm::paging;
+use crate::arch::mm::paging::{self, virtual_to_physical};
 use crate::syscalls::interfaces::SyscallInterface;
+
+/// perform a SerialWriteBuffer hypercall with `buf` as payload.
+#[inline]
+#[cfg_attr(target_arch = "riscv64", expect(dead_code))]
+pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
+	let p = SerialWriteBufferParams {
+		buf: virtual_to_physical(VirtAddr::from_ptr(core::ptr::from_ref::<[u8]>(buf))).unwrap(),
+		len: buf.len(),
+	};
+	uhyve_hypercall(Hypercall::SerialWriteBuffer(&p));
+}
 
 /// calculates the physical address of the struct passed as reference.
 #[inline]
