@@ -1,11 +1,16 @@
 #[cfg(feature = "shell")]
 use alloc::collections::VecDeque;
 
+use memory_addresses::VirtAddr;
+use uhyve_interface::parameters::SerialWriteBufferParams;
+use uhyve_interface::Hypercall;
 use x86_64::instructions::port::Port;
 
+use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::x86_64::kernel::core_local::increment_irq_counter;
 use crate::arch::x86_64::kernel::interrupts::{self, IDT};
 use crate::arch::x86_64::kernel::{apic, COM1};
+use crate::syscalls::interfaces::uhyve_hypercall;
 
 const SERIAL_IRQ: u8 = 36;
 
@@ -66,12 +71,12 @@ impl SerialPort {
 
 	pub fn send(&mut self, buf: &[u8]) {
 		match &mut self.inner {
-			SerialInner::Uhyve(s) => {
-				for &data in buf {
-					unsafe {
-						s.write(data);
-					}
-				}
+			SerialInner::Uhyve(_s) => {
+				let p = SerialWriteBufferParams {
+					buf: virtual_to_physical(VirtAddr::from_ptr(buf as *const [u8])).unwrap(),
+					len: buf.len(),
+				};
+				uhyve_hypercall(Hypercall::SerialWriteBuffer(&p));
 			}
 			SerialInner::Uart(s) => {
 				for &data in buf {
