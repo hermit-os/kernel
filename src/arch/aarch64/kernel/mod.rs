@@ -25,7 +25,7 @@ use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
-static COM1: SpinMutex<SerialPort> = SpinMutex::new(SerialPort::new(0x800));
+static COM1: SpinMutex<Option<SerialPort>> = SpinMutex::new(None);
 
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.
 ///
@@ -81,9 +81,7 @@ pub fn args() -> Option<&'static str> {
 pub fn message_output_init() {
 	CoreLocal::install();
 
-	let mut com1 = COM1.lock();
-
-	com1.port_address = env::boot_info()
+	let com_port_address = env::boot_info()
 		.hardware_info
 		.serial_port_base
 		.map(|uartport| uartport.get())
@@ -93,18 +91,13 @@ pub fn message_output_init() {
 
 	// We can only initialize the serial port here, because VGA requires processor
 	// configuration first.
-	com1.init(SERIAL_PORT_BAUDRATE);
-}
-
-pub fn output_message_byte(byte: u8) {
-	// Output messages to the serial port.
-	COM1.lock().write_byte(byte);
+	let com = SerialPort::new(com_port_address);
+	com.init(SERIAL_PORT_BAUDRATE);
+	*COM1.lock() = Some(com);
 }
 
 pub fn output_message_buf(buf: &[u8]) {
-	for byte in buf {
-		output_message_byte(*byte);
-	}
+	COM1.lock().as_mut().unwrap().write_buf(buf);
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
