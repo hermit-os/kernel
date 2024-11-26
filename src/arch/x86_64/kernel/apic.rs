@@ -422,7 +422,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		// entries starts directly after the config table
 		addr += mem::size_of::<ApicConfigTable>();
 		for _i in 0..mp_config.entry_count {
-			match unsafe { *(ptr::with_exposed_provenance(addr)) } {
+			match unsafe { *(ptr::with_exposed_provenance::<u8>(addr)) } {
 				// CPU entry
 				0 => {
 					let cpu_entry: &ApicProcessorEntry =
