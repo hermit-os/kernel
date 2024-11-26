@@ -281,7 +281,6 @@ pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *co
 pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
-	info!("shutting down with code {arg}");
 
 	SYS.shutdown(arg)
 }
