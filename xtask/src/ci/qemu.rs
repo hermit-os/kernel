@@ -12,10 +12,9 @@ use sysinfo::{CpuRefreshKind, System};
 use wait_timeout::ChildExt;
 use xshell::cmd;
 
-use super::build::Build;
 use crate::arch::Arch;
 
-/// Run hermit-rs images on QEMU.
+/// Run image on QEMU.
 #[derive(Args)]
 pub struct Qemu {
 	/// Enable hardware acceleration.
@@ -42,16 +41,9 @@ pub struct Qemu {
 	#[arg(long)]
 	no_default_virtio_features: bool,
 
-	/// Create multiple vCPUs.
-	#[arg(long, default_value_t = 1)]
-	smp: usize,
-
 	/// Enable the `virtiofsd` virtio-fs vhost-user device daemon.
 	#[arg(long)]
 	virtiofsd: bool,
-
-	#[command(flatten)]
-	build: Build,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -62,40 +54,32 @@ pub enum NetworkDevice {
 }
 
 impl Qemu {
-	pub fn run(mut self) -> Result<()> {
-		if self.smp > 1 {
-			self.build
-				.cargo_build
-				.features
-				.push("hermit/smp".to_string());
-		}
-
-		self.build.run()?;
-
+	pub fn run(self, image: &Path, smp: usize, arch: Arch, small: bool) -> Result<()> {
 		let sh = crate::sh()?;
 
 		let virtiofsd = self.virtiofsd.then(spawn_virtiofsd).transpose()?;
 		thread::sleep(Duration::from_millis(100));
 
-		if self.build.package.contains("rftrace") {
+		let image_name = image.file_name().unwrap().to_str().unwrap();
+		if image_name.contains("rftrace") {
 			sh.create_dir("shared/tracedir")?;
 		}
 
-		let arch = self.build.cargo_build.artifact.arch.name();
 		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{arch}"));
 		let program = if self.sudo { "sudo" } else { qemu.as_str() };
 		let arg = self.sudo.then_some(qemu.as_str());
+		let memory = self.memory(image_name, arch, small);
 
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
-			.args(self.image_args()?)
-			.args(self.machine_args())
-			.args(self.cpu_args())
-			.args(&["-smp", &self.smp.to_string()])
-			.args(self.memory_args())
+			.args(self.image_args(image, arch)?)
+			.args(self.machine_args(arch))
+			.args(self.cpu_args(arch))
+			.args(&["-smp", &smp.to_string()])
+			.args(&["-m".to_string(), format!("{memory}M")])
 			.args(self.netdev_args())
-			.args(self.virtiofsd_args());
+			.args(self.virtiofsd_args(memory));
 
 		eprintln!("$ {qemu}");
 		let mut qemu = KillChildOnDrop(
@@ -107,13 +91,13 @@ impl Qemu {
 		thread::sleep(Duration::from_millis(100));
 		if let Some(status) = qemu.0.try_wait()? {
 			ensure!(
-				self.qemu_success(status),
+				self.qemu_success(status, arch),
 				"QEMU exit code: {:?}",
 				status.code()
 			);
 		}
 
-		match self.build.package.as_str() {
+		match image_name {
 			"httpd" => test_httpd()?,
 			"testudp" => test_testudp()?,
 			"miotcp" => test_miotcp()?,
@@ -127,7 +111,7 @@ impl Qemu {
 			bail!("QEMU timeout")
 		};
 		ensure!(
-			self.qemu_success(status),
+			self.qemu_success(status, arch),
 			"QEMU exit code: {:?}",
 			status.code()
 		);
@@ -137,15 +121,14 @@ impl Qemu {
 			assert!(status.success());
 		}
 
-		if self.build.package.contains("rftrace") {
-			check_rftrace(&self.build.image())?;
+		if image_name.contains("rftrace") {
+			check_rftrace(image)?;
 		}
 
 		Ok(())
 	}
 
-	fn image_args(&self) -> Result<Vec<String>> {
-		let arch = self.build.cargo_build.artifact.arch.name();
+	fn image_args(&self, image: &Path, arch: Arch) -> Result<Vec<String>> {
 		let exe_suffix = if self.uefi { ".efi" } else { "" };
 		let loader = format!("hermit-loader-{arch}{exe_suffix}");
 
@@ -153,7 +136,7 @@ impl Qemu {
 			let sh = crate::sh()?;
 			sh.create_dir("target/esp/efi/boot")?;
 			sh.copy_file(loader, "target/esp/efi/boot/bootx64.efi")?;
-			sh.copy_file(self.build.image(), "target/esp/efi/boot/hermit-app")?;
+			sh.copy_file(image, "target/esp/efi/boot/hermit-app")?;
 
 			vec![
 				"-drive".to_string(),
@@ -167,16 +150,16 @@ impl Qemu {
 			]
 		} else {
 			let mut image_args = vec!["-kernel".to_string(), loader];
-			match self.build.cargo_build.artifact.arch {
+			match arch {
 				Arch::X86_64 | Arch::Riscv64 => {
 					image_args.push("-initrd".to_string());
-					image_args.push(self.build.image().into_os_string().into_string().unwrap());
+					image_args.push(image.to_str().unwrap().to_string());
 				}
 				Arch::Aarch64 => {
 					image_args.push("-device".to_string());
 					image_args.push(format!(
 						"guest-loader,addr=0x48000000,initrd={}",
-						self.build.image().display()
+						image.display()
 					));
 				}
 			}
@@ -186,7 +169,7 @@ impl Qemu {
 		Ok(image_args)
 	}
 
-	fn machine_args(&self) -> Vec<String> {
+	fn machine_args(&self, arch: Arch) -> Vec<String> {
 		if self.microvm {
 			let frequency = get_frequency();
 			vec![
@@ -200,9 +183,9 @@ impl Qemu {
 				"-append".to_string(),
 				format!("-freq {frequency}"),
 			]
-		} else if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
+		} else if arch == Arch::Aarch64 {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
-		} else if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
+		} else if arch == Arch::Riscv64 {
 			vec![
 				"-machine".to_string(),
 				"virt".to_string(),
@@ -214,8 +197,8 @@ impl Qemu {
 		}
 	}
 
-	fn cpu_args(&self) -> Vec<String> {
-		match self.build.cargo_build.artifact.arch {
+	fn cpu_args(&self, arch: Arch) -> Vec<String> {
+		match arch {
 			Arch::X86_64 => {
 				let mut cpu_args = if self.accel {
 					if cfg!(target_os = "linux") {
@@ -253,11 +236,9 @@ impl Qemu {
 		}
 	}
 
-	fn memory(&self) -> usize {
-		if self.build.cargo_build.artifact.profile() == "release"
-			&& self.build.package == "hello_world"
-		{
-			return match self.build.cargo_build.artifact.arch {
+	fn memory(&self, image_name: &str, arch: Arch, small: bool) -> usize {
+		if small && image_name == "hello_world" {
+			return match arch {
 				Arch::X86_64 => {
 					if self.uefi {
 						64
@@ -271,10 +252,6 @@ impl Qemu {
 		}
 
 		1024
-	}
-
-	fn memory_args(&self) -> [String; 2] {
-		["-m".to_string(), format!("{}M", self.memory())]
 	}
 
 	fn netdev_args(&self) -> Vec<String> {
@@ -308,9 +285,8 @@ impl Qemu {
 		netdev_args
 	}
 
-	fn virtiofsd_args(&self) -> Vec<String> {
+	fn virtiofsd_args(&self, memory: usize) -> Vec<String> {
 		if self.virtiofsd {
-			let memory = self.memory();
 			let default_virtio_features = if !self.no_default_virtio_features {
 				",packed=on"
 			} else {
@@ -331,8 +307,8 @@ impl Qemu {
 		}
 	}
 
-	fn qemu_success(&self, status: ExitStatus) -> bool {
-		if self.build.cargo_build.artifact.arch == Arch::X86_64 {
+	fn qemu_success(&self, status: ExitStatus, arch: Arch) -> bool {
+		if arch == Arch::X86_64 {
 			status.code() == Some(3)
 		} else {
 			status.success()

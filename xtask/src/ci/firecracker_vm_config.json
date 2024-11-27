@@ -6,7 +6,7 @@
   }},
   "drives": [],
   "machine-config": {{
-    "vcpu_count": 1,
+    "vcpu_count": {vcpu_count},
     "mem_size_mib": 256,
     "smt": false
   }}
