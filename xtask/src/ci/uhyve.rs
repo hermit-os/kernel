@@ -33,7 +33,7 @@ impl Uhyve {
 		let program = if self.sudo { "sudo" } else { uhyve.as_str() };
 		let arg = self.sudo.then_some(uhyve.as_str());
 
-		cmd!(sh, "{program} {arg...} --verbose {image}")
+		cmd!(sh, "{program} {arg...} {image}")
 			.env("RUST_LOG", "debug")
 			.args(self.cpu_count_args())
 			.run()?;
