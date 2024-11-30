@@ -2,27 +2,33 @@
 //!
 //! The module contains ...
 
-use alloc::boxed::Box;
-use alloc::vec::Vec;
-use core::str::FromStr;
-
-use smoltcp::phy::ChecksumCapabilities;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
-use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
-use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
+use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver};
+use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-use crate::drivers::virtio::virtqueue::Virtq;
 use crate::drivers::InterruptLine;
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
-	pub fn new(
+	pub fn print_information(&mut self) {
+		self.com_cfg.print_information();
+		if self.dev_status() == virtio::net::S::LINK_UP {
+			info!("The link of the network device is up!");
+		}
+	}
+
+	/// Initializes virtio network device by mapping configuration layout to
+	/// respective structs (configuration structs are:
+	///
+	/// Returns a driver instance of
+	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
+	pub fn init(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<Self, VirtioNetError> {
+	) -> Result<VirtioNetDriver, VirtioError> {
 		let dev_cfg_raw: &'static virtio::net::Config = unsafe {
 			&*registers
 				.borrow_mut()
@@ -41,58 +47,11 @@ impl VirtioNetDriver {
 		let isr_stat = IsrStatus::new(registers.borrow_mut());
 		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
-		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-			u16::from_str(&my_mtu).unwrap()
-		} else {
-			// fallback to the default MTU
-			1514
-		};
-
-		let send_vqs = TxQueues::new(Vec::<Box<dyn Virtq>>::new(), &dev_cfg);
-		let recv_vqs = RxQueues::new(Vec::<Box<dyn Virtq>>::new(), &dev_cfg);
-		Ok(VirtioNetDriver {
-			dev_cfg,
-			com_cfg: ComCfg::new(registers, 1),
-			isr_stat,
-			notif_cfg,
-			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs,
-			send_vqs,
-			num_vqs: 0,
-			mtu,
-			irq,
-			checksums: ChecksumCapabilities::default(),
-		})
-	}
-
-	pub fn print_information(&mut self) {
-		self.com_cfg.print_information();
-		if self.dev_status() == virtio::net::S::LINK_UP {
-			info!("The link of the network device is up!");
-		}
-	}
-
-	/// Initializes virtio network device by mapping configuration layout to
-	/// respective structs (configuration structs are:
-	///
-	/// Returns a driver instance of
-	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
-	pub fn init(
-		dev_id: u16,
-		registers: VolatileRef<'static, DeviceRegisters>,
-		irq: InterruptLine,
-	) -> Result<VirtioNetDriver, VirtioError> {
-		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq) {
-			match drv.init_dev() {
-				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
-				_ => {
-					drv.print_information();
-					Ok(drv)
-				}
-			}
-		} else {
-			error!("Unable to create Driver. Aborting!");
-			Err(VirtioError::Unknown)
-		}
+		let mut drv =
+			VirtioNetDriver::init_dev(ComCfg::new(registers, 1), notif_cfg, isr_stat, dev_cfg, irq)
+				.map_err(VirtioError::NetDriver)
+				.inspect_err(|_| error!("Unable to create Driver. Aborting!"))?;
+		drv.print_information();
+		Ok(drv)
 	}
 }

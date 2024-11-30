@@ -13,7 +13,9 @@ cfg_if::cfg_if! {
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
+use core::str::FromStr;
 
+use constants::MAX_VQ_PAIRS;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
@@ -21,7 +23,6 @@ use virtio::{DeviceConfigSpace, FeatureBits};
 use volatile::access::ReadOnly;
 use volatile::VolatileRef;
 
-use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::NetworkDriver;
@@ -47,11 +48,33 @@ pub(crate) struct NetDevCfg {
 	pub features: virtio::net::F,
 }
 
-pub struct CtrlQueue(Option<Box<dyn Virtq>>);
+pub struct CtrlQueue(#[expect(unused)] Box<dyn Virtq>);
 
 impl CtrlQueue {
-	pub fn new(vq: Option<Box<dyn Virtq>>) -> Self {
-		CtrlQueue(vq)
+	pub fn new<T: Virtq + 'static>(
+		common_cfg: &mut ComCfg,
+		notify_cfg: &NotifCfg,
+		device_cfg: &NetDevCfg,
+		virtqueue_pairs: u16,
+	) -> Option<Self> {
+		// Add a control if feature is negotiated
+		if device_cfg.features.contains(virtio::net::F::CTRL_VQ) {
+			let mut vq: Box<dyn Virtq> = Box::new(
+				T::new(
+					common_cfg,
+					notify_cfg,
+					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					VqIndex::from(2 * virtqueue_pairs),
+					device_cfg.features.into(),
+				)
+				.unwrap(),
+			);
+
+			vq.enable_notifs();
+			Some(CtrlQueue(vq))
+		} else {
+			None
+		}
 	}
 }
 
@@ -61,7 +84,12 @@ pub struct RxQueues {
 }
 
 impl RxQueues {
-	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new<T: Virtq + 'static>(
+		com_cfg: &mut ComCfg,
+		notif_cfg: &NotifCfg,
+		dev_cfg: &NetDevCfg,
+		virtqueue_pairs: u16,
+	) -> Self {
 		// See Virtio specification v1.1 - 5.1.6.3.1
 		//
 		let packet_size = if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
@@ -69,6 +97,29 @@ impl RxQueues {
 		} else {
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
 		};
+
+		let mut vqs = Vec::with_capacity(virtqueue_pairs.into());
+		for i in 0..virtqueue_pairs {
+			let mut vq: Box<dyn Virtq> = Box::new(
+				T::new(
+					com_cfg,
+					notif_cfg,
+					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					// The indices are in the form of 2N for receive queues (VIRTIO Spec v1.2 sec. 5.1.2)
+					VqIndex::from(2 * i),
+					dev_cfg.features.into(),
+				)
+				.unwrap(),
+			);
+			// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
+			const BUFF_PER_PACKET: u16 = 2;
+			// The actual size may be smaller than what we requested.
+			let num_packets = u16::from(vq.size()) / BUFF_PER_PACKET;
+			fill_queue(vq.as_mut(), num_packets, packet_size);
+			// Interrupt for receiving packets is wanted
+			vq.enable_notifs();
+			vqs.push(vq);
+		}
 
 		Self { vqs, packet_size }
 	}
@@ -79,16 +130,6 @@ impl RxQueues {
 	/// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
 	fn post_processing(_buffer_tkn: &mut UsedBufferToken) -> Result<(), VirtioNetError> {
 		Ok(())
-	}
-
-	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
-	///
-	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, mut vq: Box<dyn Virtq>) {
-		const BUFF_PER_PACKET: u16 = 2;
-		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		fill_queue(vq.as_mut(), num_packets, self.packet_size);
-		self.vqs.push(vq);
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
@@ -154,7 +195,12 @@ pub struct TxQueues {
 }
 
 impl TxQueues {
-	pub fn new(vqs: Vec<Box<dyn Virtq>>, dev_cfg: &NetDevCfg) -> Self {
+	pub fn new<T: Virtq + 'static>(
+		com_cfg: &mut ComCfg,
+		notif_cfg: &NotifCfg,
+		dev_cfg: &NetDevCfg,
+		virtqueue_pairs: u16,
+	) -> Self {
 		let packet_length = if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
@@ -163,6 +209,24 @@ impl TxQueues {
 		} else {
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
 		};
+
+		let mut vqs = Vec::with_capacity(virtqueue_pairs.into());
+		for i in 0..virtqueue_pairs {
+			let mut vq: Box<dyn Virtq> = Box::new(
+				T::new(
+					com_cfg,
+					notif_cfg,
+					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					// The indices are in the form of 2N + 1 for transmit queues (VIRTIO Spec v1.2 sec. 5.1.2)
+					VqIndex::from(2 * i + 1),
+					dev_cfg.features.into(),
+				)
+				.unwrap(),
+			);
+			// Interrupt for communicating that a sended packet left, is not needed
+			vq.disable_notifs();
+			vqs.push(vq);
+		}
 
 		Self { vqs, packet_length }
 	}
@@ -187,12 +251,6 @@ impl TxQueues {
 			while vq.try_recv().is_ok() {}
 		}
 	}
-
-	fn add(&mut self, vq: Box<dyn Virtq>) {
-		// Currently we are doing nothing with the additional queues. They are inactive and might be used in the
-		// future
-		self.vqs.push(vq);
-	}
 }
 
 /// Virtio network driver struct.
@@ -203,13 +261,17 @@ pub(crate) struct VirtioNetDriver {
 	pub(super) dev_cfg: NetDevCfg,
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
+	#[expect(unused)]
 	pub(super) notif_cfg: NotifCfg,
 
-	pub(super) ctrl_vq: CtrlQueue,
+	#[expect(
+		unused,
+		reason = "This lint exception should be removed once any of the features that make use of the control queue are implemented."
+	)]
+	pub(super) ctrl_vq: Option<CtrlQueue>,
 	pub(super) recv_vqs: RxQueues,
 	pub(super) send_vqs: TxQueues,
 
-	pub(super) num_vqs: u16,
 	pub(super) mtu: u16,
 	pub(super) irq: InterruptLine,
 	pub(super) checksums: ChecksumCapabilities,
@@ -389,11 +451,6 @@ impl VirtioNetDriver {
 		self.dev_cfg.dev_id
 	}
 
-	#[cfg(feature = "pci")]
-	pub fn set_failed(&mut self) {
-		self.com_cfg.set_failed();
-	}
-
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
 	/// has been negotiated. Otherwise assumes an active device.
 	#[cfg(not(feature = "pci"))]
@@ -471,20 +528,35 @@ impl VirtioNetDriver {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.1.5
-	pub fn init_dev(&mut self) -> Result<(), VirtioNetError> {
-		// Reset
-		self.com_cfg.reset_dev();
+	pub fn init_dev(
+		mut com_cfg: ComCfg,
+		notif_cfg: NotifCfg,
+		isr_stat: IsrStatus,
+		mut dev_cfg: NetDevCfg,
+		irq: u8,
+	) -> Result<VirtioNetDriver, VirtioNetError> {
+		let ctrl_vq;
+		let recv_vqs;
+		let send_vqs;
+		let mtu;
+		let mut checksums;
 
-		// Indicate device, that OS noticed it
-		self.com_cfg.ack_dev();
+		// We do the whole initialization process inside an inner scope so that if any of the steps fail,
+		// the scope returns an `Err` that we can catch to set the driver status as failed.
+		{
+			// Reset
+			com_cfg.reset_dev();
 
-		// Indicate device, that driver is able to handle it
-		self.com_cfg.set_drv();
+			// Indicate device, that OS noticed it
+			com_cfg.ack_dev();
 
-		let minimal_features = virtio::net::F::VERSION_1 | virtio::net::F::MAC;
+			// Indicate device, that driver is able to handle it
+			com_cfg.set_drv();
 
-		// If wanted, push new features into feats here:
-		let mut features = minimal_features
+			let minimal_features = virtio::net::F::VERSION_1 | virtio::net::F::MAC;
+
+			// If wanted, push new features into feats here:
+			let mut features = minimal_features
 			// Indirect descriptors can be used
 			| virtio::net::F::INDIRECT_DESC
 			// Packed Vq can be used
@@ -503,41 +575,41 @@ impl VirtioNetDriver {
 			// Multiqueue support
 			| virtio::net::F::MQ;
 
-		// Currently the driver does NOT support the features below.
-		// In order to provide functionality for these, the driver
-		// needs to take care of calculating checksum in
-		// RxQueues.post_processing()
-		// | virtio::net::F::GUEST_TSO4
-		// | virtio::net::F::GUEST_TSO6
+			// Currently the driver does NOT support the features below.
+			// In order to provide functionality for these, the driver
+			// needs to take care of calculating checksum in
+			// RxQueues.post_processing()
+			// | virtio::net::F::GUEST_TSO4
+			// | virtio::net::F::GUEST_TSO6
 
-		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
-		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
-		match self.negotiate_features(features) {
-			Ok(_) => info!(
+			// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
+			// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
+			match Self::negotiate_features(&mut com_cfg, features) {
+				Ok(_) => info!(
 				"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
-				self.dev_cfg.dev_id
+				dev_cfg.dev_id
 			),
-			Err(vnet_err) => {
-				match vnet_err {
-					VirtioNetError::FeatureRequirementsNotMet(features) => {
-						error!("Network drivers feature set {features:?} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!");
-						return Err(vnet_err);
-					}
-					VirtioNetError::IncompatibleFeatureSets(drv_feats, dev_feats) => {
-						// Create a new matching feature set for device and driver if the minimal set is met!
-						if !dev_feats.contains(minimal_features) {
-							error!("Device features set, does not satisfy minimal features needed. Aborting!");
-							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-						} else {
-							let common_features = drv_feats & dev_feats;
-							if common_features.is_empty() {
-								error!("Feature negotiation failed with minimal feature set. Aborting!");
-								return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-							}
-							features = common_features;
+				Err(vnet_err) => {
+					match vnet_err {
+						VirtioNetError::FeatureRequirementsNotMet(features) => {
+							error!("Network drivers feature set {features:?} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!");
+							return Err(vnet_err);
+						}
+						VirtioNetError::IncompatibleFeatureSets(drv_feats, dev_feats) => {
+							// Create a new matching feature set for device and driver if the minimal set is met!
+							if !dev_feats.contains(minimal_features) {
+								error!("Device features set, does not satisfy minimal features needed. Aborting!");
+								return Err(VirtioNetError::FailFeatureNeg(dev_cfg.dev_id));
+							} else {
+								let common_features = drv_feats & dev_feats;
+								if common_features.is_empty() {
+									error!("Feature negotiation failed with minimal feature set. Aborting!");
+									return Err(VirtioNetError::FailFeatureNeg(dev_cfg.dev_id));
+								}
+								features = common_features;
 
-							match self.negotiate_features(features) {
-                                Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {features:?}", self.dev_cfg.dev_id),
+								match Self::negotiate_features(&mut com_cfg, features) {
+                                Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {features:?}", dev_cfg.dev_id),
                                 Err(vnet_err) => {
                                     match vnet_err {
                                         VirtioNetError::FeatureRequirementsNotMet(features) => {
@@ -551,72 +623,139 @@ impl VirtioNetDriver {
                                     }
                                 }
                             }
+							}
 						}
-					}
-					_ => {
-						error!(
+						_ => {
+							error!(
 							"Wanted set of features is NOT supported by device. Set: {features:?}"
 						);
-						return Err(vnet_err);
+							return Err(vnet_err);
+						}
 					}
 				}
 			}
-		}
 
-		// Indicates the device, that the current feature set is final for the driver
-		// and will not be changed.
-		self.com_cfg.features_ok();
+			// Indicates the device, that the current feature set is final for the driver
+			// and will not be changed.
+			com_cfg.features_ok();
 
-		// Checks if the device has accepted final set. This finishes feature negotiation.
-		if self.com_cfg.check_features() {
+			// Checks if the device has accepted final set. This finishes feature negotiation.
+			if com_cfg.check_features() {
+				info!(
+					"Features have been negotiated between virtio network device {:x} and driver.",
+					dev_cfg.dev_id
+				);
+				// Set feature set in device config fur future use.
+				dev_cfg.features = features;
+			} else {
+				return Err(VirtioNetError::FailFeatureNeg(dev_cfg.dev_id));
+			}
+
+			// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
+			mtu = if dev_cfg.features.contains(virtio::net::F::MTU) {
+				dev_cfg.raw.as_ptr().mtu().read().to_ne()
+			} else if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
+				u16::from_str(&my_mtu).unwrap()
+			} else {
+				// fallback to the default MTU
+				1514
+			};
+
+			let virtqueue_pairs = if dev_cfg.features.contains(virtio::net::F::MQ) {
+				u16::min(
+					MAX_VQ_PAIRS,
+					dev_cfg.raw.as_ptr().max_virtqueue_pairs().read().to_ne(),
+				)
+			} else {
+				1
+			};
+
+			if dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
+				ctrl_vq = CtrlQueue::new::<PackedVq>(
+					&mut com_cfg,
+					&notif_cfg,
+					&dev_cfg,
+					virtqueue_pairs,
+				);
+				recv_vqs = RxQueues::new::<PackedVq>(
+					&mut com_cfg,
+					&notif_cfg,
+					&dev_cfg,
+					virtqueue_pairs,
+				);
+				send_vqs = TxQueues::new::<PackedVq>(
+					&mut com_cfg,
+					&notif_cfg,
+					&dev_cfg,
+					virtqueue_pairs,
+				);
+			} else {
+				ctrl_vq = CtrlQueue::new::<SplitVq>(
+					&mut com_cfg,
+					&notif_cfg,
+					&dev_cfg,
+					virtqueue_pairs,
+				);
+				recv_vqs = RxQueues::new::<SplitVq>(
+					&mut com_cfg,
+					&notif_cfg,
+					&dev_cfg,
+					virtqueue_pairs,
+				);
+				send_vqs = TxQueues::new::<SplitVq>(
+					&mut com_cfg,
+					&notif_cfg,
+					&dev_cfg,
+					virtqueue_pairs,
+				);
+			}
+
+			info!("Network driver successfully initialized virtqueues.");
 			info!(
-				"Features have been negotiated between virtio network device {:x} and driver.",
-				self.dev_cfg.dev_id
-			);
-			// Set feature set in device config fur future use.
-			self.dev_cfg.features = features;
-		} else {
-			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-		}
-
-		match self.dev_spec_init() {
-			Ok(_) => info!(
 				"Device specific initialization for Virtio network device {:x} finished",
-				self.dev_cfg.dev_id
-			),
-			Err(vnet_err) => return Err(vnet_err),
-		}
-		// At this point the device is "live"
-		self.com_cfg.drv_ok();
+				dev_cfg.dev_id
+			);
+			// At this point the device is "live"
+			com_cfg.drv_ok();
 
-		if self.dev_cfg.features.contains(virtio::net::F::CSUM)
-			&& self.dev_cfg.features.contains(virtio::net::F::GUEST_CSUM)
-		{
-			self.checksums.udp = Checksum::None;
-			self.checksums.tcp = Checksum::None;
-		} else if self.dev_cfg.features.contains(virtio::net::F::CSUM) {
-			self.checksums.udp = Checksum::Rx;
-			self.checksums.tcp = Checksum::Rx;
-		} else if self.dev_cfg.features.contains(virtio::net::F::GUEST_CSUM) {
-			self.checksums.udp = Checksum::Tx;
-			self.checksums.tcp = Checksum::Tx;
-		}
-		debug!("{:?}", self.checksums);
+			checksums = ChecksumCapabilities::default();
+			if dev_cfg.features.contains(virtio::net::F::CSUM)
+				&& dev_cfg.features.contains(virtio::net::F::GUEST_CSUM)
+			{
+				checksums.udp = Checksum::None;
+				checksums.tcp = Checksum::None;
+			} else if dev_cfg.features.contains(virtio::net::F::CSUM) {
+				checksums.udp = Checksum::Rx;
+				checksums.tcp = Checksum::Rx;
+			} else if dev_cfg.features.contains(virtio::net::F::GUEST_CSUM) {
+				checksums.udp = Checksum::Tx;
+				checksums.tcp = Checksum::Tx;
+			}
+			debug!("{:?}", checksums);
+			Ok(())
+		}.inspect_err(|_| com_cfg.set_failed())?;
 
-		if self.dev_cfg.features.contains(virtio::net::F::MTU) {
-			self.mtu = self.dev_cfg.raw.as_ptr().mtu().read().to_ne();
-		}
-
-		Ok(())
+		Ok(VirtioNetDriver {
+			dev_cfg,
+			com_cfg,
+			isr_stat,
+			notif_cfg,
+			ctrl_vq,
+			recv_vqs,
+			send_vqs,
+			mtu,
+			irq,
+			checksums,
+		})
 	}
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
 	fn negotiate_features(
-		&mut self,
+		com_cfg: &mut ComCfg,
 		driver_features: virtio::net::F,
 	) -> Result<(), VirtioNetError> {
-		let device_features = virtio::net::F::from(self.com_cfg.dev_features());
+		let device_features = virtio::net::F::from(com_cfg.dev_features());
 
 		if device_features.requirements_satisfied() {
 			info!("Feature set wanted by network driver are in conformance with specification.");
@@ -626,7 +765,7 @@ impl VirtioNetDriver {
 
 		if device_features.contains(driver_features) {
 			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(driver_features.into());
+			com_cfg.set_drv_features(driver_features.into());
 			Ok(())
 		} else {
 			Err(VirtioNetError::IncompatibleFeatureSets(
@@ -635,154 +774,11 @@ impl VirtioNetDriver {
 			))
 		}
 	}
-
-	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
-	fn dev_spec_init(&mut self) -> Result<(), VirtioNetError> {
-		match self.virtqueue_init() {
-			Ok(_) => info!("Network driver successfully initialized virtqueues."),
-			Err(vnet_err) => return Err(vnet_err),
-		}
-
-		// Add a control if feature is negotiated
-		if self.dev_cfg.features.contains(virtio::net::F::CTRL_VQ) {
-			if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
-				self.ctrl_vq = CtrlQueue(Some(Box::new(
-					PackedVq::new(
-						&mut self.com_cfg,
-						&self.notif_cfg,
-						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-						VqIndex::from(self.num_vqs),
-						self.dev_cfg.features.into(),
-					)
-					.unwrap(),
-				)));
-			} else {
-				self.ctrl_vq = CtrlQueue(Some(Box::new(
-					SplitVq::new(
-						&mut self.com_cfg,
-						&self.notif_cfg,
-						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-						VqIndex::from(self.num_vqs),
-						self.dev_cfg.features.into(),
-					)
-					.unwrap(),
-				)));
-			}
-
-			self.ctrl_vq.0.as_mut().unwrap().enable_notifs();
-		}
-
-		Ok(())
-	}
-
-	/// Initialize virtqueues via the queue interface and populates receiving queues
-	fn virtqueue_init(&mut self) -> Result<(), VirtioNetError> {
-		// We are assuming here, that the device single source of truth is the
-		// device specific configuration. Hence we do NOT check if
-		//
-		// max_virtqueue_pairs + 1 < num_queues
-		//
-		// - the plus 1 is due to the possibility of an existing control queue
-		// - the num_queues is found in the ComCfg struct of the device and defines the maximal number
-		// of supported queues.
-		if self.dev_cfg.features.contains(virtio::net::F::MQ) {
-			if self
-				.dev_cfg
-				.raw
-				.as_ptr()
-				.max_virtqueue_pairs()
-				.read()
-				.to_ne() * 2 >= MAX_NUM_VQ
-			{
-				self.num_vqs = MAX_NUM_VQ;
-			} else {
-				self.num_vqs = self
-					.dev_cfg
-					.raw
-					.as_ptr()
-					.max_virtqueue_pairs()
-					.read()
-					.to_ne() * 2;
-			}
-		} else {
-			// Minimal number of virtqueues defined in the standard v1.1. - 5.1.5 Step 1
-			self.num_vqs = 2;
-		}
-
-		// The loop is running from 0 to num_vqs and the indexes are provided to the VqIndex::from function in this way
-		// in order to allow the indexes of the queues to be in a form of:
-		//
-		// index i for receive queue
-		// index i+1 for send queue
-		//
-		// as it is wanted by the network network device.
-		// see Virtio specification v1.1. - 5.1.2
-		// Assure that we have always an even number of queues (i.e. pairs of queues).
-		assert_eq!(self.num_vqs % 2, 0);
-
-		for i in 0..(self.num_vqs / 2) {
-			if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
-				let mut vq = PackedVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqIndex::from(2 * i),
-					self.dev_cfg.features.into(),
-				)
-				.unwrap();
-				// Interrupt for receiving packets is wanted
-				vq.enable_notifs();
-
-				self.recv_vqs.add(Box::from(vq));
-
-				let mut vq = PackedVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqIndex::from(2 * i + 1),
-					self.dev_cfg.features.into(),
-				)
-				.unwrap();
-				// Interrupt for communicating that a sended packet left, is not needed
-				vq.disable_notifs();
-
-				self.send_vqs.add(Box::from(vq));
-			} else {
-				let mut vq = SplitVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqIndex::from(2 * i),
-					self.dev_cfg.features.into(),
-				)
-				.unwrap();
-				// Interrupt for receiving packets is wanted
-				vq.enable_notifs();
-
-				self.recv_vqs.add(Box::from(vq));
-
-				let mut vq = SplitVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-					VqIndex::from(2 * i + 1),
-					self.dev_cfg.features.into(),
-				)
-				.unwrap();
-				// Interrupt for communicating that a sended packet left, is not needed
-				vq.disable_notifs();
-
-				self.send_vqs.add(Box::from(vq));
-			}
-		}
-
-		Ok(())
-	}
 }
 
 pub mod constants {
 	// Configuration constants
-	pub const MAX_NUM_VQ: u16 = 2;
+	pub const MAX_VQ_PAIRS: u16 = 1;
 }
 
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]
