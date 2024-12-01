@@ -62,6 +62,7 @@ const UHYVE_PORT_OPEN: u16 = 0x440;
 const UHYVE_PORT_CLOSE: u16 = 0x480;
 const UHYVE_PORT_READ: u16 = 0x500;
 const UHYVE_PORT_LSEEK: u16 = 0x580;
+const UHYVE_PORT_CHDIR: u16 = 0x820;
 const UHYVE_PORT_UNLINK: u16 = 0x840;
 
 #[repr(C, packed)]
@@ -141,6 +142,22 @@ impl SysLseek {
 		SysLseek { fd, offset, whence }
 	}
 }
+
+#[repr(C, packed)]
+struct SysChdir {
+	name: PhysAddr,
+	ret: i32,
+}
+
+impl SysChdir {
+	fn new(name: VirtAddr) -> SysChdir {
+		SysChdir {
+			name: paging::virtual_to_physical(name).unwrap(),
+			ret: -1,
+		}
+	}
+}
+
 
 #[repr(C, packed)]
 struct SysUnlink {
@@ -321,7 +338,17 @@ impl VfsNode for UhyveDirectory {
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 	if is_uhyve() {
-		let mount_point = hermit_var_or!("UHYVE_MOUNTPOINT", "/root").to_string();
+		// TODO: Use FDT instead?
+		let mut mount_point = hermit_var_or!("UHYVE_MOUNTPOINT", "/root").to_string();
+		if ["/tmp", "/proc", ".", ".."].iter().any(|path| mount_point.starts_with(*path)) {
+			error!("UHYVE_MOUNTPOINT {} invalid, falling back to /root and informing host...", mount_point);
+			mount_point = "/root".to_owned();
+			let mut syschdir: SysChdir = SysChdir::new(VirtAddr::from_ptr(mount_point.as_ptr()));
+			uhyve_send(UHYVE_PORT_CHDIR, &mut syschdir);
+			if syschdir.ret != 0 {
+				panic!("Could not change invalid mount point to /root");
+			}
+		}
 		info!("Mounting uhyve filesystem at {}", mount_point);
 		fs::FILESYSTEM
 			.get()
