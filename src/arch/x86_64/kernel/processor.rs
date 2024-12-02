@@ -334,13 +334,13 @@ impl CpuFrequency {
 	unsafe fn detect_from_cpuid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		let tsc_info = cpuid.get_tsc_info().ok_or(())?;
 		let freq = tsc_info.tsc_frequency().ok_or(())?;
-		let mhz = (freq / 1000000u64) as u16;
+		let mhz = (freq / 1_000_000u64) as u16;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
 	}
 
 	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		const KHZ_TO_HZ: u64 = 1000;
-		const MHZ_TO_HZ: u64 = 1000000;
+		const MHZ_TO_HZ: u64 = 1_000_000;
 		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
 		let freq = u64::from(hypervisor_info.tsc_frequency().ok_or(())?) * KHZ_TO_HZ;
 		let mhz: u16 = (freq / MHZ_TO_HZ).try_into().unwrap();
@@ -442,7 +442,7 @@ impl CpuFrequency {
 				break Some(tick);
 			}
 
-			if get_timestamp() - start > 120000000 {
+			if get_timestamp() - start > 120_000_000 {
 				break None;
 			}
 

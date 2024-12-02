@@ -19,10 +19,10 @@ use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 use crate::init_cell::InitCell;
 
-pub const MAGIC_VALUE: u32 = 0x74726976;
+pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
-pub const MMIO_START: usize = 0x00000000feb00000;
-pub const MMIO_END: usize = 0x00000000feb0ffff;
+pub const MMIO_START: usize = 0x0000_0000_feb0_0000;
+pub const MMIO_END: usize = 0x0000_0000_feb0_ffff;
 const IRQ_NUMBER: u8 = 44 - 32;
 
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());

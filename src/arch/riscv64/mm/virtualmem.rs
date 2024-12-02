@@ -15,7 +15,7 @@ static KERNEL_FREE_LIST: InterruptSpinMutex<FreeList<16>> =
 
 /// End of the virtual memory address space reserved for kernel memory (256 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.
-const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr::new(0x4000000000);
+const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr::new(0x0040_0000_0000);
 
 pub fn init() {
 	let range = PageRange::new(

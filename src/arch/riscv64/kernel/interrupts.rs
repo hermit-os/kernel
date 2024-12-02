@@ -133,7 +133,7 @@ pub(crate) fn install_handlers() {
 			let thresh_address = *base_ptr + 0x20_0000 + 0x1000 * (*context as usize);
 			core::ptr::write_volatile(thresh_address as *mut u32, 0);
 			// Enable irq for context
-			const PLIC_ENABLE_OFFSET: usize = 0x002000;
+			const PLIC_ENABLE_OFFSET: usize = 0x0000_2000;
 			let enable_address = *base_ptr
 				+ PLIC_ENABLE_OFFSET
 				+ 0x80 * (*context as usize)

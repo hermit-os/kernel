@@ -175,11 +175,11 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 	let irqid = GicV3::get_and_acknowledge_interrupt().unwrap();
 	let esr = ESR_EL1.get();
 	let ec = esr >> 26;
-	let iss = esr & 0xFFFFFF;
+	let iss = esr & 0x00FF_FFFF;
 	let pc = ELR_EL1.get();
 
 	/* data abort from lower or current level */
-	if (ec == 0b100100) || (ec == 0b100101) {
+	if (ec == 0b10_0100) || (ec == 0b10_0101) {
 		/* check if value in far_el1 is valid */
 		if (iss & (1 << 10)) == 0 {
 			/* read far_el1 register, which holds the faulting virtual address */

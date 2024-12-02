@@ -93,6 +93,7 @@ semicolon_if_nothing_returned = "warn"
 string_to_string = "warn"
 transmute_ptr_to_ptr = "warn"
 uninlined_format_args = "warn"
+unreadable_literal = "warn"
 
 [dependencies]
 hermit-macro = { path = "hermit-macro" }

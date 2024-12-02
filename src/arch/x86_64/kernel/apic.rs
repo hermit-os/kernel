@@ -32,8 +32,8 @@ use crate::config::*;
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
 
-const MP_FLT_SIGNATURE: u32 = 0x5f504d5f;
-const MP_CONFIG_SIGNATURE: u32 = 0x504d4350;
+const MP_FLT_SIGNATURE: u32 = 0x5f50_4d5f;
+const MP_CONFIG_SIGNATURE: u32 = 0x504d_4350;
 
 const APIC_ICR2: usize = 0x0310;
 
@@ -373,7 +373,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	) {
 		Ok(mpf)
 	} else if let Ok(mpf) = search_mp_floating(
-		AddrRange::new(PhysAddr::new(0xF0000u64), PhysAddr::new(0x100000u64)).unwrap(),
+		AddrRange::new(PhysAddr::new(0xF0000u64), PhysAddr::new(0x10_0000u64)).unwrap(),
 	) {
 		Ok(mpf)
 	} else {

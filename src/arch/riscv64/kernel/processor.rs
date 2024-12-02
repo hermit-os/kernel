@@ -249,7 +249,7 @@ pub fn get_timer_ticks() -> u64 {
 }
 
 pub fn get_frequency() -> u16 {
-	(get_timebase_freq() / 1000000).try_into().unwrap()
+	(get_timebase_freq() / 1_000_000).try_into().unwrap()
 }
 
 #[inline]

@@ -23,7 +23,7 @@ use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::env;
 
-const SERIAL_PORT_BAUDRATE: u32 = 115200;
+const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
 static COM1: SpinMutex<SerialPort> = SpinMutex::new(SerialPort::new(0x800));
 

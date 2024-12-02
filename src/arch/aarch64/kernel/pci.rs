@@ -24,7 +24,10 @@ pub(crate) struct PciConfigRegion(VirtAddr);
 
 impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
-		assert!(addr.as_u64() & 0xFFFFFFF == 0, "Unaligned PCI Config Space");
+		assert!(
+			addr.as_u64() & 0x0FFF_FFFF == 0,
+			"Unaligned PCI Config Space"
+		);
 		Self(addr)
 	}
 
@@ -246,7 +249,7 @@ pub fn init() {
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 
 				let pci_address =
-					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x10000000).unwrap();
+					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x1000_0000).unwrap();
 				info!("Mapping PCI Enhanced Configuration Space interface to virtual address {:p} (size {:#X})", pci_address, size);
 
 				let mut flags = PageTableEntryFlags::empty();

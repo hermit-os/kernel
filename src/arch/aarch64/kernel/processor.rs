@@ -65,11 +65,14 @@ impl CpuFrequency {
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		let mhz = env::freq().ok_or(())?;
-		self.set_detected_cpu_frequency(u32::from(mhz) * 1000000, CpuFrequencySources::CommandLine)
+		self.set_detected_cpu_frequency(
+			u32::from(mhz) * 1_000_000,
+			CpuFrequencySources::CommandLine,
+		)
 	}
 
 	unsafe fn detect_from_register(&mut self) -> Result<(), ()> {
-		let hz = CNTFRQ_EL0.get() & 0xFFFFFFFF;
+		let hz = CNTFRQ_EL0.get() & 0xFFFF_FFFF;
 		self.set_detected_cpu_frequency(hz.try_into().unwrap(), CpuFrequencySources::Register)
 	}
 
@@ -117,7 +120,7 @@ pub fn shutdown(error_code: i32) -> ! {
 			semihosting::process::exit(error_code)
 		} else {
 			unsafe {
-				const PSCI_SYSTEM_OFF: u64 = 0x84000008;
+				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
 				// call hypervisor to shut down the system
 				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
 
@@ -134,13 +137,13 @@ pub fn shutdown(error_code: i32) -> ! {
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
 	// and dividing it by the CPU frequency in MHz.
-	let ticks = 1000000 * u128::from(get_timestamp()) / u128::from(CPU_FREQUENCY.get());
+	let ticks = 1_000_000 * u128::from(get_timestamp()) / u128::from(CPU_FREQUENCY.get());
 	u64::try_from(ticks).unwrap()
 }
 
 #[inline]
 pub fn get_frequency() -> u16 {
-	(CPU_FREQUENCY.get() / 1000000).try_into().unwrap()
+	(CPU_FREQUENCY.get() / 1_000_000).try_into().unwrap()
 }
 
 #[inline]
@@ -221,7 +224,7 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-		let deadline = u128::from(wt) * u128::from(CPU_FREQUENCY.get()) / 1000000;
+		let deadline = u128::from(wt) * u128::from(CPU_FREQUENCY.get()) / 1_000_000;
 		let deadline = u64::try_from(deadline).unwrap();
 
 		unsafe {

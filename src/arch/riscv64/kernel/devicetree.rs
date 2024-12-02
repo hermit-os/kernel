@@ -200,7 +200,7 @@ pub fn init_drivers() {
 				let magic = mmio.as_ptr().magic_value().read().to_ne();
 				let version = mmio.as_ptr().version().read().to_ne();
 
-				const MMIO_MAGIC_VALUE: u32 = 0x74726976;
+				const MMIO_MAGIC_VALUE: u32 = 0x7472_6976;
 				if magic != MMIO_MAGIC_VALUE {
 					error!("It's not a MMIO-device at {mmio:p}");
 				}

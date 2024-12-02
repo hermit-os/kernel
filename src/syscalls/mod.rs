@@ -518,7 +518,7 @@ pub unsafe extern "C" fn sys_ioctl(
 	cmd: i32,
 	argp: *mut core::ffi::c_void,
 ) -> i32 {
-	const FIONBIO: i32 = 0x8008667eu32 as i32;
+	const FIONBIO: i32 = 0x8008_667eu32 as i32;
 
 	if cmd == FIONBIO {
 		let value = unsafe { *(argp as *const i32) };

@@ -69,7 +69,7 @@ impl<'a> NetworkInterface<'a> {
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
-		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1000000;
+		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
 		if device.capabilities().medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}
@@ -147,7 +147,7 @@ impl<'a> NetworkInterface<'a> {
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
-		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1000000;
+		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
 		if device.capabilities().medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}
