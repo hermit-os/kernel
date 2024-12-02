@@ -680,10 +680,7 @@ impl VfsNode for MemDirectory {
 
 					if components.is_empty() {
 						let file = unsafe { RomFile::new(ptr, length, mode) };
-						self.inner
-							.write()
-							.await
-							.insert(name.to_string(), Box::new(file));
+						self.inner.write().await.insert(name, Box::new(file));
 						return Ok(());
 					}
 
