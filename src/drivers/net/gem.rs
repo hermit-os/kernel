@@ -242,9 +242,7 @@ impl NetworkDriver for GEMDriver {
 	{
 		debug!("get_tx_buffer");
 
-		if len as u32 > TX_BUF_LEN {
-			panic!("TX buffer is too small");
-		}
+		assert!(len as u32 <= TX_BUF_LEN, "TX buffer is too small");
 
 		self.handle_interrupt();
 

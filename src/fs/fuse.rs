@@ -1193,9 +1193,10 @@ pub(crate) fn init() {
 				(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
 			};
 
-			if len <= core::mem::size_of::<fuse_dirent>() {
-				panic!("FUSE no new dirs");
-			}
+			assert!(
+				len > core::mem::size_of::<fuse_dirent>(),
+				"FUSE no new dirs"
+			);
 
 			let mut entries: Vec<String> = Vec::new();
 			while (rsp.headers.out_header.len as usize) - offset

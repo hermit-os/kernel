@@ -337,9 +337,7 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 				.as_ref()
 				.unwrap()
 		};
-		if &rsdp.signature != b"RSD PTR " {
-			panic!("RSDP Address not valid!");
-		}
+		assert!(&rsdp.signature == b"RSD PTR ", "RSDP Address not valid!");
 		return Ok(rsdp);
 	}
 
