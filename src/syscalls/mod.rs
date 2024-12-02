@@ -298,9 +298,7 @@ pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
-	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
-		mode
-	} else {
+	let Some(mode) = AccessPermission::from_bits(mode) else {
 		return -crate::errno::EINVAL;
 	};
 
@@ -373,14 +371,10 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) -> FileDescriptor {
-	let flags = if let Some(flags) = OpenOption::from_bits(flags) {
-		flags
-	} else {
+	let Some(flags) = OpenOption::from_bits(flags) else {
 		return -crate::errno::EINVAL;
 	};
-	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
-		mode
-	} else {
+	let Some(mode) = AccessPermission::from_bits(mode) else {
 		return -crate::errno::EINVAL;
 	};
 

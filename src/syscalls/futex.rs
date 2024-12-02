@@ -31,9 +31,8 @@ pub unsafe extern "C" fn sys_futex_wait(
 			_ => return -EINVAL,
 		}
 	};
-	let flags = match Flags::from_bits(flags) {
-		Some(flags) => flags,
-		None => return -EINVAL,
+	let Some(flags) = Flags::from_bits(flags) else {
+		return -EINVAL;
 	};
 
 	synch::futex_wait(address, expected, timeout, flags)

@@ -224,9 +224,8 @@ impl Virtq for SplitVq {
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
-		let mut vq_handler = match com_cfg.select_vq(index.into()) {
-			Some(handler) => handler,
-			None => return Err(VirtqError::QueueNotExisting(index.into())),
+		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
+			return Err(VirtqError::QueueNotExisting(index.into()));
 		};
 
 		let size = vq_handler.set_vq_size(size.0);

@@ -45,10 +45,7 @@ impl VirtioNetDriver {
 			..
 		} = caps_coll;
 
-		let dev_cfg = if let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg)
-		{
-			dev_cfg
-		} else {
+		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
 			return Err(error::VirtioNetError::NoDevCfg(device_id));
 		};

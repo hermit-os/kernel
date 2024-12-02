@@ -43,13 +43,10 @@ impl VirtioVsockDriver {
 			..
 		} = caps_coll;
 
-		let dev_cfg =
-			if let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioVsockDriver::map_cfg) {
-				dev_cfg
-			} else {
-				error!("No dev config. Aborting!");
-				return Err(error::VirtioVsockError::NoDevCfg(device_id));
-			};
+		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioVsockDriver::map_cfg) else {
+			error!("No dev config. Aborting!");
+			return Err(error::VirtioVsockError::NoDevCfg(device_id));
+		};
 
 		Ok(VirtioVsockDriver {
 			dev_cfg,

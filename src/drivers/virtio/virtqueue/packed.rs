@@ -657,9 +657,8 @@ impl Virtq for PackedVq {
 		}
 
 		// Get a handler to the queues configuration area.
-		let mut vq_handler = match com_cfg.select_vq(index.into()) {
-			Some(handler) => handler,
-			None => return Err(VirtqError::QueueNotExisting(index.into())),
+		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
+			return Err(VirtqError::QueueNotExisting(index.into()));
 		};
 
 		// Must catch zero size as it is not allowed for packed queues.
