@@ -511,8 +511,8 @@ impl AvailBufferToken {
 		}
 
 		Ok(Self {
-			recv_buff,
 			send_buff,
+			recv_buff,
 		})
 	}
 }
