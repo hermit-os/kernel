@@ -439,7 +439,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	{
 		let mut guard = NIC.lock();
 
-		if let NetworkState::Initialized(nic) = guard.deref_mut() {
+		if let NetworkState::Initialized(nic) = &mut *guard {
 			#[cfg(feature = "udp")]
 			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();

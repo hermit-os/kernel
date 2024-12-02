@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 #[cfg(feature = "dns")]
 use alloc::vec::Vec;
 use core::future;
-use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
@@ -173,7 +172,7 @@ async fn dhcpv4_run() {
 async fn network_run() {
 	future::poll_fn(|_cx| {
 		if let Some(mut guard) = NIC.try_lock() {
-			match guard.deref_mut() {
+			match &mut *guard {
 				NetworkState::Initialized(nic) => {
 					nic.poll_common(now());
 					Poll::Pending
@@ -226,7 +225,7 @@ pub(crate) fn init() {
 
 	*guard = NetworkInterface::create();
 
-	if let NetworkState::Initialized(nic) = guard.deref_mut() {
+	if let NetworkState::Initialized(nic) = &mut *guard {
 		let time = now();
 		nic.poll_common(time);
 		let wakeup_time = nic

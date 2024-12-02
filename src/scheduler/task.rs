@@ -8,8 +8,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
-#[cfg(any(feature = "tcp", feature = "udp"))]
-use core::ops::DerefMut;
 use core::{cmp, fmt};
 
 use ahash::RandomState;
@@ -706,7 +704,7 @@ impl BlockedTaskQueue {
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
-			if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
+			if let crate::executor::network::NetworkState::Initialized(nic) = &mut *guard {
 				let now = crate::executor::network::now();
 				nic.poll_common(now);
 				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);

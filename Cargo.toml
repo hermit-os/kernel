@@ -77,6 +77,7 @@ unsafe_op_in_unsafe_fn = "warn"
 [lints.clippy]
 borrow_as_ptr = "warn"
 cast_lossless = "warn"
+explicit_deref_methods = "warn"
 if_not_else = "warn"
 ignored_unit_patterns = "warn"
 manual_let_else = "warn"
