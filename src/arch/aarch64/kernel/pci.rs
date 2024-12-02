@@ -268,8 +268,8 @@ pub fn init() {
 				assert!(mem64_start > 0);
 
 				let max_bus_number = size
-					/ (PCI_MAX_DEVICE_NUMBER as u64
-						* PCI_MAX_FUNCTION_NUMBER as u64
+					/ (u64::from(PCI_MAX_DEVICE_NUMBER)
+						* u64::from(PCI_MAX_FUNCTION_NUMBER)
 						* BasePageSize::SIZE);
 				info!("Scanning PCI Busses 0 to {}", max_bus_number - 1);
 

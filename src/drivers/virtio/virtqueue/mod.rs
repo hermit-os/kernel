@@ -51,7 +51,7 @@ impl From<VqIndex> for u16 {
 
 impl From<u32> for VqIndex {
 	fn from(val: u32) -> Self {
-		if val > u16::MAX as u32 {
+		if val > u32::from(u16::MAX) {
 			VqIndex(u16::MAX)
 		} else {
 			VqIndex(val as u16)
@@ -74,7 +74,7 @@ impl From<u16> for VqSize {
 
 impl From<u32> for VqSize {
 	fn from(val: u32) -> Self {
-		if val > u16::MAX as u32 {
+		if val > u32::from(u16::MAX) {
 			VqSize(u16::MAX)
 		} else {
 			VqSize(val as u16)
@@ -268,7 +268,7 @@ trait VirtqPrivate {
 						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
 							.as_u64()
 							.into(),
-						(len as u32).into(),
+						u32::from(len).into(),
 						incomplete_flags | virtq::DescF::NEXT,
 					)
 				});

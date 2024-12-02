@@ -170,7 +170,7 @@ impl Socket {
 							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(ep.cid as u64);
+							response.dst_cid = le64::from_ne(ep.cid.into());
 							response.src_port = le32::from_ne(port);
 							response.dst_port = le32::from_ne(ep.port);
 							response.len = le32::from_ne(0);
@@ -260,7 +260,7 @@ impl Socket {
 							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
+							response.dst_cid = le64::from_ne(raw.remote_cid.into());
 							response.src_port = le32::from_ne(port);
 							response.dst_port = le32::from_ne(raw.remote_port);
 							response.len = le32::from_ne(0);
@@ -388,7 +388,7 @@ impl Socket {
 
 							raw.tx_cnt = raw.tx_cnt.wrapping_add(len.try_into().unwrap());
 							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
+							response.dst_cid = le64::from_ne(raw.remote_cid.into());
 							response.src_port = le32::from_ne(port);
 							response.dst_port = le32::from_ne(raw.remote_port);
 							response.len = le32::from_ne(len.try_into().unwrap());

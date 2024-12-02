@@ -348,7 +348,7 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 	paging::identity_map(frame);
 	let ebda_ptr_location: &u16 =
 		unsafe { &*(VirtAddr::from(EBDA_PTR_LOCATION.as_u64()).as_ptr()) };
-	let ebda_address = PhysAddr::new((*ebda_ptr_location as u64) << 4);
+	let ebda_address = PhysAddr::new(u64::from(*ebda_ptr_location) << 4);
 
 	// Check if the pointed address is valid. This check is also done in ACPICA.
 	if ebda_address > EBDA_MINIMUM_ADDRESS {

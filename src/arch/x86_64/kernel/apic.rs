@@ -405,7 +405,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	);
 
 	let mut addr: usize =
-		(virtual_address | (mp_float.mp_config as u64 & (BasePageSize::SIZE - 1))) as usize;
+		(virtual_address | (u64::from(mp_float.mp_config) & (BasePageSize::SIZE - 1))) as usize;
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("Invalid MP config table");
@@ -449,7 +449,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		}
 	}
 
-	Ok(PhysAddr::new(mp_config.lapic as u64))
+	Ok(PhysAddr::new(mp_config.lapic.into()))
 }
 
 fn default_apic() -> PhysAddr {
@@ -866,7 +866,7 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 /// Translate the x2APIC MSR into an xAPIC memory address.
 #[inline]
 fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
-	*LOCAL_APIC_ADDRESS.get().unwrap() + ((x2apic_msr as u64 & 0xFF) << 4)
+	*LOCAL_APIC_ADDRESS.get().unwrap() + ((u64::from(x2apic_msr) & 0xFF) << 4)
 }
 
 fn local_apic_read(x2apic_msr: u32) -> u32 {

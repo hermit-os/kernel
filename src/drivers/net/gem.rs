@@ -250,7 +250,7 @@ impl NetworkDriver for GEMDriver {
 
 		for i in 0..TX_BUF_NUM {
 			let index = (i + self.tx_counter) % TX_BUF_NUM;
-			let word1_addr = (self.txbuffer_list + (index * 8 + 4) as u64).as_mut_ptr::<u32>();
+			let word1_addr = (self.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
 			let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
 			// Reuse a used buffer
 			if word1 & TX_DESC_USED != 0 {
@@ -263,14 +263,15 @@ impl NetworkDriver for GEMDriver {
 				self.tx_counter = (index + 1) % TX_BUF_NUM;
 
 				// Address of the tx buffer
-				let buffer = (self.txbuffer + (index * TX_BUF_LEN) as u64).as_mut_ptr::<u8>();
+				let buffer = (self.txbuffer + u64::from(index * TX_BUF_LEN)).as_mut_ptr::<u8>();
 				let buffer = unsafe { slice::from_raw_parts_mut(buffer, len) };
 				let result = f(buffer);
 
 				debug!("send_tx_buffer");
 
 				// Address of word[1] of the buffer descriptor
-				let word1_addr = (self.txbuffer_list + (index * 8 + 4) as u64).as_mut_ptr::<u32>();
+				let word1_addr =
+					(self.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
 				let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
 
 				unsafe {
@@ -293,7 +294,8 @@ impl NetworkDriver for GEMDriver {
 				}
 
 				// Set used bit to indicate that the buffer can be reused
-				let word1_addr = (self.txbuffer_list + (index * 8 + 4) as u64).as_mut_ptr::<u32>();
+				let word1_addr =
+					(self.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
 				let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
 				unsafe {
 					core::ptr::write_volatile(word1_addr, word1 | TX_DESC_USED);
@@ -318,7 +320,7 @@ impl NetworkDriver for GEMDriver {
 		// Scan the buffer descriptor queue starting from rx_count
 		match self.next_rx_index() {
 			Some(index) => {
-				let word1_addr = (self.rxbuffer_list + (index * 8 + 4) as u64);
+				let word1_addr = self.rxbuffer_list + u64::from(index * 8 + 4);
 				let word1_entry =
 					unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
 				let length = word1_entry & 0x1FFF;
@@ -437,7 +439,7 @@ impl GEMDriver {
 
 		for i in 0..RX_BUF_NUM {
 			let index = (i + self.rx_counter) % RX_BUF_NUM;
-			let word0_addr = (self.rxbuffer_list + (index * 8) as u64);
+			let word0_addr = (self.rxbuffer_list + u64::from(index * 8));
 			let word0_entry = unsafe { core::ptr::read_volatile(word0_addr.as_mut_ptr::<u32>()) };
 			// Is buffer owned by GEM?
 			if (word0_entry & 0x1) != 0 {
@@ -518,11 +520,11 @@ pub fn init_device(
 		(*gem).network_config.modify(NetworkConfig::FCSREM::SET);
 
 		// Set the MAC address
-		let bottom: u32 = ((mac[3] as u32) << 24)
-			+ ((mac[2] as u32) << 16)
-			+ ((mac[1] as u32) << 8)
-			+ (mac[0] as u32);
-		let top: u32 = ((mac[5] as u32) << 8) + (mac[4] as u32);
+		let bottom: u32 = (u32::from(mac[3]) << 24)
+			+ (u32::from(mac[2]) << 16)
+			+ (u32::from(mac[1]) << 8)
+			+ u32::from(mac[0]);
+		let top: u32 = (u32::from(mac[5]) << 8) + u32::from(mac[4]);
 		(*gem).spec_add1_bottom.set(bottom);
 		(*gem).spec_add1_top.set(top);
 
@@ -642,9 +644,9 @@ pub fn init_device(
 	unsafe {
 		// Init Receive Buffer Descriptor List
 		for i in 0..RX_BUF_NUM {
-			let word0 = (rxbuffer_list + (i * 8) as u64).as_mut_ptr::<u32>();
-			let word1 = (rxbuffer_list + (i * 8 + 4) as u64).as_mut_ptr::<u32>();
-			let buffer = virt_to_phys(rxbuffer + (i * RX_BUF_LEN) as u64);
+			let word0 = (rxbuffer_list + u64::from(i * 8)).as_mut_ptr::<u32>();
+			let word1 = (rxbuffer_list + u64::from(i * 8 + 4)).as_mut_ptr::<u32>();
+			let buffer = virt_to_phys(rxbuffer + u64::from(i * RX_BUF_LEN));
 			if (buffer.as_u64() & 0b11) != 0 {
 				error!("Wrong buffer alignment");
 				return Err(DriverError::InitGEMDevFail(GEMError::Unknown));
@@ -667,9 +669,9 @@ pub fn init_device(
 
 		// Init Transmit Buffer Descriptor List
 		for i in 0..TX_BUF_NUM {
-			let word0 = (txbuffer_list + (i * 8) as u64).as_mut_ptr::<u32>();
-			let word1 = (txbuffer_list + (i * 8 + 4) as u64).as_mut_ptr::<u32>();
-			let buffer = virt_to_phys(txbuffer + (i * TX_BUF_LEN) as u64);
+			let word0 = (txbuffer_list + u64::from(i * 8)).as_mut_ptr::<u32>();
+			let word1 = (txbuffer_list + u64::from(i * 8 + 4)).as_mut_ptr::<u32>();
+			let buffer = virt_to_phys(txbuffer + u64::from(i * TX_BUF_LEN));
 
 			// This can fail if address of buffers is > 32 bit
 			// TODO: 64-bit addresses
@@ -746,7 +748,7 @@ unsafe fn phy_write(gem: *mut Registers, addr: u32, reg: PhyReg, data: u16) {
 				+ PHYMaintenance::ADDR.val(addr)
 				+ PHYMaintenance::REG.val(reg as u32)
 				+ PHYMaintenance::MUST_10::MUST_BE_10
-				+ PHYMaintenance::DATA.val(data as u32),
+				+ PHYMaintenance::DATA.val(data.into()),
 		);
 		wait_for_mdio(gem);
 	}

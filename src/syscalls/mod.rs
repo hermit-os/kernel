@@ -596,7 +596,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	count: usize,
 ) -> i64 {
 	if dirp.is_null() || count == 0 {
-		return -crate::errno::EINVAL as i64;
+		return (-crate::errno::EINVAL).into();
 	}
 
 	const ALIGN_DIRENT: usize = core::mem::align_of::<Dirent64>();
@@ -604,7 +604,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	let mut offset: i64 = 0;
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|_| -crate::errno::EINVAL as i64,
+		|_| (-crate::errno::EINVAL).into(),
 		|v| {
 			block_on((*v).readdir(), None).map_or_else(
 				|e| -num::ToPrimitive::to_i64(&e).unwrap(),
@@ -614,7 +614,7 @@ pub unsafe extern "C" fn sys_getdents64(
 						let aligned_len = ((core::mem::size_of::<Dirent64>() + len + 1)
 							+ (ALIGN_DIRENT - 1)) & (!(ALIGN_DIRENT - 1));
 						if offset as usize + aligned_len >= count {
-							return -crate::errno::EINVAL as i64;
+							return (-crate::errno::EINVAL).into();
 						}
 
 						let dir = unsafe { &mut *dirp };

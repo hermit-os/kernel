@@ -396,13 +396,13 @@ impl From<fuse_attr> for FileAttr {
 	fn from(attr: fuse_attr) -> FileAttr {
 		FileAttr {
 			st_ino: attr.ino,
-			st_nlink: attr.nlink as u64,
+			st_nlink: attr.nlink.into(),
 			st_mode: AccessPermission::from_bits_retain(attr.mode),
 			st_uid: attr.uid,
 			st_gid: attr.gid,
-			st_rdev: attr.rdev as u64,
+			st_rdev: attr.rdev.into(),
 			st_size: attr.size,
-			st_blksize: attr.blksize as i64,
+			st_blksize: attr.blksize.into(),
 			st_blocks: attr.blocks.try_into().unwrap(),
 			st_atim: timespec {
 				tv_sec: attr.atime as time_t,

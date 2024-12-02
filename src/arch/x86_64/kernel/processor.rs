@@ -340,7 +340,7 @@ impl CpuFrequency {
 		const KHZ_TO_HZ: u64 = 1000;
 		const MHZ_TO_HZ: u64 = 1000000;
 		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
-		let freq = hypervisor_info.tsc_frequency().ok_or(())? as u64 * KHZ_TO_HZ;
+		let freq = u64::from(hypervisor_info.tsc_frequency().ok_or(())?) * KHZ_TO_HZ;
 		let mhz: u16 = (freq / MHZ_TO_HZ).try_into().unwrap();
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 	}

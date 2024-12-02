@@ -63,7 +63,7 @@ pub(crate) struct NetworkInterface<'a> {
 
 #[cfg(target_arch = "x86_64")]
 fn start_endpoint() -> u16 {
-	((unsafe { core::arch::x86_64::_rdtsc() }) % (u16::MAX as u64))
+	((unsafe { core::arch::x86_64::_rdtsc() }) % u64::from(u16::MAX))
 		.try_into()
 		.unwrap()
 }
@@ -81,12 +81,12 @@ fn start_endpoint() -> u16 {
 		);
 	}
 
-	(value % (u16::MAX as u64)).try_into().unwrap()
+	(value % u64::from(u16::MAX)).try_into().unwrap()
 }
 
 #[cfg(target_arch = "riscv64")]
 fn start_endpoint() -> u16 {
-	(riscv::register::time::read64() % (u16::MAX as u64))
+	(riscv::register::time::read64() % u64::from(u16::MAX))
 		.try_into()
 		.unwrap()
 }

@@ -226,14 +226,15 @@ impl From<sockaddr_in6> for IpListenEndpoint {
 		if addr.sin6_addr.s6_addr.into_iter().all(|b| b == 0) {
 			IpListenEndpoint { addr: None, port }
 		} else {
-			let a0 = ((addr.sin6_addr.s6_addr[0] as u16) << 8) | addr.sin6_addr.s6_addr[1] as u16;
-			let a1 = ((addr.sin6_addr.s6_addr[2] as u16) << 8) | addr.sin6_addr.s6_addr[3] as u16;
-			let a2 = ((addr.sin6_addr.s6_addr[4] as u16) << 8) | addr.sin6_addr.s6_addr[5] as u16;
-			let a3 = ((addr.sin6_addr.s6_addr[6] as u16) << 8) | addr.sin6_addr.s6_addr[7] as u16;
-			let a4 = ((addr.sin6_addr.s6_addr[8] as u16) << 8) | addr.sin6_addr.s6_addr[9] as u16;
-			let a5 = ((addr.sin6_addr.s6_addr[10] as u16) << 8) | addr.sin6_addr.s6_addr[11] as u16;
-			let a6 = ((addr.sin6_addr.s6_addr[12] as u16) << 8) | addr.sin6_addr.s6_addr[13] as u16;
-			let a7 = ((addr.sin6_addr.s6_addr[14] as u16) << 8) | addr.sin6_addr.s6_addr[15] as u16;
+			let s6_addr = addr.sin6_addr.s6_addr;
+			let a0 = (u16::from(s6_addr[0]) << 8) | u16::from(s6_addr[1]);
+			let a1 = (u16::from(s6_addr[2]) << 8) | u16::from(s6_addr[3]);
+			let a2 = (u16::from(s6_addr[4]) << 8) | u16::from(s6_addr[5]);
+			let a3 = (u16::from(s6_addr[6]) << 8) | u16::from(s6_addr[7]);
+			let a4 = (u16::from(s6_addr[8]) << 8) | u16::from(s6_addr[9]);
+			let a5 = (u16::from(s6_addr[10]) << 8) | u16::from(s6_addr[11]);
+			let a6 = (u16::from(s6_addr[12]) << 8) | u16::from(s6_addr[13]);
+			let a7 = (u16::from(s6_addr[14]) << 8) | u16::from(s6_addr[15]);
 			let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
 
 			IpListenEndpoint::from((address, port))
@@ -245,14 +246,15 @@ impl From<sockaddr_in6> for IpListenEndpoint {
 impl From<sockaddr_in6> for IpEndpoint {
 	fn from(addr: sockaddr_in6) -> IpEndpoint {
 		let port = u16::from_be(addr.sin6_port);
-		let a0 = ((addr.sin6_addr.s6_addr[0] as u16) << 8) | addr.sin6_addr.s6_addr[1] as u16;
-		let a1 = ((addr.sin6_addr.s6_addr[2] as u16) << 8) | addr.sin6_addr.s6_addr[3] as u16;
-		let a2 = ((addr.sin6_addr.s6_addr[4] as u16) << 8) | addr.sin6_addr.s6_addr[5] as u16;
-		let a3 = ((addr.sin6_addr.s6_addr[6] as u16) << 8) | addr.sin6_addr.s6_addr[7] as u16;
-		let a4 = ((addr.sin6_addr.s6_addr[8] as u16) << 8) | addr.sin6_addr.s6_addr[9] as u16;
-		let a5 = ((addr.sin6_addr.s6_addr[10] as u16) << 8) | addr.sin6_addr.s6_addr[11] as u16;
-		let a6 = ((addr.sin6_addr.s6_addr[12] as u16) << 8) | addr.sin6_addr.s6_addr[13] as u16;
-		let a7 = ((addr.sin6_addr.s6_addr[14] as u16) << 8) | addr.sin6_addr.s6_addr[15] as u16;
+		let s6_addr = addr.sin6_addr.s6_addr;
+		let a0 = (u16::from(s6_addr[0]) << 8) | u16::from(s6_addr[1]);
+		let a1 = (u16::from(s6_addr[2]) << 8) | u16::from(s6_addr[3]);
+		let a2 = (u16::from(s6_addr[4]) << 8) | u16::from(s6_addr[5]);
+		let a3 = (u16::from(s6_addr[6]) << 8) | u16::from(s6_addr[7]);
+		let a4 = (u16::from(s6_addr[8]) << 8) | u16::from(s6_addr[9]);
+		let a5 = (u16::from(s6_addr[10]) << 8) | u16::from(s6_addr[11]);
+		let a6 = (u16::from(s6_addr[12]) << 8) | u16::from(s6_addr[13]);
+		let a7 = (u16::from(s6_addr[14]) << 8) | u16::from(s6_addr[15]);
 		let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
 
 		IpEndpoint::from((address, port))
@@ -597,7 +599,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		return -crate::errno::EINVAL;
 	}
 
-	let sa_family = unsafe { (*name).sa_family as i32 };
+	let sa_family = unsafe { i32::from((*name).sa_family) };
 
 	let endpoint = match sa_family {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -908,7 +910,7 @@ pub unsafe extern "C" fn sys_sendto(
 
 	cfg_if! {
 		if #[cfg(any(feature = "tcp", feature = "udp"))] {
-			let sa_family = unsafe { (*addr).sa_family as i32 };
+			let sa_family = unsafe { i32::from((*addr).sa_family) };
 
 			if sa_family == AF_INET {
 				if addr_len < size_of::<sockaddr_in>().try_into().unwrap() {
