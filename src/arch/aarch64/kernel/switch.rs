@@ -12,7 +12,7 @@ macro_rules! kernel_function_impl {
 				$(
 					assert!(mem::size_of::<$A>() <= mem::size_of::<usize>());
 					let $arg = {
-						let mut reg = 0_usize;
+						let mut reg = 0usize;
 						// SAFETY: $A is smaller than usize and directly fits in a register
 						// Since f takes $A as argument via C calling convention, any upper bytes do not matter.
 						ptr::write(ptr::from_mut(&mut reg).cast(), $arg);

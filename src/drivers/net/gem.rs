@@ -420,7 +420,7 @@ impl GEMDriver {
 		debug!("rx_buffer_consumed: handle: {}", handle);
 
 		let word0_addr = (self.rxbuffer_list + (handle * 8) as u64);
-		let word1_addr = word0_addr + 4_u64;
+		let word1_addr = word0_addr + 4u64;
 
 		unsafe {
 			// Clear word1 (is this really necessary?)

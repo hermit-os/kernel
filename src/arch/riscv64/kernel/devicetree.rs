@@ -90,7 +90,7 @@ pub fn init_drivers() {
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						plic_region_start,
-						plic_region_start + plic_region.size.unwrap() - 1_u64,
+						plic_region_start + plic_region.size.unwrap() - 1u64,
 					)
 					.unwrap(),
 				);
@@ -147,7 +147,7 @@ pub fn init_drivers() {
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						gem_region_start,
-						gem_region_start + gem_region.size.unwrap() as u64 - 1_u64,
+						gem_region_start + gem_region.size.unwrap() as u64 - 1u64,
 					)
 					.unwrap(),
 				);
@@ -188,7 +188,7 @@ pub fn init_drivers() {
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						virtio_region_start,
-						virtio_region_start + virtio_region.size.unwrap() - 1_u64,
+						virtio_region_start + virtio_region.size.unwrap() - 1u64,
 					)
 					.unwrap(),
 				);
