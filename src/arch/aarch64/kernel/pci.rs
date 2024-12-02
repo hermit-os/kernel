@@ -25,7 +25,7 @@ pub(crate) struct PciConfigRegion(VirtAddr);
 impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
 		assert!(
-			addr.as_u64() & 0x0FFF_FFFF == 0,
+			addr.as_u64() & 0x0fff_ffff == 0,
 			"Unaligned PCI Config Space"
 		);
 		Self(addr)
@@ -33,11 +33,11 @@ impl PciConfigRegion {
 
 	#[inline]
 	fn addr_from_offset(&self, pci_addr: PciAddress, offset: u16) -> usize {
-		assert!(offset & 0xF000 == 0, "Invalid offset");
+		assert!(offset & 0xf000 == 0, "Invalid offset");
 		(u64::from(pci_addr.bus()) << 20
 			| u64::from(pci_addr.device()) << 15
 			| u64::from(pci_addr.function()) << 12
-			| (u64::from(offset) & 0xFFF)
+			| (u64::from(offset) & 0xfff)
 			| self.0.as_u64()) as usize
 	}
 }

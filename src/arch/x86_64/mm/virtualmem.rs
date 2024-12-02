@@ -162,7 +162,7 @@ pub fn print_information() {
 #[cfg(not(feature = "common-os"))]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr::new(0x7FFF_FFFF_FFFFu64)
+	VirtAddr::new(0x7fff_ffff_ffffu64)
 }
 
 #[cfg(feature = "common-os")]

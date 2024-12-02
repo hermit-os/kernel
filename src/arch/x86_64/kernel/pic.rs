@@ -7,8 +7,8 @@ use crate::scheduler;
 
 const PIC1_COMMAND_PORT: u16 = 0x20;
 const PIC1_DATA_PORT: u16 = 0x21;
-const PIC2_COMMAND_PORT: u16 = 0xA0;
-const PIC2_DATA_PORT: u16 = 0xA1;
+const PIC2_COMMAND_PORT: u16 = 0xa0;
+const PIC2_DATA_PORT: u16 = 0xa1;
 
 pub const PIC1_INTERRUPT_OFFSET: u8 = 32;
 const PIC2_INTERRUPT_OFFSET: u8 = 40;
@@ -69,8 +69,8 @@ pub fn init() {
 		outb(PIC2_DATA_PORT, 0x01);
 
 		// Mask all interrupts on both PICs.
-		outb(PIC1_DATA_PORT, 0xFF);
-		outb(PIC2_DATA_PORT, 0xFF);
+		outb(PIC1_DATA_PORT, 0xff);
+		outb(PIC2_DATA_PORT, 0xff);
 	}
 }
 

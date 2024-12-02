@@ -5,16 +5,16 @@ use x86::io::*;
 use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
 
-const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
-const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
-const CURSOR_START_REGISTER: u8 = 0x0A;
+const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3d4;
+const CRT_CONTROLLER_DATA_PORT: u16 = 0x3d5;
+const CURSOR_START_REGISTER: u8 = 0x0a;
 const CURSOR_DISABLE: u8 = 0x20;
 
 const ATTRIBUTE_BLACK: u8 = 0x00;
 const ATTRIBUTE_LIGHTGREY: u8 = 0x07;
 const COLS: usize = 80;
 const ROWS: usize = 25;
-const VGA_BUFFER_ADDRESS: PhysAddr = PhysAddr::new(0xB8000);
+const VGA_BUFFER_ADDRESS: PhysAddr = PhysAddr::new(0xb8000);
 
 static VGA_SCREEN: SpinMutex<VgaScreen> = SpinMutex::new(VgaScreen::new());
 

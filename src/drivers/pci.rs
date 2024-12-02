@@ -477,7 +477,7 @@ pub(crate) fn init() {
 	without_interrupts(|| {
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
 			let (vendor_id, device_id) = x.id();
-			vendor_id == 0x1AF4 && (0x1000..=0x107F).contains(&device_id)
+			vendor_id == 0x1af4 && (0x1000..=0x107f).contains(&device_id)
 		}) {
 			info!(
 				"Found virtio device with device id {:#x}",

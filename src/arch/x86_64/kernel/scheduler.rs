@@ -352,7 +352,7 @@ impl TaskFrame for Task {
 			// Set a marker for debugging at the very top.
 			let mut stack = self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
 				- TaskStacks::MARKER_SIZE;
-			*stack.as_mut_ptr::<u64>() = 0xDEAD_BEEFu64;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
 			stack -= mem::size_of::<State>();

@@ -178,15 +178,15 @@ impl FPUState {
 			// Set FPU-related values to their default values after initialization.
 			// Refer to Intel Vol. 3A, Table 9-1. IA-32 and Intel 64 Processor States Following Power-up, Reset, or INIT
 			legacy_region: XSaveLegacyRegion {
-				fpu_control_word: 0x37F,
+				fpu_control_word: 0x37f,
 				fpu_status_word: 0,
-				fpu_tag_word: 0xFFFF,
+				fpu_tag_word: 0xffff,
 				fpu_opcode: 0,
 				fpu_instruction_pointer: 0,
 				fpu_instruction_pointer_high_or_cs: 0,
 				fpu_data_pointer: 0,
 				fpu_data_pointer_high_or_ds: 0,
-				mxcsr: 0x1F80,
+				mxcsr: 0x1f80,
 				mxcsr_mask: 0,
 				st_space: [0; 8 * 16],
 				xmm_space: [0; 16 * 16],
@@ -891,7 +891,7 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
-		wrmsr(IA32_STAR, (0x1Bu64 << 48) | (0x08u64 << 32));
+		wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
 		wrmsr(
 			IA32_LSTAR,
 			crate::arch::x86_64::kernel::syscall::syscall_handler as u64,

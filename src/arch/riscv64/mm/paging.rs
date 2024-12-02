@@ -19,7 +19,7 @@ const PAGE_BITS: usize = 12;
 const PAGE_MAP_BITS: usize = 9;
 
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
-const PAGE_MAP_MASK: usize = 0x1FF;
+const PAGE_MAP_MASK: usize = 0x1ff;
 
 /// Number of page levels
 const PAGE_LEVELS: usize = 3;
@@ -104,7 +104,7 @@ impl PageTableEntry {
 	pub fn address(&self) -> PhysAddr {
 		PhysAddr::new(
 			(
-				self.physical_address_and_flags.as_u64() & !(0x3FFu64)
+				self.physical_address_and_flags.as_u64() & !(0x3ffu64)
 				//& !(0x3FFu64 << 54)
 			) << 2,
 		)

@@ -9,7 +9,7 @@ use crate::entropy::{self, Flags};
 use crate::errno::EINVAL;
 
 static PARK_MILLER_LEHMER_SEED: TicketMutex<u32> = TicketMutex::new(0);
-const RAND_MAX: u64 = 0x7FFF_FFFF;
+const RAND_MAX: u64 = 0x7fff_ffff;
 
 fn generate_park_miller_lehmer_random_number() -> u32 {
 	let mut seed = PARK_MILLER_LEHMER_SEED.lock();
@@ -35,7 +35,7 @@ unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	if ret < 0 {
 		warn!("Unable to read entropy! Fallback to a naive implementation!");
 		for i in &mut *buf {
-			*i = (generate_park_miller_lehmer_random_number() & 0xFF)
+			*i = (generate_park_miller_lehmer_random_number() & 0xff)
 				.try_into()
 				.unwrap();
 		}

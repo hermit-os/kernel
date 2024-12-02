@@ -321,7 +321,7 @@ impl NetworkDriver for GEMDriver {
 				let word1_addr = self.rxbuffer_list + u64::from(index * 8 + 4);
 				let word1_entry =
 					unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
-				let length = word1_entry & 0x1FFF;
+				let length = word1_entry & 0x1fff;
 				debug!("Received frame in buffer {}, length: {}", index, length);
 
 				// Starting point to search for next frame
@@ -347,7 +347,7 @@ impl NetworkDriver for GEMDriver {
 		if value {
 			// disable interrupts from the NIC
 			unsafe {
-				(*self.gem).int_disable.set(0x7FF_FEFF);
+				(*self.gem).int_disable.set(0x7ff_feff);
 			}
 		} else {
 			// Enable all known interrupts by setting the interrupt mask.
@@ -427,7 +427,7 @@ impl GEMDriver {
 			core::ptr::write_volatile(word1_addr.as_mut_ptr::<u32>(), 0);
 			// Give back ownership to GEM
 			let word0_entry = core::ptr::read_volatile(word0_addr.as_mut_ptr::<u32>());
-			core::ptr::write_volatile(word0_addr.as_mut_ptr::<u32>(), word0_entry & 0xFFFF_FFFE);
+			core::ptr::write_volatile(word0_addr.as_mut_ptr::<u32>(), word0_entry & 0xffff_fffe);
 		}
 	}
 
@@ -485,10 +485,10 @@ pub fn init_device(
 		// Clear the Statistics registers
 		(*gem).network_control.modify(NetworkControl::STATCLR::SET);
 		// Clear the status registers
-		(*gem).receive_status.set(0x0F);
-		(*gem).transmit_status.set(0x0F);
+		(*gem).receive_status.set(0x0f);
+		(*gem).transmit_status.set(0x0f);
 		// Disable all interrupts
-		(*gem).int_disable.set(0x7FF_FEFF);
+		(*gem).int_disable.set(0x7ff_feff);
 		// Clear the buffer queues
 		(*gem).rx_qbar.set(0x0);
 		(*gem).tx_qbar.set(0x0);
@@ -560,7 +560,7 @@ pub fn init_device(
 			warn! {"No PHY address provided. Trying to find PHY ..."}
 			for i in 0..32 {
 				match phy_read(gem, i, PhyReg::Control) {
-					0xFFFF => (), //Invalid
+					0xffff => (), //Invalid
 					0x0 => (),    //Invalid
 					_ => {
 						phy_addr = i;

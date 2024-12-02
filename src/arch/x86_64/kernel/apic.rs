@@ -369,11 +369,11 @@ fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static Apic
 /// Helper function to detect APIC by the Multiprocessor Specification
 fn detect_from_mp() -> Result<PhysAddr, ()> {
 	let mp_float = if let Ok(mpf) = search_mp_floating(
-		AddrRange::new(PhysAddr::new(0x9F000u64), PhysAddr::new(0xA0000u64)).unwrap(),
+		AddrRange::new(PhysAddr::new(0x9f000u64), PhysAddr::new(0xa0000u64)).unwrap(),
 	) {
 		Ok(mpf)
 	} else if let Ok(mpf) = search_mp_floating(
-		AddrRange::new(PhysAddr::new(0xF0000u64), PhysAddr::new(0x10_0000u64)).unwrap(),
+		AddrRange::new(PhysAddr::new(0xf0000u64), PhysAddr::new(0x10_0000u64)).unwrap(),
 	) {
 		Ok(mpf)
 	} else {
@@ -415,7 +415,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 
 	if mp_config.entry_count == 0 {
 		warn!("No MP table entries! Guess IO-APIC!");
-		let default_address = PhysAddr::new(0xFEC0_0000);
+		let default_address = PhysAddr::new(0xfec0_0000);
 
 		init_ioapic_address(default_address);
 	} else {
@@ -455,7 +455,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 fn default_apic() -> PhysAddr {
 	warn!("Try to use default APIC address");
 
-	let default_address = PhysAddr::new(0xFEE0_0000);
+	let default_address = PhysAddr::new(0xfee0_0000);
 
 	// currently, uhyve doesn't support an IO-APIC
 	if !env::is_uhyve() {
@@ -866,7 +866,7 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 /// Translate the x2APIC MSR into an xAPIC memory address.
 #[inline]
 fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
-	*LOCAL_APIC_ADDRESS.get().unwrap() + ((u64::from(x2apic_msr) & 0xFF) << 4)
+	*LOCAL_APIC_ADDRESS.get().unwrap() + ((u64::from(x2apic_msr) & 0xff) << 4)
 }
 
 fn local_apic_read(x2apic_msr: u32) -> u32 {
@@ -902,11 +902,11 @@ fn ioapic_read(reg: u32) -> u32 {
 }
 
 fn ioapic_version() -> u32 {
-	ioapic_read(IOAPIC_REG_VER) & 0xFF
+	ioapic_read(IOAPIC_REG_VER) & 0xff
 }
 
 fn ioapic_max_redirection_entry() -> u8 {
-	((ioapic_read(IOAPIC_REG_VER) >> 16) & 0xFF) as u8
+	((ioapic_read(IOAPIC_REG_VER) >> 16) & 0xff) as u8
 }
 
 fn local_apic_write(x2apic_msr: u32, value: u64) {
@@ -934,7 +934,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
-			let destination = ((value >> 8) & 0xFF00_0000) as u32;
+			let destination = ((value >> 8) & 0xff00_0000) as u32;
 			let icr2 = unsafe {
 				&mut *((*LOCAL_APIC_ADDRESS.get().unwrap() + APIC_ICR2).as_mut_ptr::<u32>())
 			};

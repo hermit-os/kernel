@@ -1,3 +1,4 @@
 group_imports = "StdExternalCrate"
 hard_tabs = true
+hex_literal_case = "Lower"
 imports_granularity = "Module"

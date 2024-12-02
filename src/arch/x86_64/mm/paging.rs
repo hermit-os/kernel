@@ -94,7 +94,7 @@ pub use x86_64::structures::paging::{
 
 /// Returns a recursive page table mapping, its last entry is mapped to the table itself
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
-	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000;
+	let level_4_table_addr = 0xffff_ffff_ffff_f000;
 	let level_4_table_ptr = ptr::with_exposed_provenance_mut(level_4_table_addr);
 	unsafe {
 		let level_4_table = &mut *(level_4_table_ptr);

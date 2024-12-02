@@ -243,9 +243,9 @@ impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "udp")]
 	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
 		let udp_rx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0xFFFF]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0xffff]);
 		let udp_tx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0xFFFF]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0xffff]);
 		let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
 		let udp_handle = self.sockets.add(udp_socket);
 
@@ -254,8 +254,8 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(feature = "tcp")]
 	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
-		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 0xFFFF]);
-		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 0xFFFF]);
+		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 0xffff]);
+		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 0xffff]);
 		let mut tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 		tcp_socket.set_nagle_enabled(true);
 		let tcp_handle = self.sockets.add(tcp_socket);

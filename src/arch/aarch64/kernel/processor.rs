@@ -72,7 +72,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_register(&mut self) -> Result<(), ()> {
-		let hz = CNTFRQ_EL0.get() & 0xFFFF_FFFF;
+		let hz = CNTFRQ_EL0.get() & 0xffff_ffff;
 		self.set_detected_cpu_frequency(hz.try_into().unwrap(), CpuFrequencySources::Register)
 	}
 

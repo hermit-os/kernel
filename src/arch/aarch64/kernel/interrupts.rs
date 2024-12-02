@@ -175,7 +175,7 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 	let irqid = GicV3::get_and_acknowledge_interrupt().unwrap();
 	let esr = ESR_EL1.get();
 	let ec = esr >> 26;
-	let iss = esr & 0x00FF_FFFF;
+	let iss = esr & 0x00ff_ffff;
 	let pc = ELR_EL1.get();
 
 	/* data abort from lower or current level */
