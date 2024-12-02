@@ -287,7 +287,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 
 #[hermit_macro::system]
 #[no_mangle]
-pub unsafe extern "C" fn sys_unlink(name: *const u8) -> i32 {
+pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
@@ -295,7 +295,7 @@ pub unsafe extern "C" fn sys_unlink(name: *const u8) -> i32 {
 
 #[hermit_macro::system]
 #[no_mangle]
-pub unsafe extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
+pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
 		mode
