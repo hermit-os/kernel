@@ -319,7 +319,13 @@ impl NetworkDriver for VirtioNetDriver {
 		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 		trace!("Header: {first_header:?}");
 
-		let num_buffers = first_header.num_buffers.to_ne();
+		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
+		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
+		let num_buffers = if self.dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
+			first_header.num_buffers.to_ne()
+		} else {
+			1
+		};
 
 		let mut packets = Vec::with_capacity(num_buffers.into());
 		packets.push(first_packet);
