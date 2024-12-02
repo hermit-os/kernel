@@ -19,11 +19,7 @@ use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
-		let dev_cfg: &'static virtio::net::Config =
-			match pci::map_dev_cfg::<virtio::net::Config>(cap) {
-				Some(cfg) => cfg,
-				None => return None,
-			};
+		let dev_cfg: &'static virtio::net::Config = pci::map_dev_cfg::<virtio::net::Config>(cap)?;
 
 		let dev_cfg = VolatileRef::from_ref(dev_cfg);
 
