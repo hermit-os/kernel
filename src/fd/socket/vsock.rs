@@ -312,9 +312,6 @@ impl Socket {
 		}
 	}
 
-	// TODO: Remove allow once fixed:
-	// https://github.com/rust-lang/rust-clippy/issues/11380
-	#[allow(clippy::needless_pass_by_ref_mut)]
 	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		let port = self.port;
 		future::poll_fn(|cx| {
