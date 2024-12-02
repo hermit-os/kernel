@@ -124,7 +124,7 @@ jobs:
 
   run-hermit:
     name: Run
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, X64]
     env:
       HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
     defaults:
@@ -132,7 +132,7 @@ jobs:
         working-directory: kernel
     strategy:
       matrix:
-        arch: [x86_64, aarch64, riscv64]
+        arch: [x86_64]
         profile: [dev, release]
         include:
           - profile: dev
@@ -140,10 +140,6 @@ jobs:
           - arch: x86_64
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
             flags: --accel --sudo
-          - arch: aarch64
-            packages: qemu-system-aarch64
-          - arch: riscv64
-            packages: qemu-system-misc
 
     steps:
       - name: Checkout hermit-rs
