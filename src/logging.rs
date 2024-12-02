@@ -58,15 +58,27 @@ pub unsafe fn init() {
 	log::set_logger(&KernelLogger).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
-	let max_level: LevelFilter = match log_level {
-		Some("Error") => LevelFilter::Error,
-		Some("Debug") => LevelFilter::Debug,
-		Some("Off") => LevelFilter::Off,
-		Some("Trace") => LevelFilter::Trace,
-		Some("Warn") => LevelFilter::Warn,
-		Some("Info") => LevelFilter::Info,
-		_ => LevelFilter::Info,
-	};
+	let mut max_level = LevelFilter::Info;
+
+	if let Some(log_level) = log_level {
+		max_level = if log_level.eq_ignore_ascii_case("off") {
+			LevelFilter::Off
+		} else if log_level.eq_ignore_ascii_case("error") {
+			LevelFilter::Error
+		} else if log_level.eq_ignore_ascii_case("warn") {
+			LevelFilter::Warn
+		} else if log_level.eq_ignore_ascii_case("info") {
+			LevelFilter::Info
+		} else if log_level.eq_ignore_ascii_case("debug") {
+			LevelFilter::Debug
+		} else if log_level.eq_ignore_ascii_case("trace") {
+			LevelFilter::Trace
+		} else {
+			error!("Could not parse HERMIT_LOG_LEVEL_FILTER, falling back to `info`.");
+			LevelFilter::Info
+		};
+	}
+
 	log::set_max_level(max_level);
 }
 
