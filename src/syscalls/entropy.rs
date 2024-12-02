@@ -9,7 +9,7 @@ use crate::entropy::{self, Flags};
 use crate::errno::EINVAL;
 
 static PARK_MILLER_LEHMER_SEED: TicketMutex<u32> = TicketMutex::new(0);
-const RAND_MAX: u64 = 2_147_483_647;
+const RAND_MAX: u64 = 0x7FFF_FFFF;
 
 fn generate_park_miller_lehmer_random_number() -> u32 {
 	let mut seed = PARK_MILLER_LEHMER_SEED.lock();

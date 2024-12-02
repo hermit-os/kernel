@@ -662,10 +662,10 @@ impl Virtq for PackedVq {
 		};
 
 		// Must catch zero size as it is not allowed for packed queues.
-		// Must catch size larger 32768 (2^15) as it is not allowed for packed queues.
+		// Must catch size larger 0x8000 (2^15) as it is not allowed for packed queues.
 		//
 		// See Virtio specification v1.1. - 4.1.4.3.2
-		let vq_size = if (size.0 == 0) | (size.0 > 32768) {
+		let vq_size = if (size.0 == 0) | (size.0 > 0x8000) {
 			return Err(VirtqError::QueueSizeNotAllowed(size.0));
 		} else {
 			vq_handler.set_vq_size(size.0)

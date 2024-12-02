@@ -39,8 +39,8 @@ const MAX_WRITE_LEN: usize = 1024 * 64;
 
 const U64_SIZE: usize = ::core::mem::size_of::<u64>();
 
-const S_IFLNK: u32 = 40960;
-const S_IFMT: u32 = 61440;
+const S_IFLNK: u32 = 0o120_000;
+const S_IFMT: u32 = 0o170_000;
 
 pub(crate) trait FuseInterface {
 	fn send_command<O: ops::Op + 'static>(

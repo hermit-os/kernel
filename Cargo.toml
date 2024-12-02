@@ -77,6 +77,7 @@ unsafe_op_in_unsafe_fn = "warn"
 [lints.clippy]
 borrow_as_ptr = "warn"
 cast_lossless = "warn"
+decimal_literal_representation = "warn"
 default_trait_access = "warn"
 explicit_deref_methods = "warn"
 if_not_else = "warn"

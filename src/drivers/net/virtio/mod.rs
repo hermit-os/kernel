@@ -156,7 +156,7 @@ impl TxQueues {
 			| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
 			| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
 		{
-			65550
+			0x0001_000E
 		} else {
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
 		};
