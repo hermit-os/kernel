@@ -631,7 +631,7 @@ pub unsafe extern "C" fn sys_getdents64(
 							s.add(len).write_bytes(0, 1);
 						}
 
-						dirp = unsafe { (dirp as *mut u8).add(aligned_len) as *mut Dirent64 };
+						dirp = unsafe { dirp.byte_add(aligned_len) };
 					}
 
 					offset
