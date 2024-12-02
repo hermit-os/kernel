@@ -70,6 +70,14 @@ udp = ["smoltcp", "smoltcp/socket-udp"]
 vga = []
 vsock = ["pci"]
 
+[lints.rust]
+rust_2018_idioms = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.clippy]
+transmute_ptr_to_ptr = "warn"
+uninlined_format_args = "warn"
+
 [dependencies]
 hermit-macro = { path = "hermit-macro" }
 virtio = { package = "virtio-spec", version = "0.2", features = ["alloc", "mmio", "nightly", "zerocopy"] }

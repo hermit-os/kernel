@@ -2,10 +2,6 @@
 //! Philipp Oppermann's excellent series of blog posts (<http://blog.phil-opp.com/>)
 //! and Eric Kidd's toy OS (<https://github.com/emk/toyos-rs>).
 
-#![warn(rust_2018_idioms)]
-#![warn(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::uninlined_format_args)]
-#![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
