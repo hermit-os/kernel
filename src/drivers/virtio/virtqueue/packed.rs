@@ -559,7 +559,7 @@ impl Virtq for PackedVq {
 		let notif_specific = self
 			.dev_event
 			.notif_specific()
-			.map_or(false, |idx| range.wrapping_contains(&idx));
+			.is_some_and(|idx| range.wrapping_contains(&idx));
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
@@ -594,7 +594,7 @@ impl Virtq for PackedVq {
 		let notif_specific = self
 			.dev_event
 			.notif_specific()
-			.map_or(false, |idx| range.wrapping_contains(&idx));
+			.is_some_and(|idx| range.wrapping_contains(&idx));
 
 		if self.dev_event.is_notif() | notif_specific {
 			let notification_data = NotificationData::new()

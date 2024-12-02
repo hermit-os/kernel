@@ -11,10 +11,7 @@ use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 
 impl VirtioFsDriver {
 	fn map_cfg(cap: &PciCap) -> Option<FsDevCfg> {
-		let dev_cfg = match pci::map_dev_cfg::<virtio::fs::Config>(cap) {
-			Some(cfg) => cfg,
-			None => return None,
-		};
+		let dev_cfg = pci::map_dev_cfg::<virtio::fs::Config>(cap)?;
 
 		let dev_cfg = VolatileRef::from_ref(dev_cfg);
 
