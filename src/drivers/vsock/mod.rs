@@ -409,7 +409,7 @@ impl VirtioVsockDriver {
 	where
 		F: FnMut(&Hdr, &[u8]),
 	{
-		self.recv_vq.process_packet(f)
+		self.recv_vq.process_packet(f);
 	}
 
 	/// Provides a slice to copy the packet and transfer the packet

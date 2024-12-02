@@ -21,7 +21,7 @@ pub fn boot_info() -> &'static BootInfo {
 
 pub fn set_boot_info(raw_boot_info: RawBootInfo) {
 	let boot_info = BootInfo::from(raw_boot_info);
-	BOOT_INFO.set(boot_info).unwrap()
+	BOOT_INFO.set(boot_info).unwrap();
 }
 
 static CLI: OnceCell<Cli> = OnceCell::new();

@@ -57,7 +57,7 @@ impl TaskNotify {
 
 impl Wake for TaskNotify {
 	fn wake(self: Arc<Self>) {
-		self.wake_by_ref()
+		self.wake_by_ref();
 	}
 
 	fn wake_by_ref(self: &Arc<Self>) {
@@ -76,7 +76,7 @@ pub(crate) fn run() {
 				Poll::Ready(()) => false,
 				Poll::Pending => true,
 			}
-		})
+		});
 	});
 }
 

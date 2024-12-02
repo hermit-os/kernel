@@ -31,7 +31,7 @@ impl VqCfgHandler<'_> {
 		self.raw
 			.as_mut_ptr()
 			.queue_sel()
-			.write(self.vq_index.into())
+			.write(self.vq_index.into());
 	}
 
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed

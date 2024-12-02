@@ -165,9 +165,9 @@ async fn dhcpv4_run() {
 			}
 		};
 
-		Poll::Pending
+		Poll::<()>::Pending
 	})
-	.await
+	.await;
 }
 
 async fn network_run() {
@@ -185,7 +185,7 @@ async fn network_run() {
 			Poll::Pending
 		}
 	})
-	.await
+	.await;
 }
 
 #[cfg(feature = "dns")]

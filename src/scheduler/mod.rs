@@ -132,7 +132,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 					}
 				}
 			}
-		})
+		});
 	}
 
 	/// Trigger an interrupt to reschedule the system
@@ -171,7 +171,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	fn add_network_timer(self, wakeup_time: Option<u64>) {
 		without_interrupts(|| {
 			self.blocked_tasks.add_network_timer(wakeup_time);
-		})
+		});
 	}
 
 	fn exit(self, exit_code: i32) -> ! {
@@ -431,7 +431,7 @@ impl PerCoreScheduler {
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
 		without_interrupts(|| {
 			self.blocked_tasks
-				.add(self.current_task.clone(), wakeup_time)
+				.add(self.current_task.clone(), wakeup_time);
 		});
 	}
 

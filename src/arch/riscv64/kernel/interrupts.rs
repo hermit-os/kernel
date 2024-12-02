@@ -167,10 +167,10 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 		Trap::Interrupt(Interrupt::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
 		Trap::Interrupt(Interrupt::SupervisorSoft) => {
-			crate::arch::riscv64::kernel::scheduler::wakeup_handler()
+			crate::arch::riscv64::kernel::scheduler::wakeup_handler();
 		}
 		Trap::Interrupt(Interrupt::SupervisorTimer) => {
-			crate::arch::riscv64::kernel::scheduler::timer_handler()
+			crate::arch::riscv64::kernel::scheduler::timer_handler();
 		}
 		cause => {
 			error!("Interrupt: {cause:?}");

@@ -75,7 +75,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 		{
 			error!("SMP support deactivated");
 			loop {
-				crate::arch::processor::halt()
+				crate::arch::processor::halt();
 			}
 		}
 		#[cfg(feature = "smp")]

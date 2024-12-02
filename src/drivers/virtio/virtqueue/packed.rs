@@ -81,7 +81,7 @@ impl WrapCount {
 	/// If WrapCount(true) returns WrapCount(false),
 	/// if WrapCount(false) returns WrapCount(true).
 	fn wrap(&mut self) {
-		self.0 = !self.0
+		self.0 = !self.0;
 	}
 }
 
@@ -347,7 +347,7 @@ impl ReadCtrl<'_> {
 
 	fn incrmt(&mut self) {
 		if self.desc_ring.poll_index + 1 == self.modulo {
-			self.desc_ring.dev_wc.wrap()
+			self.desc_ring.dev_wc.wrap();
 		}
 
 		// Increment capacity as we have one more free now!
@@ -412,10 +412,10 @@ impl WriteCtrl<'_> {
 			self.first_flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		} else {
 			// Set avail and used according to the current WrapCount.
-			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags)
+			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		}
 		self.desc_ring.ring[usize::from(self.position)] = incomplete_desc;
-		self.incrmt()
+		self.incrmt();
 	}
 
 	fn make_avail(&mut self, raw_tkn: Box<TransferToken<pvirtq::Desc>>) {

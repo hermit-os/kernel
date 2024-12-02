@@ -211,7 +211,7 @@ pub(crate) fn init_drivers() {
 			);
 			match mmio_virtio::init_device(mmio, irq) {
 				Ok(VirtioDriver::Network(drv)) => {
-					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)));
 				}
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}

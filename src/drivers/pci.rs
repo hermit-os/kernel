@@ -159,7 +159,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			return None;
 		}
 		if !prefetchable {
-			warn!("Currently only mapping of prefetchable bars is supported!")
+			warn!("Currently only mapping of prefetchable bars is supported!");
 		}
 
 		// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
@@ -492,15 +492,15 @@ pub(crate) fn init() {
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				Ok(VirtioDriver::Network(drv)) => {
-					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)));
 				}
 				#[cfg(feature = "vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
-					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)))
+					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)));
 				}
 				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
-					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)))
+					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)));
 				}
 				_ => {}
 			}

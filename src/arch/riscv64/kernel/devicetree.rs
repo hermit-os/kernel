@@ -234,7 +234,7 @@ pub fn init_drivers() {
 				{
 					register_driver(MmioDriver::VirtioNet(hermit_sync::InterruptSpinMutex::new(
 						drv,
-					)))
+					)));
 				}
 			}
 		}

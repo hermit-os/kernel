@@ -714,7 +714,7 @@ pub fn boot_application_processors() {
 		let pt = unsafe { crate::arch::mm::paging::identity_mapped_page_table() };
 		let virt_addr = SMP_BOOT_CODE_ADDRESS;
 		let phys_addr = pt.translate_addr(virt_addr.into()).unwrap();
-		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64())
+		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64());
 	} else {
 		// Identity-map the boot code page and copy over the code.
 		debug!(

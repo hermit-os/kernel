@@ -114,9 +114,9 @@ impl VirtioNetDriver {
 		}
 
 		if drv.is_link_up() {
-			info!("Virtio-net link is up after initialization.")
+			info!("Virtio-net link is up after initialization.");
 		} else {
-			info!("Virtio-net link is down after initialization!")
+			info!("Virtio-net link is down after initialization!");
 		}
 
 		Ok(drv)

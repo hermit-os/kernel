@@ -56,7 +56,7 @@ impl WakerRegistration {
 	/// Wake the registered waker, if any.
 	pub fn wake(&mut self) {
 		if let Some(w) = self.waker.take() {
-			w.wake()
+			w.wake();
 		}
 	}
 }
@@ -186,7 +186,7 @@ async fn vsock_run() {
 			Poll::Ready(())
 		}
 	})
-	.await
+	.await;
 }
 
 pub(crate) struct VsockMap {

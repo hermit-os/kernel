@@ -399,7 +399,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) {
-		self.map_page_in_this_table::<S>(page, physical_address, flags)
+		self.map_page_in_this_table::<S>(page, physical_address, flags);
 	}
 }
 
@@ -448,11 +448,11 @@ where
 			}
 
 			let subtable = self.subtable::<S>(page);
-			subtable.map_page::<S>(page, physical_address, flags)
+			subtable.map_page::<S>(page, physical_address, flags);
 		} else {
 			// Calling the default implementation from a specialized one is not supported (yet),
 			// so we have to resort to an extra function.
-			self.map_page_in_this_table::<S>(page, physical_address, flags)
+			self.map_page_in_this_table::<S>(page, physical_address, flags);
 		}
 	}
 }
