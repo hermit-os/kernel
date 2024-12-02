@@ -118,7 +118,7 @@ pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec)
 	if ts.is_null() {
 		unsafe { sem_timedwait(sem, 0) }
 	} else {
-		let mut current_ts: timespec = Default::default();
+		let mut current_ts = timespec::default();
 
 		unsafe {
 			sys_clock_gettime(CLOCK_REALTIME, &mut current_ts);

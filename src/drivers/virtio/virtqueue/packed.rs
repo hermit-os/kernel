@@ -724,7 +724,7 @@ impl Virtq for PackedVq {
 			notif_ctrl,
 			size: VqSize::from(vq_size),
 			index,
-			last_next: Default::default(),
+			last_next: Cell::default(),
 		})
 	}
 

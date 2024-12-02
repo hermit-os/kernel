@@ -266,7 +266,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {
 			IpAddress::Ipv6(ip) => {
-				let mut in6_addr: in6_addr = Default::default();
+				let mut in6_addr = in6_addr::default();
 				in6_addr.s6_addr.copy_from_slice(ip.as_bytes());
 
 				Self {
