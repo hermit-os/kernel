@@ -4,6 +4,7 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{c_char, CStr};
 use core::marker::PhantomData;
+use core::ptr;
 
 use hermit_sync::Lazy;
 
@@ -625,7 +626,7 @@ pub unsafe extern "C" fn sys_getdents64(
 						dir.d_off = offset;
 
 						// copy null-terminated filename
-						let s = &mut dir.d_name as *mut _ as *mut u8;
+						let s = ptr::from_mut(&mut dir.d_name).cast::<u8>();
 						unsafe {
 							core::ptr::copy_nonoverlapping(i.name.as_ptr(), s, len);
 							s.add(len).write_bytes(0, 1);

@@ -121,7 +121,7 @@ pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec)
 		let mut current_ts: timespec = Default::default();
 
 		unsafe {
-			sys_clock_gettime(CLOCK_REALTIME, &mut current_ts as *mut _);
+			sys_clock_gettime(CLOCK_REALTIME, &mut current_ts);
 
 			let ts = &*ts;
 			let ms: i64 = (ts.tv_sec - current_ts.tv_sec) * 1000
