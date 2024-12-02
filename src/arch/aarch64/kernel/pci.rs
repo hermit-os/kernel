@@ -299,12 +299,12 @@ pub fn init() {
 											cmd |= CommandRegister::IO_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;
 										}
-										// Currently, we ignore 32 bit memory bars
-										/*Bar::Memory32 { address, size, prefetchable } => {
-											dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
-											mem32_start += u64::from(size);
-											cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
-										}*/
+										Bar::Memory32 { .. } => {
+											// Currently, we ignore 32 bit memory bars
+											// dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
+											// mem32_start += u64::from(size);
+											// cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
+										}
 										Bar::Memory64 {
 											address: _,
 											size,
@@ -322,7 +322,6 @@ pub fn init() {
 											cmd |= CommandRegister::MEMORY_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;
 										}
-										_ => {}
 									}
 								}
 							}

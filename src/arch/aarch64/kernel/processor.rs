@@ -27,7 +27,9 @@ impl fmt::Display for CpuFrequencySources {
 		match &self {
 			CpuFrequencySources::CommandLine => write!(f, "Command Line"),
 			CpuFrequencySources::Register => write!(f, "CNTFRQ_EL0"),
-			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
+			CpuFrequencySources::Invalid => {
+				panic!("Attempted to print an invalid CPU Frequency Source")
+			}
 		}
 	}
 }

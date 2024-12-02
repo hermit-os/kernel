@@ -552,10 +552,15 @@ impl VirtioNetDriver {
                                 }
 						}
 					}
-					_ => {
+					VirtioNetError::FailFeatureNeg(_) => {
 						error!(
 							"Wanted set of features is NOT supported by device. Set: {features:?}"
 						);
+						return Err(vnet_err);
+					}
+					#[cfg(feature = "pci")]
+					VirtioNetError::NoDevCfg(_) => {
+						error!("No device config found.");
 						return Err(vnet_err);
 					}
 				}

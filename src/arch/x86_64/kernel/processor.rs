@@ -278,7 +278,9 @@ impl fmt::Display for CpuFrequencySources {
 			CpuFrequencySources::CpuIdTscInfo => write!(f, "CpuId Tsc Info"),
 			CpuFrequencySources::HypervisorTscInfo => write!(f, "Tsc Info from Hypervisor"),
 			CpuFrequencySources::Visionary => write!(f, "Visionary"),
-			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
+			CpuFrequencySources::Invalid => {
+				panic!("Attempted to print an invalid CPU Frequency Source")
+			}
 		}
 	}
 }
