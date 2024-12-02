@@ -167,7 +167,7 @@ impl Socket {
 						let local_cid = driver_guard.get_cid();
 
 						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 							response.src_cid = le64::from_ne(local_cid);
 							response.dst_cid = le64::from_ne(ep.cid as u64);
@@ -257,7 +257,7 @@ impl Socket {
 						let local_cid = driver_guard.get_cid();
 
 						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 							response.src_cid = le64::from_ne(local_cid);
 							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
@@ -384,7 +384,7 @@ impl Socket {
 
 						driver_guard.send_packet(HEADER_SIZE + len, |virtio_buffer| {
 							let response =
-								unsafe { &mut *(virtio_buffer.as_mut_ptr() as *mut Hdr) };
+								unsafe { &mut *virtio_buffer.as_mut_ptr().cast::<Hdr>() };
 
 							raw.tx_cnt = raw.tx_cnt.wrapping_add(len.try_into().unwrap());
 							response.src_cid = le64::from_ne(local_cid);

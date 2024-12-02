@@ -160,7 +160,7 @@ async fn vsock_run() {
 
 			if let Some(hdr) = hdr {
 				driver_guard.send_packet(HEADER_SIZE, |buffer| {
-					let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+					let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 					response.src_cid = hdr.dst_cid;
 					response.dst_cid = hdr.src_cid;

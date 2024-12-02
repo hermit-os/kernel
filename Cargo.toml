@@ -75,6 +75,7 @@ rust_2018_idioms = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 
 [lints.clippy]
+ptr_as_ptr = "warn"
 ref_as_ptr = "warn"
 string_to_string = "warn"
 transmute_ptr_to_ptr = "warn"

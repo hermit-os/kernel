@@ -351,7 +351,7 @@ fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static Apic
 		for i in 0..BasePageSize::SIZE / 4 {
 			let mut tmp: *const u32 = virtual_address.as_ptr();
 			tmp = unsafe { tmp.offset(i.try_into().unwrap()) };
-			let apic_mp: &ApicMP = unsafe { &(*(tmp as *const ApicMP)) };
+			let apic_mp = unsafe { &*tmp.cast::<ApicMP>() };
 			if apic_mp.signature == MP_FLT_SIGNATURE
 				&& !(apic_mp.version > 4 || apic_mp.features[0] != 0)
 			{

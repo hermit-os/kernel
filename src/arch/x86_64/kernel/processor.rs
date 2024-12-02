@@ -224,7 +224,7 @@ impl FPUState {
 	pub fn restore(&self) {
 		if supports_xsave() {
 			unsafe {
-				_xrstor(ptr::from_ref(self) as _, u64::MAX);
+				_xrstor(ptr::from_ref(self).cast(), u64::MAX);
 			}
 		} else {
 			self.restore_common();
@@ -234,7 +234,7 @@ impl FPUState {
 	pub fn save(&mut self) {
 		if supports_xsave() {
 			unsafe {
-				_xsave(ptr::from_mut(self) as _, u64::MAX);
+				_xsave(ptr::from_mut(self).cast(), u64::MAX);
 			}
 		} else {
 			self.save_common();
@@ -243,13 +243,13 @@ impl FPUState {
 
 	pub fn restore_common(&self) {
 		unsafe {
-			_fxrstor(ptr::from_ref(self) as _);
+			_fxrstor(ptr::from_ref(self).cast());
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			_fxsave(ptr::from_mut(self) as _);
+			_fxsave(ptr::from_mut(self).cast());
 			asm!("fnclex", options(nomem, nostack));
 		}
 	}

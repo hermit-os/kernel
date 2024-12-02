@@ -812,7 +812,13 @@ impl ObjectInterface for FuseDirectoryHandle {
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
 		while (rsp.headers.out_header.len as usize) - offset > core::mem::size_of::<fuse_dirent>() {
 			let dirent = unsafe {
-				&*(rsp.payload.as_ref().unwrap().as_ptr().byte_add(offset) as *const fuse_dirent)
+				&*rsp
+					.payload
+					.as_ref()
+					.unwrap()
+					.as_ptr()
+					.byte_add(offset)
+					.cast::<fuse_dirent>()
 			};
 
 			offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
@@ -939,7 +945,13 @@ impl VfsNode for FuseDirectory {
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
 		while (rsp.headers.out_header.len as usize) - offset > core::mem::size_of::<fuse_dirent>() {
 			let dirent = unsafe {
-				&*(rsp.payload.as_ref().unwrap().as_ptr().byte_add(offset) as *const fuse_dirent)
+				&*rsp
+					.payload
+					.as_ref()
+					.unwrap()
+					.as_ptr()
+					.byte_add(offset)
+					.cast::<fuse_dirent>()
 			};
 
 			offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
@@ -1190,8 +1202,13 @@ pub(crate) fn init() {
 				> core::mem::size_of::<fuse_dirent>()
 			{
 				let dirent = unsafe {
-					&*(rsp.payload.as_ref().unwrap().as_ptr().byte_add(offset)
-						as *const fuse_dirent)
+					&*rsp
+						.payload
+						.as_ref()
+						.unwrap()
+						.as_ptr()
+						.byte_add(offset)
+						.cast::<fuse_dirent>()
 				};
 
 				offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;

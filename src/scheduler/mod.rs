@@ -753,7 +753,7 @@ impl PerCoreScheduler {
 			let mut borrowed = self.current_task.borrow_mut();
 			(
 				borrowed.id,
-				ptr::from_mut(&mut borrowed.last_stack_pointer) as *mut usize,
+				ptr::from_mut(&mut borrowed.last_stack_pointer).cast::<usize>(),
 				borrowed.prio,
 				borrowed.status,
 			)

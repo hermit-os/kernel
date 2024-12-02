@@ -376,7 +376,7 @@ impl BufferElem {
 
 	pub fn addr(&self) -> *const u8 {
 		match self {
-			BufferElem::Sized(sized) => ptr::from_ref(sized.as_ref()) as *const u8,
+			BufferElem::Sized(sized) => ptr::from_ref(sized.as_ref()).cast::<u8>(),
 			BufferElem::Vector(vec) => vec.as_ptr(),
 		}
 	}
