@@ -18,7 +18,7 @@ pub(crate) struct VsockDevCfgRaw {
 
 impl VirtioVsockDriver {
 	fn map_cfg(cap: &PciCap) -> Option<VsockDevCfg> {
-		let dev_cfg: &'static VsockDevCfgRaw = pci::map_dev_cfg::<VsockDevCfgRaw>(cap)?;
+		let dev_cfg = pci::map_dev_cfg::<VsockDevCfgRaw>(cap)?;
 
 		Some(VsockDevCfg {
 			raw: dev_cfg,
