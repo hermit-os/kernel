@@ -1,9 +1,10 @@
 use core::num::NonZeroUsize;
 
 use log::debug;
+use one_shot_mutex::OneShotMutex;
 use x86_64::structures::paging::{FrameAllocator, FrameDeallocator, PageSize, PhysFrame, Size4KiB};
 
-static mut PHYS_ALLOC: Option<PhysAllocInner> = None;
+static PHYS_ALLOC: OneShotMutex<Option<PhysAllocInner>> = OneShotMutex::new(None);
 
 struct PhysAllocInner {
 	next: NonZeroUsize,
@@ -27,14 +28,13 @@ pub struct PhysAlloc;
 
 impl PhysAlloc {
 	pub fn init(addr: usize) {
-		unsafe {
-			assert!(PHYS_ALLOC.is_none());
-			PHYS_ALLOC.replace(PhysAllocInner::new(addr.try_into().unwrap()));
-		}
+		let mut phys_alloc = PHYS_ALLOC.lock();
+		assert!(phys_alloc.is_none());
+		phys_alloc.replace(PhysAllocInner::new(addr.try_into().unwrap()));
 	}
 
 	pub fn allocate(size: usize) -> usize {
-		unsafe { PHYS_ALLOC.as_mut().unwrap().allocate(size) }
+		PHYS_ALLOC.lock().as_mut().unwrap().allocate(size)
 	}
 }
 

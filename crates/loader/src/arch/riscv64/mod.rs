@@ -47,7 +47,7 @@ fn find_kernel_multiboot(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 
 	let initrd_start = sptr::from_exposed_addr_mut::<u8>(addr);
 	// SAFETY: We trust the raw pointer from the firmware
-	return Some(unsafe { slice::from_raw_parts(initrd_start, len) });
+	Some(unsafe { slice::from_raw_parts(initrd_start, len) })
 }
 
 pub fn find_kernel() -> &'static [u8] {

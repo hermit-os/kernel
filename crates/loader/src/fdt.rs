@@ -136,7 +136,7 @@ mod uefi {
 		inner: &'a T,
 	}
 
-	impl<'a, T> fmt::Display for MemoryMapDisplay<'a, T>
+	impl<T> fmt::Display for MemoryMapDisplay<'_, T>
 	where
 		T: MemoryMap,
 	{
@@ -169,7 +169,7 @@ mod uefi {
 		inner: &'a MemoryDescriptor,
 	}
 
-	impl<'a> fmt::Display for MemoryDescriptorDisplay<'a> {
+	impl fmt::Display for MemoryDescriptorDisplay<'_> {
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			write!(
 				f,
