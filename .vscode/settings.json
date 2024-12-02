@@ -16,8 +16,8 @@
         "-Zbuild-std=core,alloc",
         "--quiet",
         "--message-format=json",
-        "--target=aarch64-unknown-none-softfloat",
-        "--target=riscv64gc-unknown-none-elf",
+        // "--target=aarch64-unknown-none-softfloat",
+        // "--target=riscv64gc-unknown-none-elf",
         "--target=x86_64-unknown-none",
     ],
     "rust-analyzer.check.targets": [
