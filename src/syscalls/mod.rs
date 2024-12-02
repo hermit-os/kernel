@@ -291,7 +291,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
 	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 }
 
 #[hermit_macro::system]
@@ -304,7 +304,8 @@ pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 		return -crate::errno::EINVAL;
 	};
 
-	crate::fs::create_dir(name, mode).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fs::create_dir(name, mode)
+		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 }
 
 #[hermit_macro::system]
@@ -312,7 +313,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
 	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-	crate::fs::remove_dir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fs::remove_dir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 }
 
 #[hermit_macro::system]
@@ -533,7 +534,7 @@ pub unsafe extern "C" fn sys_ioctl(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
 				block_on((*v).ioctl(IoCtl::NonBlocking, value != 0), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else {
@@ -558,7 +559,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
 				block_on((*v).ioctl(IoCtl::NonBlocking, true), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else {

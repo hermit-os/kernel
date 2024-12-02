@@ -106,7 +106,7 @@ impl VirtioNetDriver {
 		};
 
 		match drv.init_dev() {
-			Ok(_) => info!(
+			Ok(()) => info!(
 				"Network device with id {:x}, has been initialized by driver!",
 				drv.get_dev_id()
 			),

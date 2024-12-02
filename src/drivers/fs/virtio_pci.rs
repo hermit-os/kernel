@@ -72,7 +72,7 @@ impl VirtioFsDriver {
 		};
 
 		match drv.init_dev() {
-			Ok(_) => info!(
+			Ok(()) => info!(
 				"Filesystem device with id {:x}, has been initialized by driver!",
 				drv.get_dev_id()
 			),

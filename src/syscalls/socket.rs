@@ -542,7 +542,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
 			block_on((*v).listen(backlog), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 		},
 	)
 }
@@ -567,7 +567,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET6 => {
@@ -576,7 +576,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			}
 			#[cfg(feature = "vsock")]
 			AF_VSOCK => {
@@ -585,7 +585,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() });
 				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			}
 			_ => -crate::errno::EINVAL,
 		},
@@ -633,7 +633,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
 			block_on((*v).connect(endpoint), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 		},
 	)
 }
@@ -723,7 +723,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
 				block_on((*v).setsockopt(SocketOption::TcpNoDelay, value != 0), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
@@ -861,7 +861,7 @@ fn shutdown(sockfd: i32, how: i32) -> i32 {
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
 			block_on((*v).shutdown(how), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 		},
 	)
 }

@@ -84,7 +84,7 @@ impl VirtioVsockDriver {
 		};
 
 		match drv.init_dev() {
-			Ok(_) => {
+			Ok(()) => {
 				info!(
 					"Socket device with cid {:x}, has been initialized by driver!",
 					drv.dev_cfg.raw.guest_cid

@@ -134,12 +134,9 @@ fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
 		// Transfers will be awaited at the queue
-		match vq.dispatch(buff_tkn, false, BufferType::Direct) {
-			Ok(_) => (),
-			Err(err) => {
-				error!("{:#?}", err);
-				break;
-			}
+		if let Err(err) = vq.dispatch(buff_tkn, false, BufferType::Direct) {
+			error!("{:#?}", err);
+			break;
 		}
 	}
 }
@@ -513,7 +510,7 @@ impl VirtioNetDriver {
 		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
 		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
 		match self.negotiate_features(features) {
-			Ok(_) => info!(
+			Ok(()) => info!(
 				"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
 				self.dev_cfg.dev_id
 			),
@@ -540,7 +537,7 @@ impl VirtioNetDriver {
 						features = common_features;
 
 						match self.negotiate_features(features) {
-                                Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {features:?}", self.dev_cfg.dev_id),
+                                Ok(()) => info!("Driver found a subset of features for virtio device {:x}. Features are: {features:?}", self.dev_cfg.dev_id),
                                 Err(vnet_err) => {
                                     match vnet_err {
                                         VirtioNetError::FeatureRequirementsNotMet(features) => {
@@ -581,13 +578,12 @@ impl VirtioNetDriver {
 			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
-		match self.dev_spec_init() {
-			Ok(_) => info!(
-				"Device specific initialization for Virtio network device {:x} finished",
-				self.dev_cfg.dev_id
-			),
-			Err(vnet_err) => return Err(vnet_err),
-		}
+		self.dev_spec_init()?;
+		info!(
+			"Device specific initialization for Virtio network device {:x} finished",
+			self.dev_cfg.dev_id
+		);
+
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
@@ -640,10 +636,8 @@ impl VirtioNetDriver {
 
 	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
 	fn dev_spec_init(&mut self) -> Result<(), VirtioNetError> {
-		match self.virtqueue_init() {
-			Ok(_) => info!("Network driver successfully initialized virtqueues."),
-			Err(vnet_err) => return Err(vnet_err),
-		}
+		self.virtqueue_init()?;
+		info!("Network driver successfully initialized virtqueues.");
 
 		// Add a control if feature is negotiated
 		if self.dev_cfg.features.contains(virtio::net::F::CTRL_VQ) {

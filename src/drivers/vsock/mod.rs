@@ -47,12 +47,9 @@ fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
 		// Transfers will be awaited at the queue
-		match vq.dispatch(buff_tkn, false, BufferType::Direct) {
-			Ok(_) => (),
-			Err(err) => {
-				error!("{:#?}", err);
-				break;
-			}
+		if let Err(err) = vq.dispatch(buff_tkn, false, BufferType::Direct) {
+			error!("{:#?}", err);
+			break;
 		}
 	}
 }

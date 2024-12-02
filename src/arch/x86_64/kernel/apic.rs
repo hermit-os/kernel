@@ -472,8 +472,8 @@ pub fn eoi() {
 pub fn init() {
 	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_acpi()
-		.or_else(|_| detect_from_mp())
-		.unwrap_or_else(|_| default_apic());
+		.or_else(|()| detect_from_mp())
+		.unwrap_or_else(|()| default_apic());
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	init_x2apic();
