@@ -1145,7 +1145,7 @@ pub(crate) fn init() {
 		let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
 		trace!("fuse init answer: {:?}", rsp);
 
-		let mount_point = driver.lock().get_mount_point().to_string();
+		let mount_point = driver.lock().get_mount_point();
 		if mount_point == "/" {
 			let fuse_nid = lookup(c"/".to_owned()).unwrap();
 			// Opendir
