@@ -288,7 +288,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
 	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
@@ -296,7 +296,7 @@ pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
 		mode
 	} else {
@@ -309,7 +309,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
 	crate::fs::remove_dir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
@@ -317,7 +317,7 @@ pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
 	match fs::read_stat(name) {
 		Ok(attr) => unsafe {
@@ -331,7 +331,7 @@ pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
 	match fs::read_lstat(name) {
 		Ok(attr) => unsafe {
@@ -361,7 +361,7 @@ pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
-	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
+	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
 		-crate::errno::EINVAL
@@ -382,7 +382,7 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 		return -crate::errno::EINVAL;
 	};
 
-	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
+	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::open(name, flags, mode)
 			.unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
