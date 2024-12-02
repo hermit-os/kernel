@@ -127,10 +127,10 @@ extern "C" fn initd(_arg: usize) {
 		fn main(argc: i32, argv: *const *const u8, env: *const *const u8);
 	}
 
-	if !env::is_uhyve() {
-		info!("Hermit is running on common system!");
-	} else {
+	if env::is_uhyve() {
 		info!("Hermit is running on uhyve!");
+	} else {
+		info!("Hermit is running on common system!");
 	}
 
 	// Initialize Drivers

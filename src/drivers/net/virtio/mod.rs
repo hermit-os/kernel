@@ -528,15 +528,18 @@ impl VirtioNetDriver {
 						if !dev_feats.contains(minimal_features) {
 							error!("Device features set, does not satisfy minimal features needed. Aborting!");
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-						} else {
-							let common_features = drv_feats & dev_feats;
-							if common_features.is_empty() {
-								error!("Feature negotiation failed with minimal feature set. Aborting!");
-								return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-							}
-							features = common_features;
+						}
 
-							match self.negotiate_features(features) {
+						let common_features = drv_feats & dev_feats;
+						if common_features.is_empty() {
+							error!(
+								"Feature negotiation failed with minimal feature set. Aborting!"
+							);
+							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
+						}
+						features = common_features;
+
+						match self.negotiate_features(features) {
                                 Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {features:?}", self.dev_cfg.dev_id),
                                 Err(vnet_err) => {
                                     match vnet_err {
@@ -550,7 +553,6 @@ impl VirtioNetDriver {
                                         }
                                     }
                                 }
-                            }
 						}
 					}
 					_ => {

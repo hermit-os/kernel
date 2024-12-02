@@ -91,12 +91,12 @@ impl Socket {
 
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if !socket.is_active() {
-					Poll::Ready(Ok(()))
-				} else {
+				if socket.is_active() {
 					socket.register_send_waker(cx.waker());
 					socket.register_recv_waker(cx.waker());
 					Poll::Pending
+				} else {
+					Poll::Ready(Ok(()))
 				}
 			})
 		})
@@ -377,18 +377,20 @@ impl Socket {
 		let nic = guard.as_nic_mut().unwrap();
 
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
-		if !socket.is_open() {
-			if backlog > 0 {
-				socket
-					.listen(self.port)
-					.map(|_| ())
-					.map_err(|_| io::Error::EIO)?;
-			} else {
-				return Err(io::Error::EINVAL);
-			}
-		} else {
+
+		if socket.is_open() {
 			return Err(io::Error::EIO);
 		}
+
+		if backlog <= 0 {
+			return Err(io::Error::EINVAL);
+		}
+
+		socket
+			.listen(self.port)
+			.map(|_| ())
+			.map_err(|_| io::Error::EIO)?;
+
 		self.is_listen = true;
 
 		for _ in 1..backlog {

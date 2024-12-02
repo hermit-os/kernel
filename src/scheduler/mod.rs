@@ -275,13 +275,13 @@ impl PerCoreScheduler {
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "smp")]
-			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(new_task);
-				true
-			} else {
+			if core_id == core_scheduler().core_id {
 				let task = Rc::new(RefCell::new(Task::from(new_task)));
 				core_scheduler().ready_queue.push(task);
 				false
+			} else {
+				input_locked.new_tasks.push_back(new_task);
+				true
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {
@@ -354,13 +354,13 @@ impl PerCoreScheduler {
 			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			#[cfg(feature = "smp")]
-			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(clone_task);
-				true
-			} else {
+			if core_id == core_scheduler().core_id {
 				let clone_task = Rc::new(RefCell::new(Task::from(clone_task)));
 				core_scheduler().ready_queue.push(clone_task);
 				false
+			} else {
+				input_locked.new_tasks.push_back(clone_task);
+				true
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {

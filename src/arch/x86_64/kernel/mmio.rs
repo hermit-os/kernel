@@ -183,10 +183,10 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	let linux_mmio = env::mmio();
 
-	if !linux_mmio.is_empty() {
-		check_linux_args(linux_mmio)
-	} else {
+	if linux_mmio.is_empty() {
 		guess_device()
+	} else {
+		check_linux_args(linux_mmio)
 	}
 }
 
