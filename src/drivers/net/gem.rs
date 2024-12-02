@@ -330,8 +330,7 @@ impl NetworkDriver for GEMDriver {
 				// The API must be fixed or the buffer may never touched again.
 				let buffer = unsafe {
 					core::slice::from_raw_parts_mut(
-						(self.rxbuffer.as_usize() + (index * RX_BUF_LEN) as usize) as *const u8
-							as *mut u8,
+						(self.rxbuffer.as_usize() + (index * RX_BUF_LEN) as usize) as *mut u8,
 						length as usize,
 					)
 				};
