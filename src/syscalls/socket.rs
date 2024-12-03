@@ -365,9 +365,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	use crate::executor::block_on;
 	use crate::executor::network::get_query_result;
 
-	if len != size_of::<in_addr>().try_into().unwrap()
-		&& len != size_of::<in6_addr>().try_into().unwrap()
-	{
+	if len != size_of::<in_addr>() && len != size_of::<in6_addr>() {
 		return -EINVAL;
 	}
 
@@ -375,7 +373,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 		return -EINVAL;
 	}
 
-	let query_type = if len == size_of::<in6_addr>().try_into().unwrap() {
+	let query_type = if len == size_of::<in6_addr>() {
 		DnsQueryType::Aaaa
 	} else {
 		DnsQueryType::A
