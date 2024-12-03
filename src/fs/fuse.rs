@@ -4,9 +4,9 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::future;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
+use core::{future, mem};
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -37,7 +37,7 @@ use crate::{arch, io};
 const MAX_READ_LEN: usize = 1024 * 64;
 const MAX_WRITE_LEN: usize = 1024 * 64;
 
-const U64_SIZE: usize = ::core::mem::size_of::<u64>();
+const U64_SIZE: usize = mem::size_of::<u64>();
 
 const S_IFLNK: u32 = 0o120_000;
 const S_IFMT: u32 = 0o170_000;
@@ -542,13 +542,12 @@ fn readlink(nid: u64) -> io::Result<String> {
 		.unwrap()
 		.lock()
 		.send_command(cmd, rsp_payload_len)?;
-	let len: usize = if rsp.headers.out_header.len as usize
-		- ::core::mem::size_of::<fuse_out_header>()
+	let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
 		>= len.try_into().unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
-		(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
+		(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 	};
 
 	Ok(String::from_utf8(rsp.payload.unwrap()[..len].to_vec()).unwrap())
@@ -618,14 +617,13 @@ impl FuseFileHandleInner {
 				.ok_or(io::Error::ENOSYS)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
-			let len: usize = if (rsp.headers.out_header.len as usize)
-				- ::core::mem::size_of::<fuse_out_header>()
-				>= len
-			{
-				len
-			} else {
-				(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
-			};
+			let len: usize =
+				if (rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>() >= len
+				{
+					len
+				} else {
+					(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
+				};
 			self.offset += len;
 
 			buf[..len].copy_from_slice(&rsp.payload.unwrap()[..len]);
@@ -795,13 +793,12 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if rsp.headers.out_header.len as usize
-			- ::core::mem::size_of::<fuse_out_header>()
+		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
+			(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 		};
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
@@ -928,13 +925,12 @@ impl VfsNode for FuseDirectory {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if rsp.headers.out_header.len as usize
-			- ::core::mem::size_of::<fuse_out_header>()
+		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
+			(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 		};
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
@@ -1185,12 +1181,12 @@ pub(crate) fn init() {
 				.unwrap();
 
 			let len: usize = if rsp.headers.out_header.len as usize
-				- ::core::mem::size_of::<fuse_out_header>()
+				- mem::size_of::<fuse_out_header>()
 				>= len.try_into().unwrap()
 			{
 				len.try_into().unwrap()
 			} else {
-				(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
+				(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 			};
 
 			assert!(
