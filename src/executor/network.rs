@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
-use smoltcp::iface::{SocketHandle, SocketSet};
+use smoltcp::iface::{PollResult, SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 #[cfg(feature = "dns")]
@@ -263,7 +263,7 @@ impl<'a> NetworkInterface<'a> {
 		Ok(tcp_handle)
 	}
 
-	pub(crate) fn poll_common(&mut self, timestamp: Instant) -> bool {
+	pub(crate) fn poll_common(&mut self, timestamp: Instant) -> PollResult {
 		self.iface
 			.poll(timestamp, &mut self.device, &mut self.sockets)
 	}

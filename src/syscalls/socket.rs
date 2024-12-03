@@ -192,7 +192,7 @@ impl From<IpEndpoint> for sockaddr_in {
 		match endpoint.addr {
 			IpAddress::Ipv4(ip) => {
 				let sin_addr = in_addr {
-					s_addr: u32::from_ne_bytes(ip.as_bytes().try_into().unwrap()),
+					s_addr: u32::from_ne_bytes(ip.octets()),
 				};
 
 				Self {
@@ -267,7 +267,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 		match endpoint.addr {
 			IpAddress::Ipv6(ip) => {
 				let mut in6_addr = in6_addr::default();
-				in6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+				in6_addr.s6_addr.copy_from_slice(&ip.octets());
 
 				Self {
 					sin6_len: core::mem::size_of::<sockaddr_in6>().try_into().unwrap(),
@@ -400,7 +400,11 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	match block_on(get_query_result(query), None) {
 		Ok(addr_vec) => {
 			let slice = unsafe { core::slice::from_raw_parts_mut(inaddr, len) };
-			slice.copy_from_slice(addr_vec[0].as_bytes());
+
+			match addr_vec[0] {
+				IpAddress::Ipv4(ipv4_addr) => slice.copy_from_slice(&ipv4_addr.octets()),
+				IpAddress::Ipv6(ipv6_addr) => slice.copy_from_slice(&ipv6_addr.octets()),
+			}
 
 			0
 		}
