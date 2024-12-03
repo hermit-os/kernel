@@ -118,14 +118,14 @@ pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec)
 	if ts.is_null() {
 		unsafe { sem_timedwait(sem, 0) }
 	} else {
-		let mut current_ts: timespec = Default::default();
+		let mut current_ts = timespec::default();
 
 		unsafe {
-			sys_clock_gettime(CLOCK_REALTIME, &mut current_ts as *mut _);
+			sys_clock_gettime(CLOCK_REALTIME, &mut current_ts);
 
 			let ts = &*ts;
 			let ms: i64 = (ts.tv_sec - current_ts.tv_sec) * 1000
-				+ (ts.tv_nsec as i64 - current_ts.tv_nsec as i64) / 1000000;
+				+ (i64::from(ts.tv_nsec) - i64::from(current_ts.tv_nsec)) / 1_000_000;
 
 			if ms > 0 {
 				sem_timedwait(sem, ms.try_into().unwrap())

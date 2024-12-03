@@ -87,13 +87,13 @@ pub(super) fn usleep(usecs: u64) {
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_msleep(ms: u32) {
-	usleep(u64::from(ms) * 1000)
+	usleep(u64::from(ms) * 1000);
 }
 
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_usleep(usecs: u64) {
-	usleep(usecs)
+	usleep(usecs);
 }
 
 #[hermit_macro::system]
@@ -204,7 +204,7 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 static BLOCKED_TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 
-fn block_current_task(timeout: &Option<u64>) {
+fn block_current_task(timeout: Option<u64>) {
 	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
@@ -218,14 +218,14 @@ fn block_current_task(timeout: &Option<u64>) {
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_block_current_task() {
-	block_current_task(&None)
+	block_current_task(None);
 }
 
 /// Set the current task state to `blocked`
 #[hermit_macro::system]
 #[no_mangle]
 pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
-	block_current_task(&Some(timeout))
+	block_current_task(Some(timeout));
 }
 
 /// Wake up the task with the identifier `id`

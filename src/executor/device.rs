@@ -69,7 +69,7 @@ impl<'a> NetworkInterface<'a> {
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
-		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1000000;
+		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
 		if device.capabilities().medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}
@@ -147,7 +147,7 @@ impl<'a> NetworkInterface<'a> {
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
-		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1000000;
+		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
 		if device.capabilities().medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}
@@ -195,7 +195,7 @@ impl Device for HermitNet {
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
 		cap.max_transmission_unit = self.mtu.into();
-		cap.max_burst_size = Some(65535 / cap.max_transmission_unit);
+		cap.max_burst_size = Some(0xffff / cap.max_transmission_unit);
 		cap.checksum = self.checksums.clone();
 		cap
 	}

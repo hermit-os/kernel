@@ -156,7 +156,7 @@ impl FPUState {
 				"fld f31, (8*31)({fpu_state})",
 				"ld t0, (8*32)({fpu_state})",
 				"fscsr t0",
-				fpu_state = in(reg) self as *const _,
+				fpu_state = in(reg) self,
 				out("t0") _,
 			}
 
@@ -202,7 +202,7 @@ impl FPUState {
 				"fsd f31, (8*31)({fpu_state})",
 				"frcsr t0",
 				"sd t0, (8*32)({fpu_state})",
-				fpu_state = in(reg) self as *mut _,
+				fpu_state = in(reg) self,
 				out("t0") _,
 			}
 		}
@@ -249,7 +249,7 @@ pub fn get_timer_ticks() -> u64 {
 }
 
 pub fn get_frequency() -> u16 {
-	(get_timebase_freq() / 1000000).try_into().unwrap()
+	(get_timebase_freq() / 1_000_000).try_into().unwrap()
 }
 
 #[inline]

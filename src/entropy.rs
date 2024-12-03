@@ -12,7 +12,7 @@ use crate::errno::ENOSYS;
 
 // Reseed every second for increased security while maintaining the performance of
 // the PRNG.
-const RESEED_INTERVAL: u64 = 1000000;
+const RESEED_INTERVAL: u64 = 1_000_000;
 
 bitflags! {
 	pub struct Flags: u32 {}

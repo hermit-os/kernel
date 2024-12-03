@@ -159,7 +159,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			return None;
 		}
 		if !prefetchable {
-			warn!("Currently only mapping of prefetchable bars is supported!")
+			warn!("Currently only mapping of prefetchable bars is supported!");
 		}
 
 		// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
@@ -477,7 +477,7 @@ pub(crate) fn init() {
 	without_interrupts(|| {
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
 			let (vendor_id, device_id) = x.id();
-			vendor_id == 0x1AF4 && (0x1000..=0x107F).contains(&device_id)
+			vendor_id == 0x1af4 && (0x1000..=0x107f).contains(&device_id)
 		}) {
 			info!(
 				"Found virtio device with device id {:#x}",
@@ -492,15 +492,15 @@ pub(crate) fn init() {
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				Ok(VirtioDriver::Network(drv)) => {
-					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)));
 				}
 				#[cfg(feature = "vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
-					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)))
+					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)));
 				}
 				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
-					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)))
+					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)));
 				}
 				_ => {}
 			}

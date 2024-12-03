@@ -178,15 +178,15 @@ impl FPUState {
 			// Set FPU-related values to their default values after initialization.
 			// Refer to Intel Vol. 3A, Table 9-1. IA-32 and Intel 64 Processor States Following Power-up, Reset, or INIT
 			legacy_region: XSaveLegacyRegion {
-				fpu_control_word: 0x37F,
+				fpu_control_word: 0x37f,
 				fpu_status_word: 0,
-				fpu_tag_word: 0xFFFF,
+				fpu_tag_word: 0xffff,
 				fpu_opcode: 0,
 				fpu_instruction_pointer: 0,
 				fpu_instruction_pointer_high_or_cs: 0,
 				fpu_data_pointer: 0,
 				fpu_data_pointer_high_or_ds: 0,
-				mxcsr: 0x1F80,
+				mxcsr: 0x1f80,
 				mxcsr_mask: 0,
 				st_space: [0; 8 * 16],
 				xmm_space: [0; 16 * 16],
@@ -224,7 +224,7 @@ impl FPUState {
 	pub fn restore(&self) {
 		if supports_xsave() {
 			unsafe {
-				_xrstor(ptr::from_ref(self) as _, u64::MAX);
+				_xrstor(ptr::from_ref(self).cast(), u64::MAX);
 			}
 		} else {
 			self.restore_common();
@@ -234,7 +234,7 @@ impl FPUState {
 	pub fn save(&mut self) {
 		if supports_xsave() {
 			unsafe {
-				_xsave(ptr::from_mut(self) as _, u64::MAX);
+				_xsave(ptr::from_mut(self).cast(), u64::MAX);
 			}
 		} else {
 			self.save_common();
@@ -243,13 +243,13 @@ impl FPUState {
 
 	pub fn restore_common(&self) {
 		unsafe {
-			_fxrstor(ptr::from_ref(self) as _);
+			_fxrstor(ptr::from_ref(self).cast());
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			_fxsave(ptr::from_mut(self) as _);
+			_fxsave(ptr::from_mut(self).cast());
 			asm!("fnclex", options(nomem, nostack));
 		}
 	}
@@ -278,7 +278,9 @@ impl fmt::Display for CpuFrequencySources {
 			CpuFrequencySources::CpuIdTscInfo => write!(f, "CpuId Tsc Info"),
 			CpuFrequencySources::HypervisorTscInfo => write!(f, "Tsc Info from Hypervisor"),
 			CpuFrequencySources::Visionary => write!(f, "Visionary"),
-			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
+			CpuFrequencySources::Invalid => {
+				panic!("Attempted to print an invalid CPU Frequency Source")
+			}
 		}
 	}
 }
@@ -332,15 +334,15 @@ impl CpuFrequency {
 	unsafe fn detect_from_cpuid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		let tsc_info = cpuid.get_tsc_info().ok_or(())?;
 		let freq = tsc_info.tsc_frequency().ok_or(())?;
-		let mhz = (freq / 1000000u64) as u16;
+		let mhz = (freq / 1_000_000u64) as u16;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
 	}
 
 	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		const KHZ_TO_HZ: u64 = 1000;
-		const MHZ_TO_HZ: u64 = 1000000;
+		const MHZ_TO_HZ: u64 = 1_000_000;
 		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
-		let freq = hypervisor_info.tsc_frequency().ok_or(())? as u64 * KHZ_TO_HZ;
+		let freq = u64::from(hypervisor_info.tsc_frequency().ok_or(())?) * KHZ_TO_HZ;
 		let mhz: u16 = (freq / MHZ_TO_HZ).try_into().unwrap();
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 	}
@@ -440,7 +442,7 @@ impl CpuFrequency {
 				break Some(tick);
 			}
 
-			if get_timestamp() - start > 120000000 {
+			if get_timestamp() - start > 120_000_000 {
 				break None;
 			}
 
@@ -889,7 +891,7 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
-		wrmsr(IA32_STAR, (0x1Bu64 << 48) | (0x08u64 << 32));
+		wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
 		wrmsr(
 			IA32_LSTAR,
 			crate::arch::x86_64::kernel::syscall::syscall_handler as u64,

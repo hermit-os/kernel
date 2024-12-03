@@ -84,7 +84,7 @@ pub fn init() {
 				);
 
 				let boot_time =
-					OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR) as i64).unwrap();
+					OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
 				info!("Hermit booted on {boot_time}");
 
 				let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();

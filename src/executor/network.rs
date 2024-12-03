@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 #[cfg(feature = "dns")]
 use alloc::vec::Vec;
 use core::future;
-use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
@@ -63,7 +62,7 @@ pub(crate) struct NetworkInterface<'a> {
 
 #[cfg(target_arch = "x86_64")]
 fn start_endpoint() -> u16 {
-	((unsafe { core::arch::x86_64::_rdtsc() }) % (u16::MAX as u64))
+	((unsafe { core::arch::x86_64::_rdtsc() }) % u64::from(u16::MAX))
 		.try_into()
 		.unwrap()
 }
@@ -81,12 +80,12 @@ fn start_endpoint() -> u16 {
 		);
 	}
 
-	(value % (u16::MAX as u64)).try_into().unwrap()
+	(value % u64::from(u16::MAX)).try_into().unwrap()
 }
 
 #[cfg(target_arch = "riscv64")]
 fn start_endpoint() -> u16 {
-	(riscv::register::time::read64() % (u16::MAX as u64))
+	(riscv::register::time::read64() % u64::from(u16::MAX))
 		.try_into()
 		.unwrap()
 }
@@ -165,15 +164,15 @@ async fn dhcpv4_run() {
 			}
 		};
 
-		Poll::Pending
+		Poll::<()>::Pending
 	})
-	.await
+	.await;
 }
 
 async fn network_run() {
 	future::poll_fn(|_cx| {
 		if let Some(mut guard) = NIC.try_lock() {
-			match guard.deref_mut() {
+			match &mut *guard {
 				NetworkState::Initialized(nic) => {
 					nic.poll_common(now());
 					Poll::Pending
@@ -185,7 +184,7 @@ async fn network_run() {
 			Poll::Pending
 		}
 	})
-	.await
+	.await;
 }
 
 #[cfg(feature = "dns")]
@@ -226,7 +225,7 @@ pub(crate) fn init() {
 
 	*guard = NetworkInterface::create();
 
-	if let NetworkState::Initialized(nic) = guard.deref_mut() {
+	if let NetworkState::Initialized(nic) = &mut *guard {
 		let time = now();
 		nic.poll_common(time);
 		let wakeup_time = nic
@@ -244,9 +243,9 @@ impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "udp")]
 	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
 		let udp_rx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 65535]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0xffff]);
 		let udp_tx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 65535]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0xffff]);
 		let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
 		let udp_handle = self.sockets.add(udp_socket);
 
@@ -255,8 +254,8 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(feature = "tcp")]
 	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
-		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
-		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
+		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 0xffff]);
+		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 0xffff]);
 		let mut tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 		tcp_socket.set_nagle_enabled(true);
 		let tcp_handle = self.sockets.add(tcp_socket);

@@ -81,7 +81,7 @@ impl WrapCount {
 	/// If WrapCount(true) returns WrapCount(false),
 	/// if WrapCount(false) returns WrapCount(true).
 	fn wrap(&mut self) {
-		self.0 = !self.0
+		self.0 = !self.0;
 	}
 }
 
@@ -347,7 +347,7 @@ impl ReadCtrl<'_> {
 
 	fn incrmt(&mut self) {
 		if self.desc_ring.poll_index + 1 == self.modulo {
-			self.desc_ring.dev_wc.wrap()
+			self.desc_ring.dev_wc.wrap();
 		}
 
 		// Increment capacity as we have one more free now!
@@ -412,10 +412,10 @@ impl WriteCtrl<'_> {
 			self.first_flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		} else {
 			// Set avail and used according to the current WrapCount.
-			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags)
+			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		}
 		self.desc_ring.ring[usize::from(self.position)] = incomplete_desc;
-		self.incrmt()
+		self.incrmt();
 	}
 
 	fn make_avail(&mut self, raw_tkn: Box<TransferToken<pvirtq::Desc>>) {
@@ -657,16 +657,15 @@ impl Virtq for PackedVq {
 		}
 
 		// Get a handler to the queues configuration area.
-		let mut vq_handler = match com_cfg.select_vq(index.into()) {
-			Some(handler) => handler,
-			None => return Err(VirtqError::QueueNotExisting(index.into())),
+		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
+			return Err(VirtqError::QueueNotExisting(index.into()));
 		};
 
 		// Must catch zero size as it is not allowed for packed queues.
-		// Must catch size larger 32768 (2^15) as it is not allowed for packed queues.
+		// Must catch size larger 0x8000 (2^15) as it is not allowed for packed queues.
 		//
 		// See Virtio specification v1.1. - 4.1.4.3.2
-		let vq_size = if (size.0 == 0) | (size.0 > 32768) {
+		let vq_size = if (size.0 == 0) | (size.0 > 0x8000) {
 			return Err(VirtqError::QueueSizeNotAllowed(size.0));
 		} else {
 			vq_handler.set_vq_size(size.0)
@@ -725,7 +724,7 @@ impl Virtq for PackedVq {
 			notif_ctrl,
 			size: VqSize::from(vq_size),
 			index,
-			last_next: Default::default(),
+			last_next: Cell::default(),
 		})
 	}
 

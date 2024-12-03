@@ -13,15 +13,15 @@ use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::env;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
-const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040E);
+const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);
 /// Minimum physical address where a valid EBDA must be located.
 const EBDA_MINIMUM_ADDRESS: PhysAddr = PhysAddr::new(0x400);
 /// The size of the EBDA window that is searched for an ACPI RSDP.
 const EBDA_WINDOW_SIZE: usize = 1024;
 /// The lower bound of the other address range, where the ACPI RSDP could be located.
-const RSDP_SEARCH_ADDRESS_LOW: PhysAddr = PhysAddr::new(0xE_0000);
+const RSDP_SEARCH_ADDRESS_LOW: PhysAddr = PhysAddr::new(0xe_0000);
 /// The upper bound of the other address range, where the ACPI RSDP could be located.
-const RSDP_SEARCH_ADDRESS_HIGH: PhysAddr = PhysAddr::new(0xF_FFFF);
+const RSDP_SEARCH_ADDRESS_HIGH: PhysAddr = PhysAddr::new(0xf_ffff);
 /// Length in bytes of the structure, over which the basic (ACPI 1.0) checksum is calculated.
 const RSDP_CHECKSUM_LENGTH: usize = 20;
 /// Length in byte sof the structure, over which the extended (ACPI 2.0+) checksum is calculated.
@@ -36,7 +36,7 @@ const AML_ZEROOP: u8 = 0x00;
 /// ACPI AML opcode indicating a single one byte as the data.
 const AML_ONEOP: u8 = 0x01;
 /// ACPI AML opcode indicating that a single byte with the data follows.
-const AML_BYTEPREFIX: u8 = 0x0A;
+const AML_BYTEPREFIX: u8 = 0x0a;
 
 /// Bit to enable an ACPI Sleep State.
 const SLP_EN: u16 = 1 << 13;
@@ -337,9 +337,7 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 				.as_ref()
 				.unwrap()
 		};
-		if &rsdp.signature != b"RSD PTR " {
-			panic!("RSDP Address not valid!");
-		}
+		assert!(&rsdp.signature == b"RSD PTR ", "RSDP Address not valid!");
 		return Ok(rsdp);
 	}
 
@@ -348,7 +346,7 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 	paging::identity_map(frame);
 	let ebda_ptr_location: &u16 =
 		unsafe { &*(VirtAddr::from(EBDA_PTR_LOCATION.as_u64()).as_ptr()) };
-	let ebda_address = PhysAddr::new((*ebda_ptr_location as u64) << 4);
+	let ebda_address = PhysAddr::new(u64::from(*ebda_ptr_location) << 4);
 
 	// Check if the pointed address is valid. This check is also done in ACPICA.
 	if ebda_address > EBDA_MINIMUM_ADDRESS {

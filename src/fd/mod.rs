@@ -67,7 +67,7 @@ bitflags! {
 		const O_TRUNC = 0o1000;
 		const O_APPEND = 0o2000;
 		const O_DIRECT = 0o40000;
-		const O_DIRECTORY = 0o200000;
+		const O_DIRECTORY = 0o200_000;
 	}
 }
 
@@ -111,14 +111,14 @@ bitflags! {
 bitflags! {
 	#[derive(Debug, Copy, Clone)]
 	pub struct AccessPermission: u32 {
-		const S_IFMT = 0o170000;
-		const S_IFSOCK = 0o140000;
-		const S_IFLNK = 0o120000;
-		const S_IFREG = 0o100000;
-		const S_IFBLK = 0o060000;
-		const S_IFDIR = 0o040000;
-		const S_IFCHR = 0o020000;
-		const S_IFIFO = 0o010000;
+		const S_IFMT = 0o170_000;
+		const S_IFSOCK = 0o140_000;
+		const S_IFLNK = 0o120_000;
+		const S_IFREG = 0o100_000;
+		const S_IFBLK = 0o060_000;
+		const S_IFDIR = 0o040_000;
+		const S_IFCHR = 0o020_000;
+		const S_IFIFO = 0o010_000;
 		const S_IRUSR = 0o400;
 		const S_IWUSR = 0o200;
 		const S_IXUSR = 0o100;

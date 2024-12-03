@@ -167,10 +167,10 @@ impl Socket {
 						let local_cid = driver_guard.get_cid();
 
 						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(ep.cid as u64);
+							response.dst_cid = le64::from_ne(ep.cid.into());
 							response.src_port = le32::from_ne(port);
 							response.dst_port = le32::from_ne(ep.port);
 							response.len = le32::from_ne(0);
@@ -257,16 +257,16 @@ impl Socket {
 						let local_cid = driver_guard.get_cid();
 
 						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *(buffer.as_mut_ptr() as *mut Hdr) };
+							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
+							response.dst_cid = le64::from_ne(raw.remote_cid.into());
 							response.src_port = le32::from_ne(port);
 							response.dst_port = le32::from_ne(raw.remote_port);
 							response.len = le32::from_ne(0);
 							response.type_ = le16::from_ne(Type::Stream.into());
 							if local_cid != cid.into() && cid != u32::MAX {
-								response.op = le16::from_ne(Op::Rst.into())
+								response.op = le16::from_ne(Op::Rst.into());
 							} else {
 								response.op = le16::from_ne(Op::Response.into());
 							}
@@ -381,11 +381,11 @@ impl Socket {
 
 						driver_guard.send_packet(HEADER_SIZE + len, |virtio_buffer| {
 							let response =
-								unsafe { &mut *(virtio_buffer.as_mut_ptr() as *mut Hdr) };
+								unsafe { &mut *virtio_buffer.as_mut_ptr().cast::<Hdr>() };
 
 							raw.tx_cnt = raw.tx_cnt.wrapping_add(len.try_into().unwrap());
 							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid as u64);
+							response.dst_cid = le64::from_ne(raw.remote_cid.into());
 							response.src_port = le32::from_ne(port);
 							response.dst_port = le32::from_ne(raw.remote_port);
 							response.len = le32::from_ne(len.try_into().unwrap());

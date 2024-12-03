@@ -16,7 +16,7 @@ use crate::{mm, scheduler, KERNEL_STACK_SIZE};
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.
 ///
 /// See entry.S and ARM Cortex-A Series Programmer's Guide for ARMv8-A, Version 1.0, PDF page 172
-const L0TABLE_ADDRESS: VirtAddr = VirtAddr::new(0x0000_FFFF_FFFF_F000u64);
+const L0TABLE_ADDRESS: VirtAddr = VirtAddr::new(0x0000_ffff_ffff_f000u64);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -25,7 +25,7 @@ const PAGE_BITS: usize = 12;
 const PAGE_MAP_BITS: usize = 9;
 
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
-const PAGE_MAP_MASK: usize = 0x1FF;
+const PAGE_MAP_MASK: usize = 0x1ff;
 
 bitflags! {
 	/// Useful flags for an entry in either table (L0Table, L1Table, L2Table, L3Table).
@@ -429,7 +429,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) {
-		self.map_page_in_this_table::<S>(page, physical_address, flags)
+		self.map_page_in_this_table::<S>(page, physical_address, flags);
 	}
 }
 
@@ -490,11 +490,11 @@ where
 			}
 
 			let subtable = self.subtable::<S>(page);
-			subtable.map_page::<S>(page, physical_address, flags)
+			subtable.map_page::<S>(page, physical_address, flags);
 		} else {
 			// Calling the default implementation from a specialized one is not supported (yet),
 			// so we have to resort to an extra function.
-			self.map_page_in_this_table::<S>(page, physical_address, flags)
+			self.map_page_in_this_table::<S>(page, physical_address, flags);
 		}
 	}
 }

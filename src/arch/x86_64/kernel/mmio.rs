@@ -19,10 +19,10 @@ use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 use crate::init_cell::InitCell;
 
-pub const MAGIC_VALUE: u32 = 0x74726976;
+pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
-pub const MMIO_START: usize = 0x00000000feb00000;
-pub const MMIO_END: usize = 0x00000000feb0ffff;
+pub const MMIO_START: usize = 0x0000_0000_feb0_0000;
+pub const MMIO_END: usize = 0x0000_0000_feb0_ffff;
 const IRQ_NUMBER: u8 = 44 - 32;
 
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
@@ -183,10 +183,10 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	let linux_mmio = env::mmio();
 
-	if !linux_mmio.is_empty() {
-		check_linux_args(linux_mmio)
-	} else {
+	if linux_mmio.is_empty() {
 		guess_device()
+	} else {
+		check_linux_args(linux_mmio)
 	}
 }
 
@@ -211,7 +211,7 @@ pub(crate) fn init_drivers() {
 			);
 			match mmio_virtio::init_device(mmio, irq) {
 				Ok(VirtioDriver::Network(drv)) => {
-					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)));
 				}
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}

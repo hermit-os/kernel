@@ -6,10 +6,10 @@ use crate::drivers::pci::{PciDevice, PCI_DEVICES};
 const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 
-const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
+const PCI_CONFIG_ADDRESS_PORT: u16 = 0xcf8;
 const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
 
-const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
+const PCI_CONFIG_DATA_PORT: u16 = 0xcfc;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct PciConfigRegion;

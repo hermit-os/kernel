@@ -13,7 +13,7 @@ use core::mem::size_of;
 //no-std otherwise std::mem::size_of
 mod common;
 
-const PATTERN: u8 = 0xAB;
+const PATTERN: u8 = 0xab;
 
 /// Mainly test if memcpy works as expected. Also somewhat tests memcmp
 /// Works with u8, u16, u32, u64, u128, i16, i32, i64 and i128

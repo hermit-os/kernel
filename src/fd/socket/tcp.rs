@@ -91,12 +91,12 @@ impl Socket {
 
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if !socket.is_active() {
-					Poll::Ready(Ok(()))
-				} else {
+				if socket.is_active() {
 					socket.register_send_waker(cx.waker());
 					socket.register_recv_waker(cx.waker());
 					Poll::Pending
+				} else {
+					Poll::Ready(Ok(()))
 				}
 			})
 		})
@@ -338,10 +338,7 @@ impl Socket {
 		self.handle.insert(new_handle);
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(new_handle);
 		socket.set_nagle_enabled(nagle_enabled);
-		socket
-			.listen(self.port)
-			.map(|_| ())
-			.map_err(|_| io::Error::EIO)?;
+		socket.listen(self.port).map_err(|_| io::Error::EIO)?;
 
 		let mut handle = BTreeSet::new();
 		handle.insert(connection_handle);
@@ -374,18 +371,17 @@ impl Socket {
 		let nic = guard.as_nic_mut().unwrap();
 
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
-		if !socket.is_open() {
-			if backlog > 0 {
-				socket
-					.listen(self.port)
-					.map(|_| ())
-					.map_err(|_| io::Error::EIO)?;
-			} else {
-				return Err(io::Error::EINVAL);
-			}
-		} else {
+
+		if socket.is_open() {
 			return Err(io::Error::EIO);
 		}
+
+		if backlog <= 0 {
+			return Err(io::Error::EINVAL);
+		}
+
+		socket.listen(self.port).map_err(|_| io::Error::EIO)?;
+
 		self.is_listen = true;
 
 		for _ in 1..backlog {
@@ -393,9 +389,7 @@ impl Socket {
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 			s.set_nagle_enabled(nagle_enabled);
-			s.listen(self.port)
-				.map(|_| ())
-				.map_err(|_| io::Error::EIO)?;
+			s.listen(self.port).map_err(|_| io::Error::EIO)?;
 
 			self.handle.insert(handle);
 		}

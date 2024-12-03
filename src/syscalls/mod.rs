@@ -4,6 +4,7 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{c_char, CStr};
 use core::marker::PhantomData;
+use core::ptr;
 
 use hermit_sync::Lazy;
 
@@ -288,36 +289,35 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	fs::unlink(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 }
 
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
-		mode
-	} else {
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
+	let Some(mode) = AccessPermission::from_bits(mode) else {
 		return -crate::errno::EINVAL;
 	};
 
-	crate::fs::create_dir(name, mode).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fs::create_dir(name, mode)
+		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 }
 
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-	crate::fs::remove_dir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fs::remove_dir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 }
 
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
 	match fs::read_stat(name) {
 		Ok(attr) => unsafe {
@@ -331,7 +331,7 @@ pub unsafe extern "C" fn sys_stat(name: *const c_char, stat: *mut FileAttr) -> i
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> i32 {
-	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
 	match fs::read_lstat(name) {
 		Ok(attr) => unsafe {
@@ -361,7 +361,7 @@ pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
-	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
+	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
 		-crate::errno::EINVAL
@@ -371,18 +371,14 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) -> FileDescriptor {
-	let flags = if let Some(flags) = OpenOption::from_bits(flags) {
-		flags
-	} else {
+	let Some(flags) = OpenOption::from_bits(flags) else {
 		return -crate::errno::EINVAL;
 	};
-	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
-		mode
-	} else {
+	let Some(mode) = AccessPermission::from_bits(mode) else {
 		return -crate::errno::EINVAL;
 	};
 
-	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
+	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::open(name, flags, mode)
 			.unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
@@ -522,7 +518,7 @@ pub unsafe extern "C" fn sys_ioctl(
 	cmd: i32,
 	argp: *mut core::ffi::c_void,
 ) -> i32 {
-	const FIONBIO: i32 = 0x8008667eu32 as i32;
+	const FIONBIO: i32 = 0x8008_667eu32 as i32;
 
 	if cmd == FIONBIO {
 		let value = unsafe { *(argp as *const i32) };
@@ -532,7 +528,7 @@ pub unsafe extern "C" fn sys_ioctl(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
 				block_on((*v).ioctl(IoCtl::NonBlocking, value != 0), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else {
@@ -557,7 +553,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
 				block_on((*v).ioctl(IoCtl::NonBlocking, true), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else {
@@ -595,7 +591,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	count: usize,
 ) -> i64 {
 	if dirp.is_null() || count == 0 {
-		return -crate::errno::EINVAL as i64;
+		return (-crate::errno::EINVAL).into();
 	}
 
 	const ALIGN_DIRENT: usize = core::mem::align_of::<Dirent64>();
@@ -603,7 +599,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	let mut offset: i64 = 0;
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|_| -crate::errno::EINVAL as i64,
+		|_| (-crate::errno::EINVAL).into(),
 		|v| {
 			block_on((*v).readdir(), None).map_or_else(
 				|e| -num::ToPrimitive::to_i64(&e).unwrap(),
@@ -613,7 +609,7 @@ pub unsafe extern "C" fn sys_getdents64(
 						let aligned_len = ((core::mem::size_of::<Dirent64>() + len + 1)
 							+ (ALIGN_DIRENT - 1)) & (!(ALIGN_DIRENT - 1));
 						if offset as usize + aligned_len >= count {
-							return -crate::errno::EINVAL as i64;
+							return (-crate::errno::EINVAL).into();
 						}
 
 						let dir = unsafe { &mut *dirp };
@@ -625,13 +621,13 @@ pub unsafe extern "C" fn sys_getdents64(
 						dir.d_off = offset;
 
 						// copy null-terminated filename
-						let s = &mut dir.d_name as *mut _ as *mut u8;
+						let s = ptr::from_mut(&mut dir.d_name).cast::<u8>();
 						unsafe {
 							core::ptr::copy_nonoverlapping(i.name.as_ptr(), s, len);
 							s.add(len).write_bytes(0, 1);
 						}
 
-						dirp = unsafe { (dirp as *mut u8).add(aligned_len) as *mut Dirent64 };
+						dirp = unsafe { dirp.byte_add(aligned_len) };
 					}
 
 					offset

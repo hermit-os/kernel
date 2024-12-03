@@ -90,7 +90,7 @@ pub fn init_drivers() {
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						plic_region_start,
-						plic_region_start + plic_region.size.unwrap() - 1_u64,
+						plic_region_start + plic_region.size.unwrap() - 1u64,
 					)
 					.unwrap(),
 				);
@@ -147,7 +147,7 @@ pub fn init_drivers() {
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						gem_region_start,
-						gem_region_start + gem_region.size.unwrap() as u64 - 1_u64,
+						gem_region_start + gem_region.size.unwrap() as u64 - 1u64,
 					)
 					.unwrap(),
 				);
@@ -188,7 +188,7 @@ pub fn init_drivers() {
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						virtio_region_start,
-						virtio_region_start + virtio_region.size.unwrap() - 1_u64,
+						virtio_region_start + virtio_region.size.unwrap() - 1u64,
 					)
 					.unwrap(),
 				);
@@ -200,39 +200,41 @@ pub fn init_drivers() {
 				let magic = mmio.as_ptr().magic_value().read().to_ne();
 				let version = mmio.as_ptr().version().read().to_ne();
 
-				const MMIO_MAGIC_VALUE: u32 = 0x74726976;
+				const MMIO_MAGIC_VALUE: u32 = 0x7472_6976;
 				if magic != MMIO_MAGIC_VALUE {
 					error!("It's not a MMIO-device at {mmio:p}");
 				}
 
 				if version != 2 {
 					warn!("Found a legacy device, which isn't supported");
-				} else {
-					// We found a MMIO-device (whose 512-bit address in this structure).
-					trace!("Found a MMIO-device at {mmio:p}");
+					return;
+				}
 
-					// Verify the device-ID to find the network card
-					let id = mmio.as_ptr().device_id().read();
+				// We found a MMIO-device (whose 512-bit address in this structure).
+				trace!("Found a MMIO-device at {mmio:p}");
 
-					if id != virtio::Id::Net {
-						debug!("It's not a network card at {mmio:p}");
-					} else {
-						info!("Found network card at {mmio:p}");
+				// Verify the device-ID to find the network card
+				let id = mmio.as_ptr().device_id().read();
 
-						// crate::arch::mm::physicalmem::reserve(
-						// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-						// 	BasePageSize::SIZE as usize,
-						// );
+				if id != virtio::Id::Net {
+					debug!("It's not a network card at {mmio:p}");
+					return;
+				}
 
-						#[cfg(all(feature = "tcp", not(feature = "gem-net")))]
-						if let Ok(VirtioDriver::Network(drv)) =
-							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-						{
-							register_driver(MmioDriver::VirtioNet(
-								hermit_sync::InterruptSpinMutex::new(drv),
-							))
-						}
-					}
+				info!("Found network card at {mmio:p}");
+
+				// crate::arch::mm::physicalmem::reserve(
+				// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
+				// 	BasePageSize::SIZE as usize,
+				// );
+
+				#[cfg(all(feature = "tcp", not(feature = "gem-net")))]
+				if let Ok(VirtioDriver::Network(drv)) =
+					mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+				{
+					register_driver(MmioDriver::VirtioNet(hermit_sync::InterruptSpinMutex::new(
+						drv,
+					)));
 				}
 			}
 		}

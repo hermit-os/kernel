@@ -27,7 +27,7 @@ impl<T> InitCell<T> {
 
 	pub fn with(&self, f: impl FnOnce(Option<&mut T>)) {
 		let mut guard = self.init.lock();
-		f((*guard).as_mut())
+		f((*guard).as_mut());
 	}
 
 	#[cfg_attr(all(feature = "pci", not(feature = "tcp")), expect(dead_code))]

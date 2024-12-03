@@ -85,7 +85,7 @@ const CR9346_EEDI: u8 = 0x2;
 const CR9346_EEDO: u8 = 0x1;
 
 /// leds status
-const CONFIG1_LEDS: u8 = 0xC0;
+const CONFIG1_LEDS: u8 = 0xc0;
 /// is the driver loaded ?
 const CONFIG1_DVRLOAD: u8 = 0x20;
 /// lanwake mode
@@ -131,7 +131,7 @@ const RCR_AM: u32 = 0x04; // Accept multicast ?
 const RCR_APM: u32 = 0x02; // Accept Physical matches (accept packets sent to our mac ?)
 const RCR_AAP: u32 = 0x01; // Accept packets with a physical address ?
 
-const TCR_HWVERID: u32 = 0x7CC0_0000; // mask for hw version ID's
+const TCR_HWVERID: u32 = 0x7cc0_0000; // mask for hw version ID's
 const TCR_HWOFFSET: u32 = 22;
 const TCR_IFG: u32 = 0x0300_0000; // interframe gap time
 const TCR_LBK1: u32 = 0x40000; // loopback test
@@ -140,7 +140,7 @@ const TCR_CRC: u32 = 0x10000; // append CRC (card adds CRC if 1)
 const TCR_MXDMA2: u32 = 0x400; // max dma burst
 const TCR_MXDMA1: u32 = 0x200; // max dma burst
 const TCR_MXDMA0: u32 = 0x100; // max dma burst
-const TCR_TXRR: u32 = 0xF0; // Tx retry count, 0 = 16 else retries TXRR * 16 + 16 times
+const TCR_TXRR: u32 = 0xf0; // Tx retry count, 0 = 16 else retries TXRR * 16 + 16 times
 const TCR_CLRABT: u32 = 0x01; // Clear abort, attempt retransmit (when in abort state)
 
 // Basic mode control register
@@ -172,8 +172,8 @@ const TSD_CRS: u32 = 1 << 31; // carrier sense lost (during packet transmission)
 const TSD_TABT: u32 = 1 << 30; // transmission abort
 const TSD_OWC: u32 = 1 << 29; // out of window collision
 const TSD_CDH: u32 = 1 << 28; // CD Heart beat (Cleared in 100Mb mode)
-const TSD_NCC: u32 = 0x0F00_0000; // Number of collisions counted (during transmission)
-const TSD_EARTH: u32 = 0x003F_0000; // threshold to begin transmission (0 = 8bytes, 1->2^6 = * 32bytes)
+const TSD_NCC: u32 = 0x0f00_0000; // Number of collisions counted (during transmission)
+const TSD_EARTH: u32 = 0x003f_0000; // threshold to begin transmission (0 = 8bytes, 1->2^6 = * 32bytes)
 const TSD_TOK: u32 = 1 << 15; // Transmission OK, successful
 const TSD_TUN: u32 = 1 << 14; // Transmission FIFO underrun
 const TSD_OWN: u32 = 1 << 13; // Tx DMA operation finished (driver must set to 0 when TBC is written)
@@ -461,7 +461,7 @@ pub(crate) fn init_device(
 	);
 
 	unsafe {
-		if inl(iobase + TCR) == 0x00FF_FFFFu32 {
+		if inl(iobase + TCR) == 0x00ff_ffffu32 {
 			error!("Unable to initialize RTL8192");
 			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::InitFailed));
 		}

@@ -65,7 +65,9 @@ impl VirtioFsDriver {
 		let device_features = virtio::fs::F::from(self.com_cfg.dev_features());
 
 		if device_features.requirements_satisfied() {
-			debug!("Feature set wanted by filesystem driver are in conformance with specification.")
+			debug!(
+				"Feature set wanted by filesystem driver are in conformance with specification."
+			);
 		} else {
 			return Err(VirtioFsError::FeatureRequirementsNotMet(device_features));
 		}

@@ -226,14 +226,15 @@ impl From<sockaddr_in6> for IpListenEndpoint {
 		if addr.sin6_addr.s6_addr.into_iter().all(|b| b == 0) {
 			IpListenEndpoint { addr: None, port }
 		} else {
-			let a0 = ((addr.sin6_addr.s6_addr[0] as u16) << 8) | addr.sin6_addr.s6_addr[1] as u16;
-			let a1 = ((addr.sin6_addr.s6_addr[2] as u16) << 8) | addr.sin6_addr.s6_addr[3] as u16;
-			let a2 = ((addr.sin6_addr.s6_addr[4] as u16) << 8) | addr.sin6_addr.s6_addr[5] as u16;
-			let a3 = ((addr.sin6_addr.s6_addr[6] as u16) << 8) | addr.sin6_addr.s6_addr[7] as u16;
-			let a4 = ((addr.sin6_addr.s6_addr[8] as u16) << 8) | addr.sin6_addr.s6_addr[9] as u16;
-			let a5 = ((addr.sin6_addr.s6_addr[10] as u16) << 8) | addr.sin6_addr.s6_addr[11] as u16;
-			let a6 = ((addr.sin6_addr.s6_addr[12] as u16) << 8) | addr.sin6_addr.s6_addr[13] as u16;
-			let a7 = ((addr.sin6_addr.s6_addr[14] as u16) << 8) | addr.sin6_addr.s6_addr[15] as u16;
+			let s6_addr = addr.sin6_addr.s6_addr;
+			let a0 = (u16::from(s6_addr[0]) << 8) | u16::from(s6_addr[1]);
+			let a1 = (u16::from(s6_addr[2]) << 8) | u16::from(s6_addr[3]);
+			let a2 = (u16::from(s6_addr[4]) << 8) | u16::from(s6_addr[5]);
+			let a3 = (u16::from(s6_addr[6]) << 8) | u16::from(s6_addr[7]);
+			let a4 = (u16::from(s6_addr[8]) << 8) | u16::from(s6_addr[9]);
+			let a5 = (u16::from(s6_addr[10]) << 8) | u16::from(s6_addr[11]);
+			let a6 = (u16::from(s6_addr[12]) << 8) | u16::from(s6_addr[13]);
+			let a7 = (u16::from(s6_addr[14]) << 8) | u16::from(s6_addr[15]);
 			let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
 
 			IpListenEndpoint::from((address, port))
@@ -245,14 +246,15 @@ impl From<sockaddr_in6> for IpListenEndpoint {
 impl From<sockaddr_in6> for IpEndpoint {
 	fn from(addr: sockaddr_in6) -> IpEndpoint {
 		let port = u16::from_be(addr.sin6_port);
-		let a0 = ((addr.sin6_addr.s6_addr[0] as u16) << 8) | addr.sin6_addr.s6_addr[1] as u16;
-		let a1 = ((addr.sin6_addr.s6_addr[2] as u16) << 8) | addr.sin6_addr.s6_addr[3] as u16;
-		let a2 = ((addr.sin6_addr.s6_addr[4] as u16) << 8) | addr.sin6_addr.s6_addr[5] as u16;
-		let a3 = ((addr.sin6_addr.s6_addr[6] as u16) << 8) | addr.sin6_addr.s6_addr[7] as u16;
-		let a4 = ((addr.sin6_addr.s6_addr[8] as u16) << 8) | addr.sin6_addr.s6_addr[9] as u16;
-		let a5 = ((addr.sin6_addr.s6_addr[10] as u16) << 8) | addr.sin6_addr.s6_addr[11] as u16;
-		let a6 = ((addr.sin6_addr.s6_addr[12] as u16) << 8) | addr.sin6_addr.s6_addr[13] as u16;
-		let a7 = ((addr.sin6_addr.s6_addr[14] as u16) << 8) | addr.sin6_addr.s6_addr[15] as u16;
+		let s6_addr = addr.sin6_addr.s6_addr;
+		let a0 = (u16::from(s6_addr[0]) << 8) | u16::from(s6_addr[1]);
+		let a1 = (u16::from(s6_addr[2]) << 8) | u16::from(s6_addr[3]);
+		let a2 = (u16::from(s6_addr[4]) << 8) | u16::from(s6_addr[5]);
+		let a3 = (u16::from(s6_addr[6]) << 8) | u16::from(s6_addr[7]);
+		let a4 = (u16::from(s6_addr[8]) << 8) | u16::from(s6_addr[9]);
+		let a5 = (u16::from(s6_addr[10]) << 8) | u16::from(s6_addr[11]);
+		let a6 = (u16::from(s6_addr[12]) << 8) | u16::from(s6_addr[13]);
+		let a7 = (u16::from(s6_addr[14]) << 8) | u16::from(s6_addr[15]);
 		let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
 
 		IpEndpoint::from((address, port))
@@ -264,7 +266,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {
 			IpAddress::Ipv6(ip) => {
-				let mut in6_addr: in6_addr = Default::default();
+				let mut in6_addr = in6_addr::default();
 				in6_addr.s6_addr.copy_from_slice(ip.as_bytes());
 
 				Self {
@@ -437,7 +439,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	{
 		let mut guard = NIC.lock();
 
-		if let NetworkState::Initialized(nic) = guard.deref_mut() {
+		if let NetworkState::Initialized(nic) = &mut *guard {
 			#[cfg(feature = "udp")]
 			if type_.contains(SockType::SOCK_DGRAM) {
 				let handle = nic.create_udp_handle().unwrap();
@@ -493,14 +495,14 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 							match endpoint.addr {
 								IpAddress::Ipv4(_) => {
 									if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
-										let addr = unsafe { &mut *(addr as *mut sockaddr_in) };
+										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in::from(endpoint);
 										*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
 									}
 								}
 								IpAddress::Ipv6(_) => {
 									if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-										let addr = unsafe { &mut *(addr as *mut sockaddr_in6) };
+										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in6::from(endpoint);
 										*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
 									}
@@ -518,7 +520,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 							let addrlen = unsafe { &mut *addrlen };
 
 							if *addrlen >= size_of::<sockaddr_vm>().try_into().unwrap() {
-								let addr = unsafe { &mut *(addr as *mut sockaddr_vm) };
+								let addr = unsafe { &mut *addr.cast() };
 								*addr = sockaddr_vm::from(endpoint);
 								*addrlen = size_of::<sockaddr_vm>().try_into().unwrap();
 							}
@@ -540,7 +542,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
 			block_on((*v).listen(backlog), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 		},
 	)
 }
@@ -563,27 +565,27 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				if namelen < size_of::<sockaddr_in>().try_into().unwrap() {
 					return -crate::errno::EINVAL;
 				}
-				let endpoint = IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in) });
+				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET6 => {
 				if namelen < size_of::<sockaddr_in6>().try_into().unwrap() {
 					return -crate::errno::EINVAL;
 				}
-				let endpoint = IpListenEndpoint::from(unsafe { *(name as *const sockaddr_in6) });
+				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			}
 			#[cfg(feature = "vsock")]
 			AF_VSOCK => {
 				if namelen < size_of::<sockaddr_vm>().try_into().unwrap() {
 					return -crate::errno::EINVAL;
 				}
-				let endpoint = VsockListenEndpoint::from(unsafe { *(name as *const sockaddr_vm) });
+				let endpoint = VsockListenEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() });
 				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			}
 			_ => -crate::errno::EINVAL,
 		},
@@ -597,7 +599,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		return -crate::errno::EINVAL;
 	}
 
-	let sa_family = unsafe { (*name).sa_family as i32 };
+	let sa_family = unsafe { i32::from((*name).sa_family) };
 
 	let endpoint = match sa_family {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -605,23 +607,21 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 			if namelen < size_of::<sockaddr_in>().try_into().unwrap() {
 				return -crate::errno::EINVAL;
 			}
-			Endpoint::Ip(IpEndpoint::from(unsafe { *(name as *const sockaddr_in) }))
+			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in>() }))
 		}
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		AF_INET6 => {
 			if namelen < size_of::<sockaddr_in6>().try_into().unwrap() {
 				return -crate::errno::EINVAL;
 			}
-			Endpoint::Ip(IpEndpoint::from(unsafe { *(name as *const sockaddr_in6) }))
+			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() }))
 		}
 		#[cfg(feature = "vsock")]
 		AF_VSOCK => {
 			if namelen < size_of::<sockaddr_vm>().try_into().unwrap() {
 				return -crate::errno::EINVAL;
 			}
-			Endpoint::Vsock(VsockEndpoint::from(unsafe {
-				*(name as *const sockaddr_vm)
-			}))
+			Endpoint::Vsock(VsockEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() }))
 		}
 		_ => {
 			return -crate::errno::EINVAL;
@@ -633,7 +633,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
 			block_on((*v).connect(endpoint), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 		},
 	)
 }
@@ -658,7 +658,7 @@ pub unsafe extern "C" fn sys_getsockname(
 						Endpoint::Ip(endpoint) => match endpoint.addr {
 							IpAddress::Ipv4(_) => {
 								if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
-									let addr = unsafe { &mut *(addr as *mut sockaddr_in) };
+									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in::from(endpoint);
 									*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
 								} else {
@@ -668,7 +668,7 @@ pub unsafe extern "C" fn sys_getsockname(
 							#[cfg(any(feature = "tcp", feature = "udp"))]
 							IpAddress::Ipv6(_) => {
 								if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-									let addr = unsafe { &mut *(addr as *mut sockaddr_in6) };
+									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in6::from(endpoint);
 									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
 								} else {
@@ -717,13 +717,13 @@ pub unsafe extern "C" fn sys_setsockopt(
 			return -crate::errno::EINVAL;
 		}
 
-		let value = unsafe { *(optval as *const i32) };
+		let value = unsafe { *optval.cast::<i32>() };
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
 				block_on((*v).setsockopt(SocketOption::TcpNoDelay, value != 0), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
@@ -752,8 +752,8 @@ pub unsafe extern "C" fn sys_getsockopt(
 			return -crate::errno::EINVAL;
 		}
 
-		let optval = unsafe { &mut *(optval as *mut i32) };
-		let optlen = unsafe { &mut *(optlen as *mut socklen_t) };
+		let optval = unsafe { &mut *optval.cast::<i32>() };
+		let optlen = unsafe { &mut *optlen };
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
@@ -798,7 +798,7 @@ pub unsafe extern "C" fn sys_getpeername(
 						Endpoint::Ip(endpoint) => match endpoint.addr {
 							IpAddress::Ipv4(_) => {
 								if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
-									let addr = unsafe { &mut *(addr as *mut sockaddr_in) };
+									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in::from(endpoint);
 									*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
 								} else {
@@ -807,7 +807,7 @@ pub unsafe extern "C" fn sys_getpeername(
 							}
 							IpAddress::Ipv6(_) => {
 								if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-									let addr = unsafe { &mut *(addr as *mut sockaddr_in6) };
+									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in6::from(endpoint);
 									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
 								} else {
@@ -861,7 +861,7 @@ fn shutdown(sockfd: i32, how: i32) -> i32 {
 		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
 			block_on((*v).shutdown(how), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 		},
 	)
 }
@@ -910,20 +910,20 @@ pub unsafe extern "C" fn sys_sendto(
 
 	cfg_if! {
 		if #[cfg(any(feature = "tcp", feature = "udp"))] {
-			let sa_family = unsafe { (*addr).sa_family as i32 };
+			let sa_family = unsafe { i32::from((*addr).sa_family) };
 
 			if sa_family == AF_INET {
 				if addr_len < size_of::<sockaddr_in>().try_into().unwrap() {
 					return (-crate::errno::EINVAL).try_into().unwrap();
 				}
 
-				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr as *const sockaddr_in)})));
+				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr.cast::<sockaddr_in>())})));
 			} else if sa_family == AF_INET6 {
 				if addr_len < size_of::<sockaddr_in6>().try_into().unwrap() {
 					return (-crate::errno::EINVAL).try_into().unwrap();
 				}
 
-				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe { *(addr as *const sockaddr_in6) })));
+				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe { *(addr.cast::<sockaddr_in6>()) })));
 			} else {
 				endpoint = None;
 			}
@@ -977,7 +977,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 							Endpoint::Ip(endpoint) => match endpoint.addr {
 								IpAddress::Ipv4(_) => {
 									if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
-										let addr = unsafe { &mut *(addr as *mut sockaddr_in) };
+										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in::from(endpoint);
 										*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
 									} else {
@@ -986,7 +986,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 								}
 								IpAddress::Ipv6(_) => {
 									if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-										let addr = unsafe { &mut *(addr as *mut sockaddr_in6) };
+										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in6::from(endpoint);
 										*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
 									} else {

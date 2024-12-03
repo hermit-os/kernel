@@ -19,7 +19,7 @@ const PAGE_BITS: usize = 12;
 const PAGE_MAP_BITS: usize = 9;
 
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
-const PAGE_MAP_MASK: usize = 0x1FF;
+const PAGE_MAP_MASK: usize = 0x1ff;
 
 /// Number of page levels
 const PAGE_LEVELS: usize = 3;
@@ -104,7 +104,7 @@ impl PageTableEntry {
 	pub fn address(&self) -> PhysAddr {
 		PhysAddr::new(
 			(
-				self.physical_address_and_flags.as_u64() & !(0x3FFu64)
+				self.physical_address_and_flags.as_u64() & !(0x3ffu64)
 				//& !(0x3FFu64 << 54)
 			) << 2,
 		)
@@ -399,7 +399,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) {
-		self.map_page_in_this_table::<S>(page, physical_address, flags)
+		self.map_page_in_this_table::<S>(page, physical_address, flags);
 	}
 }
 
@@ -448,11 +448,11 @@ where
 			}
 
 			let subtable = self.subtable::<S>(page);
-			subtable.map_page::<S>(page, physical_address, flags)
+			subtable.map_page::<S>(page, physical_address, flags);
 		} else {
 			// Calling the default implementation from a specialized one is not supported (yet),
 			// so we have to resort to an extra function.
-			self.map_page_in_this_table::<S>(page, physical_address, flags)
+			self.map_page_in_this_table::<S>(page, physical_address, flags);
 		}
 	}
 }

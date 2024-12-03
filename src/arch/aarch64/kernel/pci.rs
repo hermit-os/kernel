@@ -24,17 +24,20 @@ pub(crate) struct PciConfigRegion(VirtAddr);
 
 impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
-		assert!(addr.as_u64() & 0xFFFFFFF == 0, "Unaligned PCI Config Space");
+		assert!(
+			addr.as_u64() & 0x0fff_ffff == 0,
+			"Unaligned PCI Config Space"
+		);
 		Self(addr)
 	}
 
 	#[inline]
 	fn addr_from_offset(&self, pci_addr: PciAddress, offset: u16) -> usize {
-		assert!(offset & 0xF000 == 0, "Invalid offset");
+		assert!(offset & 0xf000 == 0, "Invalid offset");
 		(u64::from(pci_addr.bus()) << 20
 			| u64::from(pci_addr.device()) << 15
 			| u64::from(pci_addr.function()) << 12
-			| (u64::from(offset) & 0xFFF)
+			| (u64::from(offset) & 0xfff)
 			| self.0.as_u64()) as usize
 	}
 }
@@ -246,7 +249,7 @@ pub fn init() {
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 
 				let pci_address =
-					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x10000000).unwrap();
+					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x1000_0000).unwrap();
 				info!("Mapping PCI Enhanced Configuration Space interface to virtual address {:p} (size {:#X})", pci_address, size);
 
 				let mut flags = PageTableEntryFlags::empty();
@@ -268,8 +271,8 @@ pub fn init() {
 				assert!(mem64_start > 0);
 
 				let max_bus_number = size
-					/ (PCI_MAX_DEVICE_NUMBER as u64
-						* PCI_MAX_FUNCTION_NUMBER as u64
+					/ (u64::from(PCI_MAX_DEVICE_NUMBER)
+						* u64::from(PCI_MAX_FUNCTION_NUMBER)
 						* BasePageSize::SIZE);
 				info!("Scanning PCI Busses 0 to {}", max_bus_number - 1);
 
@@ -299,12 +302,12 @@ pub fn init() {
 											cmd |= CommandRegister::IO_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;
 										}
-										// Currently, we ignore 32 bit memory bars
-										/*Bar::Memory32 { address, size, prefetchable } => {
-											dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
-											mem32_start += u64::from(size);
-											cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
-										}*/
+										Bar::Memory32 { .. } => {
+											// Currently, we ignore 32 bit memory bars
+											// dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
+											// mem32_start += u64::from(size);
+											// cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
+										}
 										Bar::Memory64 {
 											address: _,
 											size,
@@ -322,7 +325,6 @@ pub fn init() {
 											cmd |= CommandRegister::MEMORY_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;
 										}
-										_ => {}
 									}
 								}
 							}

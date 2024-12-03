@@ -132,7 +132,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 					}
 				}
 			}
-		})
+		});
 	}
 
 	/// Trigger an interrupt to reschedule the system
@@ -171,7 +171,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	fn add_network_timer(self, wakeup_time: Option<u64>) {
 		without_interrupts(|| {
 			self.blocked_tasks.add_network_timer(wakeup_time);
-		})
+		});
 	}
 
 	fn exit(self, exit_code: i32) -> ! {
@@ -275,13 +275,13 @@ impl PerCoreScheduler {
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "smp")]
-			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(new_task);
-				true
-			} else {
+			if core_id == core_scheduler().core_id {
 				let task = Rc::new(RefCell::new(Task::from(new_task)));
 				core_scheduler().ready_queue.push(task);
 				false
+			} else {
+				input_locked.new_tasks.push_back(new_task);
+				true
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {
@@ -354,13 +354,13 @@ impl PerCoreScheduler {
 			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			#[cfg(feature = "smp")]
-			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(clone_task);
-				true
-			} else {
+			if core_id == core_scheduler().core_id {
 				let clone_task = Rc::new(RefCell::new(Task::from(clone_task)));
 				core_scheduler().ready_queue.push(clone_task);
 				false
+			} else {
+				input_locked.new_tasks.push_back(clone_task);
+				true
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {
@@ -431,7 +431,7 @@ impl PerCoreScheduler {
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
 		without_interrupts(|| {
 			self.blocked_tasks
-				.add(self.current_task.clone(), wakeup_time)
+				.add(self.current_task.clone(), wakeup_time);
 		});
 	}
 
@@ -753,7 +753,7 @@ impl PerCoreScheduler {
 			let mut borrowed = self.current_task.borrow_mut();
 			(
 				borrowed.id,
-				ptr::from_mut(&mut borrowed.last_stack_pointer) as *mut usize,
+				ptr::from_mut(&mut borrowed.last_stack_pointer).cast::<usize>(),
 				borrowed.prio,
 				borrowed.status,
 			)

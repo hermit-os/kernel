@@ -39,8 +39,8 @@ const MAX_WRITE_LEN: usize = 1024 * 64;
 
 const U64_SIZE: usize = ::core::mem::size_of::<u64>();
 
-const S_IFLNK: u32 = 40960;
-const S_IFMT: u32 = 61440;
+const S_IFLNK: u32 = 0o120_000;
+const S_IFMT: u32 = 0o170_000;
 
 pub(crate) trait FuseInterface {
 	fn send_command<O: ops::Op + 'static>(
@@ -396,13 +396,13 @@ impl From<fuse_attr> for FileAttr {
 	fn from(attr: fuse_attr) -> FileAttr {
 		FileAttr {
 			st_ino: attr.ino,
-			st_nlink: attr.nlink as u64,
+			st_nlink: attr.nlink.into(),
 			st_mode: AccessPermission::from_bits_retain(attr.mode),
 			st_uid: attr.uid,
 			st_gid: attr.gid,
-			st_rdev: attr.rdev as u64,
+			st_rdev: attr.rdev.into(),
 			st_size: attr.size,
-			st_blksize: attr.blksize as i64,
+			st_blksize: attr.blksize.into(),
 			st_blocks: attr.blocks.try_into().unwrap(),
 			st_atim: timespec {
 				tv_sec: attr.atime as time_t,
@@ -812,7 +812,13 @@ impl ObjectInterface for FuseDirectoryHandle {
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
 		while (rsp.headers.out_header.len as usize) - offset > core::mem::size_of::<fuse_dirent>() {
 			let dirent = unsafe {
-				&*(rsp.payload.as_ref().unwrap().as_ptr().byte_add(offset) as *const fuse_dirent)
+				&*rsp
+					.payload
+					.as_ref()
+					.unwrap()
+					.as_ptr()
+					.byte_add(offset)
+					.cast::<fuse_dirent>()
 			};
 
 			offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
@@ -939,7 +945,13 @@ impl VfsNode for FuseDirectory {
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
 		while (rsp.headers.out_header.len as usize) - offset > core::mem::size_of::<fuse_dirent>() {
 			let dirent = unsafe {
-				&*(rsp.payload.as_ref().unwrap().as_ptr().byte_add(offset) as *const fuse_dirent)
+				&*rsp
+					.payload
+					.as_ref()
+					.unwrap()
+					.as_ptr()
+					.byte_add(offset)
+					.cast::<fuse_dirent>()
 			};
 
 			offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
@@ -979,19 +991,19 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
-			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
-		} else {
-			let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
-			let attr = entry_out.attr;
-
-			if attr.mode & S_IFMT != S_IFLNK {
-				Ok(FileAttr::from(attr))
-			} else {
-				let path = readlink(entry_out.nodeid)?;
-				let mut components: Vec<&str> = path.split('/').collect();
-				self.traverse_stat(&mut components)
-			}
+			return Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap());
 		}
+
+		let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
+		let attr = entry_out.attr;
+
+		if attr.mode & S_IFMT != S_IFLNK {
+			return Ok(FileAttr::from(attr));
+		}
+
+		let path = readlink(entry_out.nodeid)?;
+		let mut components: Vec<&str> = path.split('/').collect();
+		self.traverse_stat(&mut components)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
@@ -1058,7 +1070,19 @@ impl VfsNode for FuseDirectory {
 			let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
 
 			// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
-			if !opt.contains(OpenOption::O_CREAT) {
+			if opt.contains(OpenOption::O_CREAT) {
+				// Create file (opens implicitly, returns results from both lookup and open calls)
+				let (cmd, rsp_payload_len) =
+					ops::Create::create(path, opt.bits().try_into().unwrap(), mode.bits());
+				let rsp = get_filesystem_driver()
+					.ok_or(io::Error::ENOSYS)?
+					.lock()
+					.send_command(cmd, rsp_payload_len)?;
+
+				let inner = rsp.headers.op_header;
+				file_guard.fuse_nid = Some(inner.entry.nodeid);
+				file_guard.fuse_fh = Some(inner.open.fh);
+			} else {
 				// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
 				file_guard.fuse_nid = lookup(path);
 
@@ -1075,18 +1099,6 @@ impl VfsNode for FuseDirectory {
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 				file_guard.fuse_fh = Some(rsp.headers.op_header.fh);
-			} else {
-				// Create file (opens implicitly, returns results from both lookup and open calls)
-				let (cmd, rsp_payload_len) =
-					ops::Create::create(path, opt.bits().try_into().unwrap(), mode.bits());
-				let rsp = get_filesystem_driver()
-					.ok_or(io::Error::ENOSYS)?
-					.lock()
-					.send_command(cmd, rsp_payload_len)?;
-
-				let inner = rsp.headers.op_header;
-				file_guard.fuse_nid = Some(inner.entry.nodeid);
-				file_guard.fuse_fh = Some(inner.open.fh);
 			}
 
 			drop(file_guard);
@@ -1181,17 +1193,23 @@ pub(crate) fn init() {
 				(rsp.headers.out_header.len as usize) - ::core::mem::size_of::<fuse_out_header>()
 			};
 
-			if len <= core::mem::size_of::<fuse_dirent>() {
-				panic!("FUSE no new dirs");
-			}
+			assert!(
+				len > core::mem::size_of::<fuse_dirent>(),
+				"FUSE no new dirs"
+			);
 
 			let mut entries: Vec<String> = Vec::new();
 			while (rsp.headers.out_header.len as usize) - offset
 				> core::mem::size_of::<fuse_dirent>()
 			{
 				let dirent = unsafe {
-					&*(rsp.payload.as_ref().unwrap().as_ptr().byte_add(offset)
-						as *const fuse_dirent)
+					&*rsp
+						.payload
+						.as_ref()
+						.unwrap()
+						.as_ptr()
+						.byte_add(offset)
+						.cast::<fuse_dirent>()
 				};
 
 				offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;

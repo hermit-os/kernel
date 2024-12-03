@@ -45,10 +45,7 @@ impl VirtioNetDriver {
 			..
 		} = caps_coll;
 
-		let dev_cfg = if let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg)
-		{
-			dev_cfg
-		} else {
+		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
 			return Err(error::VirtioNetError::NoDevCfg(device_id));
 		};
@@ -106,7 +103,7 @@ impl VirtioNetDriver {
 		};
 
 		match drv.init_dev() {
-			Ok(_) => info!(
+			Ok(()) => info!(
 				"Network device with id {:x}, has been initialized by driver!",
 				drv.get_dev_id()
 			),
@@ -117,9 +114,9 @@ impl VirtioNetDriver {
 		}
 
 		if drv.is_link_up() {
-			info!("Virtio-net link is up after initialization.")
+			info!("Virtio-net link is up after initialization.");
 		} else {
-			info!("Virtio-net link is down after initialization!")
+			info!("Virtio-net link is down after initialization!");
 		}
 
 		Ok(drv)

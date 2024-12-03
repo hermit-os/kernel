@@ -19,8 +19,8 @@ const CMOS_HOUR_REGISTER: u8 = 0x04;
 const CMOS_DAY_REGISTER: u8 = 0x07;
 const CMOS_MONTH_REGISTER: u8 = 0x08;
 const CMOS_YEAR_REGISTER: u8 = 0x09;
-const CMOS_STATUS_REGISTER_A: u8 = 0x0A;
-const CMOS_STATUS_REGISTER_B: u8 = 0x0B;
+const CMOS_STATUS_REGISTER_A: u8 = 0x0a;
+const CMOS_STATUS_REGISTER_B: u8 = 0x0b;
 
 const CMOS_UPDATE_IN_PROGRESS_FLAG: u8 = 1 << 7;
 const CMOS_24_HOUR_FORMAT_FLAG: u8 = 1 << 1;
@@ -52,7 +52,7 @@ impl Rtc {
 
 	/// Returns the binary value for a given value in BCD (Binary-Coded Decimal).
 	const fn convert_bcd_value(value: u8) -> u8 {
-		((value / 16) * 10) + (value & 0xF)
+		((value / 16) * 10) + (value & 0xf)
 	}
 
 	/// Returns the number of microseconds since the epoch from a given date.
@@ -181,7 +181,7 @@ pub fn init() {
 			// Subtract the timer ticks to get the actual time when Hermit was booted.
 			let current_time = without_interrupts(|| Rtc::new().get_microseconds_since_epoch());
 			let boot_time = current_time - processor::get_timer_ticks();
-			OffsetDateTime::from_unix_timestamp_nanos(boot_time as i128 * 1000).unwrap()
+			OffsetDateTime::from_unix_timestamp_nanos(i128::from(boot_time) * 1000).unwrap()
 		}
 	};
 	info!("Hermit booted on {boot_time}");
