@@ -116,25 +116,25 @@ impl<'a> NetworkInterface<'a> {
 		// calculate the netmask length
 		// => count the number of contiguous 1 bits,
 		// starting at the most significant bit in the first octet
-		let mut prefix_len = (!mymask.as_bytes()[0]).trailing_zeros();
+		let mut prefix_len = (!mymask.octets()[0]).trailing_zeros();
 		if prefix_len == 8 {
-			prefix_len += (!mymask.as_bytes()[1]).trailing_zeros();
+			prefix_len += (!mymask.octets()[1]).trailing_zeros();
 		}
 		if prefix_len == 16 {
-			prefix_len += (!mymask.as_bytes()[2]).trailing_zeros();
+			prefix_len += (!mymask.octets()[2]).trailing_zeros();
 		}
 		if prefix_len == 24 {
-			prefix_len += (!mymask.as_bytes()[3]).trailing_zeros();
+			prefix_len += (!mymask.octets()[3]).trailing_zeros();
 		}
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 		let ip_addrs = [IpCidr::new(
 			IpAddress::v4(
-				myip.as_bytes()[0],
-				myip.as_bytes()[1],
-				myip.as_bytes()[2],
-				myip.as_bytes()[3],
+				myip.octets()[0],
+				myip.octets()[1],
+				myip.octets()[2],
+				myip.octets()[3],
 			),
 			prefix_len.try_into().unwrap(),
 		)];
@@ -157,10 +157,10 @@ impl<'a> NetworkInterface<'a> {
 			ip_addrs
 				.push(IpCidr::new(
 					IpAddress::v4(
-						myip.as_bytes()[0],
-						myip.as_bytes()[1],
-						myip.as_bytes()[2],
-						myip.as_bytes()[3],
+						myip.octets()[0],
+						myip.octets()[1],
+						myip.octets()[2],
+						myip.octets()[3],
 					),
 					prefix_len.try_into().unwrap(),
 				))
@@ -228,11 +228,11 @@ impl RxToken {
 }
 
 impl phy::RxToken for RxToken {
-	fn consume<R, F>(mut self, f: F) -> R
+	fn consume<R, F>(self, f: F) -> R
 	where
-		F: FnOnce(&mut [u8]) -> R,
+		F: FnOnce(&[u8]) -> R,
 	{
-		f(&mut self.buffer[..])
+		f(&self.buffer[..])
 	}
 }
 
