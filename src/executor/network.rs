@@ -138,7 +138,7 @@ async fn dhcpv4_run() {
 				}
 
 				#[cfg(feature = "dns")]
-				if dns_servers.len() > 0 {
+				if !dns_servers.is_empty() {
 					let dns_socket = dns::Socket::new(dns_servers.as_slice(), vec![]);
 					nic.dns_handle = Some(nic.sockets.add(dns_socket));
 				}
