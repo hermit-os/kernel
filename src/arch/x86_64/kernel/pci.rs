@@ -48,6 +48,7 @@ impl ConfigRegionAccess for PciConfigRegion {
 	}
 }
 
+#[cfg(not(feature = "fdt"))]
 pub(crate) fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 
@@ -67,4 +68,9 @@ pub(crate) fn init() {
 			}
 		}
 	}
+}
+
+#[cfg(feature = "fdt")]
+pub(crate) fn init() {
+	// Do nothing here, as the PCI devices are scanned in the device tree.
 }

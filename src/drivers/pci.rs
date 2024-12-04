@@ -2,7 +2,7 @@
 
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::fmt;
+use core::fmt::{self, Write};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -304,12 +304,131 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 	}
 }
 
+#[cfg(not(feature = "fdt"))]
 pub(crate) fn print_information() {
 	infoheader!(" PCI BUS INFORMATION ");
 
 	for adapter in PCI_DEVICES.finalize().iter() {
 		info!("{}", adapter);
 	}
+
+	infofooter!();
+}
+
+#[cfg(feature = "fdt")]
+pub(crate) fn print_information() {
+	let mut f = alloc::string::String::new();
+
+	let fdt = env::fdt().expect("Failed to get FDT");
+
+	infoheader!(" PCI BUS INFORMATION ");
+
+	if let Some(pci) = fdt.find_node("/pci") {
+		for node in pci.children() {
+			let reg = node.property("reg").unwrap().value;
+			let addr = u32::from_be_bytes(reg[0..4].try_into().unwrap());
+
+			let pci_config = PciConfigRegion::new();
+
+			let pci_address = PciAddress::new(
+				0,
+				((addr >> 16) & 0xFF) as u8,
+				((addr >> 11) & 0x1F) as u8,
+				0,
+			);
+
+			let vendor_id = u32::from_be_bytes(node.property("vendor-id").unwrap().value[..].try_into().unwrap()) as u16;
+			let device_id = u32::from_be_bytes(node.property("device-id").unwrap().value[..].try_into().unwrap()) as u16;
+
+			let header = PciHeader::new(pci_address);
+			let (_dev_rev, class_id, subclass_id, _interface) = header.revision_and_class(pci_config);
+
+			#[cfg(feature = "pci-ids")]
+			let (class_name, vendor_name, device_name) = {
+				use pci_ids::{Class, Device, FromId, Subclass};
+
+				let class_name = Class::from_id(class_id).map_or("Unknown Class", |class| {
+					class
+						.subclasses()
+						.find(|s| s.id() == subclass_id)
+						.map(Subclass::name)
+						.unwrap_or_else(|| class.name())
+				});
+
+				let (vendor_name, device_name) = Device::from_vid_pid(vendor_id, device_id)
+					.map(|device| (device.vendor().name(), device.name()))
+					.unwrap_or(("Unknown Vendor", "Unknown Device"));
+
+				(class_name, vendor_name, device_name)
+			};
+
+			#[cfg(not(feature = "pci-ids"))]
+			let (class_name, vendor_name, device_name) =
+				("Unknown Class", "Unknown Vendor", "Unknown Device");
+
+			// Output detailed readable information about this device.
+			write!(
+				&mut f,
+				"{:02X}:{:02X} {} [{:02X}{:02X}]: {} {} [{:04X}:{:04X}]",
+				pci_address.bus(),
+				pci_address.device(),
+				class_name,
+				class_id,
+				subclass_id,
+				vendor_name,
+				device_name,
+				vendor_id,
+				device_id
+			);
+
+			// If the devices uses an IRQ, output this one as well.
+			if let Some(irq_prop) = node.property("interrupts") {
+				let irq = u32::from_be_bytes(irq_prop.value[..].try_into().unwrap()) as u8;
+
+				if irq != 0 && irq != u8::MAX {
+					write!(&mut f, ", IRQ {irq}");
+				}
+			}
+
+			let mut assigned_addresses = node.property("assigned-addresses").unwrap().value;
+			let mut value_slice;
+
+			let mut slot: u8 = 0;
+			while !assigned_addresses.is_empty() {
+				(value_slice, assigned_addresses) = assigned_addresses.split_at(core::mem::size_of::<u32>());
+				let bar = u32::from_be_bytes(value_slice.try_into().unwrap());
+
+				match bar ^ addr {
+					0x81000014 => {
+						(value_slice, assigned_addresses) = assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let port = u64::from_be_bytes(value_slice.try_into().unwrap());
+						(value_slice, assigned_addresses) = assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let _size = u64::from_be_bytes(value_slice.try_into().unwrap());
+						write!(&mut f, ", BAR{slot} IO {{ port: {port:#X} }}");
+					}
+					0x82000010 => {
+						(value_slice, assigned_addresses) = assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let address = u64::from_be_bytes(value_slice.try_into().unwrap());
+						(value_slice, assigned_addresses) = assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let size = u64::from_be_bytes(value_slice.try_into().unwrap());
+
+						if address.leading_zeros() >= 32 && size.leading_zeros() >= 32 {
+							write!(&mut f, ", BAR{slot} Memory32 {{ address: {address:#X}, size: {size:#X} }}");
+						} else {
+							write!(&mut f, ", BAR{slot} Memory64 {{ address: {address:#X}, size: {size:#X} }}");
+							slot += 1;
+						}
+					}
+					_ => {}
+				}
+				slot += 1;
+			}
+
+
+		}
+	}
+
+	info!("{}", f);
 
 	infofooter!();
 }
@@ -472,6 +591,7 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.find_map(|drv| drv.get_filesystem_driver())
 }
 
+#[cfg(not(feature = "fdt"))]
 pub(crate) fn init() {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
@@ -518,6 +638,39 @@ pub(crate) fn init() {
 			);
 
 			if let Ok(drv) = rtl8139::init_device(adapter) {
+				register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
+			}
+		}
+	});
+}
+
+#[cfg(feature = "fdt")]
+pub(crate) fn init() {
+	without_interrupts(|| {
+		let fdt = env::fdt().expect("Failed to get FDT");
+
+		#[cfg(feature = "rtl8139")]
+		if let Some(node) = fdt.find_compatible(&["realtek,rtl8139"]) {
+			info!(
+				"Found Realtek network device with device id {:#x}",
+				node.property("device-id").unwrap().as_usize().unwrap()
+			);
+
+			let reg = node.property("reg").unwrap().value;
+			let addr = u32::from_be_bytes(reg[0..4].try_into().unwrap());
+
+			let pci_config = PciConfigRegion::new();
+
+			let pci_address = PciAddress::new(
+				0,
+				((addr >> 16) & 0xFF) as u8,
+				((addr >> 11) & 0x1F) as u8,
+				0,
+			);
+
+			let adapter = PciDevice::new(pci_address, pci_config);
+
+			if let Ok(drv) = rtl8139::init_device(&adapter) {
 				register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
 			}
 		}
