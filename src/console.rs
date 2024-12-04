@@ -6,6 +6,12 @@ use crate::arch;
 
 pub(crate) struct Console(());
 
+impl Console {
+	pub fn write(&mut self, buf: &[u8]) {
+		arch::output_message_buf(buf);
+	}
+}
+
 /// A collection of methods that are required to format
 /// a message to Hermit's console.
 impl fmt::Write for Console {
@@ -13,15 +19,14 @@ impl fmt::Write for Console {
 	#[inline]
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		if !s.is_empty() {
-			let buf = s.as_bytes();
-			arch::output_message_buf(buf);
+			self.write(s.as_bytes());
 		}
 
 		Ok(())
 	}
 }
 
-static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
+pub(crate) static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments<'_>) {

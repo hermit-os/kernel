@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use core::ptr;
 
-use async_lock::Mutex;
 use async_trait::async_trait;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use memory_addresses::VirtAddr;
@@ -11,12 +10,11 @@ use x86::io::*;
 
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use crate::arch::mm::paging;
+use crate::console::CONSOLE;
 use crate::fd::{ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO};
-use crate::{arch, io};
+use crate::io;
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
-
-static IO_LOCK: Mutex<()> = Mutex::new(());
 
 #[repr(C, packed)]
 struct SysWrite {
@@ -91,9 +89,7 @@ impl ObjectInterface for GenericStdout {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		let _guard = IO_LOCK.lock().await;
-		arch::output_message_buf(buf);
-
+		CONSOLE.lock().write(buf);
 		Ok(buf.len())
 	}
 }
@@ -115,9 +111,7 @@ impl ObjectInterface for GenericStderr {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		let _guard = IO_LOCK.lock().await;
-		arch::output_message_buf(buf);
-
+		CONSOLE.lock().write(buf);
 		Ok(buf.len())
 	}
 }
