@@ -1,17 +1,21 @@
 #[cfg(feature = "shell")]
 use alloc::collections::VecDeque;
 
-use x86_64::instructions::port::Port;
+use heapless::Vec;
 
 use crate::arch::x86_64::kernel::core_local::increment_irq_counter;
 use crate::arch::x86_64::kernel::interrupts::{self, IDT};
 use crate::arch::x86_64::kernel::{apic, COM1};
+use crate::syscalls::interfaces::serial_buf_hypercall;
 
 const SERIAL_IRQ: u8 = 36;
 
+const SERIAL_BUFFER_SIZE: usize = 256;
+
+#[allow(clippy::large_enum_variant)]
 enum SerialInner {
 	Uart(uart_16550::SerialPort),
-	Uhyve(Port<u8>),
+	Uhyve(Vec<u8, SERIAL_BUFFER_SIZE>), // heapless vec to have print before allocators are initialized
 }
 
 pub struct SerialPort {
@@ -23,9 +27,8 @@ pub struct SerialPort {
 impl SerialPort {
 	pub unsafe fn new(base: u16) -> Self {
 		if crate::env::is_uhyve() {
-			let serial = Port::new(base);
 			Self {
-				inner: SerialInner::Uhyve(serial),
+				inner: SerialInner::Uhyve(Vec::new()),
 				#[cfg(feature = "shell")]
 				buffer: VecDeque::new(),
 			}
@@ -66,10 +69,26 @@ impl SerialPort {
 
 	pub fn send(&mut self, buf: &[u8]) {
 		match &mut self.inner {
-			SerialInner::Uhyve(s) => {
-				for &data in buf {
-					unsafe {
-						s.write(data);
+			SerialInner::Uhyve(output_buf) => {
+				if SERIAL_BUFFER_SIZE - output_buf.len() >= buf.len() {
+					// unwrap: we checked that buf fits in output_buf
+					output_buf.extend_from_slice(buf).unwrap();
+					if buf.contains(&b'\n') {
+						serial_buf_hypercall(output_buf);
+						output_buf.clear();
+					}
+				} else {
+					serial_buf_hypercall(output_buf);
+					output_buf.clear();
+					if buf.len() >= SERIAL_BUFFER_SIZE {
+						serial_buf_hypercall(buf);
+					} else {
+						// unwrap: we checked that buf fits in output_buf
+						output_buf.extend_from_slice(buf).unwrap();
+						if buf.contains(&b'\n') {
+							serial_buf_hypercall(output_buf);
+							output_buf.clear();
+						}
 					}
 				}
 			}

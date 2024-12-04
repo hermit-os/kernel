@@ -1,53 +1,100 @@
 use memory_addresses::VirtAddr;
+use uhyve_interface::parameters::{ExitParams, SerialWriteBufferParams};
+use uhyve_interface::{Hypercall, HypercallAddress};
+#[cfg(target_arch = "x86_64")]
+use x86::io::*;
 
 use crate::arch;
-use crate::arch::mm::paging;
+use crate::arch::mm::paging::{self, virtual_to_physical};
 use crate::syscalls::interfaces::SyscallInterface;
 
-const UHYVE_PORT_EXIT: u16 = 0x540;
-
-/// forward a request to the hypervisor uhyve
+/// perform a SerialWriteBuffer hypercall with `buf` as payload.
 #[inline]
-fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr::from_ptr(data);
-	let physical_address = paging::virtual_to_physical(ptr).unwrap();
+#[allow(dead_code)]
+pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
+	let p = SerialWriteBufferParams {
+		buf: virtual_to_physical(VirtAddr::from_ptr(buf as *const [u8])).unwrap(),
+		len: buf.len(),
+	};
+	uhyve_hypercall(Hypercall::SerialWriteBuffer(&p));
+}
 
-	#[cfg(target_arch = "x86_64")]
-	unsafe {
-		x86::io::outl(port, physical_address.as_u64() as u32);
+#[inline]
+/// calculates the physical address of the struct passed as reference.
+fn data_addr<T>(data: &T) -> u64 {
+	paging::virtual_to_physical(VirtAddr::from_ptr(data as *const T))
+		.unwrap()
+		.as_u64()
+}
+
+#[inline]
+/// calculates the hypercall data argument
+fn hypercall_data(hypercall: &Hypercall<'_>) -> u64 {
+	match hypercall {
+		Hypercall::Cmdsize(data) => data_addr(*data),
+		Hypercall::Cmdval(data) => data_addr(*data),
+		Hypercall::Exit(data) => data_addr(*data),
+		Hypercall::FileClose(data) => data_addr(*data),
+		Hypercall::FileLseek(data) => data_addr(*data),
+		Hypercall::FileOpen(data) => data_addr(*data),
+		Hypercall::FileRead(data) => data_addr(*data),
+		Hypercall::FileUnlink(data) => data_addr(*data),
+		Hypercall::FileWrite(data) => data_addr(*data),
+		Hypercall::SerialWriteBuffer(data) => data_addr(*data),
+		Hypercall::SerialWriteByte(byte) => *byte as u64,
+		h => todo!("unimplemented hypercall {h:?}"),
 	}
+}
 
-	#[cfg(target_arch = "aarch64")]
+#[inline]
+#[cfg(target_arch = "x86_64")]
+/// Perform a hypercall to the uhyve hypervisor
+pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
+	let port = HypercallAddress::from(&hypercall) as u16;
+	let data = hypercall_data(&hypercall);
+
 	unsafe {
-		core::arch::asm!(
-			"str x8, [{port}]",
-			port = in(reg) u64::from(port),
-			in("x8") physical_address.as_u64(),
+		outl(
+			port,
+			data.try_into()
+				.expect("Hypercall data must lie in the first 4GiB of memory"),
+		);
+	}
+}
+
+#[inline]
+#[cfg(target_arch = "aarch64")]
+/// Perform a hypercall to the uhyve hypervisor
+pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
+	let ptr = HypercallAddress::from(&hypercall) as u16;
+	let data = hypercall_data(&hypercall);
+	use core::arch::asm;
+
+	unsafe {
+		asm!(
+			"str x8, [{ptr}]",
+			ptr = in(reg) u64::from(ptr),
+			in("x8") data,
 			options(nostack),
 		);
 	}
-
-	#[cfg(target_arch = "riscv64")]
-	todo!("uhyve_send(port = {port}, physical_address = {physical_address:p})");
 }
 
-#[repr(C, packed)]
-struct SysExit {
-	arg: i32,
-}
-
-impl SysExit {
-	fn new(arg: i32) -> SysExit {
-		SysExit { arg }
-	}
+#[inline]
+#[cfg(target_arch = "riscv64")]
+/// Perform a hypercall to the uhyve hypervisor
+pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
+	let _ptr = HypercallAddress::from(&hypercall) as u16;
+	let _data = hypercall_data(&hypercall);
+	todo!()
 }
 
 pub struct Uhyve;
 
 impl SyscallInterface for Uhyve {
 	fn shutdown(&self, error_code: i32) -> ! {
-		let mut sysexit = SysExit::new(error_code);
-		uhyve_send(UHYVE_PORT_EXIT, &mut sysexit);
+		let sysexit = ExitParams { arg: error_code };
+		uhyve_hypercall(Hypercall::Exit(&sysexit));
 
 		loop {
 			arch::processor::halt();
