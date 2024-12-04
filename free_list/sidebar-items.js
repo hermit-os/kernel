@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"enum":["PageRangeSub"],"struct":["AllocError","FreeList","PageLayout","PageLayoutError","PageRange","PageRangeError"]};
