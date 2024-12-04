@@ -195,7 +195,7 @@ impl Device for HermitNet {
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
 		cap.max_transmission_unit = self.mtu.into();
-		cap.max_burst_size = Some(0xffff / cap.max_transmission_unit);
+		cap.max_burst_size = Some(0x10000 / cap.max_transmission_unit);
 		cap.checksum = self.checksums.clone();
 		cap
 	}
