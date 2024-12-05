@@ -231,9 +231,9 @@ jobs:
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --netdev rtl8139
         if: matrix.arch == 'x86_64'
+      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features firecracker --sudo
+        if: matrix.arch == 'x86_64'
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo uhyve --sudo
         if: matrix.arch == 'x86_64'
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
-        if: matrix.arch == 'x86_64'
-      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features firecracker --sudo
         if: matrix.arch == 'x86_64'
