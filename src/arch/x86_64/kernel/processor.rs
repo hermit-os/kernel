@@ -800,9 +800,6 @@ pub fn configure() {
 	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
 	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
 
-	// if set, the first FPU access will trigger interrupt 7.
-	cr0.insert(Cr0::CR0_TASK_SWITCHED);
-
 	// Prevent writes to read-only pages in Ring 0.
 	cr0.insert(Cr0::CR0_WRITE_PROTECT);
 
