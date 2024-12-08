@@ -286,13 +286,16 @@ impl VfsNode for UhyveDirectory {
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		let path: String = if components.is_empty() {
-			"/".to_string()
+			"/\0".to_string()
 		} else {
-			components
+			let mut path: String = components
 				.iter()
 				.rev()
 				.map(|v| "/".to_owned() + v)
-				.collect()
+				.collect();
+			path.push('\0');
+			path.remove(0);
+			path
 		};
 
 		let mut sysunlink = SysUnlink::new(VirtAddr::from_ptr(path.as_ptr()));
