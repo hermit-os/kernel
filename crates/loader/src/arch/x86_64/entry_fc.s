@@ -46,8 +46,8 @@ _start:
     pop rdi
 
     # Set CR3
-    mov eax, OFFSET boot_pml4
-    ;or eax, (1 << 0)        # set present bit
+    mov rax, OFFSET boot_pml4
+    ;or rax, (1 << 0)        # set present bit
     mov cr3, rax
 
     lgdt [GDT64.Pointer] # Load the 64-bit global descriptor table.
