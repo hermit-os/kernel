@@ -47,7 +47,6 @@ _start:
 
     # Set CR3
     mov rax, OFFSET boot_pml4
-    ;or rax, (1 << 0)        # set present bit
     mov cr3, rax
 
     lgdt [GDT64.Pointer] # Load the 64-bit global descriptor table.
