@@ -65,6 +65,21 @@ jobs:
         run: |
           choco install qemu
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
+      - name: Install firecracker
+        run: |
+          # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
+          ARCH="$(uname -m)"
+          release_url="https://github.com/firecracker-microvm/firecracker/releases"
+          latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
+          curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
+          | tar -xz
+          
+          mkdir -p $HOME/.local/bin
+          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
+          echo $HOME/.local/bin >> $GITHUB_PATH
+
+          $HOME/.local/bin/firecracker --version
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
       - uses: actions/checkout@v4
         with:
             lfs: true
@@ -110,50 +125,9 @@ jobs:
       - name: Run VM (hello_c, release)
         if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
-
-  run-kvm:
-    name: Run (KVM)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install QEMU
-        run: |
-          sudo apt-get update
-          sudo apt-get install qemu-system-x86
-      - uses: actions/checkout@v4
-        with:
-            lfs: true
-      - name: Install firecracker
-        run: |
-          # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
-          ARCH="$(uname -m)"
-          release_url="https://github.com/firecracker-microvm/firecracker/releases"
-          latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
-          curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
-          | tar -xz
-          
-          mkdir -p $HOME/.local/bin
-          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
-          echo $HOME/.local/bin >> $GITHUB_PATH
-
-          $HOME/.local/bin/firecracker --version
-      - name: Download OVMF
-        run: |
-          gh release download edk2-stable202408-r1 --repo rust-osdev/ovmf-prebuilt --pattern 'edk2-stable*-bin.tar.xz'
-          tar -xvf edk2-stable*-bin.tar.xz edk2-stable202408-r1-bin/x64
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Run QEMU (hello_world, dev)
-        run: cargo xtask ci qemu --target x86_64 --accel --sudo
-      - name: Run QEMU (hello_world, release)
-        run: cargo xtask ci qemu --target x86_64 --accel --sudo --release
-      - name: Run QEMU (hello_world-microvm, dev)
-        run: cargo xtask ci qemu --target x86_64 --accel --microvm --sudo
-      - name: Run QEMU (hello_world-microvm, release)
-        run: cargo xtask ci qemu --target x86_64 --accel --microvm --sudo --release
-      - name: Run UEFI (dev)
-        run: cargo xtask ci qemu --target x86_64-uefi --accel --sudo
-      - name: Run UEFI (release)
-        run: cargo xtask ci qemu --target x86_64-uefi --accel --sudo --release
-      - name: Run Firecracker (hello_world, dev)
-        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target x86_64-fc --sudo
-      - name: Run Firecracker (hello_world, release)
-        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target x86_64-fc --sudo --release
+      - name: Run VM (hello_world-microvm, fc, release)
+        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-fc --sudo
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
+      - name: Run VM (hello_world-microvm, fc, release)
+        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-fc --sudo --release
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
