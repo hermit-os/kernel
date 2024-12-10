@@ -387,8 +387,11 @@ pub fn init_page_tables() {
 
 		let mut page_table = unsafe { recursive_page_table() };
 		for page in page_range {
-			let (_frame, flush) = page_table.unmap(page).unwrap();
-			flush.ignore();
+			match page_table.unmap(page) {
+				Ok((_frame, flush)) => flush.ignore(),
+				Err(UnmapError::PageNotMapped) => {} // If it wasn't mapped, that's not an issue
+				Err(e) => panic!("Couldn't unmap page {page:?}: {e:?}"),
+			}
 		}
 
 		tlb::flush_all();
