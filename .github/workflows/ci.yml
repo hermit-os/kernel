@@ -24,9 +24,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@cargo-hack
       - uses: mkroening/rust-toolchain-toml@main
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: rustup target add x86_64-unknown-none
       - name: Check each feature
         run: cargo hack check --package hermit-kernel --each-feature --skip gem-net --no-dev-deps --target x86_64-unknown-none
@@ -40,12 +37,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: |
-            .
-            hermit-builtins
       - run: cargo xtask clippy
 
   format:
@@ -70,9 +61,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo xtask doc
 
   build:
@@ -81,12 +69,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: |
-            .
-            hermit-builtins
       - name: Build minimal kernel
         run: |
           cargo xtask build --arch x86_64 --no-default-features
@@ -102,12 +84,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install qemu-system-x86
       - uses: mkroening/rust-toolchain-toml@main
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: |
-            .
-            hermit-builtins
       - name: Unit tests
         run: cargo test --lib
         env:
