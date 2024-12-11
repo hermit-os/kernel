@@ -1,9 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
   merge_group:
 
@@ -19,7 +16,6 @@ defaults:
 jobs:
   check:
     name: Check
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +29,6 @@ jobs:
 
   clippy:
     name: Clippy
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +38,6 @@ jobs:
 
   format:
     name: Format
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +47,6 @@ jobs:
 
   typos:
     name: Typos
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,7 +54,6 @@ jobs:
 
   doc:
     name: Doc
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +62,6 @@ jobs:
 
   build:
     name: Build
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -82,7 +73,6 @@ jobs:
 
   test:
     name: Test
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -157,15 +147,6 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
         with:
           toolchain-file: 'kernel/rust-toolchain.toml'
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.arch }}-${{ matrix.profile }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          lookup-only: ${{ github.ref == 'refs/heads/main' }}
-          workspaces: |
-            .
-            kernel
-            kernel/hermit-builtins
       - name: Download loader
         run: gh release download --repo hermit-os/loader --pattern 'hermit-loader-${{ matrix.arch }}*'
       - name: Dowload OpenSBI
