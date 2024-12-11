@@ -33,7 +33,7 @@ use crate::{env, io};
 mod condvar;
 mod entropy;
 mod futex;
-mod interfaces;
+pub(crate) mod interfaces;
 #[cfg(feature = "mmap")]
 mod mmap;
 mod processor;
