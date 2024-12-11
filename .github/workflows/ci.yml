@@ -154,6 +154,7 @@ jobs:
         with:
           key: ${{ matrix.arch }}-${{ matrix.profile }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          lookup-only: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             .
             kernel
