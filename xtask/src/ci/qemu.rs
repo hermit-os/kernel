@@ -330,7 +330,7 @@ fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
 
 fn get_frequency() -> u64 {
 	let mut sys = System::new();
-	sys.refresh_cpu_specifics(CpuRefreshKind::new().with_frequency());
+	sys.refresh_cpu_specifics(CpuRefreshKind::nothing().with_frequency());
 	let frequency = sys.cpus().first().unwrap().frequency();
 	if !sys.cpus().iter().all(|cpu| cpu.frequency() == frequency) {
 		eprintln!("CPU frequencies are not all equal");
