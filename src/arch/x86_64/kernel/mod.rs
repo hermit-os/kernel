@@ -5,7 +5,6 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
-use hermit_sync::InterruptSpinMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
@@ -37,8 +36,49 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-/// Serial port to print kernel messages
-pub(crate) static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
+pub struct Console {
+	serial_port: SerialPort,
+}
+
+impl Console {
+	pub fn new() -> Self {
+		CoreLocal::install();
+
+		let base = env::boot_info()
+			.hardware_info
+			.serial_port_base
+			.unwrap()
+			.get();
+		let serial_port = unsafe { SerialPort::new(base) };
+		Self { serial_port }
+	}
+
+	pub fn write(&mut self, buf: &[u8]) {
+		self.serial_port.send(buf);
+
+		#[cfg(feature = "vga")]
+		for &byte in buf {
+			// vga::write_byte() checks if VGA support has been initialized,
+			// so we don't need any additional if clause around it.
+			vga::write_byte(byte);
+		}
+	}
+
+	pub fn buffer_input(&mut self) {
+		self.serial_port.buffer_input();
+	}
+
+	#[cfg(feature = "shell")]
+	pub fn read(&mut self) -> Option<u8> {
+		self.serial_port.read()
+	}
+}
+
+impl Default for Console {
+	fn default() -> Self {
+		Self::new()
+	}
+}
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
@@ -103,33 +143,6 @@ pub fn args() -> Option<&'static str> {
 		PlatformInfo::Multiboot { command_line, .. } => command_line,
 		PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
 		_ => None,
-	}
-}
-
-// We can only initialize the serial port here, because VGA requires processor
-// configuration first.
-/// Earliest initialization function called by the Boot Processor.
-pub fn message_output_init() {
-	CoreLocal::install();
-
-	let base = env::boot_info()
-		.hardware_info
-		.serial_port_base
-		.unwrap()
-		.get();
-	let serial_port = unsafe { SerialPort::new(base) };
-	*COM1.lock() = Some(serial_port);
-}
-
-pub fn output_message_buf(buf: &[u8]) {
-	// Output messages to the serial port and VGA screen in unikernel mode.
-	COM1.lock().as_mut().unwrap().send(buf);
-
-	#[cfg(feature = "vga")]
-	for &byte in buf {
-		// vga::write_byte() checks if VGA support has been initialized,
-		// so we don't need any additional if clause around it.
-		vga::write_byte(byte);
 	}
 }
 

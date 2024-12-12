@@ -27,6 +27,28 @@ use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
 use crate::init_cell::InitCell;
 
+pub struct Console {}
+
+impl Console {
+	pub fn new() -> Self {
+		CoreLocal::install();
+
+		Self {}
+	}
+
+	pub fn write(&mut self, buf: &[u8]) {
+		for byte in buf {
+			sbi_rt::console_write_byte(*byte);
+		}
+	}
+}
+
+impl Default for Console {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
 pub(crate) static HARTS_AVAILABLE: InitCell<Vec<usize>> = InitCell::new(Vec::new());
@@ -107,17 +129,6 @@ pub fn get_timebase_freq() -> u64 {
 
 pub fn get_current_boot_id() -> u32 {
 	CURRENT_BOOT_ID.load(Ordering::Relaxed)
-}
-
-/// Earliest initialization function called by the Boot Processor.
-pub fn message_output_init() {
-	CoreLocal::install();
-}
-
-pub fn output_message_buf(buf: &[u8]) {
-	for byte in buf {
-		sbi_rt::console_write_byte(*byte);
-	}
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.

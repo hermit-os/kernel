@@ -20,8 +20,6 @@ cfg_if::cfg_if! {
 		pub(crate) use self::aarch64::kernel::application_processor_init;
 		pub(crate) use self::aarch64::kernel::{
 			get_processor_count,
-			message_output_init,
-			output_message_buf,
 		};
 		pub use self::aarch64::mm::paging::{BasePageSize, PageSize};
 	} else if #[cfg(target_arch = "x86_64")] {
@@ -46,8 +44,6 @@ cfg_if::cfg_if! {
 		pub(crate) use self::x86_64::kernel::boot_processor_init;
 		pub(crate) use self::x86_64::kernel::{
 			get_processor_count,
-			message_output_init,
-			output_message_buf,
 		};
 		pub use self::x86_64::mm::paging::{BasePageSize, PageSize};
 		#[cfg(feature = "common-os")]
@@ -68,8 +64,6 @@ cfg_if::cfg_if! {
 			core_local,
 			get_processor_count,
 			interrupts,
-			message_output_init,
-			output_message_buf,
 			scheduler,
 			switch,
 		};

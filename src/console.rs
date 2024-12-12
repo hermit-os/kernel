@@ -1,22 +1,23 @@
 use core::fmt;
 
-use hermit_sync::InterruptTicketMutex;
+use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch;
 
-pub(crate) struct Console(());
+pub struct Console(pub arch::kernel::Console);
 
 impl Console {
+	fn new() -> Self {
+		Self(arch::kernel::Console::new())
+	}
+
 	pub fn write(&mut self, buf: &[u8]) {
-		arch::output_message_buf(buf);
+		self.0.write(buf);
 	}
 
 	#[cfg(feature = "shell")]
 	pub fn read(&mut self) -> Option<u8> {
-		crate::arch::kernel::COM1
-			.lock()
-			.as_mut()
-			.map(|s| s.read())?
+		self.0.read()
 	}
 }
 
@@ -34,7 +35,8 @@ impl fmt::Write for Console {
 	}
 }
 
-pub(crate) static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
+pub static CONSOLE: Lazy<InterruptTicketMutex<Console>> =
+	Lazy::new(|| InterruptTicketMutex::new(Console::new()));
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments<'_>) {

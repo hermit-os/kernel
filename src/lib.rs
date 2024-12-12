@@ -182,7 +182,7 @@ fn synch_all_cores() {
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
-	arch::message_output_init();
+	hermit_sync::Lazy::force(&console::CONSOLE);
 	unsafe {
 		logging::init();
 	}
