@@ -52,16 +52,9 @@ impl SerialPort {
 		}
 	}
 
-	#[allow(dead_code)]
 	#[cfg(feature = "shell")]
 	pub fn read(&mut self) -> Option<u8> {
 		self.buffer.pop_front()
-	}
-
-	#[allow(dead_code)]
-	#[cfg(not(feature = "shell"))]
-	pub fn read(&mut self) -> Option<u8> {
-		None
 	}
 
 	pub fn send(&mut self, buf: &[u8]) {

@@ -10,6 +10,14 @@ impl Console {
 	pub fn write(&mut self, buf: &[u8]) {
 		arch::output_message_buf(buf);
 	}
+
+	#[cfg(feature = "shell")]
+	pub fn read(&mut self) -> Option<u8> {
+		crate::arch::kernel::COM1
+			.lock()
+			.as_mut()
+			.map(|s| s.read())?
+	}
 }
 
 /// A collection of methods that are required to format
