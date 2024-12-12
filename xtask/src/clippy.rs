@@ -18,7 +18,7 @@ impl Clippy {
 			let triple = arch.triple();
 			cmd!(sh, "cargo clippy --target={triple}").run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
-				.arg("--features=acpi,dns,fsgsbase,pci,shell,smp,vga")
+				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga")
 				.run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
@@ -29,19 +29,27 @@ impl Clippy {
 				.run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
-				.arg("--features=acpi,fsgsbase,pci,shell,smp,vga")
+				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 
-			if *arch == Arch::Riscv64 {
-				cmd!(sh, "cargo clippy --target={triple}")
-					.arg("--no-default-features")
-					.arg("--features=gem-net,tcp")
-					.run()?;
+			match *arch {
+				Arch::X86_64 => {
+					cmd!(sh, "cargo clippy --target={triple}")
+						.arg("--features=shell")
+						.run()?;
+				}
+				Arch::Aarch64 => {}
+				Arch::Riscv64 => {
+					cmd!(sh, "cargo clippy --target={triple}")
+						.arg("--no-default-features")
+						.arg("--features=gem-net,tcp")
+						.run()?;
+				}
 			}
 
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--no-default-features")
-				.arg("--features=acpi,fsgsbase,newlib,shell,smp,vga")
+				.arg("--features=acpi,fsgsbase,newlib,smp,vga")
 				.run()?;
 		}
 
