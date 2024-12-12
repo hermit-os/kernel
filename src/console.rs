@@ -1,4 +1,4 @@
-use core::fmt;
+use core::{fmt, mem};
 
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
@@ -42,6 +42,14 @@ pub static CONSOLE: Lazy<InterruptTicketMutex<Console>> =
 pub fn _print(args: fmt::Arguments<'_>) {
 	use fmt::Write;
 	CONSOLE.lock().write_fmt(args).unwrap();
+}
+
+#[doc(hidden)]
+pub fn _panic_print(args: fmt::Arguments<'_>) {
+	use fmt::Write;
+	let mut console = unsafe { CONSOLE.make_guard_unchecked() };
+	console.write_fmt(args).ok();
+	mem::forget(console);
 }
 
 #[cfg(all(test, not(target_os = "none")))]

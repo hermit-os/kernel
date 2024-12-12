@@ -262,7 +262,7 @@ fn application_processor_main() -> ! {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 	let core_id = crate::arch::core_local::core_id();
-	println!("[{core_id}][PANIC] {info}");
+	panic_println!("[{core_id}][PANIC] {info}\n");
 
 	crate::scheduler::shutdown(1);
 }
