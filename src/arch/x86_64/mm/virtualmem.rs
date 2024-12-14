@@ -168,5 +168,5 @@ pub const fn kernel_heap_end() -> VirtAddr {
 #[cfg(feature = "common-os")]
 #[inline]
 pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr::new(0x100_0000_0000u64)
+	VirtAddr::new(0xff_ffff_ffffu64)
 }
