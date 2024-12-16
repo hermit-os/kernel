@@ -373,17 +373,17 @@ impl IrqStatistics {
 }
 
 pub(crate) fn print_statistics() {
-	println!("Number of interrupts");
+	panic_println!("Number of interrupts");
 	for (core_id, irg_statistics) in IRQ_COUNTERS.lock().iter() {
 		for (i, counter) in irg_statistics.counters.iter().enumerate() {
 			let counter = counter.load(Ordering::Relaxed);
 			if counter > 0 {
 				match get_irq_name(i.try_into().unwrap()) {
 					Some(name) => {
-						println!("[{core_id}][{name}]: {counter}");
+						panic_println!("[{core_id}][{name}]: {counter}");
 					}
 					_ => {
-						println!("[{core_id}][{i}]: {counter}");
+						panic_println!("[{core_id}][{i}]: {counter}");
 					}
 				}
 			}

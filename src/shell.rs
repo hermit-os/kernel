@@ -1,10 +1,9 @@
 use simple_shell::*;
 
-use crate::arch::kernel::COM1;
 use crate::interrupts::print_statistics;
 
 fn read() -> Option<u8> {
-	COM1.lock().as_mut().map(|s| s.read())?
+	crate::console::CONSOLE.lock().read()
 }
 
 pub(crate) fn init() {

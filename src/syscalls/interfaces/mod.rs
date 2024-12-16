@@ -50,7 +50,7 @@ pub trait SyscallInterface: Send + Sync {
 
 	fn shutdown(&self, error_code: i32) -> ! {
 		// This is a stable message used for detecting exit codes for different hypervisors.
-		println!("exit status {error_code}");
+		panic_println!("exit status {error_code}");
 
 		arch::processor::shutdown(error_code)
 	}

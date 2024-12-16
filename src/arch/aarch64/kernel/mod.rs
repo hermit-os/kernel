@@ -16,7 +16,6 @@ use core::arch::global_asm;
 use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
-use hermit_sync::SpinMutex;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::*;
@@ -25,7 +24,41 @@ use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
-static COM1: SpinMutex<SerialPort> = SpinMutex::new(SerialPort::new(0x800));
+pub struct Console {
+	serial_port: SerialPort,
+}
+
+impl Console {
+	pub fn new() -> Self {
+		CoreLocal::install();
+
+		let base = env::boot_info()
+			.hardware_info
+			.serial_port_base
+			.map(|uartport| uartport.get())
+			.unwrap_or_default()
+			.try_into()
+			.unwrap();
+
+		let serial_port = SerialPort::new(base);
+
+		serial_port.init(SERIAL_PORT_BAUDRATE);
+
+		Self { serial_port }
+	}
+
+	pub fn write(&mut self, buf: &[u8]) {
+		for byte in buf {
+			self.serial_port.write_byte(*byte);
+		}
+	}
+}
+
+impl Default for Console {
+	fn default() -> Self {
+		Self::new()
+	}
+}
 
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.
 ///
@@ -75,36 +108,6 @@ pub fn get_processor_count() -> u32 {
 
 pub fn args() -> Option<&'static str> {
 	None
-}
-
-/// Earliest initialization function called by the Boot Processor.
-pub fn message_output_init() {
-	CoreLocal::install();
-
-	let mut com1 = COM1.lock();
-
-	com1.port_address = env::boot_info()
-		.hardware_info
-		.serial_port_base
-		.map(|uartport| uartport.get())
-		.unwrap_or_default()
-		.try_into()
-		.unwrap();
-
-	// We can only initialize the serial port here, because VGA requires processor
-	// configuration first.
-	com1.init(SERIAL_PORT_BAUDRATE);
-}
-
-pub fn output_message_byte(byte: u8) {
-	// Output messages to the serial port.
-	COM1.lock().write_byte(byte);
-}
-
-pub fn output_message_buf(buf: &[u8]) {
-	for byte in buf {
-		output_message_byte(*byte);
-	}
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.

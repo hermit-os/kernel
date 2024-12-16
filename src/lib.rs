@@ -182,7 +182,7 @@ fn synch_all_cores() {
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
-	arch::message_output_init();
+	hermit_sync::Lazy::force(&console::CONSOLE);
 	unsafe {
 		logging::init();
 	}
@@ -262,7 +262,7 @@ fn application_processor_main() -> ! {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 	let core_id = crate::arch::core_local::core_id();
-	println!("[{core_id}][PANIC] {info}");
+	panic_println!("[{core_id}][PANIC] {info}\n");
 
 	crate::scheduler::shutdown(1);
 }

@@ -3,9 +3,9 @@ use alloc::collections::VecDeque;
 
 use x86_64::instructions::port::Port;
 
+use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::core_local::increment_irq_counter;
 use crate::arch::x86_64::kernel::interrupts::{self, IDT};
-use crate::arch::x86_64::kernel::{apic, COM1};
 
 const SERIAL_IRQ: u8 = 36;
 
@@ -52,16 +52,9 @@ impl SerialPort {
 		}
 	}
 
-	#[allow(dead_code)]
 	#[cfg(feature = "shell")]
 	pub fn read(&mut self) -> Option<u8> {
 		self.buffer.pop_front()
-	}
-
-	#[allow(dead_code)]
-	#[cfg(not(feature = "shell"))]
-	pub fn read(&mut self) -> Option<u8> {
-		None
 	}
 
 	pub fn send(&mut self, buf: &[u8]) {
@@ -83,7 +76,7 @@ impl SerialPort {
 }
 
 extern "x86-interrupt" fn serial_interrupt(_stack_frame: crate::interrupts::ExceptionStackFrame) {
-	COM1.lock().as_mut().unwrap().buffer_input();
+	crate::console::CONSOLE.lock().0.buffer_input();
 	increment_irq_counter(SERIAL_IRQ);
 
 	apic::eoi();

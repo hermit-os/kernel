@@ -27,6 +27,26 @@ macro_rules! println {
     }};
 }
 
+/// Emergency output.
+#[cfg(target_os = "none")]
+#[macro_export]
+macro_rules! panic_println {
+    () => {{
+        $crate::console::_panic_print(::core::format_args!("\n"));
+    }};
+    ($($arg:tt)*) => {{
+        $crate::console::_panic_print(::core::format_args!("{}\n", format_args!($($arg)*)));
+    }};
+}
+
+#[cfg(not(target_os = "none"))]
+#[macro_export]
+macro_rules! panic_println {
+    ($($arg:tt)*) => {
+        println!($($arg)*);
+    };
+}
+
 /// Prints and returns the value of a given expression for quick and dirty
 /// debugging.
 // Copied from std/macros.rs
