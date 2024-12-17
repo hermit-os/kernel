@@ -15,7 +15,6 @@
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
 #![feature(never_type)]
-#![feature(noop_waker)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
 #![cfg_attr(
