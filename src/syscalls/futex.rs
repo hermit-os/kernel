@@ -41,6 +41,8 @@ pub unsafe extern "C" fn sys_futex_wait(
 /// Like `synch::futex_wake`, but does extra sanity checks.
 ///
 /// Returns -EINVAL if `address` is null.
+/// `address` is used only for its address.
+/// It is safe to pass a dangling pointer.
 #[hermit_macro::system]
 #[no_mangle]
 pub unsafe extern "C" fn sys_futex_wake(address: *mut u32, count: i32) -> i32 {
@@ -48,6 +50,5 @@ pub unsafe extern "C" fn sys_futex_wake(address: *mut u32, count: i32) -> i32 {
 		return -EINVAL;
 	}
 
-	let address = unsafe { &*(address as *const AtomicU32) };
-	synch::futex_wake(address, count)
+	synch::futex_wake(address as *const AtomicU32, count)
 }
