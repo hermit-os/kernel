@@ -268,7 +268,7 @@ trait VirtqPrivate {
 						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
 							.as_u64()
 							.into(),
-						u32::from(len).into(),
+						len.into(),
 						incomplete_flags | virtq::DescF::NEXT,
 					)
 				});
@@ -356,7 +356,7 @@ impl BufferElem {
 	// should be only relevant for read buffer elements, which should not be uninit.
 	// If the element belongs to a write buffer, it is likely that [Self::capacity]
 	// is more appropriate.
-	pub fn len(&self) -> u16 {
+	pub fn len(&self) -> u32 {
 		match self {
 			BufferElem::Sized(sized) => mem::size_of_val(sized.as_ref()),
 			BufferElem::Vector(vec) => vec.len(),
@@ -365,7 +365,7 @@ impl BufferElem {
 		.unwrap()
 	}
 
-	pub fn capacity(&self) -> u16 {
+	pub fn capacity(&self) -> u32 {
 		match self {
 			BufferElem::Sized(sized) => mem::size_of_val(sized.as_ref()),
 			BufferElem::Vector(vec) => vec.capacity(),
