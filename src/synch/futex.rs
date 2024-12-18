@@ -167,13 +167,15 @@ pub(crate) fn futex_wait_and_set(
 /// Wake `count` threads waiting on the futex at address. Returns the number of threads
 /// woken up (saturates to `i32::MAX`). If `count` is `i32::MAX`, wake up all matching
 /// waiting threads. If `count` is negative, returns -EINVAL.
-pub(crate) fn futex_wake(address: &AtomicU32, count: i32) -> i32 {
+/// `address` is used only for its address.
+/// It is safe to pass a dangling pointer.
+pub(crate) fn futex_wake(address: *const AtomicU32, count: i32) -> i32 {
 	if count < 0 {
 		return -EINVAL;
 	}
 
 	let mut parking_lot = PARKING_LOT.lock();
-	let mut queue = match parking_lot.entry(addr(address)) {
+	let mut queue = match parking_lot.entry(address.addr()) {
 		Entry::Occupied(entry) => entry,
 		Entry::Vacant(_) => return 0,
 	};
