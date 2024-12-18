@@ -27,7 +27,7 @@ pub fn init() {
 	} else {
 		PageRange::new(
 			mm::kernel_end_address().as_usize(),
-			kernel_heap_end().as_usize() + 1
+			kernel_heap_end().as_usize() + 1,
 		)
 		.unwrap()
 	};

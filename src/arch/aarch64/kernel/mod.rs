@@ -15,6 +15,7 @@ pub mod systemtime;
 use core::arch::global_asm;
 use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::task::Waker;
 
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
@@ -24,7 +25,7 @@ use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
-pub struct Console {
+pub(crate) struct Console {
 	serial_port: SerialPort,
 }
 
@@ -52,6 +53,16 @@ impl Console {
 			self.serial_port.write_byte(*byte);
 		}
 	}
+
+	pub fn read(&mut self) -> Option<u8> {
+		None
+	}
+
+	pub fn is_empty(&self) -> bool {
+		true
+	}
+
+	pub fn register_waker(&mut self, _waker: &Waker) {}
 }
 
 impl Default for Console {

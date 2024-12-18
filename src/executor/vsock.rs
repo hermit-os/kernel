@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::future;
-use core::task::{Poll, Waker};
+use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
 use virtio::vsock::{Hdr, Op, Type};
@@ -11,7 +11,7 @@ use virtio::{le16, le32};
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
-use crate::executor::spawn;
+use crate::executor::{spawn, WakerRegistration};
 use crate::io;
 use crate::io::Error::EADDRINUSE;
 
@@ -25,40 +25,6 @@ pub(crate) enum VsockState {
 	Connected,
 	Connecting,
 	Shutdown,
-}
-
-/// WakerRegistration is derived from smoltcp's
-/// implementation.
-#[derive(Debug)]
-pub(crate) struct WakerRegistration {
-	waker: Option<Waker>,
-}
-
-impl WakerRegistration {
-	pub const fn new() -> Self {
-		Self { waker: None }
-	}
-
-	/// Register a waker. Overwrites the previous waker, if any.
-	pub fn register(&mut self, w: &Waker) {
-		match self.waker {
-			// Optimization: If both the old and new Wakers wake the same task, we can simply
-			// keep the old waker, skipping the clone.
-			Some(ref w2) if (w2.will_wake(w)) => {}
-			// In all other cases
-			// - we have no waker registered
-			// - we have a waker registered but it's for a different task.
-			// then clone the new waker and store it
-			_ => self.waker = Some(w.clone()),
-		}
-	}
-
-	/// Wake the registered waker, if any.
-	pub fn wake(&mut self) {
-		if let Some(w) = self.waker.take() {
-			w.wake();
-		}
-	}
 }
 
 pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;

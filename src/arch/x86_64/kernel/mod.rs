@@ -3,6 +3,7 @@ use core::arch::asm;
 use core::num::NonZeroU64;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
+use core::task::Waker;
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -36,7 +37,7 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-pub struct Console {
+pub(crate) struct Console {
 	serial_port: SerialPort,
 }
 
@@ -68,9 +69,16 @@ impl Console {
 		self.serial_port.buffer_input();
 	}
 
-	#[cfg(feature = "shell")]
 	pub fn read(&mut self) -> Option<u8> {
 		self.serial_port.read()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.serial_port.is_empty()
+	}
+
+	pub fn register_waker(&mut self, waker: &Waker) {
+		self.serial_port.register_waker(waker);
 	}
 }
 

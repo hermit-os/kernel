@@ -14,6 +14,7 @@ pub mod systemtime;
 use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
+use core::task::Waker;
 
 use fdt::Fdt;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -27,7 +28,7 @@ use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
 use crate::init_cell::InitCell;
 
-pub struct Console {}
+pub(crate) struct Console {}
 
 impl Console {
 	pub fn new() -> Self {
@@ -41,6 +42,16 @@ impl Console {
 			sbi_rt::console_write_byte(*byte);
 		}
 	}
+
+	pub fn read(&mut self) -> Option<u8> {
+		None
+	}
+
+	pub fn is_empty(&self) -> bool {
+		true
+	}
+
+	pub fn register_waker(&mut self, _waker: &Waker) {}
 }
 
 impl Default for Console {

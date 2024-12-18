@@ -34,6 +34,40 @@ use crate::io;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::synch::futex::*;
 
+/// WakerRegistration is derived from smoltcp's
+/// implementation.
+#[derive(Debug)]
+pub(crate) struct WakerRegistration {
+	waker: Option<Waker>,
+}
+
+impl WakerRegistration {
+	pub const fn new() -> Self {
+		Self { waker: None }
+	}
+
+	/// Register a waker. Overwrites the previous waker, if any.
+	pub fn register(&mut self, w: &Waker) {
+		match self.waker {
+			// Optimization: If both the old and new Wakers wake the same task, we can simply
+			// keep the old waker, skipping the clone.
+			Some(ref w2) if (w2.will_wake(w)) => {}
+			// In all other cases
+			// - we have no waker registered
+			// - we have a waker registered but it's for a different task.
+			// then clone the new waker and store it
+			_ => self.waker = Some(w.clone()),
+		}
+	}
+
+	/// Wake the registered waker, if any.
+	pub fn wake(&mut self) {
+		if let Some(w) = self.waker.take() {
+			w.wake();
+		}
+	}
+}
+
 struct TaskNotify {
 	/// Futex to wakeup a single task
 	futex: AtomicU32,
