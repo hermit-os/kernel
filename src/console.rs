@@ -1,10 +1,11 @@
+use core::task::Waker;
 use core::{fmt, mem};
 
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch;
 
-pub struct Console(pub arch::kernel::Console);
+pub(crate) struct Console(pub arch::kernel::Console);
 
 impl Console {
 	fn new() -> Self {
@@ -15,9 +16,16 @@ impl Console {
 		self.0.write(buf);
 	}
 
-	#[cfg(feature = "shell")]
 	pub fn read(&mut self) -> Option<u8> {
 		self.0.read()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.0.is_empty()
+	}
+
+	pub fn register_waker(&mut self, waker: &Waker) {
+		self.0.register_waker(waker)
 	}
 }
 
@@ -35,17 +43,17 @@ impl fmt::Write for Console {
 	}
 }
 
-pub static CONSOLE: Lazy<InterruptTicketMutex<Console>> =
+pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> =
 	Lazy::new(|| InterruptTicketMutex::new(Console::new()));
 
 #[doc(hidden)]
-pub fn _print(args: fmt::Arguments<'_>) {
+pub(crate) fn _print(args: fmt::Arguments<'_>) {
 	use fmt::Write;
 	CONSOLE.lock().write_fmt(args).unwrap();
 }
 
 #[doc(hidden)]
-pub fn _panic_print(args: fmt::Arguments<'_>) {
+pub(crate) fn _panic_print(args: fmt::Arguments<'_>) {
 	use fmt::Write;
 	let mut console = unsafe { CONSOLE.make_guard_unchecked() };
 	console.write_fmt(args).ok();
