@@ -243,6 +243,31 @@ pub(crate) mod ops {
 	}
 
 	#[derive(Debug)]
+	pub(crate) struct Getattr;
+
+	impl Op for Getattr {
+		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_GETATTR;
+		type InStruct = fuse_getattr_in;
+		type InPayload = ();
+		type OutStruct = fuse_attr_out;
+		type OutPayload = ();
+	}
+
+	impl Getattr {
+		pub(crate) fn create(nid: u64, fh: u64, getattr_flags: u32) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::new(
+				nid,
+				fuse_getattr_in {
+					getattr_flags,
+					fh,
+					..Default::default()
+				},
+			);
+			(cmd, 0)
+		}
+	}
+
+	#[derive(Debug)]
 	pub(crate) struct Readlink;
 
 	impl Op for Readlink {
@@ -694,6 +719,23 @@ impl FuseFileHandleInner {
 			Err(io::Error::EIO)
 		}
 	}
+
+	fn fstat(&mut self) -> io::Result<FileAttr> {
+		debug!("FUSE getattr");
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let (cmd, rsp_payload_len) = ops::Getattr::create(nid, fh, FUSE_GETATTR_FH);
+			let rsp = get_filesystem_driver()
+				.ok_or(io::Error::ENOSYS)?
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+			if rsp.headers.out_header.error < 0 {
+				return Err(io::Error::EIO);
+			}
+			Ok(rsp.headers.op_header.attr.into())
+		} else {
+			Err(io::Error::EIO)
+		}
+	}
 }
 
 impl Drop for FuseFileHandleInner {
@@ -735,6 +777,10 @@ impl ObjectInterface for FuseFileHandle {
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		self.0.lock().await.lseek(offset, whence)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		self.0.lock().await.fstat()
 	}
 }
 
