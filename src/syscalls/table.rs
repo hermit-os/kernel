@@ -8,26 +8,24 @@ const SYSNO_EXIT: usize = 0;
 const SYSNO_WRITE: usize = 1;
 /// number of the system call `read`
 const SYSNO_READ: usize = 2;
-/// number of the system call `abort`
-const SYSNO_ABORT: usize = 3;
 /// number of the system call `usleep`
-const SYSNO_USLEEP: usize = 4;
+const SYSNO_USLEEP: usize = 3;
 /// number of the system call `getpid`
-const SYSNO_GETPID: usize = 5;
+const SYSNO_GETPID: usize = 4;
 /// number of the system call `yield`
-const SYSNO_YIELD: usize = 6;
+const SYSNO_YIELD: usize = 5;
 /// number of the system call `read_entropy`
-const SYSNO_READ_ENTROPY: usize = 7;
+const SYSNO_READ_ENTROPY: usize = 6;
 /// number of the system call `get_processor_count`
-const SYSNO_GET_PROCESSOR_COUNT: usize = 8;
+const SYSNO_GET_PROCESSOR_COUNT: usize = 7;
 /// number of the system call `close`
-const SYSNO_CLOSE: usize = 9;
+const SYSNO_CLOSE: usize = 8;
 /// number of the system call `futex_wait`
-const SYSNO_FUTEX_WAIT: usize = 10;
+const SYSNO_FUTEX_WAIT: usize = 9;
 /// number of the system call `futex_wake`
-const SYSNO_FUTEX_WAKE: usize = 11;
+const SYSNO_FUTEX_WAKE: usize = 10;
 /// number of the system call `open`
-const SYSNO_OPEN: usize = 12;
+const SYSNO_OPEN: usize = 11;
 
 /// total number of system calls
 const NO_SYSCALLS: usize = 32;
@@ -65,7 +63,6 @@ impl SyscallTable {
 		table.handle[SYSNO_EXIT] = sys_exit as *const _;
 		table.handle[SYSNO_WRITE] = sys_write as *const _;
 		table.handle[SYSNO_READ] = sys_read as *const _;
-		table.handle[SYSNO_ABORT] = sys_abort as *const _;
 		table.handle[SYSNO_USLEEP] = sys_usleep as *const _;
 		table.handle[SYSNO_GETPID] = sys_getpid as *const _;
 		table.handle[SYSNO_YIELD] = sys_yield as *const _;
