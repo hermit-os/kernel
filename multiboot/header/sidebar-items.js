@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MULTIBOOT_HEADER_MAGIC"],"enum":["VideoModeType"],"struct":["Header","MultibootAddresses","MultibootVideoMode"]};
