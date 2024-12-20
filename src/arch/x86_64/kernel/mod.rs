@@ -282,7 +282,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 }
 
 #[cfg(feature = "common-os")]
-const LOADER_START: usize = 0x10000000000;
+const LOADER_START: usize = 0x0100_0000_0000;
 #[cfg(feature = "common-os")]
 const LOADER_STACK_SIZE: usize = 0x8000;
 

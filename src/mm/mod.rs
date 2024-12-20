@@ -98,7 +98,7 @@ pub(crate) fn init() {
 		// we reserve at least 75% of the memory for the user space
 		let reserve: usize = (avail_mem * 75) / 100;
 		// 64 MB is enough as kernel heap
-		let reserve = core::cmp::min(reserve, 0x4000000);
+		let reserve = core::cmp::min(reserve, 0x0400_0000);
 
 		let virt_size: usize = reserve.align_down(LargePageSize::SIZE as usize);
 		let virt_addr =
