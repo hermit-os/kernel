@@ -124,21 +124,21 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of!(l1_pgtable).addr() as u64 + PT_PT;
-	pgt_slice[511] = ptr::addr_of!(l0_pgtable).addr() as u64 + PT_PT + PT_SELF;
+	pgt_slice[0] = ptr::addr_of_mut!(l1_pgtable).expose_addr() as u64 + PT_PT;
+	pgt_slice[511] = ptr::addr_of_mut!(l0_pgtable).expose_addr() as u64 + PT_PT + PT_SELF;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l1_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of!(l2_pgtable).addr() as u64 + PT_PT;
-	pgt_slice[1] = ptr::addr_of!(l2k_pgtable).addr() as u64 + PT_PT;
+	pgt_slice[0] = ptr::addr_of_mut!(l2_pgtable).expose_addr() as u64 + PT_PT;
+	pgt_slice[1] = ptr::addr_of_mut!(l2k_pgtable).expose_addr() as u64 + PT_PT;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of!(l3_pgtable).addr() as u64 + PT_PT;
+	pgt_slice[0] = ptr::addr_of_mut!(l3_pgtable).expose_addr() as u64 + PT_PT;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l3_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
@@ -152,8 +152,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		*i = 0;
 	}
 	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice =
-			ptr::addr_of!(L0mib_pgtable).addr() as u64 + (i * BasePageSize::SIZE) as u64 + PT_PT;
+		*pgt_slice = ptr::addr_of_mut!(L0mib_pgtable).expose_addr() as u64
+			+ (i * BasePageSize::SIZE) as u64
+			+ PT_PT;
 	}
 
 	let pgt_slice =
@@ -174,7 +175,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 				"msr ttbr0_el1, {}",
 				"dsb sy",
 				"isb",
-				in(reg) ptr::addr_of!(l0_pgtable).addr() as u64,
+				in(reg) ptr::addr_of_mut!(l0_pgtable),
 				options(nostack),
 		)
 	};
