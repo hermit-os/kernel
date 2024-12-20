@@ -20,7 +20,7 @@ use crate::os::CONSOLE;
 use crate::BootInfoExt;
 
 extern "C" {
-	static loader_end: u8;
+	static mut loader_end: u8;
 	static mut l0_pgtable: u64;
 	static mut l1_pgtable: u64;
 	static mut l2_pgtable: u64;
@@ -46,7 +46,7 @@ const PT_MEM_CD: u64 = 0x70F;
 const PT_SELF: u64 = 1 << 55;
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	(ptr::addr_of!(loader_end).addr() as u64).align_up(LargePageSize::SIZE as u64)
+	(ptr::addr_of_mut!(loader_end).expose_addr() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub fn find_kernel() -> &'static [u8] {
