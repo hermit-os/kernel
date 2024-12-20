@@ -38,6 +38,7 @@ pub trait PageTableEntryFlagsExt {
 	#[cfg(feature = "common-os")]
 	fn user(&mut self) -> &mut Self;
 
+	#[expect(dead_code)]
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self;
 }
