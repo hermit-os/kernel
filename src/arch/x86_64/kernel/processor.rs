@@ -894,7 +894,9 @@ pub fn configure() {
 		wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
 		wrmsr(
 			IA32_LSTAR,
-			crate::arch::x86_64::kernel::syscall::syscall_handler as u64,
+			(crate::arch::x86_64::kernel::syscall::syscall_handler as usize)
+				.try_into()
+				.unwrap(),
 		);
 		wrmsr(IA32_FMASK, 1 << 9); // clear IF flag during system call
 	}

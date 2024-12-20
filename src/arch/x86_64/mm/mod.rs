@@ -63,7 +63,7 @@ pub fn create_new_root_page_table() -> usize {
 	paging::map::<BasePageSize>(slice_addr, physaddr, 1, flags);
 
 	unsafe {
-		let pml4 = core::slice::from_raw_parts_mut(slice_addr.as_mut_ptr() as *mut u64, 512);
+		let pml4 = core::slice::from_raw_parts_mut(slice_addr.as_mut_ptr(), 512);
 
 		// clear PML4
 		for elem in pml4.iter_mut() {

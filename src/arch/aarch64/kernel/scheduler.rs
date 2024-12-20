@@ -1,10 +1,14 @@
 //! Architecture dependent interface to initialize a task
 
+#[cfg(not(feature = "common-os"))]
 use alloc::alloc::{alloc_zeroed, Layout};
+#[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
 use core::arch::naked_asm;
+#[cfg(not(feature = "common-os"))]
+use core::slice;
 use core::sync::atomic::Ordering;
-use core::{mem, ptr, slice};
+use core::{mem, ptr};
 
 use align_address::Align;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
@@ -12,10 +16,12 @@ use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+#[cfg(not(feature = "common-os"))]
+use crate::env;
 use crate::scheduler::task::{Task, TaskFrame};
 #[cfg(target_os = "none")]
 use crate::scheduler::PerCoreSchedulerExt;
-use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -243,6 +249,7 @@ impl Drop for TaskStacks {
  * of the TLS implementations.
  */
 
+#[cfg(not(feature = "common-os"))]
 #[derive(Copy, Clone)]
 #[repr(C)]
 struct DtvPointer {
@@ -250,12 +257,14 @@ struct DtvPointer {
 	to_free: *const (),
 }
 
+#[cfg(not(feature = "common-os"))]
 #[repr(C)]
 union Dtv {
 	counter: usize,
 	pointer: DtvPointer,
 }
 
+#[cfg(not(feature = "common-os"))]
 #[repr(C)]
 pub struct TaskTLS {
 	dtv: mem::MaybeUninit<Box<[Dtv; 2]>>,
@@ -263,6 +272,7 @@ pub struct TaskTLS {
 	block: [u8],
 }
 
+#[cfg(not(feature = "common-os"))]
 impl TaskTLS {
 	fn from_environment() -> Option<Box<Self>> {
 		let tls_info = env::boot_info().load_info.tls_info?;
@@ -346,6 +356,7 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: unsafe extern "C" fn(usize), arg: usize) {
 		// Check if TLS is allocated already and if the task uses thread-local storage.
+		#[cfg(not(feature = "common-os"))]
 		if self.tls.is_none() {
 			self.tls = TaskTLS::from_environment();
 		}
@@ -360,6 +371,7 @@ impl TaskFrame for Task {
 			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
+			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
 				(*state).tpidr_el0 = tls.thread_ptr() as u64;
 			}

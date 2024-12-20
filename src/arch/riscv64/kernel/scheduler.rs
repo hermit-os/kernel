@@ -1,5 +1,8 @@
+#[cfg(not(feature = "common-os"))]
 use alloc::alloc::{alloc, dealloc, Layout};
+#[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
+#[cfg(not(feature = "common-os"))]
 use core::convert::TryInto;
 use core::{mem, ptr};
 
@@ -9,8 +12,10 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+#[cfg(not(feature = "common-os"))]
+use crate::env;
 use crate::scheduler::task::{Task, TaskFrame};
-use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
@@ -257,12 +262,14 @@ impl Drop for TaskStacks {
 	}
 }
 
+#[cfg(not(feature = "common-os"))]
 pub struct TaskTLS {
 	address: VirtAddr,
 	tp: VirtAddr,
 	layout: Layout,
 }
 
+#[cfg(not(feature = "common-os"))]
 impl TaskTLS {
 	pub fn from_environment() -> Option<Box<Self>> {
 		let tls_info = env::boot_info().load_info.tls_info?;
@@ -320,6 +327,7 @@ impl TaskTLS {
 	}
 }
 
+#[cfg(not(feature = "common-os"))]
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
 		debug!(
@@ -377,6 +385,7 @@ impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: unsafe extern "C" fn(usize), arg: usize) {
 		// Check if the task (process or thread) uses Thread-Local-Storage.
 		// check is TLS is already allocated
+		#[cfg(not(feature = "common-os"))]
 		if self.tls.is_none() {
 			self.tls = TaskTLS::from_environment();
 		}
@@ -391,6 +400,7 @@ impl TaskFrame for Task {
 			stack -= mem::size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
+			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
 				(*state).tp = tls.tp().as_usize();
 			}

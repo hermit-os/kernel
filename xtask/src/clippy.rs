@@ -17,6 +17,7 @@ impl Clippy {
 
 			let triple = arch.triple();
 			cmd!(sh, "cargo clippy --target={triple}").run()?;
+			cmd!(sh, "cargo clippy --target={triple} --features common-os").run()?;
 			cmd!(sh, "cargo clippy --target={triple}")
 				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga")
 				.run()?;
