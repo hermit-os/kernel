@@ -300,8 +300,7 @@ where
 	use crate::arch::x86_64::mm::physicalmem;
 
 	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
-	let physaddr =
-		physicalmem::allocate_aligned(code_size as usize, BasePageSize::SIZE as usize).unwrap();
+	let physaddr = physicalmem::allocate_aligned(code_size, BasePageSize::SIZE as usize).unwrap();
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
@@ -335,9 +334,8 @@ where
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
-		let block = unsafe {
-			&mut *slice_from_raw_parts_mut(tls_virt.as_mut_ptr() as *mut u8, tls_offset + tcb_size)
-		};
+		let block =
+			unsafe { &mut *slice_from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
 		for elem in block.iter_mut() {
 			*elem = 0;
 		}
