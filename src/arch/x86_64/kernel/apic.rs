@@ -15,9 +15,9 @@ use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
 use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
-#[cfg(feature = "smp")]
-use x86::controlregs::*;
 use x86::msr::*;
+#[cfg(feature = "smp")]
+use x86_64::registers::control::Cr3;
 use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
@@ -218,8 +218,9 @@ extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionSt
 	swapgs(&stack_frame);
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER);
+	let (frame, val) = Cr3::read_raw();
 	unsafe {
-		cr3_write(cr3());
+		Cr3::write_raw(frame, val);
 	}
 	eoi();
 	swapgs(&stack_frame);
@@ -748,9 +749,11 @@ pub fn boot_application_processors() {
 	}
 
 	unsafe {
+		let (frame, val) = Cr3::read_raw();
+		let value = frame.start_address().as_u64() | u64::from(val);
 		// Pass the PML4 page table address to the boot code.
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4).as_mut_ptr::<u32>()) =
-			cr3().try_into().unwrap();
+			value.try_into().unwrap();
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to {:p}",
