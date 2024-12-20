@@ -1,15 +1,22 @@
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
-use x86::io::*;
+use x86_64::instructions::port::Port;
 
 use crate::drivers::pci::{PciDevice, PCI_DEVICES};
 
 const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 
-const PCI_CONFIG_ADDRESS_PORT: u16 = 0xcf8;
 const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
 
-const PCI_CONFIG_DATA_PORT: u16 = 0xcfc;
+#[inline]
+const fn config_address() -> Port<u32> {
+	Port::new(0xcf8)
+}
+
+#[inline]
+const fn config_data() -> Port<u32> {
+	Port::new(0xcfc)
+}
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct PciConfigRegion;
@@ -29,8 +36,8 @@ impl ConfigRegionAccess for PciConfigRegion {
 			| u32::from(pci_addr.function()) << 8
 			| u32::from(register);
 		unsafe {
-			outl(PCI_CONFIG_ADDRESS_PORT, address);
-			u32::from_le(inl(PCI_CONFIG_DATA_PORT))
+			config_address().write(address);
+			config_data().read()
 		}
 	}
 
@@ -41,9 +48,10 @@ impl ConfigRegionAccess for PciConfigRegion {
 			| u32::from(pci_addr.device()) << 11
 			| u32::from(pci_addr.function()) << 8
 			| u32::from(register);
+
 		unsafe {
-			outl(PCI_CONFIG_ADDRESS_PORT, address);
-			outl(PCI_CONFIG_DATA_PORT, value.to_le());
+			config_address().write(address);
+			config_data().write(value);
 		}
 	}
 }
