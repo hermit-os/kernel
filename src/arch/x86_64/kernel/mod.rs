@@ -287,9 +287,9 @@ const LOADER_START: usize = 0x0100_0000_0000;
 const LOADER_STACK_SIZE: usize = 0x8000;
 
 #[cfg(feature = "common-os")]
-pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
+pub fn load_application<F, T>(code_size: u64, tls_size: u64, func: F) -> T
 where
-	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> Result<(), ()>,
+	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> T,
 {
 	use core::ptr::slice_from_raw_parts_mut;
 
