@@ -18,6 +18,7 @@ use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
+use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
@@ -31,6 +32,12 @@ use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
+
+/// APIC Location and Status (R/W) See Table 35-2. See Section 10.4.4, Local APIC  Status and Location.
+const IA32_APIC_BASE: Msr = Msr::new(0x1b);
+
+/// TSC Target of Local APIC s TSC Deadline Mode (R/W)  See Table 35-2
+const IA32_TSC_DEADLINE: Msr = Msr::new(0x6e0);
 
 const MP_FLT_SIGNATURE: u32 = 0x5f50_4d5f;
 const MP_CONFIG_SIGNATURE: u32 = 0x504d_4350;
@@ -632,8 +639,9 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 				IA32_X2APIC_LVT_TIMER,
 				APIC_LVT_TIMER_TSC_DEADLINE | u64::from(TIMER_INTERRUPT_NUMBER),
 			);
+			let mut ia32_tsc_deadline = IA32_TSC_DEADLINE;
 			unsafe {
-				wrmsr(IA32_TSC_DEADLINE, tsc_deadline);
+				ia32_tsc_deadline.write(tsc_deadline);
 			}
 		} else {
 			// Calculate the relative timeout from the absolute wakeup time.
@@ -671,10 +679,11 @@ pub fn init_x2apic() {
 		debug!("Enable x2APIC support");
 		// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
 		// Enable it.
-		let mut apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
+		let mut msr = IA32_APIC_BASE;
+		let mut apic_base = unsafe { msr.read() };
 		apic_base |= X2APIC_ENABLE;
 		unsafe {
-			wrmsr(IA32_APIC_BASE, apic_base);
+			msr.write(apic_base);
 		}
 	}
 }
@@ -872,7 +881,7 @@ fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
 fn local_apic_read(x2apic_msr: u32) -> u32 {
 	if processor::supports_x2apic() {
 		// x2APIC is simple, we can just read from the given MSR.
-		unsafe { rdmsr(x2apic_msr) as u32 }
+		unsafe { Msr::new(x2apic_msr).read() as u32 }
 	} else {
 		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_ptr::<u32>()) }
 	}
@@ -913,7 +922,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 	if processor::supports_x2apic() {
 		// x2APIC is simple, we can just write the given value to the given MSR.
 		unsafe {
-			wrmsr(x2apic_msr, value);
+			Msr::new(x2apic_msr).write(value);
 		}
 	} else {
 		// Write the value.
