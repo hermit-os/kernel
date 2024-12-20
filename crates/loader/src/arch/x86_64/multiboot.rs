@@ -182,12 +182,14 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	}
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
+	let device_tree =
+		DeviceTreeAddress::new(u64::try_from(device_tree.as_ptr().expose_addr()).unwrap());
 
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: 0..0,
 			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-			device_tree: DeviceTreeAddress::new(device_tree.as_ptr() as u64),
+			device_tree,
 		},
 		load_info,
 		platform_info: PlatformInfo::Multiboot {
