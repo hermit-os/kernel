@@ -19,7 +19,7 @@ use crate::fdt::Fdt;
 use crate::BootInfoExt;
 
 extern "C" {
-	static loader_end: u8;
+	static mut loader_end: u8;
 	static mb_info: usize;
 }
 
@@ -174,22 +174,22 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		PageTableFlags::WRITABLE,
 	);
 
+	let stack = ptr::addr_of_mut!(loader_end).with_addr(new_stack);
+
 	// clear stack
 	unsafe {
-		write_bytes(
-			sptr::from_exposed_addr_mut::<u8>(new_stack),
-			0,
-			KERNEL_STACK_SIZE.try_into().unwrap(),
-		);
+		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());
 	}
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
+	let device_tree =
+		DeviceTreeAddress::new(u64::try_from(device_tree.as_ptr().expose_addr()).unwrap());
 
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: 0..0,
 			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-			device_tree: DeviceTreeAddress::new(device_tree.as_ptr() as u64),
+			device_tree,
 		},
 		load_info,
 		platform_info: PlatformInfo::Multiboot {
@@ -198,7 +198,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		},
 	};
 
-	let stack = sptr::from_exposed_addr_mut(new_stack);
 	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
 	let raw_boot_info = boot_info.write();
 

@@ -75,7 +75,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel, fdt: Vec<u8>) -> ! {
 		entry_point,
 	} = kernel_info;
 
-	let device_tree = DeviceTreeAddress::new(u64::try_from(fdt.leak().as_ptr().addr()).unwrap());
+	let device_tree =
+		DeviceTreeAddress::new(u64::try_from(fdt.leak().as_ptr().expose_addr()).unwrap());
 
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
