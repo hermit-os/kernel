@@ -1079,7 +1079,7 @@ pub fn readfs() -> usize {
 	if cfg!(feature = "fsgsbase") {
 		unsafe { segmentation::rdfsbase() }
 	} else {
-		unsafe { rdmsr(IA32_GS_BASE) }
+		unsafe { rdmsr(IA32_FS_BASE) }
 	}
 	.try_into()
 	.unwrap()
@@ -1090,7 +1090,7 @@ pub fn readgs() -> usize {
 	if cfg!(feature = "fsgsbase") {
 		unsafe { segmentation::rdgsbase() }
 	} else {
-		unsafe { rdmsr(IA32_FS_BASE) }
+		unsafe { rdmsr(IA32_GS_BASE) }
 	}
 	.try_into()
 	.unwrap()
