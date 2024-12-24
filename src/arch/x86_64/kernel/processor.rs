@@ -12,13 +12,14 @@ use core::{fmt, ptr};
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
 use x86::bits64::segmentation;
-use x86::controlregs::*;
 use x86::cpuid::*;
 use x86::msr::*;
 use x86_64::VirtAddr;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
+use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
 
 #[cfg(feature = "acpi")]
@@ -794,69 +795,66 @@ pub fn configure() {
 	//
 	// CR0 CONFIGURATION
 	//
-	let mut cr0 = unsafe { cr0() };
-
-	// Enable the FPU.
-	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
-	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
-
-	// if set, the first FPU access will trigger interrupt 7.
-	cr0.insert(Cr0::CR0_TASK_SWITCHED);
-
-	// Prevent writes to read-only pages in Ring 0.
-	cr0.insert(Cr0::CR0_WRITE_PROTECT);
-
-	debug!("Set CR0 to {:#x}", cr0);
 	unsafe {
-		cr0_write(cr0);
+		Cr0::update(|flags| {
+			// Enable the FPU.
+			flags.insert(Cr0Flags::MONITOR_COPROCESSOR | Cr0Flags::NUMERIC_ERROR);
+			flags.remove(Cr0Flags::EMULATE_COPROCESSOR);
+
+			// if set, the first FPU access will trigger interrupt 7.
+			flags.insert(Cr0Flags::TASK_SWITCHED);
+
+			// Prevent writes to read-only pages in Ring 0.
+			flags.insert(Cr0Flags::WRITE_PROTECT);
+
+			debug!("Setting CR0 = {:?}", flags);
+		});
 	}
 
 	//
 	// CR4 CONFIGURATION
 	//
-	let mut cr4 = unsafe { cr4() };
-
-	let has_pge = match cpuid.get_feature_info() {
-		Some(finfo) => finfo.has_pge(),
-		None => false,
-	};
-
-	if has_pge {
-		cr4 |= Cr4::CR4_ENABLE_GLOBAL_PAGES;
-	}
-
-	// Enable Machine Check Exceptions.
-	// No need to check for support here, all x86-64 CPUs support it.
-	cr4.insert(Cr4::CR4_ENABLE_MACHINE_CHECK);
-
-	// Enable full SSE support and indicates that the OS saves SSE context using FXSR.
-	// No need to check for support here, all x86-64 CPUs support at least SSE2.
-	cr4.insert(Cr4::CR4_ENABLE_SSE | Cr4::CR4_UNMASKED_SSE);
-
-	if supports_xsave() {
-		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
-		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
-	}
-
-	// Disable Performance-Monitoring Counters
-	cr4.remove(Cr4::CR4_ENABLE_PPMC);
-	// clear TSD => every privilege level is able
-	// to use rdtsc
-	cr4.remove(Cr4::CR4_TIME_STAMP_DISABLE);
-
-	if supports_fsgs() {
-		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
-		debug!("Enable FSGSBASE support");
-	}
-	#[cfg(feature = "fsgsbase")]
-	if !supports_fsgs() {
-		error!("FSGSBASE support is enabled, but the processor doesn't support it!");
-		crate::scheduler::shutdown(1);
-	}
-
-	debug!("Set CR4 to {:#x}", cr4);
 	unsafe {
-		cr4_write(cr4);
+		Cr4::update(|flags| {
+			let has_pge = cpuid
+				.get_feature_info()
+				.is_some_and(|feature_info| feature_info.has_pge());
+
+			if has_pge {
+				flags.insert(Cr4Flags::PAGE_GLOBAL);
+			}
+
+			// Enable Machine Check Exceptions.
+			// No need to check for support here, all x86-64 CPUs support it.
+			flags.insert(Cr4Flags::MACHINE_CHECK_EXCEPTION);
+
+			// Enable full SSE support and indicates that the OS saves SSE context using FXSR.
+			// No need to check for support here, all x86-64 CPUs support at least SSE2.
+			flags.insert(Cr4Flags::OSFXSR | Cr4Flags::OSXMMEXCPT_ENABLE);
+
+			if supports_xsave() {
+				// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
+				flags.insert(Cr4Flags::OSXSAVE);
+			}
+
+			// Disable Performance-Monitoring Counters
+			flags.remove(Cr4Flags::PERFORMANCE_MONITOR_COUNTER);
+			// clear TSD => every privilege level is able
+			// to use rdtsc
+			flags.remove(Cr4Flags::TIMESTAMP_DISABLE);
+
+			if supports_fsgs() {
+				flags.insert(Cr4Flags::FSGSBASE);
+				debug!("Enable FSGSBASE support");
+			}
+			#[cfg(feature = "fsgsbase")]
+			if !supports_fsgs() {
+				error!("FSGSBASE support is enabled, but the processor doesn't support it!");
+				crate::scheduler::shutdown(1);
+			}
+
+			debug!("Setting CR4 = {:?}", flags);
+		});
 	}
 
 	//
@@ -865,16 +863,18 @@ pub fn configure() {
 	if supports_xsave() {
 		// Enable saving the context for all known vector extensions.
 		// Must happen after CR4_ENABLE_OS_XSAVE has been set.
-		let mut xcr0 = unsafe { xcr0() };
-		xcr0.insert(Xcr0::XCR0_FPU_MMX_STATE | Xcr0::XCR0_SSE_STATE);
+		// FIXME: migrate to `XCr0::update()` once available:
+		// https://github.com/rust-osdev/x86_64/pull/527
+		let mut flags = XCr0::read();
+		flags.insert(XCr0Flags::X87 | XCr0Flags::SSE);
 
 		if supports_avx() {
-			xcr0.insert(Xcr0::XCR0_AVX_STATE);
+			flags.insert(XCr0Flags::AVX);
 		}
 
-		debug!("Set XCR0 to {:#x}", xcr0);
+		debug!("Setting XCR0 = {:?}", flags);
 		unsafe {
-			xcr0_write(xcr0);
+			XCr0::write(flags);
 		}
 	}
 
