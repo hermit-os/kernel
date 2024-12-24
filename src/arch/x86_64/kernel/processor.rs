@@ -11,7 +11,6 @@ use core::{fmt, ptr};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
-use x86::bits64::segmentation;
 use x86::cpuid::*;
 use x86::msr::*;
 use x86_64::VirtAddr;
@@ -19,6 +18,8 @@ use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
+use x86_64::registers::model_specific::{FsBase, GsBase};
+use x86_64::registers::segmentation::{FS, GS, Segment64};
 use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
 
@@ -1076,43 +1077,47 @@ pub fn get_frequency() -> u16 {
 
 #[inline]
 pub fn readfs() -> usize {
-	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::rdfsbase() }
+	let base = if cfg!(feature = "fsgsbase") {
+		FS::read_base()
 	} else {
-		unsafe { rdmsr(IA32_FS_BASE) }
-	}
-	.try_into()
-	.unwrap()
+		FsBase::read()
+	};
+
+	base.as_u64().try_into().unwrap()
 }
 
 #[inline]
 pub fn readgs() -> usize {
-	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::rdgsbase() }
+	let base = if cfg!(feature = "fsgsbase") {
+		GS::read_base()
 	} else {
-		unsafe { rdmsr(IA32_GS_BASE) }
-	}
-	.try_into()
-	.unwrap()
+		GsBase::read()
+	};
+
+	base.as_u64().try_into().unwrap()
 }
 
 #[inline]
 pub fn writefs(fs: usize) {
-	let fs = fs.try_into().unwrap();
+	let base = VirtAddr::new(fs.try_into().unwrap());
 	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::wrfsbase(fs) }
+		unsafe {
+			FS::write_base(base);
+		}
 	} else {
-		unsafe { wrmsr(IA32_FS_BASE, fs) }
+		FsBase::write(base);
 	}
 }
 
 #[inline]
 pub fn writegs(gs: usize) {
-	let gs = gs.try_into().unwrap();
+	let base = VirtAddr::new(gs.try_into().unwrap());
 	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::wrgsbase(gs) }
+		unsafe {
+			GS::write_base(base);
+		}
 	} else {
-		unsafe { wrmsr(IA32_GS_BASE, gs) }
+		GsBase::write(base);
 	}
 }
 
