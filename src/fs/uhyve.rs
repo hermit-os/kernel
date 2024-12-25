@@ -1,5 +1,6 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -233,11 +234,28 @@ impl Clone for UhyveFileHandle {
 }
 
 #[derive(Debug)]
-pub(crate) struct UhyveDirectory;
+pub(crate) struct UhyveDirectory {
+	prefix: Option<String>,
+}
 
 impl UhyveDirectory {
-	pub const fn new() -> Self {
-		UhyveDirectory {}
+	pub const fn new(prefix: Option<String>) -> Self {
+		UhyveDirectory { prefix }
+	}
+
+	fn traversal_path(&self, components: &[&str]) -> CString {
+		let prefix_deref = self.prefix.as_deref();
+		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
+		// Unlike src/fs/fuse.rs, we skip the first element here so as to not prepend / before /root
+		let path: String = components_with_prefix
+			.flat_map(|component| ["/", component])
+			.skip(1)
+			.collect();
+		if path.is_empty() {
+			CString::new("/").unwrap()
+		} else {
+			CString::new(path).unwrap()
+		}
 	}
 }
 
@@ -261,18 +279,7 @@ impl VfsNode for UhyveDirectory {
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<dyn ObjectInterface>> {
-		let path: String = if components.is_empty() {
-			"/\0".to_string()
-		} else {
-			let mut path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-			path.push('\0');
-			path.remove(0);
-			path
-		};
+		let path = self.traversal_path(components);
 
 		let mut sysopen = SysOpen::new(VirtAddr::from_ptr(path.as_ptr()), opt.bits(), mode.bits());
 		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
@@ -285,18 +292,7 @@ impl VfsNode for UhyveDirectory {
 	}
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path: String = if components.is_empty() {
-			"/\0".to_string()
-		} else {
-			let mut path: String = components
-				.iter()
-				.rev()
-				.map(|v| "/".to_owned() + v)
-				.collect();
-			path.push('\0');
-			path.remove(0);
-			path
-		};
+		let path = self.traversal_path(components);
 
 		let mut sysunlink = SysUnlink::new(VirtAddr::from_ptr(path.as_ptr()));
 		uhyve_send(UHYVE_PORT_UNLINK, &mut sysunlink);
@@ -329,7 +325,10 @@ pub(crate) fn init() {
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(&mount_point, Box::new(UhyveDirectory::new()))
+			.mount(
+				&mount_point,
+				Box::new(UhyveDirectory::new(Some(mount_point.to_owned()))),
+			)
 			.expect("Mount failed. Duplicate mount_point?");
 	}
 }
