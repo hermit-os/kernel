@@ -13,7 +13,6 @@ use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
 use x86::cpuid::*;
 use x86::msr::*;
-use x86_64::VirtAddr;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
@@ -22,6 +21,7 @@ use x86_64::registers::model_specific::{FsBase, GsBase};
 use x86_64::registers::segmentation::{FS, GS, Segment64};
 use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
+use x86_64::{VirtAddr, instructions};
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
@@ -1024,9 +1024,7 @@ pub fn supports_fsgs() -> bool {
 
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
-	unsafe {
-		x86::halt();
-	}
+	instructions::hlt();
 }
 
 /// Causes a triple fault.
