@@ -641,6 +641,7 @@ dependencies = [
  "pci-ids",
  "pci_types",
  "rand_chacha",
+ "raw-cpuid 10.7.0",
  "riscv",
  "sbi-rt",
  "semihosting",

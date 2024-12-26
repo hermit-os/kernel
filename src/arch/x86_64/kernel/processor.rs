@@ -11,7 +11,7 @@ use core::{fmt, ptr};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
-use x86::cpuid::*;
+use raw_cpuid::*;
 use x86::msr::*;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
