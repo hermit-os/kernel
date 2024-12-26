@@ -16,7 +16,7 @@ use x86::msr::*;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
-use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags, Efer, EferFlags};
 use x86_64::registers::model_specific::{FsBase, GsBase};
 use x86_64::registers::segmentation::{FS, GS, Segment64};
 use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
@@ -31,16 +31,6 @@ use crate::env;
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
-
-// MSR EFER bits
-const EFER_SCE: u64 = 1 << 0;
-const EFER_LME: u64 = 1 << 8;
-const EFER_LMA: u64 = 1 << 10;
-const EFER_NXE: u64 = 1 << 11;
-const EFER_SVME: u64 = 1 << 12;
-const EFER_LMSLE: u64 = 1 << 13;
-const EFER_FFXSR: u64 = 1 << 14;
-const EFER_TCE: u64 = 1 << 15;
 
 // See Intel SDM - Volume 1 - Section 7.3.17.1
 const RDRAND_RETRY_LIMIT: usize = 10;
@@ -790,7 +780,13 @@ pub fn configure() {
 
 	// setup MSR EFER
 	unsafe {
-		wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_LMA | EFER_SCE | EFER_NXE);
+		Efer::update(|flags| {
+			flags.insert(
+				EferFlags::SYSTEM_CALL_EXTENSIONS
+					| EferFlags::LONG_MODE_ACTIVE
+					| EferFlags::NO_EXECUTE_ENABLE,
+			);
+		});
 	}
 
 	//
