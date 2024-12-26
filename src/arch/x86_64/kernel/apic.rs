@@ -15,7 +15,6 @@ use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
 use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
-use x86::msr::*;
 #[cfg(feature = "smp")]
 use x86_64::registers::control::Cr3;
 use x86_64::registers::model_specific::Msr;
@@ -38,6 +37,48 @@ const IA32_APIC_BASE: Msr = Msr::new(0x1b);
 
 /// TSC Target of Local APIC s TSC Deadline Mode (R/W)  See Table 35-2
 const IA32_TSC_DEADLINE: Msr = Msr::new(0x6e0);
+
+/// x2APIC Task Priority register (R/W)
+const IA32_X2APIC_TPR: u32 = 0x808;
+
+/// x2APIC End of Interrupt. If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_EOI: u32 = 0x80b;
+
+/// x2APIC Spurious Interrupt Vector register (R/W)
+const IA32_X2APIC_SIVR: u32 = 0x80f;
+
+/// Error Status Register. If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_ESR: u32 = 0x828;
+
+/// x2APIC Interrupt Command register (R/W)
+const IA32_X2APIC_ICR: u32 = 0x830;
+
+/// x2APIC LVT Timer Interrupt register (R/W)
+const IA32_X2APIC_LVT_TIMER: u32 = 0x832;
+
+/// x2APIC LVT Thermal Sensor Interrupt register (R/W)
+const IA32_X2APIC_LVT_THERMAL: u32 = 0x833;
+
+/// x2APIC LVT Performance Monitor register (R/W)
+const IA32_X2APIC_LVT_PMI: u32 = 0x834;
+
+/// If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_LVT_LINT0: u32 = 0x835;
+
+/// If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_LVT_LINT1: u32 = 0x836;
+
+/// If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_LVT_ERROR: u32 = 0x837;
+
+/// x2APIC Initial Count register (R/W)
+const IA32_X2APIC_INIT_COUNT: u32 = 0x838;
+
+/// x2APIC Current Count register (R/O)
+const IA32_X2APIC_CUR_COUNT: u32 = 0x839;
+
+/// x2APIC Divide Configuration register (R/W)
+const IA32_X2APIC_DIV_CONF: u32 = 0x83e;
 
 const MP_FLT_SIGNATURE: u32 = 0x5f50_4d5f;
 const MP_CONFIG_SIGNATURE: u32 = 0x504d_4350;
