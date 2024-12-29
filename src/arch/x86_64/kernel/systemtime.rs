@@ -3,13 +3,13 @@ use core::hint::spin_loop;
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::{OnceCell, without_interrupts};
 use time::OffsetDateTime;
-use x86::io::*;
+use x86_64::instructions::port::Port;
 
 use crate::arch::x86_64::kernel::processor;
 use crate::env;
 
-const CMOS_COMMAND_PORT: u16 = 0x70;
-const CMOS_DATA_PORT: u16 = 0x71;
+const CMOS_COMMAND: Port<u8> = Port::new(0x70);
+const CMOS_DATA: Port<u8> = Port::new(0x71);
 
 const CMOS_DISABLE_NMI: u8 = 1 << 7;
 
@@ -81,9 +81,11 @@ impl Rtc {
 	}
 
 	fn read_cmos_register(register: u8) -> u8 {
+		let mut cmos_command = CMOS_COMMAND;
+		let mut cmos_data = CMOS_DATA;
 		unsafe {
-			outb(CMOS_COMMAND_PORT, CMOS_DISABLE_NMI | register);
-			inb(CMOS_DATA_PORT)
+			cmos_command.write(CMOS_DISABLE_NMI | register);
+			cmos_data.read()
 		}
 	}
 
