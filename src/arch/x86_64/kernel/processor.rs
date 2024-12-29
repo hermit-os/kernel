@@ -891,8 +891,10 @@ pub fn configure() {
 	// enable support of syscall and sysret
 	#[cfg(feature = "common-os")]
 	{
+		use x86_64::PrivilegeLevel;
 		use x86_64::registers::model_specific::{LStar, SFMask, Star};
 		use x86_64::registers::rflags::RFlags;
+		use x86_64::structures::gdt::SegmentSelector;
 
 		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
 			Some(finfo) => finfo.has_syscall_sysret(),
@@ -904,9 +906,11 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
-		unsafe {
-			Star::write_raw(0x1b, 0x08);
-		}
+		let cs_sysret = SegmentSelector::new(5, PrivilegeLevel::Ring3);
+		let ss_sysret = SegmentSelector::new(4, PrivilegeLevel::Ring3);
+		let cs_syscall = SegmentSelector::new(1, PrivilegeLevel::Ring0);
+		let ss_syscall = SegmentSelector::new(2, PrivilegeLevel::Ring0);
+		Star::write(cs_sysret, ss_sysret, cs_syscall, ss_syscall).unwrap();
 		let syscall_handler_addr = crate::arch::x86_64::kernel::syscall::syscall_handler as usize;
 		let syscall_handler_addr = VirtAddr::new(syscall_handler_addr.try_into().unwrap());
 		LStar::write(syscall_handler_addr);
