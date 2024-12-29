@@ -892,6 +892,7 @@ pub fn configure() {
 	#[cfg(feature = "common-os")]
 	{
 		use x86_64::registers::model_specific::{LStar, SFMask, Star};
+		use x86_64::registers::rflags::RFlags;
 
 		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
 			Some(finfo) => finfo.has_syscall_sysret(),
@@ -903,18 +904,13 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
-		let mut star = Star::MSR;
-		let mut l_star = LStar::MSR;
-		let mut s_f_mask = SFMask::MSR;
 		unsafe {
-			star.write((0x1bu64 << 48) | (0x08u64 << 32));
-			l_star.write(
-				(crate::arch::x86_64::kernel::syscall::syscall_handler as usize)
-					.try_into()
-					.unwrap(),
-			);
-			s_f_mask.write(1 << 9); // clear IF flag during system call
+			Star::write_raw(0x1b, 0x08);
 		}
+		let syscall_handler_addr = crate::arch::x86_64::kernel::syscall::syscall_handler as usize;
+		let syscall_handler_addr = VirtAddr::new(syscall_handler_addr.try_into().unwrap());
+		LStar::write(syscall_handler_addr);
+		SFMask::write(RFlags::INTERRUPT_FLAG); // clear IF flag during system call
 	}
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.
