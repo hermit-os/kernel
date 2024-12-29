@@ -12,12 +12,11 @@ use core::{fmt, ptr};
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
 use raw_cpuid::*;
-use x86::msr::*;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags, Efer, EferFlags};
-use x86_64::registers::model_specific::{FsBase, GsBase};
+use x86_64::registers::model_specific::{FsBase, GsBase, Msr};
 use x86_64::registers::segmentation::{FS, GS, Segment64};
 use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
@@ -28,9 +27,23 @@ use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{interrupts, pic, pit};
 use crate::env;
 
+/// see <http://biosbits.org>.
+const MSR_PLATFORM_INFO: u32 = 0xce;
+
+/// See Table 35-2. See Section 14.1, Enhanced Intel  Speedstep® Technology.
+const IA32_PERF_CTL: u32 = 0x199;
+
+const IA32_MISC_ENABLE: u32 = 0x1a0;
+
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
+
+/// Maximum Ratio Limit of Turbo Mode RO if MSR_PLATFORM_INFO.\[28\] = 0, RW if MSR_PLATFORM_INFO.\[28\] = 1
+const MSR_TURBO_RATIO_LIMIT: u32 = 0x1ad;
+
+/// if CPUID.6H:ECX\[3\] = 1
+const IA32_ENERGY_PERF_BIAS: u32 = 0x1b0;
 
 // See Intel SDM - Volume 1 - Section 7.3.17.1
 const RDRAND_RETRY_LIMIT: usize = 10;
@@ -701,16 +714,16 @@ impl CpuSpeedStep {
 			return;
 		}
 
-		let misc = unsafe { rdmsr(IA32_MISC_ENABLE) };
+		let misc = unsafe { Msr::new(IA32_MISC_ENABLE).read() };
 		self.eist_enabled = (misc & IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP) > 0;
 		self.eist_locked = (misc & IA32_MISC_ENABLE_SPEEDSTEP_LOCK) > 0;
 		if !self.eist_enabled || self.eist_locked {
 			return;
 		}
 
-		self.max_pstate = (unsafe { rdmsr(MSR_PLATFORM_INFO) } >> 8) as u8;
+		self.max_pstate = (unsafe { Msr::new(MSR_PLATFORM_INFO).read() } >> 8) as u8;
 		if (misc & IA32_MISC_ENABLE_TURBO_DISABLE) == 0 {
-			let turbo_pstate = unsafe { rdmsr(MSR_TURBO_RATIO_LIMIT) } as u8;
+			let turbo_pstate = unsafe { Msr::new(MSR_TURBO_RATIO_LIMIT).read() } as u8;
 			if turbo_pstate > self.max_pstate {
 				self.max_pstate = turbo_pstate;
 				self.is_turbo_pstate = true;
@@ -729,7 +742,7 @@ impl CpuSpeedStep {
 
 		if self.energy_bias_preference {
 			unsafe {
-				wrmsr(IA32_ENERGY_PERF_BIAS, 0);
+				Msr::new(IA32_ENERGY_PERF_BIAS).write(0);
 			}
 		}
 
@@ -739,7 +752,7 @@ impl CpuSpeedStep {
 		}
 
 		unsafe {
-			wrmsr(IA32_PERF_CTL, perf_ctl_mask);
+			Msr::new(IA32_PERF_CTL).write(perf_ctl_mask);
 		}
 	}
 }
@@ -878,6 +891,8 @@ pub fn configure() {
 	// enable support of syscall and sysret
 	#[cfg(feature = "common-os")]
 	{
+		use x86_64::registers::model_specific::{LStar, SFMask, Star};
+
 		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
 			Some(finfo) => finfo.has_syscall_sysret(),
 			None => false,
@@ -888,15 +903,17 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
+		let mut star = Star::MSR;
+		let mut l_star = LStar::MSR;
+		let mut s_f_mask = SFMask::MSR;
 		unsafe {
-			wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
-			wrmsr(
-				IA32_LSTAR,
+			star.write((0x1bu64 << 48) | (0x08u64 << 32));
+			l_star.write(
 				(crate::arch::x86_64::kernel::syscall::syscall_handler as usize)
 					.try_into()
 					.unwrap(),
 			);
-			wrmsr(IA32_FMASK, 1 << 9); // clear IF flag during system call
+			s_f_mask.write(1 << 9); // clear IF flag during system call
 		}
 	}
 
