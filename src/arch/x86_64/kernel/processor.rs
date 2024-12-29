@@ -877,7 +877,7 @@ pub fn configure() {
 
 	// enable support of syscall and sysret
 	#[cfg(feature = "common-os")]
-	unsafe {
+	{
 		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
 			Some(finfo) => finfo.has_syscall_sysret(),
 			None => false,
@@ -888,14 +888,16 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
-		wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
-		wrmsr(
-			IA32_LSTAR,
-			(crate::arch::x86_64::kernel::syscall::syscall_handler as usize)
-				.try_into()
-				.unwrap(),
-		);
-		wrmsr(IA32_FMASK, 1 << 9); // clear IF flag during system call
+		unsafe {
+			wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
+			wrmsr(
+				IA32_LSTAR,
+				(crate::arch::x86_64::kernel::syscall::syscall_handler as usize)
+					.try_into()
+					.unwrap(),
+			);
+			wrmsr(IA32_FMASK, 1 << 9); // clear IF flag during system call
+		}
 	}
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.
