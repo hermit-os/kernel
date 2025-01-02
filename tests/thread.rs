@@ -55,14 +55,14 @@ unsafe extern "C" fn waker_func(futex: usize) {
 	sys_usleep(100_000);
 
 	futex.store(1, Relaxed);
-	let ret = unsafe { sys_futex_wake(futex as *const AtomicU32 as *mut u32, i32::MAX) };
+	let ret = unsafe { sys_futex_wake(futex.as_ptr(), i32::MAX) };
 	assert_eq!(ret, 1);
 }
 
 #[test_case]
 pub fn test_futex() {
 	let futex = AtomicU32::new(0);
-	let futex_ptr = &futex as *const AtomicU32 as *mut u32;
+	let futex_ptr = futex.as_ptr();
 
 	let ret = unsafe { sys_futex_wait(futex_ptr, 1, ptr::null(), 0) };
 	assert_eq!(ret, -EAGAIN);
