@@ -16,42 +16,38 @@ impl Clippy {
 			arch.install()?;
 
 			let triple = arch.triple();
-			cmd!(sh, "cargo clippy --target={triple}").run()?;
-			cmd!(sh, "cargo clippy --target={triple} --features common-os").run()?;
-			cmd!(sh, "cargo clippy --target={triple}")
+			let clippy = || cmd!(sh, "cargo clippy --target={triple}");
+
+			clippy().run()?;
+			clippy().arg("--features=common-os").run()?;
+			clippy()
 				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga")
 				.run()?;
-			cmd!(sh, "cargo clippy --target={triple}")
-				.arg("--no-default-features")
-				.run()?;
-			cmd!(sh, "cargo clippy --target={triple}")
-				.arg("--all-features")
-				.run()?;
-			cmd!(sh, "cargo clippy --target={triple}")
+			clippy().arg("--no-default-features").run()?;
+			clippy().arg("--all-features").run()?;
+			clippy()
 				.arg("--no-default-features")
 				.arg("--features=tcp")
 				.run()?;
-			cmd!(sh, "cargo clippy --target={triple}")
+			clippy()
 				.arg("--no-default-features")
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 
 			match *arch {
 				Arch::X86_64 => {
-					cmd!(sh, "cargo clippy --target={triple}")
-						.arg("--features=shell")
-						.run()?;
+					clippy().arg("--features=shell").run()?;
 				}
 				Arch::Aarch64 => {}
 				Arch::Riscv64 => {
-					cmd!(sh, "cargo clippy --target={triple}")
+					clippy()
 						.arg("--no-default-features")
 						.arg("--features=gem-net,tcp")
 						.run()?;
 				}
 			}
 
-			cmd!(sh, "cargo clippy --target={triple}")
+			clippy()
 				.arg("--no-default-features")
 				.arg("--features=acpi,fsgsbase,newlib,smp,vga")
 				.run()?;
