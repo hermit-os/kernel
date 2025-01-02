@@ -123,7 +123,7 @@ class QemuTestRunner(TestRunner):
         if rc == 1:
             print("Test failed due to QEMU error. Is QEMU installed?", file=sys.stderr)
             return False
-        elif rc != 33:
+        elif rc != 3:
             # Since we are using asserts, tests should mostly fail due to a panic
             # However, other kinds of test errors using the debug_exit of qemu are also possible
             print("Test failed due to error returncode: {}".format(rc), file=sys.stderr)

@@ -1,31 +1,17 @@
 #![feature(test)]
-#![feature(bench_black_box)]
 #![no_std]
 #![no_main]
 #![test_runner(common::test_case_runner)]
 #![feature(custom_test_frameworks)]
 #![reexport_test_harness_main = "test_main"]
 
-/// Regarding `#[test]` and `#[test_case]` this comment explains the current implementation
-/// https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
-/// This is of course subject to change, since the whole feature is not stable
-///
-//extern crate hermit;
-//extern crate x86_64;
 #[macro_use]
 extern crate float_cmp;
 
-//use common::*;
 use core::hint::black_box;
 
 use common::exit;
 
-// Either use black_box from core::hint or the value_fence definition
-// core hint is a nop, but possibly only prevents dead code elimination
-// value_fence has higher overhead but should be a bit safer regarding preventing optimizations
-// pub fn black_box<T>(x: T) -> T {
-// 	common::value_fence::<T>(x)
-// }
 mod common;
 
 #[test_case]
@@ -123,19 +109,19 @@ fn test_f64_arithmetic() {
 	let z = x * y;
 	assert!(approx_eq!(f64, z, 5810.8196f64, ulps = 1));
 	let z = z * y;
-	assert!(approx_eq!(f64, z, 517877.6752108f64, ulps = 1));
+	assert!(approx_eq!(f64, z, 517_877.675_210_8f64, ulps = 1));
 	let z = z * y;
-	assert!(approx_eq!(f64, z, 46_154_812.047_812_13_f64, ulps = 2));
+	assert!(approx_eq!(f64, z, 46_154_812.047_812_13f64, ulps = 2));
 	let z = z * y;
-	assert!(approx_eq!(f64, z, 4_113_455_314.137_160_3_f64, ulps = 3));
+	assert!(approx_eq!(f64, z, 4_113_455_314.137_160_3f64, ulps = 3));
 
 	let z = black_box(z) / y;
-	assert!(approx_eq!(f64, z, 46_154_812.047_812_13_f64, ulps = 2));
-	assert!(!approx_eq!(f64, z, 46_154_812.047_812_13_f64, ulps = 1)); // If we haven't lost any precision, the something is fishy
+	assert!(approx_eq!(f64, z, 46_154_812.047_812_13f64, ulps = 2));
+	assert!(!approx_eq!(f64, z, 46_154_812.047_812_13f64, ulps = 1)); // If we haven't lost any precision, the something is fishy
 
 	let z = black_box(z) / y;
-	assert!(approx_eq!(f64, z, 517877.6752108f64, ulps = 2));
-	assert!(!approx_eq!(f64, z, 517877.6752108f64, ulps = 1));
+	assert!(approx_eq!(f64, z, 517_877.675_210_8f64, ulps = 2));
+	assert!(!approx_eq!(f64, z, 517_877.675_210_8f64, ulps = 1));
 
 	// Division
 	let x = black_box::<f64>(4.0);

@@ -7,11 +7,10 @@
 
 extern crate alloc;
 
+mod common;
+
 use alloc::vec::Vec;
 use core::mem::size_of;
-
-//no-std otherwise std::mem::size_of
-mod common;
 
 const PATTERN: u8 = 0xab;
 
@@ -48,7 +47,7 @@ where
 			if T::from(vec_size).is_none() {
 				tmax.to_u64().unwrap() // If vec_size can't be represented in T, then tmax must fit in u64
 			} else {
-				(vec_size - 1) as u64
+				u64::from(vec_size - 1)
 			}
 		};
 		// ToDo - This loop should be rewritten in a nicer way
@@ -66,22 +65,22 @@ where
 
 	let mut b: Vec<T> =
 		Vec::with_capacity((vec_size + pre_dest_vec_size + post_dest_vec_size) as usize);
-	// Manually set length, since we will be manually filling the vector
-	unsafe {
-		b.set_len((vec_size + pre_dest_vec_size + post_dest_vec_size) as usize);
-	}
 	// Fill pre and post section with `pattern`
 	for i in 0..pre_dest_vec_size {
-		b[i as usize] = pattern;
+		b.spare_capacity_mut()[i as usize].write(pattern);
 	}
 	for i in 0..post_dest_vec_size {
-		b[(pre_dest_vec_size + vec_size + i) as usize] = pattern;
+		b.spare_capacity_mut()[(pre_dest_vec_size + vec_size + i) as usize].write(pattern);
+	}
+	// Manually set length, since we manually filled the vector
+	unsafe {
+		b.set_len((vec_size + pre_dest_vec_size + post_dest_vec_size) as usize);
 	}
 	// Copy the actual vector
 	unsafe {
 		memcpy(
-			b.as_mut_ptr().offset(pre_dest_vec_size as isize) as *mut u8,
-			a.as_ptr() as *const u8,
+			b.as_mut_ptr().add(pre_dest_vec_size as usize).cast::<u8>(),
+			a.as_ptr().cast::<u8>(),
 			((size_of::<T>() as u32) * vec_size) as usize,
 		);
 	}
@@ -111,19 +110,21 @@ where
 	unsafe {
 		assert_eq!(
 			memcmp(
-				b.as_ptr().offset(pre_dest_vec_size as isize) as *const u8,
-				a.as_ptr() as *const u8,
-				(size_of::<T>() as usize) * vec_size as usize,
+				b.as_ptr().add(pre_dest_vec_size as usize).cast::<u8>(),
+				a.as_ptr().cast::<u8>(),
+				size_of::<T>() * vec_size as usize,
 			),
 			0
 		);
 		// pattern is larger, a[0] is 0
-		assert!(memcmp(b.as_ptr() as *const u8, a.as_ptr() as *const u8, 1) > 0);
-		assert!(memcmp(a.as_ptr() as *const u8, b.as_ptr() as *const u8, 1) < 0);
+		assert!(memcmp(b.as_ptr().cast::<u8>(), a.as_ptr().cast::<u8>(), 1) > 0);
+		assert!(memcmp(a.as_ptr().cast::<u8>(), b.as_ptr().cast::<u8>(), 1) < 0);
 		assert!(
 			memcmp(
-				b.as_ptr().offset((vec_size + pre_dest_vec_size) as isize) as *const u8,
-				a.as_ptr() as *const u8,
+				b.as_ptr()
+					.add((vec_size + pre_dest_vec_size) as usize)
+					.cast::<u8>(),
+				a.as_ptr().cast::<u8>(),
 				1,
 			) > 0
 		);
