@@ -6,13 +6,15 @@
 #![feature(custom_test_frameworks)]
 #![reexport_test_harness_main = "test_main"]
 
+extern crate alloc;
+
+#[macro_use]
 extern crate hermit;
 
 use core::ptr;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering::Relaxed;
 
-use common::*;
 mod common;
 
 use alloc::vec;

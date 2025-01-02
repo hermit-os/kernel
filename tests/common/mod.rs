@@ -1,12 +1,12 @@
 /// Common functionality for all integration tests
 /// Note: If you encounter `error[E0463]: can't find crate for 'test'`, rememmber to add
 /// `harness = false` to the [[test]] section of cargo.toml
-pub extern crate alloc;
+extern crate alloc;
 
-pub use alloc::string::String;
-pub use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::vec::Vec;
 
-pub use hermit::{print, println};
+use hermit::{print, println};
 
 //use std::borrow::Cow;
 //use std::fmt;
@@ -269,8 +269,8 @@ macro_rules! runtime_entry_with_args {
 
 			let res = main(str_vec);
 			match res {
-				Ok(_) => exit(false),
-				Err(_) => exit(true),
+				Ok(_) => common::exit(false),
+				Err(_) => common::exit(true),
 			}
 		}
 	};

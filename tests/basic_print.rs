@@ -6,10 +6,16 @@
 //#![reexport_test_harness_main = "test_main"]
 
 //use core::panic::PanicInfo;
+
+extern crate alloc;
+
+#[macro_use]
 extern crate hermit;
 
-use common::*;
 mod common;
+
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// Print all Strings the application got passed as arguments
 #[no_mangle]

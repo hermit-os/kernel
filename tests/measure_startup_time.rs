@@ -1,11 +1,15 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
+#[macro_use]
 extern crate hermit;
 
-use common::*;
-
 mod common;
+
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// This Test lets the runner measure the basic overhead of the tests including
 /// - hypervisor startup time
