@@ -1,11 +1,6 @@
 /// Common functionality for all integration tests
 /// Note: If you encounter `error[E0463]: can't find crate for 'test'`, rememmber to add
 /// `harness = false` to the [[test]] section of cargo.toml
-extern crate alloc;
-
-use alloc::string::String;
-use alloc::vec::Vec;
-
 use hermit::{print, println};
 
 //use std::borrow::Cow;
@@ -226,35 +221,42 @@ pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
 	hermit::syscalls::sys_exit(0) //sys_exit exitcode on qemu gets silently dropped
 }
 
-// ToDo: Maybe we could add a hard limit on the length of `s` to make this slightly safer?
-pub unsafe fn parse_str(s: *const u8) -> Result<String, ()> {
-	let mut vec: Vec<u8> = Vec::new();
-	let mut off = s;
-	while *off != 0 {
-		vec.push(*off);
-		off = off.offset(1);
-	}
-	let str = String::from_utf8(vec);
-	match str {
-		Ok(s) => Ok(s),
-		Err(_) => Err(()), //Convert error here since we might want to add another error type later
-	}
-}
 /// defines runtime_entry and passes arguments as Rust String to main method with signature:
 /// `fn main(args: Vec<String>) -> Result<(), ()>;`
 #[macro_export]
 macro_rules! runtime_entry_with_args {
 	() => {
+		// ToDo: Maybe we could add a hard limit on the length of `s` to make this slightly safer?
+		unsafe fn parse_str(s: *const u8) -> Result<alloc::string::String, ()> {
+			use alloc::string::String;
+			use alloc::vec::Vec;
+
+			let mut vec: Vec<u8> = Vec::new();
+			let mut off = s;
+			while *off != 0 {
+				vec.push(*off);
+				off = off.offset(1);
+			}
+			let str = String::from_utf8(vec);
+			match str {
+				Ok(s) => Ok(s),
+				Err(_) => Err(()), //Convert error here since we might want to add another error type later
+			}
+		}
+
 		#[no_mangle]
 		extern "C" fn runtime_entry(
 			argc: i32,
 			argv: *const *const u8,
 			_env: *const *const u8,
 		) -> ! {
+			use alloc::string::String;
+			use alloc::vec::Vec;
+
 			let mut str_vec: Vec<String> = Vec::new();
 			let mut off = argv;
 			for i in 0..argc {
-				let s = unsafe { common::parse_str(*off) };
+				let s = unsafe { parse_str(*off) };
 				unsafe {
 					off = off.offset(1);
 				}
