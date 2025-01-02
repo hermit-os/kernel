@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 /// - kernel boot-time
 /// - overhead of runtime_entry (test entry)
 #[no_mangle]
-pub fn main(_args: Vec<String>) -> Result<(), ()> {
+pub fn main(_args: Vec<String>) -> Result<(), String> {
 	Ok(())
 }
 
