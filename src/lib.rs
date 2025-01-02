@@ -50,9 +50,6 @@ use core::hint::spin_loop;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use arch::core_local::*;
-// Used for integration test status.
-#[doc(hidden)]
-pub use env::is_uhyve as _is_uhyve;
 
 pub(crate) use crate::arch::*;
 pub use crate::config::DEFAULT_STACK_SIZE;

@@ -6,13 +6,6 @@ use hermit::{print, println};
 //use std::borrow::Cow;
 //use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
-pub enum QemuExitCode {
-	Success = 0x10,
-	Failed = 0x11,
-}
-
 //From libtest types.rs-----------------------------------------------------
 /*
 /// Type of the test according to the [rust book](https://doc.rust-lang.org/cargo/guide/tests.html)
@@ -195,31 +188,10 @@ pub fn test_case_runner(tests: &[&dyn Testable]) {
 }
 
 pub fn exit(failure: bool) -> ! {
-	// temporarily make this public. FIXME: we could also pass an argument to main indicating uhyve or qemu
-	if hermit::_is_uhyve() {
-		match failure {
-			//ToDo: Add uhyve exit code enum
-			true => hermit::syscalls::sys_exit(1),
-			false => hermit::syscalls::sys_exit(0),
-		}
-	} else {
-		match failure {
-			true => exit_qemu(QemuExitCode::Failed),
-			false => exit_qemu(QemuExitCode::Success),
-		}
+	match failure {
+		true => hermit::syscalls::sys_exit(1),
+		false => hermit::syscalls::sys_exit(0),
 	}
-}
-
-/// Debug exit from qemu with a returncode
-/// '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04' must be passed to qemu for this to work
-pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
-	use x86::io::outl;
-
-	unsafe {
-		outl(0xf4, exit_code as u32);
-	}
-	println!("Warning - Failed to debug exit qemu - exiting via sys_exit()");
-	hermit::syscalls::sys_exit(0) //sys_exit exitcode on qemu gets silently dropped
 }
 
 /// defines runtime_entry and passes arguments as Rust String to main method with signature:
