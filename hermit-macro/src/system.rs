@@ -61,24 +61,27 @@ fn parse_sig(sig: &Signature) -> Result<ParsedSig> {
 fn validate_attrs(attrs: &[Attribute]) -> Result<()> {
 	let mut no_mangle_found = false;
 	for attr in attrs {
-		if !attr.path().is_ident("cfg")
-			&& !attr.path().is_ident("doc")
-			&& !attr.path().is_ident("no_mangle")
-		{
+		if attr.path().is_ident("unsafe") {
+			if let Ok(ident) = attr.parse_args::<Ident>() {
+				if ident == "no_mangle" {
+					no_mangle_found = true;
+					continue;
+				}
+			}
+		}
+
+		if !attr.path().is_ident("cfg") && !attr.path().is_ident("doc") {
 			bail!(
 				attr,
-				"#[system] functions may only have `#[doc]`, `#[no_mangle]` and `#[cfg]` attributes"
+				"#[system] functions may only have `#[doc]`, `#[unsafe(no_mangle)]` and `#[cfg]` attributes"
 			);
-		}
-		if attr.path().is_ident("no_mangle") {
-			no_mangle_found = true;
 		}
 	}
 
 	if !no_mangle_found {
 		bail!(
 			attrs.first(),
-			"#[system] functions must have `#[no_mangle]` attribute"
+			"#[system] functions must have `#[unsafe(no_mangle)]` attribute"
 		);
 	}
 
@@ -174,7 +177,7 @@ mod tests {
 			///
 			/// This is very important.
 			#[cfg(target_os = "none")]
-			#[no_mangle]
+			#[unsafe(no_mangle)]
 			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				let c = i16::from(a) + b;
 				i32::from(c)
@@ -186,7 +189,7 @@ mod tests {
 			///
 			/// This is very important.
 			#[cfg(target_os = "none")]
-			#[no_mangle]
+			#[unsafe(no_mangle)]
 			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
 					#[allow(unreachable_code)]
@@ -222,7 +225,7 @@ mod tests {
 			///
 			/// This is very important.
 			#[cfg(target_os = "none")]
-			#[no_mangle]
+			#[unsafe(no_mangle)]
 			pub unsafe extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				let c = i16::from(a) + b;
 				i32::from(c)
@@ -234,7 +237,7 @@ mod tests {
 			///
 			/// This is very important.
 			#[cfg(target_os = "none")]
-			#[no_mangle]
+			#[unsafe(no_mangle)]
 			pub unsafe extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				unsafe extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
 					#[allow(unreachable_code)]

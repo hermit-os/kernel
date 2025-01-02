@@ -401,7 +401,7 @@ impl TaskFrame for Task {
 	}
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 	core_scheduler().get_last_stack_pointer().as_u64()
 }

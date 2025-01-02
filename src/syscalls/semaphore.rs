@@ -15,7 +15,7 @@ pub type sem_t = *const Semaphore;
 /// Stores the raw memory location of the new semaphore in parameter `sem`.
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32) -> i32 {
 	if sem.is_null() || pshared != 0 {
 		return -EINVAL;
@@ -35,7 +35,7 @@ pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32)
 ///
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
@@ -57,7 +57,7 @@ pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 ///
 /// Returns `0` on success, or `-EINVAL` if `sem` is null.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
@@ -76,7 +76,7 @@ pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if `sem` is null, or `-ECANCELED` if the decrement fails.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_trywait(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
@@ -113,7 +113,7 @@ unsafe fn sem_timedwait(sem: *mut sem_t, ms: u32) -> i32 {
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if sem is null, or `-ETIME` on timeout.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec) -> i32 {
 	if ts.is_null() {
 		unsafe { sem_timedwait(sem, 0) }

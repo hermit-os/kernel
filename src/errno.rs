@@ -405,14 +405,14 @@ pub(crate) static ERRNO: core::cell::UnsafeCell<i32> = core::cell::UnsafeCell::n
 
 /// Get the error number from the thread local storage
 #[cfg(not(feature = "nostd"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sys_get_errno() -> i32 {
 	sys_errno()
 }
 
 /// Get the error number from the thread local storage
 #[cfg(not(feature = "nostd"))]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sys_errno() -> i32 {
 	cfg_if::cfg_if! {
 		if #[cfg(any(feature = "common-os", target_arch = "riscv64"))] {

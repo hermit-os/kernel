@@ -24,7 +24,7 @@ bitflags! {
 /// Creates a new virtual memory mapping of the `size` specified with
 /// protection bits specified in `prot_flags`.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
@@ -53,7 +53,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 
 /// Unmaps memory at the specified `ptr` for `size` bytes.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 	let virtual_address = VirtAddr::from_ptr(ptr);
 	let size = size.align_up(BasePageSize::SIZE as usize);
@@ -76,7 +76,7 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 ///
 /// Returns 0 on success and an error code on failure.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProtection) -> i32 {
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();

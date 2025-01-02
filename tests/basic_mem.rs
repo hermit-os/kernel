@@ -141,7 +141,7 @@ fn test_mem() {
 	mem::<usize>();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	test_main();
 	common::exit(false)

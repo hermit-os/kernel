@@ -341,7 +341,7 @@ impl Drop for TaskTLS {
 	}
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	use crate::scheduler::PerCoreSchedulerExt;
 
@@ -446,7 +446,7 @@ pub fn wakeup_handler() {
 }
 
 #[inline(never)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn set_current_kernel_stack() {
 	core_scheduler().set_current_kernel_stack();
 }

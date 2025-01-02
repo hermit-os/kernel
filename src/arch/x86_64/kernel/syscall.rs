@@ -4,7 +4,7 @@ use core::mem;
 use super::core_local::CoreLocal;
 use crate::syscalls::table::SYSHANDLER_TABLE;
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[naked]
 pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 	unsafe {

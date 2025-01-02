@@ -89,7 +89,7 @@ hermit_entry::define_entry_version!();
 
 #[cfg(test)]
 #[cfg(target_os = "none")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	println!("Executing hermit unittests. Any arguments are dropped");
 	test_main();

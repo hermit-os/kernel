@@ -23,7 +23,7 @@ pub(crate) const TIMER_ABSTIME: i32 = 4;
 /// - `CLOCK_THREAD_CPUTIME_ID`
 /// - `CLOCK_MONOTONIC`
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespec) -> i32 {
 	assert!(
 		!res.is_null(),
@@ -53,7 +53,7 @@ pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespe
 /// - `CLOCK_REALTIME`
 /// - `CLOCK_MONOTONIC`
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespec) -> i32 {
 	assert!(
 		!tp.is_null(),
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespe
 /// - `CLOCK_REALTIME`
 /// - `CLOCK_MONOTONIC`
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_nanosleep(
 	clock_id: clockid_t,
 	flags: i32,
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_settime(_clock_id: clockid_t, _tp: *const timespec) -> i32 {
 	// We don't support setting any clocks yet.
 	debug!("sys_clock_settime is unimplemented, returning -EINVAL");
@@ -142,7 +142,7 @@ pub unsafe extern "C" fn sys_clock_settime(_clock_id: clockid_t, _tp: *const tim
 ///
 /// **Parameter `tz` should be set to `0` since tz is obsolete.**
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
 		// Return the current time based on the wallclock time when we were booted up
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_setitimer(
 	_which: i32,
 	_value: *const itimerval,

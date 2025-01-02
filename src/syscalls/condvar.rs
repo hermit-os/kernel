@@ -24,7 +24,7 @@ impl CondQueue {
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 	unsafe {
 		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
@@ -43,7 +43,7 @@ pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 	unsafe {
 		let id = ptr::with_exposed_provenance::<usize>(ptr);
@@ -81,7 +81,7 @@ pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 	unsafe {
 		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	unsafe {
 		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);
@@ -130,7 +130,7 @@ pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_wait(ptr: usize) -> i32 {
 	unsafe {
 		let id = ptr::with_exposed_provenance_mut::<usize>(ptr);

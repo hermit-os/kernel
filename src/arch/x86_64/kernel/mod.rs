@@ -255,7 +255,7 @@ pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut()
 
 #[cfg(target_os = "none")]
 #[inline(never)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// Enable caching
 	unsafe {

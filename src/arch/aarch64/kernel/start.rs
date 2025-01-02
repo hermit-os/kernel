@@ -11,7 +11,7 @@ extern "C" {
 }
 
 /// Entrypoint - Initialize Stack pointer and Exception Table
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[naked]
 pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// validate signatures
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 }
 
 #[inline(never)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// set exception table
 	unsafe {

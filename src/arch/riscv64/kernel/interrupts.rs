@@ -150,7 +150,7 @@ pub(crate) fn install_handlers() {
 /// Dispatch and handle interrupt.
 ///
 /// This function is called from `trap.S` which is in the trapframe crate.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 	let scause = scause::read();
 	let cause = scause.cause();

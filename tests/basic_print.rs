@@ -12,7 +12,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Print all Strings the application got passed as arguments
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn main(args: Vec<String>) -> Result<(), String> {
 	for s in args {
 		println!("{}", &s);

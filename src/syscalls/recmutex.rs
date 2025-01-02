@@ -4,7 +4,7 @@ use crate::errno::*;
 use crate::synch::recmutex::RecursiveMutex;
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
@@ -20,7 +20,7 @@ pub unsafe extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
@@ -36,7 +36,7 @@ pub unsafe extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> 
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
@@ -49,7 +49,7 @@ pub unsafe extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32
 }
 
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;

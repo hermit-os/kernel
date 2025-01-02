@@ -14,7 +14,7 @@ use crate::{env, KERNEL_STACK_SIZE};
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
 /// Entrypoint - Initialize Stack pointer and Exception Table
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[naked]
 pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {
 	// validate signatures
