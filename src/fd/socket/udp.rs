@@ -52,7 +52,7 @@ impl Socket {
 						Poll::Ready(
 							socket
 								.send_slice(buffer, *meta)
-								.map(|_| buffer.len())
+								.map(|()| buffer.len())
 								.map_err(|_| io::Error::EIO),
 						)
 					} else {

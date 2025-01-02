@@ -2,7 +2,7 @@
 use core::ptr::NonNull;
 
 use fdt::Fdt;
-#[cfg(all(feature = "tcp", feature = "gem-net"))]
+#[cfg(all(feature = "tcp", feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
 use memory_addresses::{AddrRange, PhysAddr};
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
@@ -15,7 +15,7 @@ use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(feature = "tcp", not(feature = "pci")))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging;
-#[cfg(feature = "gem-net")]
+#[cfg(all(feature = "tcp", feature = "gem-net", not(feature = "pci")))]
 use crate::drivers::net::gem;
 #[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
@@ -104,7 +104,7 @@ pub fn init_drivers() {
 			}
 
 			// Init GEM
-			#[cfg(all(feature = "tcp", feature = "gem-net"))]
+			#[cfg(all(feature = "tcp", feature = "gem-net", not(feature = "pci")))]
 			if let Some(gem_node) = fdt.find_compatible(&["sifive,fu540-c000-gem"]) {
 				debug!("Found Ethernet controller");
 

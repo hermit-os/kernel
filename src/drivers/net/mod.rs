@@ -1,8 +1,8 @@
 #[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 pub mod gem;
-#[cfg(feature = "rtl8139")]
+#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 pub mod rtl8139;
-#[cfg(not(feature = "rtl8139"))]
+#[cfg(not(all(target_arch = "x86_64", feature = "rtl8139")))]
 pub mod virtio;
 
 use smoltcp::phy::ChecksumCapabilities;

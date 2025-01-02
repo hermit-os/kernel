@@ -1,6 +1,5 @@
 use alloc::collections::BTreeMap;
 use core::arch::asm;
-use core::ptr;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use ahash::RandomState;
@@ -53,7 +52,7 @@ pub(crate) fn enable_and_wait() {
 
 	#[cfg(not(feature = "idle-poll"))]
 	if crate::processor::supports_mwait() {
-		let addr = ptr::from_ref(core_scheduler().get_priority_bitmap()).cast::<u8>();
+		let addr = core::ptr::from_ref(core_scheduler().get_priority_bitmap()).cast::<u8>();
 
 		unsafe {
 			if crate::processor::supports_clflush() {
