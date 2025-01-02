@@ -23,12 +23,12 @@ use hermit::errno::{EAGAIN, ETIMEDOUT};
 use hermit::syscalls::{sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep};
 use hermit::time::timespec;
 
-const USER_STACK_SIZE: usize = 1_048_576;
+const USER_STACK_SIZE: usize = 0x0010_0000;
 const NORMAL_PRIO: u8 = 2;
 
 extern "C" fn thread_func(i: usize) {
 	println!("this is thread number {}", i);
-	sys_usleep(2000000);
+	sys_usleep(2_000_000);
 	println!("---------------THREAD DONE!---------- {}", i);
 }
 
@@ -102,10 +102,10 @@ pub fn test_thread_local() {
 	static mut BYTE: u8 = 0x42;
 
 	#[thread_local]
-	static mut CAFECAFE: u64 = 0xcafecafe;
+	static mut CAFECAFE: u64 = 0xcafe_cafe;
 
 	#[thread_local]
-	static mut DEADBEEF: u64 = 0xdeadbeef;
+	static mut DEADBEEF: u64 = 0xdead_beef;
 
 	#[thread_local]
 	static mut ALIGNED_BYTE: AlignedByte = AlignedByte(0x53);
@@ -113,8 +113,8 @@ pub fn test_thread_local() {
 	// If the thread local statics are not mut, they get optimized away in release.
 	unsafe {
 		assert_eq!(0x42, { BYTE });
-		assert_eq!(0xcafecafe, { CAFECAFE });
-		assert_eq!(0xdeadbeef, { DEADBEEF });
+		assert_eq!(0xcafe_cafe, { CAFECAFE });
+		assert_eq!(0xdead_beef, { DEADBEEF });
 		assert_eq!(0x53, { ALIGNED_BYTE.0 });
 	}
 }

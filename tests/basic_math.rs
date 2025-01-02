@@ -114,19 +114,19 @@ fn test_f64_arithmetic() {
 	let z = x * y;
 	assert!(approx_eq!(f64, z, 5810.8196f64, ulps = 1));
 	let z = z * y;
-	assert!(approx_eq!(f64, z, 517877.6752108f64, ulps = 1));
+	assert!(approx_eq!(f64, z, 517_877.675_210_8f64, ulps = 1));
 	let z = z * y;
-	assert!(approx_eq!(f64, z, 46_154_812.047_812_13_f64, ulps = 2));
+	assert!(approx_eq!(f64, z, 46_154_812.047_812_13f64, ulps = 2));
 	let z = z * y;
-	assert!(approx_eq!(f64, z, 4_113_455_314.137_160_3_f64, ulps = 3));
+	assert!(approx_eq!(f64, z, 4_113_455_314.137_160_3f64, ulps = 3));
 
 	let z = black_box(z) / y;
-	assert!(approx_eq!(f64, z, 46_154_812.047_812_13_f64, ulps = 2));
-	assert!(!approx_eq!(f64, z, 46_154_812.047_812_13_f64, ulps = 1)); // If we haven't lost any precision, the something is fishy
+	assert!(approx_eq!(f64, z, 46_154_812.047_812_13f64, ulps = 2));
+	assert!(!approx_eq!(f64, z, 46_154_812.047_812_13f64, ulps = 1)); // If we haven't lost any precision, the something is fishy
 
 	let z = black_box(z) / y;
-	assert!(approx_eq!(f64, z, 517877.6752108f64, ulps = 2));
-	assert!(!approx_eq!(f64, z, 517877.6752108f64, ulps = 1));
+	assert!(approx_eq!(f64, z, 517_877.675_210_8f64, ulps = 2));
+	assert!(!approx_eq!(f64, z, 517_877.675_210_8f64, ulps = 1));
 
 	// Division
 	let x = black_box::<f64>(4.0);
