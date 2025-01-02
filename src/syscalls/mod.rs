@@ -683,3 +683,17 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 pub extern "C" fn sys_image_start_addr() -> usize {
 	crate::mm::kernel_start_address().as_usize()
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[cfg(target_os = "none")]
+	#[test_case]
+	fn test_get_application_parameters() {
+		crate::env::init();
+		let (argc, argv, _envp) = get_application_parameters();
+		assert_ne!(argc, 0);
+		assert_ne!(argv, ptr::null());
+	}
+}
