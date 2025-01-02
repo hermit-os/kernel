@@ -104,7 +104,7 @@ fn edit_mask(int_no: u8, insert: bool) {
 		let mask = inb(port);
 
 		if insert {
-			outb(port, mask | 1 << (int_no - offset));
+			outb(port, mask | (1 << (int_no - offset)));
 		} else {
 			outb(port, mask & !(1 << (int_no - offset)));
 		}

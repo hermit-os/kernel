@@ -24,9 +24,9 @@ impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, register: u16) -> u32 {
 		let address = PCI_CONFIG_ADDRESS_ENABLE
-			| u32::from(pci_addr.bus()) << 16
-			| u32::from(pci_addr.device()) << 11
-			| u32::from(pci_addr.function()) << 8
+			| (u32::from(pci_addr.bus()) << 16)
+			| (u32::from(pci_addr.device()) << 11)
+			| (u32::from(pci_addr.function()) << 8)
 			| u32::from(register);
 		unsafe {
 			outl(PCI_CONFIG_ADDRESS_PORT, address);
@@ -37,9 +37,9 @@ impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
 	unsafe fn write(&self, pci_addr: PciAddress, register: u16, value: u32) {
 		let address = PCI_CONFIG_ADDRESS_ENABLE
-			| u32::from(pci_addr.bus()) << 16
-			| u32::from(pci_addr.device()) << 11
-			| u32::from(pci_addr.function()) << 8
+			| (u32::from(pci_addr.bus()) << 16)
+			| (u32::from(pci_addr.device()) << 11)
+			| (u32::from(pci_addr.function()) << 8)
 			| u32::from(register);
 		unsafe {
 			outl(PCI_CONFIG_ADDRESS_PORT, address);

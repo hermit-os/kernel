@@ -102,7 +102,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 				prefetchable,
 			} => {
 				if prefetchable {
-					(address | 1 << 3) as usize
+					(address | (1 << 3)) as usize
 				} else {
 					address as usize
 				}
@@ -113,9 +113,9 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 				prefetchable,
 			} => {
 				if prefetchable {
-					(address | 2 << 1 | 1 << 3) as usize
+					(address | (2 << 1) | (1 << 3)) as usize
 				} else {
-					(address | 2 << 1) as usize
+					(address | (2 << 1)) as usize
 				}
 			}
 		};

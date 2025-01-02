@@ -55,7 +55,7 @@ bitflags! {
 		const DIRTY = 1 << 7;
 
 		/// The RSW field is reserved for use by supervisor
-		const RSW  = 1 << 8 | 1 << 9;
+		const RSW  = (1 << 8) | (1 << 9);
 	}
 }
 
@@ -259,7 +259,7 @@ impl<S: PageSize> Page<S> {
 	/// Returns the index of this page in the table given by L.
 	fn table_index<L: PageTableLevel>(self) -> usize {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
-		self.virtual_address.as_usize() >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS) & PAGE_MAP_MASK
+		(self.virtual_address.as_usize() >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS)) & PAGE_MAP_MASK
 	}
 }
 
@@ -682,12 +682,12 @@ pub fn init_page_tables() {
 		.unwrap(),
 	);
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
-	satp::write(0x8 << 60 | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
+	satp::write((0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
 }
 
 #[cfg(feature = "smp")]
 pub fn init_application_processor() {
 	trace!("Identity map the physical memory using HugePages");
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
-	satp::write(0x8 << 60 | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
+	satp::write((0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
 }

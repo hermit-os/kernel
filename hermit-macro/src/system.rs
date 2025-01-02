@@ -107,6 +107,7 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 			_ => unreachable!(),
 		})
 		.collect::<Vec<_>>();
+	#[allow(clippy::literal_string_with_formatting_args)]
 	let input_format = input_idents
 		.iter()
 		.map(|ident| format!("{ident} = {{:?}}"))
