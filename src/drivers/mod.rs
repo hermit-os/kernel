@@ -32,9 +32,9 @@ pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
 pub mod error {
 	use core::fmt;
 
-	#[cfg(feature = "gem-net")]
+	#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 	use crate::drivers::net::gem::GEMError;
-	#[cfg(feature = "rtl8139")]
+	#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	#[cfg(any(
 		all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
@@ -51,9 +51,9 @@ pub mod error {
 			feature = "vsock"
 		))]
 		InitVirtioDevFail(VirtioError),
-		#[cfg(feature = "rtl8139")]
+		#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 		InitRTL8139DevFail(RTL8139Error),
-		#[cfg(feature = "gem-net")]
+		#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 		InitGEMDevFail(GEMError),
 	}
 
@@ -68,14 +68,14 @@ pub mod error {
 		}
 	}
 
-	#[cfg(feature = "rtl8139")]
+	#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 	impl From<RTL8139Error> for DriverError {
 		fn from(err: RTL8139Error) -> Self {
 			DriverError::InitRTL8139DevFail(err)
 		}
 	}
 
-	#[cfg(feature = "gem-net")]
+	#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 	impl From<GEMError> for DriverError {
 		fn from(err: GEMError) -> Self {
 			DriverError::InitGEMDevFail(err)
@@ -94,11 +94,11 @@ pub mod error {
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {err:?}")
 				}
-				#[cfg(feature = "rtl8139")]
+				#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 				DriverError::InitRTL8139DevFail(ref err) => {
 					write!(f, "RTL8139 driver failed: {err:?}")
 				}
-				#[cfg(feature = "gem-net")]
+				#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 				DriverError::InitGEMDevFail(ref err) => {
 					write!(f, "GEM driver failed: {err:?}")
 				}

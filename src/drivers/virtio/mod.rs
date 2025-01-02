@@ -10,7 +10,10 @@ pub mod error {
 
 	#[cfg(feature = "fuse")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
-	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
+	#[cfg(all(
+		not(all(target_arch = "x86_64", feature = "rtl8139")),
+		any(feature = "tcp", feature = "udp")
+	))]
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
@@ -29,7 +32,10 @@ pub mod error {
 		#[cfg(feature = "pci")]
 		NoNotifCfg(u16),
 		DevNotSupported(u16),
-		#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
+		#[cfg(all(
+			not(all(target_arch = "x86_64", feature = "rtl8139")),
+			any(feature = "tcp", feature = "udp")
+		))]
 		NetDriver(VirtioNetError),
 		#[cfg(feature = "fuse")]
 		FsDriver(VirtioFsError),
@@ -58,7 +64,7 @@ pub mod error {
 				#[cfg(feature = "pci")]
 				VirtioError::NoNotifCfg(id) =>  write!(f, "Virtio driver failed, for device {id:x}, due to a missing or malformed notification config!"),
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {id:#x} not supported."),
-				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
+				#[cfg(all(not(all(target_arch = "x86_64", feature = "rtl8139")), any(feature = "tcp", feature = "udp")))]
                 VirtioError::NetDriver(net_error) => match net_error {
 					#[cfg(feature = "pci")]
 					VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),
