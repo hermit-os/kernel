@@ -561,7 +561,7 @@ pub(crate) fn init() {
 			);
 
 			if let Ok(drv) = rtl8139::init_device(adapter) {
-				register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
+				register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)));
 			}
 		}
 	});

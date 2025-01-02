@@ -431,7 +431,7 @@ pub(crate) fn init_device(
 
 	for i in 0..MAX_BARS {
 		if let Some(Bar::Io { port }) = device.get_bar(i.try_into().unwrap()) {
-			iobase = Some(port)
+			iobase = Some(port);
 		}
 	}
 
