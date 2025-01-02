@@ -1,11 +1,11 @@
 use core::arch::naked_asm;
 
-use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
+use hermit_entry::boot_info::RawBootInfo;
 
+use crate::KERNEL_STACK_SIZE;
 use crate::kernel::pre_init;
 use crate::kernel::scheduler::TaskStacks;
-use crate::KERNEL_STACK_SIZE;
 
 #[unsafe(no_mangle)]
 #[naked]

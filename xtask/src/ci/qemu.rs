@@ -6,7 +6,7 @@ use std::str::from_utf8;
 use std::time::Duration;
 use std::{env, fs, thread};
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use clap::{Args, ValueEnum};
 use sysinfo::{CpuRefreshKind, System};
 use wait_timeout::ChildExt;
@@ -296,7 +296,9 @@ impl Qemu {
 				"-chardev".to_string(),
 				"socket,id=char0,path=./vhostqemu".to_string(),
 				"-device".to_string(),
-				format!("vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"),
+				format!(
+					"vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"
+				),
 				"-object".to_string(),
 				format!("memory-backend-file,id=mem,size={memory}M,mem-path=/dev/shm,share=on"),
 				"-numa".to_string(),
@@ -321,7 +323,10 @@ fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
 
 	sh.create_dir("shared")?;
 
-	let cmd = cmd!(sh, "virtiofsd --socket-path=./vhostqemu --shared-dir ./shared --announce-submounts --sandbox none --seccomp none --inode-file-handles=never");
+	let cmd = cmd!(
+		sh,
+		"virtiofsd --socket-path=./vhostqemu --shared-dir ./shared --announce-submounts --sandbox none --seccomp none --inode-file-handles=never"
+	);
 
 	eprintln!("$ {cmd}");
 

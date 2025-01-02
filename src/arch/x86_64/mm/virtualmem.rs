@@ -2,8 +2,8 @@ use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::VirtAddr;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::{env, mm};
 
 static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =

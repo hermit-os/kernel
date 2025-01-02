@@ -12,8 +12,8 @@ use core::ptr;
 #[cfg(all(target_arch = "x86_64", feature = "smp"))]
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
-use core::task::ready;
 use core::task::Poll::Ready;
+use core::task::ready;
 
 use ahash::RandomState;
 use crossbeam_utils::Backoff;
@@ -149,15 +149,12 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		}
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());
-		GicV3::send_sgi(
-			reschedid,
-			SgiTarget::List {
-				affinity3: 0,
-				affinity2: 0,
-				affinity1: 0,
-				target_list: 0b1,
-			},
-		);
+		GicV3::send_sgi(reschedid, SgiTarget::List {
+			affinity3: 0,
+			affinity2: 0,
+			affinity1: 0,
+			target_list: 0b1,
+		});
 
 		interrupts::enable();
 	}

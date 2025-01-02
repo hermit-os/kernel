@@ -13,7 +13,7 @@ use smoltcp::time::Duration;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
-use crate::{io, DEFAULT_KEEP_ALIVE_INTERVAL};
+use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
 /// further receives will be disallowed
 pub const SHUT_RD: i32 = 0;

@@ -12,10 +12,10 @@ use x86::io::*;
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::pci::PciConfigRegion;
+use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::pci::PciDevice;
-use crate::drivers::Driver;
 use crate::executor::device::{RxToken, TxToken};
 
 /// size of the receive buffer

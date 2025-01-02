@@ -12,7 +12,7 @@ use virtio::{le16, le32, le64};
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
-use crate::executor::vsock::{VsockState, VSOCK_MAP};
+use crate::executor::vsock::{VSOCK_MAP, VsockState};
 use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 

@@ -6,19 +6,21 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 use hermit_sync::InterruptTicketMutex;
+use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::capability::CapabilityIterator;
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
-	InterruptPin, PciAddress, PciHeader, StatusRegister, VendorId, MAX_BARS,
+	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
 };
 
 use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
+#[cfg(any(feature = "tcp", feature = "udp"))]
+use crate::drivers::net::NetworkDriver;
 #[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(
@@ -26,8 +28,6 @@ use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 	any(feature = "tcp", feature = "udp")
 ))]
 use crate::drivers::net::virtio::VirtioNetDriver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::NetworkDriver;
 #[cfg(any(
 	all(
 		any(feature = "tcp", feature = "udp"),
@@ -279,7 +279,10 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 							size,
 							prefetchable,
 						} => {
-							write!(f, ", BAR{slot} Memory64 {{ address: {address:#X}, size: {size:#X}, prefetchable: {prefetchable} }}")?;
+							write!(
+								f,
+								", BAR{slot} Memory64 {{ address: {address:#X}, size: {size:#X}, prefetchable: {prefetchable} }}"
+							)?;
 							slot += 1;
 						}
 						Bar::Memory32 {
@@ -287,7 +290,10 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 							size,
 							prefetchable,
 						} => {
-							write!(f, ", BAR{slot} Memory32 {{ address: {address:#X}, size: {size:#X}, prefetchable: {prefetchable} }}")?;
+							write!(
+								f,
+								", BAR{slot} Memory32 {{ address: {address:#X}, size: {size:#X}, prefetchable: {prefetchable} }}"
+							)?;
 						}
 						Bar::Io { port } => {
 							write!(f, ", BAR{slot} IO {{ port: {port:#X} }}")?;

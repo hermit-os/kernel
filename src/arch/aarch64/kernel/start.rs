@@ -1,10 +1,10 @@
 use core::arch::{asm, naked_asm};
 
-use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
+use hermit_entry::boot_info::RawBootInfo;
 
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
-use crate::{env, KERNEL_STACK_SIZE};
+use crate::{KERNEL_STACK_SIZE, env};
 
 unsafe extern "C" {
 	static vector_table: u8;

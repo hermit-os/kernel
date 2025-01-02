@@ -20,8 +20,8 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::config::*;
 use crate::env;
-use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
 struct State {

@@ -1,7 +1,7 @@
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
 use x86::io::*;
 
-use crate::drivers::pci::{PciDevice, PCI_DEVICES};
+use crate::drivers::pci::{PCI_DEVICES, PciDevice};
 
 const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;

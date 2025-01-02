@@ -3,18 +3,18 @@ use alloc::boxed::Box;
 use core::alloc::Layout;
 use core::sync::atomic::Ordering;
 
+use x86_64::VirtAddr;
 use x86_64::instructions::tables;
-use x86_64::registers::segmentation::{Segment, CS, DS, ES, SS};
+use x86_64::registers::segmentation::{CS, DS, ES, SS, Segment};
 #[cfg(feature = "common-os")]
 use x86_64::structures::gdt::DescriptorFlags;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::tss::TaskStateSegment;
-use x86_64::VirtAddr;
 
+use super::CURRENT_STACK_ADDRESS;
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
-use super::CURRENT_STACK_ADDRESS;
-use crate::arch::x86_64::kernel::core_local::{core_scheduler, CoreLocal};
+use crate::arch::x86_64::kernel::core_local::{CoreLocal, core_scheduler};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::config::KERNEL_STACK_SIZE;
 

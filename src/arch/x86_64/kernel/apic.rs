@@ -13,16 +13,16 @@ use align_address::Align;
 #[cfg(feature = "smp")]
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
-use hermit_sync::{without_interrupts, OnceCell, SpinMutex};
+use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
 
 use super::interrupts::IDT;
+use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
@@ -615,8 +615,8 @@ fn calibrate_timer() {
 		.set(calibrated_counter_value)
 		.unwrap();
 	debug!(
-			"Calibrated APIC Timer with a counter value of {calibrated_counter_value} for 1 microsecond",
-		);
+		"Calibrated APIC Timer with a counter value of {calibrated_counter_value} for 1 microsecond",
+	);
 }
 
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {

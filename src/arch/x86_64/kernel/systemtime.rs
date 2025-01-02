@@ -1,7 +1,7 @@
 use core::hint::spin_loop;
 
 use hermit_entry::boot_info::PlatformInfo;
-use hermit_sync::{without_interrupts, OnceCell};
+use hermit_sync::{OnceCell, without_interrupts};
 use time::OffsetDateTime;
 use x86::io::*;
 

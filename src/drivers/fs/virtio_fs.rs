@@ -4,12 +4,13 @@ use alloc::vec::Vec;
 use core::str;
 
 use pci_types::InterruptLine;
-use virtio::fs::ConfigVolatileFieldAccess;
 use virtio::FeatureBits;
-use volatile::access::ReadOnly;
+use virtio::fs::ConfigVolatileFieldAccess;
 use volatile::VolatileRef;
+use volatile::access::ReadOnly;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::drivers::Driver;
 use crate::drivers::virtio::error::VirtioFsError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -20,7 +21,6 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, Virtq, VqIndex, VqSize,
 };
-use crate::drivers::Driver;
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
 use crate::mm::device_alloc::DeviceAlloc;
 

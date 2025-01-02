@@ -15,11 +15,11 @@ use x86::bits64::segmentation;
 use x86::controlregs::*;
 use x86::cpuid::*;
 use x86::msr::*;
+use x86_64::VirtAddr;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
 use x86_64::structures::DescriptorTablePointer;
-use x86_64::VirtAddr;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;

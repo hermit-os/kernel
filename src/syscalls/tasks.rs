@@ -6,8 +6,8 @@ use crate::arch::core_local::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::*;
-use crate::scheduler::task::{Priority, TaskHandle, TaskId};
 use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::task::{Priority, TaskHandle, TaskId};
 use crate::time::timespec;
 use crate::{arch, scheduler};
 

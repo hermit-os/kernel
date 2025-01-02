@@ -2,14 +2,14 @@ use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 
 use fdt::Fdt;
-use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
+use hermit_entry::boot_info::RawBootInfo;
 
-use super::{get_dtb_ptr, CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
+use super::{CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS, get_dtb_ptr};
+use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
-use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
-use crate::{env, KERNEL_STACK_SIZE};
+use crate::{KERNEL_STACK_SIZE, env};
 
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 

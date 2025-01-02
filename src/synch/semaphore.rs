@@ -3,8 +3,8 @@ use crossbeam_utils::Backoff;
 use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::core_local::*;
-use crate::scheduler::task::TaskHandlePriorityQueue;
 use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::task::TaskHandlePriorityQueue;
 
 struct SemaphoreState {
 	/// Resource available count

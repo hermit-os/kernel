@@ -10,7 +10,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
 use crate::arch::aarch64::mm::{physicalmem, virtualmem};
 use crate::env::is_uhyve;
-use crate::{mm, scheduler, KERNEL_STACK_SIZE};
+use crate::{KERNEL_STACK_SIZE, mm, scheduler};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.
@@ -587,9 +587,7 @@ pub fn map<S: PageSize>(
 ) {
 	trace!(
 		"Mapping virtual address {:p} to physical address {:p} ({} pages)",
-		virtual_address,
-		physical_address,
-		count
+		virtual_address, physical_address, count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
@@ -620,8 +618,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!(
 		"Unmapping virtual address {:p} ({} pages)",
-		virtual_address,
-		count
+		virtual_address, count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);

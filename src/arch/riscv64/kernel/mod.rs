@@ -20,7 +20,7 @@ use fdt::Fdt;
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::sstatus;
 
-use crate::arch::riscv64::kernel::core_local::{core_id, CoreLocal};
+use crate::arch::riscv64::kernel::core_local::{CoreLocal, core_id};
 pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
 use crate::arch::riscv64::kernel::processor::lsb;
 use crate::arch::riscv64::mm::physicalmem;

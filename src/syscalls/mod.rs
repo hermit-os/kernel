@@ -2,7 +2,7 @@
 
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use core::alloc::{GlobalAlloc, Layout};
-use core::ffi::{c_char, CStr};
+use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
 use core::ptr;
 
@@ -21,8 +21,8 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::executor::block_on;
 use crate::fd::{
-	dup_object, get_object, remove_object, AccessPermission, EventFlags, FileDescriptor, IoCtl,
-	OpenOption, PollFd,
+	AccessPermission, EventFlags, FileDescriptor, IoCtl, OpenOption, PollFd, dup_object,
+	get_object, remove_object,
 };
 use crate::fs::{self, FileAttr};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
@@ -101,9 +101,7 @@ pub extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
 
 	trace!(
 		"__sys_alloc: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr,
-		size,
-		align
+		ptr, size, align
 	);
 
 	ptr
@@ -126,9 +124,7 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 
 	trace!(
 		"__sys_alloc_zeroed: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr,
-		size,
-		align
+		ptr, size, align
 	);
 
 	ptr
@@ -151,9 +147,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 
 	trace!(
 		"__sys_malloc: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr,
-		size,
-		align
+		ptr, size, align
 	);
 
 	ptr
@@ -191,9 +185,9 @@ pub unsafe extern "C" fn sys_realloc(
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 || new_size == 0 {
 			warn!(
-			"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
-			ptr, size, align, new_size
-		);
+				"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
+				ptr, size, align, new_size
+			);
 			return core::ptr::null_mut();
 		}
 		let layout = layout_res.unwrap();
@@ -201,14 +195,13 @@ pub unsafe extern "C" fn sys_realloc(
 
 		if new_ptr.is_null() {
 			debug!(
-			"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
-			ptr, size, align, new_size
-		);
+				"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
+				ptr, size, align, new_size
+			);
 		} else {
 			trace!(
 				"__sys_realloc: resized memory at {:p}, new address {:p}",
-				ptr,
-				new_ptr
+				ptr, new_ptr
 			);
 		}
 		new_ptr
@@ -241,8 +234,7 @@ pub unsafe extern "C" fn sys_dealloc(ptr: *mut u8, size: usize, align: usize) {
 		} else {
 			trace!(
 				"sys_free: deallocate memory at {:p} (size {:#x})",
-				ptr,
-				size
+				ptr, size
 			);
 		}
 		let layout = layout_res.unwrap();
@@ -266,8 +258,7 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 		} else {
 			trace!(
 				"sys_free: deallocate memory at {:p} (size {:#x})",
-				ptr,
-				size
+				ptr, size
 			);
 		}
 		let layout = layout_res.unwrap();

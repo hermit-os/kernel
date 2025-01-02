@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use core::future::{self, Future};
 use core::mem;
-use core::task::{ready, Poll, Waker};
+use core::task::{Poll, Waker, ready};
 
 use async_lock::Mutex;
 use async_trait::async_trait;

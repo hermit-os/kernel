@@ -9,10 +9,11 @@ use core::mem;
 use core::mem::MaybeUninit;
 
 use pci_types::InterruptLine;
-use virtio::vsock::Hdr;
 use virtio::FeatureBits;
+use virtio::vsock::Hdr;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::drivers::Driver;
 use crate::drivers::virtio::error::VirtioVsockError;
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
@@ -22,21 +23,17 @@ use crate::drivers::virtio::virtqueue::{
 };
 #[cfg(feature = "pci")]
 use crate::drivers::vsock::pci::VsockDevCfgRaw;
-use crate::drivers::Driver;
 use crate::mm::device_alloc::DeviceAlloc;
 
 fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
-		let buff_tkn = match AvailBufferToken::new(
-			vec![],
-			vec![
-				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-				BufferElem::Vector(Vec::with_capacity_in(
-					packet_size.try_into().unwrap(),
-					DeviceAlloc,
-				)),
-			],
-		) {
+		let buff_tkn = match AvailBufferToken::new(vec![], vec![
+			BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+			BufferElem::Vector(Vec::with_capacity_in(
+				packet_size.try_into().unwrap(),
+				DeviceAlloc,
+			)),
+		]) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
 				error!("Setup of network queue failed, which should not happen!");

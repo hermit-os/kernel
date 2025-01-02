@@ -1,7 +1,7 @@
 //! Architecture dependent interface to initialize a task
 
 #[cfg(not(feature = "common-os"))]
-use alloc::alloc::{alloc_zeroed, Layout};
+use alloc::alloc::{Layout, alloc_zeroed};
 #[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
 use core::arch::naked_asm;
@@ -13,14 +13,14 @@ use core::{mem, ptr};
 use align_address::Align;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
-use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 #[cfg(not(feature = "common-os"))]
 use crate::env;
-use crate::scheduler::task::{Task, TaskFrame};
 #[cfg(target_os = "none")]
 use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
@@ -297,15 +297,15 @@ impl TaskTLS {
 			let raw = ptr::slice_from_raw_parts_mut(data, block_len) as *mut TaskTLS;
 
 			let addr = (*raw).block.as_ptr().add(off).cast::<()>();
-			(*raw).dtv.as_mut_ptr().write(Box::new([
-				Dtv { counter: 1 },
-				Dtv {
+			(*raw)
+				.dtv
+				.as_mut_ptr()
+				.write(Box::new([Dtv { counter: 1 }, Dtv {
 					pointer: DtvPointer {
 						val: addr,
 						to_free: ptr::null(),
 					},
-				},
-			]));
+				}]));
 
 			Box::from_raw(raw)
 		};

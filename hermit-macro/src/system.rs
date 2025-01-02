@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, Span};
 use quote::quote;
-use syn::{parse_quote, Abi, Attribute, FnArg, Item, ItemFn, Pat, Result, Signature, Visibility};
+use syn::{Abi, Attribute, FnArg, Item, ItemFn, Pat, Result, Signature, Visibility, parse_quote};
 
 fn validate_vis(vis: &Visibility) -> Result<()> {
 	if !matches!(vis, Visibility::Public(_)) {

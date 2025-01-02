@@ -264,11 +264,7 @@ fn verify_checksum(start_address: usize, length: usize) -> Result<(), ()> {
 	let checksum = slice.iter().fold(0, |acc: u8, x| acc.wrapping_add(*x));
 
 	// This sum must equal to zero to be valid.
-	if checksum == 0 {
-		Ok(())
-	} else {
-		Err(())
-	}
+	if checksum == 0 { Ok(()) } else { Err(()) }
 }
 
 /// Tries to find the ACPI RSDP within the specified address range.

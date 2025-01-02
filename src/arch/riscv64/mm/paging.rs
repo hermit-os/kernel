@@ -597,9 +597,7 @@ pub fn map<S: PageSize>(
 ) {
 	trace!(
 		"Mapping physical address {:#X} to virtual address {:#X} ({} pages)",
-		physical_address,
-		virtual_address,
-		count
+		physical_address, virtual_address, count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
@@ -631,8 +629,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!(
 		"Unmapping virtual address {:#X} ({} pages)",
-		virtual_address,
-		count
+		virtual_address, count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
@@ -650,8 +647,7 @@ pub fn identity_map<S: PageSize>(memory: AddrRange<PhysAddr>) {
 
 	trace!(
 		"identity_map address {:#X} to address {:#X}",
-		first_page.virtual_address,
-		last_page.virtual_address,
+		first_page.virtual_address, last_page.virtual_address,
 	);
 
 	/* assert!(

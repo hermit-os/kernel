@@ -7,9 +7,9 @@ use hashbrown::HashMap;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) use crate::arch::kernel::mmio::get_network_driver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::NetworkDriver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::Driver;
+#[cfg(any(feature = "tcp", feature = "udp"))]
+use crate::drivers::net::NetworkDriver;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
 pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandlerQueue, RandomState>

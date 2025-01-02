@@ -6,8 +6,8 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::MultibootMemory;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::{env, mm};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
@@ -67,11 +67,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 		}
 	}
 
-	if found_ram {
-		Ok(())
-	} else {
-		Err(())
-	}
+	if found_ram { Ok(()) } else { Err(()) }
 }
 
 fn detect_from_multiboot_info() -> Result<(), ()> {

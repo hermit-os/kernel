@@ -6,14 +6,14 @@ use bit_field::BitField;
 use hermit_dtb::Dtb;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use pci_types::{
-	Bar, CommandRegister, ConfigRegionAccess, InterruptLine, InterruptPin, PciAddress, PciHeader,
-	MAX_BARS,
+	Bar, CommandRegister, ConfigRegionAccess, InterruptLine, InterruptPin, MAX_BARS, PciAddress,
+	PciHeader,
 };
 
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::virtualmem;
-use crate::drivers::pci::{PciDevice, PCI_DEVICES};
+use crate::drivers::pci::{PCI_DEVICES, PciDevice};
 use crate::env;
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -196,9 +196,7 @@ fn detect_interrupt(
 
 		trace!(
 			"Interrupt type {:#x}, number {:#x} flags {:#x}",
-			irq_type,
-			irq_number,
-			irq_flags
+			irq_type, irq_number, irq_flags
 		);
 
 		if high.get_bits(0..24) == addr {
@@ -250,7 +248,10 @@ pub fn init() {
 
 				let pci_address =
 					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x1000_0000).unwrap();
-				info!("Mapping PCI Enhanced Configuration Space interface to virtual address {:p} (size {:#X})", pci_address, size);
+				info!(
+					"Mapping PCI Enhanced Configuration Space interface to virtual address {:p} (size {:#X})",
+					pci_address, size
+				);
 
 				let mut flags = PageTableEntryFlags::empty();
 				flags.device().writable().execute_disable();
@@ -292,12 +293,9 @@ pub fn init() {
 								if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
 									match bar {
 										Bar::Io { .. } => {
-											dev.set_bar(
-												i.try_into().unwrap(),
-												Bar::Io {
-													port: io_start.try_into().unwrap(),
-												},
-											);
+											dev.set_bar(i.try_into().unwrap(), Bar::Io {
+												port: io_start.try_into().unwrap(),
+											});
 											io_start += 0x20;
 											cmd |= CommandRegister::IO_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;
@@ -313,14 +311,11 @@ pub fn init() {
 											size,
 											prefetchable,
 										} => {
-											dev.set_bar(
-												i.try_into().unwrap(),
-												Bar::Memory64 {
-													address: mem64_start,
-													size,
-													prefetchable,
-												},
-											);
+											dev.set_bar(i.try_into().unwrap(), Bar::Memory64 {
+												address: mem64_start,
+												size,
+												prefetchable,
+											});
 											mem64_start += size;
 											cmd |= CommandRegister::MEMORY_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;

@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use crate::errno::*;
 use crate::synch::semaphore::Semaphore;
-use crate::syscalls::{sys_clock_gettime, CLOCK_REALTIME};
+use crate::syscalls::{CLOCK_REALTIME, sys_clock_gettime};
 use crate::time::timespec;
 
 #[allow(non_camel_case_types)]
@@ -100,11 +100,7 @@ unsafe fn sem_timedwait(sem: *mut sem_t, ms: u32) -> i32 {
 
 	// Get a reference to the given semaphore and wait until we have acquired it or the wakeup time has elapsed.
 	let semaphore = unsafe { &**sem };
-	if semaphore.acquire(delay) {
-		0
-	} else {
-		-ETIME
-	}
+	if semaphore.acquire(delay) { 0 } else { -ETIME }
 }
 
 /// Try to acquire a lock on a semaphore.

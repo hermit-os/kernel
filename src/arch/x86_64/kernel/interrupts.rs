@@ -14,13 +14,13 @@ pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 
 use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
-use crate::arch::x86_64::mm::paging::{page_fault_handler, BasePageSize, PageSize};
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, page_fault_handler};
 use crate::arch::x86_64::swapgs;
+use crate::drivers::InterruptHandlerQueue;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_interrupt_handlers;
-use crate::drivers::InterruptHandlerQueue;
 use crate::scheduler::{self, CoreId};
 
 static IRQ_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> = OnceCell::new();

@@ -12,7 +12,7 @@ use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::errno::*;
 #[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::executor::network::{NetworkState, NIC};
+use crate::executor::network::{NIC, NetworkState};
 #[cfg(feature = "tcp")]
 use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
@@ -20,9 +20,9 @@ use crate::fd::socket::udp;
 #[cfg(feature = "vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	get_object, insert_object, Endpoint, ListenEndpoint, ObjectInterface, SocketOption,
+	Endpoint, ListenEndpoint, ObjectInterface, SocketOption, get_object, insert_object,
 };
-use crate::syscalls::{block_on, IoCtl};
+use crate::syscalls::{IoCtl, block_on};
 
 pub const AF_INET: i32 = 0;
 pub const AF_INET6: i32 = 1;
