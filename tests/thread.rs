@@ -110,10 +110,10 @@ pub fn test_thread_local() {
 
 	// If the thread local statics are not mut, they get optimized away in release.
 	unsafe {
-		assert_eq!(0x42, BYTE);
-		assert_eq!(0xcafecafe, CAFECAFE);
-		assert_eq!(0xdeadbeef, DEADBEEF);
-		assert_eq!(0x53, ALIGNED_BYTE.0);
+		assert_eq!(0x42, { BYTE });
+		assert_eq!(0xcafecafe, { CAFECAFE });
+		assert_eq!(0xdeadbeef, { DEADBEEF });
+		assert_eq!(0x53, { ALIGNED_BYTE.0 });
 	}
 }
 
