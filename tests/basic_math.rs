@@ -5,11 +5,6 @@
 #![feature(custom_test_frameworks)]
 #![reexport_test_harness_main = "test_main"]
 
-/// Regarding `#[test]` and `#[test_case]` this comment explains the current implementation
-/// https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
-/// This is of course subject to change, since the whole feature is not stable
-///
-//extern crate x86_64;
 #[macro_use]
 extern crate float_cmp;
 

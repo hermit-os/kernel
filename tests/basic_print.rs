@@ -1,11 +1,5 @@
-#![feature(test)]
 #![no_std]
 #![no_main]
-//#![test_runner(hermit::test_runner)]
-//#![feature(custom_test_frameworks)]
-//#![reexport_test_harness_main = "test_main"]
-
-//use core::panic::PanicInfo;
 
 extern crate alloc;
 

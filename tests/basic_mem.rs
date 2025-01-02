@@ -7,11 +7,10 @@
 
 extern crate alloc;
 
+mod common;
+
 use alloc::vec::Vec;
 use core::mem::size_of;
-
-//no-std otherwise std::mem::size_of
-mod common;
 
 const PATTERN: u8 = 0xab;
 
