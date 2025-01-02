@@ -275,11 +275,3 @@ macro_rules! runtime_entry_with_args {
 		}
 	};
 }
-
-//adapted from: https://rust-lang.github.io/rfcs/2360-bench-black-box.html
-#[inline(always)]
-pub fn value_fence<T>(x: T) -> T {
-	let y = unsafe { (&x as *const T).read_volatile() };
-	//std::hint::forget(x); - doesn't exist (anymore)
-	y
-}

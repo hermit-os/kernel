@@ -19,12 +19,6 @@ use core::hint::black_box;
 
 use common::exit;
 
-// Either use black_box from core::hint or the value_fence definition
-// core hint is a nop, but possibly only prevents dead code elimination
-// value_fence has higher overhead but should be a bit safer regarding preventing optimizations
-// pub fn black_box<T>(x: T) -> T {
-// 	common::value_fence::<T>(x)
-// }
 mod common;
 
 #[test_case]
