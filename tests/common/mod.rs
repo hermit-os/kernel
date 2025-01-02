@@ -233,9 +233,9 @@ macro_rules! runtime_entry_with_args {
 
 			let mut vec: Vec<u8> = Vec::new();
 			let mut off = s;
-			while *off != 0 {
-				vec.push(*off);
-				off = off.offset(1);
+			while unsafe { *off } != 0 {
+				vec.push(unsafe { *off });
+				off = unsafe { off.offset(1) };
 			}
 			let str = String::from_utf8(vec);
 			match str {
