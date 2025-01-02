@@ -49,7 +49,7 @@ bitflags! {
 		const DEVICE_GRE = 1 << 3;
 
 		/// Set if this entry points to normal memory (non-cacheable)
-		const NORMAL_NC = 1 << 3 | 1 << 2;
+		const NORMAL_NC = (1 << 3) | (1 << 2);
 
 		/// Set if this entry points to normal memory (cacheable)
 		const NORMAL = 1 << 4;
@@ -58,7 +58,7 @@ bitflags! {
 		const READ_ONLY = 1 << 7;
 
 		/// Set if this entry shall be shared between all cores of the system.
-		const INNER_SHAREABLE = 1 << 8 | 1 << 9;
+		const INNER_SHAREABLE = (1 << 8) | (1 << 9);
 
 		/// Set if software has accessed this entry (for memory access or address translation).
 		const ACCESSED = 1 << 10;
@@ -272,7 +272,7 @@ impl<S: PageSize> Page<S> {
 	/// Returns the index of this page in the table given by L.
 	fn table_index<L: PageTableLevel>(&self) -> usize {
 		assert!(L::LEVEL <= S::MAP_LEVEL);
-		self.virtual_address.as_usize() >> PAGE_BITS >> ((3 - L::LEVEL) * PAGE_MAP_BITS)
+		(self.virtual_address.as_usize() >> PAGE_BITS >> ((3 - L::LEVEL) * PAGE_MAP_BITS))
 			& PAGE_MAP_MASK
 	}
 }

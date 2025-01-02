@@ -180,7 +180,7 @@ pub fn configure() {
 	unsafe {
 		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
-		let pmuserenr_el0: u64 = 1 << 0 | 1 << 2 | 1 << 3;
+		let pmuserenr_el0: u64 = (1 << 0) | (1 << 2) | (1 << 3);
 		asm!(
 			"msr pmuserenr_el0, {}",
 			in(reg) pmuserenr_el0,
@@ -207,7 +207,7 @@ pub fn configure() {
 			"PMCR_EL0 (has RES1 bits and therefore mustn't be zero): {:#X}",
 			pmcr_el0
 		);
-		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
+		pmcr_el0 |= (1 << 0) | (1 << 2) | (1 << 6);
 		asm!(
 			"msr pmcr_el0, {}",
 			in(reg) pmcr_el0,

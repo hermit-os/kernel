@@ -34,9 +34,9 @@ impl PciConfigRegion {
 	#[inline]
 	fn addr_from_offset(&self, pci_addr: PciAddress, offset: u16) -> usize {
 		assert!(offset & 0xf000 == 0, "Invalid offset");
-		(u64::from(pci_addr.bus()) << 20
-			| u64::from(pci_addr.device()) << 15
-			| u64::from(pci_addr.function()) << 12
+		((u64::from(pci_addr.bus()) << 20)
+			| (u64::from(pci_addr.device()) << 15)
+			| (u64::from(pci_addr.function()) << 12)
 			| (u64::from(offset) & 0xfff)
 			| self.0.as_u64()) as usize
 	}
@@ -127,7 +127,7 @@ fn detect_interrupt(
 	dtb: &Dtb<'_>,
 	parts: &[&str],
 ) -> Option<(InterruptPin, InterruptLine)> {
-	let addr = bus << 16 | dev << 11;
+	let addr = (bus << 16) | (dev << 11);
 	if addr == 0 {
 		// assume PCI bridge => no configuration required
 		return None;
