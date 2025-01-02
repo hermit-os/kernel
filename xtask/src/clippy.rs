@@ -16,7 +16,7 @@ impl Clippy {
 			arch.install()?;
 
 			let triple = arch.triple();
-			let clippy = || cmd!(sh, "cargo clippy --target={triple}");
+			let clippy = || cmd!(sh, "cargo clippy --target={triple} --all-targets");
 
 			clippy().run()?;
 			clippy().arg("--features=common-os").run()?;
