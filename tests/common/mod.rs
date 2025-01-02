@@ -185,6 +185,7 @@ where
 	}
 }
 
+#[allow(dead_code)]
 pub fn test_case_runner(tests: &[&dyn Testable]) {
 	println!("Running {} tests", tests.len());
 	for test in tests {
