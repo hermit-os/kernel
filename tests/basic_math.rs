@@ -1,5 +1,4 @@
 #![feature(test)]
-#![feature(bench_black_box)]
 #![no_std]
 #![no_main]
 #![test_runner(common::test_case_runner)]
