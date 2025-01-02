@@ -10,15 +10,15 @@ use virtio::mmio::{
 	DeviceRegisters, DeviceRegistersVolatileFieldAccess, DeviceRegistersVolatileWideFieldAccess,
 	InterruptStatus, NotificationData,
 };
-use virtio::{le32, DeviceStatus};
+use virtio::{DeviceStatus, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
+use crate::drivers::InterruptLine;
 use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::InterruptLine;
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,

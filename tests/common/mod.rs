@@ -59,7 +59,7 @@ macro_rules! runtime_entry_with_args {
 			}
 		}
 
-		#[no_mangle]
+		#[unsafe(no_mangle)]
 		extern "C" fn runtime_entry(
 			argc: i32,
 			argv: *const *const u8,

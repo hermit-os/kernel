@@ -6,8 +6,8 @@ use core::{ptr, str};
 
 use ahash::RandomState;
 use fdt::Fdt;
-use hashbrown::hash_map::Iter;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 

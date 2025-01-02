@@ -18,8 +18,8 @@ pub mod pci {
 	use pci_types::MAX_BARS;
 
 	use crate::arch::pci::PciConfigRegion;
-	use crate::drivers::pci::error::PciError;
 	use crate::drivers::pci::PciDevice;
+	use crate::drivers::pci::error::PciError;
 	use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
 
 	/// Maps all memory areas indicated by the devices BAR's into

@@ -11,7 +11,7 @@ use virtio::{le16, le32};
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
-use crate::executor::{spawn, WakerRegistration};
+use crate::executor::{WakerRegistration, spawn};
 use crate::io;
 use crate::io::Error::EADDRINUSE;
 

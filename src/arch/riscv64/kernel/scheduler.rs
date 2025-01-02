@@ -1,5 +1,5 @@
 #[cfg(not(feature = "common-os"))]
-use alloc::alloc::{alloc, dealloc, Layout};
+use alloc::alloc::{Layout, alloc, dealloc};
 #[cfg(not(feature = "common-os"))]
 use alloc::boxed::Box;
 #[cfg(not(feature = "common-os"))]
@@ -282,7 +282,7 @@ impl TaskTLS {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
 		let tls_allocation_size = tls_size.align_up(32usize); // + mem::size_of::<usize>();
-														// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
+		// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
 		let memory_size = tls_allocation_size.align_up(128usize);
 		let layout =
 			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
@@ -341,7 +341,7 @@ impl Drop for TaskTLS {
 	}
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	use crate::scheduler::PerCoreSchedulerExt;
 
@@ -420,7 +420,7 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "C" {
+unsafe extern "C" {
 	fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64);
 }
 
@@ -446,7 +446,7 @@ pub fn wakeup_handler() {
 }
 
 #[inline(never)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn set_current_kernel_stack() {
 	core_scheduler().set_current_kernel_stack();
 }

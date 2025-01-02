@@ -7,7 +7,7 @@ use core::task::Waker;
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::{PhysAddr, VirtAddr};
-use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
+use x86::controlregs::{Cr0, cr0, cr0_write, cr4};
 
 use self::serial::SerialPort;
 use crate::arch::x86_64::kernel::core_local::*;
@@ -140,10 +140,10 @@ pub fn get_processor_count() -> u32 {
 }
 
 pub fn is_uhyve_with_pci() -> bool {
-	matches!(
-		env::boot_info().platform_info,
-		PlatformInfo::Uhyve { has_pci: true, .. }
-	)
+	matches!(env::boot_info().platform_info, PlatformInfo::Uhyve {
+		has_pci: true,
+		..
+	})
 }
 
 pub fn args() -> Option<&'static str> {
@@ -255,7 +255,7 @@ pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut()
 
 #[cfg(target_os = "none")]
 #[inline(never)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// Enable caching
 	unsafe {

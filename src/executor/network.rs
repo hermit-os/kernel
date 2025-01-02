@@ -7,6 +7,7 @@ use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{PollResult, SocketHandle, SocketSet};
+use smoltcp::socket::AnySocket;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 #[cfg(feature = "dns")]
@@ -15,7 +16,6 @@ use smoltcp::socket::dns::{self, GetQueryResultError, QueryHandle};
 use smoltcp::socket::tcp;
 #[cfg(feature = "udp")]
 use smoltcp::socket::udp;
-use smoltcp::socket::AnySocket;
 use smoltcp::time::{Duration, Instant};
 #[cfg(feature = "dns")]
 use smoltcp::wire::{DnsQueryType, IpAddress};

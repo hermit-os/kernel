@@ -11,7 +11,7 @@ use crate::time::timespec;
 /// * `timeout` is negative
 /// * `flags` contains unknown flags
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_futex_wait(
 	address: *mut u32,
 	expected: u32,
@@ -44,7 +44,7 @@ pub unsafe extern "C" fn sys_futex_wait(
 /// `address` is used only for its address.
 /// It is safe to pass a dangling pointer.
 #[hermit_macro::system]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_futex_wake(address: *mut u32, count: i32) -> i32 {
 	if address.is_null() {
 		return -EINVAL;

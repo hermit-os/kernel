@@ -10,11 +10,11 @@ use smoltcp::phy::ChecksumCapabilities;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
+use crate::drivers::InterruptLine;
 use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::Virtq;
-use crate::drivers::InterruptLine;
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver {

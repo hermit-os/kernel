@@ -36,7 +36,7 @@ extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 }
 
 #[allow(unused_assignments)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[naked]
 pub(crate) unsafe extern "C" fn sys_invalid() {
 	unsafe {
@@ -80,5 +80,5 @@ impl SyscallTable {
 unsafe impl Send for SyscallTable {}
 unsafe impl Sync for SyscallTable {}
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) static SYSHANDLER_TABLE: SyscallTable = SyscallTable::new();

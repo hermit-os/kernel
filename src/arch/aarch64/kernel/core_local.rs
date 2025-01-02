@@ -8,8 +8,8 @@ use core::sync::atomic::Ordering;
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
 
-use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
+use super::interrupts::{IRQ_COUNTERS, IrqStatistics};
 use crate::executor::task::AsyncTask;
 #[cfg(feature = "smp")]
 use crate::scheduler::SchedulerInput;

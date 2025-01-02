@@ -5,7 +5,7 @@
 macro_rules! export {
     ($(fn $fn:ident($($arg:ident: $argty:ty),+) -> $retty:ty;)+) => {
         $(
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             pub extern "C" fn $fn($($arg: $argty),+) -> $retty {
                 ::libm::$fn($($arg),+)
             }
@@ -133,7 +133,7 @@ export! {
 macro_rules! export_out_param {
     ($(fn $fn:ident($($arg:ident: $argty:ty),+; $out:ident: $outty:ty) -> $retty:ty;)+) => {
         $(
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             pub extern "C" fn $fn($($arg: $argty),+, $out: $outty) -> $retty {
                 let (ret, out) = ::libm::$fn($($arg),+);
                 *$out = out;
@@ -154,12 +154,12 @@ export_out_param! {
     fn remquof(x: f32, y: f32; n: &mut i32) -> f32;
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sincos(x: f64, s: &mut f64, c: &mut f64) {
 	(*s, *c) = libm::sincos(x);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn sincosf(x: f32, s: &mut f32, c: &mut f32) {
 	(*s, *c) = libm::sincosf(x);
 }

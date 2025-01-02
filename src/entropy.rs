@@ -4,8 +4,8 @@
 //! with random data provided by the processor.
 
 use hermit_sync::InterruptTicketMutex;
-use rand_chacha::rand_core::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use rand_chacha::rand_core::{RngCore, SeedableRng};
 
 use crate::arch::kernel::processor::{get_timer_ticks, seed_entropy};
 use crate::errno::ENOSYS;

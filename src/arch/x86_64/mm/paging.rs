@@ -7,17 +7,17 @@ use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 use x86_64::registers::segmentation::SegmentSelector;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
+pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
-pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
 	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
 	Size2MiB, Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, physicalmem};
 use crate::{env, mm, scheduler};
 
 pub trait PageTableEntryFlagsExt {
@@ -266,8 +266,7 @@ where
 {
 	trace!(
 		"Unmapping virtual address {:p} ({} pages)",
-		virtual_address,
-		count
+		virtual_address, count
 	);
 
 	let first_page = Page::<S>::containing_address(virtual_address.into());

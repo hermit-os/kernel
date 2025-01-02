@@ -15,11 +15,11 @@ use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
-use smoltcp::wire::{EthernetFrame, Ipv4Packet, Ipv6Packet, ETHERNET_HEADER_LEN};
+use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
 use virtio::{DeviceConfigSpace, FeatureBits};
-use volatile::access::ReadOnly;
 use volatile::VolatileRef;
+use volatile::access::ReadOnly;
 
 use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
@@ -114,16 +114,13 @@ impl RxQueues {
 
 fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
-		let buff_tkn = match AvailBufferToken::new(
-			vec![],
-			vec![
-				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-				BufferElem::Vector(Vec::with_capacity_in(
-					packet_size.try_into().unwrap(),
-					DeviceAlloc,
-				)),
-			],
-		) {
+		let buff_tkn = match AvailBufferToken::new(vec![], vec![
+			BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+			BufferElem::Vector(Vec::with_capacity_in(
+				packet_size.try_into().unwrap(),
+				DeviceAlloc,
+			)),
+		]) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
 				error!("Setup of network queue failed, which should not happen!");
@@ -523,13 +520,17 @@ impl VirtioNetDriver {
 			Err(vnet_err) => {
 				match vnet_err {
 					VirtioNetError::FeatureRequirementsNotMet(features) => {
-						error!("Network drivers feature set {features:?} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!");
+						error!(
+							"Network drivers feature set {features:?} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!"
+						);
 						return Err(vnet_err);
 					}
 					VirtioNetError::IncompatibleFeatureSets(drv_feats, dev_feats) => {
 						// Create a new matching feature set for device and driver if the minimal set is met!
 						if !dev_feats.contains(minimal_features) {
-							error!("Device features set, does not satisfy minimal features needed. Aborting!");
+							error!(
+								"Device features set, does not satisfy minimal features needed. Aborting!"
+							);
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 						}
 
@@ -543,19 +544,24 @@ impl VirtioNetDriver {
 						features = common_features;
 
 						match self.negotiate_features(features) {
-                                Ok(()) => info!("Driver found a subset of features for virtio device {:x}. Features are: {features:?}", self.dev_cfg.dev_id),
-                                Err(vnet_err) => {
-                                    match vnet_err {
-                                        VirtioNetError::FeatureRequirementsNotMet(features) => {
-                                            error!("Network device offers a feature set {features:?} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!");
-                                            return Err(vnet_err);
-                                        },
-                                        _ => {
-                                            error!("Feature Set after reduction still not usable. Set: {features:?}. Aborting!");
-                                            return Err(vnet_err);
-                                        }
-                                    }
-                                }
+							Ok(()) => info!(
+								"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
+								self.dev_cfg.dev_id
+							),
+							Err(vnet_err) => match vnet_err {
+								VirtioNetError::FeatureRequirementsNotMet(features) => {
+									error!(
+										"Network device offers a feature set {features:?} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!"
+									);
+									return Err(vnet_err);
+								}
+								_ => {
+									error!(
+										"Feature Set after reduction still not usable. Set: {features:?}. Aborting!"
+									);
+									return Err(vnet_err);
+								}
+							},
 						}
 					}
 					VirtioNetError::FailFeatureNeg(_) => {

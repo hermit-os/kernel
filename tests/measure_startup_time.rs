@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 /// - hypervisor startup time
 /// - kernel boot-time
 /// - overhead of runtime_entry (test entry)
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn main(_args: Vec<String>) -> Result<(), String> {
 	Ok(())
 }

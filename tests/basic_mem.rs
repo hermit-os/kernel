@@ -22,7 +22,7 @@ where
 	T: core::fmt::Debug,
 	T: num_traits::int::PrimInt,
 {
-	extern "C" {
+	unsafe extern "C" {
 		fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8;
 		fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
 	}
@@ -141,7 +141,7 @@ fn test_mem() {
 	mem::<usize>();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	test_main();
 	common::exit(false)

@@ -1,9 +1,9 @@
 use core::arch::asm;
 use core::{fmt, str};
 
-use aarch64::regs::{Readable, CNTFRQ_EL0};
+use aarch64::regs::{CNTFRQ_EL0, Readable};
 use hermit_dtb::Dtb;
-use hermit_sync::{without_interrupts, Lazy};
+use hermit_sync::{Lazy, without_interrupts};
 
 use crate::env;
 

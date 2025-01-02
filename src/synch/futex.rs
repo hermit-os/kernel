@@ -2,15 +2,15 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering::SeqCst;
 
 use ahash::RandomState;
-use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
-use crate::scheduler::task::TaskHandlePriorityQueue;
 use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::task::TaskHandlePriorityQueue;
 
 // TODO: Replace with a concurrent hashmap.
 static PARKING_LOT: InterruptTicketMutex<HashMap<usize, TaskHandlePriorityQueue, RandomState>> =

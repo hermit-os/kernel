@@ -8,11 +8,11 @@ use riscv::interrupt::{Exception, Interrupt, Trap};
 use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
 
+use crate::drivers::InterruptHandlerQueue;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_interrupt_handlers;
-use crate::drivers::InterruptHandlerQueue;
 use crate::scheduler;
 
 /// base address of the PLIC, only one access at the same time is allowed
@@ -150,7 +150,7 @@ pub(crate) fn install_handlers() {
 /// Dispatch and handle interrupt.
 ///
 /// This function is called from `trap.S` which is in the trapframe crate.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 	let scause = scause::read();
 	let cause = scause.cause();

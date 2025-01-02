@@ -15,8 +15,11 @@ impl Doc {
 		for arch in Arch::all() {
 			arch.install()?;
 			let triple = arch.triple();
-			cmd!(sh, "cargo doc --package hermit-kernel --no-deps --document-private-items --target={triple}")
-				.run()?;
+			cmd!(
+				sh,
+				"cargo doc --package hermit-kernel --no-deps --document-private-items --target={triple}"
+			)
+			.run()?;
 		}
 
 		Ok(())

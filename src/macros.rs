@@ -244,7 +244,7 @@ macro_rules! hermit_var {
 /// Fetches according to [`hermit_var`] or returns the specified default value.
 #[allow(unused_macros)]
 macro_rules! hermit_var_or {
-	($name:expr, $default:expr) => {{
+	($name:expr, $default:expr) => {
 		hermit_var!($name).as_deref().unwrap_or($default)
-	}};
+	};
 }

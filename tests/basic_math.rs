@@ -146,7 +146,7 @@ fn test_f64_arithmetic() {
 	assert!(approx_eq!(f64, z, 0.8f64, ulps = 0));
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	test_main();
 	exit(false);

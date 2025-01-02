@@ -18,7 +18,7 @@ keywords = ["unikernel", "libos"]
 categories = ["os"]
 repository = "https://github.com/hermit-os/kernel"
 documentation = "https://hermit-os.github.io/kernel/hermit/"
-edition = "2021"
+edition = "2024"
 description = "A Rust-based library operating system"
 exclude = [
 	"/.github/*",

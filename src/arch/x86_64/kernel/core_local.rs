@@ -9,12 +9,12 @@ use core::{mem, ptr};
 
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
+use x86_64::VirtAddr;
 use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
-use x86_64::VirtAddr;
 
-use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
+use super::interrupts::{IRQ_COUNTERS, IrqStatistics};
 use crate::executor::task::AsyncTask;
 #[cfg(feature = "smp")]
 use crate::scheduler::SchedulerInput;

@@ -5,7 +5,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
-use core::sync::atomic::{fence, Ordering};
+use core::sync::atomic::{Ordering, fence};
 use core::{ops, ptr};
 
 use align_address::Align;
@@ -16,7 +16,7 @@ use virtio::mmio::NotificationData;
 use virtio::pci::NotificationData;
 use virtio::pvirtq::{EventSuppressDesc, EventSuppressFlags};
 use virtio::virtq::DescF;
-use virtio::{pvirtq, virtq, RingEventFlags};
+use virtio::{RingEventFlags, pvirtq, virtq};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};

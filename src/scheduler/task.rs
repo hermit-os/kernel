@@ -659,11 +659,7 @@ impl BlockedTaskQueue {
 						|node| match node.wakeup_time {
 							Some(wt) => {
 								if let Some(timer) = self.network_wakeup_time {
-									if wt < timer {
-										Some(wt)
-									} else {
-										Some(timer)
-									}
+									if wt < timer { Some(wt) } else { Some(timer) }
 								} else {
 									Some(wt)
 								}
@@ -734,11 +730,7 @@ impl BlockedTaskQueue {
 			|node| match node.wakeup_time {
 				Some(wt) => {
 					if let Some(timer) = self.network_wakeup_time {
-						if wt < timer {
-							Some(wt)
-						} else {
-							Some(timer)
-						}
+						if wt < timer { Some(wt) } else { Some(timer) }
 					} else {
 						Some(wt)
 					}

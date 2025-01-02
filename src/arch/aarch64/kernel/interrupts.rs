@@ -114,7 +114,7 @@ pub(crate) fn install_handlers() {
 	INTERRUPT_HANDLERS.set(handlers).unwrap();
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
@@ -142,7 +142,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 	core::ptr::null_mut()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
@@ -170,7 +170,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 	core::ptr::null_mut()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &State) {
 	let irqid = GicV3::get_and_acknowledge_interrupt().unwrap();
 	let esr = ESR_EL1.get();
@@ -206,14 +206,14 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 	}
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_bad_mode(_state: &State, reason: u32) -> ! {
 	error!("Receive unhandled exception: {}", reason);
 
 	scheduler::abort()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_error(_state: &State) -> ! {
 	error!("Receive error interrupt");
 

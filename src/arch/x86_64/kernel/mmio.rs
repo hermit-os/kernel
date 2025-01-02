@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use core::{ptr, str};
 
 use align_address::Align;
-use hermit_sync::{without_interrupts, InterruptTicketMutex};
+use hermit_sync::{InterruptTicketMutex, without_interrupts};
 use memory_addresses::PhysAddr;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;

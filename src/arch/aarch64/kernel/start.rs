@@ -1,17 +1,17 @@
 use core::arch::{asm, naked_asm};
 
-use hermit_entry::boot_info::RawBootInfo;
 use hermit_entry::Entry;
+use hermit_entry::boot_info::RawBootInfo;
 
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
-use crate::{env, KERNEL_STACK_SIZE};
+use crate::{KERNEL_STACK_SIZE, env};
 
-extern "C" {
+unsafe extern "C" {
 	static vector_table: u8;
 }
 
 /// Entrypoint - Initialize Stack pointer and Exception Table
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[naked]
 pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// validate signatures
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 }
 
 #[inline(never)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// set exception table
 	unsafe {

@@ -12,10 +12,10 @@ use async_trait::async_trait;
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
-use crate::fd::{insert_object, remove_object, AccessPermission, ObjectInterface, OpenOption};
+use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
 use crate::io::Write;
-use crate::time::{timespec, SystemTime};
+use crate::time::{SystemTime, timespec};
 
 static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 

@@ -89,7 +89,7 @@ hermit_entry::define_entry_version!();
 
 #[cfg(test)]
 #[cfg(target_os = "none")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	println!("Executing hermit unittests. Any arguments are dropped");
 	test_main();
@@ -116,7 +116,7 @@ fn trivial_test() {
 /// Entry point of a kernel thread, which initialize the libos
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
-	extern "C" {
+	unsafe extern "C" {
 		#[cfg(all(not(test), not(any(feature = "nostd", feature = "common-os"))))]
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
 		#[cfg(all(not(test), any(feature = "nostd", feature = "common-os")))]
@@ -190,7 +190,7 @@ fn boot_processor_main() -> ! {
 		info!("FDT:\n{fdt:#?}");
 	}
 
-	extern "C" {
+	unsafe extern "C" {
 		static mut __bss_start: u8;
 	}
 	let bss_ptr = core::ptr::addr_of_mut!(__bss_start);
