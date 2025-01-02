@@ -6,7 +6,7 @@ use hermit_entry::Entry;
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
 use crate::{env, KERNEL_STACK_SIZE};
 
-extern "C" {
+unsafe extern "C" {
 	static vector_table: u8;
 }
 

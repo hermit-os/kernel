@@ -22,7 +22,7 @@ where
 	T: core::fmt::Debug,
 	T: num_traits::int::PrimInt,
 {
-	extern "C" {
+	unsafe extern "C" {
 		fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8;
 		fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
 	}

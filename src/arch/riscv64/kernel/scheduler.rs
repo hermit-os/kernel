@@ -420,7 +420,7 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "C" {
+unsafe extern "C" {
 	fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64);
 }
 
