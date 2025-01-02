@@ -66,16 +66,16 @@ where
 
 	let mut b: Vec<T> =
 		Vec::with_capacity((vec_size + pre_dest_vec_size + post_dest_vec_size) as usize);
-	// Manually set length, since we will be manually filling the vector
-	unsafe {
-		b.set_len((vec_size + pre_dest_vec_size + post_dest_vec_size) as usize);
-	}
 	// Fill pre and post section with `pattern`
 	for i in 0..pre_dest_vec_size {
-		b[i as usize] = pattern;
+		b.spare_capacity_mut()[i as usize].write(pattern);
 	}
 	for i in 0..post_dest_vec_size {
-		b[(pre_dest_vec_size + vec_size + i) as usize] = pattern;
+		b.spare_capacity_mut()[(pre_dest_vec_size + vec_size + i) as usize].write(pattern);
+	}
+	// Manually set length, since we manually filled the vector
+	unsafe {
+		b.set_len((vec_size + pre_dest_vec_size + post_dest_vec_size) as usize);
 	}
 	// Copy the actual vector
 	unsafe {
