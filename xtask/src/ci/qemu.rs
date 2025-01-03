@@ -98,6 +98,10 @@ impl Qemu {
 		}
 
 		match image_name {
+			"http_server" | "http_server_poll" => {
+				test_http_server()?;
+				qemu.0.kill()?;
+			}
 			"httpd" => test_httpd()?,
 			"testudp" => test_testudp()?,
 			"miotcp" => test_miotcp()?,
@@ -310,6 +314,10 @@ impl Qemu {
 	}
 
 	fn qemu_success(&self, status: ExitStatus, arch: Arch) -> bool {
+		if status.code().is_none() {
+			return true;
+		}
+
 		if arch == Arch::X86_64 {
 			status.code() == Some(3)
 		} else {
@@ -341,6 +349,19 @@ fn get_frequency() -> u64 {
 		eprintln!("CPU frequencies are not all equal");
 	}
 	frequency
+}
+
+fn test_http_server() -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+	let url = "http://127.0.0.1:9975";
+	eprintln!("[CI] GET {url}");
+	let body = ureq::get(url)
+		.timeout(Duration::from_secs(3))
+		.call()?
+		.into_string()?;
+	eprintln!("[CI] body = {body:?}");
+	assert_eq!(body, "Hello, world!\n");
+	Ok(())
 }
 
 fn test_httpd() -> Result<()> {
