@@ -162,11 +162,9 @@ free-list = { version = "0.3", features = ["x86_64"] }
 multiboot = "0.8"
 raw-cpuid = "10"
 uart_16550 = "0.3"
-x86 = { version = "0.52", default-features = false }
 x86_64 = "0.15"
 memory_addresses = { version = "0.2.2", default-features = false, features = [
   "x86_64",
-  "conv-x86",
   "conv-x86_64",
 ] }
 
