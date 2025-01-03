@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["PortGeneric","ReadOnlyAccess","ReadWriteAccess","WriteOnlyAccess"],"trait":["PortAccess","PortReadAccess","PortWriteAccess"],"type":["Port","PortReadOnly","PortWriteOnly"]};
