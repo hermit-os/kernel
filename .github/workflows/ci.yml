@@ -19,7 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@cargo-hack
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add x86_64-unknown-none
       - name: Check each feature
@@ -146,7 +148,7 @@ jobs:
         working-directory: .
       - uses: mkroening/rust-toolchain-toml@main
         with:
-          toolchain-file: 'kernel/rust-toolchain.toml'
+          toolchain-file: "kernel/rust-toolchain.toml"
       - name: Download loader
         run: gh release download --repo hermit-os/loader --pattern 'hermit-loader-${{ matrix.arch }}*'
       - name: Dowload OpenSBI
@@ -169,7 +171,7 @@ jobs:
           latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
           curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
           | tar -xz
-          
+
           mkdir -p $HOME/.local/bin
           mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
           echo $HOME/.local/bin >> $GITHUB_PATH
