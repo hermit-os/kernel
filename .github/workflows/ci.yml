@@ -19,7 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: taiki-e/install-action@cargo-hack
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add x86_64-unknown-none
       - name: Check each feature
