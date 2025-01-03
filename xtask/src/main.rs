@@ -11,7 +11,7 @@ mod clippy;
 mod doc;
 
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::Result;
@@ -71,14 +71,10 @@ fn sanitize(cmd: &str) -> Command {
 		let exe = format!("{cmd}{}", env::consts::EXE_SUFFIX);
 		// On windows, the userspace toolchain ends up in front of the rustup proxy in $PATH.
 		// To reach the rustup proxy nonetheless, we explicitly query $CARGO_HOME.
-		let mut cargo_home = PathBuf::from(env::var_os("CARGO_HOME").unwrap());
+		let mut cargo_home = home::cargo_home().unwrap();
 		cargo_home.push("bin");
 		cargo_home.push(&exe);
-		if cargo_home.exists() {
-			cargo_home
-		} else {
-			PathBuf::from(exe)
-		}
+		cargo_home
 	};
 
 	let mut cmd = Command::new(cmd);
