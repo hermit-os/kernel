@@ -423,6 +423,18 @@ pub extern "C" fn sys_errno() -> i32 {
 	}
 }
 
+#[cfg(not(feature = "nostd"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_errno_location() -> *mut i32 {
+	cfg_if::cfg_if! {
+		if #[cfg(any(feature = "common-os", target_arch = "riscv64"))] {
+			unimplemented!("sys_errno_location")
+		} else {
+			ERRNO.get()
+		}
+	}
+}
+
 pub(crate) trait ToErrno {
 	fn to_errno(&self) -> Option<i32> {
 		None
