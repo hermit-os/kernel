@@ -1,14 +1,14 @@
-use x86::io::*;
+use x86_64::instructions::port::Port;
 
 use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::interrupts::ExceptionStackFrame;
 use crate::arch::x86_64::swapgs;
 use crate::scheduler;
 
-const PIC1_COMMAND_PORT: u16 = 0x20;
-const PIC1_DATA_PORT: u16 = 0x21;
-const PIC2_COMMAND_PORT: u16 = 0xa0;
-const PIC2_DATA_PORT: u16 = 0xa1;
+const PIC1_COMMAND: Port<u8> = Port::new(0x20);
+const PIC1_DATA: Port<u8> = Port::new(0x21);
+const PIC2_COMMAND: Port<u8> = Port::new(0xa0);
+const PIC2_DATA: Port<u8> = Port::new(0xa1);
 
 pub const PIC1_INTERRUPT_OFFSET: u8 = 32;
 const PIC2_INTERRUPT_OFFSET: u8 = 40;
@@ -18,18 +18,26 @@ const SPURIOUS_IRQ_NUMBER: u8 = 7;
 const PIC_EOI_COMMAND: u8 = 0x20;
 
 pub fn eoi(int_no: u8) {
+	let mut pic1_command = PIC1_COMMAND;
+	let mut pic2_command = PIC2_COMMAND;
+
 	unsafe {
 		// For IRQ 8-15 (mapped to interrupt numbers >= 40), we need to send an EOI to the slave PIC.
 		if int_no >= 40 {
-			outb(PIC2_COMMAND_PORT, PIC_EOI_COMMAND);
+			pic2_command.write(PIC_EOI_COMMAND);
 		}
 
 		// In all cases, we need to send an EOI to the master PIC.
-		outb(PIC1_COMMAND_PORT, PIC_EOI_COMMAND);
+		pic1_command.write(PIC_EOI_COMMAND);
 	}
 }
 
 pub fn init() {
+	let mut pic1_command = PIC1_COMMAND;
+	let mut pic1_data = PIC1_DATA;
+	let mut pic2_command = PIC2_COMMAND;
+	let mut pic2_data = PIC2_DATA;
+
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
 	unsafe {
@@ -53,24 +61,24 @@ pub fn init() {
 		// 47
 
 		// Reinitialize PIC1 and PIC2.
-		outb(PIC1_COMMAND_PORT, 0x11);
-		outb(PIC2_COMMAND_PORT, 0x11);
+		pic1_command.write(0x11);
+		pic2_command.write(0x11);
 
 		// Map PIC1 to interrupt numbers >= 32 and PIC2 to interrupt numbers >= 40.
-		outb(PIC1_DATA_PORT, PIC1_INTERRUPT_OFFSET);
-		outb(PIC2_DATA_PORT, PIC2_INTERRUPT_OFFSET);
+		pic1_data.write(PIC1_INTERRUPT_OFFSET);
+		pic2_data.write(PIC2_INTERRUPT_OFFSET);
 
 		// Configure PIC1 as master and PIC2 as slave.
-		outb(PIC1_DATA_PORT, 0x04);
-		outb(PIC2_DATA_PORT, 0x02);
+		pic1_data.write(0x04);
+		pic2_data.write(0x02);
 
 		// Start them in 8086 mode.
-		outb(PIC1_DATA_PORT, 0x01);
-		outb(PIC2_DATA_PORT, 0x01);
+		pic1_data.write(0x01);
+		pic2_data.write(0x01);
 
 		// Mask all interrupts on both PICs.
-		outb(PIC1_DATA_PORT, 0xff);
-		outb(PIC2_DATA_PORT, 0xff);
+		pic1_data.write(0xff);
+		pic2_data.write(0xff);
 	}
 }
 
@@ -86,27 +94,24 @@ extern "x86-interrupt" fn spurious_interrupt_on_slave(stack_frame: ExceptionStac
 
 	// As this is an interrupt forwarded by the master, we have to acknowledge it on the master
 	// (but not on the slave as with all spurious interrupts).
+	let mut pic1_command = PIC1_COMMAND;
 	unsafe {
-		outb(PIC1_COMMAND_PORT, PIC_EOI_COMMAND);
+		pic1_command.write(PIC_EOI_COMMAND);
 	}
 	scheduler::abort();
 }
 
 fn edit_mask(int_no: u8, insert: bool) {
-	let port = if int_no >= 40 {
-		PIC2_DATA_PORT
-	} else {
-		PIC1_DATA_PORT
-	};
+	let mut port = if int_no >= 40 { PIC2_DATA } else { PIC1_DATA };
 	let offset = if int_no >= 40 { 40 } else { 32 };
 
 	unsafe {
-		let mask = inb(port);
+		let mask = port.read();
 
 		if insert {
-			outb(port, mask | (1 << (int_no - offset)));
+			port.write(mask | (1 << (int_no - offset)));
 		} else {
-			outb(port, mask & !(1 << (int_no - offset)));
+			port.write(mask & !(1 << (int_no - offset)));
 		}
 	}
 }

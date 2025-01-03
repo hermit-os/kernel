@@ -11,34 +11,39 @@ use core::{fmt, ptr};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
-use x86::bits64::segmentation;
-use x86::controlregs::*;
-use x86::cpuid::*;
-use x86::msr::*;
-use x86_64::VirtAddr;
+use raw_cpuid::*;
 use x86_64::instructions::interrupts::int3;
 use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
+use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags, Efer, EferFlags};
+use x86_64::registers::model_specific::{FsBase, GsBase, Msr};
+use x86_64::registers::segmentation::{FS, GS, Segment64};
+use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
+use x86_64::{VirtAddr, instructions};
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{interrupts, pic, pit};
 use crate::env;
 
+/// see <http://biosbits.org>.
+const MSR_PLATFORM_INFO: u32 = 0xce;
+
+/// See Table 35-2. See Section 14.1, Enhanced Intel  Speedstep® Technology.
+const IA32_PERF_CTL: u32 = 0x199;
+
+const IA32_MISC_ENABLE: u32 = 0x1a0;
+
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
 
-// MSR EFER bits
-const EFER_SCE: u64 = 1 << 0;
-const EFER_LME: u64 = 1 << 8;
-const EFER_LMA: u64 = 1 << 10;
-const EFER_NXE: u64 = 1 << 11;
-const EFER_SVME: u64 = 1 << 12;
-const EFER_LMSLE: u64 = 1 << 13;
-const EFER_FFXSR: u64 = 1 << 14;
-const EFER_TCE: u64 = 1 << 15;
+/// Maximum Ratio Limit of Turbo Mode RO if MSR_PLATFORM_INFO.\[28\] = 0, RW if MSR_PLATFORM_INFO.\[28\] = 1
+const MSR_TURBO_RATIO_LIMIT: u32 = 0x1ad;
+
+/// if CPUID.6H:ECX\[3\] = 1
+const IA32_ENERGY_PERF_BIAS: u32 = 0x1b0;
 
 // See Intel SDM - Volume 1 - Section 7.3.17.1
 const RDRAND_RETRY_LIMIT: usize = 10;
@@ -709,16 +714,16 @@ impl CpuSpeedStep {
 			return;
 		}
 
-		let misc = unsafe { rdmsr(IA32_MISC_ENABLE) };
+		let misc = unsafe { Msr::new(IA32_MISC_ENABLE).read() };
 		self.eist_enabled = (misc & IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP) > 0;
 		self.eist_locked = (misc & IA32_MISC_ENABLE_SPEEDSTEP_LOCK) > 0;
 		if !self.eist_enabled || self.eist_locked {
 			return;
 		}
 
-		self.max_pstate = (unsafe { rdmsr(MSR_PLATFORM_INFO) } >> 8) as u8;
+		self.max_pstate = (unsafe { Msr::new(MSR_PLATFORM_INFO).read() } >> 8) as u8;
 		if (misc & IA32_MISC_ENABLE_TURBO_DISABLE) == 0 {
-			let turbo_pstate = unsafe { rdmsr(MSR_TURBO_RATIO_LIMIT) } as u8;
+			let turbo_pstate = unsafe { Msr::new(MSR_TURBO_RATIO_LIMIT).read() } as u8;
 			if turbo_pstate > self.max_pstate {
 				self.max_pstate = turbo_pstate;
 				self.is_turbo_pstate = true;
@@ -737,7 +742,7 @@ impl CpuSpeedStep {
 
 		if self.energy_bias_preference {
 			unsafe {
-				wrmsr(IA32_ENERGY_PERF_BIAS, 0);
+				Msr::new(IA32_ENERGY_PERF_BIAS).write(0);
 			}
 		}
 
@@ -747,7 +752,7 @@ impl CpuSpeedStep {
 		}
 
 		unsafe {
-			wrmsr(IA32_PERF_CTL, perf_ctl_mask);
+			Msr::new(IA32_PERF_CTL).write(perf_ctl_mask);
 		}
 	}
 }
@@ -788,75 +793,78 @@ pub fn configure() {
 
 	// setup MSR EFER
 	unsafe {
-		wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_LMA | EFER_SCE | EFER_NXE);
+		Efer::update(|flags| {
+			flags.insert(
+				EferFlags::SYSTEM_CALL_EXTENSIONS
+					| EferFlags::LONG_MODE_ACTIVE
+					| EferFlags::NO_EXECUTE_ENABLE,
+			);
+		});
 	}
 
 	//
 	// CR0 CONFIGURATION
 	//
-	let mut cr0 = unsafe { cr0() };
-
-	// Enable the FPU.
-	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
-	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
-
-	// if set, the first FPU access will trigger interrupt 7.
-	cr0.insert(Cr0::CR0_TASK_SWITCHED);
-
-	// Prevent writes to read-only pages in Ring 0.
-	cr0.insert(Cr0::CR0_WRITE_PROTECT);
-
-	debug!("Set CR0 to {:#x}", cr0);
 	unsafe {
-		cr0_write(cr0);
+		Cr0::update(|flags| {
+			// Enable the FPU.
+			flags.insert(Cr0Flags::MONITOR_COPROCESSOR | Cr0Flags::NUMERIC_ERROR);
+			flags.remove(Cr0Flags::EMULATE_COPROCESSOR);
+
+			// if set, the first FPU access will trigger interrupt 7.
+			flags.insert(Cr0Flags::TASK_SWITCHED);
+
+			// Prevent writes to read-only pages in Ring 0.
+			flags.insert(Cr0Flags::WRITE_PROTECT);
+
+			debug!("Setting CR0 = {:?}", flags);
+		});
 	}
 
 	//
 	// CR4 CONFIGURATION
 	//
-	let mut cr4 = unsafe { cr4() };
-
-	let has_pge = match cpuid.get_feature_info() {
-		Some(finfo) => finfo.has_pge(),
-		None => false,
-	};
-
-	if has_pge {
-		cr4 |= Cr4::CR4_ENABLE_GLOBAL_PAGES;
-	}
-
-	// Enable Machine Check Exceptions.
-	// No need to check for support here, all x86-64 CPUs support it.
-	cr4.insert(Cr4::CR4_ENABLE_MACHINE_CHECK);
-
-	// Enable full SSE support and indicates that the OS saves SSE context using FXSR.
-	// No need to check for support here, all x86-64 CPUs support at least SSE2.
-	cr4.insert(Cr4::CR4_ENABLE_SSE | Cr4::CR4_UNMASKED_SSE);
-
-	if supports_xsave() {
-		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
-		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
-	}
-
-	// Disable Performance-Monitoring Counters
-	cr4.remove(Cr4::CR4_ENABLE_PPMC);
-	// clear TSD => every privilege level is able
-	// to use rdtsc
-	cr4.remove(Cr4::CR4_TIME_STAMP_DISABLE);
-
-	if supports_fsgs() {
-		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
-		debug!("Enable FSGSBASE support");
-	}
-	#[cfg(feature = "fsgsbase")]
-	if !supports_fsgs() {
-		error!("FSGSBASE support is enabled, but the processor doesn't support it!");
-		crate::scheduler::shutdown(1);
-	}
-
-	debug!("Set CR4 to {:#x}", cr4);
 	unsafe {
-		cr4_write(cr4);
+		Cr4::update(|flags| {
+			let has_pge = cpuid
+				.get_feature_info()
+				.is_some_and(|feature_info| feature_info.has_pge());
+
+			if has_pge {
+				flags.insert(Cr4Flags::PAGE_GLOBAL);
+			}
+
+			// Enable Machine Check Exceptions.
+			// No need to check for support here, all x86-64 CPUs support it.
+			flags.insert(Cr4Flags::MACHINE_CHECK_EXCEPTION);
+
+			// Enable full SSE support and indicates that the OS saves SSE context using FXSR.
+			// No need to check for support here, all x86-64 CPUs support at least SSE2.
+			flags.insert(Cr4Flags::OSFXSR | Cr4Flags::OSXMMEXCPT_ENABLE);
+
+			if supports_xsave() {
+				// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
+				flags.insert(Cr4Flags::OSXSAVE);
+			}
+
+			// Disable Performance-Monitoring Counters
+			flags.remove(Cr4Flags::PERFORMANCE_MONITOR_COUNTER);
+			// clear TSD => every privilege level is able
+			// to use rdtsc
+			flags.remove(Cr4Flags::TIMESTAMP_DISABLE);
+
+			if supports_fsgs() {
+				flags.insert(Cr4Flags::FSGSBASE);
+				debug!("Enable FSGSBASE support");
+			}
+			#[cfg(feature = "fsgsbase")]
+			if !supports_fsgs() {
+				error!("FSGSBASE support is enabled, but the processor doesn't support it!");
+				crate::scheduler::shutdown(1);
+			}
+
+			debug!("Setting CR4 = {:?}", flags);
+		});
 	}
 
 	//
@@ -865,22 +873,29 @@ pub fn configure() {
 	if supports_xsave() {
 		// Enable saving the context for all known vector extensions.
 		// Must happen after CR4_ENABLE_OS_XSAVE has been set.
-		let mut xcr0 = unsafe { xcr0() };
-		xcr0.insert(Xcr0::XCR0_FPU_MMX_STATE | Xcr0::XCR0_SSE_STATE);
+		// FIXME: migrate to `XCr0::update()` once available:
+		// https://github.com/rust-osdev/x86_64/pull/527
+		let mut flags = XCr0::read();
+		flags.insert(XCr0Flags::X87 | XCr0Flags::SSE);
 
 		if supports_avx() {
-			xcr0.insert(Xcr0::XCR0_AVX_STATE);
+			flags.insert(XCr0Flags::AVX);
 		}
 
-		debug!("Set XCR0 to {:#x}", xcr0);
+		debug!("Setting XCR0 = {:?}", flags);
 		unsafe {
-			xcr0_write(xcr0);
+			XCr0::write(flags);
 		}
 	}
 
 	// enable support of syscall and sysret
 	#[cfg(feature = "common-os")]
-	unsafe {
+	{
+		use x86_64::PrivilegeLevel;
+		use x86_64::registers::model_specific::{LStar, SFMask, Star};
+		use x86_64::registers::rflags::RFlags;
+		use x86_64::structures::gdt::SegmentSelector;
+
 		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
 			Some(finfo) => finfo.has_syscall_sysret(),
 			None => false,
@@ -891,14 +906,15 @@ pub fn configure() {
 		} else {
 			panic!("Syscall support is missing");
 		}
-		wrmsr(IA32_STAR, (0x1bu64 << 48) | (0x08u64 << 32));
-		wrmsr(
-			IA32_LSTAR,
-			(crate::arch::x86_64::kernel::syscall::syscall_handler as usize)
-				.try_into()
-				.unwrap(),
-		);
-		wrmsr(IA32_FMASK, 1 << 9); // clear IF flag during system call
+		let cs_sysret = SegmentSelector::new(5, PrivilegeLevel::Ring3);
+		let ss_sysret = SegmentSelector::new(4, PrivilegeLevel::Ring3);
+		let cs_syscall = SegmentSelector::new(1, PrivilegeLevel::Ring0);
+		let ss_syscall = SegmentSelector::new(2, PrivilegeLevel::Ring0);
+		Star::write(cs_sysret, ss_sysret, cs_syscall, ss_syscall).unwrap();
+		let syscall_handler_addr = crate::arch::x86_64::kernel::syscall::syscall_handler as usize;
+		let syscall_handler_addr = VirtAddr::new(syscall_handler_addr.try_into().unwrap());
+		LStar::write(syscall_handler_addr);
+		SFMask::write(RFlags::INTERRUPT_FLAG); // clear IF flag during system call
 	}
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.
@@ -1023,9 +1039,7 @@ pub fn supports_fsgs() -> bool {
 
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
-	unsafe {
-		x86::halt();
-	}
+	instructions::hlt();
 }
 
 /// Causes a triple fault.
@@ -1076,43 +1090,47 @@ pub fn get_frequency() -> u16 {
 
 #[inline]
 pub fn readfs() -> usize {
-	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::rdfsbase() }
+	let base = if cfg!(feature = "fsgsbase") {
+		FS::read_base()
 	} else {
-		unsafe { rdmsr(IA32_FS_BASE) }
-	}
-	.try_into()
-	.unwrap()
+		FsBase::read()
+	};
+
+	base.as_u64().try_into().unwrap()
 }
 
 #[inline]
 pub fn readgs() -> usize {
-	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::rdgsbase() }
+	let base = if cfg!(feature = "fsgsbase") {
+		GS::read_base()
 	} else {
-		unsafe { rdmsr(IA32_GS_BASE) }
-	}
-	.try_into()
-	.unwrap()
+		GsBase::read()
+	};
+
+	base.as_u64().try_into().unwrap()
 }
 
 #[inline]
 pub fn writefs(fs: usize) {
-	let fs = fs.try_into().unwrap();
+	let base = VirtAddr::new(fs.try_into().unwrap());
 	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::wrfsbase(fs) }
+		unsafe {
+			FS::write_base(base);
+		}
 	} else {
-		unsafe { wrmsr(IA32_FS_BASE, fs) }
+		FsBase::write(base);
 	}
 }
 
 #[inline]
 pub fn writegs(gs: usize) {
-	let gs = gs.try_into().unwrap();
+	let base = VirtAddr::new(gs.try_into().unwrap());
 	if cfg!(feature = "fsgsbase") {
-		unsafe { segmentation::wrgsbase(gs) }
+		unsafe {
+			GS::write_base(base);
+		}
 	} else {
-		unsafe { wrmsr(IA32_GS_BASE, gs) }
+		GsBase::write(base);
 	}
 }
 

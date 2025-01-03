@@ -7,7 +7,7 @@ use core::task::Waker;
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::{PhysAddr, VirtAddr};
-use x86::controlregs::{Cr0, cr0, cr0_write, cr4};
+use x86_64::registers::control::{Cr0, Cr4};
 
 use self::serial::SerialPort;
 use crate::arch::x86_64::kernel::core_local::*;
@@ -175,9 +175,8 @@ pub fn boot_processor_init() {
 
 	processor::detect_frequency();
 	processor::print_information();
-	unsafe {
-		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
-	}
+	debug!("Cr0 = {:?}", Cr0::read());
+	debug!("Cr4 = {:?}", Cr4::read());
 	interrupts::install();
 	systemtime::init();
 
@@ -205,9 +204,8 @@ pub fn application_processor_init() {
 	interrupts::load_idt();
 	apic::init_x2apic();
 	apic::init_local_apic();
-	unsafe {
-		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
-	}
+	debug!("Cr0 = {:?}", Cr0::read());
+	debug!("Cr4 = {:?}", Cr4::read());
 	finish_processor_init();
 }
 
@@ -257,11 +255,11 @@ pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut()
 #[inline(never)]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
+	use x86_64::registers::control::Cr0Flags;
+
 	// Enable caching
 	unsafe {
-		let mut cr0 = cr0();
-		cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
-		cr0_write(cr0);
+		Cr0::update(|flags| flags.remove(Cr0Flags::CACHE_DISABLE | Cr0Flags::NOT_WRITE_THROUGH));
 	}
 
 	if cpu_id == 0 {

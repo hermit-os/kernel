@@ -1,12 +1,12 @@
 use hermit_sync::SpinMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
-use x86::io::*;
+use x86_64::instructions::port::Port;
 
 use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
 
-const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3d4;
-const CRT_CONTROLLER_DATA_PORT: u16 = 0x3d5;
+const CRT_CONTROLLER_ADDRESS: Port<u8> = Port::new(0x3d4);
+const CRT_CONTROLLER_DATA: Port<u8> = Port::new(0x3d5);
 const CURSOR_START_REGISTER: u8 = 0x0a;
 const CURSOR_DISABLE: u8 = 0x20;
 
@@ -66,9 +66,11 @@ impl VgaScreen {
 		);
 
 		// Disable the cursor.
+		let mut crt_controller_address = CRT_CONTROLLER_ADDRESS;
+		let mut crt_controller_data = CRT_CONTROLLER_DATA;
 		unsafe {
-			outb(CRT_CONTROLLER_ADDRESS_PORT, CURSOR_START_REGISTER);
-			outb(CRT_CONTROLLER_DATA_PORT, CURSOR_DISABLE);
+			crt_controller_address.write(CURSOR_START_REGISTER);
+			crt_controller_data.write(CURSOR_DISABLE);
 		}
 
 		// Clear the screen.

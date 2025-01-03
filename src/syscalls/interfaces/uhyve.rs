@@ -3,8 +3,6 @@ use core::ptr;
 use memory_addresses::VirtAddr;
 use uhyve_interface::parameters::ExitParams;
 use uhyve_interface::{Hypercall, HypercallAddress};
-#[cfg(target_arch = "x86_64")]
-use x86::io::*;
 
 use crate::arch;
 use crate::arch::mm::paging;
@@ -46,11 +44,11 @@ pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
 
 	#[cfg(target_arch = "x86_64")]
 	unsafe {
-		outl(
-			ptr,
-			data.try_into()
-				.expect("Hypercall data must lie in the first 4GiB of memory"),
-		);
+		use x86_64::instructions::port::Port;
+
+		let data =
+			u32::try_from(data).expect("Hypercall data must lie in the first 4GiB of memory");
+		Port::new(ptr).write(data);
 	}
 
 	#[cfg(target_arch = "aarch64")]

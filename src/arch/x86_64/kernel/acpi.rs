@@ -3,7 +3,7 @@ use core::{mem, ptr, slice, str};
 use align_address::Align;
 use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
-use x86::io::*;
+use x86_64::instructions::port::Port;
 use x86_64::structures::paging::PhysFrame;
 
 use crate::arch::x86_64::mm::paging::{
@@ -44,7 +44,7 @@ const SLP_EN: u16 = 1 << 13;
 /// The "Multiple APIC Description Table" (MADT) preserved for get_apic_table().
 static MADT: OnceCell<AcpiTable<'_>> = OnceCell::new();
 /// The PM1A Control I/O Port for powering off the computer through ACPI.
-static PM1A_CNT_BLK: OnceCell<u16> = OnceCell::new();
+static PM1A_CNT_BLK: OnceCell<Port<u16>> = OnceCell::new();
 /// The Sleeping State Type code for powering off the computer through ACPI.
 static SLP_TYPA: OnceCell<u8> = OnceCell::new();
 
@@ -431,7 +431,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	} else {
 		fadt_table.pm1a_cnt_blk as u16
 	};
-	PM1A_CNT_BLK.set(pm1a_cnt_blk).unwrap();
+	PM1A_CNT_BLK.set(Port::new(pm1a_cnt_blk)).unwrap();
 
 	// Map the "Differentiated System Description Table" (DSDT).
 	let x_dsdt_field_address = ptr::addr_of!(fadt_table.x_dsdt) as usize;
@@ -475,14 +475,15 @@ pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
 }
 
 pub fn poweroff() {
-	if let (Some(&pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get(), SLP_TYPA.get()) {
+	if let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
+	{
 		let bits = (u16::from(slp_typa) << 10) | SLP_EN;
 		debug!(
-			"Powering Off through ACPI (port {:#X}, bitmask {:#X})",
+			"Powering Off through ACPI (port {:?}, bitmask {:#X})",
 			pm1a_cnt_blk, bits
 		);
 		unsafe {
-			outw(pm1a_cnt_blk, bits);
+			pm1a_cnt_blk.write(bits);
 		}
 	} else {
 		warn!("ACPI Power Off is not available");

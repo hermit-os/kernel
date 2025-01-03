@@ -4,8 +4,6 @@ pub(crate) mod virtualmem;
 
 use core::slice;
 
-#[cfg(feature = "common-os")]
-use align_address::Align;
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 #[cfg(feature = "common-os")]
 use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
@@ -42,6 +40,8 @@ impl multiboot::information::MemoryManagement for MultibootMemory {
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
+	use x86_64::registers::control::Cr3;
+
 	let physaddr =
 		physicalmem::allocate_aligned(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize)
 			.unwrap();
@@ -52,8 +52,8 @@ pub fn create_new_root_page_table() -> usize {
 	flags.normal().writable();
 
 	let entry: u64 = unsafe {
-		let cr3 = x86::controlregs::cr3().align_down(BasePageSize::SIZE);
-		paging::map::<BasePageSize>(virtaddr, PhysAddr::new(cr3), 1, flags);
+		let (frame, _flags) = Cr3::read();
+		paging::map::<BasePageSize>(virtaddr, frame.start_address().into(), 1, flags);
 		let entry: &u64 = &*virtaddr.as_ptr();
 
 		*entry
@@ -88,9 +88,12 @@ pub fn init() {
 	virtualmem::init();
 
 	#[cfg(feature = "common-os")]
-	unsafe {
+	{
+		use x86_64::registers::control::Cr3;
+
+		let (frame, _flags) = Cr3::read();
 		crate::scheduler::BOOT_ROOT_PAGE_TABLE
-			.set(x86::controlregs::cr3().try_into().unwrap())
+			.set(frame.start_address().as_u64().try_into().unwrap())
 			.unwrap();
 	}
 }
