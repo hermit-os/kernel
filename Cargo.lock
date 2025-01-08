@@ -641,6 +641,7 @@ dependencies = [
  "pci-ids",
  "pci_types",
  "rand_chacha",
+ "raw-cpuid 10.7.0",
  "riscv",
  "sbi-rt",
  "semihosting",
@@ -657,7 +658,6 @@ dependencies = [
  "uhyve-interface",
  "virtio-spec",
  "volatile 0.6.1",
- "x86",
  "x86_64",
  "zerocopy 0.8.14",
 ]
@@ -948,7 +948,6 @@ dependencies = [
  "align-address",
  "cfg-if",
  "paste",
- "x86",
  "x86_64",
 ]
 

@@ -7,7 +7,7 @@ use core::mem;
 
 use memory_addresses::VirtAddr;
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
-use x86::io::*;
+use x86_64::instructions::port::Port;
 
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::paging::virt_to_phys;
@@ -242,10 +242,8 @@ impl NetworkDriver for RTL8139Driver {
 
 			// send the packet
 			unsafe {
-				outl(
-					self.iobase + TSD0 + (4 * id as u16),
-					len.try_into().unwrap(),
-				); //|0x3A0000);
+				Port::<u32>::new(self.iobase + TSD0 + (4 * id as u16))
+					.write(len.try_into().unwrap()); //|0x3A0000);
 			}
 
 			result
@@ -253,7 +251,7 @@ impl NetworkDriver for RTL8139Driver {
 	}
 
 	fn has_packet(&self) -> bool {
-		let cmd = unsafe { inb(self.iobase + CR) };
+		let cmd = unsafe { Port::<u8>::new(self.iobase + CR).read() };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
 			let header = self.rx_peek_u16();
@@ -268,7 +266,7 @@ impl NetworkDriver for RTL8139Driver {
 
 	/// Get buffer with the received packet
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
-		let cmd = unsafe { inb(self.iobase + CR) };
+		let cmd = unsafe { Port::<u8>::new(self.iobase + CR).read() };
 
 		if (cmd & CR_BUFE) == CR_BUFE {
 			return None;
@@ -307,18 +305,18 @@ impl NetworkDriver for RTL8139Driver {
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
 			unsafe {
-				outw(self.iobase + IMR, INT_MASK_NO_ROK);
+				Port::<u16>::new(self.iobase + IMR).write(INT_MASK_NO_ROK);
 			}
 		} else {
 			// Enable all known interrupts by setting the interrupt mask.
 			unsafe {
-				outw(self.iobase + IMR, INT_MASK);
+				Port::<u16>::new(self.iobase + IMR).write(INT_MASK);
 			}
 		}
 	}
 
 	fn handle_interrupt(&mut self) {
-		let isr_contents = unsafe { inw(self.iobase + ISR) };
+		let isr_contents = unsafe { Port::<u16>::new(self.iobase + ISR).read() };
 
 		if (isr_contents & ISR_TOK) == ISR_TOK {
 			self.tx_handler();
@@ -337,10 +335,8 @@ impl NetworkDriver for RTL8139Driver {
 		}
 
 		unsafe {
-			outw(
-				self.iobase + ISR,
-				isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
-			);
+			Port::<u16>::new(self.iobase + ISR)
+				.write(isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK));
 		}
 	}
 }
@@ -365,14 +361,12 @@ impl RTL8139Driver {
 		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
 		if self.rxpos >= 0x10 {
 			unsafe {
-				outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+				Port::<u16>::new(self.iobase + CAPR).write((self.rxpos - 0x10).try_into().unwrap());
 			}
 		} else {
 			unsafe {
-				outw(
-					self.iobase + CAPR,
-					(RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap(),
-				);
+				Port::<u16>::new(self.iobase + CAPR)
+					.write((RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap());
 			}
 		}
 	}
@@ -393,7 +387,8 @@ impl RTL8139Driver {
 	fn tx_handler(&mut self) {
 		for i in 0..self.tx_in_use.len() {
 			if self.tx_in_use[i] {
-				let txstatus = unsafe { inl(self.iobase + TSD0 + i as u16 * 4) };
+				let txstatus =
+					unsafe { Port::<u32>::new(self.iobase + TSD0 + i as u16 * 4).read() };
 
 				if (txstatus & (TSD_TABT | TSD_OWC)) > 0 {
 					error!("RTL8139: major error");
@@ -418,7 +413,7 @@ impl Drop for RTL8139Driver {
 
 		// Software reset
 		unsafe {
-			outb(self.iobase + CR, CR_RST);
+			Port::<u8>::new(self.iobase + CR).write(CR_RST);
 		}
 	}
 }
@@ -446,12 +441,12 @@ pub(crate) fn init_device(
 
 	let mac: [u8; 6] = unsafe {
 		[
-			inb(iobase + IDR0),
-			inb(iobase + IDR0 + 1),
-			inb(iobase + IDR0 + 2),
-			inb(iobase + IDR0 + 3),
-			inb(iobase + IDR0 + 4),
-			inb(iobase + IDR0 + 5),
+			Port::<u8>::new(iobase + IDR0).read(),
+			Port::<u8>::new(iobase + IDR0 + 1).read(),
+			Port::<u8>::new(iobase + IDR0 + 2).read(),
+			Port::<u8>::new(iobase + IDR0 + 3).read(),
+			Port::<u8>::new(iobase + IDR0 + 4).read(),
+			Port::<u8>::new(iobase + IDR0 + 5).read(),
 		]
 	};
 
@@ -461,19 +456,19 @@ pub(crate) fn init_device(
 	);
 
 	unsafe {
-		if inl(iobase + TCR) == 0x00ff_ffffu32 {
+		if Port::<u32>::new(iobase + TCR).read() == 0x00ff_ffffu32 {
 			error!("Unable to initialize RTL8192");
 			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::InitFailed));
 		}
 
 		// Software reset
-		outb(iobase + CR, CR_RST);
+		Port::<u8>::new(iobase + CR).write(CR_RST);
 
 		// The RST bit must be checked to make sure that the chip has finished the reset.
 		// If the RST bit is high (1), then the reset is still in operation.
 		crate::arch::kernel::processor::udelay(10000);
 		let mut tmp: u16 = 10000;
-		while (inb(iobase + CR) & CR_RST) == CR_RST && tmp > 0 {
+		while (Port::<u8>::new(iobase + CR).read() & CR_RST) == CR_RST && tmp > 0 {
 			tmp -= 1;
 		}
 
@@ -483,37 +478,35 @@ pub(crate) fn init_device(
 		}
 
 		// Enable Receive and Transmitter
-		outb(iobase + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
+		Port::<u8>::new(iobase + CR).write(CR_TE | CR_RE); // Sets the RE and TE bits high
 
 		// lock config register
-		outb(iobase + CR9346, CR9346_EEM1 | CR9346_EEM0);
+		Port::<u8>::new(iobase + CR9346).write(CR9346_EEM1 | CR9346_EEM0);
 
 		// clear all of CONFIG1
-		outb(iobase + CONFIG1, 0);
+		Port::<u8>::new(iobase + CONFIG1).write(0);
 
 		// disable driver loaded and lanwake bits, turn driver loaded bit back on
-		outb(
-			iobase + CONFIG1,
-			(inb(iobase + CONFIG1) & !(CONFIG1_DVRLOAD | CONFIG1_LWACT)) | CONFIG1_DVRLOAD,
+		Port::<u8>::new(iobase + CONFIG1).write(
+			(Port::<u8>::new(iobase + CONFIG1).read() & !(CONFIG1_DVRLOAD | CONFIG1_LWACT))
+				| CONFIG1_DVRLOAD,
 		);
 
 		// unlock config register
-		outb(iobase + CR9346, 0);
+		Port::<u8>::new(iobase + CR9346).write(0);
 
 		// configure receive buffer
 		// AB - Accept Broadcast: Accept broadcast packets sent to mac ff:ff:ff:ff:ff:ff
 		// AM - Accept Multicast: Accept multicast packets.
 		// APM - Accept Physical Match: Accept packets send to NIC's MAC address.
 		// AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
-		outl(
-			iobase + RCR,
-			RCR_MXDMA2 | RCR_MXDMA1 | RCR_MXDMA0 | RCR_AB | RCR_AM | RCR_APM | RCR_AAP,
-		); // The WRAP bit isn't set!
+		Port::<u32>::new(iobase + RCR)
+			.write(RCR_MXDMA2 | RCR_MXDMA1 | RCR_MXDMA0 | RCR_AB | RCR_AM | RCR_APM | RCR_AAP); // The WRAP bit isn't set!
 
 		// set the transmit config register to
 		// be the normal interframe gap time
 		// set DMA max burst to 64bytes
-		outl(iobase + TCR, TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
+		Port::<u32>::new(iobase + TCR).write(TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
 	}
 
 	let rxbuffer = vec![0; RX_BUF_LEN].into_boxed_slice();
@@ -533,29 +526,23 @@ pub(crate) fn init_device(
 
 	unsafe {
 		// register the receive buffer
-		outl(iobase + RBSTART, phys_addr(rxbuffer.as_ptr()));
+		Port::<u32>::new(iobase + RBSTART).write(phys_addr(rxbuffer.as_ptr()));
 
 		// set each of the transmitter start address descriptors
-		outl(iobase + TSAD0, phys_addr(txbuffer[..TX_BUF_LEN].as_ptr()));
-		outl(
-			iobase + TSAD1,
-			phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()),
-		);
-		outl(
-			iobase + TSAD2,
-			phys_addr(txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()),
-		);
-		outl(
-			iobase + TSAD3,
-			phys_addr(txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()),
-		);
+		Port::<u32>::new(iobase + TSAD0).write(phys_addr(txbuffer[..TX_BUF_LEN].as_ptr()));
+		Port::<u32>::new(iobase + TSAD1)
+			.write(phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()));
+		Port::<u32>::new(iobase + TSAD2)
+			.write(phys_addr(txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()));
+		Port::<u32>::new(iobase + TSAD3)
+			.write(phys_addr(txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()));
 
 		// Enable all known interrupts by setting the interrupt mask.
-		outw(iobase + IMR, INT_MASK);
+		Port::<u16>::new(iobase + IMR).write(INT_MASK);
 
-		outw(iobase + BMCR, BMCR_ANE);
+		Port::<u16>::new(iobase + BMCR).write(BMCR_ANE);
 		let speed;
-		let tmp = inw(iobase + BMCR);
+		let tmp = Port::<u16>::new(iobase + BMCR).read();
 		if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
 			speed = 1000;
 		} else if tmp & BMCR_SPD100 == BMCR_SPD100 {
@@ -565,12 +552,12 @@ pub(crate) fn init_device(
 		}
 
 		// Enable Receive and Transmitter
-		outb(iobase + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
+		Port::<u8>::new(iobase + CR).write(CR_TE | CR_RE); // Sets the RE and TE bits high
 
 		info!(
 			"RTL8139: CR = {:#x}, ISR = {:#x}, speed = {} mbps",
-			inb(iobase + CR),
-			inw(iobase + ISR),
+			Port::<u8>::new(iobase + CR).read(),
+			Port::<u16>::new(iobase + ISR).read(),
 			speed
 		);
 	}

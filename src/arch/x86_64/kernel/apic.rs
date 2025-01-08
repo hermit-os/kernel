@@ -16,8 +16,8 @@ use arch::x86_64::kernel::{interrupts, processor};
 use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
-use x86::controlregs::*;
-use x86::msr::*;
+use x86_64::registers::control::Cr3;
+use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
@@ -31,6 +31,54 @@ use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
+
+/// APIC Location and Status (R/W) See Table 35-2. See Section 10.4.4, Local APIC  Status and Location.
+const IA32_APIC_BASE: Msr = Msr::new(0x1b);
+
+/// TSC Target of Local APIC s TSC Deadline Mode (R/W)  See Table 35-2
+const IA32_TSC_DEADLINE: Msr = Msr::new(0x6e0);
+
+/// x2APIC Task Priority register (R/W)
+const IA32_X2APIC_TPR: u32 = 0x808;
+
+/// x2APIC End of Interrupt. If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_EOI: u32 = 0x80b;
+
+/// x2APIC Spurious Interrupt Vector register (R/W)
+const IA32_X2APIC_SIVR: u32 = 0x80f;
+
+/// Error Status Register. If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_ESR: u32 = 0x828;
+
+/// x2APIC Interrupt Command register (R/W)
+const IA32_X2APIC_ICR: u32 = 0x830;
+
+/// x2APIC LVT Timer Interrupt register (R/W)
+const IA32_X2APIC_LVT_TIMER: u32 = 0x832;
+
+/// x2APIC LVT Thermal Sensor Interrupt register (R/W)
+const IA32_X2APIC_LVT_THERMAL: u32 = 0x833;
+
+/// x2APIC LVT Performance Monitor register (R/W)
+const IA32_X2APIC_LVT_PMI: u32 = 0x834;
+
+/// If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_LVT_LINT0: u32 = 0x835;
+
+/// If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_LVT_LINT1: u32 = 0x836;
+
+/// If ( CPUID.01H:ECX.\[bit 21\]  = 1 )
+const IA32_X2APIC_LVT_ERROR: u32 = 0x837;
+
+/// x2APIC Initial Count register (R/W)
+const IA32_X2APIC_INIT_COUNT: u32 = 0x838;
+
+/// x2APIC Current Count register (R/O)
+const IA32_X2APIC_CUR_COUNT: u32 = 0x839;
+
+/// x2APIC Divide Configuration register (R/W)
+const IA32_X2APIC_DIV_CONF: u32 = 0x83e;
 
 const MP_FLT_SIGNATURE: u32 = 0x5f50_4d5f;
 const MP_CONFIG_SIGNATURE: u32 = 0x504d_4350;
@@ -211,8 +259,9 @@ extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionSt
 	swapgs(&stack_frame);
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER);
+	let (frame, val) = Cr3::read_raw();
 	unsafe {
-		cr3_write(cr3());
+		Cr3::write_raw(frame, val);
 	}
 	eoi();
 	swapgs(&stack_frame);
@@ -632,8 +681,9 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 				IA32_X2APIC_LVT_TIMER,
 				APIC_LVT_TIMER_TSC_DEADLINE | u64::from(TIMER_INTERRUPT_NUMBER),
 			);
+			let mut ia32_tsc_deadline = IA32_TSC_DEADLINE;
 			unsafe {
-				wrmsr(IA32_TSC_DEADLINE, tsc_deadline);
+				ia32_tsc_deadline.write(tsc_deadline);
 			}
 		} else {
 			// Calculate the relative timeout from the absolute wakeup time.
@@ -671,10 +721,11 @@ pub fn init_x2apic() {
 		debug!("Enable x2APIC support");
 		// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
 		// Enable it.
-		let mut apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
+		let mut msr = IA32_APIC_BASE;
+		let mut apic_base = unsafe { msr.read() };
 		apic_base |= X2APIC_ENABLE;
 		unsafe {
-			wrmsr(IA32_APIC_BASE, apic_base);
+			msr.write(apic_base);
 		}
 	}
 }
@@ -739,9 +790,11 @@ pub fn boot_application_processors() {
 	}
 
 	unsafe {
+		let (frame, val) = Cr3::read_raw();
+		let value = frame.start_address().as_u64() | u64::from(val);
 		// Pass the PML4 page table address to the boot code.
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4).as_mut_ptr::<u32>()) =
-			cr3().try_into().unwrap();
+			value.try_into().unwrap();
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to {:p}",
@@ -872,7 +925,7 @@ fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
 fn local_apic_read(x2apic_msr: u32) -> u32 {
 	if processor::supports_x2apic() {
 		// x2APIC is simple, we can just read from the given MSR.
-		unsafe { rdmsr(x2apic_msr) as u32 }
+		unsafe { Msr::new(x2apic_msr).read() as u32 }
 	} else {
 		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_ptr::<u32>()) }
 	}
@@ -913,7 +966,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 	if processor::supports_x2apic() {
 		// x2APIC is simple, we can just write the given value to the given MSR.
 		unsafe {
-			wrmsr(x2apic_msr, value);
+			Msr::new(x2apic_msr).write(value);
 		}
 	} else {
 		// Write the value.

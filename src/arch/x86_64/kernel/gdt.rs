@@ -74,10 +74,21 @@ pub fn add_current_core() {
 
 pub extern "C" fn set_current_kernel_stack() {
 	#[cfg(feature = "common-os")]
-	unsafe {
+	{
+		use x86_64::PhysAddr;
+		use x86_64::registers::control::Cr3;
+		use x86_64::structures::paging::PhysFrame;
+
 		let root = crate::scheduler::get_root_page_table();
-		if root != x86::controlregs::cr3().try_into().unwrap() {
-			x86::controlregs::cr3_write(root.try_into().unwrap());
+		let new_frame =
+			PhysFrame::from_start_address(PhysAddr::new(root.try_into().unwrap())).unwrap();
+
+		let (current_frame, val) = Cr3::read_raw();
+
+		if current_frame != new_frame {
+			unsafe {
+				Cr3::write_raw(new_frame, val);
+			}
 		}
 	}
 
