@@ -11,7 +11,7 @@ mod clippy;
 mod doc;
 
 use std::env;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::Result;
@@ -74,7 +74,13 @@ fn sanitize(cmd: &str) -> Command {
 		let mut cargo_home = home::cargo_home().unwrap();
 		cargo_home.push("bin");
 		cargo_home.push(&exe);
-		cargo_home
+		if cargo_home.exists() {
+			cargo_home
+		} else {
+			// Custom `$CARGO_HOME` values do not necessarily reflect in the environment.
+			// For these cases, our best bet is using `$PATH` for resolution.
+			PathBuf::from(exe)
+		}
 	};
 
 	let mut cmd = Command::new(cmd);
