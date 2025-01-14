@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/228644911.svg)](https://doi.org/10.5281/zenodo.14640796)
+
 # The Hermit Loader
 
 This project is a bootloader to run the [Hermit kernel](https://github.com/hermitcore/kernel) in different environments.
