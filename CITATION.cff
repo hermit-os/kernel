@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Lankes"
+  given-names: "Stefan"
+  orcid: "https://orcid.org/0000-0003-4718-2238"
+- family-names: "Kröning"
+  given-names: "Martin"
+  orcid: "https://orcid.org/0009-0005-0622-4229"
+- family-names: "Finck"
+  given-names: "Colin"
+- family-names: "Şahin"
+  given-names: "Çağatay Yiğit"
+- family-names: "Krebs"
+  given-names: "Daniel"
+- family-names: "Schwender"
+  given-names: "Jonathan"
+- family-names: "Thomas"
+  given-names: "Lambertz"
+- family-names: "Breitbart"
+  given-names: "Jens"
+- family-names: "Klimt"
+  given-names: "Jonathan"
+  orcid: "https://orcid.org/0000-0002-5980-2214"
+- family-names: "Schöning"
+  given-names: "Simon"
+title: "Hermit Kernel"
+version: 0.8.0
+doi: 10.5281/zenodo.14645535
+date-released: 2024-11-26
+url: "https://github.com/hermit-os/kernel"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Lankes"
+      given-names: "Stefan"
+      orcid: "https://orcid.org/0000-0003-4718-2238"
+    - family-names: "Klimt"
+      given-names: "Jonathan"
+      orcid: "https://orcid.org/0000-0002-5980-2214"
+    - family-names: "Breitbart"
+      given-names: "Jens"
+    - family-names: "Pickartz"
+      given-names: "Simon"
+      orcid: "https://orcid.org/0000-0002-6316-6396"
+  doi: "10.1007/978-3-030-59851-8_22"
+  journal: "High Performance Computing"
+  year: 2020
+  month: 10
+  title: "RustyHermit: A Scalable, Rust-Based Virtual Execution Environment"
