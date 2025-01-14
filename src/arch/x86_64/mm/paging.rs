@@ -454,7 +454,7 @@ unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 		let page_table_index = u16::from(page_table_index);
 		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
 
-		let phys = entry.frame().unwrap().start_address();
+		let phys = entry.addr();
 		let virt = x86_64::VirtAddr::new(phys.as_u64());
 		pt = unsafe { &*virt.as_mut_ptr() };
 	}
