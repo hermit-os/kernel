@@ -1,31 +1,60 @@
 use core::task::Waker;
 use core::{fmt, mem};
 
+use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch;
 
-pub(crate) struct Console(pub arch::kernel::Console);
+const SERIAL_BUFFER_SIZE: usize = 256;
+
+pub(crate) struct Console {
+	pub inner: arch::kernel::Console,
+	buffer: Vec<u8, SERIAL_BUFFER_SIZE>,
+}
 
 impl Console {
 	fn new() -> Self {
-		Self(arch::kernel::Console::new())
+		Self {
+			inner: arch::kernel::Console::new(),
+			buffer: Vec::new(),
+		}
 	}
 
 	pub fn write(&mut self, buf: &[u8]) {
-		self.0.write(buf);
+		if SERIAL_BUFFER_SIZE - self.buffer.len() >= buf.len() {
+			// unwrap: we checked that buf fits in self.buffer
+			self.buffer.extend_from_slice(buf).unwrap();
+			if buf.contains(&b'\n') {
+				self.inner.write(&self.buffer);
+				self.buffer.clear();
+			}
+		} else {
+			self.inner.write(&self.buffer);
+			self.buffer.clear();
+			if buf.len() >= SERIAL_BUFFER_SIZE {
+				self.inner.write(buf);
+			} else {
+				// unwrap: we checked that buf fits in self.buffer
+				self.buffer.extend_from_slice(buf).unwrap();
+				if buf.contains(&b'\n') {
+					self.inner.write(&self.buffer);
+					self.buffer.clear();
+				}
+			}
+		}
 	}
 
 	pub fn read(&mut self) -> Option<u8> {
-		self.0.read()
+		self.inner.read()
 	}
 
 	pub fn is_empty(&self) -> bool {
-		self.0.is_empty()
+		self.inner.is_empty()
 	}
 
 	pub fn register_waker(&mut self, waker: &Waker) {
-		self.0.register_waker(waker);
+		self.inner.register_waker(waker);
 	}
 }
 

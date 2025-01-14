@@ -626,6 +626,7 @@ dependencies = [
  "free-list",
  "fuse-abi",
  "hashbrown",
+ "heapless",
  "hermit-dtb",
  "hermit-entry",
  "hermit-macro",
