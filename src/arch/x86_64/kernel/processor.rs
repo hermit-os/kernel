@@ -324,7 +324,7 @@ impl CpuFrequency {
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
 	}
 
-	unsafe fn detect_from_cpuid(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+	unsafe fn detect_from_cpuid(&mut self, cpuid: &CpuId<CpuIdReaderNative>) -> Result<(), ()> {
 		let processor_frequency_info = cpuid.get_processor_frequency_info();
 
 		match processor_frequency_info {
@@ -336,14 +336,20 @@ impl CpuFrequency {
 		}
 	}
 
-	unsafe fn detect_from_cpuid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+	unsafe fn detect_from_cpuid_tsc_info(
+		&mut self,
+		cpuid: &CpuId<CpuIdReaderNative>,
+	) -> Result<(), ()> {
 		let tsc_info = cpuid.get_tsc_info().ok_or(())?;
 		let freq = tsc_info.tsc_frequency().ok_or(())?;
 		let mhz = (freq / 1_000_000u64) as u16;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
 	}
 
-	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+	unsafe fn detect_from_cpuid_hypervisor_info(
+		&mut self,
+		cpuid: &CpuId<CpuIdReaderNative>,
+	) -> Result<(), ()> {
 		const KHZ_TO_HZ: u64 = 1000;
 		const MHZ_TO_HZ: u64 = 1_000_000;
 		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
@@ -352,7 +358,10 @@ impl CpuFrequency {
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 	}
 
-	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+	unsafe fn detect_from_cpuid_brand_string(
+		&mut self,
+		cpuid: &CpuId<CpuIdReaderNative>,
+	) -> Result<(), ()> {
 		if let Some(processor_brand) = cpuid.get_processor_brand_string() {
 			let brand_string = processor_brand.as_str();
 			let ghz_find = brand_string.find("GHz");
@@ -524,7 +533,7 @@ struct CpuFeaturePrinter {
 }
 
 impl CpuFeaturePrinter {
-	fn new(cpuid: &CpuId) -> Self {
+	fn new(cpuid: &CpuId<CpuIdReaderNative>) -> Self {
 		CpuFeaturePrinter {
 			feature_info: cpuid
 				.get_feature_info()
@@ -704,7 +713,7 @@ impl CpuSpeedStep {
 		}
 	}
 
-	fn detect_features(&mut self, cpuid: &CpuId) {
+	fn detect_features(&mut self, cpuid: &CpuId<CpuIdReaderNative>) {
 		let feature_info = cpuid
 			.get_feature_info()
 			.expect("CPUID Feature Info not available!");
