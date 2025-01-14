@@ -35,7 +35,7 @@ fn find_kernel_multiboot(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 		.children()
 		.filter(|child| child.name.starts_with("module@"))
 		.find(|child| {
-			child.compatible().map_or(false, |compatible| {
+			child.compatible().is_some_and(|compatible| {
 				compatible
 					.all()
 					.any(|compatible| compatible == "multiboot,ramdisk")
