@@ -111,8 +111,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	fn traverse_create_file(
 		&self,
 		_components: &mut Vec<&str>,
-		_ptr: *const u8,
-		_length: usize,
+		_data: &'static [u8],
 		_mode: AccessPermission,
 	) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
@@ -255,11 +254,10 @@ impl Filesystem {
 	}
 
 	/// Create read-only file
-	pub unsafe fn create_file(
+	pub fn create_file(
 		&self,
 		path: &str,
-		ptr: *const u8,
-		length: usize,
+		data: &'static [u8],
 		mode: AccessPermission,
 	) -> io::Result<()> {
 		debug!("Create read-only file {}", path);
@@ -269,8 +267,7 @@ impl Filesystem {
 		components.reverse();
 		components.pop();
 
-		self.root
-			.traverse_create_file(&mut components, ptr, length, mode)
+		self.root.traverse_create_file(&mut components, data, mode)
 	}
 }
 
@@ -353,18 +350,11 @@ pub(crate) fn init() {
 	uhyve::init();
 }
 
-pub unsafe fn create_file(
-	name: &str,
-	ptr: *const u8,
-	length: usize,
-	mode: AccessPermission,
-) -> io::Result<()> {
-	unsafe {
-		FILESYSTEM
-			.get()
-			.ok_or(io::Error::EINVAL)?
-			.create_file(name, ptr, length, mode)
-	}
+pub fn create_file(name: &str, data: &'static [u8], mode: AccessPermission) -> io::Result<()> {
+	FILESYSTEM
+		.get()
+		.ok_or(io::Error::EINVAL)?
+		.create_file(name, data, mode)
 }
 
 /// Removes an empty directory.
