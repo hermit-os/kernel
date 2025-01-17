@@ -9,6 +9,7 @@
 )]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
+#![feature(linkage)]
 #![feature(linked_list_cursors)]
 #![feature(map_try_insert)]
 #![feature(maybe_uninit_as_bytes)]
