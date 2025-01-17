@@ -14,7 +14,6 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::slice;
 
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
@@ -32,11 +31,8 @@ pub(crate) struct RomFileInner {
 }
 
 impl RomFileInner {
-	pub unsafe fn new(ptr: *const u8, length: usize, attr: FileAttr) -> Self {
-		Self {
-			data: unsafe { slice::from_raw_parts(ptr, length) },
-			attr,
-		}
+	pub fn new(data: &'static [u8], attr: FileAttr) -> Self {
+		Self { data, attr }
 	}
 }
 
@@ -296,11 +292,11 @@ impl VfsNode for RomFile {
 }
 
 impl RomFile {
-	pub unsafe fn new(ptr: *const u8, length: usize, mode: AccessPermission) -> Self {
+	pub fn new(data: &'static [u8], mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let attr = FileAttr {
-			st_size: length.try_into().unwrap(),
+			st_size: data.len() as u64,
 			st_mode: mode | AccessPermission::S_IFREG,
 			st_atim: t,
 			st_mtim: t,
@@ -309,7 +305,7 @@ impl RomFile {
 		};
 
 		Self {
-			data: unsafe { Arc::new(RwLock::new(RomFileInner::new(ptr, length, attr))) },
+			data: Arc::new(RwLock::new(RomFileInner::new(data, attr))),
 		}
 	}
 }
@@ -669,8 +665,7 @@ impl VfsNode for MemDirectory {
 	fn traverse_create_file(
 		&self,
 		components: &mut Vec<&str>,
-		ptr: *const u8,
-		length: usize,
+		data: &'static [u8],
 		mode: AccessPermission,
 	) -> io::Result<()> {
 		block_on(
@@ -679,13 +674,13 @@ impl VfsNode for MemDirectory {
 					let name = String::from(component);
 
 					if components.is_empty() {
-						let file = unsafe { RomFile::new(ptr, length, mode) };
+						let file = RomFile::new(data, mode);
 						self.inner.write().await.insert(name, Box::new(file));
 						return Ok(());
 					}
 
 					if let Some(directory) = self.inner.read().await.get(&name) {
-						return directory.traverse_create_file(components, ptr, length, mode);
+						return directory.traverse_create_file(components, data, mode);
 					}
 				}
 
