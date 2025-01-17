@@ -158,11 +158,8 @@ jobs:
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - name: Download OVMF
         run: |
-          sudo apt-get update
-          sudo apt-get install ovmf
-          mkdir -p edk2-stable202408-r1-bin/x64
-          cp /usr/share/OVMF/OVMF_CODE.fd edk2-stable202408-r1-bin/x64/code.fd
-          cp /usr/share/OVMF/OVMF_VARS.fd edk2-stable202408-r1-bin/x64/vars.fd
+          gh release download edk2-stable202408-r1 --repo rust-osdev/ovmf-prebuilt --pattern 'edk2-stable*-bin.tar.xz'
+          tar -xvf edk2-stable*-bin.tar.xz edk2-stable202408-r1-bin/x64
       - name: Install Firecracker
         run: |
           # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
