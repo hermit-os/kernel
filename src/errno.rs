@@ -396,14 +396,25 @@ pub const ERFKILL: i32 = 132;
 /// Robust mutexes: Memory page has hardware error
 pub const EHWPOISON: i32 = 133;
 
+/// Returns the pointer to `errno`.
 #[cfg(all(
 	not(any(feature = "common-os", feature = "nostd")),
 	not(target_arch = "riscv64")
 ))]
-#[thread_local]
-pub(crate) static ERRNO: core::cell::UnsafeCell<i32> = core::cell::UnsafeCell::new(0);
+#[unsafe(no_mangle)]
+#[linkage = "weak"]
+pub extern "C" fn sys_errno_location() -> *mut i32 {
+	use core::cell::UnsafeCell;
+
+	#[thread_local]
+	static ERRNO: UnsafeCell<i32> = UnsafeCell::new(0);
+
+	ERRNO.get()
+}
 
 /// Get the error number from the thread local storage
+///
+/// Soft-deprecated in favor of using `sys_errno_location`.
 #[cfg(not(feature = "nostd"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_get_errno() -> i32 {
@@ -411,6 +422,8 @@ pub extern "C" fn sys_get_errno() -> i32 {
 }
 
 /// Get the error number from the thread local storage
+///
+/// Soft-deprecated in favor of using `sys_errno_location`.
 #[cfg(not(feature = "nostd"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_errno() -> i32 {
@@ -418,7 +431,7 @@ pub extern "C" fn sys_errno() -> i32 {
 		if #[cfg(any(feature = "common-os", target_arch = "riscv64"))] {
 			0
 		} else {
-			unsafe { ERRNO.get().read() }
+			unsafe { *sys_errno_location() }
 		}
 	}
 }
@@ -438,7 +451,7 @@ pub(crate) trait ToErrno {
 					let _ = errno;
 				} else {
 					unsafe {
-						ERRNO.get().write(errno);
+						*sys_errno_location() = errno;
 					}
 				}
 			}
