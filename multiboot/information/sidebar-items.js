@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SIGNATURE_EAX"],"enum":["ColorInfoType","MemoryType","SymbolType"],"struct":["AOutSymbols","BootDevice","ColorInfoPalette","ColorInfoRgb","ElfSymbols","FramebufferTable","MemoryEntry","MemoryMapIter","Module","ModuleIter","Multiboot","MultibootInfo"],"trait":["MemoryManagement"],"type":["PAddr"]};
