@@ -173,6 +173,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
+name = "const_parse"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f33a5ebcb58fc85ce4a836200bf7a2b6a86edf36000e4698bb97ac0b53955bb6"
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -226,16 +232,6 @@ checksum = "784a4df722dc6267a04af36895398f59d21d07dce47232adf31ec0ff2fa45e67"
 
 [[package]]
 name = "goblin"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b363a30c165f666402fe6a3024d3bec7ebc898f96a4a23bd1c99f8dbf3f4f47"
-dependencies = [
- "plain",
- "scroll",
-]
-
-[[package]]
-name = "goblin"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daa0a64d21a7eb230583b4c5f4e23b7e4e57974f96620f42a7e75e08ae66d745"
@@ -268,12 +264,13 @@ checksum = "89e0de208fa9b99664812350b33072d0d9b3a63caaebb03eeb23316eeedfb8d0"
 
 [[package]]
 name = "hermit-entry"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dd7fbcca1989c93500b0028a83bce0f8d33558ed7a4223294d60387bd3dfd41"
+checksum = "3489d14d0767c3d6a151e6e08effa39270356b7c6fe589775da8676a57c4d4cd"
 dependencies = [
  "align-address",
- "goblin 0.8.2",
+ "const_parse",
+ "goblin",
  "log",
  "plain",
  "time",
@@ -289,7 +286,7 @@ dependencies = [
  "anstyle",
  "cfg-if",
  "fdt",
- "goblin 0.9.3",
+ "goblin",
  "hermit-dtb",
  "hermit-entry",
  "log",
