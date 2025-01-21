@@ -142,13 +142,18 @@ impl Qemu {
 			sh.copy_file(loader, "target/esp/efi/boot/bootx64.efi")?;
 			sh.copy_file(image, "target/esp/efi/boot/hermit-app")?;
 
+			use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
+
+			let prebuilt =
+				Prebuilt::fetch(Source::LATEST, "target/ovmf").expect("failed to update prebuilt");
+			let code = prebuilt.get_file(Arch::X64, FileType::Code);
+			let vars = prebuilt.get_file(Arch::X64, FileType::Vars);
+
 			vec![
 				"-drive".to_string(),
-				"if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/code.fd"
-					.to_string(),
+				format!("if=pflash,format=raw,readonly=on,file={}", code.display()),
 				"-drive".to_string(),
-				"if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/vars.fd"
-					.to_string(),
+				format!("if=pflash,format=raw,readonly=on,file={}", vars.display()),
 				"-drive".to_string(),
 				"format=raw,file=fat:rw:target/esp".to_string(),
 			]
