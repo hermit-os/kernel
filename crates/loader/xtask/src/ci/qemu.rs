@@ -149,12 +149,23 @@ impl Qemu {
 						);
 					}
 					Target::X86_64Uefi => {
+						use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
+
+						let prebuilt = Prebuilt::fetch(Source::LATEST, "target/ovmf")
+							.expect("failed to update prebuilt");
+						let code = prebuilt.get_file(Arch::X64, FileType::Code);
+						let vars = prebuilt.get_file(Arch::X64, FileType::Vars);
+
 						cpu_args.push("-drive".to_string());
-						cpu_args
-							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/code.fd".to_string());
+						cpu_args.push(format!(
+							"if=pflash,format=raw,readonly=on,file={}",
+							code.display()
+						));
 						cpu_args.push("-drive".to_string());
-						cpu_args
-							.push("if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/vars.fd".to_string());
+						cpu_args.push(format!(
+							"if=pflash,format=raw,readonly=on,file={}",
+							vars.display()
+						));
 						cpu_args.push("-drive".to_string());
 						cpu_args.push("format=raw,file=fat:rw:target/esp".to_string());
 					}
