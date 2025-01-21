@@ -534,11 +534,10 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 	const F_SETFD: i32 = 2;
 	const F_SETFL: i32 = 4;
 	const FD_CLOEXEC: i32 = 1;
-	const O_NONBLOCK: i32 = 0o4000;
 
 	if cmd == F_SETFD && arg == FD_CLOEXEC {
 		0
-	} else if cmd == F_SETFL && arg == O_NONBLOCK {
+	} else if cmd == F_SETFL && arg == OpenOption::O_NONBLOCK.bits() {
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),

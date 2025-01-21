@@ -66,6 +66,7 @@ bitflags! {
 		const O_EXCL = 0o0200;
 		const O_TRUNC = 0o1000;
 		const O_APPEND = 0o2000;
+		const O_NONBLOCK = 0o4000;
 		const O_DIRECT = 0o40000;
 		const O_DIRECTORY = 0o200_000;
 	}
