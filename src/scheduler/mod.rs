@@ -572,6 +572,28 @@ impl PerCoreScheduler {
 		.await
 	}
 
+	pub async fn dup_object2(
+		&self,
+		fd1: FileDescriptor,
+		fd2: FileDescriptor,
+	) -> io::Result<FileDescriptor> {
+		future::poll_fn(|cx| {
+			without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
+				let obj = guard.get(&fd1).cloned().ok_or(io::Error::EBADF)?;
+
+				if guard.try_insert(fd2, obj).is_err() {
+					Ready(Err(io::Error::EMFILE))
+				} else {
+					Ready(Ok(fd2))
+				}
+			})
+		})
+		.await
+	}
+
 	/// Remove a IO interface, which is named by the file descriptor
 	pub async fn remove_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 		future::poll_fn(|cx| {

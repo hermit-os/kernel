@@ -22,7 +22,7 @@ pub use self::timer::*;
 use crate::executor::block_on;
 use crate::fd::{
 	AccessPermission, EventFlags, FileDescriptor, IoCtl, OpenOption, PollFd, dup_object,
-	get_object, remove_object,
+	dup_object2, get_object, isatty, remove_object,
 };
 use crate::fs::{self, FileAttr};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
@@ -632,6 +632,27 @@ pub unsafe extern "C" fn sys_getdents64(
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_dup(fd: i32) -> i32 {
 	dup_object(fd).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_dup2(fd1: i32, fd2: i32) -> i32 {
+	dup_object2(fd1, fd2).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_isatty(fd: i32) -> i32 {
+	match isatty(fd) {
+		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+		Ok(v) => {
+			if v {
+				1
+			} else {
+				0
+			}
+		}
+	}
 }
 
 #[hermit_macro::system]
