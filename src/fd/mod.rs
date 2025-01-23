@@ -256,6 +256,11 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	async fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
+
+	/// `isatty` returns `true` for a terminal device
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(false)
+	}
 }
 
 pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
@@ -379,6 +384,15 @@ pub(crate) fn dup_object(fd: FileDescriptor) -> io::Result<FileDescriptor> {
 	block_on(core_scheduler().dup_object(fd), None)
 }
 
+pub(crate) fn dup_object2(fd1: FileDescriptor, fd2: FileDescriptor) -> io::Result<FileDescriptor> {
+	block_on(core_scheduler().dup_object2(fd1, fd2), None)
+}
+
 pub(crate) fn remove_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 	block_on(core_scheduler().remove_object(fd), None)
+}
+
+pub(crate) fn isatty(fd: FileDescriptor) -> io::Result<bool> {
+	let obj = get_object(fd)?;
+	block_on(obj.isatty(), None)
 }

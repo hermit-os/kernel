@@ -53,6 +53,10 @@ impl ObjectInterface for GenericStdin {
 		})
 		.await
 	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
+	}
 }
 
 impl GenericStdin {
@@ -74,6 +78,10 @@ impl ObjectInterface for GenericStdout {
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		CONSOLE.lock().write(buf);
 		Ok(buf.len())
+	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
 	}
 }
 
@@ -97,6 +105,10 @@ impl ObjectInterface for GenericStderr {
 		CONSOLE.lock().write(buf);
 		Ok(buf.len())
 	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
+	}
 }
 
 impl GenericStderr {
@@ -108,7 +120,12 @@ impl GenericStderr {
 #[derive(Debug)]
 pub struct UhyveStdin;
 
-impl ObjectInterface for UhyveStdin {}
+#[async_trait]
+impl ObjectInterface for UhyveStdin {
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
+	}
+}
 
 impl UhyveStdin {
 	pub const fn new() -> Self {
@@ -135,6 +152,10 @@ impl ObjectInterface for UhyveStdout {
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
 
 		Ok(write_params.len)
+	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
 	}
 }
 
@@ -163,6 +184,10 @@ impl ObjectInterface for UhyveStderr {
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
 
 		Ok(write_params.len)
+	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
 	}
 }
 
