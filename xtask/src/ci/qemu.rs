@@ -361,9 +361,12 @@ fn test_http_server() -> Result<()> {
 	let url = "http://127.0.0.1:9975";
 	eprintln!("[CI] GET {url}");
 	let body = ureq::get(url)
-		.timeout(Duration::from_secs(3))
+		.config()
+		.timeout_global(Some(Duration::from_secs(3)))
+		.build()
 		.call()?
-		.into_string()?;
+		.into_body()
+		.read_to_string()?;
 	eprintln!("[CI] body = {body:?}");
 	assert_eq!(body, "Hello, world!\n");
 	Ok(())
@@ -373,9 +376,12 @@ fn test_httpd() -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	eprintln!("[CI] GET http://127.0.0.1:9975");
 	let body = ureq::get("http://127.0.0.1:9975")
-		.timeout(Duration::from_secs(3))
+		.config()
+		.timeout_global(Some(Duration::from_secs(3)))
+		.build()
 		.call()?
-		.into_string()?;
+		.into_body()
+		.read_to_string()?;
 	eprintln!("[CI] {body}");
 	assert_eq!(body.lines().next(), Some("Hello from Hermit! 🦀"));
 	Ok(())
