@@ -140,10 +140,10 @@ pub fn get_processor_count() -> u32 {
 }
 
 pub fn is_uhyve_with_pci() -> bool {
-	matches!(env::boot_info().platform_info, PlatformInfo::Uhyve {
-		has_pci: true,
-		..
-	})
+	matches!(
+		env::boot_info().platform_info,
+		PlatformInfo::Uhyve { has_pci: true, .. }
+	)
 }
 
 pub fn args() -> Option<&'static str> {

@@ -113,13 +113,16 @@ impl RxQueues {
 
 fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
-		let buff_tkn = match AvailBufferToken::new(vec![], vec![
-			BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-			BufferElem::Vector(Vec::with_capacity_in(
-				packet_size.try_into().unwrap(),
-				DeviceAlloc,
-			)),
-		]) {
+		let buff_tkn = match AvailBufferToken::new(
+			vec![],
+			vec![
+				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+				BufferElem::Vector(Vec::with_capacity_in(
+					packet_size.try_into().unwrap(),
+					DeviceAlloc,
+				)),
+			],
+		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
 				error!("Setup of network queue failed, which should not happen!");

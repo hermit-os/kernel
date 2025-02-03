@@ -297,15 +297,15 @@ impl TaskTLS {
 			let raw = ptr::slice_from_raw_parts_mut(data, block_len) as *mut TaskTLS;
 
 			let addr = (*raw).block.as_ptr().add(off).cast::<()>();
-			(*raw)
-				.dtv
-				.as_mut_ptr()
-				.write(Box::new([Dtv { counter: 1 }, Dtv {
+			(*raw).dtv.as_mut_ptr().write(Box::new([
+				Dtv { counter: 1 },
+				Dtv {
 					pointer: DtvPointer {
 						val: addr,
 						to_free: ptr::null(),
 					},
-				}]));
+				},
+			]));
 
 			Box::from_raw(raw)
 		};
