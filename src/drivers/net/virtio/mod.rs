@@ -12,7 +12,6 @@ cfg_if::cfg_if! {
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
@@ -249,9 +248,7 @@ impl NetworkDriver for VirtioNetDriver {
 		assert!(len < usize::try_from(self.send_vqs.packet_length).unwrap());
 		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
 		let result = unsafe {
-			let result = f(MaybeUninit::slice_assume_init_mut(
-				packet.spare_capacity_mut(),
-			));
+			let result = f(packet.spare_capacity_mut().assume_init_mut());
 			packet.set_len(len);
 			result
 		};

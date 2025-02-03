@@ -6,7 +6,6 @@ pub mod pci;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
-use core::mem::MaybeUninit;
 
 use pci_types::InterruptLine;
 use virtio::FeatureBits;
@@ -163,9 +162,7 @@ impl TxQueue {
 			assert!(len < usize::try_from(self.packet_length).unwrap());
 			let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
 			let result = unsafe {
-				let result = f(MaybeUninit::slice_assume_init_mut(
-					packet.spare_capacity_mut(),
-				));
+				let result = f(packet.spare_capacity_mut().assume_init_mut());
 				packet.set_len(len);
 				result
 			};
