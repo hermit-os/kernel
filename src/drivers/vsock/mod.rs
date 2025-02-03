@@ -6,7 +6,6 @@ pub mod pci;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
-use core::mem::MaybeUninit;
 
 use pci_types::InterruptLine;
 use virtio::FeatureBits;
@@ -27,13 +26,16 @@ use crate::mm::device_alloc::DeviceAlloc;
 
 fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
-		let buff_tkn = match AvailBufferToken::new(vec![], vec![
-			BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-			BufferElem::Vector(Vec::with_capacity_in(
-				packet_size.try_into().unwrap(),
-				DeviceAlloc,
-			)),
-		]) {
+		let buff_tkn = match AvailBufferToken::new(
+			vec![],
+			vec![
+				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+				BufferElem::Vector(Vec::with_capacity_in(
+					packet_size.try_into().unwrap(),
+					DeviceAlloc,
+				)),
+			],
+		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
 				error!("Setup of network queue failed, which should not happen!");
@@ -163,9 +165,7 @@ impl TxQueue {
 			assert!(len < usize::try_from(self.packet_length).unwrap());
 			let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
 			let result = unsafe {
-				let result = f(MaybeUninit::slice_assume_init_mut(
-					packet.spare_capacity_mut(),
-				));
+				let result = f(packet.spare_capacity_mut().assume_init_mut());
 				packet.set_len(len);
 				result
 			};

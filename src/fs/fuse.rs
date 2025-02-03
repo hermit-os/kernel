@@ -95,11 +95,14 @@ pub(crate) mod ops {
 
 	impl Init {
 		pub(crate) fn create() -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(FUSE_ROOT_ID, fuse_init_in {
-				major: 7,
-				minor: 31,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				FUSE_ROOT_ID,
+				fuse_init_in {
+					major: 7,
+					minor: 31,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -144,10 +147,13 @@ pub(crate) mod ops {
 
 	impl Open {
 		pub(crate) fn create(nid: u64, flags: u32) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_open_in {
-				flags,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_open_in {
+					flags,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -192,12 +198,15 @@ pub(crate) mod ops {
 
 	impl Read {
 		pub(crate) fn create(nid: u64, fh: u64, size: u32, offset: u64) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_read_in {
-				fh,
-				offset,
-				size,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_read_in {
+					fh,
+					offset,
+					size,
+					..Default::default()
+				},
+			);
 			(cmd, size)
 		}
 	}
@@ -220,12 +229,15 @@ pub(crate) mod ops {
 			offset: isize,
 			whence: SeekWhence,
 		) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_lseek_in {
-				fh,
-				offset: offset.try_into().unwrap(),
-				whence: num::ToPrimitive::to_u32(&whence).unwrap(),
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_lseek_in {
+					fh,
+					offset: offset.try_into().unwrap(),
+					whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -243,11 +255,14 @@ pub(crate) mod ops {
 
 	impl Getattr {
 		pub(crate) fn create(nid: u64, fh: u64, getattr_flags: u32) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_getattr_in {
-				getattr_flags,
-				fh,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_getattr_in {
+					getattr_flags,
+					fh,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -283,10 +298,13 @@ pub(crate) mod ops {
 
 	impl Release {
 		pub(crate) fn create(nid: u64, fh: u64) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_release_in {
-				fh,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_release_in {
+					fh,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -304,12 +322,15 @@ pub(crate) mod ops {
 
 	impl Poll {
 		pub(crate) fn create(nid: u64, fh: u64, kh: u64, event: PollEvent) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_poll_in {
-				fh,
-				kh,
-				events: event.bits() as u32,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_poll_in {
+					fh,
+					kh,
+					events: event.bits() as u32,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}

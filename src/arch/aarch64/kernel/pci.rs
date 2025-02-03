@@ -293,9 +293,12 @@ pub fn init() {
 								if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
 									match bar {
 										Bar::Io { .. } => {
-											dev.set_bar(i.try_into().unwrap(), Bar::Io {
-												port: io_start.try_into().unwrap(),
-											});
+											dev.set_bar(
+												i.try_into().unwrap(),
+												Bar::Io {
+													port: io_start.try_into().unwrap(),
+												},
+											);
 											io_start += 0x20;
 											cmd |= CommandRegister::IO_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;
@@ -311,11 +314,14 @@ pub fn init() {
 											size,
 											prefetchable,
 										} => {
-											dev.set_bar(i.try_into().unwrap(), Bar::Memory64 {
-												address: mem64_start,
-												size,
-												prefetchable,
-											});
+											dev.set_bar(
+												i.try_into().unwrap(),
+												Bar::Memory64 {
+													address: mem64_start,
+													size,
+													prefetchable,
+												},
+											);
 											mem64_start += size;
 											cmd |= CommandRegister::MEMORY_ENABLE
 												| CommandRegister::BUS_MASTER_ENABLE;

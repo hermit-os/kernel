@@ -144,7 +144,7 @@ pub fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 ///
 /// * `physical_address` - First physical address to map these pages to
 /// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
-///             The PRESENT flags is set automatically.
+///   The PRESENT flags is set automatically.
 pub fn map<S>(
 	virtual_address: VirtAddr,
 	physical_address: PhysAddr,

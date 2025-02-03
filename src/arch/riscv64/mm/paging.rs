@@ -484,7 +484,7 @@ where
 	/// * `range` - The range of pages of size S
 	/// * `physical_address` - First physical address to map these pages to
 	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
-	///             The VALID and GLOBAL are already set automatically.
+	///   The VALID and GLOBAL are already set automatically.
 	fn map_pages<S: PageSize>(
 		&mut self,
 		range: PageIter<S>,
