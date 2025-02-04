@@ -352,7 +352,9 @@ where
 }
 
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: u64, code_size: u64) -> ! {
+pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&str]) -> ! {
+	use alloc::ffi::CString;
+
 	use align_address::Align;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
@@ -362,17 +364,38 @@ pub unsafe fn jump_to_user_land(entry_point: u64, code_size: u64) -> ! {
 	info!("Create new file descriptor table");
 	block_on(core_scheduler().recreate_objmap(), None).unwrap();
 
-	let ds = 0x23u64;
-	let cs = 0x2bu64;
-	let entry_point: u64 = (LOADER_START as u64) | entry_point;
-	let stack_pointer: u64 = LOADER_START as u64
-		+ (code_size + LOADER_STACK_SIZE as u64).align_up(BasePageSize::SIZE)
-		- 128 /* red zone */ - 8;
+	let entry_point: usize = LOADER_START | entry_point;
+	let stack_pointer: usize = LOADER_START
+		+ (code_size + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE.try_into().unwrap())
+		- 8;
+
+	let stack_pointer =
+		stack_pointer - 128 /* red zone */ - arg.len() * core::mem::size_of::<*mut u8>();
+	let argv = unsafe { core::slice::from_raw_parts_mut(stack_pointer as *mut *mut u8, arg.len()) };
+	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
+	// align stack pointer to fulfill the requirements of the x86_64 ABI
+	let stack_pointer = (stack_pointer - len).align_down(16) - core::mem::size_of::<usize>();
+
+	let mut pos: usize = 0;
+	for (i, s) in arg.iter().enumerate() {
+		if let Ok(s) = CString::new(*s) {
+			let bytes = s.as_bytes_with_nul();
+			argv[i] = (stack_pointer + pos) as *mut u8;
+			pos += bytes.len();
+
+			unsafe {
+				core::ptr::copy_nonoverlapping(bytes.as_ptr(), argv[i], bytes.len());
+			}
+		} else {
+			panic!("Unable to create C string!");
+		}
+	}
 
 	debug!(
 		"Jump to user space at 0x{:x}, stack pointer 0x{:x}",
 		entry_point, stack_pointer
 	);
+
 	unsafe {
 		asm!(
 			"and rsp, {0}",
@@ -382,13 +405,17 @@ pub unsafe fn jump_to_user_land(entry_point: u64, code_size: u64) -> ! {
 			"push {3}",
 			"push {4}",
 			"push {5}",
+			"mov rdi, {6}",
+			"mov rsi, {7}",
 			"iretq",
 			const u64::MAX - (TaskStacks::MARKER_SIZE as u64 - 1),
-			in(reg) ds,
+			const 0x23usize,
 			in(reg) stack_pointer,
 			const 0x1202u64,
-			in(reg) cs,
+			const 0x2busize,
 			in(reg) entry_point,
+			in(reg) argv.len(),
+			in(reg) argv.as_ptr(),
 			options(nostack, noreturn)
 		);
 	}
