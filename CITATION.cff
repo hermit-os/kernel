@@ -1,0 +1,95 @@
+cff-version: 1.2.0
+title: The Hermit Kernel
+message: >-
+  If you use this software, please cite both the article
+  from preferred-citation and the software itself.
+type: software
+authors:
+  - family-names: Lankes
+    given-names: Stefan
+    orcid: 'https://orcid.org/0000-0003-4718-2238'
+  - family-names: Kröning
+    given-names: Martin
+    orcid: 'https://orcid.org/0009-0005-0622-4229'
+  - family-names: Klimt
+    given-names: Jonathan
+    orcid: 'https://orcid.org/0000-0002-5980-2214'
+  - family-names: Breitbart
+    given-names: Jens
+  - family-names: Finck
+    given-names: Colin
+  - family-names: Krebs
+    given-names: Daniel
+  - family-names: Schöning
+    given-names: Simon
+  - family-names: Schwender
+    given-names: Jonathan
+  - family-names: Şahin
+    given-names: Çağatay Yiğit
+  - family-names: Thomas
+    given-names: Lambertz
+  - name: The Hermit Project Developers
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.14645534
+    description: The concept DOI of the software.
+  - type: doi
+    value: 10.5281/zenodo.14645535
+    description: The versioned DOI for version 0.8.0 of the software.
+  - type: url
+    value: >-
+      https://github.com/hermit-os/kernel/releases/tag/v0.8.0
+    description: The GitHub release URL of tag v0.8.0.
+  - type: url
+    value: >-
+      https://github.com/hermit-os/kernel/tree/742526984ee0094b0626ad6afddb17b11bc9caff
+    description: >-
+      The GitHub release URL of the commit tagged with
+      v0.8.0.
+  - type: url
+    value: >-
+      https://github.com/hermit-os/kernel/releases/tag/v0.10.0
+    description: The GitHub release URL of tag v0.10.0.
+  - type: url
+    value: >-
+      https://github.com/hermit-os/kernel/tree/791b9328b3a6b93944692c6dfa3e2f42c59672cb
+    description: >-
+      The GitHub release URL of the commit tagged with
+      v0.10.0.
+repository-code: 'https://github.com/hermit-os/kernel'
+url: 'https://hermit-os.org/'
+abstract: 'A Rust-based, lightweight unikernel.'
+keywords:
+  - unikernel
+  - rust
+  - virtualization
+  - operating system
+  - high-performance computing
+  - cloud computing
+license:
+  - MIT
+  - Apache-2.0
+commit: 791b9328b3a6b93944692c6dfa3e2f42c59672cb
+version: 0.10.0
+date-released: '2025-01-18'
+preferred-citation:
+  type: article
+  title: Exploring Rust for Unikernel Development
+  journal: >-
+    Proceedings of the 10th Workshop on Programming Languages and Operating
+    Systems
+  doi: 10.1145/3365137.3365395
+  year: 2019
+  month: 10
+  authors:
+    - family-names: Lankes
+      given-names: Stefan
+      orcid: 'https://orcid.org/0000-0003-4718-2238'
+    - family-names: Breitbart
+      given-names: Jens
+    - family-names: Pickartz
+      given-names: Simon
+      orcid: 'https://orcid.org/0000-0002-6316-6396'
+  pages: 8
+  start: 8
+  end: 15
