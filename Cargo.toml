@@ -26,6 +26,7 @@ exclude = [
 	"/img/*",
 	".gitattributes",
 	".gitignore",
+ 	"CITATION.cff",
 ]
 
 [lib]
