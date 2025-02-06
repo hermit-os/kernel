@@ -80,6 +80,8 @@ memmove
 memset
 modf
 modff
+nan
+nanf
 nextafter
 nextafterf
 pow

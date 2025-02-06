@@ -163,3 +163,29 @@ pub extern "C" fn sincos(x: f64, s: &mut f64, c: &mut f64) {
 pub extern "C" fn sincosf(x: f32, s: &mut f32, c: &mut f32) {
 	(*s, *c) = libm::sincosf(x);
 }
+
+/// nan
+///
+/// # Safety
+///
+/// `arg` has to point to a valid [`CStr`].
+///
+/// [`CStr`]: core::ffi::CStr
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nan(arg: *const core::ffi::c_char) -> f64 {
+	let _arg = arg;
+	f64::NAN
+}
+
+/// nanf
+///
+/// # Safety
+///
+/// `arg` has to point to a valid [`CStr`].
+///
+/// [`CStr`]: core::ffi::CStr
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nanf(arg: *const core::ffi::c_char) -> f32 {
+	let _arg = arg;
+	f32::NAN
+}
