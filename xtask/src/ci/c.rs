@@ -65,7 +65,7 @@ impl C {
 
 		cmd!(
 			sh,
-			"meson setup --cross-file cross/{arch}-hermit.ini {build_dir}"
+			"meson setup --buildtype {buildtype} --cross-file cross/{arch}-hermit.ini {build_dir}"
 		)
 		.run()?;
 
