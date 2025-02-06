@@ -45,7 +45,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add rustfmt
-      - run: cargo fmt -- --check
+      - run: |
+          cargo fmt --all --check
+          cargo fmt --all --check --manifest-path hermit-builtins/Cargo.toml
 
   typos:
     name: Typos
