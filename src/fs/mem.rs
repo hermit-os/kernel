@@ -112,6 +112,11 @@ impl ObjectInterface for RomFileInterface {
 			Err(io::Error::EBADF)
 		}
 	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let guard = self.inner.read().await;
+		Ok(guard.attr)
+	}
 }
 
 impl RomFileInterface {
@@ -240,6 +245,11 @@ impl ObjectInterface for RamFileInterface {
 		*pos_guard = new_pos.try_into().unwrap();
 
 		Ok(new_pos)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let guard = self.inner.read().await;
+		Ok(guard.attr)
 	}
 }
 
