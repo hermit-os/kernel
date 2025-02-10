@@ -1963,9 +1963,9 @@ dependencies = [
 
 [[package]]
 name = "ureq"
-version = "3.0.4"
+version = "3.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18250fd12e095bc29eb65b753431ae5d326f7c259a818cb3bf3faaf740ee3344"
+checksum = "b2916852be768844b6e9cbe107358b5bc40a696bd6dc8e036c9f80c731242c9c"
 dependencies = [
  "base64",
  "flate2",
@@ -2392,7 +2392,7 @@ dependencies = [
  "home",
  "ovmf-prebuilt",
  "sysinfo",
- "ureq 3.0.4",
+ "ureq 3.0.5",
  "wait-timeout",
  "xshell",
 ]
