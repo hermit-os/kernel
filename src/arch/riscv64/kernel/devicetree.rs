@@ -239,4 +239,7 @@ pub fn init_drivers() {
 			}
 		}
 	}
+
+	#[cfg(all(feature = "tcp", not(feature = "pci")))]
+	super::mmio::MMIO_DRIVERS.finalize();
 }
