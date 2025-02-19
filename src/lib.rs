@@ -137,10 +137,6 @@ extern "C" fn initd(_arg: usize) {
 	drivers::init();
 	crate::executor::init();
 
-	// Initialize MMIO Drivers if on riscv64
-	#[cfg(target_arch = "riscv64")]
-	riscv64::kernel::init_drivers();
-
 	syscalls::init();
 	fs::init();
 	#[cfg(all(feature = "shell", target_arch = "x86_64"))]
