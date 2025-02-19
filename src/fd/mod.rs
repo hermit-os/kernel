@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::{self, Future};
+use core::mem::MaybeUninit;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
@@ -152,7 +153,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -264,7 +265,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	}
 }
 
-pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
+pub(crate) fn read(fd: FileDescriptor, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {

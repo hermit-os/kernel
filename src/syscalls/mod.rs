@@ -387,7 +387,7 @@ pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| v.try_into().unwrap(),
@@ -420,7 +420,9 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
 
 	for iovec_buf in iovec_buffers {
-		let buf = unsafe { core::slice::from_raw_parts_mut(iovec_buf.iov_base, iovec_buf.iov_len) };
+		let buf = unsafe {
+			core::slice::from_raw_parts_mut(iovec_buf.iov_base.cast(), iovec_buf.iov_len)
+		};
 
 		let len = crate::fd::read(fd, buf).map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),

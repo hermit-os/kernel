@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::future;
+use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use async_trait::async_trait;
@@ -261,7 +262,10 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.recvfrom(buffer).await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+		// FIXME
+		let buffer =
+			unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr().cast(), buffer.len()) };
 		self.read().await.read(buffer).await
 	}
 

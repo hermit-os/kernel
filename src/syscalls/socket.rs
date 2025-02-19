@@ -884,7 +884,7 @@ pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
 	if flags == 0 {
-		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+		let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 		crate::fd::read(fd, slice).map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 			|v| v.try_into().unwrap(),
