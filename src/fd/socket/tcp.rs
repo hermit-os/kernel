@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
 use core::future;
+use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
@@ -171,7 +172,7 @@ impl Socket {
 		.await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				let state = socket.state();
@@ -187,7 +188,7 @@ impl Socket {
 								socket
 									.recv(|data| {
 										let len = core::cmp::min(buffer.len(), data.len());
-										buffer[..len].copy_from_slice(&data[..len]);
+										buffer[..len].write_copy_of_slice(&data[..len]);
 										(len, len)
 									})
 									.map_err(|_| io::Error::EIO),
@@ -468,7 +469,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.poll(event).await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		self.read().await.read(buffer).await
 	}
 

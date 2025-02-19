@@ -14,6 +14,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
@@ -59,7 +60,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -81,7 +82,7 @@ impl ObjectInterface for RomFileInterface {
 			buf.len()
 		};
 
-		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
+		buf[..len].write_copy_of_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)
@@ -170,7 +171,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -192,7 +193,7 @@ impl ObjectInterface for RamFileInterface {
 			buf.len()
 		};
 
-		buf[0..len].clone_from_slice(&guard.data[pos..pos + len]);
+		buf[..len].write_copy_of_slice(&guard.data[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)
@@ -214,7 +215,7 @@ impl ObjectInterface for RamFileInterface {
 		guard.attr.st_mtim = t;
 		guard.attr.st_ctim = t;
 
-		guard.data[pos..pos + buf.len()].clone_from_slice(buf);
+		guard.data[pos..pos + buf.len()].copy_from_slice(buf);
 		*pos_guard = pos + buf.len();
 
 		Ok(buf.len())

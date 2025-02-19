@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use core::future::{self, Future};
-use core::mem;
+use core::mem::{self, MaybeUninit};
 use core::task::{Poll, Waker, ready};
 
 use async_lock::Mutex;
@@ -45,7 +45,7 @@ impl EventFd {
 
 #[async_trait]
 impl ObjectInterface for EventFd {
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
@@ -58,8 +58,7 @@ impl ObjectInterface for EventFd {
 				let mut guard = ready!(pinned.as_mut().poll(cx));
 				if guard.counter > 0 {
 					guard.counter -= 1;
-					let tmp = u64::to_ne_bytes(1);
-					buf[..len].copy_from_slice(&tmp);
+					buf[..len].write_copy_of_slice(&u64::to_ne_bytes(1));
 					if let Some(cx) = guard.write_queue.pop_front() {
 						cx.wake_by_ref();
 					}
@@ -74,7 +73,7 @@ impl ObjectInterface for EventFd {
 				let tmp = guard.counter;
 				if tmp > 0 {
 					guard.counter = 0;
-					buf[..len].copy_from_slice(&u64::to_ne_bytes(tmp));
+					buf[..len].write_copy_of_slice(&u64::to_ne_bytes(tmp));
 					if let Some(cx) = guard.read_queue.pop_front() {
 						cx.wake_by_ref();
 					}

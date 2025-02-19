@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::future;
+use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use async_trait::async_trait;
@@ -141,24 +142,23 @@ impl Socket {
 		}
 	}
 
-	async fn recvfrom(&self, buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
 					if socket.can_recv() {
-						match socket.recv_slice(buffer) {
-							Ok((len, meta)) => match self.endpoint {
-								Some(ep) => {
-									if meta.endpoint == ep {
-										Poll::Ready(Ok((len, meta.endpoint)))
-									} else {
-										buffer[..len].iter_mut().for_each(|x| *x = 0);
-										socket.register_recv_waker(cx.waker());
-										Poll::Pending
-									}
+						match socket.recv() {
+							// Drop the packet when the provided buffer cannot
+							// fit the payload.
+							Ok((data, meta)) if data.len() <= buffer.len() => {
+								if self.endpoint.is_none_or(|ep| meta.endpoint == ep) {
+									buffer[..data.len()].write_copy_of_slice(data);
+									Poll::Ready(Ok((data.len(), meta.endpoint)))
+								} else {
+									socket.register_recv_waker(cx.waker());
+									Poll::Pending
 								}
-								None => Poll::Ready(Ok((len, meta.endpoint))),
-							},
+							}
 							_ => Poll::Ready(Err(io::Error::EIO)),
 						}
 					} else {
@@ -174,24 +174,23 @@ impl Socket {
 		.map(|(len, endpoint)| (len, Endpoint::Ip(endpoint)))
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
 					if socket.can_recv() {
-						match socket.recv_slice(buffer) {
-							Ok((len, meta)) => match self.endpoint {
-								Some(ep) => {
-									if meta.endpoint == ep {
-										Poll::Ready(Ok(len))
-									} else {
-										buffer[..len].iter_mut().for_each(|x| *x = 0);
-										socket.register_recv_waker(cx.waker());
-										Poll::Pending
-									}
+						match socket.recv() {
+							// Drop the packet when the provided buffer cannot
+							// fit the payload.
+							Ok((data, meta)) if data.len() <= buffer.len() => {
+								if self.endpoint.is_none_or(|ep| meta.endpoint == ep) {
+									buffer[..data.len()].write_copy_of_slice(data);
+									Poll::Ready(Ok(data.len()))
+								} else {
+									socket.register_recv_waker(cx.waker());
+									Poll::Pending
 								}
-								None => Poll::Ready(Ok(len)),
-							},
+							}
 							_ => Poll::Ready(Err(io::Error::EIO)),
 						}
 					} else {
@@ -257,11 +256,11 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.sendto(buffer, endpoint).await
 	}
 
-	async fn recvfrom(&self, buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
 		self.read().await.recvfrom(buffer).await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		self.read().await.read(buffer).await
 	}
 
