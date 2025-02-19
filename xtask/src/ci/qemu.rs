@@ -78,6 +78,7 @@ impl Qemu {
 			.args(self.cpu_args(arch))
 			.args(&["-smp", &smp.to_string()])
 			.args(&["-m".to_string(), format!("{memory}M")])
+			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.netdev_args())
 			.args(self.virtiofsd_args(memory));
 
