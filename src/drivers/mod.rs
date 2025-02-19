@@ -128,5 +128,8 @@ pub(crate) fn init() {
 	))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
 
+	#[cfg(target_arch = "riscv64")]
+	crate::arch::riscv64::kernel::init_drivers();
+
 	crate::arch::interrupts::install_handlers();
 }
