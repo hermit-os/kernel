@@ -962,7 +962,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 	addr: *mut sockaddr,
 	addrlen: *mut socklen_t,
 ) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),

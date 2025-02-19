@@ -231,7 +231,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// receive a message from a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	async fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, _buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
 		Err(io::Error::ENOSYS)
 	}
 
