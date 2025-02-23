@@ -259,7 +259,10 @@ pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
 	if no_execution {
 		flags.execute_disable();
 	}
-	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
+
+	if !env::is_uefi() {
+		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
+	}
 
 	virtual_address
 }
@@ -269,10 +272,12 @@ pub(crate) fn deallocate(virtual_address: VirtAddr, size: usize) {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 
 	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
-		arch::mm::paging::unmap::<BasePageSize>(
-			virtual_address,
-			size / BasePageSize::SIZE as usize,
-		);
+		if !env::is_uefi() {
+			arch::mm::paging::unmap::<BasePageSize>(
+				virtual_address,
+				size / BasePageSize::SIZE as usize,
+			);
+		}
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 		arch::mm::physicalmem::deallocate(phys_addr, size);
 	} else {
