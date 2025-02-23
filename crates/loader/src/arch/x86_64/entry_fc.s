@@ -69,8 +69,7 @@ start64:
     add rsp, BOOT_STACK_SIZE-16
 
     # jump to the boot processors's C code
-    .extern loader_main
-    jmp loader_main
+    jmp {loader_main}
 invalid:
     jmp invalid
 

@@ -18,7 +18,6 @@ extern "C" {
 
 /// Entry Point of the BIOS Loader
 /// (called from entry.asm or entry.rs)
-#[no_mangle]
 pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	crate::log::init();
 

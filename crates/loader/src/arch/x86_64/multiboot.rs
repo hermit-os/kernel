@@ -25,7 +25,10 @@ extern "C" {
 
 #[allow(bad_asm_style)]
 mod entry {
-	core::arch::global_asm!(include_str!("entry.s"));
+	core::arch::global_asm!(
+		include_str!("entry.s"),
+		loader_main = sym crate::os::loader_main,
+	);
 }
 
 struct Mem;

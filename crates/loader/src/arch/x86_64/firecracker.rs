@@ -26,7 +26,10 @@ extern "C" {
 }
 
 mod entry {
-	core::arch::global_asm!(include_str!("entry_fc.s"));
+	core::arch::global_asm!(
+		include_str!("entry_fc.s"),
+		loader_main = sym crate::os::loader_main,
+	);
 }
 
 pub fn find_kernel() -> &'static [u8] {
