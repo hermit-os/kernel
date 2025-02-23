@@ -152,8 +152,8 @@ pub fn map<S>(
 	flags: PageTableEntryFlags,
 ) where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
-	OffsetPageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
+	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let pages = {
 		let start = Page::<S>::containing_address(virtual_address.into());
@@ -214,8 +214,8 @@ pub fn map<S>(
 pub fn map_heap<S>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
-	OffsetPageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
+	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let flags = {
 		let mut flags = PageTableEntryFlags::empty();
@@ -238,7 +238,7 @@ where
 pub fn identity_map<S>(frame: PhysFrame<S>)
 where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
 {
 	assert!(
 		frame.start_address().as_u64() < mm::kernel_start_address().as_u64(),
@@ -262,7 +262,7 @@ where
 pub fn unmap<S>(virtual_address: VirtAddr, count: usize)
 where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
 {
 	trace!(
 		"Unmapping virtual address {:p} ({} pages)",
