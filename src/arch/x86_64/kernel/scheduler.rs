@@ -115,32 +115,29 @@ impl TaskStacks {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().execute_disable();
 
-		// For UEFI systems, the entire memory is already mapped, just clear the stack for safety
-		if !env::is_uefi() {
-			// map IST1 into the address space
-			crate::arch::mm::paging::map::<BasePageSize>(
-				virt_addr + BasePageSize::SIZE,
-				phys_addr,
-				IST_SIZE / BasePageSize::SIZE as usize,
-				flags,
-			);
+		// map IST1 into the address space
+		crate::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + BasePageSize::SIZE,
+			phys_addr,
+			IST_SIZE / BasePageSize::SIZE as usize,
+			flags,
+		);
 
-			// map kernel stack into the address space
-			crate::arch::mm::paging::map::<BasePageSize>(
-				virt_addr + IST_SIZE + 2 * BasePageSize::SIZE,
-				phys_addr + IST_SIZE,
-				DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
-				flags,
-			);
+		// map kernel stack into the address space
+		crate::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + IST_SIZE + 2 * BasePageSize::SIZE,
+			phys_addr + IST_SIZE,
+			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
+			flags,
+		);
 
-			// map user stack into the address space
-			crate::arch::mm::paging::map::<BasePageSize>(
-				virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
-				phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
-				user_stack_size / BasePageSize::SIZE as usize,
-				flags,
-			);
-		}
+		// map user stack into the address space
+		crate::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
+			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
+			user_stack_size / BasePageSize::SIZE as usize,
+			flags,
+		);
 
 		// clear user stack
 		unsafe {
