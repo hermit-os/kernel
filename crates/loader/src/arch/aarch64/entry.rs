@@ -50,7 +50,6 @@ global_asm!(
 );
 
 #[inline(never)]
-#[link_section = ".text._start"]
 pub unsafe fn start_rust() -> ! {
 	unsafe { pre_init() }
 }

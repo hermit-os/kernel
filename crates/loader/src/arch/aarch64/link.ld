@@ -19,7 +19,6 @@ SECTIONS
   . = phys;
   loader_start = .;
   .text : {
-    KEEP(*(.text._start))
     *(.text)
     *(.text.*)
   } :segment_rx

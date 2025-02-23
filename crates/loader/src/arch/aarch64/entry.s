@@ -2,7 +2,7 @@
 
 .equ _core_id_mask, 0xff
 
-.section .text._start
+.section .text
 
 _start:
 	// Only proceed on the boot core. Park it otherwise.
