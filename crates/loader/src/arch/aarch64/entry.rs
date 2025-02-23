@@ -44,12 +44,14 @@ const fn tcr_size(x: u64) -> u64 {
 	((64 - x) << 16) | (64 - x)
 }
 
-global_asm!(include_str!("entry.s"));
+global_asm!(
+	include_str!("entry.s"),
+	start_rust = sym start_rust,
+);
 
 #[inline(never)]
-#[no_mangle]
 #[link_section = ".text._start"]
-pub unsafe fn _start_rust() -> ! {
+pub unsafe fn start_rust() -> ! {
 	unsafe { pre_init() }
 }
 
