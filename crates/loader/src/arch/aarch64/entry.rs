@@ -2,12 +2,8 @@
 
 use core::arch::{asm, global_asm};
 
-use aarch64_cpu::registers::{Writeable, SCTLR_EL1};
+use aarch64_cpu::registers::{SCTLR_EL1, Writeable};
 use log::info;
-
-extern "C" {
-	fn loader_main();
-}
 
 const BOOT_CORE_ID: u64 = 0; // ID of CPU for booting on SMP systems - this might be board specific in the future
 
@@ -48,12 +44,13 @@ const fn tcr_size(x: u64) -> u64 {
 	((64 - x) << 16) | (64 - x)
 }
 
-global_asm!(include_str!("entry.s"));
+global_asm!(
+	include_str!("entry.s"),
+	start_rust = sym start_rust,
+);
 
 #[inline(never)]
-#[no_mangle]
-#[link_section = ".text._start"]
-pub unsafe fn _start_rust() -> ! {
+pub unsafe fn start_rust() -> ! {
 	unsafe { pre_init() }
 }
 
@@ -189,10 +186,8 @@ unsafe fn pre_init() -> ! {
 
 	// Enter loader
 	unsafe {
-		loader_main();
+		crate::os::loader_main();
 	}
-
-	unreachable!()
 }
 
 pub unsafe fn wait_forever() -> ! {

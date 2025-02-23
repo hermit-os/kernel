@@ -16,17 +16,20 @@ use sptr::Strict;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 use super::physicalmem::PhysAlloc;
-use super::{paging, KERNEL_STACK_SIZE, SERIAL_IO_PORT};
-use crate::fdt::Fdt;
+use super::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, paging};
 use crate::BootInfoExt;
+use crate::fdt::Fdt;
 
-extern "C" {
+unsafe extern "C" {
 	static mut loader_end: u8;
 	static boot_params: usize;
 }
 
 mod entry {
-	core::arch::global_asm!(include_str!("entry_fc.s"));
+	core::arch::global_asm!(
+		include_str!("entry_fc.s"),
+		loader_main = sym crate::os::loader_main,
+	);
 }
 
 pub fn find_kernel() -> &'static [u8] {
@@ -54,10 +57,10 @@ pub fn find_kernel() -> &'static [u8] {
 	{
 		info!("Found Linux kernel boot flag and header magic! Probably booting in firecracker.");
 	} else {
-		info!("Kernel boot flag and hdr magic have values 0x{:x} and 0x{:x} which does not align with the normal linux kernel values", 
- 			linux_kernel_boot_flag_magic,
- 			linux_kernel_header_magic
- 		);
+		info!(
+			"Kernel boot flag and hdr magic have values 0x{:x} and 0x{:x} which does not align with the normal linux kernel values",
+			linux_kernel_boot_flag_magic, linux_kernel_header_magic
+		);
 	}
 
 	// Load the boot_param memory-map information
@@ -152,11 +155,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			.strip_suffix('\0')
 			.unwrap();
 
-		if s.is_empty() {
-			None
-		} else {
-			Some(s)
-		}
+		if s.is_empty() { None } else { Some(s) }
 	} else {
 		None
 	};

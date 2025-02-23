@@ -2,7 +2,7 @@
 
 .equ _core_id_mask, 0xff
 
-.section .text._start
+.section .text
 
 _start:
 	// Only proceed on the boot core. Park it otherwise.
@@ -21,7 +21,7 @@ _start:
 	mov		sp, x4
 	
 	// Jump to Rust code.
-	b	_start_rust
+	b	{start_rust}
 
 	// Infinitely wait for events (aka "park the core").
 1:	wfe

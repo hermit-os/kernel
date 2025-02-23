@@ -11,14 +11,13 @@ use log::info;
 pub use self::console::CONSOLE;
 use crate::arch;
 
-extern "C" {
+unsafe extern "C" {
 	static loader_end: u8;
 	static loader_start: u8;
 }
 
 /// Entry Point of the BIOS Loader
 /// (called from entry.asm or entry.rs)
-#[no_mangle]
 pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	crate::log::init();
 

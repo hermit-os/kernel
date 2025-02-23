@@ -1,7 +1,7 @@
 use std::env;
 use std::process::{Command, ExitStatus};
 
-use anyhow::{ensure, Result};
+use anyhow::{Result, ensure};
 use clap::Args;
 use sysinfo::{CpuRefreshKind, System};
 use xshell::cmd;
