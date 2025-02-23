@@ -19,7 +19,7 @@ use crate::arch::paging::*;
 use crate::os::CONSOLE;
 use crate::BootInfoExt;
 
-extern "C" {
+unsafe extern "C" {
 	static mut loader_end: u8;
 	static mut l0_pgtable: u64;
 	static mut l1_pgtable: u64;

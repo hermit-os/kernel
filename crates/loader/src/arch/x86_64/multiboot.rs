@@ -18,7 +18,7 @@ use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT};
 use crate::fdt::Fdt;
 use crate::BootInfoExt;
 
-extern "C" {
+unsafe extern "C" {
 	static mut loader_end: u8;
 	static mb_info: usize;
 }

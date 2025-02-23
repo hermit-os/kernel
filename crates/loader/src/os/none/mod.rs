@@ -11,7 +11,7 @@ use log::info;
 pub use self::console::CONSOLE;
 use crate::arch;
 
-extern "C" {
+unsafe extern "C" {
 	static loader_end: u8;
 	static loader_start: u8;
 }
