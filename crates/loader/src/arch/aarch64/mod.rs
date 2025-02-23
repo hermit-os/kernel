@@ -7,17 +7,17 @@ use core::arch::asm;
 use core::ptr::{self, NonNull};
 
 use align_address::Align;
-use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
+use goblin::elf::header::header64::{EI_DATA, ELFDATA2LSB, ELFMAG, Header, SELFMAG};
 use hermit_dtb::Dtb;
+use hermit_entry::Entry;
 use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
 use hermit_entry::elf::LoadedKernel;
-use hermit_entry::Entry;
 use log::info;
 use sptr::Strict;
 
+use crate::BootInfoExt;
 use crate::arch::paging::*;
 use crate::os::CONSOLE;
-use crate::BootInfoExt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;

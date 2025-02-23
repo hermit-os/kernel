@@ -8,11 +8,11 @@ use core::{mem, slice};
 
 use address_range::AddressRange;
 use fdt::node::FdtNode;
+use hermit_entry::Entry;
 use hermit_entry::boot_info::{
 	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, RawBootInfo,
 };
 use hermit_entry::elf::LoadedKernel;
-use hermit_entry::Entry;
 use log::info;
 use sptr::Strict;
 

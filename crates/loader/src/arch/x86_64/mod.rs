@@ -51,8 +51,8 @@ pub unsafe fn enter_kernel(
 ) -> ! {
 	use core::arch::asm;
 
-	use hermit_entry::boot_info::RawBootInfo;
 	use hermit_entry::Entry;
+	use hermit_entry::boot_info::RawBootInfo;
 	use log::info;
 
 	// Check expected signature of entry function

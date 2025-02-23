@@ -20,7 +20,7 @@ use uefi::table::cfg;
 
 pub use self::console::CONSOLE;
 use crate::fdt::Fdt;
-use crate::{arch, BootInfoExt};
+use crate::{BootInfoExt, arch};
 
 // Entry Point of the Uefi Loader
 #[entry]

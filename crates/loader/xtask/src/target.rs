@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::anyhow;
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Target {
