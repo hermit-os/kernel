@@ -429,8 +429,10 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 				print_page_table_entries(valid_indices);
 			}
 		}
-		TranslateResult::NotMapped => todo!(),
-		TranslateResult::InvalidFrameAddress(_) => todo!(),
+		TranslateResult::NotMapped => println!("virt_addr: {virt_addr:p} not mapped"),
+		TranslateResult::InvalidFrameAddress(phys_addr) => {
+			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p} (invalid)");
+		}
 	}
 }
 
@@ -453,6 +455,10 @@ unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 		let indent = &"        "[0..2 * i];
 		let page_table_index = u16::from(page_table_index);
 		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
+
+		if entry.is_unused() {
+			break;
+		}
 
 		let phys = entry.addr();
 		let virt = x86_64::VirtAddr::new(phys.as_u64());
