@@ -92,16 +92,6 @@ pub use x86_64::structures::paging::{
 	PageSize, Size1GiB as HugePageSize, Size2MiB as LargePageSize, Size4KiB as BasePageSize,
 };
 
-/// Returns a recursive page table mapping, its last entry is mapped to the table itself
-unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
-	let level_4_table_addr = 0xffff_ffff_ffff_f000;
-	let level_4_table_ptr = ptr::with_exposed_provenance_mut(level_4_table_addr);
-	unsafe {
-		let level_4_table = &mut *(level_4_table_ptr);
-		RecursivePageTable::new(level_4_table).unwrap()
-	}
-}
-
 /// Returns a mapping of the physical memory where physical address is equal to the virtual address (no offset)
 pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
@@ -117,11 +107,7 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	let addr = x86_64::VirtAddr::from(virtual_address);
 
-	let translate_result = if env::is_uefi() {
-		unsafe { identity_mapped_page_table() }.translate(addr)
-	} else {
-		unsafe { recursive_page_table() }.translate(addr)
-	};
+	let translate_result = unsafe { identity_mapped_page_table() }.translate(addr);
 
 	match translate_result {
 		TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
@@ -201,11 +187,7 @@ pub fn map<S>(
 		unmapped
 	}
 
-	let unmapped = if env::is_uefi() {
-		unsafe { map_pages(&mut identity_mapped_page_table(), pages, frames, flags) }
-	} else {
-		unsafe { map_pages(&mut recursive_page_table(), pages, frames, flags) }
-	};
+	let unmapped = unsafe { map_pages(&mut identity_mapped_page_table(), pages, frames, flags) };
 
 	if unmapped {
 		#[cfg(feature = "smp")]
@@ -253,11 +235,8 @@ where
 
 	let flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::NO_EXECUTE;
 	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
-	let mapper_result = if env::is_uefi() {
-		unsafe { identity_mapped_page_table().identity_map(frame, flags, &mut *frame_allocator) }
-	} else {
-		unsafe { recursive_page_table().identity_map(frame, flags, &mut *frame_allocator) }
-	};
+	let mapper_result =
+		unsafe { identity_mapped_page_table().identity_map(frame, flags, &mut *frame_allocator) };
 	mapper_result.unwrap().flush();
 }
 
@@ -277,11 +256,7 @@ where
 	let range = Page::range(first_page, last_page);
 
 	for page in range {
-		let unmap_result = if env::is_uefi() {
-			unsafe { identity_mapped_page_table() }.unmap(page)
-		} else {
-			unsafe { recursive_page_table() }.unmap(page)
-		};
+		let unmap_result = unsafe { identity_mapped_page_table() }.unmap(page);
 		match unmap_result {
 			Ok((_frame, flush)) => flush.flush(),
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
@@ -421,13 +396,8 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 	assert!(page_table_indices.len() <= 4);
 
-	// Recursive
-	let recursive_page_table = unsafe { recursive_page_table() };
-	let mut pt = recursive_page_table.level_4_table();
-
-	// Identity mapped
-	// let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	// let pt = identity_mapped_page_table.level_4_table();
+	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
+	let mut pt = identity_mapped_page_table.level_4_table();
 
 	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
 		let level = 4 - i;
@@ -473,13 +443,8 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 		}
 	}
 
-	// Recursive
-	let recursive_page_table = unsafe { recursive_page_table() };
-	let pt = recursive_page_table.level_4_table();
-
-	// Identity mapped
-	// let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	// let pt = identity_mapped_page_table.level_4_table();
+	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
+	let pt = identity_mapped_page_table.level_4_table();
 
 	print(pt, 4, 5 - levels);
 }
