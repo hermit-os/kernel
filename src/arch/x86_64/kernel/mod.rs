@@ -100,10 +100,6 @@ pub fn get_image_size() -> usize {
 	(range.end - range.start) as usize
 }
 
-pub fn get_limit() -> usize {
-	env::boot_info().hardware_info.phys_addr_range.end as usize
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
