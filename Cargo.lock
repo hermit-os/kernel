@@ -740,7 +740,6 @@ dependencies = [
  "lock_api",
  "log",
  "memory_addresses",
- "multiboot",
  "num",
  "num-derive",
  "num-traits",
@@ -1120,15 +1119,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8402cab7aefae129c6977bb0ff1b8fd9a04eb5b51efc50a70bea51cda0c7924"
 dependencies = [
  "adler2",
-]
-
-[[package]]
-name = "multiboot"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f87ad3b7b7bcf5da525c22221e3eb3a020cd68b2d55ae62f629c15e8bc3bd56e"
-dependencies = [
- "paste",
 ]
 
 [[package]]
