@@ -3,10 +3,11 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
-use multiboot::information::{MemoryType, Multiboot};
+use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
+use x86_64::structures::paging::mapper::MapToError;
+use x86_64::structures::paging::{Mapper, PageTableFlags, PhysFrame, Size2MiB};
 
-use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
-use crate::arch::x86_64::mm::MultibootMemory;
+use crate::arch::mm::paging::identity_mapped_page_table;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::{env, mm};
 
@@ -14,9 +15,40 @@ pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
-const KVM_32BIT_MAX_MEM_SIZE: usize = 1 << 32;
-const KVM_32BIT_GAP_SIZE: usize = 768 << 20;
-const KVM_32BIT_GAP_START: usize = KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE;
+unsafe fn init_frame_range(frame_range: PageRange) {
+	let frames = {
+		use x86_64::PhysAddr;
+
+		let start = u64::try_from(frame_range.start()).unwrap();
+		let end = u64::try_from(frame_range.end()).unwrap();
+
+		let start = PhysFrame::containing_address(PhysAddr::new(start));
+		let end = PhysFrame::containing_address(PhysAddr::new(end));
+
+		PhysFrameRangeInclusive::<Size2MiB> { start, end }
+	};
+
+	let mut physical_free_list = PHYSICAL_FREE_LIST.lock();
+
+	unsafe {
+		physical_free_list.deallocate(frame_range).unwrap();
+	}
+
+	let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+	for frame in frames {
+		let mapper_result = unsafe {
+			identity_mapped_page_table().identity_map(frame, flags, &mut *physical_free_list)
+		};
+
+		match mapper_result {
+			Ok(mapper_flush) => mapper_flush.flush(),
+			Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
+			Err(err) => panic!("could not identity-map {frame:?}: {err:?}"),
+		}
+	}
+
+	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
+}
 
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
@@ -37,9 +69,8 @@ fn detect_from_fdt() -> Result<(), ()> {
 		)
 		.unwrap();
 
-		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			init_frame_range(range);
 		}
 	} else {
 		for m in all_regions {
@@ -60,9 +91,8 @@ fn detect_from_fdt() -> Result<(), ()> {
 			};
 
 			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
-			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				init_frame_range(range);
 			}
 		}
 	}
@@ -70,95 +100,8 @@ fn detect_from_fdt() -> Result<(), ()> {
 	if found_ram { Ok(()) } else { Err(()) }
 }
 
-fn detect_from_multiboot_info() -> Result<(), ()> {
-	let mb_info = get_mbinfo().ok_or(())?.get();
-
-	let mut mem = MultibootMemory;
-	let mb = unsafe { Multiboot::from_ptr(mb_info, &mut mem).unwrap() };
-	let all_regions = mb
-		.memory_regions()
-		.expect("Could not find a memory map in the Multiboot information");
-	let ram_regions = all_regions.filter(|m| {
-		m.memory_type() == MemoryType::Available
-			&& m.base_address() + m.length() > mm::kernel_end_address().as_u64()
-	});
-	let mut found_ram = false;
-
-	for m in ram_regions {
-		found_ram = true;
-
-		let start_address = if m.base_address() <= mm::kernel_start_address().as_u64() {
-			mm::kernel_end_address()
-		} else {
-			VirtAddr::new(m.base_address())
-		};
-
-		let range = PageRange::new(
-			start_address.as_u64() as usize,
-			(m.base_address() + m.length()) as usize,
-		)
-		.unwrap();
-		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
-		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
-		}
-	}
-
-	assert!(
-		found_ram,
-		"Could not find any available RAM in the Multiboot Memory Map"
-	);
-
-	Ok(())
-}
-
-fn detect_from_uhyve() -> Result<(), ()> {
-	if !env::is_uhyve() {
-		return Err(());
-	}
-
-	let limit = get_limit();
-	assert_ne!(limit, 0);
-	let mut free_list = PHYSICAL_FREE_LIST.lock();
-	let total_memory;
-
-	// add gap for the APIC
-	if limit > KVM_32BIT_GAP_START {
-		let range = PageRange::new(
-			mm::kernel_end_address().as_u64() as usize,
-			KVM_32BIT_GAP_START,
-		)
-		.unwrap();
-		unsafe {
-			free_list.deallocate(range).unwrap();
-		}
-		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
-			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
-			unsafe {
-				free_list.deallocate(range).unwrap();
-			}
-			total_memory = limit - KVM_32BIT_GAP_SIZE;
-		} else {
-			total_memory = KVM_32BIT_GAP_START;
-		}
-	} else {
-		let range = PageRange::new(mm::kernel_end_address().as_u64() as usize, limit).unwrap();
-		unsafe {
-			free_list.deallocate(range).unwrap();
-		}
-		total_memory = limit;
-	}
-
-	TOTAL_MEMORY.store(total_memory, Ordering::Relaxed);
-
-	Ok(())
-}
-
 pub fn init() {
-	detect_from_fdt()
-		.or_else(|_e| detect_from_multiboot_info())
-		.or_else(|_e| detect_from_uhyve())
-		.unwrap();
+	detect_from_fdt().unwrap();
 }
 
 pub fn total_memory_size() -> usize {

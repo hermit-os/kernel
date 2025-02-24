@@ -1,6 +1,5 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
-use core::num::NonZeroU64;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::task::Waker;
@@ -99,20 +98,6 @@ pub fn get_base_address() -> VirtAddr {
 pub fn get_image_size() -> usize {
 	let range = &env::boot_info().load_info.kernel_image_addr_range;
 	(range.end - range.start) as usize
-}
-
-pub fn get_limit() -> usize {
-	env::boot_info().hardware_info.phys_addr_range.end as usize
-}
-
-pub fn get_mbinfo() -> Option<NonZeroU64> {
-	match env::boot_info().platform_info {
-		PlatformInfo::Multiboot {
-			multiboot_info_addr,
-			..
-		} => Some(multiboot_info_addr),
-		_ => None,
-	}
 }
 
 #[cfg(feature = "smp")]

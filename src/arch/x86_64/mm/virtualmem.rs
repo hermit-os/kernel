@@ -4,33 +4,16 @@ use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::x86_64::mm::VirtAddr;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::{env, mm};
 
 static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 
 pub fn init() {
-	let range = if env::is_uefi() {
-		let fdt = env::fdt().unwrap();
-
-		let biggest_region = fdt
-			.find_all_nodes("/memory")
-			.map(|m| m.reg().unwrap().next().unwrap())
-			.max_by_key(|m| m.size.unwrap())
-			.unwrap();
-
-		PageRange::from_start_len(
-			biggest_region.starting_address.addr(),
-			biggest_region.size.unwrap(),
-		)
-		.unwrap()
-	} else {
-		PageRange::new(
-			mm::kernel_end_address().as_usize(),
-			kernel_heap_end().as_usize() + 1,
-		)
-		.unwrap()
-	};
+	let range = PageRange::new(
+		kernel_heap_end().as_usize().div_ceil(2),
+		kernel_heap_end().as_usize() + 1,
+	)
+	.unwrap();
 
 	unsafe {
 		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();

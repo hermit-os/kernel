@@ -2,8 +2,6 @@ pub(crate) mod paging;
 pub(crate) mod physicalmem;
 pub(crate) mod virtualmem;
 
-use core::slice;
-
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 #[cfg(feature = "common-os")]
 use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
@@ -11,32 +9,6 @@ use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 pub use self::paging::init_page_tables;
 #[cfg(feature = "common-os")]
 use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
-
-/// Memory translation, allocation and deallocation for MultibootInformation
-struct MultibootMemory;
-
-impl multiboot::information::MemoryManagement for MultibootMemory {
-	unsafe fn paddr_to_slice(
-		&self,
-		p: multiboot::information::PAddr,
-		size: usize,
-	) -> Option<&'static [u8]> {
-		unsafe { Some(slice::from_raw_parts(p as _, size)) }
-	}
-
-	unsafe fn allocate(
-		&mut self,
-		_length: usize,
-	) -> Option<(multiboot::information::PAddr, &mut [u8])> {
-		None
-	}
-
-	unsafe fn deallocate(&mut self, addr: multiboot::information::PAddr) {
-		if addr != 0 {
-			unimplemented!()
-		}
-	}
-}
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
