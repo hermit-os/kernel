@@ -135,11 +135,12 @@ checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
 name = "arm-gic"
-version = "0.1.2"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f0dcb1a29e42b98d24e0706354839b8d02f0d01445d819dc06cef8919a57548"
+checksum = "1f9844c183aa6fadd47f6749ca7372da0157d5b871870605bddf379bfa8f1db4"
 dependencies = [
  "bitflags 2.8.0",
+ "thiserror",
 ]
 
 [[package]]
