@@ -3,10 +3,8 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
-use multiboot::information::{MemoryType, Multiboot};
 
-use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
-use crate::arch::x86_64::mm::MultibootMemory;
+use crate::arch::x86_64::kernel::get_limit;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::{env, mm};
 
@@ -70,48 +68,6 @@ fn detect_from_fdt() -> Result<(), ()> {
 	if found_ram { Ok(()) } else { Err(()) }
 }
 
-fn detect_from_multiboot_info() -> Result<(), ()> {
-	let mb_info = get_mbinfo().ok_or(())?.get();
-
-	let mut mem = MultibootMemory;
-	let mb = unsafe { Multiboot::from_ptr(mb_info, &mut mem).unwrap() };
-	let all_regions = mb
-		.memory_regions()
-		.expect("Could not find a memory map in the Multiboot information");
-	let ram_regions = all_regions.filter(|m| {
-		m.memory_type() == MemoryType::Available
-			&& m.base_address() + m.length() > mm::kernel_end_address().as_u64()
-	});
-	let mut found_ram = false;
-
-	for m in ram_regions {
-		found_ram = true;
-
-		let start_address = if m.base_address() <= mm::kernel_start_address().as_u64() {
-			mm::kernel_end_address()
-		} else {
-			VirtAddr::new(m.base_address())
-		};
-
-		let range = PageRange::new(
-			start_address.as_u64() as usize,
-			(m.base_address() + m.length()) as usize,
-		)
-		.unwrap();
-		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
-		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
-		}
-	}
-
-	assert!(
-		found_ram,
-		"Could not find any available RAM in the Multiboot Memory Map"
-	);
-
-	Ok(())
-}
-
 fn detect_from_uhyve() -> Result<(), ()> {
 	if !env::is_uhyve() {
 		return Err(());
@@ -155,10 +111,7 @@ fn detect_from_uhyve() -> Result<(), ()> {
 }
 
 pub fn init() {
-	detect_from_fdt()
-		.or_else(|_e| detect_from_multiboot_info())
-		.or_else(|_e| detect_from_uhyve())
-		.unwrap();
+	detect_from_fdt().or_else(|_e| detect_from_uhyve()).unwrap();
 }
 
 pub fn total_memory_size() -> usize {
