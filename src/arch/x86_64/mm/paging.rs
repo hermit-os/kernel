@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 use core::ptr;
 
-use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -13,12 +12,12 @@ use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult, UnmapErro
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
 	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
-	Size2MiB, Size4KiB, Translate,
+	Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, physicalmem};
-use crate::{env, mm, scheduler};
+use crate::{env, scheduler};
 
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
@@ -247,7 +246,7 @@ where
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	assert!(
-		frame.start_address().as_u64() < mm::kernel_start_address().as_u64(),
+		frame.start_address().as_u64() < crate::mm::kernel_start_address().as_u64(),
 		"Address {:p} to be identity-mapped is not below Kernel start address",
 		frame.start_address()
 	);
@@ -378,33 +377,7 @@ fn make_p4_writable() {
 	unsafe { without_protect(make_writable) }
 }
 
-pub fn init_page_tables() {
-	if env::is_uhyve() {
-		// Uhyve identity-maps the first Gibibyte of memory (512 page table entries * 2MiB pages)
-		// We now unmap all memory after the kernel image, so that we can remap it ourselves later for the heap.
-		// Ideally, uhyve would only map as much memory as necessary, but this requires a hermit-entry ABI jump.
-		// See https://github.com/hermit-os/uhyve/issues/426
-		let kernel_end_addr = x86_64::VirtAddr::new(mm::kernel_end_address().as_u64());
-		let start_page = Page::<Size2MiB>::from_start_address(kernel_end_addr).unwrap();
-		let end_page = Page::from_page_table_indices_2mib(
-			start_page.p4_index(),
-			start_page.p3_index(),
-			PageTableIndex::new(511),
-		);
-		let page_range = Page::range_inclusive(start_page, end_page);
-
-		let mut page_table = unsafe { recursive_page_table() };
-		for page in page_range {
-			match page_table.unmap(page) {
-				Ok((_frame, flush)) => flush.ignore(),
-				Err(UnmapError::PageNotMapped) => {} // If it wasn't mapped, that's not an issue
-				Err(e) => panic!("Couldn't unmap page {page:?}: {e:?}"),
-			}
-		}
-
-		tlb::flush_all();
-	}
-}
+pub fn init_page_tables() {}
 
 #[allow(dead_code)]
 unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
