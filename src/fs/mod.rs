@@ -286,7 +286,7 @@ pub struct FileAttr {
 	/// device id
 	pub st_rdev: u64,
 	/// size in bytes
-	pub st_size: u64,
+	pub st_size: i64,
 	/// block size
 	pub st_blksize: i64,
 	/// size in blocks
