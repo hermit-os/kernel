@@ -4,17 +4,12 @@ use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::x86_64::kernel::get_limit;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::{env, mm};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
-
-const KVM_32BIT_MAX_MEM_SIZE: usize = 1 << 32;
-const KVM_32BIT_GAP_SIZE: usize = 768 << 20;
-const KVM_32BIT_GAP_START: usize = KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE;
 
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
@@ -68,50 +63,8 @@ fn detect_from_fdt() -> Result<(), ()> {
 	if found_ram { Ok(()) } else { Err(()) }
 }
 
-fn detect_from_uhyve() -> Result<(), ()> {
-	if !env::is_uhyve() {
-		return Err(());
-	}
-
-	let limit = get_limit();
-	assert_ne!(limit, 0);
-	let mut free_list = PHYSICAL_FREE_LIST.lock();
-	let total_memory;
-
-	// add gap for the APIC
-	if limit > KVM_32BIT_GAP_START {
-		let range = PageRange::new(
-			mm::kernel_end_address().as_u64() as usize,
-			KVM_32BIT_GAP_START,
-		)
-		.unwrap();
-		unsafe {
-			free_list.deallocate(range).unwrap();
-		}
-		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
-			let range = PageRange::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit).unwrap();
-			unsafe {
-				free_list.deallocate(range).unwrap();
-			}
-			total_memory = limit - KVM_32BIT_GAP_SIZE;
-		} else {
-			total_memory = KVM_32BIT_GAP_START;
-		}
-	} else {
-		let range = PageRange::new(mm::kernel_end_address().as_u64() as usize, limit).unwrap();
-		unsafe {
-			free_list.deallocate(range).unwrap();
-		}
-		total_memory = limit;
-	}
-
-	TOTAL_MEMORY.store(total_memory, Ordering::Relaxed);
-
-	Ok(())
-}
-
 pub fn init() {
-	detect_from_fdt().or_else(|_e| detect_from_uhyve()).unwrap();
+	detect_from_fdt().unwrap();
 }
 
 pub fn total_memory_size() -> usize {
