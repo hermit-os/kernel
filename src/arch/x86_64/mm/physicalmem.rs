@@ -3,13 +3,52 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
+use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
+use x86_64::structures::paging::mapper::MapToError;
+use x86_64::structures::paging::{Mapper, PageTableFlags, PhysFrame, Size2MiB};
 
+use crate::arch::mm::paging::identity_mapped_page_table;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::{env, mm};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+unsafe fn init_frame_range(frame_range: PageRange) {
+	let frames = {
+		use x86_64::PhysAddr;
+
+		let start = u64::try_from(frame_range.start()).unwrap();
+		let end = u64::try_from(frame_range.end()).unwrap();
+
+		let start = PhysFrame::containing_address(PhysAddr::new(start));
+		let end = PhysFrame::containing_address(PhysAddr::new(end));
+
+		PhysFrameRangeInclusive::<Size2MiB> { start, end }
+	};
+
+	let mut physical_free_list = PHYSICAL_FREE_LIST.lock();
+
+	unsafe {
+		physical_free_list.deallocate(frame_range).unwrap();
+	}
+
+	let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+	for frame in frames {
+		let mapper_result = unsafe {
+			identity_mapped_page_table().identity_map(frame, flags, &mut *physical_free_list)
+		};
+
+		match mapper_result {
+			Ok(mapper_flush) => mapper_flush.flush(),
+			Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
+			Err(err) => panic!("could not identity-map {frame:?}: {err:?}"),
+		}
+	}
+
+	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
+}
 
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
@@ -30,9 +69,8 @@ fn detect_from_fdt() -> Result<(), ()> {
 		)
 		.unwrap();
 
-		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			init_frame_range(range);
 		}
 	} else {
 		for m in all_regions {
@@ -53,9 +91,8 @@ fn detect_from_fdt() -> Result<(), ()> {
 			};
 
 			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
-			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				init_frame_range(range);
 			}
 		}
 	}
