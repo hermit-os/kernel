@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Aliases","Chosen","Compatible","Cpu","CpuIds","MappedArea","Memory","MemoryRegion","Root"]};

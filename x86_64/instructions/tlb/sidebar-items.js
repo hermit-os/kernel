@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["InvPcidCommand"],"fn":["flush","flush_all","flush_pcid"],"struct":["AsidOutOfRangeError","Invlpgb","InvlpgbFlushBuilder","Pcid","PcidTooBig"]};
