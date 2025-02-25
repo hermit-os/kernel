@@ -159,14 +159,18 @@ pub fn print_information() {
 
 /// End of the virtual memory address space reserved for kernel memory (inclusive).
 /// The virtual memory address space reserved for the task heap starts after this.
-#[cfg(not(feature = "common-os"))]
 #[inline]
-pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr::new(0x7fff_ffff_ffffu64)
-}
+pub fn kernel_heap_end() -> VirtAddr {
+	use x86_64::structures::paging::PageTableIndex;
 
-#[cfg(feature = "common-os")]
-#[inline]
-pub const fn kernel_heap_end() -> VirtAddr {
-	VirtAddr::new(0xff_ffff_ffffu64)
+	let p4_index = if cfg!(feature = "common-os") {
+		PageTableIndex::new(1)
+	} else {
+		PageTableIndex::new(256)
+	};
+
+	let addr = u64::from(p4_index) << 39;
+	assert_eq!(VirtAddr::new_truncate(addr).p4_index(), p4_index);
+
+	VirtAddr::new_truncate(addr - 1)
 }
