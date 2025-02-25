@@ -160,7 +160,7 @@ pub fn print_information() {
 /// End of the virtual memory address space reserved for kernel memory (inclusive).
 /// The virtual memory address space reserved for the task heap starts after this.
 #[inline]
-pub const fn kernel_heap_end() -> VirtAddr {
+pub fn kernel_heap_end() -> VirtAddr {
 	if cfg!(feature = "common-os") {
 		VirtAddr::new(0xff_ffff_ffffu64)
 	} else {
