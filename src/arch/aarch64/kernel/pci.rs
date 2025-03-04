@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::str;
 
-use arm_gic::gicv3::{IntId, Trigger};
+use arm_gic::{IntId, Trigger};
 use bit_field::BitField;
 use hermit_dtb::Dtb;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
@@ -206,15 +206,15 @@ fn detect_interrupt(
 				let irq_id = IntId::spi(irq_number);
 				let mut gic = GIC.lock();
 				let gic = gic.as_mut().unwrap();
-				gic.set_interrupt_priority(irq_id, 0x10);
+				gic.set_interrupt_priority(irq_id, Some(0), 0x10);
 				if irq_flags == 4 {
-					gic.set_trigger(irq_id, Trigger::Level);
+					gic.set_trigger(irq_id, Some(0), Trigger::Level);
 				} else if irq_flags == 2 {
-					gic.set_trigger(irq_id, Trigger::Edge);
+					gic.set_trigger(irq_id, Some(0), Trigger::Edge);
 				} else {
 					panic!("Invalid interrupt level!");
 				}
-				gic.enable_interrupt(irq_id, true);
+				gic.enable_interrupt(irq_id, Some(0), true);
 
 				return Some((pin, irq_number.try_into().unwrap()));
 			}

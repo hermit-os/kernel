@@ -140,7 +140,8 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	fn reschedule(self) {
 		use core::arch::asm;
 
-		use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
+		use arm_gic::IntId;
+		use arm_gic::gicv3::{GicV3, SgiTarget};
 
 		use crate::interrupts::SGI_RESCHED;
 

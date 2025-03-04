@@ -6,7 +6,8 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
 use ahash::RandomState;
-use arm_gic::gicv3::{GicV3, IntId, Trigger};
+use arm_gic::gicv3::GicV3;
+use arm_gic::{IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
@@ -277,8 +278,8 @@ pub(crate) fn init() {
 	);
 
 	GicV3::set_priority_mask(0xff);
-	let mut gic = unsafe { GicV3::new(gicd_address.as_mut_ptr(), gicc_address.as_mut_ptr()) };
-	gic.setup();
+	let mut gic = unsafe { GicV3::new(gicd_address.as_mut_ptr(), gicc_address.as_mut_ptr(), 1, 0) };
+	gic.setup(0);
 
 	for node in dtb.enum_subnodes("/") {
 		let parts: Vec<_> = node.split('@').collect();
@@ -320,22 +321,22 @@ pub(crate) fn init() {
 				} else {
 					panic!("Invalid interrupt type");
 				};
-				gic.set_interrupt_priority(timer_irqid, 0x00);
+				gic.set_interrupt_priority(timer_irqid, Some(0), 0x00);
 				if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-					gic.set_trigger(timer_irqid, Trigger::Level);
+					gic.set_trigger(timer_irqid, Some(0), Trigger::Level);
 				} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-					gic.set_trigger(timer_irqid, Trigger::Edge);
+					gic.set_trigger(timer_irqid, Some(0), Trigger::Edge);
 				} else {
 					panic!("Invalid interrupt level!");
 				}
-				gic.enable_interrupt(timer_irqid, true);
+				gic.enable_interrupt(timer_irqid, Some(0), true);
 			}
 		}
 	}
 
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
-	gic.set_interrupt_priority(reschedid, 0x00);
-	gic.enable_interrupt(reschedid, true);
+	gic.set_interrupt_priority(reschedid, Some(0), 0x00);
+	gic.enable_interrupt(reschedid, Some(0), true);
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
 	*GIC.lock() = Some(gic);
