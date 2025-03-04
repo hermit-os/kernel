@@ -47,12 +47,6 @@ pub(crate) enum SocketOption {
 	TcpNoDelay,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq)]
-pub(crate) enum IoCtl {
-	NonBlocking,
-}
-
 pub(crate) type FileDescriptor = i32;
 
 bitflags! {
@@ -259,9 +253,8 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
-	/// The `ioctl` function manipulates the underlying device parameters of special
-	/// files.
-	async fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
+	/// Sets the file status flags.
+	async fn set_status_flags(&self, _status_flags: StatusFlags) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
 

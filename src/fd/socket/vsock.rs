@@ -13,7 +13,7 @@ use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::executor::vsock::{VSOCK_MAP, VsockState};
-use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 
 #[derive(Debug)]
@@ -296,20 +296,9 @@ impl Socket {
 		Ok(())
 	}
 
-	async fn ioctl(&mut self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		if cmd == IoCtl::NonBlocking {
-			if value {
-				trace!("set vsock device to nonblocking mode");
-				self.is_nonblocking = true;
-			} else {
-				trace!("set vsock device to blocking mode");
-				self.is_nonblocking = false;
-			}
-
-			Ok(())
-		} else {
-			Err(io::Error::EINVAL)
-		}
+	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.is_nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
+		Ok(())
 	}
 
 	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
@@ -461,7 +450,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.shutdown(how).await
 	}
 
-	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		self.write().await.ioctl(cmd, value).await
+	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.write().await.set_status_flags(status_flags).await
 	}
 }
