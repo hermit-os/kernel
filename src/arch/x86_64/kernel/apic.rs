@@ -178,7 +178,7 @@ struct ApicConfigTable {
 /// APIC Processor Entry
 #[repr(C, packed)]
 struct ApicProcessorEntry {
-	typ: u8,
+	ty: u8,
 	id: u8,
 	version: u8,
 	cpu_flags: u8,
@@ -190,7 +190,7 @@ struct ApicProcessorEntry {
 /// IO APIC Entry
 #[repr(C, packed)]
 struct ApicIoEntry {
-	typ: u8,
+	ty: u8,
 	id: u8,
 	version: u8,
 	enabled: u8,
