@@ -537,11 +537,23 @@ pub unsafe extern "C" fn sys_ioctl(
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 	const F_SETFD: i32 = 2;
+	const F_GETFL: i32 = 3;
 	const F_SETFL: i32 = 4;
 	const FD_CLOEXEC: i32 = 1;
 
 	if cmd == F_SETFD && arg == FD_CLOEXEC {
 		0
+	} else if cmd == F_GETFL {
+		let obj = get_object(fd);
+		obj.map_or_else(
+			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|v| {
+				block_on((*v).status_flags(), None).map_or_else(
+					|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+					|status_flags| status_flags.bits(),
+				)
+			},
+		)
 	} else if cmd == F_SETFL {
 		let obj = get_object(fd);
 		obj.map_or_else(

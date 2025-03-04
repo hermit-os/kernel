@@ -434,6 +434,16 @@ impl Socket {
 		}
 	}
 
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		let status_flags = if self.is_nonblocking {
+			fd::StatusFlags::O_NONBLOCK
+		} else {
+			fd::StatusFlags::empty()
+		};
+
+		Ok(status_flags)
+	}
+
 	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.is_nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
 		Ok(())
@@ -500,6 +510,10 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn shutdown(&self, how: i32) -> io::Result<()> {
 		self.read().await.shutdown(how).await
+	}
+
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		self.read().await.status_flags().await
 	}
 
 	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {

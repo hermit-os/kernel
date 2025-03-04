@@ -253,6 +253,11 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
+	/// Returns the file status flags.
+	async fn status_flags(&self) -> io::Result<StatusFlags> {
+		Err(io::Error::ENOSYS)
+	}
+
 	/// Sets the file status flags.
 	async fn set_status_flags(&self, _status_flags: StatusFlags) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
