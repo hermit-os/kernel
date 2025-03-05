@@ -427,7 +427,7 @@ impl From<fuse_attr> for FileAttr {
 			st_uid: attr.uid,
 			st_gid: attr.gid,
 			st_rdev: attr.rdev.into(),
-			st_size: attr.size,
+			st_size: attr.size.try_into().unwrap(),
 			st_blksize: attr.blksize.into(),
 			st_blocks: attr.blocks.try_into().unwrap(),
 			st_atim: timespec {
