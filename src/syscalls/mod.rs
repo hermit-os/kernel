@@ -21,7 +21,7 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::executor::block_on;
 use crate::fd::{
-	AccessPermission, EventFlags, FileDescriptor, IoCtl, OpenOption, PollFd, dup_object,
+	self, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd, dup_object,
 	dup_object2, get_object, isatty, remove_object,
 };
 use crate::fs::{self, FileAttr};
@@ -515,12 +515,17 @@ pub unsafe extern "C" fn sys_ioctl(
 
 	if cmd == FIONBIO {
 		let value = unsafe { *(argp as *const i32) };
+		let status_flags = if value != 0 {
+			fd::StatusFlags::O_NONBLOCK
+		} else {
+			fd::StatusFlags::empty()
+		};
 
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				block_on((*v).ioctl(IoCtl::NonBlocking, value != 0), None)
+				block_on((*v).set_status_flags(status_flags), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
@@ -534,18 +539,33 @@ pub unsafe extern "C" fn sys_ioctl(
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 	const F_SETFD: i32 = 2;
+	const F_GETFL: i32 = 3;
 	const F_SETFL: i32 = 4;
 	const FD_CLOEXEC: i32 = 1;
 
 	if cmd == F_SETFD && arg == FD_CLOEXEC {
 		0
-	} else if cmd == F_SETFL && arg == OpenOption::O_NONBLOCK.bits() {
+	} else if cmd == F_GETFL {
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				block_on((*v).ioctl(IoCtl::NonBlocking, true), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
+				block_on((*v).status_flags(), None).map_or_else(
+					|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+					|status_flags| status_flags.bits(),
+				)
+			},
+		)
+	} else if cmd == F_SETFL {
+		let obj = get_object(fd);
+		obj.map_or_else(
+			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|v| {
+				block_on(
+					(*v).set_status_flags(fd::StatusFlags::from_bits_retain(arg)),
+					None,
+				)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else {

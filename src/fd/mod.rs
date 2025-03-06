@@ -48,12 +48,6 @@ pub(crate) enum SocketOption {
 	TcpNoDelay,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq)]
-pub(crate) enum IoCtl {
-	NonBlocking,
-}
-
 pub(crate) type FileDescriptor = i32;
 
 bitflags! {
@@ -66,10 +60,17 @@ bitflags! {
 		const O_CREAT = 0o0100;
 		const O_EXCL = 0o0200;
 		const O_TRUNC = 0o1000;
-		const O_APPEND = 0o2000;
-		const O_NONBLOCK = 0o4000;
 		const O_DIRECT = 0o40000;
 		const O_DIRECTORY = 0o200_000;
+	}
+}
+
+bitflags! {
+	/// File status flags.
+	#[derive(Debug, Copy, Clone, Default)]
+	pub struct StatusFlags: i32 {
+		const O_APPEND = 0o2000;
+		const O_NONBLOCK = 0o4000;
 	}
 }
 
@@ -253,9 +254,13 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
-	/// The `ioctl` function manipulates the underlying device parameters of special
-	/// files.
-	async fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
+	/// Returns the file status flags.
+	async fn status_flags(&self) -> io::Result<StatusFlags> {
+		Err(io::Error::ENOSYS)
+	}
+
+	/// Sets the file status flags.
+	async fn set_status_flags(&self, _status_flags: StatusFlags) -> io::Result<()> {
 		Err(io::Error::ENOSYS)
 	}
 

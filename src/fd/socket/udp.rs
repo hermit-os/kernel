@@ -10,7 +10,7 @@ use smoltcp::wire::IpEndpoint;
 
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
-use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -214,20 +214,19 @@ impl Socket {
 		}
 	}
 
-	async fn ioctl(&mut self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		if cmd == IoCtl::NonBlocking {
-			if value {
-				info!("set device to nonblocking mode");
-				self.nonblocking = true;
-			} else {
-				info!("set device to blocking mode");
-				self.nonblocking = false;
-			}
-
-			Ok(())
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		let status_flags = if self.nonblocking {
+			fd::StatusFlags::O_NONBLOCK
 		} else {
-			Err(io::Error::EINVAL)
-		}
+			fd::StatusFlags::empty()
+		};
+
+		Ok(status_flags)
+	}
+
+	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
+		Ok(())
 	}
 }
 
@@ -268,7 +267,11 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.write(buf).await
 	}
 
-	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		self.write().await.ioctl(cmd, value).await
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		self.read().await.status_flags().await
+	}
+
+	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.write().await.set_status_flags(status_flags).await
 	}
 }

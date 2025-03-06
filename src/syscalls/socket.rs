@@ -20,9 +20,9 @@ use crate::fd::socket::udp;
 #[cfg(feature = "vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	Endpoint, ListenEndpoint, ObjectInterface, SocketOption, get_object, insert_object,
+	self, Endpoint, ListenEndpoint, ObjectInterface, SocketOption, get_object, insert_object,
 };
-use crate::syscalls::{IoCtl, block_on};
+use crate::syscalls::block_on;
 
 pub const AF_INET: i32 = 0;
 pub const AF_INET6: i32 = 1;
@@ -427,7 +427,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
 
 		if type_.contains(SockType::SOCK_NONBLOCK) {
-			block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
+			block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 		}
 
 		let fd = insert_object(socket).expect("FD is already used");
@@ -449,7 +449,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 				let socket = Arc::new(async_lock::RwLock::new(udp::Socket::new(handle)));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
-					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
+					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
 				let fd = insert_object(socket).expect("FD is already used");
@@ -464,7 +464,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 				let socket = Arc::new(async_lock::RwLock::new(tcp::Socket::new(handle)));
 
 				if type_.contains(SockType::SOCK_NONBLOCK) {
-					block_on(socket.ioctl(IoCtl::NonBlocking, true), None).unwrap();
+					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
 				let fd = insert_object(socket).expect("FD is already used");
