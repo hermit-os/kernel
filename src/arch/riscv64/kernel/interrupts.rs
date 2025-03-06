@@ -186,57 +186,59 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 
 /// Handles external interrupts
 fn external_handler() {
-	use crate::arch::kernel::core_local::core_scheduler;
-	use crate::scheduler::PerCoreSchedulerExt;
+    use crate::arch::kernel::core_local::core_scheduler;
+    use crate::scheduler::PerCoreSchedulerExt;
 
-	// Claim interrupt
-	let base_ptr = PLIC_BASE.lock();
-	let context = PLIC_CONTEXT.lock();
-	//let claim_address = *base_ptr + 0x20_2004;
-	let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
-	let irq = unsafe { core::ptr::read_volatile(claim_address as *mut u32) };
+    // Claim interrupt
+    let base_ptr = PLIC_BASE.lock();
+    let context = PLIC_CONTEXT.lock();
+    let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
+    let irq = unsafe { core::ptr::read_volatile(claim_address as *mut u32) };
 
-	external_eoi();
+    //dbg!("PLIC: Claimed interrupt {}, base: {:#x}, context: {}", irq, base_ptr, context);
 
-	if irq != 0 {
-		debug!("External INT: {}", irq);
-		let mut cur_int = CURRENT_INTERRUPTS.lock();
-		cur_int.push(irq);
-		if cur_int.len() > 1 {
-			warn!("More than one external interrupt is pending!");
-		}
+    if irq != 0 {
+        debug!("External INT: {}", irq);
+        let mut cur_int = CURRENT_INTERRUPTS.lock();
+        cur_int.push(irq);
+        if cur_int.len() > 1 {
+            warn!("More than one external interrupt is pending!");
+        }
+        // Release lock early
+        drop(cur_int);
 
-		// Call handler
-		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
-			if let Some(queue) = handlers.get(&u8::try_from(irq).unwrap()) {
-				for handler in queue.iter() {
-					handler();
-				}
-			}
-		}
-		crate::executor::run();
+        //dbg!("PLIC: Looking up handler for IRQ {}", irq);
 
-		core_scheduler().reschedule();
-	}
-}
+        // Call handler
+        if let Some(handlers) = INTERRUPT_HANDLERS.get() {
+            if let Some(queue) = handlers.get(&u8::try_from(irq).unwrap()) {
+                //dbg!("PLIC: Found {} handlers for IRQ {}", queue.len(), irq);
+                for handler in queue.iter() {
+                    handler();
+                }
+            } else {
+                //dbg!("PLIC: No handlers found for IRQ {}", irq);
+            }
+        } else {
+            //dbg!("PLIC: No handler table initialized");
+        }
 
-/// End of external interrupt
-fn external_eoi() {
-	unsafe {
-		let base_ptr = PLIC_BASE.lock();
-		let context = PLIC_CONTEXT.lock();
-		let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
+        crate::executor::run();
+        core_scheduler().reschedule();
 
-		let mut cur_int = CURRENT_INTERRUPTS.lock();
-		let irq = cur_int.pop().unwrap_or(0);
-		if irq != 0 {
-			debug!("EOI INT: {}", irq);
-			// Complete interrupt
-			core::ptr::write_volatile(claim_address as *mut u32, irq);
-		} else {
-			warn!("Called EOI without active interrupt");
-		}
-	}
+        // Complete interrupt after handling
+        unsafe {
+            core::ptr::write_volatile(claim_address as *mut u32, irq);
+        }
+
+        // Remove from active interrupts
+        let mut cur_int = CURRENT_INTERRUPTS.lock();
+        if let Some(active_irq) = cur_int.pop() {
+            if active_irq != irq {
+                warn!("Interrupt mismatch during EOI!");
+            }
+        }
+    }
 }
 
 pub(crate) fn print_statistics() {}
