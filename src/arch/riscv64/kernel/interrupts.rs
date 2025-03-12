@@ -192,7 +192,6 @@ fn external_handler() {
 	// Claim interrupt
 	let base_ptr = PLIC_BASE.lock();
 	let context = PLIC_CONTEXT.lock();
-	//let claim_address = *base_ptr + 0x20_2004;
 	let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
 	let irq = unsafe { core::ptr::read_volatile(claim_address as *mut u32) };
 
