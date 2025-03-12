@@ -30,7 +30,7 @@ static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomSta
 /// Init Interrupts
 pub(crate) fn install() {
 	unsafe {
-		// Intstall trap handler
+		// Install trap handler
 		trapframe::init();
 		// Enable external interrupts
 		sie::set_sext();
