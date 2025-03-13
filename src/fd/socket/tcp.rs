@@ -37,10 +37,12 @@ pub struct Socket {
 	port: u16,
 	is_nonblocking: bool,
 	is_listen: bool,
+	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`.
+	domain: i32,
 }
 
 impl Socket {
-	pub fn new(h: Handle) -> Self {
+	pub fn new(h: Handle, domain: i32) -> Self {
 		let mut handle = BTreeSet::new();
 		handle.insert(h);
 
@@ -49,6 +51,7 @@ impl Socket {
 			port: 0,
 			is_nonblocking: false,
 			is_listen: false,
+			domain,
 		}
 	}
 
@@ -349,6 +352,7 @@ impl Socket {
 			port: self.port,
 			is_nonblocking: self.is_nonblocking,
 			is_listen: false,
+			domain: self.domain,
 		};
 
 		Ok((socket, endpoint))
@@ -519,5 +523,10 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
+	}
+
+	async fn inet_domain(&self) -> io::Result<i32> {
+		let domain = self.read().await.domain;
+		Ok(domain)
 	}
 }
