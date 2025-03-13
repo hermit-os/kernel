@@ -268,6 +268,12 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
 	}
+
+	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	async fn inet_domain(&self) -> io::Result<i32> {
+		Err(io::Error::EINVAL)
+	}
 }
 
 pub(crate) fn read(fd: FileDescriptor, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
