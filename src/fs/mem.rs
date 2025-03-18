@@ -450,7 +450,7 @@ impl MemDirectory {
 					} else {
 						return Err(io::Error::ENOENT);
 					}
-				} else if opt.contains(OpenOption::O_CREAT) || opt.contains(OpenOption::O_CREAT) {
+				} else if opt.contains(OpenOption::O_CREAT) {
 					let file = Box::new(RamFile::new(mode));
 					guard.insert(node_name, file.clone());
 					return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
