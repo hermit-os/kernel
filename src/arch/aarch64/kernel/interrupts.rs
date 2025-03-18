@@ -241,17 +241,17 @@ pub(crate) fn init() {
 	let (slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 	let gicd_size = u64::from_be_bytes(slice.try_into().unwrap());
 	let (slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
-	let gicc_start = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
+	let gicr_start = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
 	let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
-	let gicc_size = u64::from_be_bytes(slice.try_into().unwrap());
+	let gicr_size = u64::from_be_bytes(slice.try_into().unwrap());
 
 	info!(
 		"Found GIC Distributor interface at {:p} (size {:#X})",
 		gicd_start, gicd_size
 	);
 	info!(
-		"Found generic interrupt controller at {:p} (size {:#X})",
-		gicc_start, gicc_size
+		"Found generic interrupt controller redistributor at {:p} (size {:#X})",
+		gicr_start, gicr_size
 	);
 
 	let gicd_address =
@@ -267,18 +267,18 @@ pub(crate) fn init() {
 		flags,
 	);
 
-	let gicc_address =
-		virtualmem::allocate_aligned(gicc_size.try_into().unwrap(), 0x10000).unwrap();
-	debug!("Mapping generic interrupt controller to virtual address {gicc_address:p}",);
+	let gicr_address =
+		virtualmem::allocate_aligned(gicr_size.try_into().unwrap(), 0x10000).unwrap();
+	debug!("Mapping generic interrupt controller to virtual address {gicr_address:p}",);
 	paging::map::<BasePageSize>(
-		gicc_address,
-		gicc_start,
-		(gicc_size / BasePageSize::SIZE).try_into().unwrap(),
+		gicr_address,
+		gicr_start,
+		(gicr_size / BasePageSize::SIZE).try_into().unwrap(),
 		flags,
 	);
 
 	GicV3::set_priority_mask(0xff);
-	let mut gic = unsafe { GicV3::new(gicd_address.as_mut_ptr(), gicc_address.as_mut_ptr(), 1, 0) };
+	let mut gic = unsafe { GicV3::new(gicd_address.as_mut_ptr(), gicr_address.as_mut_ptr(), 1, 0) };
 	gic.setup(0);
 
 	for node in dtb.enum_subnodes("/") {
