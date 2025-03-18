@@ -23,7 +23,7 @@ use crate::drivers::mmio::get_interrupt_handlers;
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::scheduler::{self, CoreId};
-use crate::{core_scheduler, env};
+use crate::{core_id, core_scheduler, env};
 
 /// The ID of the first Private Peripheral Interrupt.
 const PPI_START: u8 = 16;
@@ -245,13 +245,25 @@ pub(crate) fn init() {
 	let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 	let gicr_size = u64::from_be_bytes(slice.try_into().unwrap());
 
+	let gicr_stride = dtb
+		.get_property("/intc", "redistributor-stride")
+		.map(|bytes| u64::from_be_bytes(bytes.try_into().unwrap()))
+		.unwrap_or(0);
+
+	let num_cpus = dtb
+		.enum_subnodes("/cpus")
+		.filter(|name| name.contains("cpu@"))
+		.count();
+	let cpu_id = core_id();
+
+	info!("Found {num_cpus} cpus!");
 	info!(
 		"Found GIC Distributor interface at {:p} (size {:#X})",
 		gicd_start, gicd_size
 	);
 	info!(
-		"Found generic interrupt controller redistributor at {:p} (size {:#X})",
-		gicr_start, gicr_size
+		"Found generic interrupt controller redistributor at {:p} (size {:#X}, stride {:#X})",
+		gicr_start, gicr_size, gicr_stride
 	);
 
 	let gicd_address =
@@ -278,8 +290,15 @@ pub(crate) fn init() {
 	);
 
 	GicV3::set_priority_mask(0xff);
-	let mut gic = unsafe { GicV3::new(gicd_address.as_mut_ptr(), gicr_address.as_mut_ptr(), 1, 0) };
-	gic.setup(0);
+	let mut gic = unsafe {
+		GicV3::new(
+			gicd_address.as_mut_ptr(),
+			gicr_address.as_mut_ptr(),
+			num_cpus,
+			gicr_stride as usize,
+		)
+	};
+	gic.setup(cpu_id as usize);
 
 	for node in dtb.enum_subnodes("/") {
 		let parts: Vec<_> = node.split('@').collect();
@@ -321,22 +340,22 @@ pub(crate) fn init() {
 				} else {
 					panic!("Invalid interrupt type");
 				};
-				gic.set_interrupt_priority(timer_irqid, Some(0), 0x00);
+				gic.set_interrupt_priority(timer_irqid, Some(cpu_id as usize), 0x00);
 				if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-					gic.set_trigger(timer_irqid, Some(0), Trigger::Level);
+					gic.set_trigger(timer_irqid, Some(cpu_id as usize), Trigger::Level);
 				} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-					gic.set_trigger(timer_irqid, Some(0), Trigger::Edge);
+					gic.set_trigger(timer_irqid, Some(cpu_id as usize), Trigger::Edge);
 				} else {
 					panic!("Invalid interrupt level!");
 				}
-				gic.enable_interrupt(timer_irqid, Some(0), true);
+				gic.enable_interrupt(timer_irqid, Some(cpu_id as usize), true);
 			}
 		}
 	}
 
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
-	gic.set_interrupt_priority(reschedid, Some(0), 0x00);
-	gic.enable_interrupt(reschedid, Some(0), true);
+	gic.set_interrupt_priority(reschedid, Some(cpu_id as usize), 0x00);
+	gic.enable_interrupt(reschedid, Some(cpu_id as usize), true);
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
 	*GIC.lock() = Some(gic);
