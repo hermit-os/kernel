@@ -60,6 +60,8 @@ bitflags! {
 		const O_CREAT = 0o0100;
 		const O_EXCL = 0o0200;
 		const O_TRUNC = 0o1000;
+		const O_APPEND = StatusFlags::O_APPEND.bits();
+		const O_NONBLOCK = StatusFlags::O_NONBLOCK.bits();
 		const O_DIRECT = 0o40000;
 		const O_DIRECTORY = 0o200_000;
 	}
