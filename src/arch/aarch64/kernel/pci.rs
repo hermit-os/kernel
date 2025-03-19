@@ -14,7 +14,7 @@ use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::virtualmem;
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
-use crate::env;
+use crate::{core_id, env};
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 const PCI_MAX_FUNCTION_NUMBER: u8 = 8;
@@ -206,15 +206,16 @@ fn detect_interrupt(
 				let irq_id = IntId::spi(irq_number);
 				let mut gic = GIC.lock();
 				let gic = gic.as_mut().unwrap();
-				gic.set_interrupt_priority(irq_id, Some(0), 0x10);
+				let cpu_id = core_id();
+				gic.set_interrupt_priority(irq_id, Some(cpu_id as usize), 0x10);
 				if irq_flags == 4 {
-					gic.set_trigger(irq_id, Some(0), Trigger::Level);
+					gic.set_trigger(irq_id, Some(cpu_id as usize), Trigger::Level);
 				} else if irq_flags == 2 {
-					gic.set_trigger(irq_id, Some(0), Trigger::Edge);
+					gic.set_trigger(irq_id, Some(cpu_id as usize), Trigger::Edge);
 				} else {
 					panic!("Invalid interrupt level!");
 				}
-				gic.enable_interrupt(irq_id, Some(0), true);
+				gic.enable_interrupt(irq_id, Some(cpu_id as usize), true);
 
 				return Some((pin, irq_number.try_into().unwrap()));
 			}
