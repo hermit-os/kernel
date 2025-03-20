@@ -438,15 +438,7 @@ impl MemDirectory {
 
 			if components.is_empty() {
 				let mut guard = self.inner.write().await;
-				if opt.contains(OpenOption::O_CREAT) || opt.contains(OpenOption::O_CREAT) {
-					if guard.get(&node_name).is_some() {
-						return Err(io::Error::EEXIST);
-					} else {
-						let file = Box::new(RamFile::new(mode));
-						guard.insert(node_name, file.clone());
-						return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
-					}
-				} else if let Some(file) = guard.get(&node_name) {
+				if let Some(file) = guard.get(&node_name) {
 					if opt.contains(OpenOption::O_DIRECTORY)
 						&& file.get_kind() != NodeKind::Directory
 					{
@@ -458,6 +450,10 @@ impl MemDirectory {
 					} else {
 						return Err(io::Error::ENOENT);
 					}
+				} else if opt.contains(OpenOption::O_CREAT) {
+					let file = Box::new(RamFile::new(mode));
+					guard.insert(node_name, file.clone());
+					return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
 				} else {
 					return Err(io::Error::ENOENT);
 				}
