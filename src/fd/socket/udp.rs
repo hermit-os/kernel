@@ -18,14 +18,17 @@ pub struct Socket {
 	handle: Handle,
 	nonblocking: bool,
 	endpoint: Option<IpEndpoint>,
+	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`.
+	domain: i32,
 }
 
 impl Socket {
-	pub fn new(handle: Handle) -> Self {
+	pub fn new(handle: Handle, domain: i32) -> Self {
 		Self {
 			handle,
 			nonblocking: false,
 			endpoint: None,
+			domain,
 		}
 	}
 
@@ -273,5 +276,10 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
+	}
+
+	async fn inet_domain(&self) -> io::Result<i32> {
+		let domain = self.read().await.domain;
+		Ok(domain)
 	}
 }
