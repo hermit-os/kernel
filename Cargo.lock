@@ -705,7 +705,7 @@ dependencies = [
  "heapless",
  "hermit-dtb",
  "hermit-entry",
- "hermit-macro",
+ "hermit-macro 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hermit-sync",
  "llvm-tools",
  "lock_api",
@@ -741,6 +741,17 @@ dependencies = [
 [[package]]
 name = "hermit-macro"
 version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "hermit-macro"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3a540db6202f9081639f0de24c46dad5fe5e8571ed1b1b657eaf94382dde96e"
 dependencies = [
  "proc-macro2",
  "quote",

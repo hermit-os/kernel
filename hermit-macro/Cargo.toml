@@ -2,6 +2,10 @@
 name = "hermit-macro"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/hermit-os/kernel"
+authors = [
+        "Martin Kröning <mkroening@posteo.net>",
+]
 
 [lib]
 proc-macro = true
