@@ -1,8 +1,3 @@
-memcmp
-memcpy
-memmove
-memset
-strlen
 acos
 acosf
 acosh
@@ -68,9 +63,9 @@ jnf
 ldexp
 ldexpf
 lgamma
-lgamma_r
 lgammaf
 lgammaf_r
+lgamma_r
 log
 log10
 log10f
@@ -79,8 +74,14 @@ log1pf
 log2
 log2f
 logf
+memcmp
+memcpy
+memmove
+memset
 modf
 modff
+nan
+nanf
 nextafter
 nextafterf
 pow
@@ -103,6 +104,7 @@ sinh
 sinhf
 sqrt
 sqrtf
+strlen
 tan
 tanf
 tanh

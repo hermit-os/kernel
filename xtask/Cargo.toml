@@ -8,7 +8,8 @@ anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 goblin = { version = "0.9", default-features = false, features = ["archive", "elf32", "elf64", "std"] }
 home = "0.5"
+ovmf-prebuilt = "0.2"
 sysinfo = "0.33"
-ureq = "2"
+ureq = "3"
 wait-timeout = "0.2"
 xshell = "0.2"

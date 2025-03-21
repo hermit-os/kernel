@@ -286,7 +286,7 @@ pub struct FileAttr {
 	/// device id
 	pub st_rdev: u64,
 	/// size in bytes
-	pub st_size: u64,
+	pub st_size: i64,
 	/// block size
 	pub st_blksize: i64,
 	/// size in blocks
@@ -496,6 +496,7 @@ impl File {
 
 impl crate::io::Read for File {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		let buf = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr().cast(), buf.len()) };
 		fd::read(self.fd, buf)
 	}
 }

@@ -5,7 +5,7 @@ use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdseed64_step, _rdtsc, _xrstor, _xsave,
 };
 use core::hint::spin_loop;
-use core::num::NonZeroU32;
+use core::num::{NonZero, NonZeroU32};
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::{fmt, ptr};
 
@@ -270,6 +270,7 @@ enum CpuFrequencySources {
 	CpuIdTscInfo,
 	HypervisorTscInfo,
 	Visionary,
+	Fdt,
 }
 
 impl fmt::Display for CpuFrequencySources {
@@ -286,6 +287,7 @@ impl fmt::Display for CpuFrequencySources {
 			CpuFrequencySources::Invalid => {
 				panic!("Attempted to print an invalid CPU Frequency Source")
 			}
+			CpuFrequencySources::Fdt => write!(f, "FDT"),
 		}
 	}
 }
@@ -386,6 +388,23 @@ impl CpuFrequency {
 		}
 
 		Err(())
+	}
+
+	fn detect_from_fdt(&mut self) -> Result<(), ()> {
+		fn mhz_from_fdt() -> Option<NonZero<u16>> {
+			let khz = env::fdt()?
+				.find_node("/hermit,tsc")?
+				.property("khz")?
+				.as_usize()?;
+			let khz = u32::try_from(khz).ok()?;
+			let mhz = u16::try_from(khz / 1000).ok()?;
+			NonZero::new(mhz)
+		}
+
+		let mhz = mhz_from_fdt().ok_or(())?;
+		self.set_detected_cpu_frequency(mhz.get(), CpuFrequencySources::Fdt)?;
+
+		Ok(())
 	}
 
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
@@ -498,7 +517,8 @@ impl CpuFrequency {
 	unsafe fn detect(&mut self) {
 		let cpuid = CpuId::new();
 		unsafe {
-			self.detect_from_cpuid(&cpuid)
+			self.detect_from_fdt()
+				.or_else(|_e| self.detect_from_cpuid(&cpuid))
 				.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
 				.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
 				.or_else(|_e| self.detect_from_hypervisor())

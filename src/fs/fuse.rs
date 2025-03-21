@@ -4,6 +4,7 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
 use core::{future, mem};
@@ -95,11 +96,14 @@ pub(crate) mod ops {
 
 	impl Init {
 		pub(crate) fn create() -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(FUSE_ROOT_ID, fuse_init_in {
-				major: 7,
-				minor: 31,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				FUSE_ROOT_ID,
+				fuse_init_in {
+					major: 7,
+					minor: 31,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -144,10 +148,13 @@ pub(crate) mod ops {
 
 	impl Open {
 		pub(crate) fn create(nid: u64, flags: u32) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_open_in {
-				flags,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_open_in {
+					flags,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -192,12 +199,15 @@ pub(crate) mod ops {
 
 	impl Read {
 		pub(crate) fn create(nid: u64, fh: u64, size: u32, offset: u64) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_read_in {
-				fh,
-				offset,
-				size,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_read_in {
+					fh,
+					offset,
+					size,
+					..Default::default()
+				},
+			);
 			(cmd, size)
 		}
 	}
@@ -220,12 +230,15 @@ pub(crate) mod ops {
 			offset: isize,
 			whence: SeekWhence,
 		) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_lseek_in {
-				fh,
-				offset: offset.try_into().unwrap(),
-				whence: num::ToPrimitive::to_u32(&whence).unwrap(),
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_lseek_in {
+					fh,
+					offset: offset.try_into().unwrap(),
+					whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -243,11 +256,14 @@ pub(crate) mod ops {
 
 	impl Getattr {
 		pub(crate) fn create(nid: u64, fh: u64, getattr_flags: u32) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_getattr_in {
-				getattr_flags,
-				fh,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_getattr_in {
+					getattr_flags,
+					fh,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -283,10 +299,13 @@ pub(crate) mod ops {
 
 	impl Release {
 		pub(crate) fn create(nid: u64, fh: u64) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_release_in {
-				fh,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_release_in {
+					fh,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -304,12 +323,15 @@ pub(crate) mod ops {
 
 	impl Poll {
 		pub(crate) fn create(nid: u64, fh: u64, kh: u64, event: PollEvent) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::new(nid, fuse_poll_in {
-				fh,
-				kh,
-				events: event.bits() as u32,
-				..Default::default()
-			});
+			let cmd = Cmd::new(
+				nid,
+				fuse_poll_in {
+					fh,
+					kh,
+					events: event.bits() as u32,
+					..Default::default()
+				},
+			);
 			(cmd, 0)
 		}
 	}
@@ -405,7 +427,7 @@ impl From<fuse_attr> for FileAttr {
 			st_uid: attr.uid,
 			st_gid: attr.gid,
 			st_rdev: attr.rdev.into(),
-			st_size: attr.size,
+			st_size: attr.size.try_into().unwrap(),
 			st_blksize: attr.blksize.into(),
 			st_blocks: attr.blocks.try_into().unwrap(),
 			st_atim: timespec {
@@ -608,7 +630,7 @@ impl FuseFileHandleInner {
 		.await
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+	fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
 			debug!("Reading longer than max_read_len: {}", len);
@@ -630,7 +652,7 @@ impl FuseFileHandleInner {
 				};
 			self.offset += len;
 
-			buf[..len].copy_from_slice(&rsp.payload.unwrap()[..len]);
+			buf[..len].write_copy_of_slice(&rsp.payload.unwrap()[..len]);
 
 			Ok(len)
 		} else {
@@ -746,7 +768,7 @@ impl ObjectInterface for FuseFileHandle {
 		self.0.lock().await.poll(event).await
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 

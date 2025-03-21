@@ -6,6 +6,7 @@ use hermit_sync::SpinMutex;
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 use riscv::asm::sfence_vma;
 use riscv::register::satp;
+use riscv::register::satp::Satp;
 
 use crate::arch::riscv64::kernel::get_ram_address;
 use crate::arch::riscv64::mm::physicalmem;
@@ -218,9 +219,7 @@ impl<S: PageSize> Page<S> {
 
 	/// Flushes this page from the TLB of this CPU.
 	fn flush_from_tlb(&self) {
-		unsafe {
-			sfence_vma(0, self.virtual_address.as_usize());
-		}
+		sfence_vma(0, self.virtual_address.as_usize());
 	}
 
 	/// Returns whether the given virtual address is a valid one in SV39
@@ -484,7 +483,7 @@ where
 	/// * `range` - The range of pages of size S
 	/// * `physical_address` - First physical address to map these pages to
 	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
-	///             The VALID and GLOBAL are already set automatically.
+	///   The VALID and GLOBAL are already set automatically.
 	fn map_pages<S: PageSize>(
 		&mut self,
 		range: PageIter<S>,
@@ -678,12 +677,20 @@ pub fn init_page_tables() {
 		.unwrap(),
 	);
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
-	satp::write((0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
+	unsafe {
+		satp::write(Satp::from_bits(
+			(0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12),
+		));
+	}
 }
 
 #[cfg(feature = "smp")]
 pub fn init_application_processor() {
 	trace!("Identity map the physical memory using HugePages");
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
-	satp::write((0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
+	unsafe {
+		satp::write(Satp::from_bits(
+			(0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12),
+		));
+	}
 }

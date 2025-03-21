@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 use core::ptr;
 
-use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -13,12 +12,12 @@ use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult, UnmapErro
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
 	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
-	Size2MiB, Size4KiB, Translate,
+	Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, physicalmem};
-use crate::{env, mm, scheduler};
+use crate::{env, scheduler};
 
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
@@ -93,16 +92,6 @@ pub use x86_64::structures::paging::{
 	PageSize, Size1GiB as HugePageSize, Size2MiB as LargePageSize, Size4KiB as BasePageSize,
 };
 
-/// Returns a recursive page table mapping, its last entry is mapped to the table itself
-unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
-	let level_4_table_addr = 0xffff_ffff_ffff_f000;
-	let level_4_table_ptr = ptr::with_exposed_provenance_mut(level_4_table_addr);
-	unsafe {
-		let level_4_table = &mut *(level_4_table_ptr);
-		RecursivePageTable::new(level_4_table).unwrap()
-	}
-}
-
 /// Returns a mapping of the physical memory where physical address is equal to the virtual address (no offset)
 pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
@@ -116,10 +105,11 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	let page_table = unsafe { recursive_page_table() };
-	let translate = page_table.translate(virtual_address.into());
+	let addr = x86_64::VirtAddr::from(virtual_address);
 
-	match translate {
+	let translate_result = unsafe { identity_mapped_page_table() }.translate(addr);
+
+	match translate_result {
 		TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
 			trace!(
 				"Uable to determine the physical address of 0x{:X}",
@@ -144,7 +134,7 @@ pub fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 ///
 /// * `physical_address` - First physical address to map these pages to
 /// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
-///             The PRESENT flags is set automatically.
+///   The PRESENT flags is set automatically.
 pub fn map<S>(
 	virtual_address: VirtAddr,
 	physical_address: PhysAddr,
@@ -152,8 +142,8 @@ pub fn map<S>(
 	flags: PageTableEntryFlags,
 ) where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
-	OffsetPageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
+	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let pages = {
 		let start = Page::<S>::containing_address(virtual_address.into());
@@ -197,11 +187,7 @@ pub fn map<S>(
 		unmapped
 	}
 
-	let unmapped = if env::is_uefi() {
-		unsafe { map_pages(&mut identity_mapped_page_table(), pages, frames, flags) }
-	} else {
-		unsafe { map_pages(&mut recursive_page_table(), pages, frames, flags) }
-	};
+	let unmapped = unsafe { map_pages(&mut identity_mapped_page_table(), pages, frames, flags) };
 
 	if unmapped {
 		#[cfg(feature = "smp")]
@@ -214,8 +200,8 @@ pub fn map<S>(
 pub fn map_heap<S>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
-	OffsetPageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
+	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let flags = {
 		let mut flags = PageTableEntryFlags::empty();
@@ -238,31 +224,27 @@ where
 pub fn identity_map<S>(frame: PhysFrame<S>)
 where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
+	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	assert!(
-		frame.start_address().as_u64() < mm::kernel_start_address().as_u64(),
+		frame.start_address().as_u64() < crate::mm::kernel_start_address().as_u64(),
 		"Address {:p} to be identity-mapped is not below Kernel start address",
 		frame.start_address()
 	);
 
+	let flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::NO_EXECUTE;
 	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
-	unsafe {
-		recursive_page_table()
-			.identity_map(
-				frame,
-				PageTableEntryFlags::PRESENT | PageTableEntryFlags::NO_EXECUTE,
-				&mut *frame_allocator,
-			)
-			.unwrap()
-			.flush();
-	}
+	let mapper_result =
+		unsafe { identity_mapped_page_table().identity_map(frame, flags, &mut *frame_allocator) };
+	mapper_result.unwrap().flush();
 }
 
 pub fn unmap<S>(virtual_address: VirtAddr, count: usize)
 where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
+	for<'a> RecursivePageTable<'a>: Mapper<S>,
+	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	trace!(
 		"Unmapping virtual address {:p} ({} pages)",
@@ -274,8 +256,8 @@ where
 	let range = Page::range(first_page, last_page);
 
 	for page in range {
-		let mut page_table = unsafe { recursive_page_table() };
-		match page_table.unmap(page) {
+		let unmap_result = unsafe { identity_mapped_page_table() }.unmap(page);
+		match unmap_result {
 			Ok((_frame, flush)) => flush.flush(),
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
@@ -370,33 +352,7 @@ fn make_p4_writable() {
 	unsafe { without_protect(make_writable) }
 }
 
-pub fn init_page_tables() {
-	if env::is_uhyve() {
-		// Uhyve identity-maps the first Gibibyte of memory (512 page table entries * 2MiB pages)
-		// We now unmap all memory after the kernel image, so that we can remap it ourselves later for the heap.
-		// Ideally, uhyve would only map as much memory as necessary, but this requires a hermit-entry ABI jump.
-		// See https://github.com/hermit-os/uhyve/issues/426
-		let kernel_end_addr = x86_64::VirtAddr::new(mm::kernel_end_address().as_u64());
-		let start_page = Page::<Size2MiB>::from_start_address(kernel_end_addr).unwrap();
-		let end_page = Page::from_page_table_indices_2mib(
-			start_page.p4_index(),
-			start_page.p3_index(),
-			PageTableIndex::new(511),
-		);
-		let page_range = Page::range_inclusive(start_page, end_page);
-
-		let mut page_table = unsafe { recursive_page_table() };
-		for page in page_range {
-			match page_table.unmap(page) {
-				Ok((_frame, flush)) => flush.ignore(),
-				Err(UnmapError::PageNotMapped) => {} // If it wasn't mapped, that's not an issue
-				Err(e) => panic!("Couldn't unmap page {page:?}: {e:?}"),
-			}
-		}
-
-		tlb::flush_all();
-	}
-}
+pub fn init_page_tables() {}
 
 #[allow(dead_code)]
 unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
@@ -429,8 +385,10 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 				print_page_table_entries(valid_indices);
 			}
 		}
-		TranslateResult::NotMapped => todo!(),
-		TranslateResult::InvalidFrameAddress(_) => todo!(),
+		TranslateResult::NotMapped => println!("virt_addr: {virt_addr:p} not mapped"),
+		TranslateResult::InvalidFrameAddress(phys_addr) => {
+			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p} (invalid)");
+		}
 	}
 }
 
@@ -438,13 +396,8 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 	assert!(page_table_indices.len() <= 4);
 
-	// Recursive
-	let recursive_page_table = unsafe { recursive_page_table() };
-	let mut pt = recursive_page_table.level_4_table();
-
-	// Identity mapped
-	// let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	// let pt = identity_mapped_page_table.level_4_table();
+	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
+	let mut pt = identity_mapped_page_table.level_4_table();
 
 	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
 		let level = 4 - i;
@@ -453,6 +406,10 @@ unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 		let indent = &"        "[0..2 * i];
 		let page_table_index = u16::from(page_table_index);
 		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
+
+		if entry.is_unused() {
+			break;
+		}
 
 		let phys = entry.addr();
 		let virt = x86_64::VirtAddr::new(phys.as_u64());
@@ -486,13 +443,8 @@ pub(crate) unsafe fn print_page_tables(levels: usize) {
 		}
 	}
 
-	// Recursive
-	let recursive_page_table = unsafe { recursive_page_table() };
-	let pt = recursive_page_table.level_4_table();
-
-	// Identity mapped
-	// let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	// let pt = identity_mapped_page_table.level_4_table();
+	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
+	let pt = identity_mapped_page_table.level_4_table();
 
 	print(pt, 4, 5 - levels);
 }

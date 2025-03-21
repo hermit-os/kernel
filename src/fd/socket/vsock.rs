@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future;
+use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use async_trait::async_trait;
@@ -13,7 +14,7 @@ use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::executor::vsock::{VSOCK_MAP, VsockState};
-use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io::{self, Error};
 
 #[derive(Debug)]
@@ -296,23 +297,22 @@ impl Socket {
 		Ok(())
 	}
 
-	async fn ioctl(&mut self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		if cmd == IoCtl::NonBlocking {
-			if value {
-				trace!("set vsock device to nonblocking mode");
-				self.is_nonblocking = true;
-			} else {
-				trace!("set vsock device to blocking mode");
-				self.is_nonblocking = false;
-			}
-
-			Ok(())
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		let status_flags = if self.is_nonblocking {
+			fd::StatusFlags::O_NONBLOCK
 		} else {
-			Err(io::Error::EINVAL)
-		}
+			fd::StatusFlags::empty()
+		};
+
+		Ok(status_flags)
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.is_nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
+		Ok(())
+	}
+
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -331,7 +331,7 @@ impl Socket {
 						}
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
-						buffer[..len].copy_from_slice(tmp.as_slice());
+						buffer[..len].write_copy_of_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
 					}
@@ -343,7 +343,7 @@ impl Socket {
 						Poll::Ready(Ok(0))
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
-						buffer[..len].copy_from_slice(tmp.as_slice());
+						buffer[..len].write_copy_of_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
 					}
@@ -424,7 +424,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.poll(event).await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		self.read().await.read(buffer).await
 	}
 
@@ -461,7 +461,11 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.shutdown(how).await
 	}
 
-	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		self.write().await.ioctl(cmd, value).await
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		self.read().await.status_flags().await
+	}
+
+	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.write().await.set_status_flags(status_flags).await
 	}
 }

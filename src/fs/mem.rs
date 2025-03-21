@@ -14,6 +14,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
@@ -59,7 +60,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -81,7 +82,7 @@ impl ObjectInterface for RomFileInterface {
 			buf.len()
 		};
 
-		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
+		buf[..len].write_copy_of_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)
@@ -111,6 +112,11 @@ impl ObjectInterface for RomFileInterface {
 		} else {
 			Err(io::Error::EBADF)
 		}
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let guard = self.inner.read().await;
+		Ok(guard.attr)
 	}
 }
 
@@ -165,7 +171,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -187,7 +193,7 @@ impl ObjectInterface for RamFileInterface {
 			buf.len()
 		};
 
-		buf[0..len].clone_from_slice(&guard.data[pos..pos + len]);
+		buf[..len].write_copy_of_slice(&guard.data[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)
@@ -209,7 +215,7 @@ impl ObjectInterface for RamFileInterface {
 		guard.attr.st_mtim = t;
 		guard.attr.st_ctim = t;
 
-		guard.data[pos..pos + buf.len()].clone_from_slice(buf);
+		guard.data[pos..pos + buf.len()].copy_from_slice(buf);
 		*pos_guard = pos + buf.len();
 
 		Ok(buf.len())
@@ -240,6 +246,11 @@ impl ObjectInterface for RamFileInterface {
 		*pos_guard = new_pos.try_into().unwrap();
 
 		Ok(new_pos)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let guard = self.inner.read().await;
+		Ok(guard.attr)
 	}
 }
 
@@ -296,7 +307,7 @@ impl RomFile {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let attr = FileAttr {
-			st_size: data.len() as u64,
+			st_size: data.len().try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
 			st_atim: t,
 			st_mtim: t,
@@ -427,15 +438,7 @@ impl MemDirectory {
 
 			if components.is_empty() {
 				let mut guard = self.inner.write().await;
-				if opt.contains(OpenOption::O_CREAT) || opt.contains(OpenOption::O_CREAT) {
-					if guard.get(&node_name).is_some() {
-						return Err(io::Error::EEXIST);
-					} else {
-						let file = Box::new(RamFile::new(mode));
-						guard.insert(node_name, file.clone());
-						return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
-					}
-				} else if let Some(file) = guard.get(&node_name) {
+				if let Some(file) = guard.get(&node_name) {
 					if opt.contains(OpenOption::O_DIRECTORY)
 						&& file.get_kind() != NodeKind::Directory
 					{
@@ -447,6 +450,10 @@ impl MemDirectory {
 					} else {
 						return Err(io::Error::ENOENT);
 					}
+				} else if opt.contains(OpenOption::O_CREAT) {
+					let file = Box::new(RamFile::new(mode));
+					guard.insert(node_name, file.clone());
+					return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
 				} else {
 					return Err(io::Error::ENOENT);
 				}

@@ -26,6 +26,10 @@ const SYSNO_FUTEX_WAIT: usize = 9;
 const SYSNO_FUTEX_WAKE: usize = 10;
 /// number of the system call `open`
 const SYSNO_OPEN: usize = 11;
+/// number of the system call `writev`
+const SYSNO_WRITEV: usize = 12;
+/// number of the system call `readv`
+const SYSNO_READV: usize = 13;
 
 /// total number of system calls
 const NO_SYSCALLS: usize = 32;
@@ -72,6 +76,8 @@ impl SyscallTable {
 		table.handle[SYSNO_FUTEX_WAIT] = sys_futex_wait as *const _;
 		table.handle[SYSNO_FUTEX_WAKE] = sys_futex_wake as *const _;
 		table.handle[SYSNO_OPEN] = sys_open as *const _;
+		table.handle[SYSNO_READV] = sys_readv as *const _;
+		table.handle[SYSNO_WRITEV] = sys_writev as *const _;
 
 		table
 	}

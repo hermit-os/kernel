@@ -21,8 +21,8 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::executor::block_on;
 use crate::fd::{
-	AccessPermission, EventFlags, FileDescriptor, IoCtl, OpenOption, PollFd, dup_object,
-	get_object, remove_object,
+	self, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd, dup_object,
+	dup_object2, get_object, isatty, remove_object,
 };
 use crate::fs::{self, FileAttr};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
@@ -387,7 +387,7 @@ pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| v.try_into().unwrap(),
@@ -420,7 +420,9 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
 
 	for iovec_buf in iovec_buffers {
-		let buf = unsafe { core::slice::from_raw_parts_mut(iovec_buf.iov_base, iovec_buf.iov_len) };
+		let buf = unsafe {
+			core::slice::from_raw_parts_mut(iovec_buf.iov_base.cast(), iovec_buf.iov_len)
+		};
 
 		let len = crate::fd::read(fd, buf).map_or_else(
 			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
@@ -513,12 +515,17 @@ pub unsafe extern "C" fn sys_ioctl(
 
 	if cmd == FIONBIO {
 		let value = unsafe { *(argp as *const i32) };
+		let status_flags = if value != 0 {
+			fd::StatusFlags::O_NONBLOCK
+		} else {
+			fd::StatusFlags::empty()
+		};
 
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				block_on((*v).ioctl(IoCtl::NonBlocking, value != 0), None)
+				block_on((*v).set_status_flags(status_flags), None)
 					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
@@ -532,19 +539,33 @@ pub unsafe extern "C" fn sys_ioctl(
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 	const F_SETFD: i32 = 2;
+	const F_GETFL: i32 = 3;
 	const F_SETFL: i32 = 4;
 	const FD_CLOEXEC: i32 = 1;
-	const O_NONBLOCK: i32 = 0o4000;
 
 	if cmd == F_SETFD && arg == FD_CLOEXEC {
 		0
-	} else if cmd == F_SETFL && arg == O_NONBLOCK {
+	} else if cmd == F_GETFL {
 		let obj = get_object(fd);
 		obj.map_or_else(
 			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 			|v| {
-				block_on((*v).ioctl(IoCtl::NonBlocking, true), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
+				block_on((*v).status_flags(), None).map_or_else(
+					|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+					|status_flags| status_flags.bits(),
+				)
+			},
+		)
+	} else if cmd == F_SETFL {
+		let obj = get_object(fd);
+		obj.map_or_else(
+			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|v| {
+				block_on(
+					(*v).set_status_flags(fd::StatusFlags::from_bits_retain(arg)),
+					None,
+				)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
 			},
 		)
 	} else {
@@ -632,6 +653,27 @@ pub unsafe extern "C" fn sys_getdents64(
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_dup(fd: i32) -> i32 {
 	dup_object(fd).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_dup2(fd1: i32, fd2: i32) -> i32 {
+	dup_object2(fd1, fd2).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_isatty(fd: i32) -> i32 {
+	match isatty(fd) {
+		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+		Ok(v) => {
+			if v {
+				1
+			} else {
+				0
+			}
+		}
+	}
 }
 
 #[hermit_macro::system]

@@ -140,7 +140,8 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	fn reschedule(self) {
 		use core::arch::asm;
 
-		use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
+		use arm_gic::IntId;
+		use arm_gic::gicv3::{GicV3, SgiTarget};
 
 		use crate::interrupts::SGI_RESCHED;
 
@@ -149,12 +150,15 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		}
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());
-		GicV3::send_sgi(reschedid, SgiTarget::List {
-			affinity3: 0,
-			affinity2: 0,
-			affinity1: 0,
-			target_list: 0b1,
-		});
+		GicV3::send_sgi(
+			reschedid,
+			SgiTarget::List {
+				affinity3: 0,
+				affinity2: 0,
+				affinity1: 0,
+				target_list: 0b1,
+			},
+		);
 
 		interrupts::enable();
 	}
@@ -566,6 +570,28 @@ impl PerCoreScheduler {
 					Ready(Err(io::Error::EMFILE))
 				} else {
 					Ready(Ok(fd))
+				}
+			})
+		})
+		.await
+	}
+
+	pub async fn dup_object2(
+		&self,
+		fd1: FileDescriptor,
+		fd2: FileDescriptor,
+	) -> io::Result<FileDescriptor> {
+		future::poll_fn(|cx| {
+			without_interrupts(|| {
+				let borrowed = self.current_task.borrow();
+				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
+				let obj = guard.get(&fd1).cloned().ok_or(io::Error::EBADF)?;
+
+				if guard.try_insert(fd2, obj).is_err() {
+					Ready(Err(io::Error::EMFILE))
+				} else {
+					Ready(Ok(fd2))
 				}
 			})
 		})

@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future::{self, Future};
+use core::mem::MaybeUninit;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
@@ -47,12 +48,6 @@ pub(crate) enum SocketOption {
 	TcpNoDelay,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq)]
-pub(crate) enum IoCtl {
-	NonBlocking,
-}
-
 pub(crate) type FileDescriptor = i32;
 
 bitflags! {
@@ -65,9 +60,19 @@ bitflags! {
 		const O_CREAT = 0o0100;
 		const O_EXCL = 0o0200;
 		const O_TRUNC = 0o1000;
-		const O_APPEND = 0o2000;
+		const O_APPEND = StatusFlags::O_APPEND.bits();
+		const O_NONBLOCK = StatusFlags::O_NONBLOCK.bits();
 		const O_DIRECT = 0o40000;
 		const O_DIRECTORY = 0o200_000;
+	}
+}
+
+bitflags! {
+	/// File status flags.
+	#[derive(Debug, Copy, Clone, Default)]
+	pub struct StatusFlags: i32 {
+		const O_APPEND = 0o2000;
+		const O_NONBLOCK = 0o4000;
 	}
 }
 
@@ -151,7 +156,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -229,7 +234,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// receive a message from a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
-	async fn recvfrom(&self, _buffer: &mut [u8]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, _buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
 		Err(io::Error::ENOSYS)
 	}
 
@@ -251,14 +256,29 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
-	/// The `ioctl` function manipulates the underlying device parameters of special
-	/// files.
-	async fn ioctl(&self, _cmd: IoCtl, _value: bool) -> io::Result<()> {
+	/// Returns the file status flags.
+	async fn status_flags(&self) -> io::Result<StatusFlags> {
 		Err(io::Error::ENOSYS)
+	}
+
+	/// Sets the file status flags.
+	async fn set_status_flags(&self, _status_flags: StatusFlags) -> io::Result<()> {
+		Err(io::Error::ENOSYS)
+	}
+
+	/// `isatty` returns `true` for a terminal device
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(false)
+	}
+
+	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	async fn inet_domain(&self) -> io::Result<i32> {
+		Err(io::Error::EINVAL)
 	}
 }
 
-pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
+pub(crate) fn read(fd: FileDescriptor, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -379,6 +399,15 @@ pub(crate) fn dup_object(fd: FileDescriptor) -> io::Result<FileDescriptor> {
 	block_on(core_scheduler().dup_object(fd), None)
 }
 
+pub(crate) fn dup_object2(fd1: FileDescriptor, fd2: FileDescriptor) -> io::Result<FileDescriptor> {
+	block_on(core_scheduler().dup_object2(fd1, fd2), None)
+}
+
 pub(crate) fn remove_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
 	block_on(core_scheduler().remove_object(fd), None)
+}
+
+pub(crate) fn isatty(fd: FileDescriptor) -> io::Result<bool> {
+	let obj = get_object(fd)?;
+	block_on(obj.isatty(), None)
 }

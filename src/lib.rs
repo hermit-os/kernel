@@ -14,6 +14,7 @@
 #![feature(map_try_insert)]
 #![feature(maybe_uninit_as_bytes)]
 #![feature(maybe_uninit_slice)]
+#![feature(maybe_uninit_write_slice)]
 #![feature(naked_functions)]
 #![feature(never_type)]
 #![feature(slice_from_ptr_range)]
@@ -135,10 +136,6 @@ extern "C" fn initd(_arg: usize) {
 	// Initialize Drivers
 	drivers::init();
 	crate::executor::init();
-
-	// Initialize MMIO Drivers if on riscv64
-	#[cfg(target_arch = "riscv64")]
-	riscv64::kernel::init_drivers();
 
 	syscalls::init();
 	fs::init();

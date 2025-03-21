@@ -462,30 +462,19 @@ pub(crate) trait ToErrno {
 
 impl ToErrno for i32 {
 	fn to_errno(&self) -> Option<i32> {
-		let errno = if *self < 0 { -self } else { 0 };
-		Some(errno)
+		(*self < 0).then_some(-self)
 	}
 }
 
 impl ToErrno for i64 {
 	fn to_errno(&self) -> Option<i32> {
-		let errno = if *self < 0 {
-			i32::try_from(-self).unwrap()
-		} else {
-			0
-		};
-		Some(errno)
+		(*self < 0).then(|| i32::try_from(-self).unwrap())
 	}
 }
 
 impl ToErrno for isize {
 	fn to_errno(&self) -> Option<i32> {
-		let errno = if *self < 0 {
-			i32::try_from(-self).unwrap()
-		} else {
-			0
-		};
-		Some(errno)
+		(*self < 0).then(|| i32::try_from(-self).unwrap())
 	}
 }
 

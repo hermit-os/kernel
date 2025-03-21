@@ -45,7 +45,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add rustfmt
-      - run: cargo fmt -- --check
+      - run: |
+          cargo fmt --all --check
+          cargo fmt --all --check --manifest-path hermit-builtins/Cargo.toml
 
   typos:
     name: Typos
@@ -154,12 +156,8 @@ jobs:
       - name: Dowload OpenSBI
         if: matrix.arch == 'riscv64'
         run: |
-          gh release download v1.4 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
-          tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-      - name: Download OVMF
-        run: |
-          gh release download edk2-stable202408-r1 --repo rust-osdev/ovmf-prebuilt --pattern 'edk2-stable*-bin.tar.xz'
-          tar -xvf edk2-stable*-bin.tar.xz edk2-stable202408-r1-bin/x64
+          gh release download v1.5.1 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
+          tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.5.1-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - name: Install Firecracker
         run: |
           # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
@@ -210,8 +208,12 @@ jobs:
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 qemu ${{ matrix.flags }} --netdev virtio-net-pci --no-default-virtio-features
         if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 qemu ${{ matrix.flags }} --netdev virtio-net-pci --uefi
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp qemu ${{ matrix.flags }} --microvm --netdev virtio-net-mmio
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp qemu ${{ matrix.flags }} --netdev virtio-net-mmio
+        if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --netdev rtl8139
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4 qemu ${{ matrix.flags }} --netdev virtio-net-pci

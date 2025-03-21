@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
 use core::future;
+use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
@@ -12,7 +13,7 @@ use smoltcp::time::Duration;
 
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
-use crate::fd::{Endpoint, IoCtl, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
 /// further receives will be disallowed
@@ -36,10 +37,12 @@ pub struct Socket {
 	port: u16,
 	is_nonblocking: bool,
 	is_listen: bool,
+	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`.
+	domain: i32,
 }
 
 impl Socket {
-	pub fn new(h: Handle) -> Self {
+	pub fn new(h: Handle, domain: i32) -> Self {
 		let mut handle = BTreeSet::new();
 		handle.insert(h);
 
@@ -48,6 +51,7 @@ impl Socket {
 			port: 0,
 			is_nonblocking: false,
 			is_listen: false,
+			domain,
 		}
 	}
 
@@ -171,7 +175,7 @@ impl Socket {
 		.await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				let state = socket.state();
@@ -187,7 +191,7 @@ impl Socket {
 								socket
 									.recv(|data| {
 										let len = core::cmp::min(buffer.len(), data.len());
-										buffer[..len].copy_from_slice(&data[..len]);
+										buffer[..len].write_copy_of_slice(&data[..len]);
 										(len, len)
 									})
 									.map_err(|_| io::Error::EIO),
@@ -348,6 +352,7 @@ impl Socket {
 			port: self.port,
 			is_nonblocking: self.is_nonblocking,
 			is_listen: false,
+			domain: self.domain,
 		};
 
 		Ok((socket, endpoint))
@@ -434,20 +439,19 @@ impl Socket {
 		}
 	}
 
-	async fn ioctl(&mut self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		if cmd == IoCtl::NonBlocking {
-			if value {
-				trace!("set device to nonblocking mode");
-				self.is_nonblocking = true;
-			} else {
-				trace!("set device to blocking mode");
-				self.is_nonblocking = false;
-			}
-
-			Ok(())
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		let status_flags = if self.is_nonblocking {
+			fd::StatusFlags::O_NONBLOCK
 		} else {
-			Err(io::Error::EINVAL)
-		}
+			fd::StatusFlags::empty()
+		};
+
+		Ok(status_flags)
+	}
+
+	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.is_nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
+		Ok(())
 	}
 }
 
@@ -468,7 +472,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.poll(event).await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		self.read().await.read(buffer).await
 	}
 
@@ -513,7 +517,16 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.shutdown(how).await
 	}
 
-	async fn ioctl(&self, cmd: IoCtl, value: bool) -> io::Result<()> {
-		self.write().await.ioctl(cmd, value).await
+	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
+		self.read().await.status_flags().await
+	}
+
+	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
+		self.write().await.set_status_flags(status_flags).await
+	}
+
+	async fn inet_domain(&self) -> io::Result<i32> {
+		let domain = self.read().await.domain;
+		Ok(domain)
 	}
 }

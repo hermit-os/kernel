@@ -78,6 +78,7 @@ impl Qemu {
 			.args(self.cpu_args(arch))
 			.args(&["-smp", &smp.to_string()])
 			.args(&["-m".to_string(), format!("{memory}M")])
+			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.netdev_args())
 			.args(self.virtiofsd_args(memory));
 
@@ -142,13 +143,18 @@ impl Qemu {
 			sh.copy_file(loader, "target/esp/efi/boot/bootx64.efi")?;
 			sh.copy_file(image, "target/esp/efi/boot/hermit-app")?;
 
+			use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
+
+			let prebuilt =
+				Prebuilt::fetch(Source::LATEST, "target/ovmf").expect("failed to update prebuilt");
+			let code = prebuilt.get_file(Arch::X64, FileType::Code);
+			let vars = prebuilt.get_file(Arch::X64, FileType::Vars);
+
 			vec![
 				"-drive".to_string(),
-				"if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/code.fd"
-					.to_string(),
+				format!("if=pflash,format=raw,readonly=on,file={}", code.display()),
 				"-drive".to_string(),
-				"if=pflash,format=raw,readonly=on,file=edk2-stable202408-r1-bin/x64/vars.fd"
-					.to_string(),
+				format!("if=pflash,format=raw,readonly=on,file={}", vars.display()),
 				"-drive".to_string(),
 				"format=raw,file=fat:rw:target/esp".to_string(),
 			]
@@ -194,7 +200,7 @@ impl Qemu {
 				"-machine".to_string(),
 				"virt".to_string(),
 				"-bios".to_string(),
-				"opensbi-1.4-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
+				"opensbi-1.5.1-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
 			]
 		} else {
 			vec![]
@@ -356,9 +362,12 @@ fn test_http_server() -> Result<()> {
 	let url = "http://127.0.0.1:9975";
 	eprintln!("[CI] GET {url}");
 	let body = ureq::get(url)
-		.timeout(Duration::from_secs(3))
+		.config()
+		.timeout_global(Some(Duration::from_secs(3)))
+		.build()
 		.call()?
-		.into_string()?;
+		.into_body()
+		.read_to_string()?;
 	eprintln!("[CI] body = {body:?}");
 	assert_eq!(body, "Hello, world!\n");
 	Ok(())
@@ -368,9 +377,12 @@ fn test_httpd() -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	eprintln!("[CI] GET http://127.0.0.1:9975");
 	let body = ureq::get("http://127.0.0.1:9975")
-		.timeout(Duration::from_secs(3))
+		.config()
+		.timeout_global(Some(Duration::from_secs(3)))
+		.build()
 		.call()?
-		.into_string()?;
+		.into_body()
+		.read_to_string()?;
 	eprintln!("[CI] {body}");
 	assert_eq!(body.lines().next(), Some("Hello from Hermit! 🦀"));
 	Ok(())

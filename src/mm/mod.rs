@@ -259,6 +259,7 @@ pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
 	if no_execution {
 		flags.execute_disable();
 	}
+
 	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
 	virtual_address

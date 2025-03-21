@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::future;
+use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use async_trait::async_trait;
@@ -27,7 +28,7 @@ impl ObjectInterface for GenericStdin {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			let mut read_bytes = 0;
 			let mut guard = CONSOLE.lock();
@@ -36,7 +37,7 @@ impl ObjectInterface for GenericStdin {
 				let c = unsafe { char::from_u32_unchecked(byte.into()) };
 				guard.write(c.as_bytes());
 
-				buf[read_bytes] = byte;
+				buf[read_bytes].write(byte);
 				read_bytes += 1;
 
 				if read_bytes >= buf.len() {
@@ -52,6 +53,10 @@ impl ObjectInterface for GenericStdin {
 			}
 		})
 		.await
+	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
 	}
 }
 
@@ -75,6 +80,10 @@ impl ObjectInterface for GenericStdout {
 		CONSOLE.lock().write(buf);
 		Ok(buf.len())
 	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
+	}
 }
 
 impl GenericStdout {
@@ -97,6 +106,10 @@ impl ObjectInterface for GenericStderr {
 		CONSOLE.lock().write(buf);
 		Ok(buf.len())
 	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
+	}
 }
 
 impl GenericStderr {
@@ -108,7 +121,12 @@ impl GenericStderr {
 #[derive(Debug)]
 pub struct UhyveStdin;
 
-impl ObjectInterface for UhyveStdin {}
+#[async_trait]
+impl ObjectInterface for UhyveStdin {
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
+	}
+}
 
 impl UhyveStdin {
 	pub const fn new() -> Self {
@@ -135,6 +153,10 @@ impl ObjectInterface for UhyveStdout {
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
 
 		Ok(write_params.len)
+	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
 	}
 }
 
@@ -163,6 +185,10 @@ impl ObjectInterface for UhyveStderr {
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
 
 		Ok(write_params.len)
+	}
+
+	async fn isatty(&self) -> io::Result<bool> {
+		Ok(true)
 	}
 }
 

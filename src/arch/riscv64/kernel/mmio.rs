@@ -8,7 +8,7 @@ use crate::drivers::net::gem::GEMDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::init_cell::InitCell;
 
-static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
+pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "gem-net")]

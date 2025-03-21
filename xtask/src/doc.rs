@@ -15,12 +15,25 @@ impl Doc {
 		for arch in Arch::all() {
 			arch.install()?;
 			let triple = arch.triple();
-			cmd!(
-				sh,
-				"cargo doc --package hermit-kernel --no-deps --document-private-items --target={triple}"
-			)
-			.run()?;
+
+			cmd!(sh, "cargo doc --target={triple}")
+				.arg("--no-deps")
+				.arg("--document-private-items")
+				.arg("--package=hermit-kernel")
+				.run()?;
+
+			cmd!(sh, "cargo doc --target={triple}")
+				.arg("--no-deps")
+				.arg("--document-private-items")
+				.arg("--manifest-path=hermit-builtins/Cargo.toml")
+				.run()?;
 		}
+
+		cmd!(sh, "cargo doc")
+			.arg("--no-deps")
+			.arg("--document-private-items")
+			.arg("--package=xtask")
+			.run()?;
 
 		Ok(())
 	}
