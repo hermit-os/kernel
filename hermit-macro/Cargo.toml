@@ -2,6 +2,8 @@
 name = "hermit-macro"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Proc macro implementation to defined system calls"
 
 [lib]
 proc-macro = true
