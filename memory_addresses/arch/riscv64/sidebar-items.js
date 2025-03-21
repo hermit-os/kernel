@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BASE_PAGE_SIZE","GIGA_PAGE_SIZE","MEGA_PAGE_SIZE","TERA_PAGE_SIZE"],"struct":["PhysAddr","PhysAddrNotValid","VirtAddr","VirtAddrNotValid"]};
