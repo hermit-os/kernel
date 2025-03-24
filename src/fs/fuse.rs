@@ -569,7 +569,7 @@ fn readlink(nid: u64) -> io::Result<String> {
 		.lock()
 		.send_command(cmd, rsp_payload_len)?;
 	let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-		>= len.try_into().unwrap()
+		>= usize::try_from(len).unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
@@ -633,7 +633,7 @@ impl FuseFileHandleInner {
 	fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
-			debug!("Reading longer than max_read_len: {}", len);
+			debug!("Reading longer than max_read_len: {len}");
 			len = MAX_READ_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
@@ -686,7 +686,7 @@ impl FuseFileHandleInner {
 			}
 
 			let rsp_size = rsp.headers.op_header.size;
-			let rsp_len: usize = if rsp_size > truncated_len.try_into().unwrap() {
+			let rsp_len: usize = if rsp_size > u32::try_from(truncated_len).unwrap() {
 				truncated_len
 			} else {
 				rsp_size.try_into().unwrap()
@@ -841,7 +841,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.send_command(cmd, rsp_payload_len)?;
 
 		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-			>= len.try_into().unwrap()
+			>= usize::try_from(len).unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
@@ -973,7 +973,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-			>= len.try_into().unwrap()
+			>= usize::try_from(len).unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
@@ -1158,7 +1158,7 @@ impl VfsNode for FuseDirectory {
 			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
-		trace!("unlink answer {:?}", rsp);
+		trace!("unlink answer {rsp:?}");
 
 		Ok(())
 	}
@@ -1171,7 +1171,7 @@ impl VfsNode for FuseDirectory {
 			.ok_or(io::Error::ENOSYS)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
-		trace!("rmdir answer {:?}", rsp);
+		trace!("rmdir answer {rsp:?}");
 
 		Ok(())
 	}
@@ -1198,7 +1198,7 @@ pub(crate) fn init() {
 	if let Some(driver) = get_filesystem_driver() {
 		let (cmd, rsp_payload_len) = ops::Init::create();
 		let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
-		trace!("fuse init answer: {:?}", rsp);
+		trace!("fuse init answer: {rsp:?}");
 
 		let mount_point = driver.lock().get_mount_point();
 		if mount_point == "/" {
@@ -1229,7 +1229,7 @@ pub(crate) fn init() {
 
 			let len: usize = if rsp.headers.out_header.len as usize
 				- mem::size_of::<fuse_out_header>()
-				>= len.try_into().unwrap()
+				>= usize::try_from(len).unwrap()
 			{
 				len.try_into().unwrap()
 			} else {
@@ -1300,7 +1300,7 @@ pub(crate) fn init() {
 				let attr = FileAttr::from(attr);
 
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-					info!("Fuse mount {} to /{}", i, i);
+					info!("Fuse mount {i} to /{i}");
 					fs::FILESYSTEM
 						.get()
 						.unwrap()
@@ -1310,7 +1310,7 @@ pub(crate) fn init() {
 						)
 						.expect("Mount failed. Invalid mount_point?");
 				} else {
-					warn!("Fuse don't mount {}. It isn't a directory!", i);
+					warn!("Fuse don't mount {i}. It isn't a directory!");
 				}
 			}
 		} else {
@@ -1320,7 +1320,7 @@ pub(crate) fn init() {
 				"/".to_owned() + &mount_point
 			};
 
-			info!("Mounting virtio-fs at {}", mount_point);
+			info!("Mounting virtio-fs at {mount_point}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()

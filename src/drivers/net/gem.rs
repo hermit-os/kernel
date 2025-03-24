@@ -322,7 +322,7 @@ impl NetworkDriver for GEMDriver {
 				let word1_entry =
 					unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
 				let length = word1_entry & 0x1fff;
-				debug!("Received frame in buffer {}, length: {}", index, length);
+				debug!("Received frame in buffer {index}, length: {length}");
 
 				// Starting point to search for next frame
 				self.rx_counter = (index + 1) % RX_BUF_NUM;
@@ -334,7 +334,7 @@ impl NetworkDriver for GEMDriver {
 						length as usize,
 					)
 				};
-				trace!("BUFFER: {:x?}", buffer);
+				trace!("BUFFER: {buffer:x?}");
 				self.rx_buffer_consumed(index as usize);
 				Some((RxToken::new(buffer.to_vec()), TxToken::new()))
 			}
@@ -365,8 +365,7 @@ impl NetworkDriver for GEMDriver {
 		let transmit_status = unsafe { (*self.gem).transmit_status.extract() };
 
 		debug!(
-			"handle_interrupt\nint_status: {:?}\nreceive_status: {:?}\ntransmit_status: {:?}",
-			int_status, receive_status, transmit_status
+			"handle_interrupt\nint_status: {int_status:?}\nreceive_status: {receive_status:?}\ntransmit_status: {transmit_status:?}"
 		);
 
 		if transmit_status.is_set(TransmitStatus::TXCOMPL) {
@@ -417,7 +416,7 @@ impl Driver for GEMDriver {
 impl GEMDriver {
 	// Tells driver, that buffer is consumed and can be deallocated
 	fn rx_buffer_consumed(&mut self, handle: usize) {
-		debug!("rx_buffer_consumed: handle: {}", handle);
+		debug!("rx_buffer_consumed: handle: {handle}");
 
 		let word0_addr = (self.rxbuffer_list + (handle * 8) as u64);
 		let word1_addr = word0_addr + 4u64;
@@ -473,7 +472,7 @@ pub fn init_device(
 	phy_addr: u32,
 	mac: [u8; 6],
 ) -> Result<GEMDriver, DriverError> {
-	debug!("Init GEM at {:p}", gem_base);
+	debug!("Init GEM at {gem_base:p}");
 
 	let gem = gem_base.as_mut_ptr::<Registers>();
 
@@ -564,7 +563,7 @@ pub fn init_device(
 					0x0 => (),    //Invalid
 					_ => {
 						phy_addr = i;
-						warn!("PHY found with address {}", phy_addr);
+						warn!("PHY found with address {phy_addr}");
 						break;
 					}
 				}
@@ -607,10 +606,7 @@ pub fn init_device(
 			// TODO - Next Page does not seem to be emulated by QEMU
 
 			//info!("PHY auto-negotiation completed:\n Speed: {}\nDuplex", ,);
-			debug!(
-				"PHY auto-negotiation completed: Partner Ability {:x}",
-				partner_ability
-			);
+			debug!("PHY auto-negotiation completed: Partner Ability {partner_ability:x}");
 		}
 	}
 
@@ -634,10 +630,7 @@ pub fn init_device(
 		return Err(DriverError::InitGEMDevFail(GEMError::Unknown));
 	}
 
-	debug!(
-		"Allocate TxBuffer at 0x{:x} and RxBuffer at 0x{:x}",
-		txbuffer, rxbuffer
-	);
+	debug!("Allocate TxBuffer at 0x{txbuffer:x} and RxBuffer at 0x{rxbuffer:x}");
 
 	unsafe {
 		// Init Receive Buffer Descriptor List
@@ -662,7 +655,7 @@ pub fn init_device(
 		}
 
 		let rx_qbar: u32 = virt_to_phys(rxbuffer_list).as_u64().try_into().unwrap();
-		debug!("Set rx_qbar to {:x}", rx_qbar);
+		debug!("Set rx_qbar to {rx_qbar:x}");
 		(*gem).rx_qbar.set(rx_qbar);
 
 		// Init Transmit Buffer Descriptor List
@@ -684,7 +677,7 @@ pub fn init_device(
 		}
 
 		let tx_qbar: u32 = virt_to_phys(txbuffer_list).as_u64().try_into().unwrap();
-		debug!("Set tx_qbar to {:x}", tx_qbar);
+		debug!("Set tx_qbar to {tx_qbar:x}");
 		(*gem).tx_qbar.set(tx_qbar);
 
 		// Configure Interrupts

@@ -162,11 +162,11 @@ impl TaskStacks {
 			tss.privilege_stack_table[0].as_u64() + Self::MARKER_SIZE as u64
 				- KERNEL_STACK_SIZE as u64,
 		);
-		debug!("Using boot stack {:p}", stack);
+		debug!("Using boot stack {stack:p}");
 		let ist1 = VirtAddr::new(
 			tss.interrupt_stack_table[0].as_u64() + Self::MARKER_SIZE as u64 - IST_SIZE as u64,
 		);
-		debug!("IST1 is located at {:p}", ist1);
+		debug!("IST1 is located at {ist1:p}");
 
 		TaskStacks::Boot(BootStack { stack, ist1 })
 	}

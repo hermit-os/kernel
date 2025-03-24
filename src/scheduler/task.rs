@@ -333,7 +333,7 @@ impl PriorityTaskQueue {
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
-			if i >= prio.into().into() {
+			if i >= u32::from(prio.into()) {
 				return self.pop_from_queue(i as usize);
 			}
 		}
@@ -421,7 +421,7 @@ impl Task {
 			async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>,
 		>,
 	) -> Task {
-		debug!("Creating new task {} on core {}", tid, core_id);
+		debug!("Creating new task {tid} on core {core_id}");
 
 		Task {
 			id: tid,
@@ -442,7 +442,7 @@ impl Task {
 	}
 
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
-		debug!("Creating idle task {}", tid);
+		debug!("Creating idle task {tid}");
 
 		/// All cores use the same mapping between file descriptor and the referenced object
 		static OBJECT_MAP: OnceCell<

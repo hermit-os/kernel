@@ -79,7 +79,7 @@ fn check_linux_args(
 		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
 	for arg in linux_mmio {
-		trace!("check linux parameter: {}", arg);
+		trace!("check linux parameter: {arg}");
 
 		match arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
 			Some(arg) => {
@@ -88,10 +88,7 @@ fn check_linux_args(
 				let current_address = usize::from_str_radix(without_prefix, 16).unwrap();
 				let irq: u8 = v[1].parse::<u8>().unwrap();
 
-				trace!(
-					"try to detect MMIO device at physical address {:#X}",
-					current_address
-				);
+				trace!("try to detect MMIO device at physical address {current_address:#X}");
 
 				let mut flags = PageTableEntryFlags::empty();
 				flags.normal().writable();
@@ -117,7 +114,7 @@ fn check_linux_args(
 				return Ok((mmio, irq));
 			}
 			_ => {
-				warn!("Invalid prefix in {}", arg);
+				warn!("Invalid prefix in {arg}");
 			}
 		}
 	}
@@ -136,10 +133,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
-		trace!(
-			"try to detect MMIO device at physical address {:#X}",
-			current_address
-		);
+		trace!("try to detect MMIO device at physical address {current_address:#X}");
 		// Have we crossed a page boundary in the last iteration?
 		// info!("before the {}. paging", current_page);
 		if current_address / BasePageSize::SIZE as usize > current_page {
@@ -205,10 +199,7 @@ pub(crate) fn init_drivers() {
 	// virtio: MMIO Device Discovery
 	without_interrupts(|| {
 		if let Ok((mmio, irq)) = detect_network() {
-			warn!(
-				"Found MMIO device, but we guess the interrupt number {}!",
-				irq
-			);
+			warn!("Found MMIO device, but we guess the interrupt number {irq}!");
 			match mmio_virtio::init_device(mmio, irq) {
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)));

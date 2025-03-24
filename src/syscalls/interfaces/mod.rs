@@ -20,7 +20,7 @@ pub trait SyscallInterface: Send + Sync {
 		argv.push(name);
 
 		let args = env::args();
-		debug!("Setting argv as: {:?}", args);
+		debug!("Setting argv as: {args:?}");
 		for arg in args {
 			let ptr = Box::leak(format!("{arg}\0").into_boxed_str()).as_ptr();
 			argv.push(ptr);
@@ -29,7 +29,7 @@ pub trait SyscallInterface: Send + Sync {
 		let mut envv = Vec::new();
 
 		let envs = env::vars();
-		debug!("Setting envv as: {:?}", envs);
+		debug!("Setting envv as: {envs:?}");
 		for (key, value) in envs {
 			let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();
 			envv.push(ptr);

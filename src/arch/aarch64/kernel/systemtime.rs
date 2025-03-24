@@ -64,7 +64,7 @@ pub fn init() {
 				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 
-				debug!("Found RTC at {:p} (size {:#X})", addr, size);
+				debug!("Found RTC at {addr:p} (size {size:#X})");
 
 				let pl031_address = virtualmem::allocate_aligned(
 					size.try_into().unwrap(),

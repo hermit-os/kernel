@@ -376,10 +376,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 		}
 	}
 
-	debug!(
-		"Jump to user space at 0x{:x}, stack pointer 0x{:x}",
-		entry_point, stack_pointer
-	);
+	debug!("Jump to user space at 0x{entry_point:x}, stack pointer 0x{stack_pointer:x}");
 
 	unsafe {
 		asm!(

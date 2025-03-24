@@ -435,7 +435,7 @@ pub(crate) fn init_device(
 		.try_into()
 		.unwrap();
 
-	debug!("Found RTL8139 at iobase {:#x} (irq {})", iobase, irq);
+	debug!("Found RTL8139 at iobase {iobase:#x} (irq {irq})");
 
 	device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
@@ -512,10 +512,7 @@ pub(crate) fn init_device(
 	let rxbuffer = vec![0; RX_BUF_LEN].into_boxed_slice();
 	let txbuffer = vec![0; NO_TX_BUFFERS * TX_BUF_LEN].into_boxed_slice();
 
-	debug!(
-		"Allocate TxBuffer at {:p} and RxBuffer at {:p}",
-		txbuffer, rxbuffer
-	);
+	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 
 	let phys_addr = |p| {
 		virt_to_phys(VirtAddr::from_ptr(p))
@@ -562,7 +559,7 @@ pub(crate) fn init_device(
 		);
 	}
 
-	info!("RTL8139 use interrupt line {}", irq);
+	info!("RTL8139 use interrupt line {irq}");
 	add_irq_name(irq, "rtl8139");
 
 	Ok(RTL8139Driver {

@@ -38,7 +38,7 @@ pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespe
 			0
 		}
 		_ => {
-			debug!("Called sys_clock_getres for unsupported clock {}", clock_id);
+			debug!("Called sys_clock_getres for unsupported clock {clock_id}");
 			-EINVAL
 		}
 	}
@@ -71,10 +71,7 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespe
 			0
 		}
 		_ => {
-			debug!(
-				"Called sys_clock_gettime for unsupported clock {}",
-				clock_id
-			);
+			debug!("Called sys_clock_gettime for unsupported clock {clock_id}");
 			-EINVAL
 		}
 	}

@@ -181,7 +181,7 @@ impl TaskStacks {
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let stack = VirtAddr::new(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
-		debug!("Using boot stack {:p}", stack);
+		debug!("Using boot stack {stack:p}");
 
 		TaskStacks::Boot(BootStack { stack })
 	}
@@ -327,7 +327,7 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 
 #[cfg(target_os = "none")]
 extern "C" fn thread_exit(status: i32) -> ! {
-	debug!("Exit thread with error code {}!", status);
+	debug!("Exit thread with error code {status}!");
 	core_scheduler().exit(status)
 }
 

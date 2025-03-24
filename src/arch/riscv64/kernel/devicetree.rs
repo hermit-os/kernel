@@ -58,7 +58,7 @@ pub fn init() {
 				warn!("Unknown platform, guessing PLIC context 1");
 				PLATFORM_MODEL = Model::Unknown;
 			}
-			info!("Model: {}", model);
+			info!("Model: {model}");
 		}
 	}
 }
@@ -122,7 +122,7 @@ pub fn init_drivers() {
 					.property("local-mac-address")
 					.expect("local-mac-address property for GEM not found in FDT")
 					.value;
-				debug!("Local MAC address: {:x?}", mac);
+				debug!("Local MAC address: {mac:x?}");
 				let mut phy_addr = u32::MAX;
 
 				let phy_node = gem_node
@@ -140,10 +140,7 @@ pub fn init_drivers() {
 				}
 
 				let gem_region_start = PhysAddr::new(gem_region.starting_address as u64);
-				debug!(
-					"Init GEM at {:p}, irq: {}, phy_addr: {}",
-					gem_region_start, irq, phy_addr
-				);
+				debug!("Init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						gem_region_start,
@@ -181,10 +178,7 @@ pub fn init_drivers() {
 
 				let virtio_region_start = PhysAddr::new(virtio_region.starting_address as u64);
 
-				debug!(
-					"Init virtio_mmio at {:p}, irq: {}",
-					virtio_region_start, irq
-				);
+				debug!("Init virtio_mmio at {virtio_region_start:p}, irq: {irq}");
 				paging::identity_map::<paging::HugePageSize>(
 					AddrRange::new(
 						virtio_region_start,

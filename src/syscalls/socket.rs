@@ -415,10 +415,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
-	debug!(
-		"sys_socket: domain {}, type {:?}, protocol {}",
-		domain, type_, protocol
-	);
+	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
 
 	if protocol != 0 {
 		return -EINVAL;
@@ -498,7 +495,8 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 
 							match endpoint.addr {
 								IpAddress::Ipv4(_) => {
-									if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
+									if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap()
+									{
 										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in::from(endpoint);
 										addr.sin_family = block_on(v.inet_domain(), None)
@@ -509,7 +507,8 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 									}
 								}
 								IpAddress::Ipv6(_) => {
-									if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
+									if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap()
+									{
 										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in6::from(endpoint);
 										*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
@@ -527,7 +526,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 						if !addr.is_null() && !addrlen.is_null() {
 							let addrlen = unsafe { &mut *addrlen };
 
-							if *addrlen >= size_of::<sockaddr_vm>().try_into().unwrap() {
+							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								let addr = unsafe { &mut *addr.cast() };
 								*addr = sockaddr_vm::from(endpoint);
 								*addrlen = size_of::<sockaddr_vm>().try_into().unwrap();
@@ -570,7 +569,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 		|v| match family {
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET_OLD | AF_INET => {
-				if namelen < size_of::<sockaddr_in>().try_into().unwrap() {
+				if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in>() });
@@ -579,7 +578,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET6 => {
-				if namelen < size_of::<sockaddr_in6>().try_into().unwrap() {
+				if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() });
@@ -588,7 +587,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 			}
 			#[cfg(feature = "vsock")]
 			AF_VSOCK => {
-				if namelen < size_of::<sockaddr_vm>().try_into().unwrap() {
+				if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 					return -crate::errno::EINVAL;
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() });
@@ -612,21 +611,21 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 	let endpoint = match sa_family {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		AF_INET_OLD | AF_INET => {
-			if namelen < size_of::<sockaddr_in>().try_into().unwrap() {
+			if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 				return -crate::errno::EINVAL;
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in>() }))
 		}
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		AF_INET6 => {
-			if namelen < size_of::<sockaddr_in6>().try_into().unwrap() {
+			if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 				return -crate::errno::EINVAL;
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() }))
 		}
 		#[cfg(feature = "vsock")]
 		AF_VSOCK => {
-			if namelen < size_of::<sockaddr_vm>().try_into().unwrap() {
+			if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 				return -crate::errno::EINVAL;
 			}
 			Endpoint::Vsock(VsockEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() }))
@@ -665,7 +664,7 @@ pub unsafe extern "C" fn sys_getsockname(
 						#[cfg(any(feature = "tcp", feature = "udp"))]
 						Endpoint::Ip(endpoint) => match endpoint.addr {
 							IpAddress::Ipv4(_) => {
-								if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
+								if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in::from(endpoint);
 									addr.sin_family = block_on(v.inet_domain(), None)
@@ -679,7 +678,7 @@ pub unsafe extern "C" fn sys_getsockname(
 							}
 							#[cfg(any(feature = "tcp", feature = "udp"))]
 							IpAddress::Ipv6(_) => {
-								if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
+								if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in6::from(endpoint);
 									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
@@ -690,7 +689,7 @@ pub unsafe extern "C" fn sys_getsockname(
 						},
 						#[cfg(feature = "vsock")]
 						Endpoint::Vsock(_) => {
-							if *addrlen >= size_of::<sockaddr_vm>().try_into().unwrap() {
+							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								warn!("unsupported device");
 							} else {
 								return -crate::errno::EINVAL;
@@ -716,14 +715,11 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	debug!(
-		"sys_setsockopt: {}, level {}, optname {}",
-		fd, level, optname
-	);
+	debug!("sys_setsockopt: {fd}, level {level}, optname {optname}");
 
 	if level == IPPROTO_TCP
 		&& optname == TCP_NODELAY
-		&& optlen == size_of::<i32>().try_into().unwrap()
+		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
 	{
 		if optval.is_null() {
 			return -crate::errno::EINVAL;
@@ -754,10 +750,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	debug!(
-		"sys_getsockopt: {}, level {}, optname {}",
-		fd, level, optname
-	);
+	debug!("sys_getsockopt: {fd}, level {level}, optname {optname}");
 
 	if level == IPPROTO_TCP && optname == TCP_NODELAY {
 		if optval.is_null() || optlen.is_null() {
@@ -809,7 +802,7 @@ pub unsafe extern "C" fn sys_getpeername(
 						#[cfg(any(feature = "tcp", feature = "udp"))]
 						Endpoint::Ip(endpoint) => match endpoint.addr {
 							IpAddress::Ipv4(_) => {
-								if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
+								if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in::from(endpoint);
 									addr.sin_family = block_on(v.inet_domain(), None)
@@ -822,7 +815,7 @@ pub unsafe extern "C" fn sys_getpeername(
 								}
 							}
 							IpAddress::Ipv6(_) => {
-								if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
+								if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in6::from(endpoint);
 									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
@@ -833,7 +826,7 @@ pub unsafe extern "C" fn sys_getpeername(
 						},
 						#[cfg(feature = "vsock")]
 						Endpoint::Vsock(_) => {
-							if *addrlen >= size_of::<sockaddr_vm>().try_into().unwrap() {
+							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								warn!("unsupported device");
 							} else {
 								return -crate::errno::EINVAL;
@@ -929,13 +922,13 @@ pub unsafe extern "C" fn sys_sendto(
 			let sa_family = unsafe { i32::from((*addr).sa_family) };
 
 			if sa_family == AF_INET_OLD || sa_family == AF_INET {
-				if addr_len < size_of::<sockaddr_in>().try_into().unwrap() {
+				if addr_len < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return (-crate::errno::EINVAL).try_into().unwrap();
 				}
 
 				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr.cast::<sockaddr_in>())})));
 			} else if sa_family == AF_INET6 {
-				if addr_len < size_of::<sockaddr_in6>().try_into().unwrap() {
+				if addr_len < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return (-crate::errno::EINVAL).try_into().unwrap();
 				}
 
@@ -992,7 +985,8 @@ pub unsafe extern "C" fn sys_recvfrom(
 							#[cfg(any(feature = "tcp", feature = "udp"))]
 							Endpoint::Ip(endpoint) => match endpoint.addr {
 								IpAddress::Ipv4(_) => {
-									if *addrlen >= size_of::<sockaddr_in>().try_into().unwrap() {
+									if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap()
+									{
 										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in::from(endpoint);
 										addr.sin_family = block_on(v.inet_domain(), None)
@@ -1005,7 +999,8 @@ pub unsafe extern "C" fn sys_recvfrom(
 									}
 								}
 								IpAddress::Ipv6(_) => {
-									if *addrlen >= size_of::<sockaddr_in6>().try_into().unwrap() {
+									if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap()
+									{
 										let addr = unsafe { &mut *addr.cast() };
 										*addr = sockaddr_in6::from(endpoint);
 										*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
