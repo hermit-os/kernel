@@ -6,9 +6,7 @@ use core::ops::Range;
 
 use align_address::Align;
 use hermit_sync::Lazy;
-#[cfg(feature = "pci")]
-use memory_addresses::PhysAddr;
-use memory_addresses::VirtAddr;
+pub use memory_addresses::{PhysAddr, VirtAddr};
 
 use self::allocator::LockedAllocator;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
