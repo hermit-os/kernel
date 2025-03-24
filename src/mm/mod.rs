@@ -15,6 +15,7 @@ use self::allocator::LockedAllocator;
 use crate::arch::mm::paging::HugePageSize;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
+pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::mm::physicalmem;
 use crate::{arch, env};
