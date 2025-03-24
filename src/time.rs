@@ -1,3 +1,5 @@
+use core::time::Duration;
+
 use crate::arch;
 
 #[allow(non_camel_case_types)]
@@ -33,6 +35,7 @@ impl timeval {
 	}
 }
 
+/// Represent the timer interval in seconds and microseconds
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct itimerval {
@@ -70,11 +73,29 @@ impl timespec {
 pub struct SystemTime(timespec);
 
 impl SystemTime {
+	pub const UNIX_EPOCH: SystemTime = Self(timespec {
+		tv_sec: 0,
+		tv_nsec: 0,
+	});
+
 	/// Returns the system time corresponding to "now".
 	pub fn now() -> Self {
 		Self(timespec::from_usec(
 			arch::kernel::systemtime::now_micros() as i64
 		))
+	}
+
+	/// Returns the amount of time elapsed from an earlier point in time.
+	pub fn duration_since(&self, earlier: SystemTime) -> Duration {
+		Duration::from_micros(
+			self.0
+				.into_usec()
+				.unwrap()
+				.checked_sub(earlier.0.into_usec().unwrap())
+				.unwrap()
+				.try_into()
+				.unwrap(),
+		)
 	}
 }
 
