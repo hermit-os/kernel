@@ -98,7 +98,7 @@ uninlined_format_args = "warn"
 unreadable_literal = "warn"
 
 [dependencies]
-hermit-macro = { path = "hermit-macro" }
+hermit-macro = { version = "=0.1.0", path = "hermit-macro" }
 virtio = { package = "virtio-spec", version = "0.2", features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
