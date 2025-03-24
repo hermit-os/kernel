@@ -1,8 +1,10 @@
 [package]
 name = "hermit-macro"
 version = "0.1.0"
+authors = ["Martin Kröning <martin.kroening@eonerc.rwth-aachen.de>"]
 edition = "2024"
 description = "Proc macro implementation to defined system calls"
+repository = "https://github.com/hermit-os/kernel"
 license = "MIT OR Apache-2.0"
 
 [lib]
