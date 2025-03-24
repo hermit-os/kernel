@@ -1,5 +1,5 @@
-pub mod allocator;
-pub mod device_alloc;
+pub(crate) mod allocator;
+pub(crate) mod device_alloc;
 
 use core::mem;
 use core::ops::Range;
@@ -21,7 +21,7 @@ use crate::{arch, env};
 
 #[cfg(target_os = "none")]
 #[global_allocator]
-pub static ALLOCATOR: LockedAllocator = LockedAllocator::new();
+pub(crate) static ALLOCATOR: LockedAllocator = LockedAllocator::new();
 
 /// Physical and virtual address range of the 2 MiB pages that map the kernel.
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
