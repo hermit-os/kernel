@@ -134,7 +134,8 @@ async fn vsock_run() {
 					response.dst_port = hdr.src_port;
 					response.len = le32::from_ne(0);
 					response.type_ = hdr.type_;
-					if hdr.op.to_ne() == Op::CreditRequest.into() || hdr.op.to_ne() == Op::Rw.into()
+					if hdr.op.to_ne() == u16::from(Op::CreditRequest)
+						|| hdr.op.to_ne() == u16::from(Op::Rw)
 					{
 						response.op = le16::from_ne(Op::CreditUpdate.into());
 					} else {

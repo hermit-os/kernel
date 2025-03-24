@@ -266,7 +266,7 @@ impl Socket {
 							response.dst_port = le32::from_ne(raw.remote_port);
 							response.len = le32::from_ne(0);
 							response.type_ = le16::from_ne(Type::Stream.into());
-							if local_cid != cid.into() && cid != u32::MAX {
+							if local_cid != u64::from(cid) && cid != u32::MAX {
 								response.op = le16::from_ne(Op::Rst.into());
 							} else {
 								response.op = le16::from_ne(Op::Response.into());

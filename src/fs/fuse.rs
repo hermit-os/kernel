@@ -569,7 +569,7 @@ fn readlink(nid: u64) -> io::Result<String> {
 		.lock()
 		.send_command(cmd, rsp_payload_len)?;
 	let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-		>= len.try_into().unwrap()
+		>= usize::try_from(len).unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
@@ -686,7 +686,7 @@ impl FuseFileHandleInner {
 			}
 
 			let rsp_size = rsp.headers.op_header.size;
-			let rsp_len: usize = if rsp_size > truncated_len.try_into().unwrap() {
+			let rsp_len: usize = if rsp_size > u32::try_from(truncated_len).unwrap() {
 				truncated_len
 			} else {
 				rsp_size.try_into().unwrap()
@@ -841,7 +841,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.send_command(cmd, rsp_payload_len)?;
 
 		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-			>= len.try_into().unwrap()
+			>= usize::try_from(len).unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
@@ -973,7 +973,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-			>= len.try_into().unwrap()
+			>= usize::try_from(len).unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
@@ -1229,7 +1229,7 @@ pub(crate) fn init() {
 
 			let len: usize = if rsp.headers.out_header.len as usize
 				- mem::size_of::<fuse_out_header>()
-				>= len.try_into().unwrap()
+				>= usize::try_from(len).unwrap()
 			{
 				len.try_into().unwrap()
 			} else {

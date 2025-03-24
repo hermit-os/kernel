@@ -51,7 +51,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	}
 
 	// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-	if cap.len() < mem::size_of::<T>().try_into().unwrap() {
+	if cap.len() < u64::try_from(mem::size_of::<T>()).unwrap() {
 		error!(
 			"Device specific config from device {:x}, does not represent actual structure specified by the standard!",
 			cap.dev_id()
@@ -119,7 +119,7 @@ impl PciCap {
 		}
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if self.len() < mem::size_of::<CommonCfg>().try_into().unwrap() {
+		if self.len() < u64::try_from(mem::size_of::<CommonCfg>()).unwrap() {
 			error!(
 				"Common config of with id {}, does not represent actual structure specified by the standard!",
 				self.cap.id

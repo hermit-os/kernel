@@ -435,7 +435,7 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 
 		read_bytes += len;
 
-		if len < iovec_buf.iov_len.try_into().unwrap() {
+		if len < isize::try_from(iovec_buf.iov_len).unwrap() {
 			return read_bytes;
 		}
 	}
@@ -496,7 +496,7 @@ pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcn
 
 		written_bytes += len;
 
-		if len < iovec_buf.iov_len.try_into().unwrap() {
+		if len < isize::try_from(iovec_buf.iov_len).unwrap() {
 			return written_bytes;
 		}
 	}

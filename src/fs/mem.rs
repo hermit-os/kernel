@@ -106,7 +106,7 @@ impl ObjectInterface for RomFileInterface {
 			return Err(io::Error::EINVAL);
 		};
 
-		if new_pos <= guard.data.len().try_into().unwrap() {
+		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
 			*pos_guard = new_pos.try_into().unwrap();
 			Ok(new_pos)
 		} else {
@@ -239,7 +239,7 @@ impl ObjectInterface for RamFileInterface {
 			return Err(io::Error::EINVAL);
 		};
 
-		if new_pos > guard.data.len().try_into().unwrap() {
+		if new_pos > isize::try_from(guard.data.len()).unwrap() {
 			guard.data.resize(new_pos.try_into().unwrap(), 0);
 			guard.attr.st_size = guard.data.len().try_into().unwrap();
 		}

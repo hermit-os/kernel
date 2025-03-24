@@ -878,7 +878,7 @@ pub fn ipi_tlb_flush() {
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
 		without_interrupts(|| {
 			for (core_id_to_interrupt, &apic_id) in apic_ids.iter().enumerate() {
-				if core_id_to_interrupt != core_id.try_into().unwrap() {
+				if core_id_to_interrupt != usize::try_from(core_id).unwrap() {
 					let destination = u64::from(apic_id) << 32;
 					local_apic_write(
 						IA32_X2APIC_ICR,

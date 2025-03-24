@@ -333,7 +333,7 @@ impl PriorityTaskQueue {
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
-			if i >= prio.into().into() {
+			if i >= u32::from(prio.into()) {
 				return self.pop_from_queue(i as usize);
 			}
 		}
