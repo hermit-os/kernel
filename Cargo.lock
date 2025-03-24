@@ -682,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "hermit-kernel"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aarch64",
  "ahash",
