@@ -98,20 +98,20 @@ async fn vsock_run() {
 							hdr = Some(*header);
 							fwd_cnt = raw.fwd_cnt;
 						} else {
-							trace!("Receive message from invalid source {}", header_cid);
+							trace!("Receive message from invalid source {header_cid}");
 						}
 					} else if op == Op::CreditUpdate {
 						if raw.remote_cid == header_cid {
 							raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
 							raw.tx_waker.wake();
 						} else {
-							trace!("Receive message from invalid source {}", header_cid);
+							trace!("Receive message from invalid source {header_cid}");
 						}
 					} else if op == Op::Shutdown {
 						if raw.remote_cid == header_cid {
 							raw.state = VsockState::Shutdown;
 						} else {
-							trace!("Receive message from invalid source {}", header_cid);
+							trace!("Receive message from invalid source {header_cid}");
 						}
 					} else if op == Op::Response && type_ == Type::Stream {
 						if raw.remote_cid == header_cid && raw.state == VsockState::Connecting {

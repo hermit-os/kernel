@@ -386,7 +386,7 @@ pub(crate) fn init_device(
 				info!("Virtio network driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {}", irq_no);
+				info!("Virtio interrupt handler at line {irq_no}");
 
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}

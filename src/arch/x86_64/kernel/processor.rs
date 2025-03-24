@@ -846,7 +846,7 @@ pub fn configure() {
 			// Prevent writes to read-only pages in Ring 0.
 			flags.insert(Cr0Flags::WRITE_PROTECT);
 
-			debug!("Setting CR0 = {:?}", flags);
+			debug!("Setting CR0 = {flags:?}");
 		});
 	}
 
@@ -892,7 +892,7 @@ pub fn configure() {
 				crate::scheduler::shutdown(1);
 			}
 
-			debug!("Setting CR4 = {:?}", flags);
+			debug!("Setting CR4 = {flags:?}");
 		});
 	}
 
@@ -911,7 +911,7 @@ pub fn configure() {
 			flags.insert(XCr0Flags::AVX);
 		}
 
-		debug!("Setting XCR0 = {:?}", flags);
+		debug!("Setting XCR0 = {flags:?}");
 		unsafe {
 			XCr0::write(flags);
 		}

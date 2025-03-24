@@ -697,7 +697,7 @@ fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciErro
 		.collect::<Vec<_>>();
 
 	if capabilities.is_empty() {
-		error!("No virtio capability found for device {:x}", device_id);
+		error!("No virtio capability found for device {device_id:x}");
 		Err(PciError::NoVirtioCaps(device_id))
 	} else {
 		Ok(capabilities)
@@ -794,8 +794,7 @@ pub(crate) fn init_device(
 
 	if device_id < 0x1040 {
 		warn!(
-			"Legacy/transitional Virtio device, with id: {:#x} is NOT supported, skipping!",
-			device_id
+			"Legacy/transitional Virtio device, with id: {device_id:#x} is NOT supported, skipping!"
 		);
 
 		// Return Driver error inidacting device is not supported
@@ -817,14 +816,13 @@ pub(crate) fn init_device(
 
 				let irq = device.get_irq().unwrap();
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {}", irq);
+				info!("Virtio interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}
 			Err(virtio_error) => {
 				error!(
-					"Virtio networkd driver could not be initialized with device: {:x}",
-					device_id
+					"Virtio networkd driver could not be initialized with device: {device_id:x}"
 				);
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
@@ -836,15 +834,12 @@ pub(crate) fn init_device(
 
 				let irq = device.get_irq().unwrap();
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {}", irq);
+				info!("Virtio interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Vsock(virt_sock_drv))
 			}
 			Err(virtio_error) => {
-				error!(
-					"Virtio sock driver could not be initialized with device: {:x}",
-					device_id
-				);
+				error!("Virtio sock driver could not be initialized with device: {device_id:x}");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
@@ -859,8 +854,7 @@ pub(crate) fn init_device(
 				}
 				Err(virtio_error) => {
 					error!(
-						"Virtio filesystem driver could not be initialized with device: {:x}",
-						device_id
+						"Virtio filesystem driver could not be initialized with device: {device_id:x}"
 					);
 					Err(DriverError::InitVirtioDevFail(virtio_error))
 				}

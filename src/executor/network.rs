@@ -119,7 +119,7 @@ async fn dhcpv4_run() {
 					}
 				});
 				if let Some(router) = config.router {
-					info!("Default gateway: {}", router);
+					info!("Default gateway: {router}");
 					nic.iface
 						.routes_mut()
 						.add_default_ipv4_route(router)
@@ -132,7 +132,7 @@ async fn dhcpv4_run() {
 				#[cfg(feature = "dns")]
 				let mut dns_servers: Vec<IpAddress> = Vec::new();
 				for (i, s) in config.dns_servers.iter().enumerate() {
-					info!("DNS server {}:    {}", i, s);
+					info!("DNS server {i}:    {s}");
 					#[cfg(feature = "dns")]
 					dns_servers.push(IpAddress::Ipv4(*s));
 				}

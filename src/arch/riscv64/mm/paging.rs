@@ -595,8 +595,7 @@ pub fn map<S: PageSize>(
 	flags: PageTableEntryFlags,
 ) {
 	trace!(
-		"Mapping physical address {:#X} to virtual address {:#X} ({} pages)",
-		physical_address, virtual_address, count
+		"Mapping physical address {physical_address:#X} to virtual address {virtual_address:#X} ({count} pages)"
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
@@ -626,10 +625,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
-	trace!(
-		"Unmapping virtual address {:#X} ({} pages)",
-		virtual_address, count
-	);
+	trace!("Unmapping virtual address {virtual_address:#X} ({count} pages)");
 
 	let range = get_page_range::<S>(virtual_address, count);
 	/* let root_pagetable = unsafe {

@@ -42,7 +42,7 @@ pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 }
 
 fn exit(arg: i32) -> ! {
-	debug!("Exit program with error code {}!", arg);
+	debug!("Exit program with error code {arg}!");
 	super::shutdown(arg)
 }
 
@@ -55,7 +55,7 @@ pub extern "C" fn sys_exit(status: i32) -> ! {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_thread_exit(status: i32) -> ! {
-	debug!("Exit thread with error code {}!", status);
+	debug!("Exit thread with error code {status}!");
 	core_scheduler().exit(status)
 }
 
@@ -68,7 +68,7 @@ pub extern "C" fn sys_abort() -> ! {
 pub(super) fn usleep(usecs: u64) {
 	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
-		debug!("sys_usleep blocking the task for {} microseconds", usecs);
+		debug!("sys_usleep blocking the task for {usecs} microseconds");
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
 		core_scheduler.block_current_task(Some(wakeup_time));
@@ -142,10 +142,7 @@ pub extern "C" fn sys_yield() {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
-	debug!(
-		"sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}",
-		dest, signum
-	);
+	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {dest} with signal {signum}");
 	-ENOSYS
 }
 

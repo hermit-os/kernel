@@ -271,14 +271,14 @@ extern "x86-interrupt" fn error_interrupt_handler(stack_frame: interrupts::Excep
 	swapgs(&stack_frame);
 	error!("APIC LVT Error Interrupt");
 	error!("ESR: {:#X}", local_apic_read(IA32_X2APIC_ESR));
-	error!("{:#?}", stack_frame);
+	error!("{stack_frame:#?}");
 	eoi();
 	scheduler::abort();
 }
 
 extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	swapgs(&stack_frame);
-	error!("Spurious Interrupt: {:#?}", stack_frame);
+	error!("Spurious Interrupt: {stack_frame:#?}");
 	scheduler::abort();
 }
 
@@ -353,10 +353,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				let processor_local_apic_record = unsafe {
 					&*(ptr::with_exposed_provenance::<ProcessorLocalApicRecord>(current_address))
 				};
-				debug!(
-					"Found Processor Local APIC record: {}",
-					processor_local_apic_record
-				);
+				debug!("Found Processor Local APIC record: {processor_local_apic_record}");
 
 				if processor_local_apic_record.flags & CPU_FLAG_ENABLED > 0 {
 					add_local_apic_id(processor_local_apic_record.apic_id);
@@ -366,7 +363,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				// I/O APIC
 				let ioapic_record =
 					unsafe { &*(ptr::with_exposed_provenance::<IoApicRecord>(current_address)) };
-				debug!("Found I/O APIC record: {}", ioapic_record);
+				debug!("Found I/O APIC record: {ioapic_record}");
 
 				init_ioapic_address(PhysAddr::new(ioapic_record.address.into()));
 			}
@@ -485,7 +482,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr::new(io_entry.addr.into());
-					info!("Found IOAPIC at 0x{:p}", ioapic);
+					info!("Found IOAPIC at 0x{ioapic:p}");
 
 					init_ioapic_address(ioapic);
 
@@ -538,8 +535,7 @@ pub fn init() {
 			let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 			LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
 			debug!(
-				"Mapping Local APIC at {:p} to virtual address {:p}",
-				local_apic_physical_address, local_apic_address
+				"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
 			);
 
 			let mut flags = PageTableEntryFlags::empty();
@@ -768,10 +764,7 @@ pub fn boot_application_processors() {
 		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64());
 	} else {
 		// Identity-map the boot code page and copy over the code.
-		debug!(
-			"Mapping SMP boot code to physical and virtual address {:p}",
-			SMP_BOOT_CODE_ADDRESS
-		);
+		debug!("Mapping SMP boot code to physical and virtual address {SMP_BOOT_CODE_ADDRESS:p}");
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable();
 		paging::map::<BasePageSize>(
@@ -819,10 +812,7 @@ pub fn boot_application_processors() {
 			}
 			let destination = u64::from(apic_id) << 32;
 
-			debug!(
-				"Waking up CPU {} with Local APIC ID {}",
-				core_id_to_boot, apic_id
-			);
+			debug!("Waking up CPU {core_id_to_boot} with Local APIC ID {apic_id}");
 			init_next_processor_variables();
 
 			// Save the current number of initialized CPUs.

@@ -89,7 +89,7 @@ fn detect_pci_regions(dtb: &Dtb<'_>, parts: &[&str]) -> (u64, u64, u64) {
 			}
 			0b10 => {
 				let prefetchable = high.get_bit(30);
-				debug!("32 bit memory space: prefetchable {}", prefetchable);
+				debug!("32 bit memory space: prefetchable {prefetchable}");
 				if mem32_start != 0 {
 					warn!("Found already 32 bit memory space");
 				}
@@ -100,7 +100,7 @@ fn detect_pci_regions(dtb: &Dtb<'_>, parts: &[&str]) -> (u64, u64, u64) {
 			}
 			0b11 => {
 				let prefetchable = high.get_bit(30);
-				debug!("64 bit memory space: prefetchable {}", prefetchable);
+				debug!("64 bit memory space: prefetchable {prefetchable}");
 				if mem64_start != 0 {
 					warn!("Found already 64 bit memory space");
 				}
@@ -194,10 +194,7 @@ fn detect_interrupt(
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		let irq_flags = u32::from_be_bytes(value_slice.try_into().unwrap());
 
-		trace!(
-			"Interrupt type {:#x}, number {:#x} flags {:#x}",
-			irq_type, irq_number, irq_flags
-		);
+		trace!("Interrupt type {irq_type:#x}, number {irq_number:#x} flags {irq_flags:#x}");
 
 		if high.get_bits(0..24) == addr {
 			pin += 1;
@@ -250,8 +247,7 @@ pub fn init() {
 				let pci_address =
 					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x1000_0000).unwrap();
 				info!(
-					"Mapping PCI Enhanced Configuration Space interface to virtual address {:p} (size {:#X})",
-					pci_address, size
+					"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"
 				);
 
 				let mut flags = PageTableEntryFlags::empty();
@@ -265,9 +261,9 @@ pub fn init() {
 
 				let (mut io_start, mem32_start, mut mem64_start) = detect_pci_regions(&dtb, &parts);
 
-				debug!("IO address space starts at{:#X}", io_start);
-				debug!("Memory32 address space starts at {:#X}", mem32_start);
-				debug!("Memory64 address space starts {:#X}", mem64_start);
+				debug!("IO address space starts at{io_start:#X}");
+				debug!("Memory32 address space starts at {mem32_start:#X}");
+				debug!("Memory64 address space starts {mem64_start:#X}");
 				assert!(io_start > 0);
 				assert!(mem32_start > 0);
 				assert!(mem64_start > 0);
@@ -339,8 +335,7 @@ pub fn init() {
 								&parts,
 							) {
 								debug!(
-									"Initialize interrupt pin {} and line {} for device {}",
-									pin, line, device_id
+									"Initialize interrupt pin {pin} and line {line} for device {device_id}"
 								);
 								dev.set_irq(pin, line);
 							}

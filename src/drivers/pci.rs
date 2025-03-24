@@ -158,10 +158,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			return None;
 		}
 
-		debug!(
-			"Mapping bar {} at {:#x} with length {:#x}",
-			index, address, size
-		);
+		debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
 
 		if width != 64 {
 			warn!("Currently only mapping of 64 bit bars is supported!");
@@ -323,7 +320,7 @@ pub(crate) fn print_information() {
 	infoheader!(" PCI BUS INFORMATION ");
 
 	for adapter in PCI_DEVICES.finalize().iter() {
-		info!("{}", adapter);
+		info!("{adapter}");
 	}
 
 	infofooter!();

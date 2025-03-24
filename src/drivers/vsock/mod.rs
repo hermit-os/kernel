@@ -47,7 +47,7 @@ fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 		// TransferTokens are directly dispatched
 		// Transfers will be awaited at the queue
 		if let Err(err) = vq.dispatch(buff_tkn, false, BufferType::Direct) {
-			error!("{:#?}", err);
+			error!("{err:#?}");
 			break;
 		}
 	}
@@ -70,7 +70,7 @@ impl RxQueue {
 	pub fn add(&mut self, mut vq: Box<dyn Virtq>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		info!("num_packets {}", num_packets);
+		info!("num_packets {num_packets}");
 		fill_queue(vq.as_mut(), num_packets, self.packet_size);
 
 		self.vq = Some(vq);

@@ -35,7 +35,7 @@ const SYSNO_READV: usize = 13;
 const NO_SYSCALLS: usize = 32;
 
 extern "C" fn invalid_syscall(sys_no: u64) -> ! {
-	error!("Invalid syscall {}", sys_no);
+	error!("Invalid syscall {sys_no}");
 	sys_exit(1);
 }
 

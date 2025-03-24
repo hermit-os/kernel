@@ -120,7 +120,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
-		debug!("Receive fiq {}", vector);
+		debug!("Receive fiq {vector}");
 		increment_irq_counter(vector);
 
 		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
@@ -148,7 +148,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
-		debug!("Receive interrupt {}", vector);
+		debug!("Receive interrupt {vector}");
 		increment_irq_counter(vector);
 
 		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
@@ -189,11 +189,11 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			// add page fault handler
 
 			error!("Current stack pointer {state:p}");
-			error!("Unable to handle page fault at {:#x}", far);
+			error!("Unable to handle page fault at {far:#x}");
 			error!("Exception return address {:#x}", ELR_EL1.get());
 			error!("Thread ID register {:#x}", TPIDR_EL0.get());
 			error!("Table Base Register {:#x}", TTBR0_EL1.get());
-			error!("Exception Syndrome Register {:#x}", esr);
+			error!("Exception Syndrome Register {esr:#x}");
 
 			GicV3::end_interrupt(irqid);
 			scheduler::abort()
@@ -201,15 +201,15 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			error!("Unknown exception");
 		}
 	} else if ec == 0x3c {
-		error!("Trap to debugger, PC={:#x}", pc);
+		error!("Trap to debugger, PC={pc:#x}");
 	} else {
-		error!("Unsupported exception class: {:#x}, PC={:#x}", ec, pc);
+		error!("Unsupported exception class: {ec:#x}, PC={pc:#x}");
 	}
 }
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_bad_mode(_state: &State, reason: u32) -> ! {
-	error!("Receive unhandled exception: {}", reason);
+	error!("Receive unhandled exception: {reason}");
 
 	scheduler::abort()
 }
@@ -257,13 +257,9 @@ pub(crate) fn init() {
 	let cpu_id = core_id();
 
 	info!("Found {num_cpus} cpus!");
+	info!("Found GIC Distributor interface at {gicd_start:p} (size {gicd_size:#X})");
 	info!(
-		"Found GIC Distributor interface at {:p} (size {:#X})",
-		gicd_start, gicd_size
-	);
-	info!(
-		"Found generic interrupt controller redistributor at {:p} (size {:#X}, stride {:#X})",
-		gicr_start, gicr_size, gicr_stride
+		"Found generic interrupt controller redistributor at {gicr_start:p} (size {gicr_size:#X}, stride {gicr_stride:#X})"
 	);
 
 	let gicd_address =
@@ -323,10 +319,7 @@ pub(crate) fn init() {
 					TIMER_INTERRUPT = irq;
 				}
 
-				debug!(
-					"Timer interrupt: {}, type {}, flags {}",
-					irq, irqtype, irqflags
-				);
+				debug!("Timer interrupt: {irq}, type {irqtype}, flags {irqflags}");
 
 				IRQ_NAMES
 					.lock()
@@ -366,7 +359,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 #[allow(dead_code)]
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
+	debug!("Register name \"{name}\"  for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
 }
 

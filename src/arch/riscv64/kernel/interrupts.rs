@@ -56,7 +56,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 #[allow(dead_code)]
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
+	debug!("Register name \"{name}\"  for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(irq_number, name);
 }
 
@@ -102,7 +102,7 @@ pub(crate) fn enable_and_wait() {
 				// // Disable Supervisor-level software interrupt, wakeup not needed
 				// sie::clear_ssoft();
 
-				debug!("sip: {:x?}", pending_interrupts);
+				debug!("sip: {pending_interrupts:x?}");
 				trace!("TIMER");
 				crate::arch::riscv64::kernel::scheduler::timer_handler();
 				break;
@@ -138,7 +138,7 @@ pub(crate) fn install_handlers() {
 				+ PLIC_ENABLE_OFFSET
 				+ 0x80 * (*context as usize)
 				+ ((*irq_number / 32) * 4) as usize;
-			debug!("enable_address {:x}", enable_address);
+			debug!("enable_address {enable_address:x}");
 			core::ptr::write_volatile(enable_address as *mut u32, 1 << (irq_number % 32));
 		}
 	}
@@ -196,7 +196,7 @@ fn external_handler() {
 	let irq = unsafe { core::ptr::read_volatile(claim_address as *mut u32) };
 
 	if irq != 0 {
-		debug!("External INT: {}", irq);
+		debug!("External INT: {irq}");
 		let mut cur_int = CURRENT_INTERRUPTS.lock();
 		cur_int.push(irq);
 		if cur_int.len() > 1 {

@@ -293,18 +293,14 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 
 		// Verify the basic checksum.
 		if verify_checksum(current_address, RSDP_CHECKSUM_LENGTH).is_err() {
-			debug!(
-				"Found an ACPI table at {:#X}, but its RSDP checksum is invalid",
-				current_address
-			);
+			debug!("Found an ACPI table at {current_address:#X}, but its RSDP checksum is invalid");
 			continue;
 		}
 
 		// Verify the extended checksum if this is an ACPI 2.0-compliant table.
 		if rsdp.revision >= 2 && verify_checksum(current_address, RSDP_XCHECKSUM_LENGTH).is_err() {
 			debug!(
-				"Found an ACPI table at {:#X}, but its RSDP extended checksum is invalid",
-				current_address
+				"Found an ACPI table at {current_address:#X}, but its RSDP extended checksum is invalid"
 			);
 			continue;
 		}
@@ -478,10 +474,7 @@ pub fn poweroff() {
 	if let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
 	{
 		let bits = (u16::from(slp_typa) << 10) | SLP_EN;
-		debug!(
-			"Powering Off through ACPI (port {:?}, bitmask {:#X})",
-			pm1a_cnt_blk, bits
-		);
+		debug!("Powering Off through ACPI (port {pm1a_cnt_blk:?}, bitmask {bits:#X})");
 		unsafe {
 			pm1a_cnt_blk.write(bits);
 		}

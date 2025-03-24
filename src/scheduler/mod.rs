@@ -294,10 +294,7 @@ impl PerCoreScheduler {
 			}
 		};
 
-		debug!(
-			"Creating task {} with priority {} on core {}",
-			tid, prio, core_id
-		);
+		debug!("Creating task {tid} with priority {prio} on core {core_id}");
 
 		if wakeup {
 			arch::wakeup_core(core_id);
@@ -647,7 +644,7 @@ impl PerCoreScheduler {
 	}
 
 	pub fn set_priority(&mut self, id: TaskId, prio: Priority) -> Result<(), ()> {
-		trace!("Change priority of task {} to priority {}", id, prio);
+		trace!("Change priority of task {id} to priority {prio}");
 
 		without_interrupts(|| {
 			let task = get_task_handle(id).ok_or(())?;
@@ -903,10 +900,7 @@ pub(crate) fn add_current_core() {
 		),
 	);
 	// Initialize a scheduler for this core.
-	debug!(
-		"Initializing scheduler for core {} with idle task {}",
-		core_id, tid
-	);
+	debug!("Initializing scheduler for core {core_id} with idle task {tid}");
 	let boxed_scheduler = Box::new(PerCoreScheduler {
 		#[cfg(feature = "smp")]
 		core_id,

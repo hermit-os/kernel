@@ -153,7 +153,7 @@ impl Filesystem {
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<dyn ObjectInterface>> {
-		debug!("Open file {} with {:?}", path, opt);
+		debug!("Open file {path} with {opt:?}");
 		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
@@ -164,7 +164,7 @@ impl Filesystem {
 
 	/// Unlinks a file given by path
 	pub fn unlink(&self, path: &str) -> io::Result<()> {
-		debug!("Unlinking file {}", path);
+		debug!("Unlinking file {path}");
 		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
@@ -175,7 +175,7 @@ impl Filesystem {
 
 	/// Remove directory given by path
 	pub fn rmdir(&self, path: &str) -> io::Result<()> {
-		debug!("Removing directory {}", path);
+		debug!("Removing directory {path}");
 		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
@@ -186,7 +186,7 @@ impl Filesystem {
 
 	/// Create directory given by path
 	pub fn mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
-		debug!("Create directory {}", path);
+		debug!("Create directory {path}");
 		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
@@ -196,7 +196,7 @@ impl Filesystem {
 	}
 
 	pub fn opendir(&self, path: &str) -> io::Result<Arc<dyn ObjectInterface>> {
-		debug!("Open directory {}", path);
+		debug!("Open directory {path}");
 		Ok(Arc::new(DirectoryReader::new(self.readdir(path)?)))
 	}
 
@@ -217,7 +217,7 @@ impl Filesystem {
 
 	/// stat
 	pub fn stat(&self, path: &str) -> io::Result<FileAttr> {
-		debug!("Getting stats {}", path);
+		debug!("Getting stats {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();
 		components.reverse();
@@ -228,7 +228,7 @@ impl Filesystem {
 
 	/// lstat
 	pub fn lstat(&self, path: &str) -> io::Result<FileAttr> {
-		debug!("Getting lstats {}", path);
+		debug!("Getting lstats {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();
 		components.reverse();
@@ -243,7 +243,7 @@ impl Filesystem {
 		path: &str,
 		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
 	) -> io::Result<()> {
-		debug!("Mounting {}", path);
+		debug!("Mounting {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();
 
@@ -260,7 +260,7 @@ impl Filesystem {
 		data: &'static [u8],
 		mode: AccessPermission,
 	) -> io::Result<()> {
-		debug!("Create read-only file {}", path);
+		debug!("Create read-only file {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();
 
@@ -373,7 +373,7 @@ pub fn create_dir(path: &str, mode: AccessPermission) -> io::Result<()> {
 
 /// Returns an vector with all the entries within a directory.
 pub fn readdir(name: &str) -> io::Result<Vec<DirectoryEntry>> {
-	debug!("Read directory {}", name);
+	debug!("Read directory {name}");
 
 	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.readdir(name)
 }
@@ -391,7 +391,7 @@ pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result
 	// flags is bitmask of O_DEC_* defined above.
 	// (taken from rust stdlib/sys hermit target )
 
-	debug!("Open {}, {:?}, {:?}", name, flags, mode);
+	debug!("Open {name}, {flags:?}, {mode:?}");
 
 	let fs = FILESYSTEM.get().ok_or(io::Error::EINVAL)?;
 	if let Ok(file) = fs.open(name, flags, mode) {

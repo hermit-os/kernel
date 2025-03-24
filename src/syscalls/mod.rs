@@ -90,19 +90,13 @@ pub(crate) fn init() {
 pub extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
-		warn!(
-			"__sys_alloc called with size {:#x}, align {:#x} is an invalid layout!",
-			size, align
-		);
+		warn!("__sys_alloc called with size {size:#x}, align {align:#x} is an invalid layout!");
 		return core::ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
 
-	trace!(
-		"__sys_alloc: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr, size, align
-	);
+	trace!("__sys_alloc: allocate memory at {ptr:p} (size {size:#x}, align {align:#x})");
 
 	ptr
 }
@@ -114,18 +108,14 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!(
-			"__sys_alloc_zeroed called with size {:#x}, align {:#x} is an invalid layout!",
-			size, align
+			"__sys_alloc_zeroed called with size {size:#x}, align {align:#x} is an invalid layout!"
 		);
 		return core::ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc_zeroed(layout) };
 
-	trace!(
-		"__sys_alloc_zeroed: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr, size, align
-	);
+	trace!("__sys_alloc_zeroed: allocate memory at {ptr:p} (size {size:#x}, align {align:#x})");
 
 	ptr
 }
@@ -136,19 +126,13 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
-		warn!(
-			"__sys_malloc called with size {:#x}, align {:#x} is an invalid layout!",
-			size, align
-		);
+		warn!("__sys_malloc called with size {size:#x}, align {align:#x} is an invalid layout!");
 		return core::ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
 
-	trace!(
-		"__sys_malloc: allocate memory at {:p} (size {:#x}, align {:#x})",
-		ptr, size, align
-	);
+	trace!("__sys_malloc: allocate memory at {ptr:p} (size {size:#x}, align {align:#x})");
 
 	ptr
 }
@@ -185,8 +169,7 @@ pub unsafe extern "C" fn sys_realloc(
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 || new_size == 0 {
 			warn!(
-				"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
-				ptr, size, align, new_size
+				"__sys_realloc called with ptr {ptr:p}, size {size:#x}, align {align:#x}, new_size {new_size:#x} is an invalid layout!"
 			);
 			return core::ptr::null_mut();
 		}
@@ -195,14 +178,10 @@ pub unsafe extern "C" fn sys_realloc(
 
 		if new_ptr.is_null() {
 			debug!(
-				"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
-				ptr, size, align, new_size
+				"__sys_realloc failed to resize ptr {ptr:p} with size {size:#x}, align {align:#x}, new_size {new_size:#x} !"
 			);
 		} else {
-			trace!(
-				"__sys_realloc: resized memory at {:p}, new address {:p}",
-				ptr, new_ptr
-			);
+			trace!("__sys_realloc: resized memory at {ptr:p}, new address {new_ptr:p}");
 		}
 		new_ptr
 	}
@@ -226,16 +205,12 @@ pub unsafe extern "C" fn sys_dealloc(ptr: *mut u8, size: usize, align: usize) {
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 {
 			warn!(
-				"__sys_dealloc called with size {:#x}, align {:#x} is an invalid layout!",
-				size, align
+				"__sys_dealloc called with size {size:#x}, align {align:#x} is an invalid layout!"
 			);
 			debug_assert!(layout_res.is_err(), "__sys_dealloc error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_dealloc error: size cannot be 0");
 		} else {
-			trace!(
-				"sys_free: deallocate memory at {:p} (size {:#x})",
-				ptr, size
-			);
+			trace!("sys_free: deallocate memory at {ptr:p} (size {size:#x})");
 		}
 		let layout = layout_res.unwrap();
 		ALLOCATOR.dealloc(ptr, layout);
@@ -249,17 +224,11 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	unsafe {
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 {
-			warn!(
-				"__sys_free called with size {:#x}, align {:#x} is an invalid layout!",
-				size, align
-			);
+			warn!("__sys_free called with size {size:#x}, align {align:#x} is an invalid layout!");
 			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
 		} else {
-			trace!(
-				"sys_free: deallocate memory at {:p} (size {:#x})",
-				ptr, size
-			);
+			trace!("sys_free: deallocate memory at {ptr:p} (size {size:#x})");
 		}
 		let layout = layout_res.unwrap();
 		ALLOCATOR.dealloc(ptr, layout);

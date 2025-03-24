@@ -35,7 +35,7 @@ pub(crate) struct EventFd {
 
 impl EventFd {
 	pub fn new(initval: u64, flags: EventFlags) -> Self {
-		debug!("Create EventFd {}, {:?}", initval, flags);
+		debug!("Create EventFd {initval}, {flags:?}");
 		Self {
 			state: Mutex::new(EventState::new(initval)),
 			flags,

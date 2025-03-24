@@ -415,10 +415,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
-	debug!(
-		"sys_socket: domain {}, type {:?}, protocol {}",
-		domain, type_, protocol
-	);
+	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
 
 	if protocol != 0 {
 		return -EINVAL;
@@ -718,10 +715,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	debug!(
-		"sys_setsockopt: {}, level {}, optname {}",
-		fd, level, optname
-	);
+	debug!("sys_setsockopt: {fd}, level {level}, optname {optname}");
 
 	if level == IPPROTO_TCP
 		&& optname == TCP_NODELAY
@@ -756,10 +750,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	debug!(
-		"sys_getsockopt: {}, level {}, optname {}",
-		fd, level, optname
-	);
+	debug!("sys_getsockopt: {fd}, level {level}, optname {optname}");
 
 	if level == IPPROTO_TCP && optname == TCP_NODELAY {
 		if optval.is_null() || optlen.is_null() {

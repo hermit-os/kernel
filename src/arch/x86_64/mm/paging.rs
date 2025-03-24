@@ -111,10 +111,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 
 	match translate_result {
 		TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
-			trace!(
-				"Uable to determine the physical address of 0x{:X}",
-				virtual_address
-			);
+			trace!("Uable to determine the physical address of 0x{virtual_address:X}");
 			None
 		}
 		TranslateResult::Mapped { frame, offset, .. } => {
@@ -246,10 +243,7 @@ where
 	for<'a> RecursivePageTable<'a>: Mapper<S>,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
-	trace!(
-		"Unmapping virtual address {:p} ({} pages)",
-		virtual_address, count
-	);
+	trace!("Unmapping virtual address {virtual_address:p} ({count} pages)");
 
 	let first_page = Page::<S>::containing_address(virtual_address.into());
 	let last_page = first_page + count as u64;
