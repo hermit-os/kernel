@@ -95,10 +95,6 @@ impl Build {
 			.map(|s| vec![s])
 			.unwrap_or_default();
 
-		// TODO: Re-enable mutable-noalias
-		// https://github.com/hermit-os/kernel/issues/200
-		rustflags.push("-Zmutable-noalias=no");
-
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
 			rustflags.push("-Cpasses=ee-instrument<post-inline>");
