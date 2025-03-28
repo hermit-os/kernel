@@ -171,9 +171,8 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	);
 
 	let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
-
-	unsafe {
-		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+	if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
+		error!("Unable to deallocate {range:?}");
 	}
 }
 
