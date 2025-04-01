@@ -11,7 +11,7 @@
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
@@ -396,7 +396,7 @@ impl ObjectInterface for MemDirectoryInterface {
 	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
 		for name in self.inner.read().await.keys() {
-			entries.push(DirectoryEntry::new(name.to_string()));
+			entries.push(DirectoryEntry::new(name.clone()));
 		}
 
 		Ok(entries)
@@ -574,7 +574,7 @@ impl VfsNode for MemDirectory {
 				} else {
 					let mut entries: Vec<DirectoryEntry> = Vec::new();
 					for name in self.inner.read().await.keys() {
-						entries.push(DirectoryEntry::new(name.to_string()));
+						entries.push(DirectoryEntry::new(name.clone()));
 					}
 
 					Ok(entries)
