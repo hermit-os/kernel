@@ -173,7 +173,6 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &State) {
-	let irqid = GicV3::get_and_acknowledge_interrupt().unwrap();
 	let esr = ESR_EL1.get();
 	let ec = esr >> 26;
 	let iss = esr & 0x00ff_ffff;
@@ -195,7 +194,12 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			error!("Table Base Register {:#x}", TTBR0_EL1.get());
 			error!("Exception Syndrome Register {esr:#x}");
 
-			GicV3::end_interrupt(irqid);
+			if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+				GicV3::end_interrupt(irqid);
+			} else {
+				error!("Unable to acknowledge interrupt!");
+			}
+
 			scheduler::abort()
 		} else {
 			error!("Unknown exception");
