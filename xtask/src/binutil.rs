@@ -33,7 +33,14 @@ impl LlvmTools {
 				return Ok(Self { bin });
 			}
 		}
-		unreachable!()
+		eprintln!(
+			"Error: Could not find the required LLVM tool '{}'. Searched in: {:?}",
+			example_exe, rustlib
+		);
+		Err(io::Error::new(
+			io::ErrorKind::NotFound,
+			"Required LLVM tool not found",
+		))
 	}
 
 	pub fn tool(&self, name: &str) -> Option<PathBuf> {
