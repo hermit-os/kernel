@@ -33,7 +33,12 @@ impl LlvmTools {
 				return Ok(Self { bin });
 			}
 		}
-		unreachable!()
+		Err(io::Error::new(
+			io::ErrorKind::NotFound,
+			"Could not find llvm-tools component\n\
+			\n\
+			Maybe the rustup component `llvm-tools` is missing? Install it through: `rustup component add llvm-tools`",
+		))
 	}
 
 	pub fn tool(&self, name: &str) -> Option<PathBuf> {
