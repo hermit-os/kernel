@@ -5,7 +5,7 @@ use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
 use x86_64::structures::paging::mapper::MapToError;
-use x86_64::structures::paging::{Mapper, PageTableFlags, PhysFrame, Size2MiB};
+use x86_64::structures::paging::{Mapper, PageTableFlags, PhysFrame, Size2MiB, Translate};
 
 use crate::arch::mm::paging::identity_mapped_page_table;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
@@ -16,9 +16,9 @@ pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 unsafe fn init_frame_range(frame_range: PageRange) {
-	let frames = {
-		use x86_64::PhysAddr;
+	use x86_64::{PhysAddr, VirtAddr};
 
+	let frames = {
 		let start = u64::try_from(frame_range.start()).unwrap();
 		let end = u64::try_from(frame_range.end()).unwrap();
 
@@ -43,6 +43,12 @@ unsafe fn init_frame_range(frame_range: PageRange) {
 		match mapper_result {
 			Ok(mapper_flush) => mapper_flush.flush(),
 			Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
+			Err(MapToError::ParentEntryHugePage) => {
+				let page_table = unsafe { identity_mapped_page_table() };
+				let virt_addr = VirtAddr::new(frame.start_address().as_u64());
+				let phys_addr = frame.start_address();
+				assert_eq!(page_table.translate_addr(virt_addr), Some(phys_addr));
+			}
 			Err(err) => panic!("could not identity-map {frame:?}: {err:?}"),
 		}
 	}
