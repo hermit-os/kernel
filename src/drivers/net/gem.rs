@@ -7,9 +7,11 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::alloc::Layout;
 use core::convert::TryInto;
 use core::{mem, slice};
 
+use align_address::Align;
 use memory_addresses::VirtAddr;
 use riscv::register::*;
 use tock_registers::interfaces::*;
@@ -20,13 +22,15 @@ use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::interrupts::*;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::arch::kernel::mmio as hardware;
-use crate::arch::mm::paging::virt_to_phys;
+use crate::arch::mm::paging::{PageTableEntryFlags, virt_to_phys};
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci as hardware;
 use crate::drivers::{Driver, InterruptLine};
 use crate::executor::device::{RxToken, TxToken};
+use crate::mm::device_alloc::DeviceAlloc;
+use crate::{BasePageSize, PageSize};
 
 //Base address of the control registers
 //const GEM: *mut Registers = 0x1009_0000 as *mut Registers; //For Sifive FU540
@@ -458,10 +462,10 @@ impl Drop for GEMDriver {
 			(*self.gem).network_control.set(0x0);
 		}
 
-		crate::mm::deallocate(self.rxbuffer, (RX_BUF_LEN * RX_BUF_NUM) as usize);
-		crate::mm::deallocate(self.txbuffer, (TX_BUF_LEN * TX_BUF_NUM) as usize);
-		crate::mm::deallocate(self.rxbuffer_list, (8 * RX_BUF_NUM) as usize);
-		crate::mm::deallocate(self.txbuffer_list, (8 * TX_BUF_NUM) as usize);
+		deallocate(self.rxbuffer, (RX_BUF_LEN * RX_BUF_NUM) as usize);
+		deallocate(self.txbuffer, (TX_BUF_LEN * TX_BUF_NUM) as usize);
+		deallocate(self.rxbuffer_list, (8 * RX_BUF_NUM) as usize);
+		deallocate(self.txbuffer_list, (8 * TX_BUF_NUM) as usize);
 	}
 }
 
@@ -613,13 +617,13 @@ pub fn init_device(
 	// Configure the Buffer Descriptors
 
 	// Allocate Receive Buffer
-	let rxbuffer = crate::mm::allocate((RX_BUF_LEN * RX_BUF_NUM) as usize, true);
+	let rxbuffer = allocate((RX_BUF_LEN * RX_BUF_NUM) as usize, true);
 	// Allocate Receive Buffer Descriptor List
-	let rxbuffer_list = crate::mm::allocate((8 * RX_BUF_NUM) as usize, true);
+	let rxbuffer_list = allocate((8 * RX_BUF_NUM) as usize, true);
 	// Allocate Transmit Buffer
-	let txbuffer = crate::mm::allocate((TX_BUF_LEN * TX_BUF_NUM) as usize, true);
+	let txbuffer = allocate((TX_BUF_LEN * TX_BUF_NUM) as usize, true);
 	// Allocate Transmit Buffer Descriptor List
-	let txbuffer_list = crate::mm::allocate((8 * TX_BUF_NUM) as usize, true);
+	let txbuffer_list = allocate((8 * TX_BUF_NUM) as usize, true);
 
 	if txbuffer.is_null()
 		|| rxbuffer.is_null()
@@ -749,5 +753,43 @@ unsafe fn wait_for_mdio(gem: *mut Registers) {
 	unsafe {
 		// Check that no MDIO operation is in progress
 		while !(*gem).network_status.is_set(NetworkStatus::PHY_MGMT_IDLE) {}
+	}
+}
+
+// FIXME: boxify buffers and remove these functions
+/// Soft-deprecated in favor of `DeviceAlloc`
+pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
+	let size = size.align_up(BasePageSize::SIZE as usize);
+	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
+
+	let count = size / BasePageSize::SIZE as usize;
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	if no_execution {
+		flags.execute_disable();
+	}
+
+	crate::arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
+
+	virtual_address
+}
+
+/// Soft-deprecated in favor of `DeviceAlloc`
+pub(crate) fn deallocate(virtual_address: VirtAddr, size: usize) {
+	let size = size.align_up(BasePageSize::SIZE as usize);
+
+	if let Some(phys_addr) = crate::arch::mm::paging::virtual_to_physical(virtual_address) {
+		crate::arch::mm::paging::unmap::<BasePageSize>(
+			virtual_address,
+			size / BasePageSize::SIZE as usize,
+		);
+		crate::mm::virtualmem::deallocate(virtual_address, size);
+		crate::mm::physicalmem::deallocate(phys_addr, size);
+	} else {
+		panic!(
+			"No page table entry for virtual address {:p}",
+			virtual_address
+		);
 	}
 }
