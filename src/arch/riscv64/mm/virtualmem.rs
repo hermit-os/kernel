@@ -7,8 +7,8 @@ use memory_addresses::VirtAddr;
 
 use crate::arch::riscv64::kernel::get_ram_address;
 use crate::arch::riscv64::mm::paging::{BasePageSize, HugePageSize, PageSize};
-use crate::arch::riscv64::mm::physicalmem;
 use crate::mm;
+use crate::mm::physicalmem;
 
 static KERNEL_FREE_LIST: InterruptSpinMutex<FreeList<16>> =
 	InterruptSpinMutex::new(FreeList::new());

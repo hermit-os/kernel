@@ -32,7 +32,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
 	}
-	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
 
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
@@ -63,7 +63,7 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
-		arch::mm::physicalmem::deallocate(phys_addr, size);
+		crate::mm::physicalmem::deallocate(phys_addr, size);
 	}
 
 	arch::mm::virtualmem::deallocate(virtual_address, size);
@@ -94,7 +94,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	} else {
-		let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+		let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	}

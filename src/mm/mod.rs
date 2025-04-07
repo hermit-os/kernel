@@ -1,5 +1,6 @@
 pub(crate) mod allocator;
 pub(crate) mod device_alloc;
+pub(crate) mod physicalmem;
 
 use core::mem;
 use core::ops::Range;
@@ -15,7 +16,6 @@ use crate::arch::mm::paging::HugePageSize;
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::mm::physicalmem;
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -242,14 +242,14 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn print_information() {
-	arch::mm::physicalmem::print_information();
+	self::physicalmem::print_information();
 	arch::mm::virtualmem::print_information();
 }
 
 /// Soft-deprecated in favor of `DeviceAlloc`
 pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+	let physical_address = self::physicalmem::allocate(size).unwrap();
 	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
 	let count = size / BasePageSize::SIZE as usize;
@@ -274,7 +274,7 @@ pub(crate) fn deallocate(virtual_address: VirtAddr, size: usize) {
 			size / BasePageSize::SIZE as usize,
 		);
 		arch::mm::virtualmem::deallocate(virtual_address, size);
-		arch::mm::physicalmem::deallocate(phys_addr, size);
+		self::physicalmem::deallocate(phys_addr, size);
 	} else {
 		panic!(
 			"No page table entry for virtual address {:p}",

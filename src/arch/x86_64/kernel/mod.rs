@@ -280,7 +280,7 @@ where
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
-	use crate::arch::x86_64::mm::physicalmem;
+	use crate::mm::physicalmem;
 
 	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
 	let physaddr = physicalmem::allocate_aligned(code_size, BasePageSize::SIZE as usize).unwrap();

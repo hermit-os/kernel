@@ -217,7 +217,7 @@ pub fn init_drivers() {
 
 				info!("Found network card at {mmio:p}");
 
-				// crate::arch::mm::physicalmem::reserve(
+				// crate::mm::physicalmem::reserve(
 				// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 				// 	BasePageSize::SIZE as usize,
 				// );

@@ -106,7 +106,7 @@ fn check_linux_args(
 					continue;
 				};
 
-				crate::arch::mm::physicalmem::reserve(
+				crate::mm::physicalmem::reserve(
 					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 					BasePageSize::SIZE as usize,
 				);
@@ -158,7 +158,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 
 		info!("Found network card at {mmio:p}");
 
-		crate::arch::mm::physicalmem::reserve(
+		crate::mm::physicalmem::reserve(
 			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 			BasePageSize::SIZE as usize,
 		);
