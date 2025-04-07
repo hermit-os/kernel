@@ -3,9 +3,10 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
-use memory_addresses::PhysAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{self, BasePageSize, PageSize};
+use crate::env;
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -41,6 +42,90 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 		.for_each(paging::identity_map::<IdentityPageSize>);
 
 	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
+}
+
+fn detect_from_fdt() -> Result<(), ()> {
+	let fdt = env::fdt().ok_or(())?;
+
+	let all_regions = fdt
+		.find_all_nodes("/memory")
+		.map(|m| m.reg().unwrap().next().unwrap());
+
+	let mut found_ram = false;
+
+	if env::is_uefi() {
+		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
+		found_ram = true;
+
+		let range = PageRange::from_start_len(
+			biggest_region.starting_address.addr(),
+			biggest_region.size.unwrap(),
+		)
+		.unwrap();
+
+		unsafe {
+			init_frame_range(range);
+		}
+	} else {
+		for m in all_regions {
+			let start_address = m.starting_address as u64;
+			let size = m.size.unwrap() as u64;
+			let end_address = start_address + size;
+
+			if end_address <= super::kernel_end_address().as_u64() {
+				continue;
+			}
+
+			found_ram = true;
+
+			let start_address = if start_address <= super::kernel_start_address().as_u64() {
+				super::kernel_end_address()
+			} else {
+				VirtAddr::new(start_address)
+			};
+
+			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
+			unsafe {
+				init_frame_range(range);
+			}
+		}
+	}
+
+	if found_ram { Ok(()) } else { Err(()) }
+}
+
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+fn detect_from_limits() -> Result<(), ()> {
+	let limit = crate::arch::kernel::get_limit();
+	if limit == 0 {
+		return Err(());
+	}
+
+	#[cfg(target_arch = "riscv64")]
+	let ram_address = crate::arch::kernel::get_ram_address().as_usize();
+	#[cfg(target_arch = "aarch64")]
+	let ram_address = 0;
+
+	let range =
+		PageRange::new(super::kernel_end_address().as_usize(), ram_address + limit).unwrap();
+	unsafe {
+		init_frame_range(range);
+	}
+
+	Ok(())
+}
+
+pub fn init() {
+	if let Err(_err) = detect_from_fdt() {
+		cfg_if::cfg_if! {
+			if #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))] {
+				error!("Could not detect physical memory from FDT");
+				detect_from_limits().unwrap();
+			} else {
+				panic!("Could not detect physical memory from FDT");
+			}
+		}
+	}
 }
 
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
