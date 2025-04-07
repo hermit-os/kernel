@@ -1,6 +1,4 @@
 pub(crate) mod paging;
-pub(crate) mod physicalmem;
-pub(crate) mod virtualmem;
 
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 #[cfg(feature = "common-os")]
@@ -60,8 +58,8 @@ pub fn create_new_root_page_table() -> usize {
 
 pub fn init() {
 	paging::init();
-	physicalmem::init();
-	virtualmem::init();
+	crate::mm::physicalmem::init();
+	crate::mm::virtualmem::init();
 
 	#[cfg(feature = "common-os")]
 	{

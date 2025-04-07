@@ -8,7 +8,7 @@ pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::frame::PhysFrameRange;
-use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult, UnmapError};
+use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
 	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
@@ -218,24 +218,31 @@ where
 	Ok(())
 }
 
-#[cfg(feature = "acpi")]
-pub fn identity_map<S>(frame: PhysFrame<S>)
+pub fn identity_map<S>(phys_addr: PhysAddr)
 where
 	S: PageSize + Debug,
 	for<'a> RecursivePageTable<'a>: Mapper<S>,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
-	assert!(
-		frame.start_address().as_u64() < crate::mm::kernel_start_address().as_u64(),
-		"Address {:p} to be identity-mapped is not below Kernel start address",
-		frame.start_address()
-	);
-
-	let flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::NO_EXECUTE;
+	let frame = PhysFrame::<S>::from_start_address(phys_addr.into()).unwrap();
+	let flags = PageTableEntryFlags::PRESENT
+		| PageTableEntryFlags::WRITABLE
+		| PageTableEntryFlags::NO_EXECUTE;
 	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
 	let mapper_result =
 		unsafe { identity_mapped_page_table().identity_map(frame, flags, &mut *frame_allocator) };
-	mapper_result.unwrap().flush();
+
+	match mapper_result {
+		Ok(mapper_flush) => mapper_flush.flush(),
+		Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
+		Err(MapToError::ParentEntryHugePage) => {
+			let page_table = unsafe { identity_mapped_page_table() };
+			let virt_addr = VirtAddr::new(frame.start_address().as_u64()).into();
+			let phys_addr = frame.start_address();
+			assert_eq!(page_table.translate_addr(virt_addr), Some(phys_addr));
+		}
+		Err(err) => panic!("could not identity-map {frame:?}: {err:?}"),
+	}
 }
 
 pub fn unmap<S>(virtual_address: VirtAddr, count: usize)

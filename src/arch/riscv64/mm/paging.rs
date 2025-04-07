@@ -8,7 +8,6 @@ use riscv::asm::sfence_vma;
 use riscv::register::satp;
 use riscv::register::satp::Satp;
 
-use crate::arch::riscv64::kernel::get_ram_address;
 use crate::mm::physicalmem;
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
@@ -636,24 +635,12 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
-pub fn identity_map<S: PageSize>(memory: AddrRange<PhysAddr>) {
-	let first_page = Page::<S>::including_address(VirtAddr::new(memory.start.as_u64()));
-	let last_page = Page::<S>::including_address(VirtAddr::new(memory.end.as_u64()));
+pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
+	let range = AddrRange::new(phys_addr, phys_addr).unwrap();
 
-	trace!(
-		"identity_map address {:#X} to address {:#X}",
-		first_page.virtual_address, last_page.virtual_address,
-	);
+	let first_page = Page::<S>::including_address(VirtAddr::new(range.start.as_u64()));
+	let last_page = Page::<S>::including_address(VirtAddr::new(range.end.as_u64()));
 
-	/* assert!(
-		last_page.address() < mm::kernel_start_address(),
-		"Address {:#X} to be identity-mapped is not below Kernel start address",
-		last_page.address()
-	); */
-
-	/* let root_pagetable = unsafe {
-		&mut *mem::transmute::<*mut u64, *mut PageTable<L2Table>>(L2TABLE_ADDRESS.as_mut_ptr())
-	}; */
 	let range = Page::<S>::range(first_page, last_page);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -663,15 +650,6 @@ pub fn identity_map<S: PageSize>(memory: AddrRange<PhysAddr>) {
 }
 
 pub fn init_page_tables() {
-	trace!("Identity map the physical memory using HugePages");
-
-	identity_map::<HugePageSize>(
-		AddrRange::new(
-			get_ram_address(),
-			get_ram_address() + physicalmem::total_memory_size() as u64 - 1u64,
-		)
-		.unwrap(),
-	);
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
 	unsafe {
 		satp::write(Satp::from_bits(

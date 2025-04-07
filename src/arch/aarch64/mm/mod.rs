@@ -1,13 +1,11 @@
 pub mod paging;
-pub mod physicalmem;
-pub mod virtualmem;
-
-pub use self::physicalmem::init_page_tables;
 
 pub fn init() {
 	unsafe {
 		paging::init();
 	}
-	physicalmem::init();
-	virtualmem::init();
+	crate::mm::physicalmem::init();
+	crate::mm::virtualmem::init();
 }
+
+pub fn init_page_tables() {}

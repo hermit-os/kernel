@@ -8,7 +8,6 @@ use align_address::Align;
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
-use crate::arch::aarch64::mm::virtualmem;
 use crate::env::is_uhyve;
 use crate::mm::physicalmem;
 use crate::{KERNEL_STACK_SIZE, mm, scheduler};
@@ -613,6 +612,17 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 	}
 
 	Ok(())
+}
+
+pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
+	let virt_addr = VirtAddr::new(phys_addr.as_u64());
+	let flags = {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+		flags
+	};
+
+	map::<S>(virt_addr, phys_addr, 1, flags);
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
