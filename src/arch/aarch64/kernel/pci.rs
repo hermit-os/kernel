@@ -12,8 +12,8 @@ use pci_types::{
 
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::aarch64::mm::virtualmem;
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
+use crate::mm::virtualmem;
 use crate::{core_id, env};
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;

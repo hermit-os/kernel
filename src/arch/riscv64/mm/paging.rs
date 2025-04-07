@@ -9,7 +9,7 @@ use riscv::register::satp;
 use riscv::register::satp::Satp;
 
 use crate::arch::riscv64::kernel::get_ram_address;
-use crate::arch::riscv64::mm::physicalmem;
+use crate::mm::physicalmem;
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
 

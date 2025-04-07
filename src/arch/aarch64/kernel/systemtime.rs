@@ -10,8 +10,8 @@ use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use time::OffsetDateTime;
 
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::aarch64::mm::virtualmem;
 use crate::env;
+use crate::mm::virtualmem;
 
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();

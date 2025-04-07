@@ -6,11 +6,12 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
 use x86_64::structures::paging::PhysFrame;
 
+use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::env;
+use crate::mm::virtualmem;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);

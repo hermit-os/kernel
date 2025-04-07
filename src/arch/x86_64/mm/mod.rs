@@ -14,12 +14,16 @@ use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 pub fn create_new_root_page_table() -> usize {
 	use x86_64::registers::control::Cr3;
 
-	let physaddr =
-		physicalmem::allocate_aligned(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize)
-			.unwrap();
-	let virtaddr =
-		virtualmem::allocate_aligned(2 * BasePageSize::SIZE as usize, BasePageSize::SIZE as usize)
-			.unwrap();
+	let physaddr = crate::mm::physicalmem::allocate_aligned(
+		BasePageSize::SIZE as usize,
+		BasePageSize::SIZE as usize,
+	)
+	.unwrap();
+	let virtaddr = crate::mm::virtualmem::allocate_aligned(
+		2 * BasePageSize::SIZE as usize,
+		BasePageSize::SIZE as usize,
+	)
+	.unwrap();
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 
@@ -49,7 +53,7 @@ pub fn create_new_root_page_table() -> usize {
 	};
 
 	paging::unmap::<BasePageSize>(virtaddr, 2);
-	virtualmem::deallocate(virtaddr, 2 * BasePageSize::SIZE as usize);
+	crate::mm::virtualmem::deallocate(virtaddr, 2 * BasePageSize::SIZE as usize);
 
 	physaddr.as_usize()
 }

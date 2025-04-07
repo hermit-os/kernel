@@ -16,7 +16,8 @@ use x86_64::structures::paging::{
 };
 
 use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, physicalmem};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::mm::physicalmem;
 use crate::{env, scheduler};
 
 pub trait PageTableEntryFlagsExt {

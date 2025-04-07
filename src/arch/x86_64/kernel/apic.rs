@@ -23,12 +23,13 @@ use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::swapgs;
 use crate::config::*;
+use crate::mm::virtualmem;
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
 
