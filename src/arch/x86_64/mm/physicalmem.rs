@@ -1,52 +1,29 @@
 use core::sync::atomic::Ordering;
 
+use align_address::Align;
 use free_list::PageRange;
-use memory_addresses::VirtAddr;
-use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
-use x86_64::structures::paging::mapper::MapToError;
-use x86_64::structures::paging::{Mapper, PageTableFlags, PhysFrame, Size2MiB, Translate};
+use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::mm::paging::identity_mapped_page_table;
+use crate::arch::mm::paging::{self, LargePageSize, PageSize};
 use crate::mm::physicalmem::{PHYSICAL_FREE_LIST, TOTAL_MEMORY};
 use crate::{env, mm};
 
 unsafe fn init_frame_range(frame_range: PageRange) {
-	use x86_64::{PhysAddr, VirtAddr};
-
-	let frames = {
-		let start = u64::try_from(frame_range.start()).unwrap();
-		let end = u64::try_from(frame_range.end()).unwrap();
-
-		let start = PhysFrame::containing_address(PhysAddr::new(start));
-		let end = PhysFrame::containing_address(PhysAddr::new(end));
-
-		PhysFrameRangeInclusive::<Size2MiB> { start, end }
-	};
-
-	let mut physical_free_list = PHYSICAL_FREE_LIST.lock();
+	let start = frame_range
+		.start()
+		.align_down(LargePageSize::SIZE.try_into().unwrap());
+	let end = frame_range
+		.end()
+		.align_up(LargePageSize::SIZE.try_into().unwrap());
 
 	unsafe {
-		physical_free_list.deallocate(frame_range).unwrap();
+		PHYSICAL_FREE_LIST.lock().deallocate(frame_range).unwrap();
 	}
 
-	let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-	for frame in frames {
-		let mapper_result = unsafe {
-			identity_mapped_page_table().identity_map(frame, flags, &mut *physical_free_list)
-		};
-
-		match mapper_result {
-			Ok(mapper_flush) => mapper_flush.flush(),
-			Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
-			Err(MapToError::ParentEntryHugePage) => {
-				let page_table = unsafe { identity_mapped_page_table() };
-				let virt_addr = VirtAddr::new(frame.start_address().as_u64());
-				let phys_addr = frame.start_address();
-				assert_eq!(page_table.translate_addr(virt_addr), Some(phys_addr));
-			}
-			Err(err) => panic!("could not identity-map {frame:?}: {err:?}"),
-		}
-	}
+	(start..end)
+		.step_by(LargePageSize::SIZE.try_into().unwrap())
+		.map(|addr| PhysAddr::new(addr.try_into().unwrap()))
+		.for_each(paging::identity_map::<LargePageSize>);
 
 	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }

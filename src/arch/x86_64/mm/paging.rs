@@ -8,9 +8,7 @@ pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::frame::PhysFrameRange;
-#[cfg(feature = "acpi")]
-use x86_64::structures::paging::mapper::MapToError;
-use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult, UnmapError};
+use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
 	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
@@ -220,7 +218,6 @@ where
 	Ok(())
 }
 
-#[cfg(feature = "acpi")]
 pub fn identity_map<S>(phys_addr: PhysAddr)
 where
 	S: PageSize + Debug,
