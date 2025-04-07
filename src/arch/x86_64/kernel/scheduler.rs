@@ -101,7 +101,7 @@ impl TaskStacks {
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + IST_SIZE;
 		let virt_addr =
-			crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
+			crate::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
 				.expect("Failed to allocate Virtual Memory for TaskStacks");
 		let phys_addr = crate::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
@@ -231,7 +231,7 @@ impl Drop for TaskStacks {
 						stacks.total_size / BasePageSize::SIZE as usize + 4,
 					);
 				}
-				crate::arch::mm::virtualmem::deallocate(
+				crate::mm::virtualmem::deallocate(
 					stacks.virt_addr,
 					stacks.total_size + 4 * BasePageSize::SIZE as usize,
 				);

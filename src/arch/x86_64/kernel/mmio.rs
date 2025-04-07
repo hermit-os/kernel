@@ -75,8 +75,7 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 fn check_linux_args(
 	linux_mmio: &'static [String],
 ) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
-	let virtual_address =
-		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	let virtual_address = crate::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
 	for arg in linux_mmio {
 		trace!("check linux parameter: {arg}");
@@ -120,7 +119,7 @@ fn check_linux_args(
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::arch::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	crate::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
 
 	Err("Network card not found!")
 }
@@ -128,8 +127,7 @@ fn check_linux_args(
 fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
-	let virtual_address =
-		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	let virtual_address = crate::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
@@ -167,7 +165,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::arch::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	crate::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
 
 	Err("Network card not found!")
 }

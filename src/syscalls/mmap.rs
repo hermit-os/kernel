@@ -27,7 +27,7 @@ bitflags! {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
+	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
@@ -66,7 +66,7 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 		crate::mm::physicalmem::deallocate(phys_addr, size);
 	}
 
-	arch::mm::virtualmem::deallocate(virtual_address, size);
+	crate::mm::virtualmem::deallocate(virtual_address, size);
 
 	0
 }

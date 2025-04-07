@@ -19,9 +19,11 @@ pub fn create_new_root_page_table() -> usize {
 		BasePageSize::SIZE as usize,
 	)
 	.unwrap();
-	let virtaddr =
-		virtualmem::allocate_aligned(2 * BasePageSize::SIZE as usize, BasePageSize::SIZE as usize)
-			.unwrap();
+	let virtaddr = crate::mm::virtualmem::allocate_aligned(
+		2 * BasePageSize::SIZE as usize,
+		BasePageSize::SIZE as usize,
+	)
+	.unwrap();
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 
@@ -51,7 +53,7 @@ pub fn create_new_root_page_table() -> usize {
 	};
 
 	paging::unmap::<BasePageSize>(virtaddr, 2);
-	virtualmem::deallocate(virtaddr, 2 * BasePageSize::SIZE as usize);
+	crate::mm::virtualmem::deallocate(virtaddr, 2 * BasePageSize::SIZE as usize);
 
 	physaddr.as_usize()
 }
