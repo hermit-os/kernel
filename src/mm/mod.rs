@@ -13,10 +13,8 @@ pub use memory_addresses::{PhysAddr, VirtAddr};
 use self::allocator::LockedAllocator;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;
-#[cfg(target_arch = "x86_64")]
-use crate::arch::mm::paging::PageTableEntryFlagsExt;
 pub use crate::arch::mm::paging::virtual_to_physical;
-use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -246,43 +244,6 @@ pub(crate) fn print_information() {
 	self::virtualmem::print_information();
 }
 
-/// Soft-deprecated in favor of `DeviceAlloc`
-pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
-	let size = size.align_up(BasePageSize::SIZE as usize);
-	let physical_address = self::physicalmem::allocate(size).unwrap();
-	let virtual_address = self::virtualmem::allocate(size).unwrap();
-
-	let count = size / BasePageSize::SIZE as usize;
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
-	if no_execution {
-		flags.execute_disable();
-	}
-
-	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
-
-	virtual_address
-}
-
-/// Soft-deprecated in favor of `DeviceAlloc`
-pub(crate) fn deallocate(virtual_address: VirtAddr, size: usize) {
-	let size = size.align_up(BasePageSize::SIZE as usize);
-
-	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
-		arch::mm::paging::unmap::<BasePageSize>(
-			virtual_address,
-			size / BasePageSize::SIZE as usize,
-		);
-		self::virtualmem::deallocate(virtual_address, size);
-		self::physicalmem::deallocate(phys_addr, size);
-	} else {
-		panic!(
-			"No page table entry for virtual address {:p}",
-			virtual_address
-		);
-	}
-}
-
 /// Maps a given physical address and size in virtual space and returns address.
 #[cfg(feature = "pci")]
 pub(crate) fn map(
@@ -292,6 +253,10 @@ pub(crate) fn map(
 	no_execution: bool,
 	no_cache: bool,
 ) -> VirtAddr {
+	use crate::arch::mm::paging::PageTableEntryFlags;
+	#[cfg(target_arch = "x86_64")]
+	use crate::arch::mm::paging::PageTableEntryFlagsExt;
+
 	let size = size.align_up(BasePageSize::SIZE as usize);
 	let count = size / BasePageSize::SIZE as usize;
 
