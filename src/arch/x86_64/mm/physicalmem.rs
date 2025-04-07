@@ -1,32 +1,7 @@
-use core::sync::atomic::Ordering;
-
-use align_address::Align;
 use free_list::PageRange;
-use memory_addresses::{PhysAddr, VirtAddr};
+use memory_addresses::VirtAddr;
 
-use crate::arch::mm::paging::{self, LargePageSize, PageSize};
-use crate::mm::physicalmem::{PHYSICAL_FREE_LIST, TOTAL_MEMORY};
 use crate::{env, mm};
-
-unsafe fn init_frame_range(frame_range: PageRange) {
-	let start = frame_range
-		.start()
-		.align_down(LargePageSize::SIZE.try_into().unwrap());
-	let end = frame_range
-		.end()
-		.align_up(LargePageSize::SIZE.try_into().unwrap());
-
-	unsafe {
-		PHYSICAL_FREE_LIST.lock().deallocate(frame_range).unwrap();
-	}
-
-	(start..end)
-		.step_by(LargePageSize::SIZE.try_into().unwrap())
-		.map(|addr| PhysAddr::new(addr.try_into().unwrap()))
-		.for_each(paging::identity_map::<LargePageSize>);
-
-	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
-}
 
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
@@ -48,7 +23,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 		.unwrap();
 
 		unsafe {
-			init_frame_range(range);
+			mm::physicalmem::init_frame_range(range);
 		}
 	} else {
 		for m in all_regions {
@@ -70,7 +45,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 
 			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 			unsafe {
-				init_frame_range(range);
+				mm::physicalmem::init_frame_range(range);
 			}
 		}
 	}

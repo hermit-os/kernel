@@ -1,10 +1,7 @@
-use core::sync::atomic::Ordering;
-
 use free_list::PageRange;
 
 use crate::arch::riscv64::kernel::{get_limit, get_ram_address};
 use crate::mm;
-use crate::mm::physicalmem::{PHYSICAL_FREE_LIST, TOTAL_MEMORY};
 
 fn detect_from_limits() -> Result<(), ()> {
 	let limit = get_limit();
@@ -18,9 +15,8 @@ fn detect_from_limits() -> Result<(), ()> {
 	)
 	.unwrap();
 	unsafe {
-		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		mm::physicalmem::init_frame_range(range);
 	}
-	TOTAL_MEMORY.store(limit, Ordering::Relaxed);
 
 	Ok(())
 }

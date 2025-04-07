@@ -614,6 +614,17 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 	Ok(())
 }
 
+pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
+	let virt_addr = VirtAddr::new(phys_addr.as_u64());
+	let flags = {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+		flags
+	};
+
+	map::<S>(virt_addr, phys_addr, 1, flags);
+}
+
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!("Unmapping virtual address {virtual_address:p} ({count} pages)");
 

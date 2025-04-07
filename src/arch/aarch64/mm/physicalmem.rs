@@ -1,10 +1,7 @@
-use core::sync::atomic::Ordering;
-
 use free_list::PageRange;
 
 use crate::arch::aarch64::kernel::get_limit;
 use crate::mm;
-use crate::mm::physicalmem::{PHYSICAL_FREE_LIST, TOTAL_MEMORY};
 
 fn detect_from_limits() -> Result<(), ()> {
 	let limit = get_limit();
@@ -13,12 +10,8 @@ fn detect_from_limits() -> Result<(), ()> {
 	}
 
 	let range = PageRange::new(mm::kernel_end_address().as_usize(), limit).unwrap();
-	TOTAL_MEMORY.store(
-		limit - mm::kernel_end_address().as_usize(),
-		Ordering::Relaxed,
-	);
 	unsafe {
-		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		mm::physicalmem::init_frame_range(range);
 	}
 
 	Ok(())

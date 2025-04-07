@@ -1,10 +1,11 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::PhysAddr;
 
-use crate::arch::{BasePageSize, PageSize};
+use crate::arch::mm::paging::{self, BasePageSize, PageSize};
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -12,6 +13,34 @@ pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
+}
+
+pub unsafe fn init_frame_range(frame_range: PageRange) {
+	cfg_if::cfg_if! {
+		if #[cfg(target_arch = "riscv64")] {
+			type IdentityPageSize = crate::arch::mm::paging::HugePageSize;
+		} else {
+			type IdentityPageSize = crate::arch::mm::paging::LargePageSize;
+		}
+	}
+
+	let start = frame_range
+		.start()
+		.align_down(IdentityPageSize::SIZE.try_into().unwrap());
+	let end = frame_range
+		.end()
+		.align_up(IdentityPageSize::SIZE.try_into().unwrap());
+
+	unsafe {
+		PHYSICAL_FREE_LIST.lock().deallocate(frame_range).unwrap();
+	}
+
+	(start..end)
+		.step_by(IdentityPageSize::SIZE.try_into().unwrap())
+		.map(|addr| PhysAddr::new(addr.try_into().unwrap()))
+		.for_each(paging::identity_map::<IdentityPageSize>);
+
+	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }
 
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
