@@ -9,14 +9,10 @@ use crate::mm;
 static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 
-/// End of the virtual memory address space reserved for kernel memory (4 GiB).
-/// This also marks the start of the virtual memory address space reserved for the task heap.
-const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr::new(0x1_0000_0000);
-
 pub fn init() {
 	let range = PageRange::new(
 		mm::kernel_end_address().as_usize(),
-		KERNEL_VIRTUAL_MEMORY_END.as_usize(),
+		kernel_heap_end().as_usize(),
 	)
 	.unwrap();
 	unsafe {
@@ -80,8 +76,8 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		"Virtual address {virtual_address:p} belongs to the kernel"
 	);
 	assert!(
-		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
-		"Virtual address {virtual_address:p} is not < KERNEL_VIRTUAL_MEMORY_END"
+		virtual_address < kernel_heap_end(),
+		"Virtual address {virtual_address:p} is not < kernel_heap_end()"
 	);
 	assert!(
 		virtual_address.is_aligned_to(BasePageSize::SIZE),
@@ -112,8 +108,8 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		virtual_address
 	);
 	assert!(
-		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
-		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address < kernel_heap_end(),
+		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
 	assert_eq!(
@@ -144,4 +140,11 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 pub fn print_information() {
 	let free_list = KERNEL_FREE_LIST.lock();
 	info!("Virtual memory free list:\n{free_list}");
+}
+
+/// End of the virtual memory address space reserved for kernel memory (4 GiB).
+/// This also marks the start of the virtual memory address space reserved for the task heap.
+#[inline]
+pub fn kernel_heap_end() -> VirtAddr {
+	VirtAddr::new(0x1_0000_0000)
 }
