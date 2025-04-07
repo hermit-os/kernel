@@ -5,8 +5,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
+use core::ops;
 use core::sync::atomic::{Ordering, fence};
-use core::{ops, ptr};
 
 use align_address::Align;
 use memory_addresses::VirtAddr;
@@ -676,22 +676,21 @@ impl Virtq for PackedVq {
 		let _mem_len =
 			core::mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
-		let drv_event_ptr =
-			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).as_usize());
-		let dev_event_ptr =
-			ptr::with_exposed_provenance_mut(crate::mm::allocate(_mem_len, true).as_usize());
+		let drv_event = Box::<pvirtq::EventSuppress, _>::new_zeroed_in(DeviceAlloc);
+		let dev_event = Box::<pvirtq::EventSuppress, _>::new_zeroed_in(DeviceAlloc);
+		// TODO: make this safe using zerocopy
+		let drv_event = unsafe { drv_event.assume_init() };
+		let dev_event = unsafe { dev_event.assume_init() };
+		let drv_event = Box::leak(drv_event);
+		let dev_event = Box::leak(dev_event);
 
 		// Provide memory areas of the queues data structures to the device
 		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
 			descr_ring.raw_addr() as u64
 		)));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(drv_event_ptr as u64)));
-		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(dev_event_ptr as u64)));
-
-		let drv_event: &'static mut pvirtq::EventSuppress = unsafe { &mut *(drv_event_ptr) };
-
-		let dev_event: &'static mut pvirtq::EventSuppress = unsafe { &mut *(dev_event_ptr) };
+		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from_ptr(drv_event)));
+		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from_ptr(dev_event)));
 
 		let mut drv_event = DrvNotif {
 			f_notif_idx: false,
