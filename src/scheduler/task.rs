@@ -164,11 +164,7 @@ impl TaskHandlePriorityQueue {
 	/// Creates an empty priority queue for tasks
 	pub const fn new() -> Self {
 		Self {
-			queues: [
-				None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-				None, None, None, None, None, None, None, None, None, None, None, None, None, None,
-				None, None, None,
-			],
+			queues: [const { None }; NO_PRIORITIES],
 			prio_bitmap: CachePadded::new(0),
 		}
 	}
