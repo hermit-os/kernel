@@ -282,7 +282,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 			let frame = PhysFrame::<BasePageSize>::containing_address(x86_64::PhysAddr::new(
 				current_address as u64,
 			));
-			paging::identity_map(frame);
+			paging::identity_map::<BasePageSize>(frame.start_address().into());
 			current_page = current_address / BasePageSize::SIZE as usize;
 		}
 
@@ -336,7 +336,7 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 
 	// Get the address of the EBDA.
 	let frame = PhysFrame::<BasePageSize>::containing_address(EBDA_PTR_LOCATION.into());
-	paging::identity_map(frame);
+	paging::identity_map::<BasePageSize>(frame.start_address().into());
 	let ebda_ptr_location: &u16 =
 		unsafe { &*(VirtAddr::from(EBDA_PTR_LOCATION.as_u64()).as_ptr()) };
 	let ebda_address = PhysAddr::new(u64::from(*ebda_ptr_location) << 4);
