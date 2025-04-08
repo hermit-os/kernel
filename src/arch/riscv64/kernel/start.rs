@@ -16,6 +16,7 @@ const MAX_CORES: usize = 32;
 struct PerCpuData {
 	is_initialized: AtomicBool,
 	local_counter: AtomicU64,
+	#[allow(dead_code)]
 	padding: [u8; 48], // Fill to full cache line
 }
 
@@ -29,7 +30,7 @@ impl PerCpuData {
 	}
 }
 
-static mut CPU_DATA: [PerCpuData; MAX_CORES] = {
+static CPU_DATA: [PerCpuData; MAX_CORES] = {
 	const CPU_LOCAL: PerCpuData = PerCpuData::new();
 	[CPU_LOCAL; MAX_CORES]
 };
@@ -74,7 +75,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 	if CPU_ONLINE.load(Ordering::Acquire) > 0 {
 		// Faster check for Secondary-HARTs
 		if (HART_MASK.load(Ordering::Relaxed) & (1 << hart_id)) == 0 {
-			error!("Invalid hart ID: {}", hart_id);
+			error!("Invalid hart ID: {hart_id}");
 			processor::halt();
 		}
 	}
@@ -96,7 +97,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 					if cpu
 						.property("status")
 						.and_then(|p| p.as_str())
-						.map_or(false, |s| s != "disabled\u{0}")
+						.is_some_and(|s| s != "disabled\u{0}")
 					{
 						hart_mask |= 1 << cpu_id;
 					}
