@@ -132,7 +132,7 @@ take-static = "0.1"
 talc = { version = "4" }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
-zerocopy = { version = "0.8", default-features = false }
+zerocopy = { version = "0.8", features = ["derive"], default-features = false }
 uhyve-interface = "0.1.3"
 
 [dependencies.smoltcp]

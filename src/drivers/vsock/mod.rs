@@ -3,7 +3,6 @@
 #[cfg(feature = "pci")]
 pub mod pci;
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 
@@ -29,8 +28,8 @@ fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 		let buff_tkn = match AvailBufferToken::new(
 			vec![],
 			vec![
-				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-				BufferElem::Vector(Vec::with_capacity_in(
+				BufferElem::new_uninit::<Hdr>(),
+				BufferElem(Vec::with_capacity_in(
 					packet_size.try_into().unwrap(),
 					DeviceAlloc,
 				)),
@@ -99,7 +98,7 @@ impl RxQueue {
 		while let Some(mut buffer_tkn) = self.get_next() {
 			let header = buffer_tkn
 				.used_recv_buff
-				.pop_front_downcast::<Hdr>()
+				.pop_front_deserialize::<Hdr>()
 				.unwrap();
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
 
@@ -170,7 +169,7 @@ impl TxQueue {
 				result
 			};
 
-			let buff_tkn = AvailBufferToken::new(vec![BufferElem::Vector(packet)], vec![]).unwrap();
+			let buff_tkn = AvailBufferToken::new(vec![BufferElem(packet)], vec![]).unwrap();
 
 			vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
 

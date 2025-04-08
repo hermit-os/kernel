@@ -15,12 +15,11 @@ pub mod split;
 use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
-use core::any::Any;
-use core::mem::MaybeUninit;
-use core::{mem, ptr};
+use core::mem;
 
 use memory_addresses::VirtAddr;
 use virtio::{le32, le64, pvirtq, virtq};
+use zerocopy::{Immutable, IntoBytes};
 
 use self::error::VirtqError;
 #[cfg(not(feature = "pci"))]
@@ -265,7 +264,7 @@ trait VirtqPrivate {
 				.chain(recv_desc_iter)
 				.map(|(mem_descr, len, incomplete_flags)| {
 					Self::Descriptor::incomplete_desc(
-						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
+						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.as_ptr()))
 							.as_u64()
 							.into(),
 						len.into(),
@@ -344,41 +343,49 @@ impl<Descriptor> TransferToken<Descriptor> {
 }
 
 #[derive(Debug)]
-pub enum BufferElem {
-	Sized(Box<dyn Any + Send, DeviceAlloc>),
-	Vector(Vec<u8, DeviceAlloc>),
-}
+pub struct BufferElem(pub Vec<u8, DeviceAlloc>);
 
 impl BufferElem {
-	// Returns the initialized length of the element. Assumes [Self::Sized] to
-	// be initialized, since the type of the object is erased and we cannot
-	// detect if the content is actually a [MaybeUninit]. However, this function
-	// should be only relevant for read buffer elements, which should not be uninit.
-	// If the element belongs to a write buffer, it is likely that [Self::capacity]
-	// is more appropriate.
+	/// Returns the initialized length of the element.
 	pub fn len(&self) -> u32 {
-		match self {
-			BufferElem::Sized(sized) => mem::size_of_val(sized.as_ref()),
-			BufferElem::Vector(vec) => vec.len(),
-		}
-		.try_into()
-		.unwrap()
+		self.0.len().try_into().unwrap()
 	}
 
+	/// Returns the allocated capacity of the element.
 	pub fn capacity(&self) -> u32 {
-		match self {
-			BufferElem::Sized(sized) => mem::size_of_val(sized.as_ref()),
-			BufferElem::Vector(vec) => vec.capacity(),
-		}
-		.try_into()
-		.unwrap()
+		self.0.capacity().try_into().unwrap()
 	}
 
-	pub fn addr(&self) -> *const u8 {
-		match self {
-			BufferElem::Sized(sized) => ptr::from_ref(sized.as_ref()).cast::<u8>(),
-			BufferElem::Vector(vec) => vec.as_ptr(),
-		}
+	/// Returns a pointer to the buffer.
+	pub fn as_ptr(&self) -> *const u8 {
+		self.0.as_ptr()
+	}
+
+	/// Helper method to create a [`BufferElem`] that pre-allocates capacity
+	/// for a given element of type `T`. This ensures the buffer is aligned
+	/// to the same boundaries as `T`.
+	pub fn new_uninit<T>() -> Self {
+		let uninit_mem = Box::<T, _>::new_uninit_in(DeviceAlloc);
+		// SAFETY: Length is 0 because it's uninit, capacity matches the memory amount that the Box allocated.
+		// The pointer was allocated with the same allocator: DeviceAlloc.
+		let uninit_vec = unsafe {
+			Vec::from_raw_parts_in(
+				Box::into_raw(uninit_mem).cast(),
+				0,
+				size_of::<T>(),
+				DeviceAlloc,
+			)
+		};
+		Self(uninit_vec)
+	}
+}
+
+impl<T> From<T> for BufferElem
+where
+	T: IntoBytes + Immutable,
+{
+	fn from(value: T) -> Self {
+		Self(value.as_bytes().to_vec_in(DeviceAlloc))
 	}
 }
 
@@ -419,46 +426,39 @@ pub(crate) struct UsedDeviceWritableBuffer {
 }
 
 impl UsedDeviceWritableBuffer {
-	pub fn pop_front_downcast<T>(&mut self) -> Option<Box<T, DeviceAlloc>>
-	where
-		T: Any,
-	{
+	pub fn pop_front_deserialize<T>(&mut self) -> Option<Box<T, DeviceAlloc>> {
 		if self.remaining_written_len < u32::try_from(size_of::<T>()).unwrap() {
 			return None;
 		}
 
-		let elem = self.elems.pop_front()?;
-		if let BufferElem::Sized(sized) = elem {
-			match sized.downcast::<MaybeUninit<T>>() {
-				Ok(cast) => {
-					self.remaining_written_len -= u32::try_from(size_of::<T>()).unwrap();
-					Some(unsafe { cast.assume_init() })
-				}
-				Err(sized) => {
-					self.elems.push_front(BufferElem::Sized(sized));
-					None
-				}
-			}
-		} else {
-			self.elems.push_front(elem);
-			None
-		}
+		let BufferElem(buf) = self.elems.pop_front()?;
+		self.remaining_written_len -= u32::try_from(size_of::<T>()).unwrap();
+
+		// Ensure the buffer is aligned to T. This is the case if it was created via
+		// [`BufferElem::new_uninit::<T>`] and should always be the case, but since
+		// it is technically possible to construct an unaligned buffer and use that,
+		// we should check it.
+		assert!(
+			buf.as_ptr().addr() % align_of::<T>() == 0,
+			"Attempted to deserialize buffer as type with different alignment"
+		);
+
+		// SAFETY: Management of the memory is transferred from the Vec to the Box
+		// Both heap allocations were made with the same alloc: DeviceAlloc
+		// The alignment was checked manually before.
+		Some(unsafe { Box::from_raw_in(buf.into_raw_parts().0.cast(), DeviceAlloc) })
 	}
 
 	pub fn pop_front_vec(&mut self) -> Option<Vec<u8, DeviceAlloc>> {
-		let elem = self.elems.pop_front()?;
-		if let BufferElem::Vector(mut vector) = elem {
-			let new_len = u32::min(
-				vector.capacity().try_into().unwrap(),
-				self.remaining_written_len,
-			);
-			self.remaining_written_len -= new_len;
-			unsafe { vector.set_len(new_len.try_into().unwrap()) };
-			Some(vector)
-		} else {
-			self.elems.push_front(elem);
-			None
-		}
+		let BufferElem(mut vector) = self.elems.pop_front()?;
+		let new_len = u32::min(
+			vector.capacity().try_into().unwrap(),
+			self.remaining_written_len,
+		);
+		self.remaining_written_len -= new_len;
+		unsafe { vector.set_len(new_len.try_into().unwrap()) };
+
+		Some(vector)
 	}
 }
 

@@ -24,6 +24,7 @@
 	feature(specialization)
 )]
 #![feature(thread_local)]
+#![feature(vec_into_raw_parts)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
 #![cfg_attr(all(target_os = "none", test), test_runner(crate::test_runner))]
