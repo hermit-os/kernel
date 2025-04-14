@@ -29,7 +29,24 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 
 	unsafe {
 		naked_asm!(
-			"msr spsel, {l1}", // we want to use sp_el1
+			// use core::sync::atomic::{AtomicU32, Ordering};
+			//
+			// pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+			//
+			// while CPU_ONLINE.load(Ordering::Acquire) != this {
+			//     core::hint::spin_loop();
+			// }
+			"mrs x4, mpidr_el1",
+			"and x4, x4, #0xff",
+			"1:",
+			"adrp x8, {cpu_online}",
+			"ldr x5, [x8, #:lo12:{cpu_online}]",
+			"cmp x4, x5",
+			"b.eq 2f",
+			"b 1b",
+			"2:",
+
+			"msr spsel, #1", // we want to use sp_el1
 			"adrp x8, {current_stack_address}",
 			"mov x4, sp",
 			"str x4, [x8, #:lo12:{current_stack_address}]",
@@ -41,7 +58,7 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 			// Jump to Rust code
 			"b {pre_init}",
 
-			l1 = const 1,
+			cpu_online = sym super::CPU_ONLINE,
 			stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 			current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 			pre_init = sym pre_init,
