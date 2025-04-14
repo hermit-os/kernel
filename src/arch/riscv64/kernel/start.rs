@@ -88,7 +88,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
 		// Boot CPU Initialization
 		env::set_boot_info(*boot_info.unwrap());
-		let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
+		let fdt = unsafe { Fdt::from_ptr(get_dtb_ptr()) }.expect("FDT is invalid");
 
 		// Optimized HART_MASK calculation
 		let mut hart_mask = 0u64;
@@ -118,11 +118,13 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 		// Initialize TLS for boot core:
 		if let Some(tls_info) = env::boot_info().load_info.tls_info {
 			// Load the value into 'tp' using the mv instruction:
-			asm!(
-				"mv tp, {val}",
-				val = in(reg) tls_info.start as usize,
-				options(nostack, nomem)
-			);
+			unsafe {
+				asm!(
+					"mv tp, {val}",
+					val = in(reg) tls_info.start as usize,
+					options(nostack, nomem)
+				);
+			}
 		}
 		crate::boot_processor_main()
 	} else {
