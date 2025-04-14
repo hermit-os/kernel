@@ -30,6 +30,7 @@ impl PerCpuData {
 	}
 }
 
+#[allow(clippy::declare_interior_mutable_const)]
 static CPU_DATA: [PerCpuData; MAX_CORES] = {
 	const CPU_LOCAL: PerCpuData = PerCpuData::new();
 	[CPU_LOCAL; MAX_CORES]
