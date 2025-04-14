@@ -125,12 +125,14 @@ checksum = "dcfed56ad506cb2c684a14971b8861fdc3baaaae314b9e5f9bb532cbe3ba7a4f"
 
 [[package]]
 name = "arm-gic"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0283195c61a2bbd6c5e79a0d707951799f97503db21974de7c9f948c05ba3ad8"
+checksum = "0a4f82708c311e0f5d2eafc3447400f34bbb366fd02d4000b95358c1e4ded0ff"
 dependencies = [
  "bitflags 2.9.0",
+ "safe-mmio",
  "thiserror",
+ "zerocopy 0.8.24",
 ]
 
 [[package]]
@@ -1390,6 +1392,15 @@ name = "rustversion"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eded382c5f5f786b989652c49544c4877d9f015cc22e145a5ea8ea66c2921cd2"
+
+[[package]]
+name = "safe-mmio"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db02a82ad13df46afeba34a4e54065fa912308b9101b060e4422898eac0e06f6"
+dependencies = [
+ "zerocopy 0.8.24",
+]
 
 [[package]]
 name = "sbi-rt"
