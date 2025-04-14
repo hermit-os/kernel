@@ -86,44 +86,42 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
 		// Boot CPU Initialization
-		unsafe {
-			env::set_boot_info(*boot_info.unwrap());
-			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
+		env::set_boot_info(*boot_info.unwrap());
+		let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
 
-			// Optimized HART_MASK calculation
-			let mut hart_mask = 0u64;
-			for cpu in fdt.cpus() {
-				if let Some(cpu_id) = cpu.property("reg").and_then(|p| p.as_usize()) {
-					if cpu
-						.property("status")
-						.and_then(|p| p.as_str())
-						.is_some_and(|s| s != "disabled\u{0}")
-					{
-						hart_mask |= 1 << cpu_id;
-					}
+		// Optimized HART_MASK calculation
+		let mut hart_mask = 0u64;
+		for cpu in fdt.cpus() {
+			if let Some(cpu_id) = cpu.property("reg").and_then(|p| p.as_usize()) {
+				if cpu
+					.property("status")
+					.and_then(|p| p.as_str())
+					.is_some_and(|s| s != "disabled\u{0}")
+				{
+					hart_mask |= 1 << cpu_id;
 				}
 			}
+		}
 
-			NUM_CPUS.store(fdt.cpus().count().try_into().unwrap(), Ordering::Release);
+		NUM_CPUS.store(fdt.cpus().count().try_into().unwrap(), Ordering::Release);
 
-			// Memory Fence before HART_MASK update
-			fence(Ordering::Release);
-			HART_MASK.store(hart_mask, Ordering::Release);
+		// Memory Fence before HART_MASK update
+		fence(Ordering::Release);
+		HART_MASK.store(hart_mask, Ordering::Release);
 
-			CPU_DATA[hart_id]
-				.is_initialized
-				.store(true, Ordering::Release);
-			CPU_DATA[hart_id].local_counter.store(1, Ordering::Release);
+		CPU_DATA[hart_id]
+			.is_initialized
+			.store(true, Ordering::Release);
+		CPU_DATA[hart_id].local_counter.store(1, Ordering::Release);
 
-			// Initialize TLS for boot core:
-			if let Some(tls_info) = env::boot_info().load_info.tls_info {
-				// Load the value into 'tp' using the mv instruction:
-				asm!(
-					"mv tp, {val}",
-					val = in(reg) tls_info.start as usize,
-					options(nostack, nomem)
-				);
-			}
+		// Initialize TLS for boot core:
+		if let Some(tls_info) = env::boot_info().load_info.tls_info {
+			// Load the value into 'tp' using the mv instruction:
+			asm!(
+				"mv tp, {val}",
+				val = in(reg) tls_info.start as usize,
+				options(nostack, nomem)
+			);
 		}
 		crate::boot_processor_main()
 	} else {
@@ -136,16 +134,14 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 		}
 		#[cfg(feature = "smp")]
 		{
-			unsafe {
-				// Optimized Secondary-HART initialization
-				fence(Ordering::Acquire);
-				CPU_DATA[hart_id]
-					.is_initialized
-					.store(true, Ordering::Release);
-				CPU_DATA[hart_id]
-					.local_counter
-					.fetch_add(1, Ordering::Relaxed);
-			}
+			// Optimized Secondary-HART initialization
+			fence(Ordering::Acquire);
+			CPU_DATA[hart_id]
+				.is_initialized
+				.store(true, Ordering::Release);
+			CPU_DATA[hart_id]
+				.local_counter
+				.fetch_add(1, Ordering::Relaxed);
 			crate::application_processor_main()
 		}
 	}
