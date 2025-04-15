@@ -703,7 +703,7 @@ impl PerCoreScheduler {
 		}
 	}
 
-	#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
+	#[cfg(feature = "smp")]
 	pub fn check_input(&mut self) {
 		let mut input_locked = CoreLocal::get().scheduler_input.lock();
 
@@ -732,7 +732,7 @@ impl PerCoreScheduler {
 			crate::executor::run();
 
 			// do housekeeping
-			#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
+			#[cfg(feature = "smp")]
 			core_scheduler.check_input();
 			core_scheduler.cleanup_tasks();
 
