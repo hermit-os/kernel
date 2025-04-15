@@ -69,10 +69,13 @@ impl Default for Console {
 	}
 }
 
+#[repr(align(8))]
+pub(crate) struct AlignedAtomicU32(AtomicU32);
+
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.
 ///
 /// It also synchronizes initialization of CPU cores.
-pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+pub(crate) static CPU_ONLINE: AlignedAtomicU32 = AlignedAtomicU32(AtomicU32::new(0));
 
 pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 
@@ -102,7 +105,7 @@ pub fn get_limit() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	CPU_ONLINE.load(Ordering::Acquire)
+	CPU_ONLINE.0.load(Ordering::Acquire)
 }
 
 #[cfg(feature = "smp")]
@@ -152,7 +155,7 @@ fn finish_processor_init() {
 }
 
 pub fn boot_next_processor() {
-	CPU_ONLINE.fetch_add(1, Ordering::Release);
+	CPU_ONLINE.0.fetch_add(1, Ordering::Release);
 }
 
 pub fn print_statistics() {
