@@ -105,12 +105,25 @@ pub fn get_limit() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	CPU_ONLINE.0.load(Ordering::Acquire)
+	use hermit_dtb::Dtb;
+
+	let dtb = unsafe {
+		Dtb::from_raw(core::ptr::with_exposed_provenance(
+			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
+	};
+
+	dtb.enum_subnodes("/cpus")
+		.filter(|name| name.contains("cpu@"))
+		.count()
+		.try_into()
+		.unwrap()
 }
 
 #[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
-	1
+	CPU_ONLINE.0.load(Ordering::Acquire)
 }
 
 #[cfg(not(feature = "smp"))]
