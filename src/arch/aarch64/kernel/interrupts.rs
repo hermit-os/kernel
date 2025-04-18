@@ -46,9 +46,11 @@ pub(crate) static GIC: SpinMutex<Option<GicV3<'_>>> = SpinMutex::new(None);
 pub fn enable() {
 	unsafe {
 		asm!(
+			"dmb ish",
 			"msr daifclr, {mask}",
+			"dmb ish",
 			mask = const 0b111,
-			options(nostack, nomem),
+			options(nostack),
 		);
 	}
 }
@@ -61,9 +63,11 @@ pub fn enable() {
 pub fn enable_and_wait() {
 	unsafe {
 		asm!(
+			"dmb ish",
 			"msr daifclr, {mask}; wfi",
+			"dmb ish",
 			mask = const 0b111,
-			options(nostack, nomem),
+			options(nostack),
 		);
 	}
 }
@@ -73,9 +77,11 @@ pub fn enable_and_wait() {
 pub fn disable() {
 	unsafe {
 		asm!(
+			"dmb ish",
 			"msr daifset, {mask}",
+			"dmb ish",
 			mask = const 0b111,
-			options(nostack, nomem),
+			options(nostack),
 		);
 	}
 }
@@ -206,8 +212,14 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 		}
 	} else if ec == 0x3c {
 		error!("Trap to debugger, PC={pc:#x}");
+		loop {
+			core::hint::spin_loop();
+		}
 	} else {
 		error!("Unsupported exception class: {ec:#x}, PC={pc:#x}");
+		loop {
+			core::hint::spin_loop();
+		}
 	}
 }
 
