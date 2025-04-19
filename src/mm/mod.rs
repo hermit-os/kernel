@@ -79,7 +79,7 @@ pub(crate) fn init() {
 		(kernel_addr_range.end.as_u64() - env::get_ram_address().as_u64() + reserved_space as u64)
 			as usize
 	};
-	info!("Minimum required memory size: {} MiB", min_mem >> 20);
+	info!("Minimum memory size: {} MiB", min_mem >> 20);
 	let avail_mem = total_mem
 		.checked_sub(min_mem)
 		.unwrap_or_else(|| panic!("Not enough memory available!"))

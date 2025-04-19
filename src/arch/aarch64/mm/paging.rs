@@ -27,6 +27,9 @@ const PAGE_MAP_BITS: usize = 9;
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
 const PAGE_MAP_MASK: usize = 0x1ff;
 
+/// Grouping 4KiB pages to a larger page
+const GROUP_SIZE: usize = 16;
+
 bitflags! {
 	/// Useful flags for an entry in either table (L0Table, L1Table, L2Table, L3Table).
 	///
@@ -62,6 +65,9 @@ bitflags! {
 
 		/// Set if software has accessed this entry (for memory access or address translation).
 		const ACCESSED = 1 << 10;
+
+		/// Translation table contiguous  to the previous for initial lookup
+		const CONTIGUOUS = 1 << 52;
 
 		/// Set if code execution shall be disabled for memory referenced by this entry in privileged mode.
 		const PRIVILEGED_EXECUTE_NEVER = 1 << 53;
@@ -136,6 +142,11 @@ impl PageTableEntry {
 	/// Returns whether this entry is valid (present).
 	fn is_present(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
+	}
+
+	/// Return whether this entry is a 4KiB page.
+	fn is_table_or_4kib_page(&self) -> bool {
+		(self.physical_address_and_flags & PageTableEntryFlags::TABLE_OR_4KIB_PAGE.bits()) != 0
 	}
 
 	/// Mark this as a valid (present) entry and set address translation and flags.
@@ -557,7 +568,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	root_pagetable.get_page_table_entry(page)
 }
 
-pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<PhysAddr> {
+fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	trace!("Getting physical address for {virtual_address:p}");
 
 	let page = Page::<S>::including_address(virtual_address);
@@ -580,38 +591,90 @@ pub fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 }
 
 pub fn map<S: PageSize>(
-	virtual_address: VirtAddr,
-	physical_address: PhysAddr,
-	count: usize,
+	mut virtual_address: VirtAddr,
+	mut physical_address: PhysAddr,
+	mut count: usize,
 	flags: PageTableEntryFlags,
 ) {
 	trace!(
 		"Mapping virtual address {virtual_address:p} to physical address {physical_address:p} ({count} pages)"
 	);
 
-	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
-	root_pagetable.map_pages(range, physical_address, flags);
+	if count < GROUP_SIZE {
+		let range = get_page_range::<S>(virtual_address, count);
+		let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
+		root_pagetable.map_pages(range, physical_address, flags);
+	} else {
+		// map to GROUP_SIZE*S:SIZE boundary
+		let offset = virtual_address.as_usize() % (GROUP_SIZE * S::SIZE as usize);
+		if offset > 0 {
+			map::<S>(
+				virtual_address,
+				physical_address,
+				offset / S::SIZE as usize,
+				flags,
+			);
+			virtual_address += offset;
+			physical_address += offset;
+			count -= offset / S::SIZE as usize;
+		}
+
+		// map with contiguous bit
+		if count >= GROUP_SIZE {
+			let map_pages = count.align_down(GROUP_SIZE);
+			let range = get_page_range::<S>(virtual_address, map_pages);
+			let root_pagetable =
+				unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
+
+			trace!("Mapping {map_pages} pages with contiguous bit");
+			root_pagetable.map_pages(
+				range,
+				physical_address,
+				flags | PageTableEntryFlags::CONTIGUOUS,
+			);
+			virtual_address += map_pages * S::SIZE as usize;
+			physical_address += map_pages * S::SIZE as usize;
+			count -= map_pages;
+		}
+
+		// map the remaining pages
+		if count > 0 {
+			map::<S>(virtual_address, physical_address, count, flags);
+		}
+	}
 }
 
-/// Maps `count` pages at address `virt_addr`. If the allocation of a physical memory failed,
+/// Maps `nr_pages` pages at address `virt_addr`. If the allocation of a physical memory failed,
 /// the number of successful mapped pages are returned as error value.
-pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), usize> {
+pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(), usize> {
 	let flags = {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().execute_disable();
 		flags
 	};
+	let mut map_counter = 0;
 
-	let virt_addrs = (0..count as u64).map(|n| virt_addr + n * S::SIZE);
-
-	for (map_counter, virt_addr) in virt_addrs.enumerate() {
-		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
-			.map_err(|_| map_counter)?;
-		map::<S>(virt_addr, phys_addr, 1, flags);
+	while map_counter < nr_pages {
+		let size = (nr_pages - map_counter) * S::SIZE as usize;
+		for i in (S::SIZE as usize..=size).rev().step_by(S::SIZE as usize) {
+			if let Ok(phys_addr) = physicalmem::allocate_aligned(i, S::SIZE as usize) {
+				map::<S>(
+					virt_addr + map_counter * S::SIZE as usize,
+					phys_addr,
+					i / S::SIZE as usize,
+					flags,
+				);
+				map_counter += i / S::SIZE as usize;
+				break;
+			}
+		}
 	}
 
-	Ok(())
+	if map_counter < nr_pages {
+		Err(map_counter)
+	} else {
+		Ok(())
+	}
 }
 
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
