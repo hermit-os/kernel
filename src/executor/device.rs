@@ -23,6 +23,7 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::net::NetworkDriver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
+use crate::mm::device_alloc::DeviceAlloc;
 
 /// Data type to determine the mac address
 #[derive(Debug, Clone)]
@@ -220,11 +221,11 @@ pub(crate) type RxHandle = usize;
 
 #[doc(hidden)]
 pub(crate) struct RxToken {
-	buffer: Vec<u8>,
+	buffer: Vec<u8, DeviceAlloc>,
 }
 
 impl RxToken {
-	pub(crate) fn new(buffer: Vec<u8>) -> Self {
+	pub(crate) fn new(buffer: Vec<u8, DeviceAlloc>) -> Self {
 		Self { buffer }
 	}
 }

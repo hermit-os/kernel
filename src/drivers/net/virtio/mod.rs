@@ -305,13 +305,17 @@ impl NetworkDriver for VirtioNetDriver {
 	}
 
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
-		let mut buffer_tkn = self.recv_vqs.get_next()?;
-		RxQueues::post_processing(&mut buffer_tkn)
-			.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
-			.ok()?;
-		let first_header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
-		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-		trace!("Header: {first_header:?}");
+		let mut receive_single_packet = || {
+			let mut buffer_tkn = self.recv_vqs.get_next()?;
+			RxQueues::post_processing(&mut buffer_tkn)
+				.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
+				.ok()?;
+			let header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
+			Some((header, packet))
+		};
+
+		let (first_header, first_packet) = receive_single_packet()?;
 
 		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
 		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
@@ -321,17 +325,11 @@ impl NetworkDriver for VirtioNetDriver {
 			1
 		};
 
-		let mut packets = Vec::with_capacity(num_buffers.into());
-		packets.push(first_packet);
+		let mut combined_packets = first_packet;
 
 		for _ in 1..num_buffers {
-			let mut buffer_tkn = self.recv_vqs.get_next().unwrap();
-			RxQueues::post_processing(&mut buffer_tkn)
-				.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
-				.ok()?;
-			let _header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
-			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-			packets.push(packet);
+			let (_header, packet) = receive_single_packet()?;
+			combined_packets.extend_from_slice(&packet);
 		}
 
 		fill_queue(
@@ -340,9 +338,7 @@ impl NetworkDriver for VirtioNetDriver {
 			self.recv_vqs.packet_size,
 		);
 
-		let vec_data = packets.into_iter().flatten().collect();
-
-		Some((RxToken::new(vec_data), TxToken::new()))
+		Some((RxToken::new(combined_packets), TxToken::new()))
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {

@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::mem;
 
 use memory_addresses::VirtAddr;
@@ -17,6 +18,7 @@ use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
+use crate::mm::device_alloc::DeviceAlloc;
 
 /// size of the receive buffer
 const RX_BUF_LEN: usize = 8192;
@@ -287,14 +289,18 @@ impl NetworkDriver for RTL8139Driver {
 		let length = self.rx_peek_u16() - 4; // copy packet (but not the CRC)
 		let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
 
+		let mut vec_data = Vec::with_capacity_in(length as usize, DeviceAlloc);
+
 		// do we reach the end of the receive buffers?
 		// in this case, we contact the two slices to one vec
-		let vec_data = if pos + length as usize > RX_BUF_LEN {
+		if pos + length as usize > RX_BUF_LEN {
 			let first = &self.rxbuffer[pos..RX_BUF_LEN];
 			let second = &self.rxbuffer[..length as usize - first.len()];
-			[first, second].concat()
+
+			vec_data.extend_from_slice(first);
+			vec_data.extend_from_slice(second);
 		} else {
-			(self.rxbuffer[pos..][..length.into()]).to_vec()
+			vec_data.extend_from_slice(&self.rxbuffer[pos..][..length.into()]);
 		};
 
 		self.consume_current_buffer();
