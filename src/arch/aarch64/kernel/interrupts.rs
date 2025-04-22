@@ -39,7 +39,7 @@ static mut TIMER_INTERRUPT: u32 = 0;
 static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> =
 	OnceCell::new();
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
-pub(crate) static GIC: SpinMutex<Option<GicV3>> = SpinMutex::new(None);
+pub(crate) static GIC: SpinMutex<Option<GicV3<'_>>> = SpinMutex::new(None);
 
 /// Enable all interrupts
 #[inline]
