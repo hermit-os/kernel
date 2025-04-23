@@ -125,7 +125,7 @@ impl PageTableEntryFlags {
 }
 
 /// An entry in either table
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct PageTableEntry {
 	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
 	physical_address_and_flags: u64,
@@ -239,10 +239,10 @@ impl<S: PageSize> Page<S> {
 		unsafe {
 			asm!(
 				"dsb ishst",
-				"tlbi vale1is, {}",
+				"tlbi vale1is, {addr}",
 				"dsb ish",
 				"isb",
-				in(reg) self.virtual_address.as_u64(),
+				addr = in(reg) self.virtual_address.as_u64() >> 12,
 				options(nostack),
 			);
 		}
@@ -403,6 +403,14 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
+		if flush {
+			// The reference manual suggests to replace the entry with an invalid entry first
+			// and then with the entry we actually want to see. And on top of that the procedure
+			// is heavily reinforced with memory barrier instructions along the way.
+			self.entries[index] = PageTableEntry::default();
+			page.flush_from_tlb();
+		}
+
 		if flags == PageTableEntryFlags::BLANK {
 			// in this case we unmap the pages
 			self.entries[index].set(physical_address, flags);
@@ -493,11 +501,13 @@ where
 					PageTableEntryFlags::NORMAL | PageTableEntryFlags::TABLE_OR_4KIB_PAGE,
 				);
 
+				// On a M1 processor is tlb flush required. Otherwise, a page fault sometime occurs.
+				// Memory barriers isn't enough to avoid this issue.
+				page.flush_from_tlb();
+
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
-				for entry in subtable.entries.iter_mut() {
-					entry.physical_address_and_flags = PhysAddr::zero().as_u64();
-				}
+				subtable.entries.fill(PageTableEntry::default());
 			}
 
 			let subtable = self.subtable::<S>(page);
