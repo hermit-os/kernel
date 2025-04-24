@@ -46,9 +46,19 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 			"b 1b",
 			"2:",
 
-			"msr spsel, #1", // we want to use sp_el1
+			// we want to use sp_el1
+			"msr spsel, #1",
+
+			// Overwrite RSP if `CURRENT_STACK_ADDRESS != 0`
 			"adrp x8, {current_stack_address}",
+			"ldr x4, [x8, #:lo12:{current_stack_address}]",
+			"cmp x4, 0",
+			"b.eq 3f",
+			"mov sp, x4",
+			"b 4f",
+			"3:",
 			"mov x4, sp",
+			"4:",
 			"str x4, [x8, #:lo12:{current_stack_address}]",
 
 			// Add stack top offset

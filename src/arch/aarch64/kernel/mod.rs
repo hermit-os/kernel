@@ -12,15 +12,18 @@ mod start;
 pub mod switch;
 pub mod systemtime;
 
+use alloc::alloc::{Layout, alloc};
 use core::arch::global_asm;
-use core::str;
-use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::task::Waker;
+use core::{ptr, str};
 
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
+use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
+use crate::config::*;
 use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
@@ -77,7 +80,7 @@ pub(crate) struct AlignedAtomicU32(AtomicU32);
 /// It also synchronizes initialization of CPU cores.
 pub(crate) static CPU_ONLINE: AlignedAtomicU32 = AlignedAtomicU32(AtomicU32::new(0));
 
-pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
+pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
@@ -165,6 +168,12 @@ pub fn application_processor_init() {
 
 fn finish_processor_init() {
 	debug!("Initialized Processor");
+
+	// Allocate stack for the CPU and pass the addresses.
+	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
+	let stack = unsafe { alloc(layout) };
+	assert!(!stack.is_null());
+	CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
 }
 
 pub fn boot_next_processor() {

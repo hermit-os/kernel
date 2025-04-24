@@ -180,7 +180,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		let stack = VirtAddr::new(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
+		let stack = VirtAddr::new(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) as u64);
 		debug!("Using boot stack {stack:p}");
 
 		TaskStacks::Boot(BootStack { stack })
