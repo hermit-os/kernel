@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::str;
 
+use arm_pl031::Rtc;
 use hermit_dtb::Dtb;
 use hermit_sync::OnceCell;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
@@ -13,37 +14,8 @@ use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEn
 use crate::env;
 use crate::mm::virtualmem;
 
-static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
+static RTC_PL031: OnceCell<Rtc> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
-
-const RTC_DR: usize = 0x00;
-const RTC_MR: usize = 0x04;
-const RTC_LR: usize = 0x08;
-const RTC_CR: usize = 0x0c;
-/// Interrupt mask and set register
-const RTC_IRQ_MASK: usize = 0x10;
-/// Raw interrupt status
-const RTC_RAW_IRQ_STATUS: usize = 0x14;
-/// Masked interrupt status
-const RTC_MASK_IRQ_STATUS: usize = 0x18;
-/// Interrupt clear register
-const RTC_IRQ_CLEAR: usize = 0x1c;
-
-#[inline]
-fn rtc_read(off: usize) -> u32 {
-	let value: u32;
-
-	// we have to use inline assembly to guarantee 32bit memory access
-	unsafe {
-		asm!("ldar {value:w}, [{addr}]",
-			value = out(reg) value,
-			addr = in(reg) (PL031_ADDRESS.get().unwrap().as_usize() + off),
-			options(nostack, readonly),
-		);
-	}
-
-	value
-}
 
 pub fn init() {
 	let dtb = unsafe {
@@ -71,8 +43,6 @@ pub fn init() {
 					BasePageSize::SIZE.try_into().unwrap(),
 				)
 				.unwrap();
-				PL031_ADDRESS.set(pl031_address).unwrap();
-				debug!("Mapping RTC to virtual address {pl031_address:p}",);
 
 				let mut flags = PageTableEntryFlags::empty();
 				flags.device().writable().execute_disable();
@@ -83,20 +53,27 @@ pub fn init() {
 					flags,
 				);
 
+				debug!("Mapping RTC to virtual address {pl031_address:p}");
+
+				let rtc = unsafe { Rtc::new(pl031_address.as_mut_ptr()) };
 				let boot_time =
-					OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
+					OffsetDateTime::from_unix_timestamp(rtc.get_unix_timestamp().into()).unwrap();
 				info!("Hermit booted on {boot_time}");
 
 				let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
 				let current_ticks = super::processor::get_timer_ticks();
-				BOOT_TIME.set(micros - current_ticks).unwrap();
+
+				assert!(
+					BOOT_TIME.set(micros - current_ticks).is_err(),
+					"Unable to set BOOT_TIME"
+				);
+				assert!(RTC_PL031.set(rtc).is_err(), "Unable to set RTC_PL031");
 
 				return;
 			}
 		}
 	}
 
-	PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
 	BOOT_TIME.set(0).unwrap();
 }
 
