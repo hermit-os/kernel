@@ -45,6 +45,11 @@ const SLP_EN: u16 = 1 << 13;
 
 /// The "Multiple APIC Description Table" (MADT) preserved for get_apic_table().
 static MADT: OnceCell<AcpiTable<'_>> = OnceCell::new();
+
+/// The MCFG table, to address PCI-E configuration space
+#[cfg(feature = "pci")]
+static MCFG: OnceCell<AcpiTable<'_>> = OnceCell::new();
+
 /// The PM1A Control I/O Port for powering off the computer through ACPI.
 static PM1A_CNT_BLK: OnceCell<Port<u16>> = OnceCell::new();
 /// The Sleeping State Type code for powering off the computer through ACPI.
@@ -487,6 +492,11 @@ pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
 	MADT.get()
 }
 
+#[cfg(feature = "pci")]
+pub fn get_mcfg_table() -> Option<&'static AcpiTable<'static>> {
+	MCFG.get()
+}
+
 pub fn poweroff() {
 	if let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
 	{
@@ -562,6 +572,12 @@ pub fn init() {
 				"SSDT at {table_physical_address:p} has invalid checksum"
 			);
 			parse_ssdt(table);
+		} else if cfg!(feature = "pci") && table.header.signature() == "MCFG" {
+			assert!(
+				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
+				"MCFG at {table_physical_address:p} has invalid checksum"
+			);
+			MCFG.set(table).unwrap();
 		}
 	}
 }

@@ -22,7 +22,7 @@ use pci_types::{
 	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
 };
 
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::pci::PciConfigAccess;
 #[cfg(feature = "console")]
 use crate::console::IoDevice;
 #[cfg(feature = "console")]
@@ -64,7 +64,7 @@ use crate::drivers::vsock::VirtioVsockDriver;
 use crate::drivers::{Driver, InterruptHandlerQueue};
 use crate::init_cell::InitCell;
 
-pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigRegion>>> =
+pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigAccess>>> =
 	InitCell::new(Vec::new());
 static PCI_DRIVERS: InitCell<Vec<PciDriver>> = InitCell::new(Vec::new());
 
