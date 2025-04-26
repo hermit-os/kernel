@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::{fmt, str};
 
-use aarch64::regs::{CNTFRQ_EL0, Readable};
+use aarch64::regs::*;
 use hermit_dtb::Dtb;
 use hermit_sync::{Lazy, without_interrupts};
 
@@ -144,17 +144,7 @@ pub fn get_frequency() -> u16 {
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	let value: u64;
-
-	unsafe {
-		asm!(
-			"mrs {value}, cntpct_el0",
-			value = out(reg) value,
-			options(nostack),
-		);
-	}
-
-	value
+	CNTPCT_EL0.get()
 }
 
 #[inline]
@@ -219,24 +209,12 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
 		let deadline = (wt * u64::from(get_frequency())) / 1000;
 
-		unsafe {
-			asm!(
-				"msr cntp_cval_el0, {value}",
-				"msr cntp_ctl_el0, {enable}",
-				value = in(reg) deadline,
-				enable = in(reg) 1u64,
-				options(nostack, nomem),
-			);
-		}
+		CNTP_CVAL_EL0.set(deadline);
+		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
 	} else {
 		// disable timer
-		unsafe {
-			asm!(
-				"msr cntp_cval_el0, xzr",
-				"msr cntp_ctl_el0, xzr",
-				options(nostack, nomem),
-			);
-		}
+		CNTP_CVAL_EL0.set(0);
+		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
 	}
 }
 
