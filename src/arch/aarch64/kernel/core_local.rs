@@ -32,7 +32,7 @@ pub(crate) struct CoreLocal {
 
 impl CoreLocal {
 	pub fn install() {
-		let core_id = CPU_ONLINE.load(Ordering::Relaxed);
+		let core_id = CPU_ONLINE.0.load(Ordering::Relaxed);
 
 		let irq_statistics = if core_id == 0 {
 			static FIRST_IRQ_STATISTICS: IrqStatistics = IrqStatistics::new();

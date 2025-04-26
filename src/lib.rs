@@ -169,7 +169,8 @@ fn synch_all_cores() {
 
 	CORE_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-	while CORE_COUNTER.load(Ordering::SeqCst) != kernel::get_possible_cpus() {
+	let possible_cpus = kernel::get_possible_cpus();
+	while CORE_COUNTER.load(Ordering::SeqCst) != possible_cpus {
 		spin_loop();
 	}
 }

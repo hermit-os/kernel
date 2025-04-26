@@ -12,15 +12,18 @@ mod start;
 pub mod switch;
 pub mod systemtime;
 
+use alloc::alloc::{Layout, alloc};
 use core::arch::global_asm;
-use core::str;
-use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::task::Waker;
+use core::{ptr, str};
 
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
+use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
+use crate::config::*;
 use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
@@ -69,12 +72,15 @@ impl Default for Console {
 	}
 }
 
+#[repr(align(8))]
+pub(crate) struct AlignedAtomicU32(AtomicU32);
+
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.
 ///
 /// It also synchronizes initialization of CPU cores.
-pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+pub(crate) static CPU_ONLINE: AlignedAtomicU32 = AlignedAtomicU32(AtomicU32::new(0));
 
-pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
+pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
@@ -102,12 +108,25 @@ pub fn get_limit() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	CPU_ONLINE.load(Ordering::Acquire)
+	use hermit_dtb::Dtb;
+
+	let dtb = unsafe {
+		Dtb::from_raw(core::ptr::with_exposed_provenance(
+			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
+	};
+
+	dtb.enum_subnodes("/cpus")
+		.filter(|name| name.contains("cpu@"))
+		.count()
+		.try_into()
+		.unwrap()
 }
 
 #[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
-	1
+	CPU_ONLINE.0.load(Ordering::Acquire)
 }
 
 #[cfg(not(feature = "smp"))]
@@ -149,10 +168,16 @@ pub fn application_processor_init() {
 
 fn finish_processor_init() {
 	debug!("Initialized Processor");
+
+	// Allocate stack for the CPU and pass the addresses.
+	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
+	let stack = unsafe { alloc(layout) };
+	assert!(!stack.is_null());
+	CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
 }
 
 pub fn boot_next_processor() {
-	CPU_ONLINE.fetch_add(1, Ordering::Release);
+	CPU_ONLINE.0.fetch_add(1, Ordering::Release);
 }
 
 pub fn print_statistics() {
