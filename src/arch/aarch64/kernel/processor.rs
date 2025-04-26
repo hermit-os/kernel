@@ -35,27 +35,27 @@ impl fmt::Display for CpuFrequencySources {
 }
 
 struct CpuFrequency {
-	hz: u32,
+	khz: u32,
 	source: CpuFrequencySources,
 }
 
 impl CpuFrequency {
 	const fn new() -> Self {
 		CpuFrequency {
-			hz: 0,
+			khz: 0,
 			source: CpuFrequencySources::Invalid,
 		}
 	}
 
 	fn set_detected_cpu_frequency(
 		&mut self,
-		hz: u32,
+		khz: u32,
 		source: CpuFrequencySources,
 	) -> Result<(), ()> {
 		//The clock frequency must never be set to zero, otherwise a division by zero will
 		//occur during runtime
-		if hz > 0 {
-			self.hz = hz;
+		if khz > 0 {
+			self.khz = khz;
 			self.source = source;
 			Ok(())
 		} else {
@@ -65,15 +65,12 @@ impl CpuFrequency {
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		let mhz = env::freq().ok_or(())?;
-		self.set_detected_cpu_frequency(
-			u32::from(mhz) * 1_000_000,
-			CpuFrequencySources::CommandLine,
-		)
+		self.set_detected_cpu_frequency(u32::from(mhz) * 1000, CpuFrequencySources::CommandLine)
 	}
 
 	unsafe fn detect_from_register(&mut self) -> Result<(), ()> {
-		let hz = CNTFRQ_EL0.get() & 0xffff_ffff;
-		self.set_detected_cpu_frequency(hz.try_into().unwrap(), CpuFrequencySources::Register)
+		let khz = (CNTFRQ_EL0.get() & 0xffff_ffff) / 1000;
+		self.set_detected_cpu_frequency(khz.try_into().unwrap(), CpuFrequencySources::Register)
 	}
 
 	unsafe fn detect(&mut self) {
@@ -85,13 +82,13 @@ impl CpuFrequency {
 	}
 
 	fn get(&self) -> u32 {
-		self.hz
+		self.khz
 	}
 }
 
 impl fmt::Display for CpuFrequency {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{} Hz (from {})", self.hz, self.source)
+		write!(f, "{} KHz (from {})", self.khz, self.source)
 	}
 }
 
@@ -137,13 +134,12 @@ pub fn shutdown(error_code: i32) -> ! {
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
 	// and dividing it by the CPU frequency in MHz.
-	let ticks = 1_000_000 * u128::from(get_timestamp()) / u128::from(CPU_FREQUENCY.get());
-	u64::try_from(ticks).unwrap()
+	get_timestamp() / u64::from(get_frequency())
 }
 
 #[inline]
 pub fn get_frequency() -> u16 {
-	(CPU_FREQUENCY.get() / 1_000_000).try_into().unwrap()
+	(CPU_FREQUENCY.get() / 1_000).try_into().unwrap()
 }
 
 #[inline]
@@ -221,8 +217,7 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-		let deadline = u128::from(wt) * u128::from(CPU_FREQUENCY.get()) / 1_000_000;
-		let deadline = u64::try_from(deadline).unwrap();
+		let deadline = (wt * u64::from(get_frequency())) / 1000;
 
 		unsafe {
 			asm!(
