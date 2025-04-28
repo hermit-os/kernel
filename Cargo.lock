@@ -8,9 +8,20 @@ version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9dfa8287e400aa9af0c4e0c93967882634f7972b94b74fd5110507b486a1ced4"
 dependencies = [
- "aarch64-cpu",
+ "aarch64-cpu 9.4.0",
  "memory_addresses",
  "tock-registers 0.8.1",
+]
+
+[[package]]
+name = "aarch64"
+version = "0.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2df0852593ebb4ed15e4fce123daf16a272b8d4449ae75050d6b9d7cea461a21"
+dependencies = [
+ "aarch64-cpu 10.0.0",
+ "memory_addresses",
+ "tock-registers 0.9.0",
 ]
 
 [[package]]
@@ -20,6 +31,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac42a04a61c19fc8196dd728022a784baecc5d63d7e256c01ad1b3fbfab26287"
 dependencies = [
  "tock-registers 0.8.1",
+]
+
+[[package]]
+name = "aarch64-cpu"
+version = "10.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a21cd0131c25c438e19cd6a774adf7e3f64f7f4d723022882facc2dee0f8bc9"
+dependencies = [
+ "tock-registers 0.9.0",
 ]
 
 [[package]]
@@ -661,7 +681,7 @@ dependencies = [
 name = "hermit-kernel"
 version = "0.11.0"
 dependencies = [
- "aarch64",
+ "aarch64 0.0.14",
  "ahash",
  "align-address",
  "anstyle",
@@ -1667,7 +1687,7 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7390116b0481b52dbc7d979f858dcc426494714a3ba03e9534d26c8ea41b899e"
 dependencies = [
- "aarch64",
+ "aarch64 0.0.13",
  "memory_addresses",
  "num_enum",
  "x86_64",
