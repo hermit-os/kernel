@@ -26,7 +26,8 @@ use crate::fd::socket::udp;
 #[cfg(feature = "virtio-vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	self, Endpoint, ListenEndpoint, ObjectInterface, RawFd, SocketOption, get_object, insert_object,
+	self, Endpoint, ListenEndpoint, ObjectInterface, RawFd, SocketOption, SocketOptionSocket,
+	SocketOptionValue, get_object, insert_object,
 };
 use crate::init_buf;
 use crate::syscalls::block_on;
@@ -75,9 +76,12 @@ pub const SO_REUSEADDR: i32 = 0x0004;
 pub const SO_KEEPALIVE: i32 = 0x0008;
 pub const SO_BROADCAST: i32 = 0x0020;
 pub const SO_LINGER: i32 = 0x0080;
+pub const SO_SNDBUF: i32 = 0x1001;
+pub const SO_RCVBUF: i32 = 0x1002;
 pub const SO_SNDTIMEO: i32 = 0x1005;
 pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
+pub const TCP_NODELAY: i32 = 1;
 pub const MSG_PEEK: i32 = 1;
 pub type sa_family_t = u8;
 pub type socklen_t = u32;
@@ -624,7 +628,8 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	}
 
 	#[cfg(feature = "net")]
-	if domain == Af::Inet && matches!(sock, Sock::Stream | Sock::Dgram) {
+	if (domain == Af::Inet || domain == Af::Inet6) && (sock == Sock::Stream || sock == Sock::Dgram)
+	{
 		let mut guard = NIC.lock();
 
 		let NetworkState::Initialized(nic) = &mut *guard else {
@@ -929,43 +934,32 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	if level == SOL_SOCKET && optname == SO_REUSEADDR {
+	let option = SocketOption::from_level_optname(level, optname);
+	let Some(option) = option else {
+		error!("setsockopt: unsupported option level={level:x} optname={optname:x}.");
+		return -i32::from(Errno::Inval);
+	};
+
+	if option == SocketOption::SocketOption(SocketOptionSocket::ReuseAddr) {
 		return 0;
 	}
 
-	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
-		return -i32::from(Errno::Inval);
+	let opt_value = unsafe {
+		// Safety: optval and optlen are provided by the end user
+		SocketOptionValue::new(optval, optlen)
 	};
 
-	let Ok(optname) = SocketOption::try_from(optname) else {
-		return -i32::from(Errno::Inval);
-	};
-
-	debug!("sys_setsockopt: {fd}, level {level:?}, optname {optname:?}");
-
-	if level == Ipproto::Tcp
-		&& optname == SocketOption::TcpNodelay
-		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
-	{
-		if optval.is_null() {
-			return -i32::from(Errno::Inval);
-		}
-
-		let value = unsafe { *optval.cast::<i32>() };
-		let obj = get_object(fd);
-		obj.map_or_else(
-			|e| -i32::from(e),
-			|v| {
-				block_on(
-					async { v.read().await.setsockopt(optname, value != 0).await },
-					None,
-				)
-				.map_or_else(|e| -i32::from(e), |()| 0)
-			},
-		)
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	let obj = get_object(fd);
+	obj.map_or_else(
+		|e| -i32::from(e),
+		|v| {
+			block_on(
+				async { v.read().await.setsockopt(option, opt_value).await },
+				None,
+			)
+			.map_or_else(|e| -i32::from(e), |()| 0)
+		},
+	)
 }
 
 #[hermit_macro::system(errno)]
@@ -977,40 +971,32 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	let Ok(optname) = SocketOption::try_from(optname) else {
+	let option = SocketOption::from_level_optname(level, optname);
+	let optval = unsafe { &mut *optval.cast::<i32>() };
+	let optlen = unsafe { &mut *optlen };
+
+	let Some(option) = option else {
+		error!("getsockopt: unsupported option level={level:x} optname={optname:x}.");
 		return -i32::from(Errno::Inval);
 	};
 
-	debug!("sys_getsockopt: {fd}, level {level}, optname {optname:?}");
+	let obj = get_object(fd);
+	let result = obj.map_or_else(
+		|e| -i32::from(e),
+		|v| {
+			block_on(async { v.read().await.getsockopt(option).await }, None).map_or_else(
+				|e| -i32::from(e),
+				|value| {
+					*optval = value;
+					*optlen = size_of::<i32>().try_into().unwrap();
+					0
+				},
+			)
+		},
+	);
 
-	if level == Ipproto::Tcp as i32 && optname == SocketOption::TcpNodelay
-		|| level == SOL_SOCKET
-			&& (optname == SocketOption::SoSndbuf || optname == SocketOption::SoRcvbuf)
-	{
-		if optval.is_null() || optlen.is_null() {
-			return -i32::from(Errno::Inval);
-		}
-
-		let optval = unsafe { &mut *optval.cast::<i32>() };
-		let optlen = unsafe { &mut *optlen };
-		let obj = get_object(fd);
-		obj.map_or_else(
-			|e| -i32::from(e),
-			|v| {
-				block_on(async { v.read().await.getsockopt(optname).await }, None).map_or_else(
-					|e| -i32::from(e),
-					|value| {
-						*optval = value;
-						*optlen = size_of::<i32>().try_into().unwrap();
-
-						0
-					},
-				)
-			},
-		)
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	*optlen = 0;
+	result
 }
 
 #[hermit_macro::system(errno)]

@@ -7,10 +7,11 @@ use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
-#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use zerocopy::{FromBytes, native_endian};
 
 pub(crate) use self::delegate::Fd;
 use crate::arch::kernel::core_local::core_scheduler;
@@ -18,6 +19,8 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fs::{FileAttr, SeekWhence};
 use crate::io;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use crate::syscalls::socket::{Ipproto, SOL_SOCKET, socklen_t};
 
 mod delegate;
 mod eventfd;
@@ -48,12 +51,107 @@ pub(crate) enum ListenEndpoint {
 	Vsock(socket::vsock::VsockListenEndpoint),
 }
 
-#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-#[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
-#[repr(i32)]
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum SocketOption {
-	TcpNodelay = 1,
+	TcpOption(SocketOptionTcp),
+	SocketOption(SocketOptionSocket),
+}
+
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+impl SocketOption {
+	pub fn from_level_optname(level: i32, optname: i32) -> Option<SocketOption> {
+		if level == SOL_SOCKET {
+			SocketOptionSocket::try_from(optname)
+				.ok()
+				.map(SocketOption::SocketOption)
+		} else {
+			let protocol = u8::try_from(level)
+				.ok()
+				.and_then(|proto| Ipproto::try_from(proto).ok())?;
+
+			match protocol {
+				Ipproto::Tcp => SocketOptionTcp::try_from(optname)
+					.ok()
+					.map(SocketOption::TcpOption),
+				_ => None,
+			}
+		}
+	}
+}
+
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct SocketOptionValue<'a>(Option<&'a [u8]>);
+
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+impl SocketOptionValue<'_> {
+	/// Creates a new socket option value from a raw pointer and its size
+	///
+	/// # Safety
+	///
+	/// * `optval` must be a null ptr, or a valid pointer provided to a `setsockopt` system call
+	/// * `optlen` must be the data length of the `optval` ptr, as provided to a `setsockopt` system
+	///   call
+	pub unsafe fn new(optval: *const core::ffi::c_void, optlen: socklen_t) -> Self {
+		if optlen == 0 || optval.is_null() {
+			return Self(None);
+		}
+
+		let slice = unsafe { core::slice::from_raw_parts(optval.cast::<u8>(), optlen as usize) };
+		Self(Some(slice))
+	}
+}
+
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+impl TryFrom<&SocketOptionValue<'_>> for i32 {
+	type Error = Errno;
+
+	fn try_from(value: &SocketOptionValue<'_>) -> Result<Self, Self::Error> {
+		let Some(value) = value.0 else {
+			return Err(Errno::Inval);
+		};
+
+		if value.len() != size_of::<i32>() {
+			return Err(Errno::Inval);
+		}
+
+		let value = native_endian::I32::ref_from_bytes(value).map_err(|_| Errno::Inval)?;
+
+		Ok(value.get())
+	}
+}
+
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+impl TryFrom<&SocketOptionValue<'_>> for bool {
+	type Error = Errno;
+
+	fn try_from(value: &SocketOptionValue<'_>) -> Result<Self, Self::Error> {
+		let value: i32 = value.try_into()?;
+		Ok(value != 0)
+	}
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
+#[non_exhaustive]
+pub(crate) enum SocketOptionTcp {
+	#[doc(alias = "TCP_NODELAY")]
+	TcpNoDelay = 1,
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
+#[non_exhaustive]
+pub(crate) enum SocketOptionSocket {
+	#[doc(alias = "SO_REUSEADDR")]
+	ReuseAddr = 4,
+	#[doc(alias = "SO_KEEPALIVE")]
+	KeepAlive = 8,
+	#[doc(alias = "SO_SNDBUF")]
 	SoSndbuf = 0x1001,
+	#[doc(alias = "SO_RCVBUF")]
 	SoRcvbuf = 0x1002,
 }
 
@@ -268,7 +366,11 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
+	async fn setsockopt(
+		&self,
+		_opt: SocketOption,
+		_optval: SocketOptionValue<'_>,
+	) -> io::Result<()> {
 		Err(Errno::Notsock)
 	}
 

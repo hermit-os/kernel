@@ -926,6 +926,7 @@ dependencies = [
  "virtio-spec",
  "volatile 0.6.1",
  "x86_64",
+ "zerocopy",
  "zeroize",
 ]
 
