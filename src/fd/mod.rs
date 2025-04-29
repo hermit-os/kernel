@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use core::ffi::c_int;
 use core::future;
 use core::mem::MaybeUninit;
@@ -7,8 +6,7 @@ use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
-#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-use num_enum::TryFromPrimitive;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
@@ -18,6 +16,8 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fs::{FileAttr, SeekWhence};
 use crate::io;
+#[cfg(feature = "net")]
+use crate::syscalls::socket::{Ipproto, SOL_SOCKET, socklen_t};
 
 mod delegate;
 mod eventfd;
@@ -48,12 +48,100 @@ pub(crate) enum ListenEndpoint {
 	Vsock(socket::vsock::VsockListenEndpoint),
 }
 
-#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-#[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
-#[repr(i32)]
+#[allow(dead_code)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum SocketOption {
-	TcpNodelay = 1,
+	TcpOption(SocketOptionTcp),
+	SocketOption(SocketOptionSocket),
+}
+
+#[cfg(feature = "net")]
+impl SocketOption {
+	pub fn from_level_optname(level: i32, optname: i32) -> Option<SocketOption> {
+		if level == SOL_SOCKET {
+			SocketOptionSocket::try_from(optname)
+				.ok()
+				.map(SocketOption::SocketOption)
+		} else {
+			let protocol = u8::try_from(level)
+				.ok()
+				.and_then(|proto| Ipproto::try_from(proto).ok())?;
+
+			match protocol {
+				Ipproto::Tcp => SocketOptionTcp::try_from(optname)
+					.ok()
+					.map(SocketOption::TcpOption),
+				_ => None,
+			}
+		}
+	}
+}
+
+#[cfg(feature = "net")]
+pub struct SocketOptionValue {
+	optval: *const core::ffi::c_void,
+	optlen: socklen_t,
+}
+
+#[cfg(not(feature = "net"))]
+pub struct SocketOptionValue;
+
+unsafe impl Send for SocketOptionValue {}
+
+#[cfg(feature = "net")]
+impl SocketOptionValue {
+	pub fn new(optval: *const core::ffi::c_void, optlen: socklen_t) -> Self {
+		Self { optval, optlen }
+	}
+}
+
+#[cfg(feature = "net")]
+impl TryFrom<&SocketOptionValue> for i32 {
+	type Error = Errno;
+
+	fn try_from(value: &SocketOptionValue) -> Result<Self, Self::Error> {
+		if value.optval.is_null() {
+			return Err(Errno::Inval);
+		}
+
+		if value.optlen != size_of::<i32>() as u32 {
+			return Err(Errno::Inval);
+		}
+
+		let value = unsafe { *value.optval.cast::<i32>() };
+		Ok(value)
+	}
+}
+
+#[cfg(feature = "net")]
+impl TryFrom<&SocketOptionValue> for bool {
+	type Error = Errno;
+
+	fn try_from(value: &SocketOptionValue) -> Result<Self, Self::Error> {
+		let value: i32 = value.try_into()?;
+		Ok(value != 0)
+	}
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
+#[non_exhaustive]
+pub(crate) enum SocketOptionTcp {
+	#[doc(alias = "TCP_NODELAY")]
+	TcpNoDelay = 1,
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
+#[non_exhaustive]
+pub(crate) enum SocketOptionSocket {
+	#[doc(alias = "SO_REUSEADDR")]
+	ReuseAddr = 1,
+	#[doc(alias = "SO_KEEPALIVE")]
+	KeepAlive = 8,
+	#[doc(alias = "SO_SNDBUF")]
 	SoSndbuf = 0x1001,
+	#[doc(alias = "SO_RCVBUF")]
 	SoRcvbuf = 0x1002,
 }
 
@@ -265,7 +353,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
+	async fn setsockopt(&self, _opt: SocketOption, _optval: SocketOptionValue) -> io::Result<()> {
 		Err(Errno::Notsock)
 	}
 

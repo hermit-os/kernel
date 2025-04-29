@@ -314,6 +314,8 @@ pub(crate) fn init() {
 		spawn(network_run());
 		#[cfg(feature = "dhcpv4")]
 		spawn(dhcpv4_run());
+	} else {
+		warn!("Network initialization failed.");
 	}
 }
 
