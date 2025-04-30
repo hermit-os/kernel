@@ -103,7 +103,7 @@ pub fn init_drivers() {
 			}
 
 			// Init GEM
-			#[cfg(all(feature = "tcp", feature = "gem-net", not(feature = "pci")))]
+			#[cfg(all(feature = "gem-net", not(feature = "pci")))]
 			if let Some(gem_node) = fdt.find_compatible(&["sifive,fu540-c000-gem"]) {
 				debug!("Found Ethernet controller");
 
