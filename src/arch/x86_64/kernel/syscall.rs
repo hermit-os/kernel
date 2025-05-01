@@ -5,7 +5,7 @@ use super::core_local::CoreLocal;
 use crate::syscalls::table::SYSHANDLER_TABLE;
 
 #[unsafe(no_mangle)]
-#[naked]
+#[unsafe(naked)]
 pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 	unsafe {
 		naked_asm!(

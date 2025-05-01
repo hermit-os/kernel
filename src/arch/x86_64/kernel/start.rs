@@ -8,7 +8,7 @@ use crate::kernel::pre_init;
 use crate::kernel::scheduler::TaskStacks;
 
 #[unsafe(no_mangle)]
-#[naked]
+#[unsafe(naked)]
 pub unsafe extern "C" fn _start(_boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// boot_info is in the `rdi` register
 

@@ -332,7 +332,7 @@ extern "C" fn thread_exit(status: i32) -> ! {
 }
 
 #[cfg(target_os = "none")]
-#[naked]
+#[unsafe(naked)]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	// `f` is in the `x0` register
 	// `arg` is in the `x1` register

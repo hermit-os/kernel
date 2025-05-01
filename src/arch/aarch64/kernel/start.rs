@@ -12,7 +12,7 @@ unsafe extern "C" {
 
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[unsafe(no_mangle)]
-#[naked]
+#[unsafe(naked)]
 pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
 	// validate signatures
 	// `_Start` is compatible to `Entry`

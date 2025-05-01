@@ -312,7 +312,7 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 }
 
 #[cfg(target_os = "none")]
-#[naked]
+#[unsafe(naked)]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	// `f` is in the `rdi` register
 	// `arg` is in the `rsi` register

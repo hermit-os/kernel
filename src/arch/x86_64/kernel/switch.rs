@@ -167,7 +167,7 @@ macro_rules! restore_context {
 	};
 }
 
-#[naked]
+#[unsafe(naked)]
 pub(crate) unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {
 	// `old_stack` is in `rdi` register
 	// `new_stack` is in `rsi` register
@@ -193,7 +193,7 @@ pub(crate) unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stac
 
 /// Performs a context switch to an idle task or a task, which already is owner
 /// of the FPU.
-#[naked]
+#[unsafe(naked)]
 pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {
 	// `old_stack` is in `rdi` register
 	// `new_stack` is in `rsi` register
