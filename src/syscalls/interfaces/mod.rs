@@ -1,9 +1,15 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ptr;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
 use crate::{arch, env};
+
+#[linkage = "weak"]
+#[no_mangle]
+
+static __hermit_app_name: *const u8 = ptr::null();
 
 mod generic;
 pub(crate) mod uhyve;
@@ -16,7 +22,14 @@ pub trait SyscallInterface: Send + Sync {
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
 		let mut argv = Vec::new();
 
-		let name = Box::leak(Box::new("bin\0")).as_ptr();
+		let name = unsafe {
+			if !__hermit_app_name.is_null() {
+				__hermit_app_name
+			} else {
+				Box::leak(Box::new("hermit-app\0")).as_ptr() // default binary name
+			}
+		};
+
 		argv.push(name);
 
 		let args = env::args();
