@@ -54,6 +54,8 @@ pub fn init() {
 			let current_ticks = super::processor::get_timer_ticks();
 			BOOT_TIME.set(micros - current_ticks).unwrap();
 			info!("Hermit booted on {boot_time}");
+
+			return;
 		}
 		_ => {
 			let dtb = unsafe {
@@ -109,6 +111,8 @@ pub fn init() {
 			}
 		}
 	};
+
+	BOOT_TIME.set(0).unwrap();
 }
 
 /// Returns the current time in microseconds since UNIX epoch.
