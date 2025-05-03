@@ -209,9 +209,9 @@ fn boot_processor_main() -> ! {
 
 	#[cfg(feature = "pci")]
 	info!("Compiled with PCI support");
-	#[cfg(feature = "acpi")]
+	#[cfg(all(feature = "acpi", target_arch = "x86_64"))]
 	info!("Compiled with ACPI support");
-	#[cfg(feature = "fsgsbase")]
+	#[cfg(all(feature = "fsgsbase", target_arch = "x86_64"))]
 	info!("Compiled with FSGSBASE support");
 	#[cfg(feature = "smp")]
 	info!("Compiled with SMP support");
