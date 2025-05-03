@@ -318,14 +318,12 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 	// `arg` is in the `rsi` register
 	// `user_stack` is in the `rdx` register
 
-	unsafe {
-		naked_asm!(
-			"mov rsp, rdx",
-			"sti",
-			"jmp {task_entry}",
-			task_entry = sym task_entry,
-		)
-	}
+	naked_asm!(
+		"mov rsp, rdx",
+		"sti",
+		"jmp {task_entry}",
+		task_entry = sym task_entry,
+	)
 }
 
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
