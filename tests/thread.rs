@@ -71,7 +71,7 @@ pub fn test_futex() {
 		tv_sec: 0,
 		tv_nsec: 100_000_000,
 	};
-	let ret = unsafe { sys_futex_wait(futex_ptr, 0, &timeout, 1) };
+	let ret = unsafe { sys_futex_wait(futex_ptr, 0, &raw const timeout, 1) };
 	assert_eq!(ret, -ETIMEDOUT);
 
 	let waker = unsafe {
