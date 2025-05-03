@@ -1186,7 +1186,7 @@ unsafe fn get_timestamp_rdtsc() -> u64 {
 unsafe fn get_timestamp_rdtscp() -> u64 {
 	unsafe {
 		let mut aux: u32 = 0;
-		let value = __rdtscp(&mut aux);
+		let value = __rdtscp(&raw mut aux);
 		_mm_lfence();
 		value
 	}

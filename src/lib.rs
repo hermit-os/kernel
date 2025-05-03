@@ -15,7 +15,6 @@
 #![feature(maybe_uninit_as_bytes)]
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_write_slice)]
-#![feature(naked_functions)]
 #![feature(never_type)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]

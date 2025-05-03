@@ -332,25 +332,23 @@ extern "C" fn thread_exit(status: i32) -> ! {
 }
 
 #[cfg(target_os = "none")]
-#[naked]
+#[unsafe(naked)]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	// `f` is in the `x0` register
 	// `arg` is in the `x1` register
 
-	unsafe {
-		naked_asm!(
-			"msr spsel, {l0}",
-			"mov x25, x0",
-			"mov x0, x1",
-			"blr x25",
-			"mov x0, xzr",
-			"adrp x4, {exit}",
-			"add  x4, x4, #:lo12:{exit}",
-			"br x4",
-			l0 = const 0,
-			exit = sym thread_exit,
-		)
-	}
+	naked_asm!(
+		"msr spsel, {l0}",
+		"mov x25, x0",
+		"mov x0, x1",
+		"blr x25",
+		"mov x0, xzr",
+		"adrp x4, {exit}",
+		"add  x4, x4, #:lo12:{exit}",
+		"br x4",
+		l0 = const 0,
+		exit = sym thread_exit,
+	)
 }
 
 impl TaskFrame for Task {
