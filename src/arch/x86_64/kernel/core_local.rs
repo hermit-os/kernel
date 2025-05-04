@@ -76,7 +76,7 @@ impl CoreLocal {
 			this.add_irq_counter();
 			Box::leak(Box::new(this))
 		};
-		this.this = &*this;
+		this.this = ptr::from_ref(this);
 
 		GsBase::write(VirtAddr::from_ptr(this));
 	}
