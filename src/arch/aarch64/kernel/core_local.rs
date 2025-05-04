@@ -59,7 +59,7 @@ impl CoreLocal {
 			this.add_irq_counter();
 			Box::leak(Box::new(this))
 		};
-		this.this = &*this;
+		this.this = ptr::from_ref(this);
 
 		unsafe {
 			asm!("msr tpidr_el1, {}", in(reg) this, options(nostack, preserves_flags));

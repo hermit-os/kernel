@@ -41,15 +41,13 @@ extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 
 #[allow(unused_assignments)]
 #[unsafe(no_mangle)]
-#[naked]
+#[unsafe(naked)]
 pub(crate) unsafe extern "C" fn sys_invalid() {
-	unsafe {
-		naked_asm!(
-			"mov rdi, rax",
-			"call {}",
-			sym invalid_syscall,
-		);
-	}
+	naked_asm!(
+		"mov rdi, rax",
+		"call {}",
+		sym invalid_syscall,
+	);
 }
 
 #[repr(align(64))]
