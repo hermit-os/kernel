@@ -3,11 +3,11 @@ use core::{fmt, str};
 
 use aarch64::regs::*;
 use hermit_dtb::Dtb;
-use hermit_sync::{Lazy, without_interrupts};
+use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
 use crate::env;
 
-// System counter frequency in Hz
+// System counter frequency in KHz
 static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	let mut cpu_frequency = CpuFrequency::new();
 	unsafe {
@@ -15,6 +15,8 @@ static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	}
 	cpu_frequency
 });
+// Value of CNTPCT_EL0 at boot time
+static BOOT_COUNTER: OnceCell<u64> = OnceCell::new();
 
 enum CpuFrequencySources {
 	Invalid,
@@ -133,10 +135,13 @@ pub fn shutdown(error_code: i32) -> ! {
 #[inline]
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
-	// and dividing it by the CPU frequency in MHz.
-	get_timestamp() / u64::from(get_frequency())
+	// and dividing it by the CPU frequency (in KHz).
+
+	let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
+	1000 * get_timestamp() / freq
 }
 
+/// Returns the timer frequency in MHz
 #[inline]
 pub fn get_frequency() -> u16 {
 	(CPU_FREQUENCY.get() / 1_000).try_into().unwrap()
@@ -144,7 +149,7 @@ pub fn get_frequency() -> u16 {
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	CNTPCT_EL0.get()
+	CNTPCT_EL0.get() - BOOT_COUNTER.get().unwrap()
 }
 
 #[inline]
@@ -200,6 +205,7 @@ pub fn configure() {
 }
 
 pub fn detect_frequency() {
+	BOOT_COUNTER.set(CNTPCT_EL0.get()).unwrap();
 	Lazy::force(&CPU_FREQUENCY);
 }
 
@@ -207,7 +213,8 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-		let deadline = (wt * u64::from(get_frequency())) / 1000;
+		let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
+		let deadline = (wt / 1000) * freq;
 
 		CNTP_CVAL_EL0.set(deadline);
 		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);

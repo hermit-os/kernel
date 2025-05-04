@@ -50,9 +50,7 @@ pub fn init() {
 	match env::boot_info().platform_info {
 		PlatformInfo::Uhyve { boot_time, .. } => {
 			PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
-			let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
-			let current_ticks = super::processor::get_timer_ticks();
-			BOOT_TIME.set(micros - current_ticks).unwrap();
+			BOOT_TIME.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap());
 			info!("Hermit booted on {boot_time}");
 
 			return;
@@ -100,10 +98,9 @@ pub fn init() {
 							OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
 						info!("Hermit booted on {boot_time}");
 
-						let micros =
-							u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
-						let current_ticks = super::processor::get_timer_ticks();
-						BOOT_TIME.set(micros - current_ticks).unwrap();
+						BOOT_TIME
+							.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap())
+							.unwrap();
 
 						return;
 					}
