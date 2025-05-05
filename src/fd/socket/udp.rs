@@ -1,4 +1,4 @@
-use core::ffi::c_int;
+use core::ffi::{c_int, c_void};
 use core::future;
 use core::mem::MaybeUninit;
 use core::task::Poll;
@@ -11,6 +11,7 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC, wake_network_waker};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::fs::ioctl::IoCtlCall;
 use crate::io;
 use crate::syscalls::socket::Af;
 
@@ -256,6 +257,10 @@ impl ObjectInterface for Socket {
 			SocketOption::SoSndbuf => Ok(c_int::try_from(socket.payload_send_capacity()).unwrap()),
 			SocketOption::SoRcvbuf => Ok(c_int::try_from(socket.payload_recv_capacity()).unwrap()),
 		}
+	}
+
+	fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: *mut c_void) -> io::Result<()> {
+		crate::socket_handle_ioctl!(self, cmd, argp)
 	}
 }
 

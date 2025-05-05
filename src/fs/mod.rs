@@ -1,4 +1,5 @@
 pub(crate) mod dev_directory;
+pub mod ioctl;
 pub(crate) mod mem;
 #[cfg(feature = "uhyve")]
 pub(crate) mod uhyve;
