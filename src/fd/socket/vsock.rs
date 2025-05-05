@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ffi::c_void;
 use core::future;
 use core::task::Poll;
 
@@ -13,7 +14,7 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::pci as hardware;
 use crate::errno::Errno;
 use crate::executor::vsock::{ConnKey, RawSocket, VSOCK_MAP, VsockMap, VsockState};
-use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{self, Endpoint, Fd, IoCtlCall, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -487,6 +488,10 @@ impl ObjectInterface for Socket {
 			}
 		})
 		.await
+	}
+
+	async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: *mut c_void) -> io::Result<()> {
+		crate::socket_handle_ioctl!(self, cmd, argp)
 	}
 }
 
