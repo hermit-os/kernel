@@ -2,7 +2,7 @@
 
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use core::alloc::{GlobalAlloc, Layout};
-use core::ffi::{CStr, c_char};
+use core::ffi::{CStr, c_char, c_ulong};
 use core::marker::PhantomData;
 use core::ptr;
 
@@ -24,6 +24,7 @@ use crate::fd::{
 	self, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd, dup_object,
 	dup_object2, get_object, isatty, remove_object,
 };
+use crate::fs::ioctl::IoCtlCall;
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
@@ -475,30 +476,17 @@ pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcn
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_ioctl(
 	fd: FileDescriptor,
-	cmd: i32,
+	cmd: c_ulong,
 	argp: *mut core::ffi::c_void,
 ) -> i32 {
-	const FIONBIO: i32 = 0x8008_667eu32 as i32;
-
-	if cmd == FIONBIO {
-		let value = unsafe { *(argp as *const i32) };
-		let status_flags = if value != 0 {
-			fd::StatusFlags::O_NONBLOCK
-		} else {
-			fd::StatusFlags::empty()
-		};
-
-		let obj = get_object(fd);
-		obj.map_or_else(
-			|e| -i32::from(e),
-			|v| {
-				block_on((*v).set_status_flags(status_flags), None)
-					.map_or_else(|e| -i32::from(e), |()| 0)
-			},
-		)
-	} else {
-		-crate::errno::EINVAL
-	}
+	let obj = get_object(fd);
+	obj.map_or_else(
+		|e| -i32::from(e),
+		|v| {
+			(*v).handle_ioctl(IoCtlCall(cmd as u32), argp)
+				.map_or_else(|e| -i32::from(e), |()| 0)
+		},
+	)
 }
 
 /// manipulate file descriptor

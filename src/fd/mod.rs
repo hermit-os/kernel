@@ -268,6 +268,15 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(io::Error::ENOSYS)
 	}
 
+	/// Handles an ioctl
+	fn handle_ioctl(
+		&self,
+		_cmd: crate::fs::ioctl::IoCtlCall,
+		_argp: *mut core::ffi::c_void,
+	) -> io::Result<()> {
+		Err(io::Error::ENOSYS)
+	}
+
 	/// `isatty` returns `true` for a terminal device
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
