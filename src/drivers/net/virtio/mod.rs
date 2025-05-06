@@ -65,8 +65,13 @@ impl RxQueues {
 		//
 		let packet_size = if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
 			1514
-		} else {
+		} else if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
+			|| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
+			|| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
+		{
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
+		} else {
+			1514
 		};
 
 		Self { vqs, packet_size }
