@@ -18,6 +18,7 @@ use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::fs::{self, FileSystem, Path};
 use uefi::prelude::*;
 use uefi::table::cfg::ConfigTableEntry;
+use uefi::{Guid, guid};
 
 pub use self::console::CONSOLE;
 use crate::fdt::Fdt;
@@ -47,6 +48,10 @@ fn main() -> Status {
 		.unwrap()
 		.rsdp(u64::try_from(rsdp.expose_provenance()).unwrap())
 		.unwrap();
+
+	if let Some(cc_blob) = detect_cc_blob() {
+		fdt = fdt.efi_sev_snp_cc_blob(cc_blob).unwrap()
+	};
 
 	if let Some(bootargs) = esp.read_bootargs() {
 		fdt = fdt.bootargs(bootargs).unwrap();
@@ -185,4 +190,25 @@ impl Esp {
 
 		inner(&mut self.fs, path.as_ref())
 	}
+}
+
+/// Try to locate an AMD SEV-SNP confidential computing blob, and returns its address if found.
+/// This function is only relevant on AMD SEV-SNP guests, and will do mostly nothing otherwise.
+fn detect_cc_blob() -> Option<u64> {
+	/// EFI SEV-SNP Confidential Computing Blob configuration table.
+	/// See <https://docs.amd.com/v/u/en-US/56421>.
+	const CC_BLOB_GUID: Guid = guid!("067b1f5f-cf26-44c5-8554-93d777912d42");
+
+	system::with_config_table(|config_table| {
+		config_table
+			.iter()
+			.find(|entry| entry.guid == CC_BLOB_GUID)
+			.map(|entry| {
+				info!(
+					"EFI SEV-SNP Confidential Computing Blob found at {:p}",
+					entry.address
+				);
+				u64::try_from(entry.address.addr()).unwrap()
+			})
+	})
 }
