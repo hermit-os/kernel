@@ -54,9 +54,12 @@ pub struct RxQueues {
 
 impl RxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
-		// See Virtio specification v1.1 - 5.1.6.3.1
+		// See Virtio specification v1.1 - 5.1.6.3.1 and 5.1.4.2
 		//
-		let packet_size = if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
+		#[allow(clippy::decimal_literal_representation)]
+		let packet_size = if dev_cfg.features.contains(virtio::net::F::MTU) {
+			65550
+		} else if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
 			1514
 		} else {
 			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
