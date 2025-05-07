@@ -1113,6 +1113,7 @@ pub fn get_timer_ticks() -> u64 {
 	get_timestamp() / u64::from(get_frequency())
 }
 
+/// Returns the timer frequency in MHz
 pub fn get_frequency() -> u16 {
 	CPU_FREQUENCY.get()
 }

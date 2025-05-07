@@ -1,13 +1,13 @@
 use core::arch::asm;
 use core::{fmt, str};
 
-use aarch64::regs::{CNTFRQ_EL0, Readable};
+use aarch64::regs::*;
 use hermit_dtb::Dtb;
-use hermit_sync::{Lazy, without_interrupts};
+use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
 use crate::env;
 
-// System counter frequency in Hz
+// System counter frequency in KHz
 static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	let mut cpu_frequency = CpuFrequency::new();
 	unsafe {
@@ -15,6 +15,8 @@ static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	}
 	cpu_frequency
 });
+// Value of CNTPCT_EL0 at boot time
+static BOOT_COUNTER: OnceCell<u64> = OnceCell::new();
 
 enum CpuFrequencySources {
 	Invalid,
@@ -35,27 +37,27 @@ impl fmt::Display for CpuFrequencySources {
 }
 
 struct CpuFrequency {
-	hz: u32,
+	khz: u32,
 	source: CpuFrequencySources,
 }
 
 impl CpuFrequency {
 	const fn new() -> Self {
 		CpuFrequency {
-			hz: 0,
+			khz: 0,
 			source: CpuFrequencySources::Invalid,
 		}
 	}
 
 	fn set_detected_cpu_frequency(
 		&mut self,
-		hz: u32,
+		khz: u32,
 		source: CpuFrequencySources,
 	) -> Result<(), ()> {
 		//The clock frequency must never be set to zero, otherwise a division by zero will
 		//occur during runtime
-		if hz > 0 {
-			self.hz = hz;
+		if khz > 0 {
+			self.khz = khz;
 			self.source = source;
 			Ok(())
 		} else {
@@ -65,15 +67,12 @@ impl CpuFrequency {
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		let mhz = env::freq().ok_or(())?;
-		self.set_detected_cpu_frequency(
-			u32::from(mhz) * 1_000_000,
-			CpuFrequencySources::CommandLine,
-		)
+		self.set_detected_cpu_frequency(u32::from(mhz) * 1000, CpuFrequencySources::CommandLine)
 	}
 
 	unsafe fn detect_from_register(&mut self) -> Result<(), ()> {
-		let hz = CNTFRQ_EL0.get() & 0xffff_ffff;
-		self.set_detected_cpu_frequency(hz.try_into().unwrap(), CpuFrequencySources::Register)
+		let khz = (CNTFRQ_EL0.get() & 0xffff_ffff) / 1000;
+		self.set_detected_cpu_frequency(khz.try_into().unwrap(), CpuFrequencySources::Register)
 	}
 
 	unsafe fn detect(&mut self) {
@@ -85,13 +84,13 @@ impl CpuFrequency {
 	}
 
 	fn get(&self) -> u32 {
-		self.hz
+		self.khz
 	}
 }
 
 impl fmt::Display for CpuFrequency {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{} Hz (from {})", self.hz, self.source)
+		write!(f, "{} KHz (from {})", self.khz, self.source)
 	}
 }
 
@@ -136,29 +135,21 @@ pub fn shutdown(error_code: i32) -> ! {
 #[inline]
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
-	// and dividing it by the CPU frequency in MHz.
-	let ticks = 1_000_000 * u128::from(get_timestamp()) / u128::from(CPU_FREQUENCY.get());
-	u64::try_from(ticks).unwrap()
+	// and dividing it by the CPU frequency (in KHz).
+
+	let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
+	1000 * get_timestamp() / freq
 }
 
+/// Returns the timer frequency in MHz
 #[inline]
 pub fn get_frequency() -> u16 {
-	(CPU_FREQUENCY.get() / 1_000_000).try_into().unwrap()
+	(CPU_FREQUENCY.get() / 1_000).try_into().unwrap()
 }
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	let value: u64;
-
-	unsafe {
-		asm!(
-			"mrs {value}, cntpct_el0",
-			value = out(reg) value,
-			options(nostack),
-		);
-	}
-
-	value
+	CNTPCT_EL0.get() - BOOT_COUNTER.get().unwrap()
 }
 
 #[inline]
@@ -214,6 +205,7 @@ pub fn configure() {
 }
 
 pub fn detect_frequency() {
+	BOOT_COUNTER.set(CNTPCT_EL0.get()).unwrap();
 	Lazy::force(&CPU_FREQUENCY);
 }
 
@@ -221,27 +213,15 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-		let deadline = u128::from(wt) * u128::from(CPU_FREQUENCY.get()) / 1_000_000;
-		let deadline = u64::try_from(deadline).unwrap();
+		let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
+		let deadline = (wt / 1000) * freq;
 
-		unsafe {
-			asm!(
-				"msr cntp_cval_el0, {value}",
-				"msr cntp_ctl_el0, {enable}",
-				value = in(reg) deadline,
-				enable = in(reg) 1u64,
-				options(nostack, nomem),
-			);
-		}
+		CNTP_CVAL_EL0.set(deadline);
+		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
 	} else {
 		// disable timer
-		unsafe {
-			asm!(
-				"msr cntp_cval_el0, xzr",
-				"msr cntp_ctl_el0, xzr",
-				options(nostack, nomem),
-			);
-		}
+		CNTP_CVAL_EL0.set(0);
+		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
 	}
 }
 
