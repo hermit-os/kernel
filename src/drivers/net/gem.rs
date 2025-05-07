@@ -340,7 +340,7 @@ impl NetworkDriver for GEMDriver {
 				};
 				trace!("BUFFER: {buffer:x?}");
 				self.rx_buffer_consumed(index as usize);
-				Some((RxToken::new(buffer.to_vec()), TxToken::new()))
+				Some((RxToken::new(buffer.to_vec_in(DeviceAlloc)), TxToken::new()))
 			}
 			None => None,
 		}
