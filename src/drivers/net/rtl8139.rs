@@ -6,12 +6,10 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 
-use memory_addresses::VirtAddr;
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86_64::instructions::port::Port;
 
 use crate::arch::kernel::interrupts::*;
-use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
@@ -522,12 +520,7 @@ pub(crate) fn init_device(
 
 	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 
-	let phys_addr = |p| {
-		virt_to_phys(VirtAddr::from_ptr(p))
-			.as_u64()
-			.try_into()
-			.unwrap()
-	};
+	let phys_addr = |p: *const u8| u32::try_from(p.expose_provenance()).unwrap();
 
 	unsafe {
 		// register the receive buffer
