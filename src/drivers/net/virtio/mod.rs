@@ -500,6 +500,8 @@ impl VirtioNetDriver {
 			| virtio::net::F::MRG_RXBUF
 			// the link status can be announced
 			| virtio::net::F::STATUS
+			// control queue support
+			| virtio::net::F::CTRL_VQ
 			// Multiqueue support
 			| virtio::net::F::MQ;
 
