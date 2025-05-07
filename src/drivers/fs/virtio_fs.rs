@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
@@ -8,6 +7,7 @@ use virtio::FeatureBits;
 use virtio::fs::ConfigVolatileFieldAccess;
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
@@ -158,30 +158,26 @@ impl FuseInterface for VirtioFsDriver {
 		rsp_payload_len: u32,
 	) -> Result<fuse::Rsp<O>, VirtqError>
 	where
-		<O as fuse::ops::Op>::InStruct: Send,
-		<O as fuse::ops::Op>::OutStruct: Send,
+		<O as fuse::ops::Op>::InStruct: Send + IntoBytes + Immutable,
+		<O as fuse::ops::Op>::OutStruct: Send + FromBytes,
 	{
 		let fuse::Cmd {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
 		} = cmd;
 		let send = if let Some(cmd_payload) = cmd_payload_opt {
-			vec![
-				BufferElem::Sized(cmd_headers),
-				BufferElem::Vector(cmd_payload),
-			]
+			vec![BufferElem::from(cmd_headers), BufferElem(cmd_payload)]
 		} else {
-			vec![BufferElem::Sized(cmd_headers)]
+			vec![BufferElem::from(cmd_headers)]
 		};
 
-		let rsp_headers = Box::<RspHeader<O>, _>::new_uninit_in(DeviceAlloc);
 		let recv = if rsp_payload_len == 0 {
-			vec![BufferElem::Sized(rsp_headers)]
+			vec![BufferElem::new_uninit::<RspHeader<O>>()]
 		} else {
 			let rsp_payload = Vec::with_capacity_in(rsp_payload_len as usize, DeviceAlloc);
 			vec![
-				BufferElem::Sized(rsp_headers),
-				BufferElem::Vector(rsp_payload),
+				BufferElem::new_uninit::<RspHeader<O>>(),
+				BufferElem(rsp_payload),
 			]
 		};
 
@@ -189,7 +185,10 @@ impl FuseInterface for VirtioFsDriver {
 		let mut transfer_result =
 			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
 
-		let headers = transfer_result.used_recv_buff.pop_front_downcast().unwrap();
+		let headers = transfer_result
+			.used_recv_buff
+			.pop_front_deserialize()
+			.unwrap();
 		let payload = transfer_result.used_recv_buff.pop_front_vec();
 		Ok(Rsp { headers, payload })
 	}

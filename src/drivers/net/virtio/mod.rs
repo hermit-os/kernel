@@ -10,7 +10,6 @@ cfg_if::cfg_if! {
 	}
 }
 
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
@@ -116,8 +115,8 @@ fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 		let buff_tkn = match AvailBufferToken::new(
 			vec![],
 			vec![
-				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-				BufferElem::Vector(Vec::with_capacity_in(
+				BufferElem::new_uninit::<Hdr>(),
+				BufferElem(Vec::with_capacity_in(
 					packet_size.try_into().unwrap(),
 					DeviceAlloc,
 				)),
@@ -256,7 +255,7 @@ impl NetworkDriver for VirtioNetDriver {
 			result
 		};
 
-		let mut header = Box::new_in(<Hdr as Default>::default(), DeviceAlloc);
+		let mut header = Hdr::default();
 		// If a checksum isn't necessary, we have inform the host within the header
 		// see Virtio specification 5.1.6.2
 		if !self.checksums.tcp.tx() || !self.checksums.udp.tx() {
@@ -291,11 +290,9 @@ impl NetworkDriver for VirtioNetDriver {
 			.into();
 		}
 
-		let buff_tkn = AvailBufferToken::new(
-			vec![BufferElem::Sized(header), BufferElem::Vector(packet)],
-			vec![],
-		)
-		.unwrap();
+		let buff_tkn =
+			AvailBufferToken::new(vec![BufferElem::from(header), BufferElem(packet)], vec![])
+				.unwrap();
 
 		self.send_vqs.vqs[0]
 			.dispatch(buff_tkn, false, BufferType::Direct)
@@ -309,7 +306,7 @@ impl NetworkDriver for VirtioNetDriver {
 		RxQueues::post_processing(&mut buffer_tkn)
 			.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
 			.ok()?;
-		let first_header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+		let first_header = buffer_tkn.used_recv_buff.pop_front_deserialize::<Hdr>()?;
 		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 		trace!("Header: {first_header:?}");
 
@@ -329,7 +326,7 @@ impl NetworkDriver for VirtioNetDriver {
 			RxQueues::post_processing(&mut buffer_tkn)
 				.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
 				.ok()?;
-			let _header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+			let _header = buffer_tkn.used_recv_buff.pop_front_deserialize::<Hdr>()?;
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 			packets.push(packet);
 		}

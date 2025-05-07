@@ -13,7 +13,7 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
 use num_traits::FromPrimitive;
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -50,8 +50,8 @@ pub(crate) trait FuseInterface {
 		rsp_payload_len: u32,
 	) -> Result<Rsp<O>, VirtqError>
 	where
-		<O as ops::Op>::InStruct: Send,
-		<O as ops::Op>::OutStruct: Send;
+		<O as ops::Op>::InStruct: Send + IntoBytes + Immutable,
+		<O as ops::Op>::OutStruct: Send + FromBytes;
 
 	fn get_mount_point(&self) -> String;
 }
@@ -62,13 +62,14 @@ pub(crate) mod ops {
 	use alloc::ffi::CString;
 
 	use fuse_abi::linux::*;
+	use zerocopy::FromBytes;
 
 	use super::Cmd;
 	use crate::fd::PollEvent;
 	use crate::fs::SeekWhence;
 
 	#[repr(C)]
-	#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
+	#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, FromBytes)]
 	pub(crate) struct CreateOut {
 		pub entry: fuse_entry_out,
 		pub open: fuse_open_out,
@@ -447,8 +448,8 @@ impl From<fuse_attr> for FileAttr {
 	}
 }
 
-#[repr(C)]
-#[derive(Debug)]
+#[repr(C, packed)]
+#[derive(Debug, IntoBytes, Immutable)]
 pub(crate) struct CmdHeader<O: ops::Op> {
 	pub in_header: fuse_in_header,
 	op_header: O::InStruct,
@@ -484,7 +485,7 @@ impl<O: ops::Op> CmdHeader<O> {
 }
 
 pub(crate) struct Cmd<O: ops::Op> {
-	pub headers: Box<CmdHeader<O>, DeviceAlloc>,
+	pub headers: CmdHeader<O>,
 	pub payload: Option<Vec<u8, DeviceAlloc>>,
 }
 
@@ -494,7 +495,7 @@ where
 {
 	fn new(nodeid: u64, op_header: O::InStruct) -> Self {
 		Self {
-			headers: Box::new_in(CmdHeader::new(nodeid, op_header), DeviceAlloc),
+			headers: CmdHeader::new(nodeid, op_header),
 			payload: None,
 		}
 	}
@@ -507,10 +508,7 @@ where
 	fn with_cstring(nodeid: u64, op_header: O::InStruct, cstring: CString) -> Self {
 		let cstring_bytes = cstring.into_bytes_with_nul().to_vec_in(DeviceAlloc);
 		Self {
-			headers: Box::new_in(
-				CmdHeader::with_payload_size(nodeid, op_header, cstring_bytes.len()),
-				DeviceAlloc,
-			),
+			headers: CmdHeader::with_payload_size(nodeid, op_header, cstring_bytes.len()),
 			payload: Some(cstring_bytes),
 		}
 	}
@@ -524,17 +522,14 @@ where
 		let mut device_slice = Vec::with_capacity_in(slice.len(), DeviceAlloc);
 		device_slice.extend_from_slice(&slice);
 		Self {
-			headers: Box::new_in(
-				CmdHeader::with_payload_size(nodeid, op_header, slice.len()),
-				DeviceAlloc,
-			),
+			headers: CmdHeader::with_payload_size(nodeid, op_header, slice.len()),
 			payload: Some(device_slice),
 		}
 	}
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, FromBytes)]
 pub(crate) struct RspHeader<O: ops::Op> {
 	out_header: fuse_out_header,
 	op_header: O::OutStruct,
