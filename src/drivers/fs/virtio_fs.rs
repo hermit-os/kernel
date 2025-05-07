@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::str;
 
 use pci_types::InterruptLine;
+use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::fs::ConfigVolatileFieldAccess;
 use volatile::VolatileRef;
@@ -168,23 +169,26 @@ impl FuseInterface for VirtioFsDriver {
 			payload: cmd_payload_opt,
 		} = cmd;
 		let send = if let Some(cmd_payload) = cmd_payload_opt {
-			vec![
+			SmallVec::from_buf([
 				BufferElem::Sized(cmd_headers),
 				BufferElem::Vector(cmd_payload),
-			]
+			])
 		} else {
-			vec![BufferElem::Sized(cmd_headers)]
+			let mut vec = SmallVec::new();
+			vec.push(BufferElem::Sized(cmd_headers));
+			vec
 		};
 
 		let rsp_headers = Box::<RspHeader<O>, _>::new_uninit_in(DeviceAlloc);
 		let recv = if rsp_payload_len == 0 {
-			vec![BufferElem::Sized(rsp_headers)]
+			let mut vec = SmallVec::new();
+			vec.push(BufferElem::Sized(rsp_headers));
+			vec
 		} else {
-			let rsp_payload = Vec::with_capacity_in(rsp_payload_len as usize, DeviceAlloc);
-			vec![
+			SmallVec::from_buf([
 				BufferElem::Sized(rsp_headers),
-				BufferElem::Vector(rsp_payload),
-			]
+				BufferElem::Vector(Vec::with_capacity_in(rsp_payload_len as usize, DeviceAlloc)),
+			])
 		};
 
 		let buffer_tkn = AvailBufferToken::new(send, recv).unwrap();
