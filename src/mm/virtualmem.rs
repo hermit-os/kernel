@@ -26,8 +26,8 @@ pub fn init() {
 pub fn kernel_heap_end() -> VirtAddr {
 	cfg_if::cfg_if! {
 		if #[cfg(target_arch = "aarch64")] {
-			// 4 GiB
-			VirtAddr::new(0x1_0000_0000 - 1)
+			// maximum address, which can be supported by TTBR0
+			VirtAddr::new(0xFFFF_FFFF_FFFF)
 		} else if #[cfg(target_arch = "riscv64")] {
 			// 256 GiB
 			VirtAddr::new(0x0040_0000_0000 - 1)
