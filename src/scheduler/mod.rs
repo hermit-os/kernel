@@ -150,13 +150,18 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		}
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());
+		#[cfg(feature = "smp")]
+		let core_id = self.core_id;
+		#[cfg(not(feature = "smp"))]
+		let core_id = 0;
+
 		GicV3::send_sgi(
 			reschedid,
 			SgiTarget::List {
 				affinity3: 0,
 				affinity2: 0,
 				affinity1: 0,
-				target_list: 0b1,
+				target_list: 1 << core_id,
 			},
 		);
 

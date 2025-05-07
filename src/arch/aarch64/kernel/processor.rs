@@ -98,10 +98,6 @@ pub fn seed_entropy() -> Option<[u8; 32]> {
 	None
 }
 
-pub(crate) fn run_on_hypervisor() -> bool {
-	true
-}
-
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
@@ -246,8 +242,5 @@ pub fn print_information() {
 	infoheader!(" CPU INFORMATION ");
 	infoentry!("Processor compatibility", str::from_utf8(reg).unwrap());
 	infoentry!("Counter frequency", *CPU_FREQUENCY);
-	if run_on_hypervisor() {
-		info!("Run on hypervisor");
-	}
 	infofooter!();
 }

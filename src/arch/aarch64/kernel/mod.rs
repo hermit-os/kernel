@@ -163,11 +163,12 @@ pub fn boot_processor_init() {
 #[allow(dead_code)]
 pub fn application_processor_init() {
 	CoreLocal::install();
+	interrupts::init_cpu();
 	finish_processor_init();
 }
 
 fn finish_processor_init() {
-	debug!("Initialized Processor");
+	debug!("Initialized processor {}", core_id());
 
 	// Allocate stack for the CPU and pass the addresses.
 	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
@@ -177,7 +178,82 @@ fn finish_processor_init() {
 }
 
 pub fn boot_next_processor() {
-	CPU_ONLINE.0.fetch_add(1, Ordering::Release);
+	// This triggers to wake up the next processor (bare-metal/QEMU) or uhyve
+	// to initialize the next processor.
+	#[allow(unused_variables)]
+	let cpu_online = CPU_ONLINE.0.fetch_add(1, Ordering::Release);
+
+	#[cfg(all(target_os = "none", feature = "smp"))]
+	if !env::is_uhyve() && get_possible_cpus() > 1 {
+		use core::arch::asm;
+		use core::hint::spin_loop;
+
+		use hermit_dtb::Dtb;
+
+		use crate::kernel::start::{TTBR0, smp_start};
+		use crate::mm::virtual_to_physical;
+
+		if cpu_online == 0 {
+			let virt_start = VirtAddr::from(smp_start as usize);
+			let phys_start = virtual_to_physical(virt_start).unwrap();
+			assert!(virt_start.as_u64() == phys_start.as_u64());
+
+			trace!("Virtual address of smp_start 0x{virt_start:x}");
+			trace!("Physical address of smp_start 0x{phys_start:x}");
+
+			let dtb = unsafe {
+				Dtb::from_raw(core::ptr::with_exposed_provenance(
+					env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
+				))
+				.expect(".dtb file has invalid header")
+			};
+
+			let cpu_on = u32::from_be_bytes(
+				dtb.get_property("/psci", "cpu_on")
+					.unwrap()
+					.try_into()
+					.unwrap(),
+			);
+			trace!("CPU_ON: 0x{cpu_on:x}");
+			let method =
+				core::str::from_utf8(dtb.get_property("/psci", "method").unwrap_or(b"unknown"))
+					.unwrap()
+					.replace('\0', "");
+
+			let ttbr0: *mut u8;
+			unsafe {
+				asm!(
+					"mrs {}, ttbr0_el1",
+					out(reg) ttbr0,
+				);
+			}
+			TTBR0.store(ttbr0, Ordering::Relaxed);
+
+			for cpu_id in 1..get_possible_cpus() {
+				debug!("Try to wake-up core {cpu_id}");
+
+				if method == "hvc" {
+					// call hypervisor to wakeup next core
+					unsafe {
+						asm!("hvc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, options(nomem, nostack));
+					}
+				} else if method == "smc" {
+					// call secure monitor to wakeup next core
+					unsafe {
+						asm!("smc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, options(nomem, nostack));
+					}
+				} else {
+					warn!("Method {method} isn't supported!");
+					return;
+				}
+
+				// wait for next core
+				while CPU_ONLINE.0.load(Ordering::Relaxed) < cpu_id + 1 {
+					spin_loop();
+				}
+			}
+		}
+	}
 }
 
 pub fn print_statistics() {
