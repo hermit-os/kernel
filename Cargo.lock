@@ -156,6 +156,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arm_pl031"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13696b1c2b59992f4223e0ae5bb173c81c63039367ca90eee845346ad2a13421"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "async-lock"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -687,6 +696,7 @@ dependencies = [
  "anstyle",
  "anyhow",
  "arm-gic",
+ "arm_pl031",
  "async-lock",
  "async-trait",
  "bit_field",
