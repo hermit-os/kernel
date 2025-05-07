@@ -210,9 +210,9 @@ pub(crate) struct RTL8139Driver {
 	mac: [u8; 6],
 	tx_in_use: [bool; NO_TX_BUFFERS],
 	tx_counter: usize,
-	rxbuffer: Box<[u8]>,
+	rxbuffer: Box<[u8], DeviceAlloc>,
 	rxpos: usize,
-	txbuffer: Box<[u8]>,
+	txbuffer: Box<[u8], DeviceAlloc>,
 }
 
 impl NetworkDriver for RTL8139Driver {
@@ -515,8 +515,10 @@ pub(crate) fn init_device(
 		Port::<u32>::new(iobase + TCR).write(TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
 	}
 
-	let rxbuffer = vec![0; RX_BUF_LEN].into_boxed_slice();
-	let txbuffer = vec![0; NO_TX_BUFFERS * TX_BUF_LEN].into_boxed_slice();
+	let rxbuffer = Box::new_zeroed_slice_in(RX_BUF_LEN, DeviceAlloc);
+	let rxbuffer = unsafe { rxbuffer.assume_init() };
+	let txbuffer = Box::new_zeroed_slice_in(NO_TX_BUFFERS * TX_BUF_LEN, DeviceAlloc);
+	let txbuffer = unsafe { txbuffer.assume_init() };
 
 	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 
