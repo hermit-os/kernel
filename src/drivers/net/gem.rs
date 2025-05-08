@@ -402,7 +402,7 @@ impl NetworkDriver for GEMDriver {
 			}
 
 			// handle incoming packets
-			todo!();
+			warn!("Interrupt is received but 'user space' will not be notified.");
 		}
 	}
 }
