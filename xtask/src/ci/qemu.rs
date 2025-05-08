@@ -99,7 +99,7 @@ impl Qemu {
 		}
 
 		match image_name {
-			"http_server" | "http_server_poll" => {
+			"axum-example" | "http_server" | "http_server_poll" => {
 				test_http_server()?;
 				qemu.0.kill()?;
 			}
