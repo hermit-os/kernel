@@ -1,0 +1,23 @@
+[graph]
+targets = [
+    "x86_64-unknown-none",
+    "aarch64-unknown-none-softfloat",
+    "riscv64gc-unknown-none-elf",
+]
+all-features = true
+
+[advisories]
+ignore = [
+    { id = "RUSTSEC-2024-0436", reason = "`paste` is unmaintained, but finished. See https://github.com/rustsec/advisory-db/pull/2215#issuecomment-2709315704." },
+]
+
+[licenses]
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "MIT",
+    "MPL-2.0",
+    "ISC",
+    "Unicode-3.0",
+]
+confidence-threshold = 1.0
