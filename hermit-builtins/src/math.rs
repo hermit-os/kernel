@@ -60,8 +60,16 @@ export! {
 	fn fmaf(x: f32, y: f32, z: f32) -> f32;
 	fn fmax(x: f64, y: f64) -> f64;
 	fn fmaxf(x: f32, y: f32) -> f32;
+	fn fmaximum(x: f64, y: f64) -> f64;
+	fn fmaximum_num(x: f64, y: f64) -> f64;
+	fn fmaximumf(x: f32, y: f32) -> f32;
+	fn fmaximum_numf(x: f32, y: f32) -> f32;
 	fn fmin(x: f64, y: f64) -> f64;
 	fn fminf(x: f32, y: f32) -> f32;
+	fn fminimum(x: f64, y: f64) -> f64;
+	fn fminimum_num(x: f64, y: f64) -> f64;
+	fn fminimumf(x: f32, y: f32) -> f32;
+	fn fminimum_numf(x: f32, y: f32) -> f32;
 	fn fmod(x: f64, y: f64) -> f64;
 	fn fmodf(x: f32, y: f32) -> f32;
 	// fn frexp(x: f64, n: &mut i32) -> f64;
@@ -103,6 +111,8 @@ export! {
 	fn rint(x: f64) -> f64;
 	fn rintf(x: f32) -> f32;
 	fn round(x: f64) -> f64;
+	fn roundeven(x: f64) -> f64;
+	fn roundevenf(x: f32) -> f32;
 	fn roundf(x: f32) -> f32;
 	fn scalbn(x: f64, n: i32) -> f64;
 	fn scalbnf(x: f32, n: i32) -> f32;

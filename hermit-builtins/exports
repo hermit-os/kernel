@@ -44,8 +44,16 @@ fma
 fmaf
 fmax
 fmaxf
+fmaximum
+fmaximum_num
+fmaximumf
+fmaximum_numf
 fmin
 fminf
+fminimum
+fminimum_num
+fminimumf
+fminimum_numf
 fmod
 fmodf
 frexp
@@ -93,6 +101,8 @@ remquof
 rint
 rintf
 round
+roundeven
+roundevenf
 roundf
 scalbn
 scalbnf
