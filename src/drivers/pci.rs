@@ -27,7 +27,7 @@ use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	any(feature = "tcp", feature = "udp")
 ))]
-use crate::drivers::net::virtio::VirtioNetDriver;
+use crate::drivers::net::virtio::{Init, VirtioNetDriver};
 #[cfg(any(
 	all(
 		any(feature = "tcp", feature = "udp"),
@@ -337,7 +337,7 @@ pub(crate) enum PciDriver {
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 		any(feature = "tcp", feature = "udp")
 	))]
-	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
+	VirtioNet(InterruptTicketMutex<VirtioNetDriver<Init>>),
 	#[cfg(all(
 		target_arch = "x86_64",
 		feature = "rtl8139",
@@ -351,7 +351,7 @@ impl PciDriver {
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 		any(feature = "tcp", feature = "udp")
 	))]
-	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
+	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver<Init>>> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
@@ -477,7 +477,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	any(feature = "tcp", feature = "udp")
 ))]
-pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
+pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver<Init>>> {
 	PCI_DRIVERS
 		.get()?
 		.iter()

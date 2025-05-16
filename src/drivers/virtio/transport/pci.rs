@@ -26,7 +26,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	any(feature = "tcp", feature = "udp")
 ))]
-use crate::drivers::net::virtio::VirtioNetDriver;
+use crate::drivers::net::virtio::{Init, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::virtio::error::VirtioError;
@@ -876,7 +876,7 @@ pub(crate) enum VirtioDriver {
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 		any(feature = "tcp", feature = "udp")
 	))]
-	Network(VirtioNetDriver),
+	Network(VirtioNetDriver<Init>),
 	#[cfg(feature = "vsock")]
 	Vsock(VirtioVsockDriver),
 	#[cfg(feature = "fuse")]
