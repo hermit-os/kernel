@@ -399,9 +399,8 @@ impl PerCoreScheduler {
 	pub fn handle_waiting_tasks(&mut self) {
 		without_interrupts(|| {
 			crate::executor::run();
-			for task in self.blocked_tasks.handle_waiting_tasks() {
-				self.ready_queue.push(task);
-			}
+			self.blocked_tasks
+				.handle_waiting_tasks(&mut self.ready_queue);
 		});
 	}
 

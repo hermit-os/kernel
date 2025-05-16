@@ -5,7 +5,6 @@ use alloc::boxed::Box;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
 use core::{cmp, fmt};
@@ -535,7 +534,7 @@ impl BlockedTaskQueue {
 		}
 	}
 
-	fn wakeup_task(task: Rc<RefCell<Task>>) {
+	fn mark_ready(task: &RefCell<Task>) {
 		let mut borrowed = task.borrow_mut();
 		debug!(
 			"Waking up task {} on core {}",
@@ -674,7 +673,7 @@ impl BlockedTaskQueue {
 				}
 
 				// Wake it up.
-				Self::wakeup_task(task_ref.clone());
+				Self::mark_ready(&task_ref);
 
 				return task_ref;
 			}
@@ -690,7 +689,7 @@ impl BlockedTaskQueue {
 	///
 	/// Should be called by the One-Shot Timer interrupt handler when the wakeup time for
 	/// at least one task has elapsed.
-	pub fn handle_waiting_tasks(&mut self) -> Vec<Rc<RefCell<Task>>> {
+	pub fn handle_waiting_tasks(&mut self, ready_queue: &mut PriorityTaskQueue) {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
 
@@ -703,48 +702,35 @@ impl BlockedTaskQueue {
 			}
 		}
 
-		let mut tasks = vec![];
+		// Get the wakeup time of this task and check if we have reached the first task
+		// that hasn't elapsed yet or waits indefinitely.
+		// This iterator has to be consumed to actually remove the elements.
+		let newly_ready_tasks = self.list.extract_if(|blocked_task| {
+			blocked_task
+				.wakeup_time
+				.is_some_and(|wakeup_time| wakeup_time < time)
+		});
 
-		// Loop through all blocked tasks.
-		let mut cursor = self.list.cursor_front_mut();
-		while let Some(node) = cursor.current() {
-			// Get the wakeup time of this task and check if we have reached the first task
-			// that hasn't elapsed yet or waits indefinitely.
-			let node_wakeup_time = node.wakeup_time;
-			if node_wakeup_time.is_none() || time < node_wakeup_time.unwrap() {
-				break;
+		for task in newly_ready_tasks {
+			Self::mark_ready(&task.task);
+			ready_queue.push(task.task);
+		}
+
+		let new_task_wakeup_time = self.list.front().and_then(|task| task.wakeup_time);
+		cfg_if::cfg_if! {
+			if 	#[cfg(any(feature = "tcp", feature = "udp"))] {
+				let network_wakeup_time = self.network_wakeup_time;
+			} else {
+				let network_wakeup_time = None;
 			}
+		};
+		let timer_wakeup_time = match (new_task_wakeup_time, network_wakeup_time) {
+			(None, None) => None,
+			(None, Some(network_wt)) => Some(network_wt),
+			(Some(task_wt), None) => Some(task_wt),
+			(Some(task_wt), Some(network_wt)) => Some(u64::min(task_wt, network_wt)),
+		};
 
-			// Otherwise, this task has elapsed, so remove it from the list and wake it up.
-			tasks.push(node.task.clone());
-			cursor.remove_current();
-		}
-
-		#[cfg(any(feature = "tcp", feature = "udp"))]
-		arch::set_oneshot_timer(cursor.current().map_or_else(
-			|| self.network_wakeup_time,
-			|node| match node.wakeup_time {
-				Some(wt) => {
-					if let Some(timer) = self.network_wakeup_time {
-						if wt < timer { Some(wt) } else { Some(timer) }
-					} else {
-						Some(wt)
-					}
-				}
-				None => self.network_wakeup_time,
-			},
-		));
-		#[cfg(not(any(feature = "tcp", feature = "udp")))]
-		arch::set_oneshot_timer(
-			cursor
-				.current()
-				.map_or_else(|| None, |node| node.wakeup_time),
-		);
-
-		for task in tasks.iter().cloned() {
-			Self::wakeup_task(task);
-		}
-
-		tasks
+		arch::set_oneshot_timer(timer_wakeup_time);
 	}
 }
