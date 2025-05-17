@@ -3,6 +3,7 @@
 //! The module contains ...
 #![allow(dead_code)]
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -836,7 +837,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
-				Ok(VirtioDriver::Vsock(virt_sock_drv))
+				Ok(VirtioDriver::Vsock(Box::new(virt_sock_drv)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio sock driver could not be initialized with device: {device_id:x}");
@@ -878,7 +879,7 @@ pub(crate) enum VirtioDriver {
 	))]
 	Network(VirtioNetDriver),
 	#[cfg(feature = "vsock")]
-	Vsock(VirtioVsockDriver),
+	Vsock(Box<VirtioVsockDriver>),
 	#[cfg(feature = "fuse")]
 	FileSystem(VirtioFsDriver),
 }
