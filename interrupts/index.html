@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Cross-architecture utilities for temporarily disabling interrupts and signals."><title>interrupts - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="interrupts" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../interrupts/index.html">interrupts</a><span class="version">0.1.5</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#caveats" title="Caveats">Caveats</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#related-crates" title="Related Crates">Related Crates</a></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>interrupts</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/interrupts/lib.rs.html#1-200">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Cross-architecture utilities for temporarily disabling interrupts and signals.</p>
+<p>This crate allows you to temporarily disable interrupts and then restore the previous state again.</p>
+<p>Supported platforms:</p>
+<ul>
+<li>
+<p>bare-metal (kernel mode, <code>target_os = "none"</code>)</p>
+<p>Disables hardware interrupts.</p>
+<ul>
+<li>
+<p>AArch64 (<code>arch = aarch64</code>)</p>
+</li>
+<li>
+<p>64-bit RISC-V (<code>arch = riscv64</code>)</p>
+</li>
+<li>
+<p>x86-64 (<code>arch = x86_64</code>)</p>
+</li>
+</ul>
+</li>
+<li>
+<p>Unix (user mode, <code>unix</code>)</p>
+<p>Disables signals.</p>
+</li>
+</ul>
+<p>On targets with non-unix operating systems (not <code>cfg!(unix)</code>), this crate does nothing.</p>
+<h2 id="caveats"><a class="doc-anchor" href="#caveats">§</a>Caveats</h2><div class="warning">Interrupts are disabled on a best-effort basis.</div>
+<p>Even though this crate makes sure that interrupts are disabled, nothing prevents you from manually enabling them again.</p>
+<p><a href="struct.Guard.html#caveats-drop-order" title="struct interrupts::Guard">Manually dropping</a> <a href="struct.Guard.html" title="struct interrupts::Guard"><code>Guard</code></a>s  may also cause interrupts to be enabled.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>Use <a href="fn.disable.html" title="fn interrupts::disable"><code>disable</code></a> to disable interrupts with a guard:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// interrupts may or may not be enabled
+</span><span class="kw">let </span>guard = interrupts::disable();
+<span class="comment">// interrupts are disabled
+</span>drop(guard);
+<span class="comment">// interrupts are restored to the previous state</span></code></pre></div>
+<p>Use <a href="fn.without.html" title="fn interrupts::without"><code>without</code></a> to run a closure with disabled interrupts:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// interrupts may or may not be enabled
+</span>interrupts::without(|| {
+    <span class="comment">// interrupts are disabled
+</span>});
+<span class="comment">// interrupts are restored to the previous state</span></code></pre></div>
+<h2 id="related-crates"><a class="doc-anchor" href="#related-crates">§</a>Related Crates</h2>
+<ul>
+<li><a href="https://crates.io/crates/interrupt-ref-cell">interrupt-ref-cell</a> (A <code>RefCell</code> for sharing data with interrupt handlers or signal handlers on the same thread.)</li>
+<li><a href="https://crates.io/crates/interrupt-mutex">interrupt-mutex</a> (A mutex for sharing data with interrupt handlers or signal handlers.)</li>
+</ul>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Guard.html" title="struct interrupts::Guard">Guard</a></dt><dd>An interrupt guard.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.disable.html" title="fn interrupts::disable">disable</a></dt><dd>Temporarily disable interrupts.</dd><dt><a class="fn" href="fn.without.html" title="fn interrupts::without">without</a></dt><dd>Run a closure with disabled interrupts.</dd></dl></section></div></main></body></html>

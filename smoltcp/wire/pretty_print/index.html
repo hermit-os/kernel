@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Pretty-printing of packet representation."><title>smoltcp::wire::pretty_print - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="smoltcp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../../static.files/storage-4e99c027.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../smoltcp/index.html">smoltcp</a><span class="version">0.12.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module pretty_<wbr>print</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#example" title="Example">Example</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In smoltcp::<wbr>wire</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">smoltcp</a>::<wbr><a href="../index.html">wire</a></div><h1>Module <span>pretty_print</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/smoltcp/wire/pretty_print.rs.html#1-126">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Pretty-printing of packet representation.</p>
+<p>The <code>pretty_print</code> module provides bits and pieces for printing concise,
+easily human readable packet listings.</p>
+<h2 id="example"><a class="doc-anchor" href="#example">§</a>Example</h2>
+<p>A packet can be formatted using the <code>PrettyPrinter</code> wrapper:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>smoltcp::wire::<span class="kw-2">*</span>;
+<span class="kw">let </span>buffer = <span class="macro">vec!</span>[
+    <span class="comment">// Ethernet II
+    </span><span class="number">0x01</span>, <span class="number">0x02</span>, <span class="number">0x03</span>, <span class="number">0x04</span>, <span class="number">0x05</span>, <span class="number">0x06</span>,
+    <span class="number">0x11</span>, <span class="number">0x12</span>, <span class="number">0x13</span>, <span class="number">0x14</span>, <span class="number">0x15</span>, <span class="number">0x16</span>,
+    <span class="number">0x08</span>, <span class="number">0x00</span>,
+    <span class="comment">// IPv4
+    </span><span class="number">0x45</span>, <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0x20</span>,
+    <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0x40</span>, <span class="number">0x00</span>,
+    <span class="number">0x40</span>, <span class="number">0x01</span>, <span class="number">0xd2</span>, <span class="number">0x79</span>,
+    <span class="number">0x11</span>, <span class="number">0x12</span>, <span class="number">0x13</span>, <span class="number">0x14</span>,
+    <span class="number">0x21</span>, <span class="number">0x22</span>, <span class="number">0x23</span>, <span class="number">0x24</span>,
+    <span class="comment">// ICMPv4
+    </span><span class="number">0x08</span>, <span class="number">0x00</span>, <span class="number">0x8e</span>, <span class="number">0xfe</span>,
+    <span class="number">0x12</span>, <span class="number">0x34</span>, <span class="number">0xab</span>, <span class="number">0xcd</span>,
+    <span class="number">0xaa</span>, <span class="number">0x00</span>, <span class="number">0x00</span>, <span class="number">0xff
+</span>];
+
+<span class="kw">let </span>result = <span class="string">"\
+EthernetII src=11-12-13-14-15-16 dst=01-02-03-04-05-06 type=IPv4\n\
+\\ IPv4 src=17.18.19.20 dst=33.34.35.36 proto=ICMP (checksum incorrect)\n \
+ \\ ICMPv4 echo request id=4660 seq=43981 len=4\
+"</span>;
+
+<span class="attr">#[cfg(all(feature = <span class="string">"medium-ethernet"</span>, feature = <span class="string">"proto-ipv4"</span>))]
+</span><span class="macro">assert_eq!</span>(
+    result,
+    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, PrettyPrinter::&lt;EthernetFrame&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>[u8]&gt;&gt;::new(<span class="string">""</span>, <span class="kw-2">&amp;</span>buffer))
+);</code></pre></div>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.PrettyIndent.html" title="struct smoltcp::wire::pretty_print::PrettyIndent">Pretty<wbr>Indent</a></dt><dd>Indentation state.</dd><dt><a class="struct" href="struct.PrettyPrinter.html" title="struct smoltcp::wire::pretty_print::PrettyPrinter">Pretty<wbr>Printer</a></dt><dd>Wrapper for using a <code>PrettyPrint</code> where a <code>Display</code> is expected.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.PrettyPrint.html" title="trait smoltcp::wire::pretty_print::PrettyPrint">Pretty<wbr>Print</a></dt><dd>Interface for printing listings.</dd></dl></section></div></main></body></html>

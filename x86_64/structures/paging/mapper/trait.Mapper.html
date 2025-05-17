@@ -1,0 +1,255 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A trait for common page table operations on pages of size `S`."><title>Mapper in x86_64::structures::paging::mapper - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="x86_64" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../../../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../x86_64/index.html">x86_64</a><span class="version">0.15.2</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Mapper</a></h2><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.map_to_with_table_flags" title="map_to_with_table_flags">map_to_with_table_flags</a></li><li><a href="#tymethod.set_flags_p2_entry" title="set_flags_p2_entry">set_flags_p2_entry</a></li><li><a href="#tymethod.set_flags_p3_entry" title="set_flags_p3_entry">set_flags_p3_entry</a></li><li><a href="#tymethod.set_flags_p4_entry" title="set_flags_p4_entry">set_flags_p4_entry</a></li><li><a href="#tymethod.translate_page" title="translate_page">translate_page</a></li><li><a href="#tymethod.unmap" title="unmap">unmap</a></li><li><a href="#tymethod.update_flags" title="update_flags">update_flags</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.identity_map" title="identity_map">identity_map</a></li><li><a href="#method.map_to" title="map_to">map_to</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In x86_<wbr>64::<wbr>structures::<wbr>paging::<wbr>mapper</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">x86_64</a>::<wbr><a href="../../index.html">structures</a>::<wbr><a href="../index.html">paging</a>::<wbr><a href="index.html">mapper</a></div><h1>Trait <span class="trait">Mapper</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#110-377">Source</a> </span></div><pre class="rust item-decl"><code>pub trait Mapper&lt;S: <a class="trait" href="../page/trait.PageSize.html" title="trait x86_64::structures::paging::page::PageSize">PageSize</a>&gt; {
+    // Required methods
+    unsafe fn <a href="#tymethod.map_to_with_table_flags" class="fn">map_to_with_table_flags</a>&lt;A&gt;(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+        frame: <a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+        parent_table_flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+        frame_allocator: <a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.reference.html">&amp;mut A</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.MapToError.html" title="enum x86_64::structures::paging::mapper::MapToError">MapToError</a>&lt;S&gt;&gt;
+       <span class="where">where Self: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,
+             A: <a class="trait" href="../trait.FrameAllocator.html" title="trait x86_64::structures::paging::FrameAllocator">FrameAllocator</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a></span>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.unmap" class="fn">unmap</a>(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;(<a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;, <a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;), <a class="enum" href="enum.UnmapError.html" title="enum x86_64::structures::paging::mapper::UnmapError">UnmapError</a>&gt;;
+<span class="item-spacer"></span>    unsafe fn <a href="#tymethod.update_flags" class="fn">update_flags</a>(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;;
+<span class="item-spacer"></span>    unsafe fn <a href="#tymethod.set_flags_p4_entry" class="fn">set_flags_p4_entry</a>(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlushAll.html" title="struct x86_64::structures::paging::mapper::MapperFlushAll">MapperFlushAll</a>, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;;
+<span class="item-spacer"></span>    unsafe fn <a href="#tymethod.set_flags_p3_entry" class="fn">set_flags_p3_entry</a>(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlushAll.html" title="struct x86_64::structures::paging::mapper::MapperFlushAll">MapperFlushAll</a>, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;;
+<span class="item-spacer"></span>    unsafe fn <a href="#tymethod.set_flags_p2_entry" class="fn">set_flags_p2_entry</a>(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlushAll.html" title="struct x86_64::structures::paging::mapper::MapperFlushAll">MapperFlushAll</a>, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.translate_page" class="fn">translate_page</a>(
+        &amp;self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;, <a class="enum" href="enum.TranslateError.html" title="enum x86_64::structures::paging::mapper::TranslateError">TranslateError</a>&gt;;
+
+    // Provided methods
+    unsafe fn <a href="#method.map_to" class="fn">map_to</a>&lt;A&gt;(
+        &amp;mut self,
+        page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+        frame: <a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+        frame_allocator: <a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.reference.html">&amp;mut A</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.MapToError.html" title="enum x86_64::structures::paging::mapper::MapToError">MapToError</a>&lt;S&gt;&gt;
+       <span class="where">where Self: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,
+             A: <a class="trait" href="../trait.FrameAllocator.html" title="trait x86_64::structures::paging::FrameAllocator">FrameAllocator</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a></span> { ... }
+<span class="item-spacer"></span>    unsafe fn <a href="#method.identity_map" class="fn">identity_map</a>&lt;A&gt;(
+        &amp;mut self,
+        frame: <a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;,
+        flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+        frame_allocator: <a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.reference.html">&amp;mut A</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.MapToError.html" title="enum x86_64::structures::paging::mapper::MapToError">MapToError</a>&lt;S&gt;&gt;
+       <span class="where">where Self: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a> + <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;S&gt;,
+             A: <a class="trait" href="../trait.FrameAllocator.html" title="trait x86_64::structures::paging::FrameAllocator">FrameAllocator</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,
+             S: <a class="trait" href="../page/trait.PageSize.html" title="trait x86_64::structures::paging::page::PageSize">PageSize</a></span> { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A trait for common page table operations on pages of size <code>S</code>.</p>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.map_to_with_table_flags" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#270-280">Source</a><h4 class="code-header">unsafe fn <a href="#tymethod.map_to_with_table_flags" class="fn">map_to_with_table_flags</a>&lt;A&gt;(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    frame: <a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    parent_table_flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    frame_allocator: <a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.reference.html">&amp;mut A</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.MapToError.html" title="enum x86_64::structures::paging::mapper::MapToError">MapToError</a>&lt;S&gt;&gt;<div class="where">where
+    Self: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,
+    A: <a class="trait" href="../trait.FrameAllocator.html" title="trait x86_64::structures::paging::FrameAllocator">FrameAllocator</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h4></section></summary><div class="docblock"><p>Creates a new mapping in the page table.</p>
+<p>This function might need additional physical frames to create new page tables. These
+frames are allocated from the <code>allocator</code> argument. At most three frames are required.</p>
+<p>The flags of the parent table(s) can be explicitly specified. Those flags are used for
+newly created table entries, and for existing entries the flags are added.</p>
+<p>Depending on the used mapper implementation, the <code>PRESENT</code> and <code>WRITABLE</code> flags might
+be set for parent tables, even if they are not specified in <code>parent_table_flags</code>.</p>
+<h6 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h6>
+<p>Creating page table mappings is a fundamentally unsafe operation because
+there are various ways to break memory safety through it. For example,
+re-mapping an in-use page to a different frame changes and invalidates
+all values stored in that page, resulting in undefined behavior on the
+next use.</p>
+<p>The caller must ensure that no undefined behavior or memory safety
+violations can occur through the new mapping. Among other things, the
+caller must prevent the following:</p>
+<ul>
+<li>Aliasing of <code>&amp;mut</code> references, i.e. two <code>&amp;mut</code> references that point to
+the same physical address. This is undefined behavior in Rust.
+<ul>
+<li>This can be ensured by mapping each page to an individual physical
+frame that is not mapped anywhere else.</li>
+</ul>
+</li>
+<li>Creating uninitialized or invalid values: Rust requires that all values
+have a correct memory layout. For example, a <code>bool</code> must be either a 0
+or a 1 in memory, but not a 3 or 4. An exception is the <code>MaybeUninit</code>
+wrapper type, which abstracts over possibly uninitialized memory.
+<ul>
+<li>This is only a problem when re-mapping pages to different physical
+frames. Mapping a page that is not in use yet is fine.</li>
+</ul>
+</li>
+</ul>
+<p>Special care must be taken when sharing pages with other address spaces,
+e.g. by setting the <code>GLOBAL</code> flag. For example, a global mapping must be
+the same in all address spaces, otherwise undefined behavior can occur
+because of TLB races. It’s worth noting that all the above requirements
+also apply to shared mappings, including the aliasing requirements.</p>
+<h5 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h5>
+<p>Create USER_ACCESSIBLE | NO_EXECUTE | NO_CACHE mapping and update
+the top hierarchy only with USER_ACCESSIBLE:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>        mapper
+          .map_to_with_table_flags(
+              page,
+              frame,
+             PageTableFlags::PRESENT
+                  | PageTableFlags::WRITABLE
+                  | PageTableFlags::USER_ACCESSIBLE
+                  | PageTableFlags::NO_EXECUTE
+                  | PageTableFlags::NO_CACHE,
+             PageTableFlags::USER_ACCESSIBLE,
+              frame_allocator,
+          )
+          .unwrap()
+          .flush();</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.unmap" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#285">Source</a><h4 class="code-header">fn <a href="#tymethod.unmap" class="fn">unmap</a>(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;(<a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;, <a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;), <a class="enum" href="enum.UnmapError.html" title="enum x86_64::structures::paging::mapper::UnmapError">UnmapError</a>&gt;</h4></section></summary><div class="docblock"><p>Removes a mapping from the page table and returns the frame that used to be mapped.</p>
+<p>Note that no page tables or pages are deallocated.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.update_flags" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#298-302">Source</a><h4 class="code-header">unsafe fn <a href="#tymethod.update_flags" class="fn">update_flags</a>(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;</h4></section></summary><div class="docblock"><p>Updates the flags of an existing mapping.</p>
+<p>To read the current flags of a mapped page, use the <a href="trait.Translate.html#tymethod.translate" title="method x86_64::structures::paging::mapper::Translate::translate"><code>Translate::translate</code></a> method.</p>
+<h6 id="safety-1"><a class="doc-anchor" href="#safety-1">§</a>Safety</h6>
+<p>This method is unsafe because changing the flags of a mapping
+might result in undefined behavior. For example, setting the
+<code>GLOBAL</code> and <code>WRITABLE</code> flags for a page might result in the corruption
+of values stored in that page from processes running in other address
+spaces.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.set_flags_p4_entry" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#313-317">Source</a><h4 class="code-header">unsafe fn <a href="#tymethod.set_flags_p4_entry" class="fn">set_flags_p4_entry</a>(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlushAll.html" title="struct x86_64::structures::paging::mapper::MapperFlushAll">MapperFlushAll</a>, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;</h4></section></summary><div class="docblock"><p>Set the flags of an existing page level 4 table entry</p>
+<h6 id="safety-2"><a class="doc-anchor" href="#safety-2">§</a>Safety</h6>
+<p>This method is unsafe because changing the flags of a mapping
+might result in undefined behavior. For example, setting the
+<code>GLOBAL</code> and <code>WRITABLE</code> flags for a page might result in the corruption
+of values stored in that page from processes running in other address
+spaces.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.set_flags_p3_entry" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#328-332">Source</a><h4 class="code-header">unsafe fn <a href="#tymethod.set_flags_p3_entry" class="fn">set_flags_p3_entry</a>(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlushAll.html" title="struct x86_64::structures::paging::mapper::MapperFlushAll">MapperFlushAll</a>, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;</h4></section></summary><div class="docblock"><p>Set the flags of an existing page table level 3 entry</p>
+<h6 id="safety-3"><a class="doc-anchor" href="#safety-3">§</a>Safety</h6>
+<p>This method is unsafe because changing the flags of a mapping
+might result in undefined behavior. For example, setting the
+<code>GLOBAL</code> and <code>WRITABLE</code> flags for a page might result in the corruption
+of values stored in that page from processes running in other address
+spaces.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.set_flags_p2_entry" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#343-347">Source</a><h4 class="code-header">unsafe fn <a href="#tymethod.set_flags_p2_entry" class="fn">set_flags_p2_entry</a>(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlushAll.html" title="struct x86_64::structures::paging::mapper::MapperFlushAll">MapperFlushAll</a>, <a class="enum" href="enum.FlagUpdateError.html" title="enum x86_64::structures::paging::mapper::FlagUpdateError">FlagUpdateError</a>&gt;</h4></section></summary><div class="docblock"><p>Set the flags of an existing page table level 2 entry</p>
+<h6 id="safety-4"><a class="doc-anchor" href="#safety-4">§</a>Safety</h6>
+<p>This method is unsafe because changing the flags of a mapping
+might result in undefined behavior. For example, setting the
+<code>GLOBAL</code> and <code>WRITABLE</code> flags for a page might result in the corruption
+of values stored in that page from processes running in other address
+spaces.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.translate_page" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#353">Source</a><h4 class="code-header">fn <a href="#tymethod.translate_page" class="fn">translate_page</a>(&amp;self, page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;, <a class="enum" href="enum.TranslateError.html" title="enum x86_64::structures::paging::mapper::TranslateError">TranslateError</a>&gt;</h4></section></summary><div class="docblock"><p>Return the frame that the specified page is mapped to.</p>
+<p>This function assumes that the page is mapped to a frame of size <code>S</code> and returns an
+error otherwise.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.map_to" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#179-198">Source</a><h4 class="code-header">unsafe fn <a href="#method.map_to" class="fn">map_to</a>&lt;A&gt;(
+    &amp;mut self,
+    page: <a class="struct" href="../page/struct.Page.html" title="struct x86_64::structures::paging::page::Page">Page</a>&lt;S&gt;,
+    frame: <a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    frame_allocator: <a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.reference.html">&amp;mut A</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.MapToError.html" title="enum x86_64::structures::paging::mapper::MapToError">MapToError</a>&lt;S&gt;&gt;<div class="where">where
+    Self: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,
+    A: <a class="trait" href="../trait.FrameAllocator.html" title="trait x86_64::structures::paging::FrameAllocator">FrameAllocator</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,</div></h4></section></summary><div class="docblock"><p>Creates a new mapping in the page table.</p>
+<p>This function might need additional physical frames to create new page tables. These
+frames are allocated from the <code>allocator</code> argument. At most three frames are required.</p>
+<p>Parent page table entries are automatically updated with <code>PRESENT | WRITABLE | USER_ACCESSIBLE</code>
+if present in the <code>PageTableFlags</code>. Depending on the used mapper implementation
+the <code>PRESENT</code> and <code>WRITABLE</code> flags might be set for parent tables,
+even if they are not set in <code>PageTableFlags</code>.</p>
+<p>The <code>map_to_with_table_flags</code> method gives explicit control over the parent page table flags.</p>
+<h6 id="safety-5"><a class="doc-anchor" href="#safety-5">§</a>Safety</h6>
+<p>Creating page table mappings is a fundamentally unsafe operation because
+there are various ways to break memory safety through it. For example,
+re-mapping an in-use page to a different frame changes and invalidates
+all values stored in that page, resulting in undefined behavior on the
+next use.</p>
+<p>The caller must ensure that no undefined behavior or memory safety
+violations can occur through the new mapping. Among other things, the
+caller must prevent the following:</p>
+<ul>
+<li>Aliasing of <code>&amp;mut</code> references, i.e. two <code>&amp;mut</code> references that point to
+the same physical address. This is undefined behavior in Rust.
+<ul>
+<li>This can be ensured by mapping each page to an individual physical
+frame that is not mapped anywhere else.</li>
+</ul>
+</li>
+<li>Creating uninitialized or invalid values: Rust requires that all values
+have a correct memory layout. For example, a <code>bool</code> must be either a 0
+or a 1 in memory, but not a 3 or 4. An exception is the <code>MaybeUninit</code>
+wrapper type, which abstracts over possibly uninitialized memory.
+<ul>
+<li>This is only a problem when re-mapping pages to different physical
+frames. Mapping a page that is not in use yet is fine.</li>
+</ul>
+</li>
+</ul>
+<p>Special care must be taken when sharing pages with other address spaces,
+e.g. by setting the <code>GLOBAL</code> flag. For example, a global mapping must be
+the same in all address spaces, otherwise undefined behavior can occur
+because of TLB races. It’s worth noting that all the above requirements
+also apply to shared mappings, including the aliasing requirements.</p>
+<h5 id="examples-1"><a class="doc-anchor" href="#examples-1">§</a>Examples</h5>
+<p>Create a USER_ACCESSIBLE mapping:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code>        mapper
+          .map_to(
+              page,
+              frame,
+             PageTableFlags::PRESENT
+                  | PageTableFlags::WRITABLE
+                  | PageTableFlags::USER_ACCESSIBLE,
+              frame_allocator,
+          )
+          .unwrap()
+          .flush();</code></pre></div>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.identity_map" class="method"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mod.rs.html#362-376">Source</a><h4 class="code-header">unsafe fn <a href="#method.identity_map" class="fn">identity_map</a>&lt;A&gt;(
+    &amp;mut self,
+    frame: <a class="struct" href="../frame/struct.PhysFrame.html" title="struct x86_64::structures::paging::frame::PhysFrame">PhysFrame</a>&lt;S&gt;,
+    flags: <a class="struct" href="../page_table/struct.PageTableFlags.html" title="struct x86_64::structures::paging::page_table::PageTableFlags">PageTableFlags</a>,
+    frame_allocator: <a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.reference.html">&amp;mut A</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="struct.MapperFlush.html" title="struct x86_64::structures::paging::mapper::MapperFlush">MapperFlush</a>&lt;S&gt;, <a class="enum" href="enum.MapToError.html" title="enum x86_64::structures::paging::mapper::MapToError">MapToError</a>&lt;S&gt;&gt;<div class="where">where
+    Self: <a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a> + <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;S&gt;,
+    A: <a class="trait" href="../trait.FrameAllocator.html" title="trait x86_64::structures::paging::FrameAllocator">FrameAllocator</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; + ?<a class="trait" href="https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html" title="trait core::marker::Sized">Sized</a>,
+    S: <a class="trait" href="../page/trait.PageSize.html" title="trait x86_64::structures::paging::page::PageSize">PageSize</a>,</div></h4></section></summary><div class="docblock"><p>Maps the given frame to the virtual page with the same address.</p>
+<h6 id="safety-6"><a class="doc-anchor" href="#safety-6">§</a>Safety</h6>
+<p>This is a convencience function that invokes <a href="trait.Mapper.html#method.map_to" title="method x86_64::structures::paging::mapper::Mapper::map_to"><code>Mapper::map_to</code></a> internally, so
+all safety requirements of it also apply for this function.</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><section id="impl-Mapper%3CSize1GiB%3E-for-OffsetPageTable%3C'_%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/offset_page_table.rs.html#68-135">Source</a><a href="#impl-Mapper%3CSize1GiB%3E-for-OffsetPageTable%3C'_%3E" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size1GiB.html" title="enum x86_64::structures::paging::page::Size1GiB">Size1GiB</a>&gt; for <a class="struct" href="struct.OffsetPageTable.html" title="struct x86_64::structures::paging::mapper::OffsetPageTable">OffsetPageTable</a>&lt;'_&gt;</h3></section><section id="impl-Mapper%3CSize1GiB%3E-for-RecursivePageTable%3C'_%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/recursive_page_table.rs.html#302-420">Source</a><a href="#impl-Mapper%3CSize1GiB%3E-for-RecursivePageTable%3C'_%3E" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size1GiB.html" title="enum x86_64::structures::paging::page::Size1GiB">Size1GiB</a>&gt; for <a class="struct" href="struct.RecursivePageTable.html" title="struct x86_64::structures::paging::mapper::RecursivePageTable">RecursivePageTable</a>&lt;'_&gt;</h3></section><section id="impl-Mapper%3CSize2MiB%3E-for-OffsetPageTable%3C'_%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/offset_page_table.rs.html#137-204">Source</a><a href="#impl-Mapper%3CSize2MiB%3E-for-OffsetPageTable%3C'_%3E" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size2MiB.html" title="enum x86_64::structures::paging::page::Size2MiB">Size2MiB</a>&gt; for <a class="struct" href="struct.OffsetPageTable.html" title="struct x86_64::structures::paging::mapper::OffsetPageTable">OffsetPageTable</a>&lt;'_&gt;</h3></section><section id="impl-Mapper%3CSize2MiB%3E-for-RecursivePageTable%3C'_%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/recursive_page_table.rs.html#422-575">Source</a><a href="#impl-Mapper%3CSize2MiB%3E-for-RecursivePageTable%3C'_%3E" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size2MiB.html" title="enum x86_64::structures::paging::page::Size2MiB">Size2MiB</a>&gt; for <a class="struct" href="struct.RecursivePageTable.html" title="struct x86_64::structures::paging::mapper::RecursivePageTable">RecursivePageTable</a>&lt;'_&gt;</h3></section><section id="impl-Mapper%3CSize4KiB%3E-for-OffsetPageTable%3C'_%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/offset_page_table.rs.html#206-273">Source</a><a href="#impl-Mapper%3CSize4KiB%3E-for-OffsetPageTable%3C'_%3E" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; for <a class="struct" href="struct.OffsetPageTable.html" title="struct x86_64::structures::paging::mapper::OffsetPageTable">OffsetPageTable</a>&lt;'_&gt;</h3></section><section id="impl-Mapper%3CSize4KiB%3E-for-RecursivePageTable%3C'_%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/recursive_page_table.rs.html#577-764">Source</a><a href="#impl-Mapper%3CSize4KiB%3E-for-RecursivePageTable%3C'_%3E" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; for <a class="struct" href="struct.RecursivePageTable.html" title="struct x86_64::structures::paging::mapper::RecursivePageTable">RecursivePageTable</a>&lt;'_&gt;</h3></section><section id="impl-Mapper%3CSize1GiB%3E-for-MappedPageTable%3C'_,+P%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mapped_page_table.rs.html#153-259">Source</a><a href="#impl-Mapper%3CSize1GiB%3E-for-MappedPageTable%3C'_,+P%3E" class="anchor">§</a><h3 class="code-header">impl&lt;P: <a class="trait" href="trait.PageTableFrameMapping.html" title="trait x86_64::structures::paging::mapper::PageTableFrameMapping">PageTableFrameMapping</a>&gt; <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size1GiB.html" title="enum x86_64::structures::paging::page::Size1GiB">Size1GiB</a>&gt; for <a class="struct" href="struct.MappedPageTable.html" title="struct x86_64::structures::paging::mapper::MappedPageTable">MappedPageTable</a>&lt;'_, P&gt;</h3></section><section id="impl-Mapper%3CSize2MiB%3E-for-MappedPageTable%3C'_,+P%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mapped_page_table.rs.html#261-387">Source</a><a href="#impl-Mapper%3CSize2MiB%3E-for-MappedPageTable%3C'_,+P%3E" class="anchor">§</a><h3 class="code-header">impl&lt;P: <a class="trait" href="trait.PageTableFrameMapping.html" title="trait x86_64::structures::paging::mapper::PageTableFrameMapping">PageTableFrameMapping</a>&gt; <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size2MiB.html" title="enum x86_64::structures::paging::page::Size2MiB">Size2MiB</a>&gt; for <a class="struct" href="struct.MappedPageTable.html" title="struct x86_64::structures::paging::mapper::MappedPageTable">MappedPageTable</a>&lt;'_, P&gt;</h3></section><section id="impl-Mapper%3CSize4KiB%3E-for-MappedPageTable%3C'_,+P%3E" class="impl"><a class="src rightside" href="../../../../src/x86_64/structures/paging/mapper/mapped_page_table.rs.html#389-531">Source</a><a href="#impl-Mapper%3CSize4KiB%3E-for-MappedPageTable%3C'_,+P%3E" class="anchor">§</a><h3 class="code-header">impl&lt;P: <a class="trait" href="trait.PageTableFrameMapping.html" title="trait x86_64::structures::paging::mapper::PageTableFrameMapping">PageTableFrameMapping</a>&gt; <a class="trait" href="trait.Mapper.html" title="trait x86_64::structures::paging::mapper::Mapper">Mapper</a>&lt;<a class="enum" href="../page/enum.Size4KiB.html" title="enum x86_64::structures::paging::page::Size4KiB">Size4KiB</a>&gt; for <a class="struct" href="struct.MappedPageTable.html" title="struct x86_64::structures::paging::mapper::MappedPageTable">MappedPageTable</a>&lt;'_, P&gt;</h3></section></div><script src="../../../../trait.impl/x86_64/structures/paging/mapper/trait.Mapper.js" async></script></section></div></main></body></html>

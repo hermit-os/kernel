@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Splits command line into separate arguments, in much the same way Unix shell would, but without many of expansion the shell would perform."><title>split in shell_words - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="shell_words" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../shell_words/index.html">shell_<wbr>words</a><span class="version">1.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">split</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#errors" title="Errors">Errors</a></li><li><a href="#compatibility-with-other-implementations" title="Compatibility with other implementations">Compatibility with other implementations</a></li><li><a href="#examples" title="Examples">Examples</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate shell_<wbr>words</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">shell_words</a></div><h1>Function <span class="fn">split</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/shell_words/lib.rs.html#126-229">Source</a> </span></div><pre class="rust item-decl"><code>pub fn split(s: &amp;<a class="primitive" href="https://doc.rust-lang.org/nightly/core/primitive.str.html">str</a>) -&gt; <a class="enum" href="https://doc.rust-lang.org/nightly/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="struct" href="https://doc.rust-lang.org/nightly/alloc/string/struct.String.html" title="struct alloc::string::String">String</a>&gt;, <a class="struct" href="struct.ParseError.html" title="struct shell_words::ParseError">ParseError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Splits command line into separate arguments, in much the same way Unix shell
+would, but without many of expansion the shell would perform.</p>
+<p>The split functionality is compatible with behaviour of Unix shell, but with
+word expansions limited to quote removal, and without special token
+recognition rules for operators.</p>
+<p>The result is exactly the same as one obtained from Unix shell as long as
+those unsupported features are not present in input: no operators, no
+variable assignments, no tilde expansion, no parameter expansion, no command
+substitution, no arithmetic expansion, no pathname expansion.</p>
+<p>In case those unsupported shell features are present, the syntax that
+introduce them is interpreted literally.</p>
+<h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>
+<p>When input contains unmatched quote, an error is returned.</p>
+<h2 id="compatibility-with-other-implementations"><a class="doc-anchor" href="#compatibility-with-other-implementations">§</a>Compatibility with other implementations</h2>
+<p>It should be fully compatible with g_shell_parse_argv from GLib, except that
+in GLib it is an error not to have any words after tokenization.</p>
+<p>It is also very close to shlex.split available in Python standard library,
+when used in POSIX mode with support for comments. Though, shlex
+implementation diverges from POSIX, and from implementation contained herein
+in three aspects. First, it doesn’t support line continuations.
+Second, inside double quotes, the backslash characters retains its special
+meaning as an escape character only when followed by \ or ", whereas POSIX
+specifies that it should retain its special meaning when followed by: $, `,
+", \, or a newline. Third, it treats carriage return as one of delimiters.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>Building an executable using compiler obtained from CC environment variable
+and compiler flags from both CFLAGS and CPPFLAGS. Similar to default build
+rule for C used in GNU Make:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::env::var;
+<span class="kw">use </span>std::process::Command;
+
+<span class="kw">let </span>cc = var(<span class="string">"CC"</span>).unwrap_or_else(|<span class="kw">_</span>| <span class="string">"cc"</span>.to_owned());
+
+<span class="kw">let </span>cflags_str = var(<span class="string">"CFLAGS"</span>).unwrap_or_else(|<span class="kw">_</span>| String::new());
+<span class="kw">let </span>cflags = shell_words::split(<span class="kw-2">&amp;</span>cflags_str).expect(<span class="string">"failed to parse CFLAGS"</span>);
+
+<span class="kw">let </span>cppflags_str = var(<span class="string">"CPPFLAGS"</span>).unwrap_or_else(|<span class="kw">_</span>| String::new());
+<span class="kw">let </span>cppflags = shell_words::split(<span class="kw-2">&amp;</span>cppflags_str).expect(<span class="string">"failed to parse CPPFLAGS"</span>);
+
+Command::new(cc)
+    .args(cflags)
+    .args(cppflags)
+    .args(<span class="kw-2">&amp;</span>[<span class="string">"-c"</span>, <span class="string">"a.c"</span>, <span class="string">"-o"</span>, <span class="string">"a.out"</span>])
+    .spawn()
+    .expect(<span class="string">"failed to start subprocess"</span>)
+    .wait()
+    .expect(<span class="string">"failed to wait for subprocess"</span>);</code></pre></div>
+</div></details></section></div></main></body></html>
