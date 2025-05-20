@@ -1,0 +1,66 @@
+name: Benchmark
+
+on:
+  pull_request_target:
+  push:
+    branches:
+      - main
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: [self-hosted]
+    environment: ${{ github.event_name == 'push' && 'benchmark' || '' }}
+
+    permissions:
+      pull-requests: write
+
+    strategy:
+      matrix:
+        include:
+          - benchmark-file: kernel/.github/benchmarks/general.yaml
+            benchmark-matrix-name: General
+          - benchmark-file: kernel/.github/benchmarks/misc.yaml
+            benchmark-matrix-name: Misc
+
+    steps:
+      - name: Checkout hermit-rs
+        uses: actions/checkout@v4
+        with:
+          repository: hermit-os/hermit-rs
+          submodules: true
+      - name: Remove hermit-kernel submodule
+        run: git rm -r kernel
+      - name: Checkout hermit-kernel
+        uses: actions/checkout@v4
+        with:
+          path: kernel
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 gh
+      - uses: mkroening/rust-toolchain-toml@main
+      - uses: mkroening/rust-toolchain-toml@main
+        with:
+          toolchain-file: "kernel/rust-toolchain.toml"
+      - name: Download loader
+        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
+      - name: Run benchmarks
+        uses: hermit-os/hermit-bench@main
+        id: run-bench
+        with:
+          benchmark-file: ${{ matrix.benchmark-file }}
+      - name: Store benchmark results
+        uses: hermit-os/github-action-benchmark@main
+        with:
+          tool: "hermit-bench"
+          output-file-path: ${{ steps.run-bench.outputs.result-file }}
+          github-token: ${{ github.event_name == 'push' && secrets.HERMIT_BENCH_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          benchmark-data-dir-path: .
+          gh-repository: github.com/hermit-os/hermit-bench
+          comment-always: true
+          benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
+          auto-push: ${{ github.event_name == 'push' }}
