@@ -4,6 +4,7 @@ on:
   pull_request:
   merge_group:
   
+    
 env:
   GH_TOKEN: ${{ github.token }}
   RUSTFLAGS: -Dwarnings
@@ -271,6 +272,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y qemu-system qemu-system-x86 qemu-kvm
     - uses: mkroening/rust-toolchain-toml@main
+    - name: Install parallel
+      run: sudo apt install parallel -y
     - name: Download loader  
       run: |
         sudo apt install gh -y
