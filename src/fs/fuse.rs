@@ -859,13 +859,10 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-			>= usize::try_from(len).unwrap()
-		{
-			len.try_into().unwrap()
-		} else {
-			(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
-		};
+		let len = usize::min(
+			MAX_READ_LEN,
+			rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>(),
+		);
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
 			debug!("FUSE no new dirs");
