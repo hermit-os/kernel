@@ -64,6 +64,8 @@ bitflags! {
 		const O_NONBLOCK = StatusFlags::O_NONBLOCK.bits();
 		const O_DIRECT = 0o40000;
 		const O_DIRECTORY = 0o200_000;
+		/// `O_CLOEXEC` has no functionality in Hermit and will be silently ignored
+		const O_CLOEXEC = 0o2_000_000;
 	}
 }
 
