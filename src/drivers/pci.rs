@@ -542,7 +542,7 @@ pub(crate) fn init() {
 				}
 				#[cfg(feature = "vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
-					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(drv)));
+					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {

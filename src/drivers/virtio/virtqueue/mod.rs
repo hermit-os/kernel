@@ -19,15 +19,14 @@ use core::any::Any;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
+use enum_dispatch::enum_dispatch;
 use memory_addresses::VirtAddr;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
-#[cfg(not(feature = "pci"))]
-use super::transport::mmio::{ComCfg, NotifCfg};
-#[cfg(feature = "pci")]
-use super::transport::pci::{ComCfg, NotifCfg};
 use crate::arch::mm::paging;
+use crate::drivers::virtio::virtqueue::packed::PackedVq;
+use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
@@ -97,6 +96,7 @@ impl From<VqSize> for u16 {
 /// might not provide the complete feature set of each queue. Drivers who
 /// do need these features should refrain from providing support for both
 /// Virtqueue types and use the structs directly instead.
+#[enum_dispatch]
 pub trait Virtq: Send {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
@@ -185,21 +185,6 @@ pub trait Virtq: Send {
 		notif: bool,
 	) -> Result<(), VirtqError>;
 
-	/// Creates a new Virtq of the specified [VqSize] and the [VqIndex].
-	/// The index represents the "ID" of the virtqueue.
-	/// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
-	///
-	/// Be aware, that devices define a maximum number of queues and a maximal size they can handle.
-	fn new(
-		com_cfg: &mut ComCfg,
-		notif_cfg: &NotifCfg,
-		size: VqSize,
-		index: VqIndex,
-		features: virtio::F,
-	) -> Result<Self, VirtqError>
-	where
-		Self: Sized;
-
 	/// Returns the size of a Virtqueue. This represents the overall size and not the capacity the
 	/// queue currently has for new descriptors.
 	fn size(&self) -> VqSize;
@@ -280,6 +265,12 @@ trait VirtqPrivate {
 
 		Ok(all_desc_iter.chain([last_desc]))
 	}
+}
+
+#[enum_dispatch(Virtq)]
+pub(crate) enum VirtQueue {
+	Split(SplitVq),
+	Packed(PackedVq),
 }
 
 trait VirtqDescriptor {
