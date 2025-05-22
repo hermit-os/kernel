@@ -582,11 +582,6 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	panic!("virtual_to_physical should never reach this point");
 }
 
-#[cfg(any(feature = "fuse", feature = "vsock", feature = "tcp", feature = "udp"))]
-pub fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
-	virtual_to_physical(virtual_address).unwrap()
-}
-
 pub fn map<S: PageSize>(
 	virtual_address: VirtAddr,
 	physical_address: PhysAddr,

@@ -5,10 +5,12 @@
 
 #![allow(unused)]
 
+use alloc::alloc::Allocator;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::convert::TryInto;
+use core::ptr::NonNull;
 use core::{mem, slice};
 
 use align_address::Align;
@@ -22,7 +24,7 @@ use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::interrupts::*;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::arch::kernel::mmio as hardware;
-use crate::arch::mm::paging::{PageTableEntryFlags, virt_to_phys};
+use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
@@ -456,16 +458,16 @@ impl Drop for GEMDriver {
 	fn drop(&mut self) {
 		debug!("Dropping GEMDriver!");
 
-		// Software reset
-		// Clear the Network Control register
 		unsafe {
+			// Software reset
+			// Clear the Network Control register
 			(*self.gem).network_control.set(0x0);
-		}
 
-		deallocate(self.rxbuffer, (RX_BUF_LEN * RX_BUF_NUM) as usize);
-		deallocate(self.txbuffer, (TX_BUF_LEN * TX_BUF_NUM) as usize);
-		deallocate(self.rxbuffer_list, (8 * RX_BUF_NUM) as usize);
-		deallocate(self.txbuffer_list, (8 * TX_BUF_NUM) as usize);
+			deallocate(self.rxbuffer, (RX_BUF_LEN * RX_BUF_NUM) as usize);
+			deallocate(self.txbuffer, (TX_BUF_LEN * TX_BUF_NUM) as usize);
+			deallocate(self.rxbuffer_list, (8 * RX_BUF_NUM) as usize);
+			deallocate(self.txbuffer_list, (8 * TX_BUF_NUM) as usize);
+		}
 	}
 }
 
@@ -641,7 +643,7 @@ pub fn init_device(
 		for i in 0..RX_BUF_NUM {
 			let word0 = (rxbuffer_list + u64::from(i * 8)).as_mut_ptr::<u32>();
 			let word1 = (rxbuffer_list + u64::from(i * 8 + 4)).as_mut_ptr::<u32>();
-			let buffer = virt_to_phys(rxbuffer + u64::from(i * RX_BUF_LEN));
+			let buffer = rxbuffer + u64::from(i * RX_BUF_LEN);
 			if (buffer.as_u64() & 0b11) != 0 {
 				error!("Wrong buffer alignment");
 				return Err(DriverError::InitGEMDevFail(GEMError::Unknown));
@@ -658,7 +660,7 @@ pub fn init_device(
 			core::ptr::write_volatile(word1, 0x0);
 		}
 
-		let rx_qbar: u32 = virt_to_phys(rxbuffer_list).as_u64().try_into().unwrap();
+		let rx_qbar: u32 = rxbuffer_list.as_u64().try_into().unwrap();
 		debug!("Set rx_qbar to {rx_qbar:x}");
 		(*gem).rx_qbar.set(rx_qbar);
 
@@ -666,7 +668,7 @@ pub fn init_device(
 		for i in 0..TX_BUF_NUM {
 			let word0 = (txbuffer_list + u64::from(i * 8)).as_mut_ptr::<u32>();
 			let word1 = (txbuffer_list + u64::from(i * 8 + 4)).as_mut_ptr::<u32>();
-			let buffer = virt_to_phys(txbuffer + u64::from(i * TX_BUF_LEN));
+			let buffer = txbuffer + u64::from(i * TX_BUF_LEN);
 
 			// This can fail if address of buffers is > 32 bit
 			// TODO: 64-bit addresses
@@ -680,7 +682,7 @@ pub fn init_device(
 			core::ptr::write_volatile(word1, word1_entry);
 		}
 
-		let tx_qbar: u32 = virt_to_phys(txbuffer_list).as_u64().try_into().unwrap();
+		let tx_qbar: u32 = txbuffer_list.as_u64().try_into().unwrap();
 		debug!("Set tx_qbar to {tx_qbar:x}");
 		(*gem).tx_qbar.set(tx_qbar);
 
@@ -758,38 +760,17 @@ unsafe fn wait_for_mdio(gem: *mut Registers) {
 
 // FIXME: boxify buffers and remove these functions
 /// Soft-deprecated in favor of `DeviceAlloc`
-pub(crate) fn allocate(size: usize, no_execution: bool) -> VirtAddr {
-	let size = size.align_up(BasePageSize::SIZE as usize);
-	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
-	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
-
-	let count = size / BasePageSize::SIZE as usize;
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
-	if no_execution {
-		flags.execute_disable();
-	}
-
-	crate::arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
-
-	virtual_address
+fn allocate(size: usize, no_execution: bool) -> VirtAddr {
+	let layout = Layout::from_size_align(size, 8).unwrap();
+	let allocation = DeviceAlloc.allocate(layout).unwrap();
+	VirtAddr::from_ptr(allocation.as_ptr())
 }
 
 /// Soft-deprecated in favor of `DeviceAlloc`
-pub(crate) fn deallocate(virtual_address: VirtAddr, size: usize) {
-	let size = size.align_up(BasePageSize::SIZE as usize);
-
-	if let Some(phys_addr) = crate::arch::mm::paging::virtual_to_physical(virtual_address) {
-		crate::arch::mm::paging::unmap::<BasePageSize>(
-			virtual_address,
-			size / BasePageSize::SIZE as usize,
-		);
-		crate::mm::virtualmem::deallocate(virtual_address, size);
-		crate::mm::physicalmem::deallocate(phys_addr, size);
-	} else {
-		panic!(
-			"No page table entry for virtual address {:p}",
-			virtual_address
-		);
+unsafe fn deallocate(virtual_address: VirtAddr, size: usize) {
+	let layout = Layout::from_size_align(size, 8).unwrap();
+	let ptr = NonNull::new(virtual_address.as_mut_ptr::<u8>()).unwrap();
+	unsafe {
+		DeviceAlloc.deallocate(ptr, layout);
 	}
 }
