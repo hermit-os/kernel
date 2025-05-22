@@ -51,6 +51,7 @@ pub enum NetworkDevice {
 	VirtioNetPci,
 	VirtioNetMmio,
 	Rtl8139,
+	GEMNet,
 }
 
 impl Qemu {
@@ -70,13 +71,20 @@ impl Qemu {
 		let arg = self.sudo.then_some(qemu.as_str());
 		let memory = self.memory(image_name, arch, small);
 
+		// GEM requires sifive_u, which in turn requires an SMP of at least 2.
+		let effective_smp = if matches!(self.netdev, Some(NetworkDevice::GEMNet)) {
+			usize::max(smp, 2)
+		} else {
+			smp
+		};
+
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
 			.args(self.image_args(image, arch)?)
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
-			.args(&["-smp", &smp.to_string()])
+			.args(&["-smp", &effective_smp.to_string()])
 			.args(&["-m".to_string(), format!("{memory}M")])
 			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.netdev_args())
@@ -99,16 +107,22 @@ impl Qemu {
 		}
 
 		match image_name {
-			"axum-example" | "http_server" | "http_server_poll" => {
-				test_http_server()?;
-				qemu.0.kill()?;
-			}
+			"axum-example" | "http_server" | "http_server_poll" => test_http_server()?,
 			"httpd" => test_httpd()?,
 			"testudp" => test_testudp()?,
 			"miotcp" => test_miotcp()?,
 			"mioudp" => test_mioudp()?,
 			"poll" => test_poll()?,
 			_ => {}
+		}
+
+		if matches!(
+			image_name,
+			"axum-example" | "http_server" | "http_server_poll"
+		) || matches!(self.netdev, Some(NetworkDevice::GEMNet))
+		// sifive_u, on which we test GEMNet, does not support software shutdowns, so we have to kill the machine ourselves.
+		{
+			qemu.0.kill()?;
 		}
 
 		let status = qemu.0.wait_timeout(Duration::from_secs(60 * 6))?;
@@ -196,9 +210,14 @@ impl Qemu {
 		} else if arch == Arch::Aarch64 {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if arch == Arch::Riscv64 {
+			// GEM requires sifive_u
+			let machine = match self.netdev {
+				Some(NetworkDevice::GEMNet) => "sifive_u",
+				_ => "virt",
+			};
 			vec![
 				"-machine".to_string(),
-				"virt".to_string(),
+				machine.to_string(),
 				"-bios".to_string(),
 				"opensbi-1.6-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
 			]
@@ -240,7 +259,12 @@ impl Qemu {
 				if self.accel {
 					todo!()
 				} else {
-					vec!["-cpu".to_string(), "rv64".to_string()]
+					match self.netdev {
+						// GEM does not seem to work with rv64 as the CPU,
+						// possibly because it requires sifive_u as the machine.
+						Some(NetworkDevice::GEMNet) => vec![],
+						_ => vec!["-cpu".to_string(), "rv64".to_string()],
+					}
 				}
 			}
 		}
@@ -265,34 +289,45 @@ impl Qemu {
 	}
 
 	fn netdev_args(&self) -> Vec<String> {
-		let Some(netdev) = self.netdev else {
-			return vec![];
-		};
+		const NETDEV_OPTIONS: &str = "user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9";
+		match self.netdev {
+			Some(NetworkDevice::GEMNet) => {
+				vec![
+					"-nic".to_string(),
+					format!("{NETDEV_OPTIONS},model=cadence_gem"),
+				]
+			}
+			Some(netdev) => {
+				let mut netdev_args = vec![
+					"-netdev".to_string(),
+					NETDEV_OPTIONS.to_string(),
+					"-device".to_string(),
+				];
 
-		let mut netdev_args = vec![
-			"-netdev".to_string(),
-			"user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9".to_string(),
-			"-device".to_string(),
-		];
+				let mut device_arg = match netdev {
+					NetworkDevice::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
+					NetworkDevice::VirtioNetMmio => "virtio-net-device,netdev=u1",
+					NetworkDevice::Rtl8139 => "rtl8139,netdev=u1",
+					NetworkDevice::GEMNet => {
+						unreachable!("We should have already checked for GEM earlier.")
+					}
+				}
+				.to_string();
 
-		let mut device_arg = match netdev {
-			NetworkDevice::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
-			NetworkDevice::VirtioNetMmio => "virtio-net-device,netdev=u1",
-			NetworkDevice::Rtl8139 => "rtl8139,netdev=u1",
+				if !self.no_default_virtio_features
+					&& matches!(
+						netdev,
+						NetworkDevice::VirtioNetPci | NetworkDevice::VirtioNetMmio
+					) {
+					device_arg.push_str(",packed=on,mq=on");
+				}
+
+				netdev_args.push(device_arg);
+
+				netdev_args
+			}
+			None => vec![],
 		}
-		.to_string();
-
-		if !self.no_default_virtio_features
-			&& matches!(
-				netdev,
-				NetworkDevice::VirtioNetPci | NetworkDevice::VirtioNetMmio
-			) {
-			device_arg.push_str(",packed=on,mq=on");
-		}
-
-		netdev_args.push(device_arg);
-
-		netdev_args
 	}
 
 	fn virtiofsd_args(&self, memory: usize) -> Vec<String> {
