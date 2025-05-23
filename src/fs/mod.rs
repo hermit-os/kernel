@@ -131,8 +131,9 @@ impl DirectoryReader {
 
 #[async_trait]
 impl ObjectInterface for DirectoryReader {
-	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
-		Ok(self.0.clone())
+	async fn getdents(&self, _buf: &mut [core::mem::MaybeUninit<u8>]) -> io::Result<usize> {
+		let _ = &self.0; // Dummy statement to avoid warning for the moment
+		unimplemented!()
 	}
 }
 

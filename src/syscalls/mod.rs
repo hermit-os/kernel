@@ -4,8 +4,8 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
-use core::ptr;
 
+use dirent_display::Dirent64Display;
 use hermit_sync::Lazy;
 
 pub use self::condvar::*;
@@ -548,20 +548,79 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
 pub struct Dirent64 {
 	/// 64-bit inode number
 	pub d_ino: u64,
-	/// 64-bit offset to next structure
+	/// Field without meaning. Kept for BW compatibility.
 	pub d_off: i64,
 	/// Size of this dirent
 	pub d_reclen: u16,
 	/// File type
-	pub d_type: u8,
+	pub d_type: fs::FileType,
 	/// Filename (null-terminated)
 	pub d_name: PhantomData<c_char>,
 }
+impl Dirent64 {
+	/// Creates a [`Dirent64Display`] struct for debug printing.
+	///
+	/// # Safety
+	/// The bytes following the `d_name` must form a valid zero terminated `CStr`. Else we have an
+	/// out-of-bounds read.
+	#[allow(dead_code)]
+	unsafe fn display<'a>(&'a self) -> Dirent64Display<'a> {
+		unsafe { Dirent64Display::new(self) }
+	}
+}
 
+mod dirent_display {
+	use core::ffi::{CStr, c_char};
+	use core::fmt;
+
+	use super::Dirent64;
+
+	/// Helperstruct for unsafe formatting of [`Dirent64`]
+	pub(super) struct Dirent64Display<'a> {
+		dirent: &'a Dirent64,
+	}
+	impl<'a> Dirent64Display<'a> {
+		/// # Safety
+		/// The `d_name` ptr of `dirent` must be valid and zero-terminated.
+		pub(super) unsafe fn new(dirent: &'a Dirent64) -> Self {
+			Self { dirent }
+		}
+	}
+
+	impl<'a> fmt::Debug for Dirent64Display<'a> {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			let cstr = unsafe { CStr::from_ptr((&raw const self.dirent.d_name).cast::<c_char>()) };
+
+			f.debug_struct("Dirent64")
+				.field("d_ino", &self.dirent.d_ino)
+				.field("d_off", &self.dirent.d_off)
+				.field("d_reclen", &self.dirent.d_reclen)
+				.field("d_type", &self.dirent.d_type)
+				.field("d_name", &cstr)
+				.finish()
+		}
+	}
+}
+
+/// Read the entries of a directory.
+/// Similar as the Linux system-call, this reads up to `count` bytes and returns the number of
+/// bytes written. If the size was not sufficient to list all directory entries, subsequent calls
+/// to this fn return the next entries.
+///
+/// Parameters:
+///
+/// - `fd`: File Descriptor of the directory in question.
+/// -`dirp`: Memory for the kernel to store the filled `Dirent64` objects including the c-strings with the filenames to.
+/// - `count`: Size of the memory region described by `dirp` in bytes.
+///
+/// Return:
+///
+/// The number of bytes read into `dirp` on success. Zero indicates that no more entries remain and
+/// the directories readposition needs to be reset using `sys_lseek`.
+/// Negative numbers encode errors.
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_getdents64(
@@ -569,49 +628,19 @@ pub unsafe extern "C" fn sys_getdents64(
 	dirp: *mut Dirent64,
 	count: usize,
 ) -> i64 {
+	debug!("getdents for fd {fd:?} - count: {count}");
 	if dirp.is_null() || count == 0 {
 		return (-i32::from(Errno::Inval)).into();
 	}
 
-	const ALIGN_DIRENT: usize = core::mem::align_of::<Dirent64>();
-	let mut dirp: *mut Dirent64 = dirp;
-	let mut offset: i64 = 0;
+	let slice = unsafe { core::slice::from_raw_parts_mut(dirp.cast(), count) };
+
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|_| (-i32::from(Errno::Inval)).into(),
 		|v| {
-			block_on((*v).readdir(), None).map_or_else(
-				|e| i64::from(-i32::from(e)),
-				|v| {
-					for i in v.iter() {
-						let len = i.name.len();
-						let aligned_len = ((core::mem::size_of::<Dirent64>() + len + 1)
-							+ (ALIGN_DIRENT - 1)) & (!(ALIGN_DIRENT - 1));
-						if offset as usize + aligned_len >= count {
-							return (-i32::from(Errno::Inval)).into();
-						}
-
-						let dir = unsafe { &mut *dirp };
-
-						dir.d_ino = 0;
-						dir.d_type = 0;
-						dir.d_reclen = aligned_len.try_into().unwrap();
-						offset += i64::try_from(aligned_len).unwrap();
-						dir.d_off = offset;
-
-						// copy null-terminated filename
-						let s = ptr::from_mut(&mut dir.d_name).cast::<u8>();
-						unsafe {
-							core::ptr::copy_nonoverlapping(i.name.as_ptr(), s, len);
-							s.add(len).write_bytes(0, 1);
-						}
-
-						dirp = unsafe { dirp.byte_add(aligned_len) };
-					}
-
-					offset
-				},
-			)
+			block_on((*v).getdents(slice), None)
+				.map_or_else(|e| (-i32::from(e)).into(), |cnt| cnt as i64)
 		},
 	)
 }
@@ -681,6 +710,8 @@ pub extern "C" fn sys_image_start_addr() -> usize {
 
 #[cfg(test)]
 mod tests {
+	use core::ptr;
+
 	use super::*;
 
 	#[cfg(target_os = "none")]
