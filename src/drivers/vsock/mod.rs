@@ -99,10 +99,12 @@ impl RxQueue {
 		F: FnMut(&Hdr, &[u8]),
 	{
 		while let Some(mut buffer_tkn) = self.get_next() {
-			let header = buffer_tkn
-				.used_recv_buff
-				.pop_front_downcast::<Hdr>()
-				.unwrap();
+			let header = unsafe {
+				buffer_tkn
+					.used_recv_buff
+					.pop_front_downcast::<Hdr>()
+					.unwrap()
+			};
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
 
 			if let Some(ref mut vq) = self.vq {

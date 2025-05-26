@@ -100,8 +100,7 @@ impl RxQueues {
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
-		const BUFF_PER_PACKET: u16 = 2;
-		let num_bufs: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		let num_bufs: u16 = u16::from(vq.size()) / constants::BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
 	}
@@ -320,7 +319,11 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	}
 
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
-		let (first_header, first_packet) = self.receive_single_packet()?;
+		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
+		// Safety: any buffers that do not start with a `Hdr` must have been consumed by the previous call
+		// to this function.
+		let first_header = unsafe { buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()? };
+		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 
 		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
 		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
@@ -344,14 +347,22 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 			.unwrap();
 
 		for _ in 1..num_buffers {
-			let (header, packet) = self.receive_single_packet()?;
+			let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
+			// The descriptor that was meant for the header of another frame was used for a portion of the current frame's contents.
+			// Thus, we cannot cast it to a Hdr.
+			let (header_descriptor, used_len) = buffer_tkn.used_recv_buff.pop_front_raw()?;
+			combined_packets.extend_from_slice(unsafe {
+				core::slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
+			});
+
+			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 			combined_packets.extend_from_slice(&packet);
+
+			let header = header_descriptor.downcast::<MaybeUninit<Hdr>>().unwrap();
 
 			let tkn = buffer_token_from_hdr(
 				// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
-				unsafe {
-					transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(header)
-				},
+				header,
 				self.inner.recv_vqs.buf_size,
 			);
 			self.inner.recv_vqs.vqs[0]
@@ -476,14 +487,6 @@ impl VirtioNetDriver<Init> {
 		// For send and receive queues?
 		// Only for receive? Because send is off anyway?
 		self.inner.recv_vqs.enable_notifs();
-	}
-
-	fn receive_single_packet(&mut self) -> Option<(Box<Hdr, DeviceAlloc>, Vec<u8, DeviceAlloc>)> {
-		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
-		let header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
-		let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-
-		Some((header, packet))
 	}
 }
 
@@ -834,6 +837,7 @@ impl VirtioNetDriver<Uninit> {
 pub mod constants {
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
+	pub(super) const BUFF_PER_PACKET: u16 = 2;
 }
 
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]
