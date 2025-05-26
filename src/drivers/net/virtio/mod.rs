@@ -96,14 +96,6 @@ impl RxQueues {
 		}
 	}
 
-	/// Takes care of handling packets correctly which need some processing after being received.
-	/// This currently include nothing. But in the future it might include among others:
-	/// * Calculating missing checksums
-	/// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
-	fn post_processing(_buffer_tkn: &mut UsedBufferToken) -> Result<(), VirtioNetError> {
-		Ok(())
-	}
-
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
@@ -488,9 +480,6 @@ impl VirtioNetDriver<Init> {
 
 	fn receive_single_packet(&mut self) -> Option<(Box<Hdr, DeviceAlloc>, Vec<u8, DeviceAlloc>)> {
 		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
-		RxQueues::post_processing(&mut buffer_tkn)
-			.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
-			.ok()?;
 		let header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
 		let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 
@@ -540,8 +529,7 @@ impl VirtioNetDriver<Uninit> {
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
-		// needs to take care of calculating checksum in
-		// RxQueues.post_processing()
+		// needs to take care of calculating checksum.
 		// | virtio::net::F::GUEST_TSO4
 		// | virtio::net::F::GUEST_TSO6
 
