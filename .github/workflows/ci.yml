@@ -258,10 +258,13 @@ jobs:
       matrix:
         include:
           - benchmark-file: /kernel/.github/benchmarks/general.json
+            benchmark-matrix-name: General
             benchmark-build: true
           - benchmark-file: /kernel/.github/benchmarks/misc.json
+            benchmark-matrix-name: Misc
             benchmark-build: false
           - benchmark-file: /kernel/.github/benchmarks/netbench.json
+            benchmark-matrix-name: Netbench
             benchmark-build: false
 
     steps:
@@ -317,5 +320,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           benchmark-data-dir-path: benchmarks
           comment-always: true
+          benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
           auto-push: ${{ steps.publish-benchmarks.outputs.publish_benchmarks == 'true' }} 
           
