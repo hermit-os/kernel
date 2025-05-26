@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use core::mem;
 
 use pci_types::InterruptLine;
+use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::vsock::Hdr;
 
@@ -28,14 +29,14 @@ use crate::mm::device_alloc::DeviceAlloc;
 fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(
-			vec![],
-			vec![
+			SmallVec::new(),
+			SmallVec::from_buf([
 				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
 				BufferElem::Vector(Vec::with_capacity_in(
 					packet_size.try_into().unwrap(),
 					DeviceAlloc,
 				)),
-			],
+			]),
 		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
@@ -171,7 +172,15 @@ impl TxQueue {
 				result
 			};
 
-			let buff_tkn = AvailBufferToken::new(vec![BufferElem::Vector(packet)], vec![]).unwrap();
+			let buff_tkn = AvailBufferToken::new(
+				{
+					let mut vec = SmallVec::new();
+					vec.push(BufferElem::Vector(packet));
+					vec
+				},
+				SmallVec::new(),
+			)
+			.unwrap();
 
 			vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
 

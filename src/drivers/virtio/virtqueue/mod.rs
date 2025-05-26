@@ -20,6 +20,7 @@ use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
 use enum_dispatch::enum_dispatch;
+use smallvec::SmallVec;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
@@ -396,8 +397,8 @@ impl BufferElem {
 /// respective virtqueue.
 /// The maximum number of descriptors per buffer is bounded by the size of the virtqueue.
 pub struct AvailBufferToken {
-	pub(crate) send_buff: Vec<BufferElem>,
-	pub(crate) recv_buff: Vec<BufferElem>,
+	pub(crate) send_buff: SmallVec<[BufferElem; 2]>,
+	pub(crate) recv_buff: SmallVec<[BufferElem; 2]>,
 }
 
 pub(crate) struct UsedDeviceWritableBuffer {
@@ -450,7 +451,7 @@ impl UsedDeviceWritableBuffer {
 }
 
 pub(crate) struct UsedBufferToken {
-	pub send_buff: Vec<BufferElem>,
+	pub send_buff: SmallVec<[BufferElem; 2]>,
 	pub used_recv_buff: UsedDeviceWritableBuffer,
 }
 
@@ -459,7 +460,7 @@ impl UsedBufferToken {
 		Self {
 			send_buff: tkn.send_buff,
 			used_recv_buff: UsedDeviceWritableBuffer {
-				elems: tkn.recv_buff.into(),
+				elems: tkn.recv_buff.into_vec().into(),
 				remaining_written_len: written_len,
 			},
 		}
@@ -492,7 +493,10 @@ impl AvailBufferToken {
 	/// ```
 	/// they must split the structure after the send part and provide the respective part via the send argument and the respective other
 	/// part via the recv argument.
-	pub fn new(send_buff: Vec<BufferElem>, recv_buff: Vec<BufferElem>) -> Result<Self, VirtqError> {
+	pub fn new(
+		send_buff: SmallVec<[BufferElem; 2]>,
+		recv_buff: SmallVec<[BufferElem; 2]>,
+	) -> Result<Self, VirtqError> {
 		if send_buff.is_empty() && recv_buff.is_empty() {
 			return Err(VirtqError::BufferNotSpecified);
 		}

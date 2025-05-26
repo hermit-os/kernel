@@ -13,6 +13,7 @@ cfg_if::cfg_if! {
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
@@ -114,14 +115,14 @@ impl RxQueues {
 fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(
-			vec![],
-			vec![
+			SmallVec::new(),
+			SmallVec::from_buf([
 				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
 				BufferElem::Vector(Vec::with_capacity_in(
 					packet_size.try_into().unwrap(),
 					DeviceAlloc,
 				)),
-			],
+			]),
 		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
@@ -292,8 +293,8 @@ impl NetworkDriver for VirtioNetDriver {
 		}
 
 		let buff_tkn = AvailBufferToken::new(
-			vec![BufferElem::Sized(header), BufferElem::Vector(packet)],
-			vec![],
+			SmallVec::from_buf([BufferElem::Sized(header), BufferElem::Vector(packet)]),
+			SmallVec::new(),
 		)
 		.unwrap();
 
