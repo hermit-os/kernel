@@ -69,8 +69,7 @@ impl RxQueues {
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
-		const BUFF_PER_PACKET: u16 = 2;
-		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		let num_packets: u16 = u16::from(vq.size()) / constants::BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_packets, self.packet_size);
 		self.vqs.push(vq);
 	}
@@ -295,14 +294,9 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	}
 
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
-		let mut receive_single_packet = || {
-			let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
-			let header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
-			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-			Some((header, packet))
-		};
-
-		let (first_header, first_packet) = receive_single_packet()?;
+		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
+		let first_header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 
 		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
 		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
@@ -314,8 +308,16 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 
 		let mut combined_packets = first_packet;
 
-		for _ in 1..num_buffers {
-			let (_header, packet) = receive_single_packet()?;
+		for _ in 2..=num_buffers {
+			let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
+			// The descriptor that was meant for the header of another frame was used for a portion of the current frame's contents.
+			// Thus, we cannot cast it to a Hdr.
+			let (header_descriptor, used_len) = buffer_tkn.used_recv_buff.pop_front_raw()?;
+			combined_packets.extend_from_slice(unsafe {
+				core::slice::from_raw_parts(Box::as_ptr(&header_descriptor).cast::<u8>(), used_len)
+			});
+
+			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
 			combined_packets.extend_from_slice(&packet);
 		}
 
@@ -794,6 +796,7 @@ impl VirtioNetDriver<Uninit> {
 pub mod constants {
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
+	pub(super) const BUFF_PER_PACKET: u16 = 2;
 }
 
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]
