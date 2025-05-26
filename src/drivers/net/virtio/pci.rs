@@ -2,22 +2,22 @@
 //!
 //! The module contains ...
 
-use alloc::vec::Vec;
 use core::str::FromStr;
 
 use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 use volatile::VolatileRef;
 
+use super::{Init, Uninit};
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
+use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 
 // Backend-dependent interface for Virtio network driver
-impl VirtioNetDriver {
+impl VirtioNetDriver<Uninit> {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
 		let dev_cfg = pci::map_dev_cfg::<virtio::net::Config>(cap)?;
 
@@ -57,16 +57,12 @@ impl VirtioNetDriver {
 			1514
 		};
 
-		let send_vqs = TxQueues::new(Vec::new(), &dev_cfg);
-		let recv_vqs = RxQueues::new(Vec::new(), &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg,
 			isr_stat: isr_cfg,
 			notif_cfg,
-			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs,
-			send_vqs,
+			inner: Uninit,
 			num_vqs: 0,
 			mtu,
 			irq: device.get_irq().unwrap(),
@@ -84,11 +80,11 @@ impl VirtioNetDriver {
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
-	) -> Result<VirtioNetDriver, VirtioError> {
+	) -> Result<VirtioNetDriver<Init>, VirtioError> {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
-		let mut drv = match pci::map_caps(device) {
+		let drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioNetDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(vnet_err) => {
@@ -102,23 +98,25 @@ impl VirtioNetDriver {
 			}
 		};
 
-		match drv.init_dev() {
-			Ok(()) => info!(
-				"Network device with id {:x}, has been initialized by driver!",
-				drv.get_dev_id()
-			),
+		let initialized_drv = match drv.init_dev() {
+			Ok(initialized_drv) => {
+				info!(
+					"Network device with id {:x}, has been initialized by driver!",
+					initialized_drv.get_dev_id()
+				);
+				initialized_drv
+			}
 			Err(vnet_err) => {
-				drv.set_failed();
 				return Err(VirtioError::NetDriver(vnet_err));
 			}
-		}
+		};
 
-		if drv.is_link_up() {
+		if initialized_drv.is_link_up() {
 			info!("Virtio-net link is up after initialization.");
 		} else {
 			info!("Virtio-net link is down after initialization!");
 		}
 
-		Ok(drv)
+		Ok(initialized_drv)
 	}
 }
