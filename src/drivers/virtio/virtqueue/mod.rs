@@ -200,7 +200,7 @@ trait VirtqPrivate {
 
 	fn create_indirect_ctrl(
 		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
+	) -> Result<SmallVec<[Self::Descriptor; 4]>, VirtqError>;
 
 	fn indirect_desc(table: &[Self::Descriptor]) -> Self::Descriptor {
 		let addr = table.as_ptr().expose_provenance();
@@ -312,7 +312,7 @@ pub struct TransferToken<Descriptor> {
 	/// upon reuse.
 	buff_tkn: AvailBufferToken,
 	// Contains the [MemDescr] for the indirect table if the transfer is indirect.
-	ctrl_desc: Option<Box<[Descriptor]>>,
+	ctrl_desc: Option<SmallVec<[Descriptor; 4]>>,
 }
 
 /// Public Interface for TransferToken
