@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
   merge_group:
-
+  
+    
 env:
   GH_TOKEN: ${{ github.token }}
   RUSTFLAGS: -Dwarnings
@@ -246,3 +247,58 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package thread_test --smp 4 qemu ${{ matrix.flags }}
         if: matrix.arch == 'x86_64'
+
+  benchmark:
+    name: Bench
+    runs-on: [self-hosted]
+    steps:
+    - name: Checkout hermit-rs
+      uses: actions/checkout@v4
+      with:
+        repository: hermit-os/hermit-rs
+        submodules: true
+    - name: Remove hermit-kernel submodule
+      run: git rm -r kernel
+      working-directory: .
+    - name: Checkout hermit-kernel
+      uses: actions/checkout@v4
+      with:
+        path: kernel
+    - name: Install QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-system qemu-system-x86 qemu-kvm
+    - uses: mkroening/rust-toolchain-toml@main
+    - name: Install parallel
+      run: sudo apt install parallel -y
+    - name: Download loader  
+      run: |
+        sudo apt install gh -y
+        gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
+    - name: Install uhyve
+      run: cargo +stable install --locked uhyve
+    - name: Check KVM availability
+      shell: bash
+      run: |
+         lscpu
+         kvm-ok
+    - name: Add wasm target
+      run: |
+         rustup component add llvm-tools
+         rustup target add wasm32-wasip1
+         rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+    - name: Run benchmarks
+      uses: hermit-os/hermit-bench@kernel
+      with: 
+        benchmark-file: /kernel/.github/benchmarks/bench.json
+        build-command: "HERMIT_LOG_LEVEL_FILTER=Off cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --release"
+    - name: Store benchmark result
+      # Only save the result if the commit is on main
+      # This is to avoid saving results for PRs
+      if: (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      uses: hermit-os/github-action-benchmark@hermit-rs
+      with:
+        tool: 'hermit-bench'
+        output-file-path: results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
