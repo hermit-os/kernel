@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The smoltcp library is built in a layered structure, with the layers corresponding to the levels of API abstraction. Only the highest layers would be used by a typical application; however, the goal of smoltcp is not just to provide a simple interface for writing applications but also to be a toolbox of networking primitives, so every layer is fully exposed and documented."><title>smoltcp - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="smoltcp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../smoltcp/index.html">smoltcp</a><span class="version">0.12.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#the-socket-layer" title="The socket layer">The socket layer</a></li><li><a href="#the-interface-layer" title="The interface layer">The interface layer</a></li><li><a href="#the-physical-layer" title="The physical layer">The physical layer</a></li><li><a href="#the-wire-layers" title="The wire layers">The wire layers</a><ul><li><a href="#the-representation-layer" title="The representation layer">The representation layer</a></li><li><a href="#the-packet-layer" title="The packet layer">The packet layer</a></li></ul></li><li><a href="#minimum-supported-rust-version-msrv" title="Minimum Supported Rust Version (MSRV)">Minimum Supported Rust Version (MSRV)</a></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>smoltcp</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/smoltcp/lib.rs.html#1-180">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The <em>smoltcp</em> library is built in a layered structure, with the layers corresponding
+to the levels of API abstraction. Only the highest layers would be used by a typical
+application; however, the goal of <em>smoltcp</em> is not just to provide a simple interface
+for writing applications but also to be a toolbox of networking primitives, so
+every layer is fully exposed and documented.</p>
+<p>When discussing networking stacks and layering, often the <a href="https://en.wikipedia.org/wiki/OSI_model">OSI model</a> is invoked.
+<em>smoltcp</em> makes no effort to conform to the OSI model as it is not applicable to TCP/IP.</p>
+<h2 id="the-socket-layer"><a class="doc-anchor" href="#the-socket-layer">§</a>The socket layer</h2>
+<p>The socket layer APIs are provided in the module <a href="socket/index.html">socket</a>; currently,
+raw, ICMP, TCP, and UDP sockets are provided. The socket API provides the usual primitives,
+but necessarily differs in many from the <a href="https://en.wikipedia.org/wiki/Berkeley_sockets">Berkeley socket API</a>, as the latter was
+not designed to be used without heap allocation.</p>
+<p>The socket layer provides the buffering, packet construction and validation, and (for
+stateful sockets) the state machines, but it is interface-agnostic. An application must
+use sockets together with a network interface.</p>
+<h2 id="the-interface-layer"><a class="doc-anchor" href="#the-interface-layer">§</a>The interface layer</h2>
+<p>The interface layer APIs are provided in the module <a href="iface/index.html">iface</a>; currently,
+Ethernet interface is provided.</p>
+<p>The interface layer handles the control messages, physical addressing and neighbor discovery.
+It routes packets to and from sockets.</p>
+<h2 id="the-physical-layer"><a class="doc-anchor" href="#the-physical-layer">§</a>The physical layer</h2>
+<p>The physical layer APIs are provided in the module <a href="phy/index.html">phy</a>; currently,
+raw socket and TAP interface are provided. In addition, two <em>middleware</em> interfaces
+are provided: the <em>tracer device</em>, which prints a human-readable representation of packets,
+and the <em>fault injector device</em>, which randomly introduces errors into the transmitted
+and received packet sequences.</p>
+<p>The physical layer handles interaction with a platform-specific network device.</p>
+<h2 id="the-wire-layers"><a class="doc-anchor" href="#the-wire-layers">§</a>The wire layers</h2>
+<p>Unlike the higher layers, the wire layer APIs will not be used by a typical application.
+They however are the bedrock of <em>smoltcp</em>, and everything else is built on top of them.</p>
+<p>The wire layer APIs are designed by the principle “make illegal states ir-representable”.
+If a wire layer object can be constructed, then it can also be parsed from or emitted to
+a lower level.</p>
+<p>The wire layer APIs also provide <em>tcpdump</em>-like pretty printing.</p>
+<h3 id="the-representation-layer"><a class="doc-anchor" href="#the-representation-layer">§</a>The representation layer</h3>
+<p>The representation layer APIs are provided in the module <a href="wire/index.html">wire</a>.</p>
+<p>The representation layer exists to reduce the state space of raw packets. Raw packets
+may be nonsensical in a multitude of ways: invalid checksums, impossible combinations of flags,
+pointers to fields out of bounds, meaningless options… Representations shed all that,
+as well as any features not supported by <em>smoltcp</em>.</p>
+<h3 id="the-packet-layer"><a class="doc-anchor" href="#the-packet-layer">§</a>The packet layer</h3>
+<p>The packet layer APIs are also provided in the module <a href="wire/index.html">wire</a>.</p>
+<p>The packet layer exists to provide a more structured way to work with packets than
+treating them as sequences of octets. It makes no judgement as to content of the packets,
+except where necessary to provide safe access to fields, and strives to implement every
+feature ever defined, to ensure that, when the representation layer is unable to make sense
+of a packet, it is still logged correctly and in full.</p>
+<h2 id="minimum-supported-rust-version-msrv"><a class="doc-anchor" href="#minimum-supported-rust-version-msrv">§</a>Minimum Supported Rust Version (MSRV)</h2>
+<p>This crate is guaranteed to compile on stable Rust 1.80 and up with any valid set of features.
+It <em>might</em> compile on older versions but that may change in any new patch release.</p>
+<p>The exception is when using the <code>defmt</code> feature, in which case <code>defmt</code>’s MSRV applies, which
+is higher.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="config/index.html" title="mod smoltcp::config">config</a></dt><dt><a class="mod" href="iface/index.html" title="mod smoltcp::iface">iface</a></dt><dd>Network interface logic.</dd><dt><a class="mod" href="phy/index.html" title="mod smoltcp::phy">phy</a></dt><dd>Access to networking hardware.</dd><dt><a class="mod" href="socket/index.html" title="mod smoltcp::socket">socket</a></dt><dd>Communication between endpoints.</dd><dt><a class="mod" href="storage/index.html" title="mod smoltcp::storage">storage</a></dt><dd>Specialized containers.</dd><dt><a class="mod" href="time/index.html" title="mod smoltcp::time">time</a></dt><dd>Time structures.</dd><dt><a class="mod" href="wire/index.html" title="mod smoltcp::wire">wire</a></dt><dd>Low-level packet access and construction.</dd></dl></section></div></main></body></html>

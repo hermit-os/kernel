@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Minimal support for serial communication through UART devices, which are compatible to the 16550 UART."><title>uart_16550 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="uart_16550" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../uart_16550/index.html">uart_<wbr>16550</a><span class="version">0.3.2</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#usage" title="Usage">Usage</a><ul><li><a href="#with-port-mappd-io" title="With port-mappd I/O">With port-mappd I/O</a></li><li><a href="#with-memory-mapped-serial-port" title="With memory mapped serial port">With memory mapped serial port</a></li></ul></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>uart_16550</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/uart_16550/lib.rs.html#1-124">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Minimal support for
+<a href="https://en.wikipedia.org/wiki/Asynchronous_serial_communication">serial communication</a>
+through <a href="https://en.wikipedia.org/wiki/Universal_asynchronous_receiver-transmitter">UART</a>
+devices, which are compatible to the <a href="https://en.wikipedia.org/wiki/16550_UART">16550 UART</a>.</p>
+<p>This crate supports I/O port-mapped (x86 only) and memory-mapped UARTS.</p>
+<h3 id="usage"><a class="doc-anchor" href="#usage">§</a>Usage</h3>
+<p>Depending on the system architecture, the UART can be either accessed through
+<a href="https://wiki.osdev.org/Port_IO">port-mapped I/O</a> or
+<a href="https://en.wikipedia.org/wiki/Memory-mapped_I/O">memory-mapped I/O</a>.</p>
+<h4 id="with-port-mappd-io"><a class="doc-anchor" href="#with-port-mappd-io">§</a>With port-mappd I/O</h4>
+<p>The UART is accessed through port-mapped I/O on architectures such as <code>x86_64</code>.
+On these architectures, the  <a href="struct.SerialPort.html" title="struct uart_16550::SerialPort"><code>SerialPort</code></a> type can be used:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>uart_16550::SerialPort;
+
+<span class="kw">const </span>SERIAL_IO_PORT: u16 = <span class="number">0x3F8</span>;
+
+<span class="kw">let </span><span class="kw-2">mut </span>serial_port = <span class="kw">unsafe </span>{ SerialPort::new(SERIAL_IO_PORT) };
+serial_port.init();
+
+<span class="comment">// Now the serial port is ready to be used. To send a byte:
+</span>serial_port.send(<span class="number">42</span>);
+
+<span class="comment">// To receive a byte:
+</span><span class="kw">let </span>data = serial_port.receive();</code></pre></div>
+<h4 id="with-memory-mapped-serial-port"><a class="doc-anchor" href="#with-memory-mapped-serial-port">§</a>With memory mapped serial port</h4>
+<p>Most other architectures, such as <a href="https://en.wikipedia.org/wiki/RISC-V">RISC-V</a>, use
+memory-mapped I/O for accessing the UARTs. On these architectures, the <a href="struct.MmioSerialPort.html" title="struct uart_16550::MmioSerialPort"><code>MmioSerialPort</code></a>
+type can be used:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>uart_16550::MmioSerialPort;
+
+<span class="kw">const </span>SERIAL_PORT_BASE_ADDRESS: usize = <span class="number">0x1000_0000</span>;
+
+<span class="kw">let </span><span class="kw-2">mut </span>serial_port = <span class="kw">unsafe </span>{ MmioSerialPort::new(SERIAL_PORT_BASE_ADDRESS) };
+serial_port.init();
+
+<span class="comment">// Now the serial port is ready to be used. To send a byte:
+</span>serial_port.send(<span class="number">42</span>);
+
+<span class="comment">// To receive a byte:
+</span><span class="kw">let </span>data = serial_port.receive();</code></pre></div>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.MmioSerialPort.html" title="struct uart_16550::MmioSerialPort">Mmio<wbr>Serial<wbr>Port</a></dt><dd>A memory-mapped UART.</dd><dt><a class="struct" href="struct.SerialPort.html" title="struct uart_16550::SerialPort">Serial<wbr>Port</a></dt><dd>A x86 I/O port-mapped UART.</dd><dt><a class="struct" href="struct.WouldBlockError.html" title="struct uart_16550::WouldBlockError">Would<wbr>Block<wbr>Error</a></dt><dd>The <code>WouldBlockError</code> error indicates that the serial device was not ready immediately.</dd></dl></section></div></main></body></html>

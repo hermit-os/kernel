@@ -1,0 +1,415 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/fdt-0.1.5/src/lib.rs`."><title>lib.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="fdt" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="../../static.files/src-script-63605ae7.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">fdt/</div>lib.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// This Source Code Form is subject to the terms of the Mozilla Public License,
+<a href=#2 id=2 data-nosnippet>2</a>// v. 2.0. If a copy of the MPL was not distributed with this file, You can
+<a href=#3 id=3 data-nosnippet>3</a>// obtain one at https://mozilla.org/MPL/2.0/.
+<a href=#4 id=4 data-nosnippet>4</a>
+<a href=#5 id=5 data-nosnippet>5</a></span><span class="doccomment">//! # `fdt`
+<a href=#6 id=6 data-nosnippet>6</a>//!
+<a href=#7 id=7 data-nosnippet>7</a>//! A pure-Rust `#![no_std]` crate for parsing Flattened Devicetrees, with the goal of having a
+<a href=#8 id=8 data-nosnippet>8</a>//! very ergonomic and idiomatic API.
+<a href=#9 id=9 data-nosnippet>9</a>//!
+<a href=#10 id=10 data-nosnippet>10</a>//! [![crates.io](https://img.shields.io/crates/v/fdt.svg)](https://crates.io/crates/fdt) [![Documentation](https://docs.rs/fdt/badge.svg)](https://docs.rs/fdt) ![Build](https://github.com/repnop/fdt/actions/workflows/test.yml/badge.svg?branch=master&amp;event=push)
+<a href=#11 id=11 data-nosnippet>11</a>//!
+<a href=#12 id=12 data-nosnippet>12</a>//! ## License
+<a href=#13 id=13 data-nosnippet>13</a>//!
+<a href=#14 id=14 data-nosnippet>14</a>//! This crate is licensed under the Mozilla Public License 2.0 (see the LICENSE file).
+<a href=#15 id=15 data-nosnippet>15</a>//!
+<a href=#16 id=16 data-nosnippet>16</a>//! ## Example
+<a href=#17 id=17 data-nosnippet>17</a>//!
+<a href=#18 id=18 data-nosnippet>18</a>//! ```rust,no_run
+<a href=#19 id=19 data-nosnippet>19</a>//! static MY_FDT: &amp;[u8] = include_bytes!("../dtb/test.dtb");
+<a href=#20 id=20 data-nosnippet>20</a>//!
+<a href=#21 id=21 data-nosnippet>21</a>//! fn main() {
+<a href=#22 id=22 data-nosnippet>22</a>//!     let fdt = fdt::Fdt::new(MY_FDT).unwrap();
+<a href=#23 id=23 data-nosnippet>23</a>//!
+<a href=#24 id=24 data-nosnippet>24</a>//!     println!("This is a devicetree representation of a {}", fdt.root().model());
+<a href=#25 id=25 data-nosnippet>25</a>//!     println!("...which is compatible with at least: {}", fdt.root().compatible().first());
+<a href=#26 id=26 data-nosnippet>26</a>//!     println!("...and has {} CPU(s)", fdt.cpus().count());
+<a href=#27 id=27 data-nosnippet>27</a>//!     println!(
+<a href=#28 id=28 data-nosnippet>28</a>//!         "...and has at least one memory location at: {:#X}\n",
+<a href=#29 id=29 data-nosnippet>29</a>//!         fdt.memory().regions().next().unwrap().starting_address as usize
+<a href=#30 id=30 data-nosnippet>30</a>//!     );
+<a href=#31 id=31 data-nosnippet>31</a>//!
+<a href=#32 id=32 data-nosnippet>32</a>//!     let chosen = fdt.chosen();
+<a href=#33 id=33 data-nosnippet>33</a>//!     if let Some(bootargs) = chosen.bootargs() {
+<a href=#34 id=34 data-nosnippet>34</a>//!         println!("The bootargs are: {:?}", bootargs);
+<a href=#35 id=35 data-nosnippet>35</a>//!     }
+<a href=#36 id=36 data-nosnippet>36</a>//!
+<a href=#37 id=37 data-nosnippet>37</a>//!     if let Some(stdout) = chosen.stdout() {
+<a href=#38 id=38 data-nosnippet>38</a>//!         println!("It would write stdout to: {}", stdout.name);
+<a href=#39 id=39 data-nosnippet>39</a>//!     }
+<a href=#40 id=40 data-nosnippet>40</a>//!
+<a href=#41 id=41 data-nosnippet>41</a>//!     let soc = fdt.find_node("/soc");
+<a href=#42 id=42 data-nosnippet>42</a>//!     println!("Does it have a `/soc` node? {}", if soc.is_some() { "yes" } else { "no" });
+<a href=#43 id=43 data-nosnippet>43</a>//!     if let Some(soc) = soc {
+<a href=#44 id=44 data-nosnippet>44</a>//!         println!("...and it has the following children:");
+<a href=#45 id=45 data-nosnippet>45</a>//!         for child in soc.children() {
+<a href=#46 id=46 data-nosnippet>46</a>//!             println!("    {}", child.name);
+<a href=#47 id=47 data-nosnippet>47</a>//!         }
+<a href=#48 id=48 data-nosnippet>48</a>//!     }
+<a href=#49 id=49 data-nosnippet>49</a>//! }
+<a href=#50 id=50 data-nosnippet>50</a>//! ```
+<a href=#51 id=51 data-nosnippet>51</a>
+<a href=#52 id=52 data-nosnippet>52</a></span><span class="attr">#![no_std]
+<a href=#53 id=53 data-nosnippet>53</a>
+<a href=#54 id=54 data-nosnippet>54</a>#[cfg(test)]
+<a href=#55 id=55 data-nosnippet>55</a></span><span class="kw">mod </span>tests;
+<a href=#56 id=56 data-nosnippet>56</a>
+<a href=#57 id=57 data-nosnippet>57</a><span class="kw">pub mod </span>node;
+<a href=#58 id=58 data-nosnippet>58</a><span class="kw">mod </span>parsing;
+<a href=#59 id=59 data-nosnippet>59</a><span class="kw">pub mod </span>standard_nodes;
+<a href=#60 id=60 data-nosnippet>60</a>
+<a href=#61 id=61 data-nosnippet>61</a><span class="attr">#[cfg(feature = <span class="string">"pretty-printing"</span>)]
+<a href=#62 id=62 data-nosnippet>62</a></span><span class="kw">mod </span>pretty_print;
+<a href=#63 id=63 data-nosnippet>63</a>
+<a href=#64 id=64 data-nosnippet>64</a><span class="kw">use </span>node::MemoryReservation;
+<a href=#65 id=65 data-nosnippet>65</a><span class="kw">use </span>parsing::{BigEndianU32, CStr, FdtData};
+<a href=#66 id=66 data-nosnippet>66</a><span class="kw">use </span>standard_nodes::{Aliases, Chosen, Cpu, Memory, MemoryRegion, Root};
+<a href=#67 id=67 data-nosnippet>67</a>
+<a href=#68 id=68 data-nosnippet>68</a><span class="doccomment">/// Possible errors when attempting to create an `Fdt`
+<a href=#69 id=69 data-nosnippet>69</a></span><span class="attr">#[derive(Debug, Clone, Copy, PartialEq)]
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="kw">pub enum </span>FdtError {
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="doccomment">/// The FDT had an invalid magic value
+<a href=#72 id=72 data-nosnippet>72</a>    </span>BadMagic,
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// The given pointer was null
+<a href=#74 id=74 data-nosnippet>74</a>    </span>BadPtr,
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="doccomment">/// The slice passed in was too small to fit the given total size of the FDT
+<a href=#76 id=76 data-nosnippet>76</a>    /// structure
+<a href=#77 id=77 data-nosnippet>77</a>    </span>BufferTooSmall,
+<a href=#78 id=78 data-nosnippet>78</a>}
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="kw">impl </span>core::fmt::Display <span class="kw">for </span>FdtError {
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; core::fmt::Result {
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#83 id=83 data-nosnippet>83</a>            FdtError::BadMagic =&gt; <span class="macro">write!</span>(f, <span class="string">"bad FDT magic value"</span>),
+<a href=#84 id=84 data-nosnippet>84</a>            FdtError::BadPtr =&gt; <span class="macro">write!</span>(f, <span class="string">"an invalid pointer was passed"</span>),
+<a href=#85 id=85 data-nosnippet>85</a>            FdtError::BufferTooSmall =&gt; {
+<a href=#86 id=86 data-nosnippet>86</a>                <span class="macro">write!</span>(f, <span class="string">"the given buffer was too small to contain a FDT header"</span>)
+<a href=#87 id=87 data-nosnippet>87</a>            }
+<a href=#88 id=88 data-nosnippet>88</a>        }
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>}
+<a href=#91 id=91 data-nosnippet>91</a>
+<a href=#92 id=92 data-nosnippet>92</a><span class="doccomment">/// A flattened devicetree located somewhere in memory
+<a href=#93 id=93 data-nosnippet>93</a>///
+<a href=#94 id=94 data-nosnippet>94</a>/// Note on `Debug` impl: by default the `Debug` impl of this struct will not
+<a href=#95 id=95 data-nosnippet>95</a>/// print any useful information, if you would like a best-effort tree print
+<a href=#96 id=96 data-nosnippet>96</a>/// which looks similar to `dtc`'s output, enable the `pretty-printing` feature
+<a href=#97 id=97 data-nosnippet>97</a></span><span class="attr">#[derive(Clone, Copy)]
+<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">pub struct </span>Fdt&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#99 id=99 data-nosnippet>99</a>    data: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8],
+<a href=#100 id=100 data-nosnippet>100</a>    header: FdtHeader,
+<a href=#101 id=101 data-nosnippet>101</a>}
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a><span class="kw">impl </span>core::fmt::Debug <span class="kw">for </span>Fdt&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#104 id=104 data-nosnippet>104</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>core::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; core::fmt::Result {
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="attr">#[cfg(feature = <span class="string">"pretty-printing"</span>)]
+<a href=#106 id=106 data-nosnippet>106</a>        </span>pretty_print::print_node(f, <span class="self">self</span>.root().node, <span class="number">0</span>)<span class="question-mark">?</span>;
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="attr">#[cfg(not(feature = <span class="string">"pretty-printing"</span>))]
+<a href=#109 id=109 data-nosnippet>109</a>        </span>f.debug_struct(<span class="string">"Fdt"</span>).finish_non_exhaustive()<span class="question-mark">?</span>;
+<a href=#110 id=110 data-nosnippet>110</a>
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="prelude-val">Ok</span>(())
+<a href=#112 id=112 data-nosnippet>112</a>    }
+<a href=#113 id=113 data-nosnippet>113</a>}
+<a href=#114 id=114 data-nosnippet>114</a>
+<a href=#115 id=115 data-nosnippet>115</a><span class="attr">#[derive(Debug, Clone, Copy)]
+<a href=#116 id=116 data-nosnippet>116</a>#[repr(C)]
+<a href=#117 id=117 data-nosnippet>117</a></span><span class="kw">struct </span>FdtHeader {
+<a href=#118 id=118 data-nosnippet>118</a>    <span class="doccomment">/// FDT header magic
+<a href=#119 id=119 data-nosnippet>119</a>    </span>magic: BigEndianU32,
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// Total size in bytes of the FDT structure
+<a href=#121 id=121 data-nosnippet>121</a>    </span>totalsize: BigEndianU32,
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="doccomment">/// Offset in bytes from the start of the header to the structure block
+<a href=#123 id=123 data-nosnippet>123</a>    </span>off_dt_struct: BigEndianU32,
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="doccomment">/// Offset in bytes from the start of the header to the strings block
+<a href=#125 id=125 data-nosnippet>125</a>    </span>off_dt_strings: BigEndianU32,
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// Offset in bytes from the start of the header to the memory reservation
+<a href=#127 id=127 data-nosnippet>127</a>    /// block
+<a href=#128 id=128 data-nosnippet>128</a>    </span>off_mem_rsvmap: BigEndianU32,
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// FDT version
+<a href=#130 id=130 data-nosnippet>130</a>    </span>version: BigEndianU32,
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="doccomment">/// Last compatible FDT version
+<a href=#132 id=132 data-nosnippet>132</a>    </span>last_comp_version: BigEndianU32,
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="doccomment">/// System boot CPU ID
+<a href=#134 id=134 data-nosnippet>134</a>    </span>boot_cpuid_phys: BigEndianU32,
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="doccomment">/// Length in bytes of the strings block
+<a href=#136 id=136 data-nosnippet>136</a>    </span>size_dt_strings: BigEndianU32,
+<a href=#137 id=137 data-nosnippet>137</a>    <span class="doccomment">/// Length in bytes of the struct block
+<a href=#138 id=138 data-nosnippet>138</a>    </span>size_dt_struct: BigEndianU32,
+<a href=#139 id=139 data-nosnippet>139</a>}
+<a href=#140 id=140 data-nosnippet>140</a>
+<a href=#141 id=141 data-nosnippet>141</a><span class="kw">impl </span>FdtHeader {
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">fn </span>valid_magic(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="self">self</span>.magic.get() == <span class="number">0xd00dfeed
+<a href=#144 id=144 data-nosnippet>144</a>    </span>}
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">fn </span>struct_range(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; core::ops::Range&lt;usize&gt; {
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>start = <span class="self">self</span>.off_dt_struct.get() <span class="kw">as </span>usize;
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">let </span>end = start + <span class="self">self</span>.size_dt_struct.get() <span class="kw">as </span>usize;
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a>        start..end
+<a href=#151 id=151 data-nosnippet>151</a>    }
+<a href=#152 id=152 data-nosnippet>152</a>
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">fn </span>strings_range(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; core::ops::Range&lt;usize&gt; {
+<a href=#154 id=154 data-nosnippet>154</a>        <span class="kw">let </span>start = <span class="self">self</span>.off_dt_strings.get() <span class="kw">as </span>usize;
+<a href=#155 id=155 data-nosnippet>155</a>        <span class="kw">let </span>end = start + <span class="self">self</span>.size_dt_strings.get() <span class="kw">as </span>usize;
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a>        start..end
+<a href=#158 id=158 data-nosnippet>158</a>    }
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">fn </span>from_bytes(bytes: <span class="kw-2">&amp;mut </span>FdtData&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="prelude-val">Some</span>(<span class="self">Self </span>{
+<a href=#162 id=162 data-nosnippet>162</a>            magic: bytes.u32()<span class="question-mark">?</span>,
+<a href=#163 id=163 data-nosnippet>163</a>            totalsize: bytes.u32()<span class="question-mark">?</span>,
+<a href=#164 id=164 data-nosnippet>164</a>            off_dt_struct: bytes.u32()<span class="question-mark">?</span>,
+<a href=#165 id=165 data-nosnippet>165</a>            off_dt_strings: bytes.u32()<span class="question-mark">?</span>,
+<a href=#166 id=166 data-nosnippet>166</a>            off_mem_rsvmap: bytes.u32()<span class="question-mark">?</span>,
+<a href=#167 id=167 data-nosnippet>167</a>            version: bytes.u32()<span class="question-mark">?</span>,
+<a href=#168 id=168 data-nosnippet>168</a>            last_comp_version: bytes.u32()<span class="question-mark">?</span>,
+<a href=#169 id=169 data-nosnippet>169</a>            boot_cpuid_phys: bytes.u32()<span class="question-mark">?</span>,
+<a href=#170 id=170 data-nosnippet>170</a>            size_dt_strings: bytes.u32()<span class="question-mark">?</span>,
+<a href=#171 id=171 data-nosnippet>171</a>            size_dt_struct: bytes.u32()<span class="question-mark">?</span>,
+<a href=#172 id=172 data-nosnippet>172</a>        })
+<a href=#173 id=173 data-nosnippet>173</a>    }
+<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; Fdt&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="doccomment">/// Construct a new `Fdt` from a byte buffer
+<a href=#178 id=178 data-nosnippet>178</a>    ///
+<a href=#179 id=179 data-nosnippet>179</a>    /// Note: this function does ***not*** require that the data be 4-byte
+<a href=#180 id=180 data-nosnippet>180</a>    /// aligned
+<a href=#181 id=181 data-nosnippet>181</a>    </span><span class="kw">pub fn </span>new(data: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FdtError&gt; {
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span><span class="kw-2">mut </span>stream = FdtData::new(data);
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>header = FdtHeader::from_bytes(<span class="kw-2">&amp;mut </span>stream).ok_or(FdtError::BufferTooSmall)<span class="question-mark">?</span>;
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">if </span>!header.valid_magic() {
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(FdtError::BadMagic);
+<a href=#187 id=187 data-nosnippet>187</a>        } <span class="kw">else if </span>data.len() &lt; header.totalsize.get() <span class="kw">as </span>usize {
+<a href=#188 id=188 data-nosnippet>188</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(FdtError::BufferTooSmall);
+<a href=#189 id=189 data-nosnippet>189</a>        }
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ data, header })
+<a href=#192 id=192 data-nosnippet>192</a>    }
+<a href=#193 id=193 data-nosnippet>193</a>
+<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// # Safety
+<a href=#195 id=195 data-nosnippet>195</a>    /// This function performs a read to verify the magic value. If the pointer
+<a href=#196 id=196 data-nosnippet>196</a>    /// is invalid this can result in undefined behavior.
+<a href=#197 id=197 data-nosnippet>197</a>    ///
+<a href=#198 id=198 data-nosnippet>198</a>    /// Note: this function does ***not*** require that the data be 4-byte
+<a href=#199 id=199 data-nosnippet>199</a>    /// aligned
+<a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">pub unsafe fn </span>from_ptr(ptr: <span class="kw-2">*const </span>u8) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FdtError&gt; {
+<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">if </span>ptr.is_null() {
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(FdtError::BadPtr);
+<a href=#203 id=203 data-nosnippet>203</a>        }
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a>        <span class="kw">let </span>tmp_header = core::slice::from_raw_parts(ptr, core::mem::size_of::&lt;FdtHeader&gt;());
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span>real_size =
+<a href=#207 id=207 data-nosnippet>207</a>            FdtHeader::from_bytes(<span class="kw-2">&amp;mut </span>FdtData::new(tmp_header)).unwrap().totalsize.get() <span class="kw">as </span>usize;
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="self">Self</span>::new(core::slice::from_raw_parts(ptr, real_size))
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="doccomment">/// Return the `/aliases` node, if one exists
+<a href=#213 id=213 data-nosnippet>213</a>    </span><span class="kw">pub fn </span>aliases(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;Aliases&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="prelude-val">Some</span>(Aliases {
+<a href=#215 id=215 data-nosnippet>215</a>            node: node::find_node(<span class="kw-2">&amp;mut </span>FdtData::new(<span class="self">self</span>.structs_block()), <span class="string">"/aliases"</span>, <span class="self">self</span>, <span class="prelude-val">None</span>)<span class="question-mark">?</span>,
+<a href=#216 id=216 data-nosnippet>216</a>            header: <span class="self">self</span>,
+<a href=#217 id=217 data-nosnippet>217</a>        })
+<a href=#218 id=218 data-nosnippet>218</a>    }
+<a href=#219 id=219 data-nosnippet>219</a>
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="doccomment">/// Searches for the `/chosen` node, which is always available
+<a href=#221 id=221 data-nosnippet>221</a>    </span><span class="kw">pub fn </span>chosen(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Chosen&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt; {
+<a href=#222 id=222 data-nosnippet>222</a>        node::find_node(<span class="kw-2">&amp;mut </span>FdtData::new(<span class="self">self</span>.structs_block()), <span class="string">"/chosen"</span>, <span class="self">self</span>, <span class="prelude-val">None</span>)
+<a href=#223 id=223 data-nosnippet>223</a>            .map(|node| Chosen { node })
+<a href=#224 id=224 data-nosnippet>224</a>            .expect(<span class="string">"/chosen is required"</span>)
+<a href=#225 id=225 data-nosnippet>225</a>    }
+<a href=#226 id=226 data-nosnippet>226</a>
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="doccomment">/// Return the `/cpus` node, which is always available
+<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">pub fn </span>cpus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = Cpu&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="kw">let </span>parent = <span class="self">self</span>.find_node(<span class="string">"/cpus"</span>).expect(<span class="string">"/cpus is a required node"</span>);
+<a href=#230 id=230 data-nosnippet>230</a>
+<a href=#231 id=231 data-nosnippet>231</a>        parent
+<a href=#232 id=232 data-nosnippet>232</a>            .children()
+<a href=#233 id=233 data-nosnippet>233</a>            .filter(|c| c.name.split(<span class="string">'@'</span>).next().unwrap() == <span class="string">"cpu"</span>)
+<a href=#234 id=234 data-nosnippet>234</a>            .map(<span class="kw">move </span>|cpu| Cpu { parent, node: cpu })
+<a href=#235 id=235 data-nosnippet>235</a>    }
+<a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// Returns the memory node, which is always available
+<a href=#238 id=238 data-nosnippet>238</a>    </span><span class="kw">pub fn </span>memory(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Memory&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt; {
+<a href=#239 id=239 data-nosnippet>239</a>        Memory { node: <span class="self">self</span>.find_node(<span class="string">"/memory"</span>).expect(<span class="string">"requires memory node"</span>) }
+<a href=#240 id=240 data-nosnippet>240</a>    }
+<a href=#241 id=241 data-nosnippet>241</a>
+<a href=#242 id=242 data-nosnippet>242</a>    <span class="doccomment">/// Returns an iterator over the memory reservations
+<a href=#243 id=243 data-nosnippet>243</a>    </span><span class="kw">pub fn </span>memory_reservations(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = MemoryReservation&gt; + <span class="lifetime">'a </span>{
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span><span class="kw-2">mut </span>stream = FdtData::new(<span class="kw-2">&amp;</span><span class="self">self</span>.data[<span class="self">self</span>.header.off_mem_rsvmap.get() <span class="kw">as </span>usize..]);
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span><span class="kw-2">mut </span>done = <span class="bool-val">false</span>;
+<a href=#246 id=246 data-nosnippet>246</a>
+<a href=#247 id=247 data-nosnippet>247</a>        core::iter::from_fn(<span class="kw">move </span>|| {
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">if </span>stream.is_empty() || done {
+<a href=#249 id=249 data-nosnippet>249</a>                <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#250 id=250 data-nosnippet>250</a>            }
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="kw">let </span>res = MemoryReservation::from_bytes(<span class="kw-2">&amp;mut </span>stream)<span class="question-mark">?</span>;
+<a href=#253 id=253 data-nosnippet>253</a>
+<a href=#254 id=254 data-nosnippet>254</a>            <span class="kw">if </span>res.address() <span class="kw">as </span>usize == <span class="number">0 </span>&amp;&amp; res.size() == <span class="number">0 </span>{
+<a href=#255 id=255 data-nosnippet>255</a>                done = <span class="bool-val">true</span>;
+<a href=#256 id=256 data-nosnippet>256</a>                <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#257 id=257 data-nosnippet>257</a>            }
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="prelude-val">Some</span>(res)
+<a href=#260 id=260 data-nosnippet>260</a>        })
+<a href=#261 id=261 data-nosnippet>261</a>    }
+<a href=#262 id=262 data-nosnippet>262</a>
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="doccomment">/// Return the root (`/`) node, which is always available
+<a href=#264 id=264 data-nosnippet>264</a>    </span><span class="kw">pub fn </span>root(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Root&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt; {
+<a href=#265 id=265 data-nosnippet>265</a>        Root { node: <span class="self">self</span>.find_node(<span class="string">"/"</span>).expect(<span class="string">"/ is a required node"</span>) }
+<a href=#266 id=266 data-nosnippet>266</a>    }
+<a href=#267 id=267 data-nosnippet>267</a>
+<a href=#268 id=268 data-nosnippet>268</a>    <span class="doccomment">/// Returns the first node that matches the node path, if you want all that
+<a href=#269 id=269 data-nosnippet>269</a>    /// match the path, use `find_all_nodes`. This will automatically attempt to
+<a href=#270 id=270 data-nosnippet>270</a>    /// resolve aliases if `path` is not found.
+<a href=#271 id=271 data-nosnippet>271</a>    ///
+<a href=#272 id=272 data-nosnippet>272</a>    /// Node paths must begin with a leading `/` and are ASCII only. Passing in
+<a href=#273 id=273 data-nosnippet>273</a>    /// an invalid node path or non-ASCII node name in the path will return
+<a href=#274 id=274 data-nosnippet>274</a>    /// `None`, as they will not be found within the devicetree structure.
+<a href=#275 id=275 data-nosnippet>275</a>    ///
+<a href=#276 id=276 data-nosnippet>276</a>    /// Note: if the address of a node name is left out, the search will find
+<a href=#277 id=277 data-nosnippet>277</a>    /// the first node that has a matching name, ignoring the address portion if
+<a href=#278 id=278 data-nosnippet>278</a>    /// it exists.
+<a href=#279 id=279 data-nosnippet>279</a>    </span><span class="kw">pub fn </span>find_node(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Option</span>&lt;node::FdtNode&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">let </span>node = node::find_node(<span class="kw-2">&amp;mut </span>FdtData::new(<span class="self">self</span>.structs_block()), path, <span class="self">self</span>, <span class="prelude-val">None</span>);
+<a href=#281 id=281 data-nosnippet>281</a>        node.or_else(|| <span class="self">self</span>.aliases()<span class="question-mark">?</span>.resolve_node(path))
+<a href=#282 id=282 data-nosnippet>282</a>    }
+<a href=#283 id=283 data-nosnippet>283</a>
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="doccomment">/// Searches for a node which contains a `compatible` property and contains
+<a href=#285 id=285 data-nosnippet>285</a>    /// one of the strings inside of `with`
+<a href=#286 id=286 data-nosnippet>286</a>    </span><span class="kw">pub fn </span>find_compatible(<span class="kw-2">&amp;</span><span class="self">self</span>, with: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Option</span>&lt;node::FdtNode&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#287 id=287 data-nosnippet>287</a>        <span class="self">self</span>.all_nodes().find(|n| {
+<a href=#288 id=288 data-nosnippet>288</a>            n.compatible().and_then(|compats| compats.all().find(|c| with.contains(c))).is_some()
+<a href=#289 id=289 data-nosnippet>289</a>        })
+<a href=#290 id=290 data-nosnippet>290</a>    }
+<a href=#291 id=291 data-nosnippet>291</a>
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="doccomment">/// Searches for the given `phandle`
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">pub fn </span>find_phandle(<span class="kw-2">&amp;</span><span class="self">self</span>, phandle: u32) -&gt; <span class="prelude-ty">Option</span>&lt;node::FdtNode&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#294 id=294 data-nosnippet>294</a>        <span class="self">self</span>.all_nodes().find(|n| {
+<a href=#295 id=295 data-nosnippet>295</a>            n.properties()
+<a href=#296 id=296 data-nosnippet>296</a>                .find(|p| p.name == <span class="string">"phandle"</span>)
+<a href=#297 id=297 data-nosnippet>297</a>                .and_then(|p| <span class="prelude-val">Some</span>(BigEndianU32::from_bytes(p.value)<span class="question-mark">?</span>.get() == phandle))
+<a href=#298 id=298 data-nosnippet>298</a>                .unwrap_or(<span class="bool-val">false</span>)
+<a href=#299 id=299 data-nosnippet>299</a>        })
+<a href=#300 id=300 data-nosnippet>300</a>    }
+<a href=#301 id=301 data-nosnippet>301</a>
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="doccomment">/// Returns an iterator over all of the available nodes with the given path.
+<a href=#303 id=303 data-nosnippet>303</a>    /// This does **not** attempt to find any node with the same name as the
+<a href=#304 id=304 data-nosnippet>304</a>    /// provided path, if you're looking to do that, [`Fdt::all_nodes`] will
+<a href=#305 id=305 data-nosnippet>305</a>    /// allow you to iterate over each node's name and filter for the desired
+<a href=#306 id=306 data-nosnippet>306</a>    /// node(s).
+<a href=#307 id=307 data-nosnippet>307</a>    ///
+<a href=#308 id=308 data-nosnippet>308</a>    /// For example:
+<a href=#309 id=309 data-nosnippet>309</a>    /// ```rust
+<a href=#310 id=310 data-nosnippet>310</a>    /// static MY_FDT: &amp;[u8] = include_bytes!("../dtb/test.dtb");
+<a href=#311 id=311 data-nosnippet>311</a>    ///
+<a href=#312 id=312 data-nosnippet>312</a>    /// let fdt = fdt::Fdt::new(MY_FDT).unwrap();
+<a href=#313 id=313 data-nosnippet>313</a>    ///
+<a href=#314 id=314 data-nosnippet>314</a>    /// for node in fdt.find_all_nodes("/soc/virtio_mmio") {
+<a href=#315 id=315 data-nosnippet>315</a>    ///     println!("{}", node.name);
+<a href=#316 id=316 data-nosnippet>316</a>    /// }
+<a href=#317 id=317 data-nosnippet>317</a>    /// ```
+<a href=#318 id=318 data-nosnippet>318</a>    /// prints:
+<a href=#319 id=319 data-nosnippet>319</a>    /// ```notrust
+<a href=#320 id=320 data-nosnippet>320</a>    /// virtio_mmio@10008000
+<a href=#321 id=321 data-nosnippet>321</a>    /// virtio_mmio@10007000
+<a href=#322 id=322 data-nosnippet>322</a>    /// virtio_mmio@10006000
+<a href=#323 id=323 data-nosnippet>323</a>    /// virtio_mmio@10005000
+<a href=#324 id=324 data-nosnippet>324</a>    /// virtio_mmio@10004000
+<a href=#325 id=325 data-nosnippet>325</a>    /// virtio_mmio@10003000
+<a href=#326 id=326 data-nosnippet>326</a>    /// virtio_mmio@10002000
+<a href=#327 id=327 data-nosnippet>327</a>    /// virtio_mmio@10001000
+<a href=#328 id=328 data-nosnippet>328</a>    /// ```
+<a href=#329 id=329 data-nosnippet>329</a>    </span><span class="kw">pub fn </span>find_all_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>, path: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str) -&gt; <span class="kw">impl </span>Iterator&lt;Item = node::FdtNode&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="kw">let </span><span class="kw-2">mut </span>done = <span class="bool-val">false</span>;
+<a href=#331 id=331 data-nosnippet>331</a>        <span class="kw">let </span>only_root = path == <span class="string">"/"</span>;
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">let </span>valid_path = path.chars().fold(<span class="number">0</span>, |acc, c| acc + <span class="kw">if </span>c == <span class="string">'/' </span>{ <span class="number">1 </span>} <span class="kw">else </span>{ <span class="number">0 </span>}) &gt;= <span class="number">1</span>;
+<a href=#333 id=333 data-nosnippet>333</a>
+<a href=#334 id=334 data-nosnippet>334</a>        <span class="kw">let </span><span class="kw-2">mut </span>path_split = path.rsplitn(<span class="number">2</span>, <span class="string">'/'</span>);
+<a href=#335 id=335 data-nosnippet>335</a>        <span class="kw">let </span>child_name = path_split.next().unwrap();
+<a href=#336 id=336 data-nosnippet>336</a>        <span class="kw">let </span>parent = <span class="kw">match </span>path_split.next() {
+<a href=#337 id=337 data-nosnippet>337</a>            <span class="prelude-val">Some</span>(<span class="string">""</span>) =&gt; <span class="prelude-val">Some</span>(<span class="self">self</span>.root().node),
+<a href=#338 id=338 data-nosnippet>338</a>            <span class="prelude-val">Some</span>(s) =&gt; node::find_node(<span class="kw-2">&amp;mut </span>FdtData::new(<span class="self">self</span>.structs_block()), s, <span class="self">self</span>, <span class="prelude-val">None</span>),
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="prelude-val">None </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#340 id=340 data-nosnippet>340</a>        };
+<a href=#341 id=341 data-nosnippet>341</a>
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">let </span>(parent, bad_parent) = <span class="kw">match </span>parent {
+<a href=#343 id=343 data-nosnippet>343</a>            <span class="prelude-val">Some</span>(parent) =&gt; (parent, <span class="bool-val">false</span>),
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="prelude-val">None </span>=&gt; (<span class="self">self</span>.find_node(<span class="string">"/"</span>).unwrap(), <span class="bool-val">true</span>),
+<a href=#345 id=345 data-nosnippet>345</a>        };
+<a href=#346 id=346 data-nosnippet>346</a>
+<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span><span class="kw-2">mut </span>child_iter = parent.children();
+<a href=#348 id=348 data-nosnippet>348</a>
+<a href=#349 id=349 data-nosnippet>349</a>        core::iter::from_fn(<span class="kw">move </span>|| {
+<a href=#350 id=350 data-nosnippet>350</a>            <span class="kw">if </span>done || !valid_path || bad_parent {
+<a href=#351 id=351 data-nosnippet>351</a>                <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#352 id=352 data-nosnippet>352</a>            }
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a>            <span class="kw">if </span>only_root {
+<a href=#355 id=355 data-nosnippet>355</a>                done = <span class="bool-val">true</span>;
+<a href=#356 id=356 data-nosnippet>356</a>                <span class="kw">return </span><span class="self">self</span>.find_node(<span class="string">"/"</span>);
+<a href=#357 id=357 data-nosnippet>357</a>            }
+<a href=#358 id=358 data-nosnippet>358</a>
+<a href=#359 id=359 data-nosnippet>359</a>            <span class="kw">let </span><span class="kw-2">mut </span>ret = <span class="prelude-val">None</span>;
+<a href=#360 id=360 data-nosnippet>360</a>
+<a href=#361 id=361 data-nosnippet>361</a>            <span class="attr">#[allow(clippy::while_let_on_iterator)]
+<a href=#362 id=362 data-nosnippet>362</a>            </span><span class="kw">while let </span><span class="prelude-val">Some</span>(child) = child_iter.next() {
+<a href=#363 id=363 data-nosnippet>363</a>                <span class="kw">if </span>child.name.split(<span class="string">'@'</span>).next()<span class="question-mark">? </span>== child_name {
+<a href=#364 id=364 data-nosnippet>364</a>                    ret = <span class="prelude-val">Some</span>(child);
+<a href=#365 id=365 data-nosnippet>365</a>                    <span class="kw">break</span>;
+<a href=#366 id=366 data-nosnippet>366</a>                }
+<a href=#367 id=367 data-nosnippet>367</a>            }
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>            ret
+<a href=#370 id=370 data-nosnippet>370</a>        })
+<a href=#371 id=371 data-nosnippet>371</a>    }
+<a href=#372 id=372 data-nosnippet>372</a>
+<a href=#373 id=373 data-nosnippet>373</a>    <span class="doccomment">/// Returns an iterator over all of the nodes in the devicetree, depth-first
+<a href=#374 id=374 data-nosnippet>374</a>    </span><span class="kw">pub fn </span>all_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = node::FdtNode&lt;<span class="lifetime">'_</span>, <span class="lifetime">'a</span>&gt;&gt; {
+<a href=#375 id=375 data-nosnippet>375</a>        node::all_nodes(<span class="self">self</span>)
+<a href=#376 id=376 data-nosnippet>376</a>    }
+<a href=#377 id=377 data-nosnippet>377</a>
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="doccomment">/// Returns an iterator over all of the strings inside of the strings block
+<a href=#379 id=379 data-nosnippet>379</a>    </span><span class="kw">pub fn </span>strings(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str&gt; {
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span><span class="kw-2">mut </span>block = <span class="self">self</span>.strings_block();
+<a href=#381 id=381 data-nosnippet>381</a>
+<a href=#382 id=382 data-nosnippet>382</a>        core::iter::from_fn(<span class="kw">move </span>|| {
+<a href=#383 id=383 data-nosnippet>383</a>            <span class="kw">if </span>block.is_empty() {
+<a href=#384 id=384 data-nosnippet>384</a>                <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#385 id=385 data-nosnippet>385</a>            }
+<a href=#386 id=386 data-nosnippet>386</a>
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="kw">let </span>cstr = CStr::new(block)<span class="question-mark">?</span>;
+<a href=#388 id=388 data-nosnippet>388</a>
+<a href=#389 id=389 data-nosnippet>389</a>            block = <span class="kw-2">&amp;</span>block[cstr.len() + <span class="number">1</span>..];
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a>            cstr.as_str()
+<a href=#392 id=392 data-nosnippet>392</a>        })
+<a href=#393 id=393 data-nosnippet>393</a>    }
+<a href=#394 id=394 data-nosnippet>394</a>
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// Total size of the devicetree in bytes
+<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">pub fn </span>total_size(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="self">self</span>.header.totalsize.get() <span class="kw">as </span>usize
+<a href=#398 id=398 data-nosnippet>398</a>    }
+<a href=#399 id=399 data-nosnippet>399</a>
+<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">fn </span>cstr_at_offset(<span class="kw-2">&amp;</span><span class="self">self</span>, offset: usize) -&gt; CStr&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#401 id=401 data-nosnippet>401</a>        CStr::new(<span class="kw-2">&amp;</span><span class="self">self</span>.strings_block()[offset..]).expect(<span class="string">"no null terminating string on C str?"</span>)
+<a href=#402 id=402 data-nosnippet>402</a>    }
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">fn </span>str_at_offset(<span class="kw-2">&amp;</span><span class="self">self</span>, offset: usize) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str {
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="self">self</span>.cstr_at_offset(offset).as_str().expect(<span class="string">"not utf-8 cstr"</span>)
+<a href=#406 id=406 data-nosnippet>406</a>    }
+<a href=#407 id=407 data-nosnippet>407</a>
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">fn </span>strings_block(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8] {
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.data[<span class="self">self</span>.header.strings_range()]
+<a href=#410 id=410 data-nosnippet>410</a>    }
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">fn </span>structs_block(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8] {
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.data[<span class="self">self</span>.header.struct_range()]
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>}</code></pre></div></section></main></body></html>

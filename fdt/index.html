@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="`fdt`"><title>fdt - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="fdt" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../fdt/index.html">fdt</a><span class="version">0.1.5</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#fdt" title="`fdt`"><code>fdt</code></a><ul><li><a href="#license" title="License">License</a></li><li><a href="#example" title="Example">Example</a></li></ul></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>fdt</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/fdt/lib.rs.html#5-415">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="fdt"><a class="doc-anchor" href="#fdt">§</a><code>fdt</code></h2>
+<p>A pure-Rust <code>#![no_std]</code> crate for parsing Flattened Devicetrees, with the goal of having a
+very ergonomic and idiomatic API.</p>
+<p><a href="https://crates.io/crates/fdt"><img src="https://img.shields.io/crates/v/fdt.svg" alt="crates.io" /></a> <a href="https://docs.rs/fdt"><img src="https://docs.rs/fdt/badge.svg" alt="Documentation" /></a> <img src="https://github.com/repnop/fdt/actions/workflows/test.yml/badge.svg?branch=master&amp;event=push" alt="Build" /></p>
+<h3 id="license"><a class="doc-anchor" href="#license">§</a>License</h3>
+<p>This crate is licensed under the Mozilla Public License 2.0 (see the LICENSE file).</p>
+<h3 id="example"><a class="doc-anchor" href="#example">§</a>Example</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">static </span>MY_FDT: <span class="kw-2">&amp;</span>[u8] = <span class="macro">include_bytes!</span>(<span class="string">"../dtb/test.dtb"</span>);
+
+<span class="kw">fn </span>main() {
+    <span class="kw">let </span>fdt = fdt::Fdt::new(MY_FDT).unwrap();
+
+    <span class="macro">println!</span>(<span class="string">"This is a devicetree representation of a {}"</span>, fdt.root().model());
+    <span class="macro">println!</span>(<span class="string">"...which is compatible with at least: {}"</span>, fdt.root().compatible().first());
+    <span class="macro">println!</span>(<span class="string">"...and has {} CPU(s)"</span>, fdt.cpus().count());
+    <span class="macro">println!</span>(
+        <span class="string">"...and has at least one memory location at: {:#X}\n"</span>,
+        fdt.memory().regions().next().unwrap().starting_address <span class="kw">as </span>usize
+    );
+
+    <span class="kw">let </span>chosen = fdt.chosen();
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(bootargs) = chosen.bootargs() {
+        <span class="macro">println!</span>(<span class="string">"The bootargs are: {:?}"</span>, bootargs);
+    }
+
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(stdout) = chosen.stdout() {
+        <span class="macro">println!</span>(<span class="string">"It would write stdout to: {}"</span>, stdout.name);
+    }
+
+    <span class="kw">let </span>soc = fdt.find_node(<span class="string">"/soc"</span>);
+    <span class="macro">println!</span>(<span class="string">"Does it have a `/soc` node? {}"</span>, <span class="kw">if </span>soc.is_some() { <span class="string">"yes" </span>} <span class="kw">else </span>{ <span class="string">"no" </span>});
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(soc) = soc {
+        <span class="macro">println!</span>(<span class="string">"...and it has the following children:"</span>);
+        <span class="kw">for </span>child <span class="kw">in </span>soc.children() {
+            <span class="macro">println!</span>(<span class="string">"    {}"</span>, child.name);
+        }
+    }
+}</code></pre></div>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="node/index.html" title="mod fdt::node">node</a></dt><dt><a class="mod" href="standard_nodes/index.html" title="mod fdt::standard_nodes">standard_<wbr>nodes</a></dt></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Fdt.html" title="struct fdt::Fdt">Fdt</a></dt><dd>A flattened devicetree located somewhere in memory</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.FdtError.html" title="enum fdt::FdtError">FdtError</a></dt><dd>Possible errors when attempting to create an <code>Fdt</code></dd></dl></section></div></main></body></html>
