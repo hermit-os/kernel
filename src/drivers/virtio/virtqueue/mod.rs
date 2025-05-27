@@ -13,7 +13,6 @@ pub mod packed;
 pub mod split;
 
 use alloc::boxed::Box;
-use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::mem::MaybeUninit;
@@ -402,7 +401,7 @@ pub struct AvailBufferToken {
 }
 
 pub(crate) struct UsedDeviceWritableBuffer {
-	elems: VecDeque<BufferElem>,
+	elems: SmallVec<[BufferElem; 2]>,
 	remaining_written_len: u32,
 }
 
@@ -415,7 +414,9 @@ impl UsedDeviceWritableBuffer {
 			return None;
 		}
 
-		let elem = self.elems.pop_front()?;
+		// May panic, but we have written data remaining so there should always be an item
+		let elem = self.elems.remove(0);
+
 		if let BufferElem::Sized(sized) = elem {
 			match sized.downcast::<MaybeUninit<T>>() {
 				Ok(cast) => {
@@ -423,18 +424,25 @@ impl UsedDeviceWritableBuffer {
 					Some(unsafe { cast.assume_init() })
 				}
 				Err(sized) => {
-					self.elems.push_front(BufferElem::Sized(sized));
+					// Unlikely and wrong usage, we should not optimize for this case
+					self.elems.insert(0, BufferElem::Sized(sized));
 					None
 				}
 			}
 		} else {
-			self.elems.push_front(elem);
+			// Unlikely and wrong usage, we should not optimize for this case
+			self.elems.insert(0, elem);
 			None
 		}
 	}
 
 	pub fn pop_front_vec(&mut self) -> Option<Vec<u8, DeviceAlloc>> {
-		let elem = self.elems.pop_front()?;
+		if self.elems.is_empty() {
+			return None;
+		}
+
+		let elem = self.elems.remove(0);
+
 		if let BufferElem::Vector(mut vector) = elem {
 			let new_len = u32::min(
 				vector.capacity().try_into().unwrap(),
@@ -444,7 +452,8 @@ impl UsedDeviceWritableBuffer {
 			unsafe { vector.set_len(new_len.try_into().unwrap()) };
 			Some(vector)
 		} else {
-			self.elems.push_front(elem);
+			// Unlikely and wrong usage, we should not optimize for this case
+			self.elems.insert(0, elem);
 			None
 		}
 	}
@@ -460,7 +469,7 @@ impl UsedBufferToken {
 		Self {
 			send_buff: tkn.send_buff,
 			used_recv_buff: UsedDeviceWritableBuffer {
-				elems: tkn.recv_buff.into_vec().into(),
+				elems: tkn.recv_buff,
 				remaining_written_len: written_len,
 			},
 		}
