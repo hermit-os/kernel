@@ -16,6 +16,7 @@ use core::{mem, slice};
 use align_address::Align;
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::*;
+use smoltcp::phy::{ChecksumCapabilities, DeviceCapabilities};
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 use tock_registers::{register_bitfields, register_structs};
@@ -30,7 +31,6 @@ use crate::drivers::net::{NetworkDriver, mtu};
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci as hardware;
 use crate::drivers::{Driver, InterruptLine};
-use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::{BasePageSize, PageSize};
 
@@ -214,17 +214,27 @@ pub enum GEMError {
 /// Struct allows to control device queues and also
 /// the device itself.
 pub struct GEMDriver {
-	// Pointer to the registers of the controller
-	gem: *mut Registers,
 	mtu: u16,
 	irq: u8,
 	mac: [u8; 6],
 	rx_counter: u32,
+	rx_fields: RxFields,
+	tx_counter: u32,
+	tx_fields: TxFields,
+}
+
+struct RxFields {
 	rxbuffer: VirtAddr,
 	rxbuffer_list: VirtAddr,
-	tx_counter: u32,
+	rxbuffer_reserved: Box<[bool]>,
+}
+
+struct TxFields {
+	// Pointer to the registers of the controller
+	gem: *mut Registers,
 	txbuffer: VirtAddr,
 	txbuffer_list: VirtAddr,
+	txbuffer_reserved: Box<[bool]>,
 }
 
 // FIXME: make `gem` implement `Send` instead
@@ -236,119 +246,10 @@ impl NetworkDriver for GEMDriver {
 		self.mac
 	}
 
-	/// Returns the current MTU of the device.
-	fn get_mtu(&self) -> u16 {
-		self.mtu
-	}
-
-	#[allow(clippy::modulo_one)]
-	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
-	where
-		F: FnOnce(&mut [u8]) -> R,
-	{
-		debug!("get_tx_buffer");
-
-		assert!(len as u32 <= TX_BUF_LEN, "TX buffer is too small");
-
-		self.handle_interrupt();
-
-		for i in 0..TX_BUF_NUM {
-			let index = (i + self.tx_counter) % TX_BUF_NUM;
-			let word1_addr = (self.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
-			let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
-			// Reuse a used buffer
-			if word1 & TX_DESC_USED != 0 {
-				// Clear used bit
-				unsafe {
-					core::ptr::write_volatile(word1_addr, word1 & (!TX_DESC_USED));
-				}
-
-				// Set new starting point to search for next buffer
-				self.tx_counter = (index + 1) % TX_BUF_NUM;
-
-				// Address of the tx buffer
-				let buffer = (self.txbuffer + u64::from(index * TX_BUF_LEN)).as_mut_ptr::<u8>();
-				let buffer = unsafe { slice::from_raw_parts_mut(buffer, len) };
-				let result = f(buffer);
-
-				debug!("send_tx_buffer");
-
-				// Address of word[1] of the buffer descriptor
-				let word1_addr =
-					(self.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
-				let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
-
-				unsafe {
-					// Set length of frame and mark as single buffer Ethernet frame
-					core::ptr::write_volatile(
-						word1_addr,
-						(word1 & TX_DESC_WRAP) | TX_DESC_LAST | len as u32,
-					);
-
-					// Enable TX
-					(*self.gem)
-						.network_control
-						.modify(NetworkControl::TXEN::SET);
-					// Start transmission
-					(*self.gem)
-						.network_control
-						.modify(NetworkControl::STARTTX::SET);
-
-					// (*GEM).network_control.modify(NetworkControl::RXEN::CLEAR);
-				}
-
-				// Set used bit to indicate that the buffer can be reused
-				let word1_addr =
-					(self.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
-				let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
-				unsafe {
-					core::ptr::write_volatile(word1_addr, word1 | TX_DESC_USED);
-				}
-
-				return result;
-			}
-		}
-
-		panic!("Unable to get TX buffer")
-	}
-
 	fn has_packet(&self) -> bool {
 		debug!("has_packet");
 
 		self.next_rx_index().is_some()
-	}
-
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
-		debug!("receive_rx_buffer");
-
-		// Scan the buffer descriptor queue starting from rx_count
-		match self.next_rx_index() {
-			Some(index) => {
-				let word1_addr = self.rxbuffer_list + u64::from(index * 8 + 4);
-				let word1_entry =
-					unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
-				let length = word1_entry & 0x1fff;
-				debug!("Received frame in buffer {index}, length: {length}");
-
-				// Starting point to search for next frame
-				self.rx_counter = (index + 1) % RX_BUF_NUM;
-				// SAFETY: This is a blatant lie and very unsound.
-				// The API must be fixed or the buffer may never touched again.
-				let buffer = unsafe {
-					core::slice::from_raw_parts_mut(
-						(self.rxbuffer.as_usize() + (index * RX_BUF_LEN) as usize) as *mut u8,
-						length as usize,
-					)
-				};
-				trace!("BUFFER: {buffer:x?}");
-				self.rx_buffer_consumed(index as usize);
-				Some((
-					RxToken::new(buffer.to_vec_in(DeviceAlloc)),
-					TxToken::new(self),
-				))
-			}
-			None => None,
-		}
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
@@ -356,16 +257,24 @@ impl NetworkDriver for GEMDriver {
 		if value {
 			// disable interrupts from the NIC
 			unsafe {
-				(*self.gem).int_disable.set(0x7ff_feff);
+				(*self.tx_fields.gem).int_disable.set(0x7ff_feff);
 			}
 		} else {
 			// Enable all known interrupts by setting the interrupt mask.
 			unsafe {
-				(*self.gem).int_enable.write(Interrupts::FRAMERX::SET);
+				(*self.tx_fields.gem)
+					.int_enable
+					.write(Interrupts::FRAMERX::SET);
 			}
 		}
 	}
 
+	fn handle_interrupt(&mut self) {
+		self.tx_fields.handle_interrupt();
+	}
+}
+
+impl TxFields {
 	fn handle_interrupt(&mut self) {
 		let int_status = unsafe { (*self.gem).int_status.extract() };
 
@@ -422,12 +331,12 @@ impl Driver for GEMDriver {
 	}
 }
 
-impl GEMDriver {
+impl RxToken<'_> {
 	// Tells driver, that buffer is consumed and can be deallocated
-	fn rx_buffer_consumed(&mut self, handle: usize) {
-		debug!("rx_buffer_consumed: handle: {handle}");
+	fn rx_buffer_consumed(&mut self) {
+		debug!("rx_buffer_consumed: handle: {}", self.buffer_index);
 
-		let word0_addr = (self.rxbuffer_list + (handle * 8) as u64);
+		let word0_addr = (self.rx_fields.rxbuffer_list + u64::from(self.buffer_index * 8));
 		let word1_addr = word0_addr + 4u64;
 
 		unsafe {
@@ -438,14 +347,16 @@ impl GEMDriver {
 			core::ptr::write_volatile(word0_addr.as_mut_ptr::<u32>(), word0_entry & 0xffff_fffe);
 		}
 	}
+}
 
+impl GEMDriver {
 	/// Returns the index of the next received frame
 	fn next_rx_index(&self) -> Option<u32> {
 		// Scan the buffer descriptor queue starting from rx_count
 
 		for i in 0..RX_BUF_NUM {
 			let index = (i + self.rx_counter) % RX_BUF_NUM;
-			let word0_addr = (self.rxbuffer_list + u64::from(index * 8));
+			let word0_addr = (self.rx_fields.rxbuffer_list + u64::from(index * 8));
 			let word0_entry = unsafe { core::ptr::read_volatile(word0_addr.as_mut_ptr::<u32>()) };
 			// Is buffer owned by GEM?
 			if (word0_entry & 0x1) != 0 {
@@ -454,6 +365,200 @@ impl GEMDriver {
 		}
 
 		None
+	}
+
+	#[expect(clippy::modulo_one)]
+	fn next_tx_index(&self) -> Option<u32> {
+		for i in 0..TX_BUF_NUM {
+			let index = (i + self.tx_counter) % TX_BUF_NUM;
+			let word1_addr =
+				(self.tx_fields.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
+			let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
+			// Reuse a used buffer
+			if word1 & TX_DESC_USED != 0
+				&& !self.tx_fields.txbuffer_reserved[usize::try_from(i).unwrap()]
+			{
+				return Some(i);
+			}
+		}
+		None
+	}
+
+	#[expect(clippy::modulo_one)]
+	fn reserve_tx_index(&mut self, index: u32) {
+		// Set new starting point to search for next buffer
+		self.tx_counter = (index + 1) % TX_BUF_NUM;
+		self.tx_fields.txbuffer_reserved[usize::try_from(index).unwrap()] = true;
+	}
+}
+
+pub struct RxToken<'a> {
+	/// The index of the free Rx buffer
+	buffer_index: u32,
+	rx_fields: &'a mut RxFields,
+}
+
+/// The index of the free Tx buffer
+pub struct TxToken<'a> {
+	/// The index of the free Tx buffer
+	buffer_index: u32,
+	tx_fields: &'a mut TxFields,
+}
+
+impl smoltcp::phy::Device for GEMDriver {
+	/// The index of the free Rx buffer
+	type RxToken<'a> = RxToken<'a>;
+	type TxToken<'a> = TxToken<'a>;
+
+	fn receive(
+		&mut self,
+		timestamp: smoltcp::time::Instant,
+	) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+		if let Some(rx_index) = self.next_rx_index()
+			&& let Some(tx_index) = self.next_tx_index()
+		{
+			self.reserve_tx_index(tx_index);
+
+			// Starting point to search for next frame
+			self.rx_counter = (rx_index + 1) % RX_BUF_NUM;
+			self.rx_fields.rxbuffer_reserved[usize::try_from(rx_index).unwrap()] = true;
+
+			Some((
+				RxToken {
+					buffer_index: rx_index,
+					rx_fields: &mut self.rx_fields,
+				},
+				TxToken {
+					buffer_index: tx_index,
+					tx_fields: &mut self.tx_fields,
+				},
+			))
+		} else {
+			None
+		}
+	}
+	fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+		self.handle_interrupt();
+		self.next_tx_index()
+			.inspect(|index| self.reserve_tx_index(*index))
+			.map(|buffer_index| TxToken {
+				buffer_index,
+				tx_fields: &mut self.tx_fields,
+			})
+	}
+	fn capabilities(&self) -> DeviceCapabilities {
+		let mut cap = DeviceCapabilities::default();
+		cap.max_transmission_unit = usize::from(self.mtu);
+		cap.max_burst_size = Some(u32::max(TX_BUF_NUM, RX_BUF_NUM).try_into().unwrap());
+		cap.checksum = ChecksumCapabilities::default();
+		cap
+	}
+}
+
+impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
+	fn consume<R, F>(mut self, f: F) -> R
+	where
+		F: FnOnce(&[u8]) -> R,
+	{
+		debug!("receive_rx_buffer");
+
+		let word1_addr = self.rx_fields.rxbuffer_list + u64::from(self.buffer_index * 8 + 4);
+		let word1_entry = unsafe { core::ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
+		let length = word1_entry & 0x1fff;
+		debug!(
+			"Received frame in buffer {}, length: {length}",
+			self.buffer_index
+		);
+
+		// SAFETY: This is a blatant lie and very unsound.
+		// The API must be fixed or the buffer may never touched again.
+		let buffer = unsafe {
+			core::slice::from_raw_parts_mut(
+				(self.rx_fields.rxbuffer.as_usize() + (self.buffer_index * RX_BUF_LEN) as usize)
+					as *mut u8,
+				length as usize,
+			)
+		};
+		trace!("BUFFER: {buffer:x?}");
+		let res = f(buffer);
+		self.rx_buffer_consumed();
+		res
+	}
+}
+
+impl Drop for RxToken<'_> {
+	fn drop(&mut self) {
+		self.rx_fields.rxbuffer_reserved[usize::try_from(self.buffer_index).unwrap()] = false;
+	}
+}
+
+impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
+	fn consume<R, F>(self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R,
+	{
+		debug!("get_tx_buffer");
+
+		assert!(len as u32 <= TX_BUF_LEN, "TX buffer is too small");
+
+		self.tx_fields.handle_interrupt();
+
+		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
+			.as_mut_ptr::<u32>();
+		let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
+
+		// Clear used bit
+		unsafe {
+			core::ptr::write_volatile(word1_addr, word1 & (!TX_DESC_USED));
+		}
+
+		// Address of the tx buffer
+		let buffer = (self.tx_fields.txbuffer + u64::from(self.buffer_index * TX_BUF_LEN))
+			.as_mut_ptr::<u8>();
+		let buffer = unsafe { slice::from_raw_parts_mut(buffer, len) };
+		let result = f(buffer);
+
+		debug!("send_tx_buffer");
+
+		// Address of word[1] of the buffer descriptor
+		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
+			.as_mut_ptr::<u32>();
+		let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
+
+		unsafe {
+			// Set length of frame and mark as single buffer Ethernet frame
+			core::ptr::write_volatile(
+				word1_addr,
+				(word1 & TX_DESC_WRAP) | TX_DESC_LAST | len as u32,
+			);
+
+			// Enable TX
+			(*self.tx_fields.gem)
+				.network_control
+				.modify(NetworkControl::TXEN::SET);
+			// Start transmission
+			(*self.tx_fields.gem)
+				.network_control
+				.modify(NetworkControl::STARTTX::SET);
+
+			// (*GEM).network_control.modify(NetworkControl::RXEN::CLEAR);
+		}
+
+		// Set used bit to indicate that the buffer can be reused
+		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
+			.as_mut_ptr::<u32>();
+		let word1 = unsafe { core::ptr::read_volatile(word1_addr) };
+		unsafe {
+			core::ptr::write_volatile(word1_addr, word1 | TX_DESC_USED);
+		}
+
+		result
+	}
+}
+
+impl Drop for TxToken<'_> {
+	fn drop(&mut self) {
+		self.tx_fields.txbuffer_reserved[usize::try_from(self.buffer_index).unwrap()] = false;
 	}
 }
 
@@ -464,12 +569,12 @@ impl Drop for GEMDriver {
 		unsafe {
 			// Software reset
 			// Clear the Network Control register
-			(*self.gem).network_control.set(0x0);
+			(*self.tx_fields.gem).network_control.set(0x0);
 
-			deallocate(self.rxbuffer, (RX_BUF_LEN * RX_BUF_NUM) as usize);
-			deallocate(self.txbuffer, (TX_BUF_LEN * TX_BUF_NUM) as usize);
-			deallocate(self.rxbuffer_list, (8 * RX_BUF_NUM) as usize);
-			deallocate(self.txbuffer_list, (8 * TX_BUF_NUM) as usize);
+			deallocate(self.rx_fields.rxbuffer, (RX_BUF_LEN * RX_BUF_NUM) as usize);
+			deallocate(self.tx_fields.txbuffer, (TX_BUF_LEN * TX_BUF_NUM) as usize);
+			deallocate(self.rx_fields.rxbuffer_list, (8 * RX_BUF_NUM) as usize);
+			deallocate(self.tx_fields.txbuffer_list, (8 * TX_BUF_NUM) as usize);
 		}
 	}
 }
@@ -717,16 +822,22 @@ pub fn init_device(
 	);
 
 	Ok(GEMDriver {
-		gem,
 		mtu: mtu(),
 		irq,
 		mac,
 		rx_counter: 0,
-		rxbuffer,
-		rxbuffer_list,
+		rx_fields: RxFields {
+			rxbuffer,
+			rxbuffer_list,
+			rxbuffer_reserved: vec![false; usize::try_from(RX_BUF_NUM).unwrap()].into_boxed_slice(),
+		},
 		tx_counter: 0,
-		txbuffer,
-		txbuffer_list,
+		tx_fields: TxFields {
+			gem,
+			txbuffer,
+			txbuffer_list,
+			txbuffer_reserved: vec![false; usize::try_from(TX_BUF_NUM).unwrap()].into_boxed_slice(),
+		},
 	})
 }
 
