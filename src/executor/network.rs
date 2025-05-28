@@ -23,9 +23,9 @@ use smoltcp::wire::{DnsQueryType, IpAddress};
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch;
+use crate::drivers::net::{NetworkDevice, NetworkDriver};
 #[cfg(feature = "dns")]
 use crate::errno::Errno;
-use crate::executor::device::HermitNet;
 use crate::executor::spawn;
 #[cfg(feature = "dns")]
 use crate::io;
@@ -67,9 +67,9 @@ pub(crate) struct NetworkInterface<'a> {
 	pub(super) iface: smoltcp::iface::Interface,
 	pub(super) sockets: SocketSet<'a>,
 	#[cfg(feature = "trace")]
-	pub(super) device: smoltcp::phy::Tracer<HermitNet>,
+	pub(super) device: smoltcp::phy::Tracer<NetworkDevice>,
 	#[cfg(not(feature = "trace"))]
-	pub(super) device: HermitNet,
+	pub(super) device: NetworkDevice,
 	#[cfg(feature = "dhcpv4")]
 	pub(super) dhcp_handle: SocketHandle,
 	#[cfg(feature = "dns")]

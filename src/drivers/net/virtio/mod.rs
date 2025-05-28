@@ -12,10 +12,10 @@ cfg_if::cfg_if! {
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem::{MaybeUninit, transmute};
+use core::mem::{ManuallyDrop, MaybeUninit, transmute};
 
 use smallvec::SmallVec;
-use smoltcp::phy::{Checksum, ChecksumCapabilities};
+use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
 use virtio::{DeviceConfigSpace, FeatureBits};
@@ -25,6 +25,7 @@ use volatile::access::ReadOnly;
 use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -36,7 +37,6 @@ use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex, VqSize,
 };
 use crate::drivers::{Driver, InterruptLine};
-use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -185,12 +185,17 @@ impl TxQueues {
 		}
 	}
 
-	fn poll(&mut self) {
+	/// Polls all queues for buffers whose transmission has been completed and returns the number of such buffers.
+	fn poll(&mut self) -> u32 {
+		let mut released_buffers = 0u32;
 		for vq in &mut self.vqs {
 			// We don't do anything with the buffers but we need to receive them for the
 			// ring slots to be emptied and the memory from the previous transfers to be freed.
-			while vq.try_recv().is_ok() {}
+			while vq.try_recv().is_ok() {
+				released_buffers += 1;
+			}
 		}
+		released_buffers
 	}
 
 	fn add(&mut self, vq: VirtQueue) {
@@ -206,6 +211,8 @@ pub(crate) struct Init {
 	pub(super) ctrl_vq: Option<VirtQueue>,
 	pub(super) recv_vqs: RxQueues,
 	pub(super) send_vqs: TxQueues,
+	/// Capacity in number of buffer descriptors, not frames.
+	pub(super) send_capacity: u32,
 }
 
 /// Virtio network driver struct.
@@ -225,6 +232,139 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) checksums: ChecksumCapabilities,
 }
 
+pub struct TxToken<'a> {
+	send_vqs: &'a mut TxQueues,
+	checksums: ChecksumCapabilities,
+	send_capacity: &'a mut u32,
+}
+
+impl Drop for TxToken<'_> {
+	fn drop(&mut self) {
+		*self.send_capacity += u32::from(BUFF_PER_PACKET);
+	}
+}
+
+impl smoltcp::phy::TxToken for TxToken<'_> {
+	fn consume<R, F>(self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R,
+	{
+		// When the token is consumed, the capacity cannot be returned until its buffer is marked by the device as used.
+		// Thus, we bypass the Drop implementation that would do that prematurely and let the call to poll in the next
+		// call to this function return the capacity.
+		let mut token = ManuallyDrop::new(self);
+		// We need to poll to get the queue to remove elements from the table and make space for
+		// what we are about to add
+		*token.send_capacity += token.send_vqs.poll() * u32::from(BUFF_PER_PACKET);
+
+		assert!(len <= usize::try_from(token.send_vqs.buf_size).unwrap());
+		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
+		let result = unsafe {
+			let result = f(packet.spare_capacity_mut().assume_init_mut());
+			packet.set_len(len);
+			result
+		};
+
+		let mut header = Box::new_in(<Hdr as Default>::default(), DeviceAlloc);
+
+		// If a checksum calculation by the host is necessary, we have to inform the host within the header
+		// see Virtio specification 5.1.6.2
+		if let Some((ip_header_len, csum_offset)) =
+			VirtioNetDriver::should_request_checksum(&token.checksums, &mut packet)
+		{
+			header.flags = HdrF::NEEDS_CSUM;
+			header.csum_start =
+				(u16::try_from(ETHERNET_HEADER_LEN).unwrap() + ip_header_len).into();
+			header.csum_offset = csum_offset.into();
+		}
+
+		let buff_tkn = AvailBufferToken::new(
+			SmallVec::from_buf([BufferElem::Sized(header), BufferElem::Vector(packet)]),
+			SmallVec::new(),
+		)
+		.unwrap();
+
+		token.send_vqs.vqs[0]
+			.dispatch(buff_tkn, false, BufferType::Direct)
+			.unwrap();
+
+		result
+	}
+}
+
+pub struct RxToken<'a> {
+	recv_vqs: &'a mut RxQueues,
+	is_mrg_rxbuf_enabled: bool,
+}
+
+impl smoltcp::phy::RxToken for RxToken<'_> {
+	fn consume<R, F>(self, f: F) -> R
+	where
+		F: FnOnce(&[u8]) -> R,
+	{
+		let Some(mut buffer_tkn) = self.recv_vqs.get_next() else {
+			// We overpromised a frame. The best we can do is to provide an empty frame to smoltcp and let it handle it as a faulty reception.
+			return f(&[]);
+		};
+		// Safety: any buffers that do not start with a `Hdr` must have been consumed by the previous call
+		// to this function.
+		let first_header = unsafe {
+			buffer_tkn
+				.used_recv_buff
+				.pop_front_downcast::<Hdr>()
+				.unwrap()
+		};
+		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
+
+		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
+		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
+		let num_buffers = if self.is_mrg_rxbuf_enabled {
+			first_header.num_buffers.to_ne()
+		} else {
+			1
+		};
+
+		let mut combined_packets = first_packet;
+
+		let first_tkn = buffer_token_from_hdr(
+			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+			unsafe {
+				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
+			},
+			self.recv_vqs.buf_size,
+		);
+		self.recv_vqs.vqs[0]
+			.dispatch(first_tkn, false, BufferType::Direct)
+			.unwrap();
+
+		for _ in 1..num_buffers {
+			let mut buffer_tkn = self.recv_vqs.get_next().unwrap();
+			// The descriptor that was meant for the header of another frame was used for a portion of the current frame's contents.
+			// Thus, we cannot cast it to a Hdr.
+			let (header_descriptor, used_len) = buffer_tkn.used_recv_buff.pop_front_raw().unwrap();
+			combined_packets.extend_from_slice(unsafe {
+				core::slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
+			});
+
+			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
+			combined_packets.extend_from_slice(&packet);
+
+			let header = header_descriptor.downcast::<MaybeUninit<Hdr>>().unwrap();
+
+			let tkn = buffer_token_from_hdr(
+				// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+				header,
+				self.recv_vqs.buf_size,
+			);
+			self.recv_vqs.vqs[0]
+				.dispatch(tkn, false, BufferType::Direct)
+				.unwrap();
+		}
+
+		f(&combined_packets)
+	}
+}
+
 impl NetworkDriver for VirtioNetDriver<Init> {
 	/// Returns the mac address of the device.
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
@@ -238,115 +378,9 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 		}
 	}
 
-	/// Returns the current MTU of the device.
-	fn get_mtu(&self) -> u16 {
-		self.inner.mtu
-	}
-
-	fn get_checksums(&self) -> ChecksumCapabilities {
-		self.checksums.clone()
-	}
-
 	#[allow(dead_code)]
 	fn has_packet(&self) -> bool {
 		self.inner.recv_vqs.has_packet()
-	}
-
-	/// Provides smoltcp a slice to copy the IP packet and transfer the packet
-	/// to the send queue.
-	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
-	where
-		F: FnOnce(&mut [u8]) -> R,
-	{
-		// We need to poll to get the queue to remove elements from the table and make space for
-		// what we are about to add
-		self.inner.send_vqs.poll();
-
-		assert!(len <= usize::try_from(self.inner.send_vqs.buf_size).unwrap());
-		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
-		let result = unsafe {
-			let result = f(packet.spare_capacity_mut().assume_init_mut());
-			packet.set_len(len);
-			result
-		};
-
-		let mut header = Box::new_in(<Hdr as Default>::default(), DeviceAlloc);
-
-		// If a checksum calculation by the host is necessary, we have to inform the host within the header
-		// see Virtio specification 5.1.6.2
-		if let Some((ip_header_len, csum_offset)) = self.should_request_checksum(&mut packet) {
-			header.flags = HdrF::NEEDS_CSUM;
-			header.csum_start =
-				(u16::try_from(ETHERNET_HEADER_LEN).unwrap() + ip_header_len).into();
-			header.csum_offset = csum_offset.into();
-		}
-
-		let buff_tkn = AvailBufferToken::new(
-			SmallVec::from_buf([BufferElem::Sized(header), BufferElem::Vector(packet)]),
-			SmallVec::new(),
-		)
-		.unwrap();
-
-		self.inner.send_vqs.vqs[0]
-			.dispatch(buff_tkn, false, BufferType::Direct)
-			.unwrap();
-
-		result
-	}
-
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
-		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
-		// Safety: any buffers that do not start with a `Hdr` must have been consumed by the previous call
-		// to this function.
-		let first_header = unsafe { buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()? };
-		let first_packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-
-		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
-		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
-		let num_buffers = if self.dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
-			first_header.num_buffers.to_ne()
-		} else {
-			1
-		};
-
-		let mut combined_packets = first_packet;
-
-		let first_tkn = buffer_token_from_hdr(
-			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
-			unsafe {
-				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
-			},
-			self.inner.recv_vqs.buf_size,
-		);
-		self.inner.recv_vqs.vqs[0]
-			.dispatch(first_tkn, false, BufferType::Direct)
-			.unwrap();
-
-		for _ in 1..num_buffers {
-			let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
-			// The descriptor that was meant for the header of another frame was used for a portion of the current frame's contents.
-			// Thus, we cannot cast it to a Hdr.
-			let (header_descriptor, used_len) = buffer_tkn.used_recv_buff.pop_front_raw()?;
-			combined_packets.extend_from_slice(unsafe {
-				core::slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
-			});
-
-			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-			combined_packets.extend_from_slice(&packet);
-
-			let header = header_descriptor.downcast::<MaybeUninit<Hdr>>().unwrap();
-
-			let tkn = buffer_token_from_hdr(
-				// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
-				header,
-				self.inner.recv_vqs.buf_size,
-			);
-			self.inner.recv_vqs.vqs[0]
-				.dispatch(tkn, false, BufferType::Direct)
-				.unwrap();
-		}
-
-		Some((RxToken::new(combined_packets), TxToken::new(self)))
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
@@ -373,6 +407,58 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 		}
 
 		self.isr_stat.acknowledge();
+	}
+}
+
+impl smoltcp::phy::Device for VirtioNetDriver {
+	type TxToken<'a> = TxToken<'a>;
+	type RxToken<'a> = RxToken<'a>;
+
+	fn capabilities(&self) -> DeviceCapabilities {
+		let mut device_capabilities = DeviceCapabilities::default();
+		device_capabilities.medium = smoltcp::phy::Medium::Ethernet;
+		device_capabilities.max_transmission_unit = self.inner.mtu.into();
+		device_capabilities.max_burst_size =
+			Some(usize::try_from(self.inner.send_capacity).unwrap() / usize::from(BUFF_PER_PACKET));
+		device_capabilities.checksum = self.checksums.clone();
+		device_capabilities
+	}
+
+	fn receive(
+		&mut self,
+		_timestamp: smoltcp::time::Instant,
+	) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+		if self.inner.recv_vqs.has_packet()
+			&& self.inner.send_capacity >= u32::from(BUFF_PER_PACKET)
+		{
+			self.inner.send_capacity -= u32::from(BUFF_PER_PACKET);
+			Some((
+				RxToken {
+					recv_vqs: &mut self.inner.recv_vqs,
+					is_mrg_rxbuf_enabled: self.dev_cfg.features.contains(virtio::net::F::MRG_RXBUF),
+				},
+				TxToken {
+					send_vqs: &mut self.inner.send_vqs,
+					checksums: self.checksums.clone(),
+					send_capacity: &mut self.inner.send_capacity,
+				},
+			))
+		} else {
+			None
+		}
+	}
+
+	fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+		if self.inner.send_capacity >= u32::from(BUFF_PER_PACKET) {
+			self.inner.send_capacity -= u32::from(BUFF_PER_PACKET);
+			Some(TxToken {
+				send_vqs: &mut self.inner.send_vqs,
+				checksums: self.checksums.clone(),
+				send_capacity: &mut self.inner.send_capacity,
+			})
+		} else {
+			None
+		}
 	}
 }
 
@@ -469,10 +555,10 @@ impl VirtioNetDriver<Init> {
 	/// pseudo-header and returns the IP header length and the checksum offset.
 	/// Otherwise, returns None.
 	fn should_request_checksum<T: AsRef<[u8]> + AsMut<[u8]>>(
-		&self,
+		checksums: &ChecksumCapabilities,
 		frame: T,
 	) -> Option<(u16, u16)> {
-		if self.checksums.tcp.tx() && self.checksums.udp.tx() {
+		if checksums.tcp.tx() && checksums.udp.tx() {
 			return None;
 		}
 
@@ -509,11 +595,11 @@ impl VirtioNetDriver<Init> {
 		let csum_offset;
 		let ip_payload = &mut ethernet_frame.payload_mut()[ip_header_len.into()..ip_packet_len];
 		// Like the Ethernet protocol check, we check for IP protocols for which we know the location of the checksum field.
-		if protocol == smoltcp::wire::IpProtocol::Tcp && !self.checksums.tcp.tx() {
+		if protocol == smoltcp::wire::IpProtocol::Tcp && !checksums.tcp.tx() {
 			let mut tcp_packet = smoltcp::wire::TcpPacket::new_unchecked(ip_payload);
 			tcp_packet.set_checksum(pseudo_header_checksum);
 			csum_offset = 16;
-		} else if protocol == smoltcp::wire::IpProtocol::Udp && !self.checksums.udp.tx() {
+		} else if protocol == smoltcp::wire::IpProtocol::Udp && !checksums.udp.tx() {
 			let mut udp_packet = smoltcp::wire::UdpPacket::new_unchecked(ip_payload);
 			udp_packet.set_checksum(pseudo_header_checksum);
 			csum_offset = 6;
@@ -659,6 +745,7 @@ impl VirtioNetDriver<Uninit> {
 			ctrl_vq: None,
 			recv_vqs: RxQueues::new(Vec::new(), &self.dev_cfg),
 			send_vqs: TxQueues::new(Vec::new(), &self.dev_cfg),
+			send_capacity: 0,
 		};
 
 		debug!("Using RX buffer size of {}", inner.recv_vqs.buf_size);
@@ -833,6 +920,7 @@ impl VirtioNetDriver<Uninit> {
 				// Interrupt for communicating that a sent packet left, is not needed
 				vq.disable_notifs();
 
+				inner.send_capacity += u32::from(u16::from(vq.size()));
 				inner.send_vqs.add(VirtQueue::Packed(vq));
 			} else {
 				let mut vq = SplitVq::new(
@@ -858,7 +946,7 @@ impl VirtioNetDriver<Uninit> {
 				.unwrap();
 				// Interrupt for communicating that a sent packet left, is not needed
 				vq.disable_notifs();
-
+				inner.send_capacity += u32::from(u16::from(vq.size()));
 				inner.send_vqs.add(VirtQueue::Split(vq));
 			}
 		}

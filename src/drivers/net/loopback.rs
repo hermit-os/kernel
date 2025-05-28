@@ -1,16 +1,26 @@
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+use hermit_sync::SpinMutex;
+use smoltcp::phy;
+use smoltcp::time::Instant;
 
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::{Driver, InterruptLine};
-use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
 
-pub(crate) struct LoopbackDriver(VecDeque<Vec<u8, DeviceAlloc>>);
+pub(crate) struct LoopbackDriver {
+	queue: SpinMutex<VecDeque<Vec<u8, DeviceAlloc>>>,
+	reserved_receives: AtomicUsize,
+}
 
 impl LoopbackDriver {
 	pub(crate) const fn new() -> Self {
-		Self(VecDeque::new())
+		Self {
+			queue: SpinMutex::new(VecDeque::new()),
+			reserved_receives: AtomicUsize::new(0),
+		}
 	}
 }
 
@@ -26,37 +36,85 @@ impl Driver for LoopbackDriver {
 	}
 }
 
-impl NetworkDriver for LoopbackDriver {
-	fn get_mac_address(&self) -> [u8; 6] {
-		// This matches Linux' behavior
-		[0; 6]
-	}
+pub(crate) struct TxToken<'a> {
+	queue: &'a SpinMutex<VecDeque<Vec<u8, DeviceAlloc>>>,
+}
 
-	fn get_mtu(&self) -> u16 {
-		// Technically Linux uses 2^16, which we cannot use until we switch
-		// to u32 for MTU
-		u16::MAX
-	}
-
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
-		self.0
-			.pop_front()
-			.map(move |buffer| (RxToken::new(buffer), TxToken::new(self)))
-	}
-
-	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
+impl smoltcp::phy::TxToken for TxToken<'_> {
+	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
 		let mut buffer = Vec::with_capacity_in(len, DeviceAlloc);
 		buffer.resize(len, 0);
 		let result = f(&mut buffer);
-		self.0.push_back(buffer);
+		self.queue.lock().push_back(buffer);
 		result
+	}
+}
+
+pub(crate) struct RxToken<'a> {
+	queue: &'a SpinMutex<VecDeque<Vec<u8, DeviceAlloc>>>,
+	reserved_receives: &'a AtomicUsize,
+}
+
+impl smoltcp::phy::RxToken for RxToken<'_> {
+	fn consume<R, F>(self, f: F) -> R
+	where
+		F: FnOnce(&[u8]) -> R,
+	{
+		let frame = self.queue.lock().pop_front();
+		f(&frame.unwrap())
+	}
+}
+
+impl Drop for RxToken<'_> {
+	fn drop(&mut self) {
+		self.reserved_receives.fetch_sub(1, Ordering::Relaxed);
+	}
+}
+
+impl smoltcp::phy::Device for LoopbackDriver {
+	type RxToken<'a> = RxToken<'a>;
+	type TxToken<'a> = TxToken<'a>;
+
+	fn receive(&mut self, _: Instant) -> Option<(RxToken<'_>, TxToken<'_>)> {
+		if self.queue.lock().len() > self.reserved_receives.load(Ordering::Relaxed) {
+			self.reserved_receives.fetch_add(1, Ordering::Relaxed);
+			Some((
+				RxToken {
+					queue: &self.queue,
+					reserved_receives: &self.reserved_receives,
+				},
+				TxToken { queue: &self.queue },
+			))
+		} else {
+			None
+		}
+	}
+
+	fn transmit(&mut self, _: Instant) -> Option<TxToken<'_>> {
+		Some(TxToken { queue: &self.queue })
+	}
+
+	fn capabilities(&self) -> phy::DeviceCapabilities {
+		let mut capabilities = phy::DeviceCapabilities::default();
+		capabilities.medium = phy::Medium::Ethernet;
+		// Technically Linux uses 2^16, which we cannot use until we switch
+		// to u32 for MTU
+		capabilities.max_transmission_unit = u16::MAX.into();
+		capabilities
+	}
+}
+
+impl NetworkDriver for LoopbackDriver {
+	fn get_mac_address(&self) -> [u8; 6] {
+		// This matches Linux' behavior
+		[0; 6]
 	}
 
 	fn has_packet(&self) -> bool {
-		!self.0.is_empty()
+		!self.queue.lock().is_empty()
 	}
 
 	fn set_polling_mode(&mut self, _value: bool) {

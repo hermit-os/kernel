@@ -4,9 +4,10 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem;
+use core::mem::{self, ManuallyDrop};
 
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
+use smoltcp::phy::DeviceCapabilities;
 use x86_64::instructions::port::Port;
 
 use crate::arch::kernel::interrupts::*;
@@ -15,7 +16,6 @@ use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::pci::PciDevice;
-use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// size of the receive buffer
@@ -197,6 +197,66 @@ pub enum RTL8139Error {
 	Unknown,
 }
 
+struct RxFields {
+	rxbuffer: Box<[u8], DeviceAlloc>,
+	rxpos: usize,
+	rx_in_use: bool,
+}
+
+impl RxFields {
+	fn rx_peek_u16(&self) -> u16 {
+		u16::from_ne_bytes(
+			self.rxbuffer[self.rxpos..][..mem::size_of::<u16>()]
+				.try_into()
+				.unwrap(),
+		)
+	}
+
+	fn advance_rxpos(&mut self, count: usize) {
+		self.rxpos += count;
+		self.rxpos %= RX_BUF_LEN;
+	}
+}
+
+impl RxToken<'_> {
+	// Tells driver, that buffer is consumed and can be deallocated
+	fn consume_current_buffer(&mut self) {
+		let length = self.rx_fields.rx_peek_u16();
+		self.rx_fields
+			.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
+
+		// packets are dword aligned
+		self.rx_fields.rxpos = ((self.rx_fields.rxpos + 3) & !0x3) % RX_BUF_LEN;
+		if self.rx_fields.rxpos >= 0x10 {
+			unsafe {
+				Port::<u16>::new(self.iobase + CAPR)
+					.write((self.rx_fields.rxpos - 0x10).try_into().unwrap());
+			}
+		} else {
+			unsafe {
+				Port::<u16>::new(self.iobase + CAPR).write(
+					(RX_BUF_LEN - (0x10 - self.rx_fields.rxpos))
+						.try_into()
+						.unwrap(),
+				);
+			}
+		}
+	}
+}
+
+impl Drop for RxToken<'_> {
+	fn drop(&mut self) {
+		self.rx_fields.rx_in_use = false;
+	}
+}
+
+struct TxFields {
+	tx_in_use: [bool; NO_TX_BUFFERS],
+	tx_counter: usize,
+	txbuffer: Box<[u8], DeviceAlloc>,
+	remaining_bufs: usize,
+}
+
 /// RealTek RTL8139 network driver struct.
 ///
 /// Struct allows to control device queues as also
@@ -206,11 +266,130 @@ pub(crate) struct RTL8139Driver {
 	mtu: u16,
 	irq: InterruptLine,
 	mac: [u8; 6],
-	tx_in_use: [bool; NO_TX_BUFFERS],
-	tx_counter: usize,
-	rxbuffer: Box<[u8], DeviceAlloc>,
-	rxpos: usize,
-	txbuffer: Box<[u8], DeviceAlloc>,
+	rx_fields: RxFields,
+	tx_fields: TxFields,
+}
+
+pub struct RxToken<'a> {
+	iobase: u16,
+	rx_fields: &'a mut RxFields,
+}
+
+impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
+	fn consume<R, F>(mut self, f: F) -> R
+	where
+		F: FnOnce(&[u8]) -> R,
+	{
+		self.rx_fields.advance_rxpos(mem::size_of::<u16>());
+
+		let length = self.rx_fields.rx_peek_u16() - 4; // copy packet (but not the CRC)
+		let pos = (self.rx_fields.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
+
+		let mut vec_data = Vec::with_capacity(length as usize);
+
+		// do we reach the end of the receive buffers?
+		// in this case, we contact the two slices to one vec
+		let frame = if pos + length as usize > RX_BUF_LEN {
+			let first = &self.rx_fields.rxbuffer[pos..RX_BUF_LEN];
+			let second = &self.rx_fields.rxbuffer[..length as usize - first.len()];
+
+			vec_data.extend_from_slice(first);
+			vec_data.extend_from_slice(second);
+			vec_data.as_slice()
+		} else {
+			&self.rx_fields.rxbuffer[pos..][..length.into()]
+		};
+
+		let result = f(frame);
+
+		self.consume_current_buffer();
+
+		result
+	}
+}
+
+pub struct TxToken<'a> {
+	iobase: u16,
+	tx_fields: &'a mut TxFields,
+}
+
+impl Drop for TxToken<'_> {
+	// For when the token is dropped without being used. When the token is consumed, the remaining buffer
+	// count should only be increased after we receive confirmation of the actual transmission (i.e. TOK).
+	fn drop(&mut self) {
+		self.tx_fields.remaining_bufs += 1;
+	}
+}
+
+impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
+	fn consume<R, F>(self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R,
+	{
+		let mut token = ManuallyDrop::new(self);
+		let id = token.tx_fields.tx_counter % NO_TX_BUFFERS;
+
+		assert!(
+			!token.tx_fields.tx_in_use[id] && len <= TX_BUF_LEN,
+			"Unable to get TX buffer"
+		);
+
+		token.tx_fields.tx_in_use[id] = true;
+		token.tx_fields.tx_counter += 1;
+
+		let buffer = &mut token.tx_fields.txbuffer[id * TX_BUF_LEN..][..len];
+		let result = f(buffer);
+
+		// send the packet
+		unsafe {
+			Port::<u32>::new(token.iobase + TSD0 + (4 * id as u16)).write(len.try_into().unwrap()); //|0x3A0000);
+		}
+
+		result
+	}
+}
+
+impl smoltcp::phy::Device for RTL8139Driver {
+	type RxToken<'a> = RxToken<'a>;
+	type TxToken<'a> = TxToken<'a>;
+	fn receive(&mut self, _: smoltcp::time::Instant) -> Option<(RxToken<'_>, TxToken<'_>)> {
+		if !self.rx_fields.rx_in_use && self.has_packet() {
+			self.rx_fields.rx_in_use = true;
+			Some((
+				RxToken {
+					iobase: self.iobase,
+					rx_fields: &mut self.rx_fields,
+				},
+				TxToken {
+					iobase: self.iobase,
+					tx_fields: &mut self.tx_fields,
+				},
+			))
+		} else {
+			None
+		}
+	}
+	fn transmit(&mut self, _: smoltcp::time::Instant) -> Option<TxToken<'_>> {
+		if self.tx_fields.remaining_bufs > 0 {
+			Some(TxToken {
+				iobase: self.iobase,
+				tx_fields: &mut self.tx_fields,
+			})
+		} else {
+			None
+		}
+	}
+
+	fn capabilities(&self) -> smoltcp::phy::DeviceCapabilities {
+		let mut device_capabilities = DeviceCapabilities::default();
+		device_capabilities.medium = smoltcp::phy::Medium::Ethernet;
+		device_capabilities.max_transmission_unit = usize::from(self.mtu);
+		device_capabilities.max_burst_size = Some(usize::min(
+			NO_TX_BUFFERS,
+			RX_BUF_LEN / usize::from(self.mtu),
+		));
+		device_capabilities
+	}
 }
 
 impl NetworkDriver for RTL8139Driver {
@@ -219,91 +398,23 @@ impl NetworkDriver for RTL8139Driver {
 		self.mac
 	}
 
-	/// Returns the current MTU of the device.
-	fn get_mtu(&self) -> u16 {
-		self.mtu
-	}
-
-	/// Send packet with the size `len`
-	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
-	where
-		F: FnOnce(&mut [u8]) -> R,
-	{
-		let id = self.tx_counter % NO_TX_BUFFERS;
-
-		if self.tx_in_use[id] || len > TX_BUF_LEN {
-			panic!("Unable to get TX buffer");
-		} else {
-			self.tx_in_use[id] = true;
-			self.tx_counter += 1;
-
-			let buffer = &mut self.txbuffer[id * TX_BUF_LEN..][..len];
-			let result = f(buffer);
-
-			// send the packet
-			unsafe {
-				Port::<u32>::new(self.iobase + TSD0 + (4 * id as u16))
-					.write(len.try_into().unwrap()); //|0x3A0000);
-			}
-
-			result
-		}
-	}
-
 	fn has_packet(&self) -> bool {
 		let cmd = unsafe { Port::<u8>::new(self.iobase + CR).read() };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
-			let header = self.rx_peek_u16();
+			let header = self.rx_fields.rx_peek_u16();
 
 			if header & ISR_ROK == ISR_ROK {
 				return true;
+			} else {
+				warn!(
+					"RTL8192: invalid header {:#x}, rx_pos {}\n",
+					header, self.rx_fields.rxpos
+				);
 			}
 		}
 
 		false
-	}
-
-	/// Get buffer with the received packet
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
-		let cmd = unsafe { Port::<u8>::new(self.iobase + CR).read() };
-
-		if (cmd & CR_BUFE) == CR_BUFE {
-			return None;
-		}
-
-		let header = self.rx_peek_u16();
-		self.advance_rxpos(mem::size_of::<u16>());
-
-		if header & ISR_ROK != ISR_ROK {
-			warn!(
-				"RTL8192: invalid header {:#x}, rx_pos {}\n",
-				header, self.rxpos
-			);
-
-			return None;
-		}
-
-		let length = self.rx_peek_u16() - 4; // copy packet (but not the CRC)
-		let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
-
-		let mut vec_data = Vec::with_capacity_in(length as usize, DeviceAlloc);
-
-		// do we reach the end of the receive buffers?
-		// in this case, we contact the two slices to one vec
-		if pos + length as usize > RX_BUF_LEN {
-			let first = &self.rxbuffer[pos..RX_BUF_LEN];
-			let second = &self.rxbuffer[..length as usize - first.len()];
-
-			vec_data.extend_from_slice(first);
-			vec_data.extend_from_slice(second);
-		} else {
-			vec_data.extend_from_slice(&self.rxbuffer[pos..][..length.into()]);
-		};
-
-		self.consume_current_buffer();
-
-		Some((RxToken::new(vec_data), TxToken::new(self)))
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
@@ -356,41 +467,9 @@ impl Driver for RTL8139Driver {
 }
 
 impl RTL8139Driver {
-	// Tells driver, that buffer is consumed and can be deallocated
-	fn consume_current_buffer(&mut self) {
-		let length = self.rx_peek_u16();
-		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
-
-		// packets are dword aligned
-		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
-		if self.rxpos >= 0x10 {
-			unsafe {
-				Port::<u16>::new(self.iobase + CAPR).write((self.rxpos - 0x10).try_into().unwrap());
-			}
-		} else {
-			unsafe {
-				Port::<u16>::new(self.iobase + CAPR)
-					.write((RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap());
-			}
-		}
-	}
-
-	fn rx_peek_u16(&self) -> u16 {
-		u16::from_ne_bytes(
-			self.rxbuffer[self.rxpos..][..mem::size_of::<u16>()]
-				.try_into()
-				.unwrap(),
-		)
-	}
-
-	fn advance_rxpos(&mut self, count: usize) {
-		self.rxpos += count;
-		self.rxpos %= RX_BUF_LEN;
-	}
-
 	fn tx_handler(&mut self) {
-		for i in 0..self.tx_in_use.len() {
-			if self.tx_in_use[i] {
+		for i in 0..self.tx_fields.tx_in_use.len() {
+			if self.tx_fields.tx_in_use[i] {
 				let txstatus =
 					unsafe { Port::<u32>::new(self.iobase + TSD0 + i as u16 * 4).read() };
 
@@ -404,7 +483,8 @@ impl RTL8139Driver {
 				}
 
 				if (txstatus & TSD_TOK) == TSD_TOK {
-					self.tx_in_use[i] = false;
+					self.tx_fields.tx_in_use[i] = false;
+					self.tx_fields.remaining_bufs += 1;
 				}
 			}
 		}
@@ -570,10 +650,16 @@ pub(crate) fn init_device(
 		mtu: mtu(),
 		irq,
 		mac,
-		tx_in_use: [false; NO_TX_BUFFERS],
-		tx_counter: 0,
-		rxbuffer,
-		rxpos: 0,
-		txbuffer,
+		rx_fields: RxFields {
+			rxbuffer,
+			rxpos: 0,
+			rx_in_use: false,
+		},
+		tx_fields: TxFields {
+			tx_in_use: [false; NO_TX_BUFFERS],
+			tx_counter: 0,
+			txbuffer,
+			remaining_bufs: NO_TX_BUFFERS,
+		},
 	})
 }
