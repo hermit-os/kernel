@@ -70,7 +70,7 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 }
 
 unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {
-	 // Sanity check: validate hart_id against HART_MASK
+	// Sanity check: validate hart_id against HART_MASK
 	if CPU_ONLINE.load(Ordering::Acquire) > 0 {
 		// Faster check for Secondary-HARTs
 		if (HART_MASK.load(Ordering::Relaxed) & (1 << hart_id)) == 0 {
