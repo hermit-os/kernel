@@ -184,16 +184,16 @@ fn finish_processor_init() {
 pub fn boot_next_processor() {
 	let new_hart_mask = HART_MASK.load(Ordering::Relaxed);
 
-	info!("Current HART_MASK: 0x{new_hart_mask:x}");
+	debug!("Current HART_MASK: 0x{new_hart_mask:x}");
 	let next_hart_index = lsb(new_hart_mask);
 
 	if let Some(next_hart_id) = next_hart_index {
-		info!("Preparing to start HART {next_hart_id}");
+		debug!("Preparing to start HART {next_hart_id}");
 
 		{
 			let stack = physicalmem::allocate(KERNEL_STACK_SIZE)
 				.expect("Failed to allocate boot stack for new core");
-			CURRENT_STACK_ADDRESS.store(stack.as_usize() as _, Ordering::Release);
+			CURRENT_STACK_ADDRESS.store(stack.as_usize() as _, Ordering::Relaxed);
 		}
 
 		info!(
@@ -205,15 +205,7 @@ pub fn boot_next_processor() {
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
 
 		if !env::is_uhyve() {
-			let result = sbi_rt::hart_start(next_hart_id as usize, start::_start as usize, 0);
-			if result.error == 0 {
-				info!("HART {next_hart_id} start requested");
-			} else {
-				error!(
-					"Failed to start HART {next_hart_id}: error code {}",
-					result.error
-				);
-			}
+			sbi_rt::hart_start(next_hart_id as usize, start::_start as usize, 0).unwrap();
 		}
 	} else {
 		info!("All processors are initialized");
