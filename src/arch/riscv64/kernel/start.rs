@@ -38,7 +38,7 @@ static CPU_DATA: [PerCpuData; MAX_CORES] = {
 
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[unsafe(no_mangle)]
-#[naked]
+#[unsafe(naked)]
 pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {
 	// validate signatures
 	// `_Start` is compatible to `Entry`
@@ -53,22 +53,20 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 		const _PRE_INIT: _Start = pre_init;
 	}
 
-	unsafe {
-		naked_asm!(
-			// Use stack pointer from `CURRENT_STACK_ADDRESS` if set
-			"ld      t0, {current_stack_pointer}",
-			"beqz    t0, 2f",
-			"li      t1, {top_offset}",
-			"add     t0, t0, t1",
-			"mv      sp, t0",
-			"2:",
+	naked_asm!(
+		// Use stack pointer from `CURRENT_STACK_ADDRESS` if set
+		"ld      t0, {current_stack_pointer}",
+		"beqz    t0, 2f",
+		"li      t1, {top_offset}",
+		"add     t0, t0, t1",
+		"mv      sp, t0",
+		"2:",
 
-			"j       {pre_init}",
-			current_stack_pointer = sym CURRENT_STACK_ADDRESS,
-			top_offset = const KERNEL_STACK_SIZE,
-			pre_init = sym pre_init,
-		)
-	}
+		"j       {pre_init}",
+		current_stack_pointer = sym CURRENT_STACK_ADDRESS,
+		top_offset = const KERNEL_STACK_SIZE,
+		pre_init = sym pre_init,
+	)
 }
 
 unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {

@@ -7,7 +7,7 @@ use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 use core::ptr;
 
-use memory_addresses::VirtAddr;
+use memory_addresses::PhysAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -24,7 +24,6 @@ use super::{
 	VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
-use crate::arch::mm::paging;
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
@@ -216,7 +215,33 @@ impl Virtq for SplitVq {
 		self.index
 	}
 
-	fn new(
+	fn size(&self) -> VqSize {
+		self.size
+	}
+
+	fn has_used_buffers(&self) -> bool {
+		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
+	}
+}
+
+impl VirtqPrivate for SplitVq {
+	type Descriptor = virtq::Desc;
+	fn create_indirect_ctrl(
+		buffer_tkn: &AvailBufferToken,
+	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
+		Ok(Self::descriptor_iter(buffer_tkn)?
+			.zip(1..)
+			.map(|(descriptor, next_id)| Self::Descriptor {
+				next: next_id.into(),
+				..descriptor
+			})
+			.collect::<Vec<_>>()
+			.into_boxed_slice())
+	}
+}
+
+impl SplitVq {
+	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: VqSize,
@@ -262,16 +287,16 @@ impl Virtq for SplitVq {
 		};
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
+		vq_handler.set_ring_addr(PhysAddr::from(
 			ptr::from_ref(descr_table_cell.as_ref()).expose_provenance(),
-		)));
+		));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
+		vq_handler.set_drv_ctrl_addr(PhysAddr::from(
 			ptr::from_ref(avail_ring_cell.as_ref()).expose_provenance(),
-		)));
-		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
+		));
+		vq_handler.set_dev_ctrl_addr(PhysAddr::from(
 			ptr::from_ref(used_ring_cell.as_ref()).expose_provenance(),
-		)));
+		));
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
@@ -302,29 +327,5 @@ impl Virtq for SplitVq {
 			size: VqSize(size),
 			index,
 		})
-	}
-
-	fn size(&self) -> VqSize {
-		self.size
-	}
-
-	fn has_used_buffers(&self) -> bool {
-		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
-	}
-}
-
-impl VirtqPrivate for SplitVq {
-	type Descriptor = virtq::Desc;
-	fn create_indirect_ctrl(
-		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		Ok(Self::descriptor_iter(buffer_tkn)?
-			.zip(1..)
-			.map(|(descriptor, next_id)| Self::Descriptor {
-				next: next_id.into(),
-				..descriptor
-			})
-			.collect::<Vec<_>>()
-			.into_boxed_slice())
 	}
 }

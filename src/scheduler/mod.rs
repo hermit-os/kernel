@@ -150,13 +150,18 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		}
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());
+		#[cfg(feature = "smp")]
+		let core_id = self.core_id;
+		#[cfg(not(feature = "smp"))]
+		let core_id = 0;
+
 		GicV3::send_sgi(
 			reschedid,
 			SgiTarget::List {
 				affinity3: 0,
 				affinity2: 0,
 				affinity1: 0,
-				target_list: 0b1,
+				target_list: 1 << core_id,
 			},
 		);
 
@@ -394,9 +399,8 @@ impl PerCoreScheduler {
 	pub fn handle_waiting_tasks(&mut self) {
 		without_interrupts(|| {
 			crate::executor::run();
-			for task in self.blocked_tasks.handle_waiting_tasks() {
-				self.ready_queue.push(task);
-			}
+			self.blocked_tasks
+				.handle_waiting_tasks(&mut self.ready_queue);
 		});
 	}
 
@@ -703,7 +707,7 @@ impl PerCoreScheduler {
 		}
 	}
 
-	#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
+	#[cfg(feature = "smp")]
 	pub fn check_input(&mut self) {
 		let mut input_locked = CoreLocal::get().scheduler_input.lock();
 
@@ -732,7 +736,7 @@ impl PerCoreScheduler {
 			crate::executor::run();
 
 			// do housekeeping
-			#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
+			#[cfg(feature = "smp")]
 			core_scheduler.check_input();
 			core_scheduler.cleanup_tasks();
 

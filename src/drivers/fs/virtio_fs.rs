@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::str;
 
 use pci_types::InterruptLine;
+use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::fs::ConfigVolatileFieldAccess;
 use volatile::VolatileRef;
@@ -19,7 +20,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq, VqIndex, VqSize,
 };
 use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -43,7 +44,7 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
-	pub(super) vqueues: Vec<Box<dyn Virtq>>,
+	pub(super) vqueues: Vec<VirtQueue>,
 	pub(super) irq: InterruptLine,
 }
 
@@ -133,15 +134,17 @@ impl VirtioFsDriver {
 
 		// create the queues and tell device about them
 		for i in 0..vqnum as u16 {
-			let vq = SplitVq::new(
-				&mut self.com_cfg,
-				&self.notif_cfg,
-				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-				VqIndex::from(i),
-				self.dev_cfg.features.into(),
-			)
-			.unwrap();
-			self.vqueues.push(Box::new(vq));
+			let vq = VirtQueue::Split(
+				SplitVq::new(
+					&mut self.com_cfg,
+					&self.notif_cfg,
+					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					VqIndex::from(i),
+					self.dev_cfg.features.into(),
+				)
+				.unwrap(),
+			);
+			self.vqueues.push(vq);
 		}
 
 		// At this point the device is "live"
@@ -166,23 +169,26 @@ impl FuseInterface for VirtioFsDriver {
 			payload: cmd_payload_opt,
 		} = cmd;
 		let send = if let Some(cmd_payload) = cmd_payload_opt {
-			vec![
+			SmallVec::from_buf([
 				BufferElem::Sized(cmd_headers),
 				BufferElem::Vector(cmd_payload),
-			]
+			])
 		} else {
-			vec![BufferElem::Sized(cmd_headers)]
+			let mut vec = SmallVec::new();
+			vec.push(BufferElem::Sized(cmd_headers));
+			vec
 		};
 
 		let rsp_headers = Box::<RspHeader<O>, _>::new_uninit_in(DeviceAlloc);
 		let recv = if rsp_payload_len == 0 {
-			vec![BufferElem::Sized(rsp_headers)]
+			let mut vec = SmallVec::new();
+			vec.push(BufferElem::Sized(rsp_headers));
+			vec
 		} else {
-			let rsp_payload = Vec::with_capacity_in(rsp_payload_len as usize, DeviceAlloc);
-			vec![
+			SmallVec::from_buf([
 				BufferElem::Sized(rsp_headers),
-				BufferElem::Vector(rsp_payload),
-			]
+				BufferElem::Vector(Vec::with_capacity_in(rsp_payload_len as usize, DeviceAlloc)),
+			])
 		};
 
 		let buffer_tkn = AvailBufferToken::new(send, recv).unwrap();

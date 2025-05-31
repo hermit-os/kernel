@@ -182,7 +182,7 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world qemu ${{ matrix.flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world qemu ${{ matrix.flags }} --uefi
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package wasmtime-demo --features ci qemu ${{ matrix.flags }}
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hermit-wasm --features ci qemu ${{ matrix.flags }}
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features qemu ${{ matrix.flags }} --microvm
         if: matrix.arch == 'x86_64'
@@ -196,8 +196,6 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo qemu ${{ matrix.flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 qemu ${{ matrix.flags }}
-        # https://github.com/hermit-os/kernel/issues/737
-        if: matrix.arch != 'aarch64'
         # https://github.com/hermit-os/kernel/issues/1286
         continue-on-error: ${{ matrix.arch == 'riscv64' }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 qemu ${{ matrix.flags }} --uefi
@@ -216,14 +214,20 @@ jobs:
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --netdev rtl8139
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.flags }} --netdev gem-net
+        if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4 qemu ${{ matrix.flags }} --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --netdev rtl8139
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --no-default-features --features hermit/udp,hermit/dhcpv4,hermit/gem-net qemu ${{ matrix.flags }} --netdev gem-net
+        if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --features hermit/dhcpv4 qemu ${{ matrix.flags }} --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --netdev rtl8139
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --no-default-features --features hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.flags }} --netdev gem-net
+        if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4 qemu ${{ matrix.flags }} --netdev virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --netdev rtl8139
@@ -241,3 +245,4 @@ jobs:
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package thread_test --smp 4 qemu ${{ matrix.flags }}
+        if: matrix.arch == 'x86_64'

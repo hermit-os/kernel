@@ -8,9 +8,11 @@ use alloc::vec::Vec;
 use core::mem;
 
 use pci_types::InterruptLine;
+use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::vsock::Hdr;
 
+use super::virtio::virtqueue::VirtQueue;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::error::VirtioVsockError;
@@ -24,17 +26,17 @@ use crate::drivers::virtio::virtqueue::{
 use crate::drivers::vsock::pci::VsockDevCfgRaw;
 use crate::mm::device_alloc::DeviceAlloc;
 
-fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
+fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(
-			vec![],
-			vec![
+			SmallVec::new(),
+			SmallVec::from_buf([
 				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
 				BufferElem::Vector(Vec::with_capacity_in(
 					packet_size.try_into().unwrap(),
 					DeviceAlloc,
 				)),
-			],
+			]),
 		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
@@ -54,7 +56,7 @@ fn fill_queue(vq: &mut dyn Virtq, num_packets: u16, packet_size: u32) {
 }
 
 pub(crate) struct RxQueue {
-	vq: Option<Box<dyn Virtq>>,
+	vq: Option<VirtQueue>,
 	packet_size: u32,
 }
 
@@ -67,11 +69,11 @@ impl RxQueue {
 		}
 	}
 
-	pub fn add(&mut self, mut vq: Box<dyn Virtq>) {
+	pub fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
 		info!("num_packets {num_packets}");
-		fill_queue(vq.as_mut(), num_packets, self.packet_size);
+		fill_queue(&mut vq, num_packets, self.packet_size);
 
 		self.vq = Some(vq);
 	}
@@ -106,7 +108,7 @@ impl RxQueue {
 			if let Some(ref mut vq) = self.vq {
 				f(&header, &packet[..]);
 
-				fill_queue(vq.as_mut(), 1, self.packet_size);
+				fill_queue(vq, 1, self.packet_size);
 			} else {
 				panic!("Invalid length of receive queue");
 			}
@@ -115,7 +117,7 @@ impl RxQueue {
 }
 
 pub(crate) struct TxQueue {
-	vq: Option<Box<dyn Virtq>>,
+	vq: Option<VirtQueue>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
 	packet_length: u32,
@@ -129,7 +131,7 @@ impl TxQueue {
 		}
 	}
 
-	pub fn add(&mut self, vq: Box<dyn Virtq>) {
+	pub fn add(&mut self, vq: VirtQueue) {
 		self.vq = Some(vq);
 	}
 
@@ -170,7 +172,15 @@ impl TxQueue {
 				result
 			};
 
-			let buff_tkn = AvailBufferToken::new(vec![BufferElem::Vector(packet)], vec![]).unwrap();
+			let buff_tkn = AvailBufferToken::new(
+				{
+					let mut vec = SmallVec::new();
+					vec.push(BufferElem::Vector(packet));
+					vec
+				},
+				SmallVec::new(),
+			)
+			.unwrap();
 
 			vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
 
@@ -182,7 +192,7 @@ impl TxQueue {
 }
 
 pub(crate) struct EventQueue {
-	vq: Option<Box<dyn Virtq>>,
+	vq: Option<VirtQueue>,
 	packet_size: u32,
 }
 
@@ -197,10 +207,10 @@ impl EventQueue {
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, mut vq: Box<dyn Virtq>) {
+	fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		fill_queue(vq.as_mut(), num_packets, self.packet_size);
+		fill_queue(&mut vq, num_packets, self.packet_size);
 		self.vq = Some(vq);
 	}
 
@@ -355,7 +365,7 @@ impl VirtioVsockDriver {
 		}
 
 		// create the queues and tell device about them
-		self.recv_vq.add(Box::new(
+		self.recv_vq.add(VirtQueue::Split(
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
@@ -368,7 +378,7 @@ impl VirtioVsockDriver {
 		// Interrupt for receiving packets is wanted
 		self.recv_vq.enable_notifs();
 
-		self.send_vq.add(Box::new(
+		self.send_vq.add(VirtQueue::Split(
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
@@ -382,7 +392,7 @@ impl VirtioVsockDriver {
 		self.send_vq.disable_notifs();
 
 		// create the queues and tell device about them
-		self.event_vq.add(Box::new(
+		self.event_vq.add(VirtQueue::Split(
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,

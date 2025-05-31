@@ -15,7 +15,6 @@
 #![feature(maybe_uninit_as_bytes)]
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_write_slice)]
-#![feature(naked_functions)]
 #![feature(never_type)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
@@ -169,7 +168,8 @@ fn synch_all_cores() {
 
 	CORE_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-	while CORE_COUNTER.load(Ordering::SeqCst) != kernel::get_possible_cpus() {
+	let possible_cpus = kernel::get_possible_cpus();
+	while CORE_COUNTER.load(Ordering::SeqCst) != possible_cpus {
 		spin_loop();
 	}
 }
@@ -209,9 +209,9 @@ fn boot_processor_main() -> ! {
 
 	#[cfg(feature = "pci")]
 	info!("Compiled with PCI support");
-	#[cfg(feature = "acpi")]
+	#[cfg(all(feature = "acpi", target_arch = "x86_64"))]
 	info!("Compiled with ACPI support");
-	#[cfg(feature = "fsgsbase")]
+	#[cfg(all(feature = "fsgsbase", target_arch = "x86_64"))]
 	info!("Compiled with FSGSBASE support");
 	#[cfg(feature = "smp")]
 	info!("Compiled with SMP support");

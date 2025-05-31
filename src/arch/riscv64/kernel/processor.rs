@@ -234,9 +234,14 @@ pub fn shutdown(error_code: i32) -> ! {
 			semihosting::process::exit(error_code)
 		} else {
 			// use SBI shutdown
-			sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason);
-			loop {
-				core::hint::spin_loop();
+			match sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason).into_result() {
+				Ok(_) => unreachable!("System reset shouldn't have returned with success."),
+				Err(err) => {
+					error!("Could not shutdown. SBI error: {err:?}");
+					loop {
+						core::hint::spin_loop();
+					}
+				}
 			}
 		}
 	}
@@ -248,6 +253,7 @@ pub fn get_timer_ticks() -> u64 {
 	get_timestamp() / u64::from(get_frequency())
 }
 
+/// Returns the timer frequency in MHz
 pub fn get_frequency() -> u16 {
 	(get_timebase_freq() / 1_000_000).try_into().unwrap()
 }

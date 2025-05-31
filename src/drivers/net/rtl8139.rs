@@ -3,20 +3,20 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::mem;
 
-use memory_addresses::VirtAddr;
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86_64::instructions::port::Port;
 
 use crate::arch::kernel::interrupts::*;
-use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
+use crate::mm::device_alloc::DeviceAlloc;
 
 /// size of the receive buffer
 const RX_BUF_LEN: usize = 8192;
@@ -208,9 +208,9 @@ pub(crate) struct RTL8139Driver {
 	mac: [u8; 6],
 	tx_in_use: [bool; NO_TX_BUFFERS],
 	tx_counter: usize,
-	rxbuffer: Box<[u8]>,
+	rxbuffer: Box<[u8], DeviceAlloc>,
 	rxpos: usize,
-	txbuffer: Box<[u8]>,
+	txbuffer: Box<[u8], DeviceAlloc>,
 }
 
 impl NetworkDriver for RTL8139Driver {
@@ -287,14 +287,18 @@ impl NetworkDriver for RTL8139Driver {
 		let length = self.rx_peek_u16() - 4; // copy packet (but not the CRC)
 		let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
 
+		let mut vec_data = Vec::with_capacity_in(length as usize, DeviceAlloc);
+
 		// do we reach the end of the receive buffers?
 		// in this case, we contact the two slices to one vec
-		let vec_data = if pos + length as usize > RX_BUF_LEN {
+		if pos + length as usize > RX_BUF_LEN {
 			let first = &self.rxbuffer[pos..RX_BUF_LEN];
 			let second = &self.rxbuffer[..length as usize - first.len()];
-			[first, second].concat()
+
+			vec_data.extend_from_slice(first);
+			vec_data.extend_from_slice(second);
 		} else {
-			(self.rxbuffer[pos..][..length.into()]).to_vec()
+			vec_data.extend_from_slice(&self.rxbuffer[pos..][..length.into()]);
 		};
 
 		self.consume_current_buffer();
@@ -509,17 +513,14 @@ pub(crate) fn init_device(
 		Port::<u32>::new(iobase + TCR).write(TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
 	}
 
-	let rxbuffer = vec![0; RX_BUF_LEN].into_boxed_slice();
-	let txbuffer = vec![0; NO_TX_BUFFERS * TX_BUF_LEN].into_boxed_slice();
+	let rxbuffer = Box::new_zeroed_slice_in(RX_BUF_LEN, DeviceAlloc);
+	let rxbuffer = unsafe { rxbuffer.assume_init() };
+	let txbuffer = Box::new_zeroed_slice_in(NO_TX_BUFFERS * TX_BUF_LEN, DeviceAlloc);
+	let txbuffer = unsafe { txbuffer.assume_init() };
 
 	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 
-	let phys_addr = |p| {
-		virt_to_phys(VirtAddr::from_ptr(p))
-			.as_u64()
-			.try_into()
-			.unwrap()
-	};
+	let phys_addr = |p: *const u8| u32::try_from(p.expose_provenance()).unwrap();
 
 	unsafe {
 		// register the receive buffer

@@ -2,8 +2,6 @@
 //!
 //! The module contains ...
 
-use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::str::FromStr;
 
 use smoltcp::phy::ChecksumCapabilities;
@@ -11,13 +9,12 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::drivers::InterruptLine;
-use crate::drivers::net::virtio::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
+use crate::drivers::net::virtio::{Init, NetDevCfg, Uninit, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-use crate::drivers::virtio::virtqueue::Virtq;
 
 // Backend-dependent interface for Virtio network driver
-impl VirtioNetDriver {
+impl VirtioNetDriver<Uninit> {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
@@ -48,28 +45,17 @@ impl VirtioNetDriver {
 			1514
 		};
 
-		let send_vqs = TxQueues::new(Vec::<Box<dyn Virtq>>::new(), &dev_cfg);
-		let recv_vqs = RxQueues::new(Vec::<Box<dyn Virtq>>::new(), &dev_cfg);
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),
 			isr_stat,
 			notif_cfg,
-			ctrl_vq: CtrlQueue::new(None),
-			recv_vqs,
-			send_vqs,
+			inner: Uninit,
 			num_vqs: 0,
 			mtu,
 			irq,
 			checksums: ChecksumCapabilities::default(),
 		})
-	}
-
-	pub fn print_information(&mut self) {
-		self.com_cfg.print_information();
-		if self.dev_status() == virtio::net::S::LINK_UP {
-			info!("The link of the network device is up!");
-		}
 	}
 
 	/// Initializes virtio network device by mapping configuration layout to
@@ -81,18 +67,27 @@ impl VirtioNetDriver {
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<VirtioNetDriver, VirtioError> {
-		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq) {
+	) -> Result<VirtioNetDriver<Init>, VirtioError> {
+		if let Ok(drv) = VirtioNetDriver::new(dev_id, registers, irq) {
 			match drv.init_dev() {
 				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
-				_ => {
-					drv.print_information();
-					Ok(drv)
+				Ok(mut initialized_drv) => {
+					initialized_drv.print_information();
+					Ok(initialized_drv)
 				}
 			}
 		} else {
 			error!("Unable to create Driver. Aborting!");
 			Err(VirtioError::Unknown)
+		}
+	}
+}
+
+impl VirtioNetDriver<Init> {
+	pub fn print_information(&mut self) {
+		self.com_cfg.print_information();
+		if self.dev_status() == virtio::net::S::LINK_UP {
+			info!("The link of the network device is up!");
 		}
 	}
 }

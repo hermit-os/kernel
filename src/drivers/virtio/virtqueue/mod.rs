@@ -13,21 +13,18 @@ pub mod packed;
 pub mod split;
 
 use alloc::boxed::Box;
-use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
-use memory_addresses::VirtAddr;
+use enum_dispatch::enum_dispatch;
+use smallvec::SmallVec;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
-#[cfg(not(feature = "pci"))]
-use super::transport::mmio::{ComCfg, NotifCfg};
-#[cfg(feature = "pci")]
-use super::transport::pci::{ComCfg, NotifCfg};
-use crate::arch::mm::paging;
+use crate::drivers::virtio::virtqueue::packed::PackedVq;
+use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
@@ -97,6 +94,7 @@ impl From<VqSize> for u16 {
 /// might not provide the complete feature set of each queue. Drivers who
 /// do need these features should refrain from providing support for both
 /// Virtqueue types and use the structs directly instead.
+#[enum_dispatch]
 pub trait Virtq: Send {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
@@ -185,21 +183,6 @@ pub trait Virtq: Send {
 		notif: bool,
 	) -> Result<(), VirtqError>;
 
-	/// Creates a new Virtq of the specified [VqSize] and the [VqIndex].
-	/// The index represents the "ID" of the virtqueue.
-	/// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
-	///
-	/// Be aware, that devices define a maximum number of queues and a maximal size they can handle.
-	fn new(
-		com_cfg: &mut ComCfg,
-		notif_cfg: &NotifCfg,
-		size: VqSize,
-		index: VqIndex,
-		features: virtio::F,
-	) -> Result<Self, VirtqError>
-	where
-		Self: Sized;
-
 	/// Returns the size of a Virtqueue. This represents the overall size and not the capacity the
 	/// queue currently has for new descriptors.
 	fn size(&self) -> VqSize;
@@ -220,10 +203,9 @@ trait VirtqPrivate {
 	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
 
 	fn indirect_desc(table: &[Self::Descriptor]) -> Self::Descriptor {
+		let addr = table.as_ptr().expose_provenance();
 		Self::Descriptor::incomplete_desc(
-			paging::virt_to_phys(VirtAddr::from_ptr(table.as_ptr()))
-				.as_u64()
-				.into(),
+			u64::try_from(addr).unwrap().into(),
 			(mem::size_of_val(table) as u32).into(),
 			virtq::DescF::INDIRECT,
 		)
@@ -264,10 +246,9 @@ trait VirtqPrivate {
 			send_desc_iter
 				.chain(recv_desc_iter)
 				.map(|(mem_descr, len, incomplete_flags)| {
+					let addr = mem_descr.addr().expose_provenance();
 					Self::Descriptor::incomplete_desc(
-						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
-							.as_u64()
-							.into(),
+						u64::try_from(addr).unwrap().into(),
 						len.into(),
 						incomplete_flags | virtq::DescF::NEXT,
 					)
@@ -280,6 +261,12 @@ trait VirtqPrivate {
 
 		Ok(all_desc_iter.chain([last_desc]))
 	}
+}
+
+#[enum_dispatch(Virtq)]
+pub(crate) enum VirtQueue {
+	Split(SplitVq),
+	Packed(PackedVq),
 }
 
 trait VirtqDescriptor {
@@ -409,12 +396,12 @@ impl BufferElem {
 /// respective virtqueue.
 /// The maximum number of descriptors per buffer is bounded by the size of the virtqueue.
 pub struct AvailBufferToken {
-	pub(crate) send_buff: Vec<BufferElem>,
-	pub(crate) recv_buff: Vec<BufferElem>,
+	pub(crate) send_buff: SmallVec<[BufferElem; 2]>,
+	pub(crate) recv_buff: SmallVec<[BufferElem; 2]>,
 }
 
 pub(crate) struct UsedDeviceWritableBuffer {
-	elems: VecDeque<BufferElem>,
+	elems: SmallVec<[BufferElem; 2]>,
 	remaining_written_len: u32,
 }
 
@@ -427,7 +414,9 @@ impl UsedDeviceWritableBuffer {
 			return None;
 		}
 
-		let elem = self.elems.pop_front()?;
+		// May panic, but we have written data remaining so there should always be an item
+		let elem = self.elems.remove(0);
+
 		if let BufferElem::Sized(sized) = elem {
 			match sized.downcast::<MaybeUninit<T>>() {
 				Ok(cast) => {
@@ -435,18 +424,25 @@ impl UsedDeviceWritableBuffer {
 					Some(unsafe { cast.assume_init() })
 				}
 				Err(sized) => {
-					self.elems.push_front(BufferElem::Sized(sized));
+					// Unlikely and wrong usage, we should not optimize for this case
+					self.elems.insert(0, BufferElem::Sized(sized));
 					None
 				}
 			}
 		} else {
-			self.elems.push_front(elem);
+			// Unlikely and wrong usage, we should not optimize for this case
+			self.elems.insert(0, elem);
 			None
 		}
 	}
 
 	pub fn pop_front_vec(&mut self) -> Option<Vec<u8, DeviceAlloc>> {
-		let elem = self.elems.pop_front()?;
+		if self.elems.is_empty() {
+			return None;
+		}
+
+		let elem = self.elems.remove(0);
+
 		if let BufferElem::Vector(mut vector) = elem {
 			let new_len = u32::min(
 				vector.capacity().try_into().unwrap(),
@@ -456,14 +452,15 @@ impl UsedDeviceWritableBuffer {
 			unsafe { vector.set_len(new_len.try_into().unwrap()) };
 			Some(vector)
 		} else {
-			self.elems.push_front(elem);
+			// Unlikely and wrong usage, we should not optimize for this case
+			self.elems.insert(0, elem);
 			None
 		}
 	}
 }
 
 pub(crate) struct UsedBufferToken {
-	pub send_buff: Vec<BufferElem>,
+	pub send_buff: SmallVec<[BufferElem; 2]>,
 	pub used_recv_buff: UsedDeviceWritableBuffer,
 }
 
@@ -472,7 +469,7 @@ impl UsedBufferToken {
 		Self {
 			send_buff: tkn.send_buff,
 			used_recv_buff: UsedDeviceWritableBuffer {
-				elems: tkn.recv_buff.into(),
+				elems: tkn.recv_buff,
 				remaining_written_len: written_len,
 			},
 		}
@@ -505,7 +502,10 @@ impl AvailBufferToken {
 	/// ```
 	/// they must split the structure after the send part and provide the respective part via the send argument and the respective other
 	/// part via the recv argument.
-	pub fn new(send_buff: Vec<BufferElem>, recv_buff: Vec<BufferElem>) -> Result<Self, VirtqError> {
+	pub fn new(
+		send_buff: SmallVec<[BufferElem; 2]>,
+		recv_buff: SmallVec<[BufferElem; 2]>,
+	) -> Result<Self, VirtqError> {
 		if send_buff.is_empty() && recv_buff.is_empty() {
 			return Err(VirtqError::BufferNotSpecified);
 		}

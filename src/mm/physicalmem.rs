@@ -18,9 +18,11 @@ pub fn total_memory_size() -> usize {
 
 pub unsafe fn init_frame_range(frame_range: PageRange) {
 	cfg_if::cfg_if! {
-		if #[cfg(target_arch = "riscv64")] {
+		if #[cfg(target_arch = "aarch64")] {
+			type IdentityPageSize = crate::arch::mm::paging::BasePageSize;
+		} else if #[cfg(target_arch = "riscv64")] {
 			type IdentityPageSize = crate::arch::mm::paging::HugePageSize;
-		} else {
+		} else if #[cfg(target_arch = "x86_64")] {
 			type IdentityPageSize = crate::arch::mm::paging::LargePageSize;
 		}
 	}

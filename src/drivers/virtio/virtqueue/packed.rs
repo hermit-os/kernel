@@ -5,11 +5,11 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
-use core::ops;
 use core::sync::atomic::{Ordering, fence};
+use core::{ops, ptr};
 
 use align_address::Align;
-use memory_addresses::VirtAddr;
+use memory_addresses::PhysAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -27,7 +27,6 @@ use super::{
 	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
-use crate::arch::mm::paging;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -637,7 +636,30 @@ impl Virtq for PackedVq {
 		self.index
 	}
 
-	fn new(
+	fn size(&self) -> VqSize {
+		self.size
+	}
+
+	fn has_used_buffers(&self) -> bool {
+		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
+		self.descr_ring.is_marked_used(desc.flags)
+	}
+}
+
+impl VirtqPrivate for PackedVq {
+	type Descriptor = pvirtq::Desc;
+
+	fn create_indirect_ctrl(
+		buffer_tkn: &AvailBufferToken,
+	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
+		Ok(Self::descriptor_iter(buffer_tkn)?
+			.collect::<Vec<_>>()
+			.into_boxed_slice())
+	}
+}
+
+impl PackedVq {
+	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: VqSize,
@@ -685,12 +707,10 @@ impl Virtq for PackedVq {
 		let dev_event = Box::leak(dev_event);
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
-			descr_ring.raw_addr() as u64
-		)));
+		vq_handler.set_ring_addr(PhysAddr::from(descr_ring.raw_addr()));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from_ptr(drv_event)));
-		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from_ptr(dev_event)));
+		vq_handler.set_drv_ctrl_addr(PhysAddr::from(ptr::from_mut(drv_event).expose_provenance()));
+		vq_handler.set_dev_ctrl_addr(PhysAddr::from(ptr::from_mut(dev_event).expose_provenance()));
 
 		let mut drv_event = DrvNotif {
 			f_notif_idx: false,
@@ -725,26 +745,5 @@ impl Virtq for PackedVq {
 			index,
 			last_next: Cell::default(),
 		})
-	}
-
-	fn size(&self) -> VqSize {
-		self.size
-	}
-
-	fn has_used_buffers(&self) -> bool {
-		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
-		self.descr_ring.is_marked_used(desc.flags)
-	}
-}
-
-impl VirtqPrivate for PackedVq {
-	type Descriptor = pvirtq::Desc;
-
-	fn create_indirect_ctrl(
-		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		Ok(Self::descriptor_iter(buffer_tkn)?
-			.collect::<Vec<_>>()
-			.into_boxed_slice())
 	}
 }

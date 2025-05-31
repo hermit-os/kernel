@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
 use ahash::RandomState;
-use arm_gic::gicv3::GicV3;
+use arm_gic::gicv3::{GicV3, SgiTarget};
 use arm_gic::{IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
@@ -39,31 +39,32 @@ static mut TIMER_INTERRUPT: u32 = 0;
 static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> =
 	OnceCell::new();
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
-pub(crate) static GIC: SpinMutex<Option<GicV3>> = SpinMutex::new(None);
+pub(crate) static GIC: SpinMutex<Option<GicV3<'_>>> = SpinMutex::new(None);
 
 /// Enable all interrupts
 #[inline]
 pub fn enable() {
 	unsafe {
 		asm!(
+			"dmb ish",
 			"msr daifclr, {mask}",
+			"dmb ish",
 			mask = const 0b111,
-			options(nostack, nomem),
+			options(nostack),
 		);
 	}
 }
 
-/// Enable Interrupts and wait for the next interrupt (HLT instruction)
-/// According to <https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html>, this exact sequence of assembly
-/// instructions is guaranteed to be atomic.
-/// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
+/// Enable all interrupts and wait for the next interrupt (wfi instruction)
 #[inline]
 pub fn enable_and_wait() {
 	unsafe {
 		asm!(
+			"dmb ish",
 			"msr daifclr, {mask}; wfi",
+			"dmb ish",
 			mask = const 0b111,
-			options(nostack, nomem),
+			options(nostack),
 		);
 	}
 }
@@ -73,9 +74,11 @@ pub fn enable_and_wait() {
 pub fn disable() {
 	unsafe {
 		asm!(
+			"dmb ish",
 			"msr daifset, {mask}",
+			"dmb ish",
 			mask = const 0b111,
-			options(nostack, nomem),
+			options(nostack),
 		);
 	}
 }
@@ -88,13 +91,8 @@ pub(crate) fn install_handlers() {
 		debug!("Handle timer interrupt");
 
 		// disable timer
-		unsafe {
-			asm!(
-				"msr cntp_cval_el0, xzr",
-				"msr cntp_ctl_el0, xzr",
-				options(nostack, nomem),
-			);
-		}
+		CNTP_CVAL_EL0.set(0);
+		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
 	}
 
 	for (key, value) in get_interrupt_handlers().into_iter() {
@@ -206,8 +204,14 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 		}
 	} else if ec == 0x3c {
 		error!("Trap to debugger, PC={pc:#x}");
+		loop {
+			core::hint::spin_loop();
+		}
 	} else {
 		error!("Unsupported exception class: {ec:#x}, PC={pc:#x}");
+		loop {
+			core::hint::spin_loop();
+		}
 	}
 }
 
@@ -225,8 +229,19 @@ pub(crate) extern "C" fn do_error(_state: &State) -> ! {
 	scheduler::abort()
 }
 
-pub fn wakeup_core(_core_to_wakeup: CoreId) {
-	todo!("wakeup_core stub");
+pub fn wakeup_core(core_id: CoreId) {
+	debug!("Wakeup core {core_id}");
+	let reschedid = IntId::sgi(SGI_RESCHED.into());
+
+	GicV3::send_sgi(
+		reschedid,
+		SgiTarget::List {
+			affinity3: 0,
+			affinity2: 0,
+			affinity1: 0,
+			target_list: 1 << core_id,
+		},
+	);
 }
 
 pub(crate) fn init() {
@@ -249,21 +264,31 @@ pub(crate) fn init() {
 	let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 	let gicr_size = u64::from_be_bytes(slice.try_into().unwrap());
 
-	let gicr_stride = dtb
-		.get_property("/intc", "redistributor-stride")
-		.map(|bytes| u64::from_be_bytes(bytes.try_into().unwrap()))
-		.unwrap_or(0);
-
 	let num_cpus = dtb
 		.enum_subnodes("/cpus")
 		.filter(|name| name.contains("cpu@"))
 		.count();
-	let cpu_id = core_id();
+	let cpu_id: usize = core_id().try_into().unwrap();
 
-	info!("Found {num_cpus} cpus!");
+	let compatible = core::str::from_utf8(
+		dtb.get_property("/intc", "compatible")
+			.unwrap_or(b"unknown"),
+	)
+	.unwrap()
+	.replace('\0', "");
+	let is_gic_v4 = if compatible == "arm,gic-v4" {
+		info!("Found GIC v4 with {num_cpus} cpus");
+		true
+	} else if compatible == "arm,gic-v3" {
+		info!("Found GIC v3 with {num_cpus} cpus");
+		false
+	} else {
+		panic!("{compatible} isn't supported")
+	};
+
 	info!("Found GIC Distributor interface at {gicd_start:p} (size {gicd_size:#X})");
 	info!(
-		"Found generic interrupt controller redistributor at {gicr_start:p} (size {gicr_size:#X}, stride {gicr_stride:#X})"
+		"Found generic interrupt controller redistributor at {gicr_start:p} (size {gicr_size:#X})"
 	);
 
 	let gicd_address =
@@ -289,16 +314,16 @@ pub(crate) fn init() {
 		flags,
 	);
 
-	GicV3::set_priority_mask(0xff);
 	let mut gic = unsafe {
 		GicV3::new(
 			gicd_address.as_mut_ptr(),
 			gicr_address.as_mut_ptr(),
 			num_cpus,
-			gicr_stride as usize,
+			is_gic_v4,
 		)
 	};
-	gic.setup(cpu_id as usize);
+	gic.setup(cpu_id);
+	GicV3::set_priority_mask(0xff);
 
 	for node in dtb.enum_subnodes("/") {
 		let parts: Vec<_> = node.split('@').collect();
@@ -337,25 +362,89 @@ pub(crate) fn init() {
 				} else {
 					panic!("Invalid interrupt type");
 				};
-				gic.set_interrupt_priority(timer_irqid, Some(cpu_id as usize), 0x00);
+				gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
 				if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-					gic.set_trigger(timer_irqid, Some(cpu_id as usize), Trigger::Level);
+					gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
 				} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-					gic.set_trigger(timer_irqid, Some(cpu_id as usize), Trigger::Edge);
+					gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
 				} else {
 					panic!("Invalid interrupt level!");
 				}
-				gic.enable_interrupt(timer_irqid, Some(cpu_id as usize), true);
+				gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
 			}
 		}
 	}
 
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
-	gic.set_interrupt_priority(reschedid, Some(cpu_id as usize), 0x00);
-	gic.enable_interrupt(reschedid, Some(cpu_id as usize), true);
+	gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01);
+	gic.enable_interrupt(reschedid, Some(cpu_id), true);
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
 	*GIC.lock() = Some(gic);
+}
+
+// marks the given CPU core as awake
+pub fn init_cpu() {
+	let cpu_id: usize = core_id().try_into().unwrap();
+
+	if let Some(ref mut gic) = *GIC.lock() {
+		debug!("Mark cpu {cpu_id} as awake");
+
+		gic.setup(cpu_id);
+		GicV3::set_priority_mask(0xff);
+
+		let dtb = unsafe {
+			Dtb::from_raw(ptr::with_exposed_provenance(
+				env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
+			))
+			.expect(".dtb file has invalid header")
+		};
+
+		for node in dtb.enum_subnodes("/") {
+			let parts: Vec<_> = node.split('@').collect();
+
+			if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
+				if core::str::from_utf8(compatible).unwrap().contains("timer") {
+					let irq_slice = dtb
+						.get_property(parts.first().unwrap(), "interrupts")
+						.unwrap();
+					/* Secure Phys IRQ */
+					let (_irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+					let (_irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+					let (_irqflags, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+					/* Non-secure Phys IRQ */
+					let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+					let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+					let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+					let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+					let irq = u32::from_be_bytes(irq.try_into().unwrap());
+					let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+
+					// enable timer interrupt
+					let timer_irqid = if irqtype == 1 {
+						IntId::ppi(irq)
+					} else if irqtype == 0 {
+						IntId::spi(irq)
+					} else {
+						panic!("Invalid interrupt type");
+					};
+					gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
+					if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+						gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
+					} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+						gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
+					} else {
+						panic!("Invalid interrupt level!");
+					}
+					gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
+				}
+			}
+		}
+
+		let reschedid = IntId::sgi(SGI_RESCHED.into());
+		gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01);
+		gic.enable_interrupt(reschedid, Some(cpu_id), true);
+	}
 }
 
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =

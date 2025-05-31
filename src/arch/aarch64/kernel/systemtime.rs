@@ -5,6 +5,7 @@ use core::arch::asm;
 use core::str;
 
 use hermit_dtb::Dtb;
+use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use time::OffsetDateTime;
@@ -46,57 +47,68 @@ fn rtc_read(off: usize) -> u32 {
 }
 
 pub fn init() {
-	let dtb = unsafe {
-		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
-		))
-		.expect(".dtb file has invalid header")
-	};
+	match env::boot_info().platform_info {
+		PlatformInfo::Uhyve { boot_time, .. } => {
+			PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
+			BOOT_TIME.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap());
+			info!("Hermit booted on {boot_time}");
 
-	for node in dtb.enum_subnodes("/") {
-		let parts: Vec<_> = node.split('@').collect();
+			return;
+		}
+		_ => {
+			let dtb = unsafe {
+				Dtb::from_raw(core::ptr::with_exposed_provenance(
+					env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
+				))
+				.expect(".dtb file has invalid header")
+			};
 
-		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-			if str::from_utf8(compatible).unwrap().contains("pl031") {
-				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
-				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
-				let addr = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
-				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
-				let size = u64::from_be_bytes(slice.try_into().unwrap());
+			for node in dtb.enum_subnodes("/") {
+				let parts: Vec<_> = node.split('@').collect();
 
-				debug!("Found RTC at {addr:p} (size {size:#X})");
+				if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
+					if str::from_utf8(compatible).unwrap().contains("pl031") {
+						let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
+						let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
+						let addr = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
+						let (slice, _residual_slice) =
+							residual_slice.split_at(core::mem::size_of::<u64>());
+						let size = u64::from_be_bytes(slice.try_into().unwrap());
 
-				let pl031_address = virtualmem::allocate_aligned(
-					size.try_into().unwrap(),
-					BasePageSize::SIZE.try_into().unwrap(),
-				)
-				.unwrap();
-				PL031_ADDRESS.set(pl031_address).unwrap();
-				debug!("Mapping RTC to virtual address {pl031_address:p}",);
+						debug!("Found RTC at {addr:p} (size {size:#X})");
 
-				let mut flags = PageTableEntryFlags::empty();
-				flags.device().writable().execute_disable();
-				paging::map::<BasePageSize>(
-					pl031_address,
-					addr,
-					(size / BasePageSize::SIZE).try_into().unwrap(),
-					flags,
-				);
+						let pl031_address = virtualmem::allocate_aligned(
+							size.try_into().unwrap(),
+							BasePageSize::SIZE.try_into().unwrap(),
+						)
+						.unwrap();
+						PL031_ADDRESS.set(pl031_address).unwrap();
+						debug!("Mapping RTC to virtual address {pl031_address:p}",);
 
-				let boot_time =
-					OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
-				info!("Hermit booted on {boot_time}");
+						let mut flags = PageTableEntryFlags::empty();
+						flags.device().writable().execute_disable();
+						paging::map::<BasePageSize>(
+							pl031_address,
+							addr,
+							(size / BasePageSize::SIZE).try_into().unwrap(),
+							flags,
+						);
 
-				let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
-				let current_ticks = super::processor::get_timer_ticks();
-				BOOT_TIME.set(micros - current_ticks).unwrap();
+						let boot_time =
+							OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
+						info!("Hermit booted on {boot_time}");
 
-				return;
+						BOOT_TIME
+							.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap())
+							.unwrap();
+
+						return;
+					}
+				}
 			}
 		}
-	}
+	};
 
-	PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
 	BOOT_TIME.set(0).unwrap();
 }
 
