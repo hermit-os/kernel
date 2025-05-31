@@ -70,7 +70,7 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 }
 
 unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBootInfo>) -> ! {
-	// Optimized Hart-ID validation
+	 // Sanity check: validate hart_id against HART_MASK
 	if CPU_ONLINE.load(Ordering::Acquire) > 0 {
 		// Faster check for Secondary-HARTs
 		if (HART_MASK.load(Ordering::Relaxed) & (1 << hart_id)) == 0 {
@@ -88,7 +88,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 		env::set_boot_info(*boot_info.unwrap());
 		let fdt = unsafe { Fdt::from_ptr(get_dtb_ptr()) }.expect("FDT is invalid");
 
-		// Optimized HART_MASK calculation
+		// Build HART_MASK using readable conditional checks
 		let mut hart_mask = 0u64;
 		for cpu in fdt.cpus() {
 			if let Some(cpu_id) = cpu.property("reg").and_then(|p| p.as_usize()) {
