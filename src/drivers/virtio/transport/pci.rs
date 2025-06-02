@@ -819,7 +819,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
-				Ok(VirtioDriver::Network(virt_net_drv))
+				Ok(VirtioDriver::Network(Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
 				error!(
@@ -877,7 +877,7 @@ pub(crate) enum VirtioDriver {
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 		any(feature = "tcp", feature = "udp")
 	))]
-	Network(VirtioNetDriver),
+	Network(Box<VirtioNetDriver>),
 	#[cfg(feature = "vsock")]
 	Vsock(Box<VirtioVsockDriver>),
 	#[cfg(feature = "fuse")]

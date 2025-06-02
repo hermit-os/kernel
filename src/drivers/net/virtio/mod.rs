@@ -38,6 +38,19 @@ use crate::drivers::virtio::virtqueue::{
 use crate::drivers::{Driver, InterruptLine};
 use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
+use crate::object_pool::{ObjectAllocator, ObjectPool};
+
+struct BufferAllocator {
+	buffer_size: usize,
+}
+
+impl ObjectAllocator<Vec<u8, DeviceAlloc>> for BufferAllocator {
+	fn allocate(&self) -> Vec<u8, DeviceAlloc> {
+		Vec::with_capacity_in(self.buffer_size, DeviceAlloc)
+	}
+}
+
+type BufferObjectPool = ObjectPool<Vec<u8, DeviceAlloc>, BufferAllocator>;
 
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
@@ -85,15 +98,21 @@ fn determine_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 
 pub struct RxQueues {
 	vqs: Vec<VirtQueue>,
-	buf_size: u32,
+	buffer_pool: BufferObjectPool,
 }
 
 impl RxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
-			buf_size: determine_buf_size(dev_cfg),
+			buffer_pool: BufferObjectPool::new(BufferAllocator {
+				buffer_size: determine_buf_size(dev_cfg) as usize,
+			}),
 		}
+	}
+
+	pub fn return_packet_buffer(&mut self, item: Vec<u8, DeviceAlloc>) {
+		self.buffer_pool.put(item);
 	}
 
 	/// Takes care of handling packets correctly which need some processing after being received.
@@ -109,8 +128,8 @@ impl RxQueues {
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
-		let num_bufs: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		fill_queue(&mut vq, num_bufs, self.buf_size);
+		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		fill_queue(&mut vq, num_packets, &mut self.buffer_pool);
 		self.vqs.push(vq);
 	}
 
@@ -135,25 +154,15 @@ impl RxQueues {
 	}
 }
 
-fn buffer_token_from_hdr(
-	hdr: Box<MaybeUninit<Hdr>, DeviceAlloc>,
-	buf_size: u32,
-) -> AvailBufferToken {
-	AvailBufferToken::new(SmallVec::new(), {
-		SmallVec::from_buf([
-			BufferElem::Sized(hdr),
-			BufferElem::Vector(Vec::with_capacity_in(
-				buf_size.try_into().unwrap(),
-				DeviceAlloc,
-			)),
-		])
-	})
-	.unwrap()
-}
-
-fn fill_queue(vq: &mut VirtQueue, num_bufs: u16, buf_size: u32) {
-	for _ in 0..num_bufs {
-		let buff_tkn = buffer_token_from_hdr(Box::<Hdr, _>::new_uninit_in(DeviceAlloc), buf_size);
+fn fill_queue(vq: &mut VirtQueue, num_packets: u16, pool: &mut BufferObjectPool) {
+	for _ in 0..num_packets {
+		let buff_tkn = AvailBufferToken::new(SmallVec::new(), {
+			SmallVec::from_buf([
+				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
+				BufferElem::Vector(pool.get()),
+			])
+		})
+		.unwrap();
 
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
@@ -215,7 +224,7 @@ pub(crate) struct Uninit;
 pub(crate) struct Init {
 	pub(super) mtu: u16,
 	pub(super) ctrl_vq: Option<VirtQueue>,
-	pub(super) recv_vqs: RxQueues,
+	pub(crate) recv_vqs: RxQueues,
 	pub(super) send_vqs: TxQueues,
 }
 
@@ -229,7 +238,7 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
 
-	pub(super) inner: T,
+	pub(crate) inner: T,
 
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
@@ -342,13 +351,20 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 
 		let mut combined_packets = first_packet;
 
-		let first_tkn = buffer_token_from_hdr(
-			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
-			unsafe {
-				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
-			},
-			self.inner.recv_vqs.buf_size,
-		);
+		let first_tkn = AvailBufferToken::new(SmallVec::new(), {
+			SmallVec::from_buf([
+				BufferElem::Sized(
+					// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+					unsafe {
+						transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(
+							first_header,
+						)
+					},
+				),
+				BufferElem::Vector(self.inner.recv_vqs.buffer_pool.get()),
+			])
+		})
+		.unwrap();
 		self.inner.recv_vqs.vqs[0]
 			.dispatch(first_tkn, false, BufferType::Direct)
 			.unwrap();
@@ -357,13 +373,20 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 			let (header, packet) = self.receive_single_packet()?;
 			combined_packets.extend_from_slice(&packet);
 
-			let tkn = buffer_token_from_hdr(
-				// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
-				unsafe {
-					transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(header)
-				},
-				self.inner.recv_vqs.buf_size,
-			);
+			let tkn = AvailBufferToken::new(SmallVec::new(), {
+				SmallVec::from_buf([
+					BufferElem::Sized(
+						// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+						unsafe {
+							transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(
+								header,
+							)
+						},
+					),
+					BufferElem::Vector(self.inner.recv_vqs.buffer_pool.get()),
+				])
+			})
+			.unwrap();
 			self.inner.recv_vqs.vqs[0]
 				.dispatch(tkn, false, BufferType::Direct)
 				.unwrap();
@@ -638,8 +661,6 @@ impl VirtioNetDriver<Uninit> {
 			recv_vqs: RxQueues::new(Vec::new(), &self.dev_cfg),
 			send_vqs: TxQueues::new(Vec::new(), &self.dev_cfg),
 		};
-
-		debug!("Using RX buffer size of {}", inner.recv_vqs.buf_size);
 
 		self.dev_spec_init(&mut inner)?;
 		info!(

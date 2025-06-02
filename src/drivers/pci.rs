@@ -538,7 +538,7 @@ pub(crate) fn init() {
 					any(feature = "tcp", feature = "udp")
 				))]
 				Ok(VirtioDriver::Network(drv)) => {
-					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)));
+					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
