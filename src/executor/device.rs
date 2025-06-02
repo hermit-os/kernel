@@ -23,6 +23,7 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::net::NetworkDriver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
+use crate::drivers::pci::get_network_driver;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// Data type to determine the mac address
@@ -235,7 +236,21 @@ impl phy::RxToken for RxToken {
 	where
 		F: FnOnce(&[u8]) -> R,
 	{
-		f(&self.buffer[..])
+		let res = f(&self.buffer[..]);
+
+		#[cfg(all(
+			not(all(target_arch = "x86_64", feature = "rtl8139")),
+			any(feature = "tcp", feature = "udp")
+		))]
+		if let Some(driver) = get_network_driver() {
+			driver
+				.lock()
+				.inner
+				.recv_vqs
+				.return_packet_buffer(self.buffer);
+		}
+
+		res
 	}
 }
 
