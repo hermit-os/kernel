@@ -1,7 +1,7 @@
 name: Benchmark
 
 on:
-  pull_request:
+  pull_request_target:
   merge_group:
   push:
     branches:
@@ -15,9 +15,7 @@ jobs:
         name: Run Benchmarks
         runs-on: [self-hosted]
         permissions:
-          contents: write
           pull-requests: write
-          repository-projects: write
 
         strategy:
           matrix:
