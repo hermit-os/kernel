@@ -1,0 +1,86 @@
+name: Benchmark
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+    benchmark:
+        name: Run Benchmarks
+        runs-on: [self-hosted]
+
+        strategy:
+          matrix:
+            include:
+              - benchmark-file: /kernel/.github/benchmarks/general.json
+                benchmark-matrix-name: General
+                benchmark-build: true
+              - benchmark-file: /kernel/.github/benchmarks/misc.json
+                benchmark-matrix-name: Misc
+                benchmark-build: false
+              - benchmark-file: /kernel/.github/benchmarks/netbench.json
+                benchmark-matrix-name: Netbench
+                benchmark-build: false
+
+        steps:
+          - name: Checkout hermit-rs
+            uses: actions/checkout@v4
+            with:
+              repository: hermit-os/hermit-rs
+              submodules: true
+          - name: Remove hermit-kernel submodule
+            run: git rm -r kernel
+          - name: Checkout hermit-kernel
+            uses: actions/checkout@v4
+            with:
+              path: kernel
+          - name: Install dependencies
+            run: |
+              sudo apt-get update
+              sudo apt-get install -y qemu-system qemu-system-x86 qemu-kvm parallel gh
+          - name: Download loader
+            run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
+          - uses: mkroening/rust-toolchain-toml@main
+          - name: Install uhyve
+            run: cargo +stable install --locked uhyve
+          - name: Check KVM availability
+            run: |
+              lscpu
+              kvm-ok
+          - name: Add wasm target
+            run: |
+              rustup component add llvm-tools
+              rustup target add wasm32-wasip1
+              rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+          - name: Run benchmarks
+            uses: hermit-os/hermit-bench@kernel
+            id: run-bench
+            with: 
+              benchmark-file: ${{ matrix.benchmark-file }}
+              benchmark-build: ${{ matrix.benchmark-build }}
+              build-command: "HERMIT_LOG_LEVEL_FILTER=Off cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --release"
+          - name: Determine if benchmarks should be published
+            id: publish-benchmarks
+            run: |
+              if [[ "${{ github.event_name }}" == "push" && "${GITHUB_REF##*/}" == "main" ]]; then
+                echo "publish_benchmarks=true" >> $GITHUB_OUTPUT
+              else
+                echo "publish_benchmarks=false" >> $GITHUB_OUTPUT
+              fi
+          - name: Store benchmark results
+            uses: hermit-os/github-action-benchmark@hermit-rs
+            with:
+              tool: 'hermit-bench'
+              output-file-path: ${{ steps.run-bench.outputs.result-file }}
+              github-token: ${{ secrets.GITHUB_TOKEN }}
+              benchmark-data-dir-path: benchmarks
+              comment-always: true
+              benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
+              auto-push: ${{ steps.publish-benchmarks.outputs.publish_benchmarks == 'true' }} 
+            
