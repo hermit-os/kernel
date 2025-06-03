@@ -1,7 +1,7 @@
 [
     {
        "name": "1 core",
-       "command": "sudo qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
+       "command": "sudo qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
        "external_time": true,
        "iterations": 25,
        "group": "General",
@@ -9,7 +9,7 @@
     },
     {
         "name": "2 cores",
-        "command": "sudo qemu-system-x86_64 -display none -smp 2 -m 128M -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
+        "command": "sudo qemu-system-x86_64 -display none -smp 2 -m 128M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
         "external_time": true,
         "iterations": 25,
         "group": "General",
@@ -17,7 +17,7 @@
      },
     {
         "name": "4 cores",
-        "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 128M -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
+        "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 128M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
         "external_time": true,
         "iterations": 25,
         "group": "General",
@@ -25,7 +25,7 @@
     },
     {
         "name": "Pi Multithreaded Benchmark",
-        "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 512M -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/multithreaded_benchmark",
+        "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 512M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/multithreaded_benchmark",
         "iterations": 15,
         "group": "General",
         "plot_group": "Multithreaded Pi Efficiency"

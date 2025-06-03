@@ -19,19 +19,19 @@
     },
     {
         "name": "Micro Benchmarks",
-        "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 512M -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/micro_benchmarks",
+        "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 512M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/micro_benchmarks",
         "iterations": 20,
         "group": "Micro"
     },
     {
         "name": "Allocation Benchmarks",
-        "command": "sudo qemu-system-x86_64 -display none -smp 1 -m 5G -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/alloc_benchmarks",
+        "command": "sudo qemu-system-x86_64 -display none -smp 1 -m 5G -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/alloc_benchmarks",
         "iterations": 30,
         "group": "Allocations"
     },
     {
         "name": "Mutex Stress Test",
-        "command": "sudo qemu-system-x86_64 -display none -smp 2 -m 512M -serial stdio -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/mutex",
+        "command": "sudo qemu-system-x86_64 -display none -smp 2 -m 512M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/mutex",
         "iterations": 40,
         "group": "Mutex"
     }
