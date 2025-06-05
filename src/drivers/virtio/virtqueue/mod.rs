@@ -415,7 +415,11 @@ impl UsedDeviceWritableBuffer {
 		}
 
 		// May panic, but we have written data remaining so there should always be an item
-		let elem = self.elems.remove(0);
+		let elem = if self.elems.len() <= 2 {
+			self.elems.swap_remove(0)
+		} else {
+			self.elems.remove(0)
+		};
 
 		if let BufferElem::Sized(sized) = elem {
 			match sized.downcast::<MaybeUninit<T>>() {
@@ -441,7 +445,11 @@ impl UsedDeviceWritableBuffer {
 			return None;
 		}
 
-		let elem = self.elems.remove(0);
+		let elem = if self.elems.len() <= 2 {
+			self.elems.swap_remove(0)
+		} else {
+			self.elems.remove(0)
+		};
 
 		if let BufferElem::Vector(mut vector) = elem {
 			let new_len = u32::min(
