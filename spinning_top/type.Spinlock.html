@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A mutual exclusion (Mutex) type based on busy-waiting."><title>Spinlock in spinning_top - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="spinning_top" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc type"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../spinning_top/index.html">spinning_<wbr>top</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Spinlock</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#example" title="Example">Example</a></li><li><a href="#usage-in-statics" title="Usage in statics">Usage in statics</a></li></ul><h3><a href="#aliased-type">Aliased Type</a></h3></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate spinning_<wbr>top</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">spinning_top</a></div><h1>Type Alias <span class="type">Spinlock</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/spinning_top/spinlock.rs.html#146">Source</a> </span></div><pre class="rust item-decl"><code>pub type Spinlock&lt;T&gt; = <a class="struct" href="../lock_api/mutex/struct.Mutex.html" title="struct lock_api::mutex::Mutex">Mutex</a>&lt;<a class="struct" href="struct.RawSpinlock.html" title="struct spinning_top::RawSpinlock">RawSpinlock</a>&lt;<a class="struct" href="relax/struct.Spin.html" title="struct spinning_top::relax::Spin">Spin</a>&gt;, T&gt;;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A mutual exclusion (Mutex) type based on busy-waiting.</p>
+<p>Calling <code>lock</code> (or <code>try_lock</code>) on this type returns a <a href="guard/type.SpinlockGuard.html" title="type spinning_top::guard::SpinlockGuard"><code>SpinlockGuard</code></a>, which
+automatically frees the lock when it goes out of scope.</p>
+<h3 id="example"><a class="doc-anchor" href="#example">§</a>Example</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>spinning_top::Spinlock;
+
+<span class="kw">fn </span>main() {
+    <span class="comment">// Wrap some data in a spinlock
+    </span><span class="kw">let </span>data = String::from(<span class="string">"Hello"</span>);
+    <span class="kw">let </span>spinlock = Spinlock::new(data);
+    make_uppercase(<span class="kw-2">&amp;</span>spinlock); <span class="comment">// only pass a shared reference
+
+    // We have ownership of the spinlock, so we can extract the data without locking
+    // Note: this consumes the spinlock
+    </span><span class="kw">let </span>data = spinlock.into_inner();
+    <span class="macro">assert_eq!</span>(data.as_str(), <span class="string">"HELLO"</span>);
+}
+
+<span class="kw">fn </span>make_uppercase(spinlock: <span class="kw-2">&amp;</span>Spinlock&lt;String&gt;) {
+    <span class="comment">// Lock the spinlock to get a mutable reference to the data
+    </span><span class="kw">let </span><span class="kw-2">mut </span>locked_data = spinlock.lock();
+    <span class="macro">assert_eq!</span>(locked_data.as_str(), <span class="string">"Hello"</span>);
+    locked_data.make_ascii_uppercase();
+
+    <span class="comment">// the lock is automatically freed at the end of the scope
+</span>}</code></pre></div>
+<h3 id="usage-in-statics"><a class="doc-anchor" href="#usage-in-statics">§</a>Usage in statics</h3>
+<p><code>Spinlock::new</code> is a <code>const</code> function. This makes the <code>Spinlock</code> type
+usable in statics:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>spinning_top::Spinlock;
+
+<span class="kw">static </span>DATA: Spinlock&lt;u32&gt; = Spinlock::new(<span class="number">0</span>);
+
+<span class="kw">fn </span>main() {
+    <span class="kw">let </span><span class="kw-2">mut </span>data = DATA.lock();
+    <span class="kw-2">*</span>data += <span class="number">1</span>;
+    <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>data, <span class="number">1</span>);
+}</code></pre></div>
+</div></details><h2 id="aliased-type" class="section-header">Aliased Type<a href="#aliased-type" class="anchor">§</a></h2><pre class="rust item-decl"><code>struct Spinlock&lt;T&gt; { <span class="comment">/* private fields */</span> }</code></pre><script src="../type.impl/lock_api/mutex/struct.Mutex.js" data-self-path="spinning_top::spinlock::Spinlock" async></script></section></div></main></body></html>

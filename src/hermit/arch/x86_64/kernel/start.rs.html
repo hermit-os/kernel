@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/arch/x86_64/kernel/start.rs`."><title>start.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="hermit" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../../../../static.files/storage-4e99c027.js"></script><script defer src="../../../../../static.files/src-script-63605ae7.js"></script><script defer src="../../../../../src-files.js"></script><script defer src="../../../../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hermit/arch/x86_64/kernel/</div>start.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>core::arch::naked_asm;
+<a href=#2 id=2 data-nosnippet>2</a>
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>hermit_entry::Entry;
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>hermit_entry::boot_info::RawBootInfo;
+<a href=#5 id=5 data-nosnippet>5</a>
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">crate</span>::KERNEL_STACK_SIZE;
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::kernel::pre_init;
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::kernel::scheduler::TaskStacks;
+<a href=#9 id=9 data-nosnippet>9</a>
+<a href=#10 id=10 data-nosnippet>10</a><span class="attr">#[<span class="kw">unsafe</span>(no_mangle)]
+<a href=#11 id=11 data-nosnippet>11</a>#[<span class="kw">unsafe</span>(naked)]
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="kw">pub unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>_start(_boot_info: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>RawBootInfo&gt;, cpu_id: u32) -&gt; ! {
+<a href=#13 id=13 data-nosnippet>13</a>	<span class="comment">// boot_info is in the `rdi` register
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a>	// validate signatures
+<a href=#16 id=16 data-nosnippet>16</a>	// `_Start` is compatible to `Entry`
+<a href=#17 id=17 data-nosnippet>17</a>	</span>{
+<a href=#18 id=18 data-nosnippet>18</a>		<span class="kw">unsafe extern </span><span class="string">"C" </span><span class="kw">fn </span>_entry(_boot_info: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>RawBootInfo, _cpu_id: u32) -&gt; ! {
+<a href=#19 id=19 data-nosnippet>19</a>			<span class="macro">unreachable!</span>()
+<a href=#20 id=20 data-nosnippet>20</a>		}
+<a href=#21 id=21 data-nosnippet>21</a>		<span class="kw">pub type </span>_Start =
+<a href=#22 id=22 data-nosnippet>22</a>			<span class="kw">unsafe extern </span><span class="string">"C" </span><span class="kw">fn</span>(boot_info: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>RawBootInfo&gt;, cpu_id: u32) -&gt; !;
+<a href=#23 id=23 data-nosnippet>23</a>		<span class="kw">const </span>_ENTRY: Entry = _entry;
+<a href=#24 id=24 data-nosnippet>24</a>		<span class="kw">const </span>_START: _Start = _start;
+<a href=#25 id=25 data-nosnippet>25</a>		<span class="kw">const </span>_PRE_INIT: _Start = pre_init;
+<a href=#26 id=26 data-nosnippet>26</a>	}
+<a href=#27 id=27 data-nosnippet>27</a>
+<a href=#28 id=28 data-nosnippet>28</a>	<span class="macro">naked_asm!</span>(
+<a href=#29 id=29 data-nosnippet>29</a>		<span class="comment">// use core::sync::atomic::{AtomicU32, Ordering};
+<a href=#30 id=30 data-nosnippet>30</a>		//
+<a href=#31 id=31 data-nosnippet>31</a>		// pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+<a href=#32 id=32 data-nosnippet>32</a>		//
+<a href=#33 id=33 data-nosnippet>33</a>		// while CPU_ONLINE.load(Ordering::Acquire) != this {
+<a href=#34 id=34 data-nosnippet>34</a>		//     core::hint::spin_loop();
+<a href=#35 id=35 data-nosnippet>35</a>		// }
+<a href=#36 id=36 data-nosnippet>36</a>		</span><span class="string">"mov rax, qword ptr [rip + {cpu_online}@GOTPCREL]"</span>,
+<a href=#37 id=37 data-nosnippet>37</a>		<span class="string">"2:"</span>,
+<a href=#38 id=38 data-nosnippet>38</a>		<span class="string">"mov ecx, dword ptr [rax]"</span>,
+<a href=#39 id=39 data-nosnippet>39</a>		<span class="string">"cmp ecx, esi"</span>,
+<a href=#40 id=40 data-nosnippet>40</a>		<span class="string">"je 3f"</span>,
+<a href=#41 id=41 data-nosnippet>41</a>		<span class="string">"pause"</span>,
+<a href=#42 id=42 data-nosnippet>42</a>		<span class="string">"jmp 2b"</span>,
+<a href=#43 id=43 data-nosnippet>43</a>		<span class="string">"3:"</span>,
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a>		<span class="comment">// Overwrite RSP if `CURRENT_STACK_ADDRESS != 0`
+<a href=#46 id=46 data-nosnippet>46</a>		</span><span class="string">"mov rax, qword ptr [rip + {current_stack_address}@GOTPCREL]"</span>,
+<a href=#47 id=47 data-nosnippet>47</a>		<span class="string">"mov rax, qword ptr [rax]"</span>,
+<a href=#48 id=48 data-nosnippet>48</a>		<span class="string">"test rax, rax"</span>,
+<a href=#49 id=49 data-nosnippet>49</a>		<span class="string">"cmovne rsp, rax"</span>,
+<a href=#50 id=50 data-nosnippet>50</a>		<span class="string">"mov rax, qword ptr [rip + {current_stack_address}@GOTPCREL]"</span>,
+<a href=#51 id=51 data-nosnippet>51</a>		<span class="string">"mov qword ptr [rax], rsp"</span>,
+<a href=#52 id=52 data-nosnippet>52</a>
+<a href=#53 id=53 data-nosnippet>53</a>		<span class="comment">// Add top stack offset
+<a href=#54 id=54 data-nosnippet>54</a>		</span><span class="string">"add rsp, {stack_top_offset}"</span>,
+<a href=#55 id=55 data-nosnippet>55</a>
+<a href=#56 id=56 data-nosnippet>56</a>		<span class="comment">// Jump into Rust code
+<a href=#57 id=57 data-nosnippet>57</a>		</span><span class="string">"jmp {pre_init}"</span>,
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a>		cpu_online = sym <span class="kw">super</span>::CPU_ONLINE,
+<a href=#60 id=60 data-nosnippet>60</a>		current_stack_address = sym <span class="kw">super</span>::CURRENT_STACK_ADDRESS,
+<a href=#61 id=61 data-nosnippet>61</a>		stack_top_offset = <span class="kw">const </span>KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+<a href=#62 id=62 data-nosnippet>62</a>		pre_init = sym pre_init,
+<a href=#63 id=63 data-nosnippet>63</a>	)
+<a href=#64 id=64 data-nosnippet>64</a>}</code></pre></div></section></main></body></html>

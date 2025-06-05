@@ -1,0 +1,198 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/arch/x86_64/kernel/systemtime.rs`."><title>systemtime.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="hermit" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../../../../static.files/storage-4e99c027.js"></script><script defer src="../../../../../static.files/src-script-63605ae7.js"></script><script defer src="../../../../../src-files.js"></script><script defer src="../../../../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hermit/arch/x86_64/kernel/</div>systemtime.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>core::hint::spin_loop;
+<a href=#2 id=2 data-nosnippet>2</a>
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span>hermit_entry::boot_info::PlatformInfo;
+<a href=#4 id=4 data-nosnippet>4</a><span class="kw">use </span>hermit_sync::{OnceCell, without_interrupts};
+<a href=#5 id=5 data-nosnippet>5</a><span class="kw">use </span>time::OffsetDateTime;
+<a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span>x86_64::instructions::port::Port;
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">crate</span>::arch::x86_64::kernel::processor;
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span><span class="kw">crate</span>::env;
+<a href=#10 id=10 data-nosnippet>10</a>
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">const </span>CMOS_COMMAND: Port&lt;u8&gt; = Port::new(<span class="number">0x70</span>);
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">const </span>CMOS_DATA: Port&lt;u8&gt; = Port::new(<span class="number">0x71</span>);
+<a href=#13 id=13 data-nosnippet>13</a>
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">const </span>CMOS_DISABLE_NMI: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">7</span>;
+<a href=#15 id=15 data-nosnippet>15</a>
+<a href=#16 id=16 data-nosnippet>16</a><span class="kw">const </span>CMOS_SECOND_REGISTER: u8 = <span class="number">0x00</span>;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">const </span>CMOS_MINUTE_REGISTER: u8 = <span class="number">0x02</span>;
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">const </span>CMOS_HOUR_REGISTER: u8 = <span class="number">0x04</span>;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">const </span>CMOS_DAY_REGISTER: u8 = <span class="number">0x07</span>;
+<a href=#20 id=20 data-nosnippet>20</a><span class="kw">const </span>CMOS_MONTH_REGISTER: u8 = <span class="number">0x08</span>;
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">const </span>CMOS_YEAR_REGISTER: u8 = <span class="number">0x09</span>;
+<a href=#22 id=22 data-nosnippet>22</a><span class="kw">const </span>CMOS_STATUS_REGISTER_A: u8 = <span class="number">0x0a</span>;
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">const </span>CMOS_STATUS_REGISTER_B: u8 = <span class="number">0x0b</span>;
+<a href=#24 id=24 data-nosnippet>24</a>
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">const </span>CMOS_UPDATE_IN_PROGRESS_FLAG: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">7</span>;
+<a href=#26 id=26 data-nosnippet>26</a><span class="kw">const </span>CMOS_24_HOUR_FORMAT_FLAG: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">1</span>;
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">const </span>CMOS_BINARY_FORMAT_FLAG: u8 = <span class="number">1 </span>&lt;&lt; <span class="number">2</span>;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">const </span>CMOS_12_HOUR_PM_FLAG: u8 = <span class="number">0x80</span>;
+<a href=#29 id=29 data-nosnippet>29</a>
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">struct </span>Rtc {
+<a href=#31 id=31 data-nosnippet>31</a>	cmos_format: u8,
+<a href=#32 id=32 data-nosnippet>32</a>}
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">impl </span>Rtc {
+<a href=#35 id=35 data-nosnippet>35</a>	<span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#36 id=36 data-nosnippet>36</a>		<span class="self">Self </span>{
+<a href=#37 id=37 data-nosnippet>37</a>			cmos_format: <span class="self">Self</span>::read_cmos_register(CMOS_STATUS_REGISTER_B),
+<a href=#38 id=38 data-nosnippet>38</a>		}
+<a href=#39 id=39 data-nosnippet>39</a>	}
+<a href=#40 id=40 data-nosnippet>40</a>
+<a href=#41 id=41 data-nosnippet>41</a>	<span class="kw">const fn </span>is_24_hour_format(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#42 id=42 data-nosnippet>42</a>		<span class="self">self</span>.cmos_format &amp; CMOS_24_HOUR_FORMAT_FLAG &gt; <span class="number">0
+<a href=#43 id=43 data-nosnippet>43</a>	</span>}
+<a href=#44 id=44 data-nosnippet>44</a>
+<a href=#45 id=45 data-nosnippet>45</a>	<span class="kw">const fn </span>is_binary_format(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#46 id=46 data-nosnippet>46</a>		<span class="self">self</span>.cmos_format &amp; CMOS_BINARY_FORMAT_FLAG &gt; <span class="number">0
+<a href=#47 id=47 data-nosnippet>47</a>	</span>}
+<a href=#48 id=48 data-nosnippet>48</a>
+<a href=#49 id=49 data-nosnippet>49</a>	<span class="kw">const fn </span>time_is_pm(hour: u8) -&gt; bool {
+<a href=#50 id=50 data-nosnippet>50</a>		hour &amp; CMOS_12_HOUR_PM_FLAG &gt; <span class="number">0
+<a href=#51 id=51 data-nosnippet>51</a>	</span>}
+<a href=#52 id=52 data-nosnippet>52</a>
+<a href=#53 id=53 data-nosnippet>53</a>	<span class="doccomment">/// Returns the binary value for a given value in BCD (Binary-Coded Decimal).
+<a href=#54 id=54 data-nosnippet>54</a>	</span><span class="kw">const fn </span>convert_bcd_value(value: u8) -&gt; u8 {
+<a href=#55 id=55 data-nosnippet>55</a>		((value / <span class="number">16</span>) * <span class="number">10</span>) + (value &amp; <span class="number">0xf</span>)
+<a href=#56 id=56 data-nosnippet>56</a>	}
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a>	<span class="doccomment">/// Returns the number of microseconds since the epoch from a given date.
+<a href=#59 id=59 data-nosnippet>59</a>	/// Inspired by Linux Kernel's mktime64(), see kernel/time/time.c.
+<a href=#60 id=60 data-nosnippet>60</a>	</span><span class="kw">fn </span>microseconds_from_date(
+<a href=#61 id=61 data-nosnippet>61</a>		year: u16,
+<a href=#62 id=62 data-nosnippet>62</a>		month: u8,
+<a href=#63 id=63 data-nosnippet>63</a>		day: u8,
+<a href=#64 id=64 data-nosnippet>64</a>		hour: u8,
+<a href=#65 id=65 data-nosnippet>65</a>		minute: u8,
+<a href=#66 id=66 data-nosnippet>66</a>		second: u8,
+<a href=#67 id=67 data-nosnippet>67</a>	) -&gt; u64 {
+<a href=#68 id=68 data-nosnippet>68</a>		<span class="kw">let </span>(m, y) = <span class="kw">if </span>month &gt; <span class="number">2 </span>{
+<a href=#69 id=69 data-nosnippet>69</a>			(u64::from(month - <span class="number">2</span>), u64::from(year))
+<a href=#70 id=70 data-nosnippet>70</a>		} <span class="kw">else </span>{
+<a href=#71 id=71 data-nosnippet>71</a>			(u64::from(month + <span class="number">12 </span>- <span class="number">2</span>), u64::from(year - <span class="number">1</span>))
+<a href=#72 id=72 data-nosnippet>72</a>		};
+<a href=#73 id=73 data-nosnippet>73</a>
+<a href=#74 id=74 data-nosnippet>74</a>		<span class="kw">let </span>days_since_epoch =
+<a href=#75 id=75 data-nosnippet>75</a>			(y / <span class="number">4 </span>- y / <span class="number">100 </span>+ y / <span class="number">400 </span>+ <span class="number">367 </span>* m / <span class="number">12 </span>+ u64::from(day)) + y * <span class="number">365 </span>- <span class="number">719_499</span>;
+<a href=#76 id=76 data-nosnippet>76</a>		<span class="kw">let </span>hours_since_epoch = days_since_epoch * <span class="number">24 </span>+ u64::from(hour);
+<a href=#77 id=77 data-nosnippet>77</a>		<span class="kw">let </span>minutes_since_epoch = hours_since_epoch * <span class="number">60 </span>+ u64::from(minute);
+<a href=#78 id=78 data-nosnippet>78</a>		<span class="kw">let </span>seconds_since_epoch = minutes_since_epoch * <span class="number">60 </span>+ u64::from(second);
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a>		seconds_since_epoch * <span class="number">1_000_000u64
+<a href=#81 id=81 data-nosnippet>81</a>	</span>}
+<a href=#82 id=82 data-nosnippet>82</a>
+<a href=#83 id=83 data-nosnippet>83</a>	<span class="kw">fn </span>read_cmos_register(register: u8) -&gt; u8 {
+<a href=#84 id=84 data-nosnippet>84</a>		<span class="kw">let </span><span class="kw-2">mut </span>cmos_command = CMOS_COMMAND;
+<a href=#85 id=85 data-nosnippet>85</a>		<span class="kw">let </span><span class="kw-2">mut </span>cmos_data = CMOS_DATA;
+<a href=#86 id=86 data-nosnippet>86</a>		<span class="kw">unsafe </span>{
+<a href=#87 id=87 data-nosnippet>87</a>			cmos_command.write(CMOS_DISABLE_NMI | register);
+<a href=#88 id=88 data-nosnippet>88</a>			cmos_data.read()
+<a href=#89 id=89 data-nosnippet>89</a>		}
+<a href=#90 id=90 data-nosnippet>90</a>	}
+<a href=#91 id=91 data-nosnippet>91</a>
+<a href=#92 id=92 data-nosnippet>92</a>	<span class="kw">fn </span>read_datetime_register(<span class="kw-2">&amp;</span><span class="self">self</span>, register: u8) -&gt; u8 {
+<a href=#93 id=93 data-nosnippet>93</a>		<span class="kw">let </span>value = <span class="self">Self</span>::read_cmos_register(register);
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a>		<span class="comment">// Every date/time register may either be in binary or in BCD format.
+<a href=#96 id=96 data-nosnippet>96</a>		// Convert BCD values if necessary.
+<a href=#97 id=97 data-nosnippet>97</a>		</span><span class="kw">if </span><span class="self">self</span>.is_binary_format() {
+<a href=#98 id=98 data-nosnippet>98</a>			value
+<a href=#99 id=99 data-nosnippet>99</a>		} <span class="kw">else </span>{
+<a href=#100 id=100 data-nosnippet>100</a>			<span class="self">Self</span>::convert_bcd_value(value)
+<a href=#101 id=101 data-nosnippet>101</a>		}
+<a href=#102 id=102 data-nosnippet>102</a>	}
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a>	<span class="kw">fn </span>read_all_values(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#105 id=105 data-nosnippet>105</a>		<span class="comment">// Reading year, month, and day is straightforward.
+<a href=#106 id=106 data-nosnippet>106</a>		</span><span class="kw">let </span>year = u16::from(<span class="self">self</span>.read_datetime_register(CMOS_YEAR_REGISTER)) + <span class="number">2000</span>;
+<a href=#107 id=107 data-nosnippet>107</a>		<span class="kw">let </span>month = <span class="self">self</span>.read_datetime_register(CMOS_MONTH_REGISTER);
+<a href=#108 id=108 data-nosnippet>108</a>		<span class="kw">let </span>day = <span class="self">self</span>.read_datetime_register(CMOS_DAY_REGISTER);
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a>		<span class="comment">// The hour register is a bitch.
+<a href=#111 id=111 data-nosnippet>111</a>		// On top of being in either binary or BCD format, it may also be in 12-hour
+<a href=#112 id=112 data-nosnippet>112</a>		// or 24-hour format.
+<a href=#113 id=113 data-nosnippet>113</a>		</span><span class="kw">let </span><span class="kw-2">mut </span>hour = <span class="self">Self</span>::read_cmos_register(CMOS_HOUR_REGISTER);
+<a href=#114 id=114 data-nosnippet>114</a>		<span class="kw">let </span><span class="kw-2">mut </span>is_pm = <span class="bool-val">false</span>;
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a>		<span class="comment">// Check and mask off a potential PM flag if the hour is given in 12-hour format.
+<a href=#117 id=117 data-nosnippet>117</a>		</span><span class="kw">if </span>!<span class="self">self</span>.is_24_hour_format() {
+<a href=#118 id=118 data-nosnippet>118</a>			is_pm = <span class="self">Self</span>::time_is_pm(hour);
+<a href=#119 id=119 data-nosnippet>119</a>			hour &amp;= !CMOS_12_HOUR_PM_FLAG;
+<a href=#120 id=120 data-nosnippet>120</a>		}
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>		<span class="comment">// Now convert a BCD number to binary if necessary (after potentially masking off the PM flag above).
+<a href=#123 id=123 data-nosnippet>123</a>		</span><span class="kw">if </span>!<span class="self">self</span>.is_binary_format() {
+<a href=#124 id=124 data-nosnippet>124</a>			hour = <span class="self">Self</span>::convert_bcd_value(hour);
+<a href=#125 id=125 data-nosnippet>125</a>		}
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a>		<span class="comment">// If the hour is given in 12-hour format, do the necessary calculations to convert it into 24 hours.
+<a href=#128 id=128 data-nosnippet>128</a>		</span><span class="kw">if </span>!<span class="self">self</span>.is_24_hour_format() {
+<a href=#129 id=129 data-nosnippet>129</a>			<span class="kw">if </span>hour == <span class="number">12 </span>{
+<a href=#130 id=130 data-nosnippet>130</a>				<span class="comment">// 12:00 AM is 00:00 and 12:00 PM is 12:00 (see is_pm below) in 24-hour format.
+<a href=#131 id=131 data-nosnippet>131</a>				</span>hour = <span class="number">0</span>;
+<a href=#132 id=132 data-nosnippet>132</a>			}
+<a href=#133 id=133 data-nosnippet>133</a>
+<a href=#134 id=134 data-nosnippet>134</a>			<span class="kw">if </span>is_pm {
+<a href=#135 id=135 data-nosnippet>135</a>				<span class="comment">// {01:00 PM, 02:00 PM, ...} is {13:00, 14:00, ...} in 24-hour format.
+<a href=#136 id=136 data-nosnippet>136</a>				</span>hour += <span class="number">12</span>;
+<a href=#137 id=137 data-nosnippet>137</a>			}
+<a href=#138 id=138 data-nosnippet>138</a>		}
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a>		<span class="comment">// The minute and second registers are straightforward again.
+<a href=#141 id=141 data-nosnippet>141</a>		</span><span class="kw">let </span>minute = <span class="self">self</span>.read_datetime_register(CMOS_MINUTE_REGISTER);
+<a href=#142 id=142 data-nosnippet>142</a>		<span class="kw">let </span>second = <span class="self">self</span>.read_datetime_register(CMOS_SECOND_REGISTER);
+<a href=#143 id=143 data-nosnippet>143</a>
+<a href=#144 id=144 data-nosnippet>144</a>		<span class="comment">// Convert it all to microseconds and return the result.
+<a href=#145 id=145 data-nosnippet>145</a>		</span><span class="self">Self</span>::microseconds_from_date(year, month, day, hour, minute, second)
+<a href=#146 id=146 data-nosnippet>146</a>	}
+<a href=#147 id=147 data-nosnippet>147</a>
+<a href=#148 id=148 data-nosnippet>148</a>	<span class="kw">pub fn </span>get_microseconds_since_epoch(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
+<a href=#149 id=149 data-nosnippet>149</a>		<span class="kw">loop </span>{
+<a href=#150 id=150 data-nosnippet>150</a>			<span class="comment">// If a clock update is currently in progress, wait until it is finished.
+<a href=#151 id=151 data-nosnippet>151</a>			</span><span class="kw">while </span><span class="self">Self</span>::read_cmos_register(CMOS_STATUS_REGISTER_A) &amp; CMOS_UPDATE_IN_PROGRESS_FLAG
+<a href=#152 id=152 data-nosnippet>152</a>				&gt; <span class="number">0
+<a href=#153 id=153 data-nosnippet>153</a>			</span>{
+<a href=#154 id=154 data-nosnippet>154</a>				spin_loop();
+<a href=#155 id=155 data-nosnippet>155</a>			}
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a>			<span class="comment">// Get the current time in microseconds since the epoch.
+<a href=#158 id=158 data-nosnippet>158</a>			</span><span class="kw">let </span>microseconds_since_epoch_1 = <span class="self">self</span>.read_all_values();
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>			<span class="comment">// If the clock is already updating the time again, the read values may be inconsistent
+<a href=#161 id=161 data-nosnippet>161</a>			// and we have to repeat this process.
+<a href=#162 id=162 data-nosnippet>162</a>			</span><span class="kw">if </span><span class="self">Self</span>::read_cmos_register(CMOS_STATUS_REGISTER_A) &amp; CMOS_UPDATE_IN_PROGRESS_FLAG &gt; <span class="number">0 </span>{
+<a href=#163 id=163 data-nosnippet>163</a>				<span class="kw">continue</span>;
+<a href=#164 id=164 data-nosnippet>164</a>			}
+<a href=#165 id=165 data-nosnippet>165</a>
+<a href=#166 id=166 data-nosnippet>166</a>			<span class="comment">// Get the current time again and verify that it's the same we last read.
+<a href=#167 id=167 data-nosnippet>167</a>			</span><span class="kw">let </span>microseconds_since_epoch_2 = <span class="self">self</span>.read_all_values();
+<a href=#168 id=168 data-nosnippet>168</a>			<span class="kw">if </span>microseconds_since_epoch_1 == microseconds_since_epoch_2 {
+<a href=#169 id=169 data-nosnippet>169</a>				<span class="comment">// Both times are identical, so we have read consistent values and can exit the loop.
+<a href=#170 id=170 data-nosnippet>170</a>				</span><span class="kw">return </span>microseconds_since_epoch_1;
+<a href=#171 id=171 data-nosnippet>171</a>			}
+<a href=#172 id=172 data-nosnippet>172</a>		}
+<a href=#173 id=173 data-nosnippet>173</a>	}
+<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="kw">static </span>BOOT_TIME: OnceCell&lt;u64&gt; = OnceCell::new();
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a><span class="kw">pub fn </span>init() {
+<a href=#179 id=179 data-nosnippet>179</a>	<span class="kw">let </span>boot_time = <span class="kw">match </span>env::boot_info().platform_info {
+<a href=#180 id=180 data-nosnippet>180</a>		PlatformInfo::Uhyve { boot_time, .. } =&gt; boot_time,
+<a href=#181 id=181 data-nosnippet>181</a>		<span class="kw">_ </span>=&gt; {
+<a href=#182 id=182 data-nosnippet>182</a>			<span class="comment">// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
+<a href=#183 id=183 data-nosnippet>183</a>			// Subtract the timer ticks to get the actual time when Hermit was booted.
+<a href=#184 id=184 data-nosnippet>184</a>			</span><span class="kw">let </span>current_time = without_interrupts(|| Rtc::new().get_microseconds_since_epoch());
+<a href=#185 id=185 data-nosnippet>185</a>			<span class="kw">let </span>boot_time = current_time - processor::get_timer_ticks();
+<a href=#186 id=186 data-nosnippet>186</a>			OffsetDateTime::from_unix_timestamp_nanos(i128::from(boot_time) * <span class="number">1000</span>).unwrap()
+<a href=#187 id=187 data-nosnippet>187</a>		}
+<a href=#188 id=188 data-nosnippet>188</a>	};
+<a href=#189 id=189 data-nosnippet>189</a>	<span class="macro">info!</span>(<span class="string">"Hermit booted on {boot_time}"</span>);
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>	<span class="kw">let </span>micros = u64::try_from(boot_time.unix_timestamp_nanos() / <span class="number">1000</span>).unwrap();
+<a href=#192 id=192 data-nosnippet>192</a>	BOOT_TIME.set(micros).unwrap();
+<a href=#193 id=193 data-nosnippet>193</a>}
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a><span class="doccomment">/// Returns the current time in microseconds since UNIX epoch.
+<a href=#196 id=196 data-nosnippet>196</a></span><span class="kw">pub fn </span>now_micros() -&gt; u64 {
+<a href=#197 id=197 data-nosnippet>197</a>	<span class="kw-2">*</span>BOOT_TIME.get().unwrap() + <span class="kw">super</span>::processor::get_timer_ticks()
+<a href=#198 id=198 data-nosnippet>198</a>}</code></pre></div></section></main></body></html>

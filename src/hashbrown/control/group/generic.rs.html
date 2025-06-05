@@ -1,0 +1,154 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `/home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/hashbrown-0.15.3/src/control/group/generic.rs`."><title>generic.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-0ce1a80b.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="hashbrown" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (d97326eab 2025-05-15)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../../../static.files/storage-4e99c027.js"></script><script defer src="../../../../static.files/src-script-63605ae7.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">hashbrown/control/group/</div>generic.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::{BitMask, Tag};
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span>core::{mem, ptr};
+<a href=#3 id=3 data-nosnippet>3</a>
+<a href=#4 id=4 data-nosnippet>4</a><span class="comment">// Use the native word size as the group size. Using a 64-bit group size on
+<a href=#5 id=5 data-nosnippet>5</a>// a 32-bit architecture will just end up being more expensive because
+<a href=#6 id=6 data-nosnippet>6</a>// shifts and multiplies will need to be emulated.
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a></span><span class="macro">cfg_if!</span> {
+<a href=#9 id=9 data-nosnippet>9</a>    <span class="kw">if </span><span class="attr">#[cfg(any(
+<a href=#10 id=10 data-nosnippet>10</a>        target_pointer_width = <span class="string">"64"</span>,
+<a href=#11 id=11 data-nosnippet>11</a>        target_arch = <span class="string">"aarch64"</span>,
+<a href=#12 id=12 data-nosnippet>12</a>        target_arch = <span class="string">"x86_64"</span>,
+<a href=#13 id=13 data-nosnippet>13</a>        target_arch = <span class="string">"wasm32"</span>,
+<a href=#14 id=14 data-nosnippet>14</a>    ))] </span>{
+<a href=#15 id=15 data-nosnippet>15</a>        <span class="kw">type </span>GroupWord = u64;
+<a href=#16 id=16 data-nosnippet>16</a>        <span class="kw">type </span>NonZeroGroupWord = core::num::NonZeroU64;
+<a href=#17 id=17 data-nosnippet>17</a>    } <span class="kw">else </span>{
+<a href=#18 id=18 data-nosnippet>18</a>        <span class="kw">type </span>GroupWord = u32;
+<a href=#19 id=19 data-nosnippet>19</a>        <span class="kw">type </span>NonZeroGroupWord = core::num::NonZeroU32;
+<a href=#20 id=20 data-nosnippet>20</a>    }
+<a href=#21 id=21 data-nosnippet>21</a>}
+<a href=#22 id=22 data-nosnippet>22</a>
+<a href=#23 id=23 data-nosnippet>23</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">type </span>BitMaskWord = GroupWord;
+<a href=#24 id=24 data-nosnippet>24</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">type </span>NonZeroBitMaskWord = NonZeroGroupWord;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>BITMASK_STRIDE: usize = <span class="number">8</span>;
+<a href=#26 id=26 data-nosnippet>26</a><span class="comment">// We only care about the highest bit of each tag for the mask.
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="attr">#[allow(clippy::cast_possible_truncation, clippy::unnecessary_cast)]
+<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>BITMASK_MASK: BitMaskWord = u64::from_ne_bytes([Tag::DELETED.<span class="number">0</span>; <span class="number">8</span>]) <span class="kw">as </span>GroupWord;
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>BITMASK_ITER_MASK: BitMaskWord = !<span class="number">0</span>;
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a><span class="doccomment">/// Helper function to replicate a tag across a `GroupWord`.
+<a href=#32 id=32 data-nosnippet>32</a></span><span class="attr">#[inline]
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">fn </span>repeat(tag: Tag) -&gt; GroupWord {
+<a href=#34 id=34 data-nosnippet>34</a>    GroupWord::from_ne_bytes([tag.<span class="number">0</span>; Group::WIDTH])
+<a href=#35 id=35 data-nosnippet>35</a>}
+<a href=#36 id=36 data-nosnippet>36</a>
+<a href=#37 id=37 data-nosnippet>37</a><span class="doccomment">/// Abstraction over a group of control tags which can be scanned in
+<a href=#38 id=38 data-nosnippet>38</a>/// parallel.
+<a href=#39 id=39 data-nosnippet>39</a>///
+<a href=#40 id=40 data-nosnippet>40</a>/// This implementation uses a word-sized integer.
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="attr">#[derive(Copy, Clone)]
+<a href=#42 id=42 data-nosnippet>42</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Group(GroupWord);
+<a href=#43 id=43 data-nosnippet>43</a>
+<a href=#44 id=44 data-nosnippet>44</a><span class="comment">// We perform all operations in the native endianness, and convert to
+<a href=#45 id=45 data-nosnippet>45</a>// little-endian just before creating a BitMask. The can potentially
+<a href=#46 id=46 data-nosnippet>46</a>// enable the compiler to eliminate unnecessary byte swaps if we are
+<a href=#47 id=47 data-nosnippet>47</a>// only checking whether a BitMask is empty.
+<a href=#48 id=48 data-nosnippet>48</a></span><span class="attr">#[allow(clippy::use_self)]
+<a href=#49 id=49 data-nosnippet>49</a></span><span class="kw">impl </span>Group {
+<a href=#50 id=50 data-nosnippet>50</a>    <span class="doccomment">/// Number of bytes in the group.
+<a href=#51 id=51 data-nosnippet>51</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>WIDTH: usize = mem::size_of::&lt;<span class="self">Self</span>&gt;();
+<a href=#52 id=52 data-nosnippet>52</a>
+<a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// Returns a full group of empty tags, suitable for use as the initial
+<a href=#54 id=54 data-nosnippet>54</a>    /// value for an empty hash table.
+<a href=#55 id=55 data-nosnippet>55</a>    ///
+<a href=#56 id=56 data-nosnippet>56</a>    /// This is guaranteed to be aligned to the group size.
+<a href=#57 id=57 data-nosnippet>57</a>    </span><span class="attr">#[inline]
+<a href=#58 id=58 data-nosnippet>58</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const fn </span>static_empty() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[Tag; Group::WIDTH] {
+<a href=#59 id=59 data-nosnippet>59</a>        <span class="attr">#[repr(C)]
+<a href=#60 id=60 data-nosnippet>60</a>        </span><span class="kw">struct </span>AlignedTags {
+<a href=#61 id=61 data-nosnippet>61</a>            _align: [Group; <span class="number">0</span>],
+<a href=#62 id=62 data-nosnippet>62</a>            tags: [Tag; Group::WIDTH],
+<a href=#63 id=63 data-nosnippet>63</a>        }
+<a href=#64 id=64 data-nosnippet>64</a>        <span class="kw">const </span>ALIGNED_TAGS: AlignedTags = AlignedTags {
+<a href=#65 id=65 data-nosnippet>65</a>            _align: [],
+<a href=#66 id=66 data-nosnippet>66</a>            tags: [Tag::EMPTY; Group::WIDTH],
+<a href=#67 id=67 data-nosnippet>67</a>        };
+<a href=#68 id=68 data-nosnippet>68</a>        <span class="kw-2">&amp;</span>ALIGNED_TAGS.tags
+<a href=#69 id=69 data-nosnippet>69</a>    }
+<a href=#70 id=70 data-nosnippet>70</a>
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="doccomment">/// Loads a group of tags starting at the given address.
+<a href=#72 id=72 data-nosnippet>72</a>    </span><span class="attr">#[inline]
+<a href=#73 id=73 data-nosnippet>73</a>    #[allow(clippy::cast_ptr_alignment)] </span><span class="comment">// unaligned load
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>load(ptr: <span class="kw-2">*const </span>Tag) -&gt; <span class="self">Self </span>{
+<a href=#75 id=75 data-nosnippet>75</a>        Group(ptr::read_unaligned(ptr.cast()))
+<a href=#76 id=76 data-nosnippet>76</a>    }
+<a href=#77 id=77 data-nosnippet>77</a>
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Loads a group of tags starting at the given address, which must be
+<a href=#79 id=79 data-nosnippet>79</a>    /// aligned to `mem::align_of::&lt;Group&gt;()`.
+<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="attr">#[inline]
+<a href=#81 id=81 data-nosnippet>81</a>    #[allow(clippy::cast_ptr_alignment)]
+<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>load_aligned(ptr: <span class="kw-2">*const </span>Tag) -&gt; <span class="self">Self </span>{
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="macro">debug_assert_eq!</span>(ptr.align_offset(mem::align_of::&lt;<span class="self">Self</span>&gt;()), <span class="number">0</span>);
+<a href=#84 id=84 data-nosnippet>84</a>        Group(ptr::read(ptr.cast()))
+<a href=#85 id=85 data-nosnippet>85</a>    }
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="doccomment">/// Stores the group of tags to the given address, which must be
+<a href=#88 id=88 data-nosnippet>88</a>    /// aligned to `mem::align_of::&lt;Group&gt;()`.
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="attr">#[inline]
+<a href=#90 id=90 data-nosnippet>90</a>    #[allow(clippy::cast_ptr_alignment)]
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">unsafe fn </span>store_aligned(<span class="self">self</span>, ptr: <span class="kw-2">*mut </span>Tag) {
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="macro">debug_assert_eq!</span>(ptr.align_offset(mem::align_of::&lt;<span class="self">Self</span>&gt;()), <span class="number">0</span>);
+<a href=#93 id=93 data-nosnippet>93</a>        ptr::write(ptr.cast(), <span class="self">self</span>.<span class="number">0</span>);
+<a href=#94 id=94 data-nosnippet>94</a>    }
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a>    <span class="doccomment">/// Returns a `BitMask` indicating all tags in the group which *may*
+<a href=#97 id=97 data-nosnippet>97</a>    /// have the given value.
+<a href=#98 id=98 data-nosnippet>98</a>    ///
+<a href=#99 id=99 data-nosnippet>99</a>    /// This function may return a false positive in certain cases where
+<a href=#100 id=100 data-nosnippet>100</a>    /// the tag in the group differs from the searched value only in its
+<a href=#101 id=101 data-nosnippet>101</a>    /// lowest bit. This is fine because:
+<a href=#102 id=102 data-nosnippet>102</a>    /// - This never happens for `EMPTY` and `DELETED`, only full entries.
+<a href=#103 id=103 data-nosnippet>103</a>    /// - The check for key equality will catch these.
+<a href=#104 id=104 data-nosnippet>104</a>    /// - This only happens if there is at least 1 true match.
+<a href=#105 id=105 data-nosnippet>105</a>    /// - The chance of this happening is very low (&lt; 1% chance per byte).
+<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="attr">#[inline]
+<a href=#107 id=107 data-nosnippet>107</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>match_tag(<span class="self">self</span>, tag: Tag) -&gt; BitMask {
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="comment">// This algorithm is derived from
+<a href=#109 id=109 data-nosnippet>109</a>        // https://graphics.stanford.edu/~seander/bithacks.html##ValueInWord
+<a href=#110 id=110 data-nosnippet>110</a>        </span><span class="kw">let </span>cmp = <span class="self">self</span>.<span class="number">0 </span>^ repeat(tag);
+<a href=#111 id=111 data-nosnippet>111</a>        BitMask((cmp.wrapping_sub(repeat(Tag(<span class="number">0x01</span>))) &amp; !cmp &amp; repeat(Tag::DELETED)).to_le())
+<a href=#112 id=112 data-nosnippet>112</a>    }
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// Returns a `BitMask` indicating all tags in the group which are
+<a href=#115 id=115 data-nosnippet>115</a>    /// `EMPTY`.
+<a href=#116 id=116 data-nosnippet>116</a>    </span><span class="attr">#[inline]
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>match_empty(<span class="self">self</span>) -&gt; BitMask {
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="comment">// If the high bit is set, then the tag must be either:
+<a href=#119 id=119 data-nosnippet>119</a>        // 1111_1111 (EMPTY) or 1000_0000 (DELETED).
+<a href=#120 id=120 data-nosnippet>120</a>        // So we can just check if the top two bits are 1 by ANDing them.
+<a href=#121 id=121 data-nosnippet>121</a>        </span>BitMask((<span class="self">self</span>.<span class="number">0 </span>&amp; (<span class="self">self</span>.<span class="number">0 </span>&lt;&lt; <span class="number">1</span>) &amp; repeat(Tag::DELETED)).to_le())
+<a href=#122 id=122 data-nosnippet>122</a>    }
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="doccomment">/// Returns a `BitMask` indicating all tags in the group which are
+<a href=#125 id=125 data-nosnippet>125</a>    /// `EMPTY` or `DELETED`.
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="attr">#[inline]
+<a href=#127 id=127 data-nosnippet>127</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>match_empty_or_deleted(<span class="self">self</span>) -&gt; BitMask {
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="comment">// A tag is EMPTY or DELETED iff the high bit is set
+<a href=#129 id=129 data-nosnippet>129</a>        </span>BitMask((<span class="self">self</span>.<span class="number">0 </span>&amp; repeat(Tag::DELETED)).to_le())
+<a href=#130 id=130 data-nosnippet>130</a>    }
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a>    <span class="doccomment">/// Returns a `BitMask` indicating all tags in the group which are full.
+<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="attr">#[inline]
+<a href=#134 id=134 data-nosnippet>134</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>match_full(<span class="self">self</span>) -&gt; BitMask {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="self">self</span>.match_empty_or_deleted().invert()
+<a href=#136 id=136 data-nosnippet>136</a>    }
+<a href=#137 id=137 data-nosnippet>137</a>
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// Performs the following transformation on all tags in the group:
+<a href=#139 id=139 data-nosnippet>139</a>    /// - `EMPTY =&gt; EMPTY`
+<a href=#140 id=140 data-nosnippet>140</a>    /// - `DELETED =&gt; EMPTY`
+<a href=#141 id=141 data-nosnippet>141</a>    /// - `FULL =&gt; DELETED`
+<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="attr">#[inline]
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>convert_special_to_empty_and_full_to_deleted(<span class="self">self</span>) -&gt; <span class="self">Self </span>{
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="comment">// Map high_bit = 1 (EMPTY or DELETED) to 1111_1111
+<a href=#145 id=145 data-nosnippet>145</a>        // and high_bit = 0 (FULL) to 1000_0000
+<a href=#146 id=146 data-nosnippet>146</a>        //
+<a href=#147 id=147 data-nosnippet>147</a>        // Here's this logic expanded to concrete values:
+<a href=#148 id=148 data-nosnippet>148</a>        //   let full = 1000_0000 (true) or 0000_0000 (false)
+<a href=#149 id=149 data-nosnippet>149</a>        //   !1000_0000 + 1 = 0111_1111 + 1 = 1000_0000 (no carry)
+<a href=#150 id=150 data-nosnippet>150</a>        //   !0000_0000 + 0 = 1111_1111 + 0 = 1111_1111 (no carry)
+<a href=#151 id=151 data-nosnippet>151</a>        </span><span class="kw">let </span>full = !<span class="self">self</span>.<span class="number">0 </span>&amp; repeat(Tag::DELETED);
+<a href=#152 id=152 data-nosnippet>152</a>        Group(!full + (full &gt;&gt; <span class="number">7</span>))
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>}</code></pre></div></section></main></body></html>
