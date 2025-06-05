@@ -87,7 +87,7 @@ impl WrapCount {
 /// Structure which allows to control raw ring and operate easily on it
 struct DescriptorRing {
 	ring: Box<[pvirtq::Desc], DeviceAlloc>,
-	tkn_ref_ring: Box<[Option<Box<TransferToken<pvirtq::Desc>>>]>,
+	tkn_ref_ring: Box<[Option<TransferToken<pvirtq::Desc>>]>,
 
 	// Controlling variables for the ring
 	//
@@ -153,21 +153,21 @@ impl DescriptorRing {
 		if let Some(first_tkn) = tkn_iterator.next() {
 			ctrl = self.push_without_making_available(&first_tkn)?;
 			first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
-			first_buffer = Some(Box::new(first_tkn));
+			first_buffer = first_tkn;
 		} else {
 			// Empty batches are an error
 			return Err(VirtqError::BufferNotSpecified);
 		}
 		// Push the remaining tokens (if any)
 		for tkn in tkn_iterator {
-			ctrl.make_avail(Box::new(tkn));
+			ctrl.make_avail(tkn);
 		}
 
 		// Manually make the first buffer available lastly
 		//
 		// Providing the first buffer in the list manually
 		self.make_avail_with_state(
-			first_buffer.unwrap(),
+			first_buffer,
 			first_ctrl_settings.0,
 			first_ctrl_settings.1,
 			first_ctrl_settings.2,
@@ -244,7 +244,7 @@ impl DescriptorRing {
 
 	fn make_avail_with_state(
 		&mut self,
-		raw_tkn: Box<TransferToken<pvirtq::Desc>>,
+		raw_tkn: TransferToken<pvirtq::Desc>,
 		start: u16,
 		buff_id: MemDescrId,
 		first_flags: DescF,
@@ -301,7 +301,7 @@ struct ReadCtrl<'a> {
 impl ReadCtrl<'_> {
 	/// Polls the ring for a new finished buffer. If buffer is marked as finished, takes care of
 	/// updating the queue and returns the respective TransferToken.
-	fn poll_next(&mut self) -> Option<(Box<TransferToken<pvirtq::Desc>>, u32)> {
+	fn poll_next(&mut self) -> Option<(TransferToken<pvirtq::Desc>, u32)> {
 		// Check if descriptor has been marked used.
 		let desc = &self.desc_ring.ring[usize::from(self.position)];
 		if self.desc_ring.is_marked_used(desc.flags) {
@@ -417,7 +417,7 @@ impl WriteCtrl<'_> {
 		self.incrmt();
 	}
 
-	fn make_avail(&mut self, raw_tkn: Box<TransferToken<pvirtq::Desc>>) {
+	fn make_avail(&mut self, raw_tkn: TransferToken<pvirtq::Desc>) {
 		// We fail if one wants to make a buffer available without inserting one element!
 		assert!(self.start != self.position);
 		self.desc_ring
