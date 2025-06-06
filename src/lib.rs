@@ -78,6 +78,7 @@ pub mod fs;
 mod init_cell;
 pub mod io;
 pub mod mm;
+mod object_pool;
 pub mod scheduler;
 #[cfg(all(feature = "shell", target_arch = "x86_64"))]
 mod shell;
