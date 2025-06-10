@@ -65,6 +65,21 @@ impl Qemu {
 		if image_name.contains("rftrace") {
 			sh.create_dir("shared/tracedir")?;
 		}
+		let machine_args = if image_name == "hermit-wasm" {
+			let mut args = self.machine_args(arch);
+
+			if args.contains(&"-append".to_string()) {
+				let last = args.last_mut().unwrap();
+				*last = format!("{last} -- {}", "/root/hello_world.wasm");
+			} else {
+				args.push("-append".to_string());
+				args.push(format!("-- {}", "/root/hello_world.wasm"));
+			}
+
+			args
+		} else {
+			self.machine_args(arch)
+		};
 
 		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{arch}"));
 		let program = if self.sudo { "sudo" } else { qemu.as_str() };
@@ -82,7 +97,7 @@ impl Qemu {
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
 			.args(self.image_args(image, arch)?)
-			.args(self.machine_args(arch))
+			.args(machine_args)
 			.args(self.cpu_args(arch))
 			.args(&["-smp", &effective_smp.to_string()])
 			.args(&["-m".to_string(), format!("{memory}M")])
