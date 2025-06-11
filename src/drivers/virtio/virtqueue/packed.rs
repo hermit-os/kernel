@@ -10,6 +10,7 @@ use core::{ops, ptr};
 
 use align_address::Align;
 use memory_addresses::PhysAddr;
+use smallvec::SmallVec;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -651,10 +652,8 @@ impl VirtqPrivate for PackedVq {
 
 	fn create_indirect_ctrl(
 		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
-		Ok(Self::descriptor_iter(buffer_tkn)?
-			.collect::<Vec<_>>()
-			.into_boxed_slice())
+	) -> Result<SmallVec<[Self::Descriptor; 4]>, VirtqError> {
+		Ok(Self::descriptor_iter(buffer_tkn)?.collect::<SmallVec<_>>())
 	}
 }
 
