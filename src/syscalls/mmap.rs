@@ -34,7 +34,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 	}
 	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
 
-	debug!("{physical_address:X} -> {virtual_address:X} ({size})");
+	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -92,6 +92,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 
 	let virtual_address = VirtAddr::from_ptr(ptr);
 
+	debug!("Mprotect {virtual_address:X} ({size}) -> {prot_flags:?})");
 	if let Some(physical_address) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
