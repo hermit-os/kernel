@@ -1,6 +1,6 @@
 use core::ptr::NonNull;
 
-use hermit_dtb::Dtb;
+use fdt::Fdt;
 
 pub struct Console {
 	stdout: NonNull<u8>,
@@ -11,15 +11,13 @@ fn stdout() -> u32 {
 	const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 
 	let dtb = unsafe {
-		Dtb::from_raw(sptr::from_exposed_addr(super::DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(super::DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
 	};
 
-	let property = dtb.get_property("/chosen", "stdout-path");
+	let property = dtb.chosen().stdout();
 	if let Some(stdout) = property {
-		let stdout = core::str::from_utf8(stdout)
-			.unwrap()
-			.trim_matches(char::from(0));
+		let stdout = stdout.name.trim_matches(char::from(0));
 		if let Some(pos) = stdout.find('@') {
 			let len = stdout.len();
 			u32::from_str_radix(&stdout[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
