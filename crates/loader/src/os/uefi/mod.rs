@@ -46,7 +46,7 @@ fn main() -> Status {
 		.unwrap();
 
 	allocator::exit_boot_services();
-	let mut memory_map = unsafe { boot::exit_boot_services(MemoryType::LOADER_DATA) };
+	let mut memory_map = unsafe { boot::exit_boot_services(None) };
 
 	let fdt = fdt.memory_map(&mut memory_map).unwrap().finish().unwrap();
 
