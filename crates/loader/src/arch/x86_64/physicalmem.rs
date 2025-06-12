@@ -1,7 +1,7 @@
 use core::num::NonZeroUsize;
 
 use log::debug;
-use one_shot_mutex::OneShotMutex;
+use one_shot_mutex::sync::OneShotMutex;
 use x86_64::structures::paging::{FrameAllocator, FrameDeallocator, PageSize, PhysFrame, Size4KiB};
 
 static PHYS_ALLOC: OneShotMutex<Option<PhysAllocInner>> = OneShotMutex::new(None);

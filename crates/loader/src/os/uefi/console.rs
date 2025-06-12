@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use core::fmt;
 use core::ptr::NonNull;
 
-use one_shot_mutex::OneShotMutex;
+use one_shot_mutex::sync::OneShotMutex;
 use uefi::Event;
 use uefi::boot::{EventType, Tpl};
 

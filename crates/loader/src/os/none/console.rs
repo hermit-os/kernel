@@ -1,6 +1,6 @@
 use core::fmt;
 
-use one_shot_mutex::OneShotMutex;
+use one_shot_mutex::sync::OneShotMutex;
 
 use crate::arch;
 
