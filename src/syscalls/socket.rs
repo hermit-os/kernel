@@ -699,6 +699,14 @@ pub unsafe extern "C" fn sys_getsockname(
 				} else {
 					return -crate::errno::EINVAL;
 				}
+			} else if !addr.is_null() && !addrlen.is_null() {
+				// FIXME: this is a workaround for
+				// https://github.com/hermit-os/kernel/issues/1754
+				let addrlen = unsafe { &mut *addrlen };
+				if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
+					let addr = unsafe { &mut *addr.cast::<sockaddr_in>() };
+					addr.sin_family = AF_INET.try_into().unwrap();
+				}
 			}
 
 			0
