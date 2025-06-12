@@ -30,8 +30,6 @@ pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
 /// [DriverError](error::DriverError) values will be
 /// passed on to higher layers.
 pub mod error {
-	use core::fmt;
-
 	#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 	use crate::drivers::net::gem::GEMError;
 	#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
@@ -43,6 +41,7 @@ pub mod error {
 	))]
 	use crate::drivers::virtio::error::VirtioError;
 
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 	#[derive(Debug)]
 	pub enum DriverError {
 		#[cfg(any(
@@ -82,9 +81,10 @@ pub mod error {
 		}
 	}
 
-	impl fmt::Display for DriverError {
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
+	impl core::fmt::Display for DriverError {
 		#[allow(unused_variables)]
-		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 			match *self {
 				#[cfg(any(
 					all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
