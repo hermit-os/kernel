@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use core::ptr::{self, NonNull};
 
 use allocator_api2::alloc::Allocator;
-use one_shot_mutex::OneShotMutex;
+use one_shot_mutex::sync::OneShotMutex;
 
 use crate::bump_allocator::BumpAllocator;
 

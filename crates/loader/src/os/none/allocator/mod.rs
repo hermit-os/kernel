@@ -6,7 +6,7 @@ use core::ptr;
 use core::ptr::NonNull;
 
 use allocator_api2::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
-use one_shot_mutex::OneShotMutex;
+use one_shot_mutex::sync::OneShotMutex;
 
 use self::bootstrap::BootstrapAllocator;
 use crate::bump_allocator::BumpAllocator;
