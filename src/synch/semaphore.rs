@@ -80,15 +80,15 @@ impl Semaphore {
 				// Successfully acquired the semaphore.
 				locked_state.count -= 1;
 				return true;
-			} else if let Some(t) = wakeup_time {
-				if t < crate::arch::processor::get_timer_ticks() {
-					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
-					// Don't try again and return the failure status.
-					locked_state
-						.queue
-						.remove(core_scheduler.get_current_task_handle());
-					return false;
-				}
+			} else if let Some(t) = wakeup_time
+				&& t < crate::arch::processor::get_timer_ticks()
+			{
+				// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
+				// Don't try again and return the failure status.
+				locked_state
+					.queue
+					.remove(core_scheduler.get_current_task_handle());
+				return false;
 			}
 
 			#[cfg(feature = "smp")]

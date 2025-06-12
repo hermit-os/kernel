@@ -327,10 +327,10 @@ impl PriorityTaskQueue {
 
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
-		if let Some(i) = msb(self.prio_bitmap) {
-			if i >= u32::from(prio.into()) {
-				return self.pop_from_queue(i as usize);
-			}
+		if let Some(i) = msb(self.prio_bitmap)
+			&& i >= u32::from(prio.into())
+		{
+			return self.pop_from_queue(i as usize);
 		}
 
 		None
@@ -632,10 +632,10 @@ impl BlockedTaskQueue {
 		let mut cursor = self.list.cursor_front_mut();
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		if let Some(wakeup_time) = self.network_wakeup_time {
-			if wakeup_time <= arch::processor::get_timer_ticks() {
-				self.network_wakeup_time = None;
-			}
+		if let Some(wakeup_time) = self.network_wakeup_time
+			&& wakeup_time <= arch::processor::get_timer_ticks()
+		{
+			self.network_wakeup_time = None;
 		}
 
 		// Loop through all blocked tasks to find it.
@@ -694,12 +694,12 @@ impl BlockedTaskQueue {
 		let time = arch::processor::get_timer_ticks();
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
-			if let crate::executor::network::NetworkState::Initialized(nic) = &mut *guard {
-				let now = crate::executor::network::now();
-				nic.poll_common(now);
-				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
-			}
+		if let Some(mut guard) = crate::executor::network::NIC.try_lock()
+			&& let crate::executor::network::NetworkState::Initialized(nic) = &mut *guard
+		{
+			let now = crate::executor::network::now();
+			nic.poll_common(now);
+			self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
 		}
 
 		// Get the wakeup time of this task and check if we have reached the first task

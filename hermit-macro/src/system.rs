@@ -61,13 +61,12 @@ fn parse_sig(sig: &Signature) -> Result<ParsedSig> {
 fn validate_attrs(attrs: &[Attribute]) -> Result<()> {
 	let mut no_mangle_found = false;
 	for attr in attrs {
-		if attr.path().is_ident("unsafe") {
-			if let Ok(ident) = attr.parse_args::<Ident>() {
-				if ident == "no_mangle" {
-					no_mangle_found = true;
-					continue;
-				}
-			}
+		if attr.path().is_ident("unsafe")
+			&& let Ok(ident) = attr.parse_args::<Ident>()
+			&& ident == "no_mangle"
+		{
+			no_mangle_found = true;
+			continue;
 		}
 
 		if !attr.path().is_ident("cfg") && !attr.path().is_ident("doc") {

@@ -590,10 +590,10 @@ impl VfsNode for MemDirectory {
 				if let Some(component) = components.pop() {
 					let node_name = String::from(component);
 
-					if components.is_empty() {
-						if let Some(node) = self.inner.read().await.get(&node_name) {
-							return node.get_file_attributes();
-						}
+					if components.is_empty()
+						&& let Some(node) = self.inner.read().await.get(&node_name)
+					{
+						return node.get_file_attributes();
 					}
 
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
@@ -615,10 +615,10 @@ impl VfsNode for MemDirectory {
 				if let Some(component) = components.pop() {
 					let node_name = String::from(component);
 
-					if components.is_empty() {
-						if let Some(node) = self.inner.read().await.get(&node_name) {
-							return node.get_file_attributes();
-						}
+					if components.is_empty()
+						&& let Some(node) = self.inner.read().await.get(&node_name)
+					{
+						return node.get_file_attributes();
 					}
 
 					if let Some(directory) = self.inner.read().await.get(&node_name) {

@@ -206,11 +206,11 @@ fn external_handler() {
 		drop(cur_int);
 
 		// Call handler
-		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
-			if let Some(queue) = handlers.get(&u8::try_from(irq).unwrap()) {
-				for handler in queue.iter() {
-					handler();
-				}
+		if let Some(handlers) = INTERRUPT_HANDLERS.get()
+			&& let Some(queue) = handlers.get(&u8::try_from(irq).unwrap())
+		{
+			for handler in queue.iter() {
+				handler();
 			}
 		}
 		crate::executor::run();
@@ -224,10 +224,10 @@ fn external_handler() {
 
 		// Remove from active interrupts
 		let mut cur_int = CURRENT_INTERRUPTS.lock();
-		if let Some(active_irq) = cur_int.pop() {
-			if active_irq != irq {
-				warn!("Interrupt mismatch during EOI!");
-			}
+		if let Some(active_irq) = cur_int.pop()
+			&& active_irq != irq
+		{
+			warn!("Interrupt mismatch during EOI!");
 		}
 	}
 }
