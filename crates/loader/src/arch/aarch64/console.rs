@@ -16,7 +16,7 @@ fn stdout() -> u32 {
 	};
 
 	let property = dtb.get_property("/chosen", "stdout-path");
-	let uart_address = if let Some(stdout) = property {
+	if let Some(stdout) = property {
 		let stdout = core::str::from_utf8(stdout)
 			.unwrap()
 			.trim_matches(char::from(0));
@@ -28,8 +28,7 @@ fn stdout() -> u32 {
 		}
 	} else {
 		SERIAL_PORT_ADDRESS
-	};
-	uart_address
+	}
 }
 
 impl Console {
