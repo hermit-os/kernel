@@ -10,10 +10,12 @@ use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
+use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::syscalls::socket::{AF_INET, AF_INET_OLD, AF_INET6};
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
 /// further receives will be disallowed
@@ -34,10 +36,9 @@ fn get_ephemeral_port() -> u16 {
 #[derive(Debug)]
 pub struct Socket {
 	handle: BTreeSet<Handle>,
-	port: u16,
+	endpoint: IpEndpoint,
 	is_nonblocking: bool,
 	is_listen: bool,
-	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`.
 	domain: i32,
 }
 
@@ -46,9 +47,17 @@ impl Socket {
 		let mut handle = BTreeSet::new();
 		handle.insert(h);
 
+		let endpoint = if domain == AF_INET || domain == AF_INET_OLD {
+			IpEndpoint::new(Ipv4Address::UNSPECIFIED.into(), 0)
+		} else if domain == AF_INET6 {
+			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
+		} else {
+			panic!("Unsupported domain for TCP socket: {}", domain);
+		};
+
 		Self {
 			handle,
-			port: 0,
+			endpoint,
 			is_nonblocking: false,
 			is_listen: false,
 			domain,
@@ -263,7 +272,10 @@ impl Socket {
 	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let ListenEndpoint::Ip(endpoint) = endpoint {
-			self.port = endpoint.port;
+			self.endpoint.port = endpoint.port;
+			if let Some(addr) = endpoint.addr {
+				self.endpoint.addr = addr;
+			}
 			Ok(())
 		} else {
 			Err(io::Error::EIO)
@@ -342,14 +354,16 @@ impl Socket {
 		self.handle.insert(new_handle);
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(new_handle);
 		socket.set_nagle_enabled(nagle_enabled);
-		socket.listen(self.port).map_err(|_| io::Error::EIO)?;
+		socket
+			.listen(self.endpoint.port)
+			.map_err(|_| io::Error::EIO)?;
 
 		let mut handle = BTreeSet::new();
 		handle.insert(connection_handle);
 
 		let socket = Socket {
 			handle,
-			port: self.port,
+			endpoint: self.endpoint,
 			is_nonblocking: self.is_nonblocking,
 			is_listen: false,
 			domain: self.domain,
@@ -366,7 +380,13 @@ impl Socket {
 
 	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
 		Ok(self
-			.with(|socket| socket.local_endpoint())
+			.with(|socket| {
+				if let Some(endpoint) = socket.local_endpoint() {
+					Some(endpoint)
+				} else {
+					Some(self.endpoint)
+				}
+			})
 			.map(Endpoint::Ip))
 	}
 
@@ -385,7 +405,9 @@ impl Socket {
 			return Err(io::Error::EINVAL);
 		}
 
-		socket.listen(self.port).map_err(|_| io::Error::EIO)?;
+		socket
+			.listen(self.endpoint.port)
+			.map_err(|_| io::Error::EIO)?;
 
 		self.is_listen = true;
 
@@ -394,7 +416,7 @@ impl Socket {
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 			s.set_nagle_enabled(nagle_enabled);
-			s.listen(self.port).map_err(|_| io::Error::EIO)?;
+			s.listen(self.endpoint.port).map_err(|_| io::Error::EIO)?;
 
 			self.handle.insert(handle);
 		}

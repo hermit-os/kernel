@@ -6,28 +6,39 @@ use core::task::Poll;
 use async_trait::async_trait;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
-use smoltcp::wire::IpEndpoint;
+use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
+use crate::syscalls::socket::{AF_INET, AF_INET_OLD, AF_INET6};
 
 #[derive(Debug)]
 pub struct Socket {
 	handle: Handle,
 	nonblocking: bool,
-	endpoint: Option<IpEndpoint>,
+	local_endpoint: IpEndpoint,
+	remote_endpoint: Option<IpEndpoint>,
 	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`.
 	domain: i32,
 }
 
 impl Socket {
 	pub fn new(handle: Handle, domain: i32) -> Self {
+		let local_endpoint = if domain == AF_INET || domain == AF_INET_OLD {
+			IpEndpoint::new(Ipv4Address::UNSPECIFIED.into(), 0)
+		} else if domain == AF_INET6 {
+			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
+		} else {
+			panic!("Unsupported domain for TCP socket: {}", domain);
+		};
+
 		Self {
 			handle,
 			nonblocking: false,
-			endpoint: None,
+			local_endpoint,
+			remote_endpoint: None,
 			domain,
 		}
 	}
@@ -116,9 +127,13 @@ impl Socket {
 		.await
 	}
 
-	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let ListenEndpoint::Ip(endpoint) = endpoint {
+			self.local_endpoint.port = endpoint.port;
+			if let Some(addr) = endpoint.addr {
+				self.local_endpoint.addr = addr;
+			}
 			self.with(|socket| socket.bind(endpoint).map_err(|_| io::Error::EADDRINUSE))
 		} else {
 			Err(io::Error::EIO)
@@ -128,7 +143,7 @@ impl Socket {
 	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let Endpoint::Ip(endpoint) = endpoint {
-			self.endpoint = Some(endpoint);
+			self.remote_endpoint = Some(endpoint);
 			Ok(())
 		} else {
 			Err(io::Error::EIO)
@@ -154,7 +169,7 @@ impl Socket {
 							// Drop the packet when the provided buffer cannot
 							// fit the payload.
 							Ok((data, meta)) if data.len() <= buffer.len() => {
-								if self.endpoint.is_none_or(|ep| meta.endpoint == ep) {
+								if self.remote_endpoint.is_none_or(|ep| meta.endpoint == ep) {
 									buffer[..data.len()].write_copy_of_slice(data);
 									Poll::Ready(Ok((data.len(), meta.endpoint)))
 								} else {
@@ -186,7 +201,7 @@ impl Socket {
 							// Drop the packet when the provided buffer cannot
 							// fit the payload.
 							Ok((data, meta)) if data.len() <= buffer.len() => {
-								if self.endpoint.is_none_or(|ep| meta.endpoint == ep) {
+								if self.remote_endpoint.is_none_or(|ep| meta.endpoint == ep) {
 									buffer[..data.len()].write_copy_of_slice(data);
 									Poll::Ready(Ok(data.len()))
 								} else {
@@ -209,7 +224,7 @@ impl Socket {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		if let Some(endpoint) = self.endpoint {
+		if let Some(endpoint) = self.remote_endpoint {
 			let meta = UdpMetadata::from(endpoint);
 			self.write_with_meta(buf, &meta).await
 		} else {
@@ -231,6 +246,10 @@ impl Socket {
 		self.nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
 		Ok(())
 	}
+
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
+		Ok(Some(Endpoint::Ip(self.local_endpoint)))
+	}
 }
 
 impl Drop for Socket {
@@ -247,7 +266,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 	}
 
 	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
-		self.read().await.bind(endpoint).await
+		self.write().await.bind(endpoint).await
 	}
 
 	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
@@ -268,6 +287,10 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		self.read().await.write(buf).await
+	}
+
+	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
+		self.read().await.getsockname().await
 	}
 
 	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {

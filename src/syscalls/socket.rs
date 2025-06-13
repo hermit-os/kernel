@@ -672,8 +672,10 @@ pub unsafe extern "C" fn sys_getsockname(
 										.try_into()
 										.unwrap();
 									*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
+
+									0
 								} else {
-									return -crate::errno::EINVAL;
+									-crate::errno::EINVAL
 								}
 							}
 							#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -682,8 +684,10 @@ pub unsafe extern "C" fn sys_getsockname(
 									let addr = unsafe { &mut *addr.cast() };
 									*addr = sockaddr_in6::from(endpoint);
 									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
+
+									0
 								} else {
-									return -crate::errno::EINVAL;
+									-crate::errno::EINVAL
 								}
 							}
 						},
@@ -691,17 +695,18 @@ pub unsafe extern "C" fn sys_getsockname(
 						Endpoint::Vsock(_) => {
 							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								warn!("unsupported device");
+								0
 							} else {
-								return -crate::errno::EINVAL;
+								-crate::errno::EINVAL
 							}
 						}
 					}
 				} else {
-					return -crate::errno::EINVAL;
+					-crate::errno::EINVAL
 				}
+			} else {
+				-crate::errno::EINVAL
 			}
-
-			0
 		},
 	)
 }
