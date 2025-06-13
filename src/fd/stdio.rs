@@ -152,6 +152,14 @@ impl ObjectInterface for UhyveStdin {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
 	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
+	}
 }
 
 impl UhyveStdin {
@@ -184,6 +192,14 @@ impl ObjectInterface for UhyveStdout {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
 	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
+	}
 }
 
 impl UhyveStdout {
@@ -215,6 +231,14 @@ impl ObjectInterface for UhyveStderr {
 
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
 	}
 }
 
