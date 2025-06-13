@@ -35,15 +35,17 @@ impl ObjectInterface for GenericStdin {
 
 			while let Some(byte) = guard.read() {
 				let c = unsafe { char::from_u32_unchecked(byte.into()) };
-				guard.write(c.as_bytes());
+				guard.write_buffered(c.as_bytes());
 
 				buf[read_bytes].write(byte);
 				read_bytes += 1;
 
 				if read_bytes >= buf.len() {
+					guard.flush();
 					return Poll::Ready(Ok(read_bytes));
 				}
 			}
+			guard.flush();
 
 			if read_bytes > 0 {
 				Poll::Ready(Ok(read_bytes))
@@ -77,7 +79,7 @@ impl ObjectInterface for GenericStdout {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		CONSOLE.lock().write(buf);
+		CONSOLE.lock().write_buffered(buf);
 		Ok(buf.len())
 	}
 
@@ -103,7 +105,7 @@ impl ObjectInterface for GenericStderr {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		CONSOLE.lock().write(buf);
+		CONSOLE.lock().write_buffered(buf);
 		Ok(buf.len())
 	}
 
