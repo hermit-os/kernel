@@ -7,8 +7,8 @@ use core::arch::asm;
 use core::ptr::{self, NonNull};
 
 use align_address::Align;
+use fdt::Fdt;
 use goblin::elf::header::header64::{EI_DATA, ELFDATA2LSB, ELFMAG, Header, SELFMAG};
-use hermit_dtb::Dtb;
 use hermit_entry::Entry;
 use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
 use hermit_entry::elf::LoadedKernel;
@@ -51,15 +51,17 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 
 pub fn find_kernel() -> &'static [u8] {
 	let dtb = unsafe {
-		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
 	};
 
 	let module_start = dtb
-		.enum_subnodes("/chosen")
-		.find(|node| node.starts_with("module@"))
+		.find_node("/chosen")
+		.unwrap()
+		.children()
+		.find(|node| node.name.starts_with("module@"))
 		.map(|node| {
-			let value = node.strip_prefix("module@").unwrap();
+			let value = node.name.strip_prefix("module@").unwrap();
 			if let Some(value) = value.strip_prefix("0x") {
 				usize::from_str_radix(value, 16).unwrap()
 			} else if let Some(value) = value.strip_prefix("0X") {
@@ -108,14 +110,11 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	let dtb = unsafe {
-		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
 	};
-	let cpus = dtb
-		.enum_subnodes("/cpus")
-		.filter(|c| c.split('@').next().unwrap() == "cpu")
-		.count();
-	info!("Detect {} CPU(s)", cpus);
+	let cpus = dtb.cpus().count();
+	info!("Detect {cpus} CPU(s)");
 
 	let uart_address: u32 = CONSOLE.lock().get().get_stdout().as_ptr() as u32;
 	info!("Detect UART at {:#x}", uart_address);
@@ -194,21 +193,23 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	}
 
 	let dtb = unsafe {
-		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
 	};
 
-	if let Some(device_type) = dtb.get_property("/memory", "device_type") {
-		let device_type = core::str::from_utf8(device_type)
+	if let Some(device_type) = dtb
+		.find_node("/memory")
+		.and_then(|node| node.property("device_type"))
+	{
+		let device_type = core::str::from_utf8(device_type.value)
 			.unwrap()
 			.trim_matches(char::from(0));
 		assert!(device_type == "memory");
 	}
 
-	let reg = dtb.get_property("/memory", "reg").unwrap();
-	let (start_slice, size_slice) = reg.split_at(core::mem::size_of::<u64>());
-	let ram_start = u64::from_be_bytes(start_slice.try_into().unwrap());
-	let ram_size = u64::from_be_bytes(size_slice.try_into().unwrap());
+	let regions = dtb.memory().regions().next().unwrap();
+	let ram_start = regions.starting_address as u64;
+	let ram_size = regions.size.unwrap() as u64;
 
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
