@@ -121,11 +121,11 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 		debug!("Receive fiq {vector}");
 		increment_irq_counter(vector);
 
-		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
-			if let Some(queue) = handlers.get(&vector) {
-				for handler in queue.iter() {
-					handler();
-				}
+		if let Some(handlers) = INTERRUPT_HANDLERS.get()
+			&& let Some(queue) = handlers.get(&vector)
+		{
+			for handler in queue.iter() {
+				handler();
 			}
 		}
 		crate::executor::run();
@@ -149,11 +149,11 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 		debug!("Receive interrupt {vector}");
 		increment_irq_counter(vector);
 
-		if let Some(handlers) = INTERRUPT_HANDLERS.get() {
-			if let Some(queue) = handlers.get(&vector) {
-				for handler in queue.iter() {
-					handler();
-				}
+		if let Some(handlers) = INTERRUPT_HANDLERS.get()
+			&& let Some(queue) = handlers.get(&vector)
+		{
+			for handler in queue.iter() {
+				handler();
 			}
 		}
 		crate::executor::run();
@@ -328,50 +328,50 @@ pub(crate) fn init() {
 	for node in dtb.enum_subnodes("/") {
 		let parts: Vec<_> = node.split('@').collect();
 
-		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-			if core::str::from_utf8(compatible).unwrap().contains("timer") {
-				let irq_slice = dtb
-					.get_property(parts.first().unwrap(), "interrupts")
-					.unwrap();
-				/* Secure Phys IRQ */
-				let (_irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let (_irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let (_irqflags, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				/* Non-secure Phys IRQ */
-				let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-				let irq = u32::from_be_bytes(irq.try_into().unwrap());
-				let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
-				unsafe {
-					TIMER_INTERRUPT = irq;
-				}
-
-				debug!("Timer interrupt: {irq}, type {irqtype}, flags {irqflags}");
-
-				IRQ_NAMES
-					.lock()
-					.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
-
-				// enable timer interrupt
-				let timer_irqid = if irqtype == 1 {
-					IntId::ppi(irq)
-				} else if irqtype == 0 {
-					IntId::spi(irq)
-				} else {
-					panic!("Invalid interrupt type");
-				};
-				gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
-				if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-					gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
-				} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-					gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
-				} else {
-					panic!("Invalid interrupt level!");
-				}
-				gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
+		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible")
+			&& core::str::from_utf8(compatible).unwrap().contains("timer")
+		{
+			let irq_slice = dtb
+				.get_property(parts.first().unwrap(), "interrupts")
+				.unwrap();
+			/* Secure Phys IRQ */
+			let (_irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+			let (_irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+			let (_irqflags, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+			/* Non-secure Phys IRQ */
+			let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+			let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+			let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+			let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+			let irq = u32::from_be_bytes(irq.try_into().unwrap());
+			let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+			unsafe {
+				TIMER_INTERRUPT = irq;
 			}
+
+			debug!("Timer interrupt: {irq}, type {irqtype}, flags {irqflags}");
+
+			IRQ_NAMES
+				.lock()
+				.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
+
+			// enable timer interrupt
+			let timer_irqid = if irqtype == 1 {
+				IntId::ppi(irq)
+			} else if irqtype == 0 {
+				IntId::spi(irq)
+			} else {
+				panic!("Invalid interrupt type");
+			};
+			gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
+			if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
+			} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
+			} else {
+				panic!("Invalid interrupt level!");
+			}
+			gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
 		}
 	}
 
@@ -403,41 +403,41 @@ pub fn init_cpu() {
 		for node in dtb.enum_subnodes("/") {
 			let parts: Vec<_> = node.split('@').collect();
 
-			if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-				if core::str::from_utf8(compatible).unwrap().contains("timer") {
-					let irq_slice = dtb
-						.get_property(parts.first().unwrap(), "interrupts")
-						.unwrap();
-					/* Secure Phys IRQ */
-					let (_irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-					let (_irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-					let (_irqflags, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-					/* Non-secure Phys IRQ */
-					let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-					let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-					let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-					let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-					let irq = u32::from_be_bytes(irq.try_into().unwrap());
-					let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+			if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible")
+				&& core::str::from_utf8(compatible).unwrap().contains("timer")
+			{
+				let irq_slice = dtb
+					.get_property(parts.first().unwrap(), "interrupts")
+					.unwrap();
+				/* Secure Phys IRQ */
+				let (_irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (_irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (_irqflags, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				/* Non-secure Phys IRQ */
+				let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+				let irq = u32::from_be_bytes(irq.try_into().unwrap());
+				let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
 
-					// enable timer interrupt
-					let timer_irqid = if irqtype == 1 {
-						IntId::ppi(irq)
-					} else if irqtype == 0 {
-						IntId::spi(irq)
-					} else {
-						panic!("Invalid interrupt type");
-					};
-					gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
-					if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-						gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
-					} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-						gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
-					} else {
-						panic!("Invalid interrupt level!");
-					}
-					gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
+				// enable timer interrupt
+				let timer_irqid = if irqtype == 1 {
+					IntId::ppi(irq)
+				} else if irqtype == 0 {
+					IntId::spi(irq)
+				} else {
+					panic!("Invalid interrupt type");
+				};
+				gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
+				if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+					gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
+				} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+					gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
+				} else {
+					panic!("Invalid interrupt level!");
 				}
+				gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
 			}
 		}
 
