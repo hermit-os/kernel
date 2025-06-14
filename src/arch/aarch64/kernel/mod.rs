@@ -138,6 +138,11 @@ pub fn args() -> Option<&'static str> {
 	None
 }
 
+#[cfg(all(not(feature = "pci"), any(feature = "tcp", feature = "udp")))]
+pub fn get_dtb_ptr() -> *const u8 {
+	env::boot_info().hardware_info.device_tree.unwrap().get() as _
+}
+
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {
