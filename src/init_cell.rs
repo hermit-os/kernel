@@ -2,6 +2,7 @@
 	all(
 		not(feature = "pci"),
 		not(all(target_arch = "x86_64", feature = "tcp")),
+		not(all(target_arch = "aarch64", feature = "tcp")),
 		not(all(target_arch = "riscv64", feature = "tcp")),
 	),
 	expect(dead_code)
