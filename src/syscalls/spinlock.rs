@@ -14,7 +14,7 @@ pub struct SpinlockIrqSaveContainer<'a> {
 	guard: Option<InterruptTicketMutexGuard<'a, ()>>,
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
@@ -31,7 +31,7 @@ pub unsafe extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
@@ -45,7 +45,7 @@ pub unsafe extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) 
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
@@ -61,7 +61,7 @@ pub unsafe extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> 
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
@@ -77,7 +77,7 @@ pub unsafe extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_irqsave_init(
 	lock: *mut *mut SpinlockIrqSaveContainer<'_>,
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn sys_spinlock_irqsave_init(
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_irqsave_destroy(
 	lock: *mut SpinlockIrqSaveContainer<'_>,
@@ -112,7 +112,7 @@ pub unsafe extern "C" fn sys_spinlock_irqsave_destroy(
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
 	if lock.is_null() {
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveCon
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_spinlock_irqsave_unlock(
 	lock: *mut SpinlockIrqSaveContainer<'_>,

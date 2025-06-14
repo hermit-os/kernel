@@ -1,6 +1,19 @@
 use proc_macro2::{Ident, Span};
-use quote::quote;
-use syn::{Abi, Attribute, FnArg, Item, ItemFn, Pat, Result, Signature, Visibility, parse_quote};
+use syn::{
+	Abi, Attribute, FnArg, Item, ItemFn, Pat, Result, Signature, Stmt, Visibility, parse_quote,
+};
+
+fn parse_attr(attr: Option<Ident>) -> Result<bool> {
+	let Some(label) = attr else {
+		return Ok(false);
+	};
+
+	if label == "errno" {
+		return Ok(true);
+	}
+
+	bail!(label, "#[system] can only contain \"errno\" or nothing");
+}
 
 fn validate_vis(vis: &Visibility) -> Result<()> {
 	if !matches!(vis, Visibility::Public(_)) {
@@ -87,18 +100,20 @@ fn validate_attrs(attrs: &[Attribute]) -> Result<()> {
 	Ok(())
 }
 
-fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
-	let args = &sig.args;
-	let attrs = func.attrs.clone();
-	let vis = func.vis.clone();
-	let sig = func.sig.clone();
+fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
+	let inner_ident = Ident::new(&format!("__{}", func.sig.ident), Span::call_site());
+	let inner_func = ItemFn {
+		attrs: vec![],
+		vis: Visibility::Inherited,
+		sig: Signature {
+			ident: inner_ident.clone(),
+			..func.sig.clone()
+		},
+		block: func.block.clone(),
+	};
 
-	let ident = Ident::new(&format!("__{}", func.sig.ident), Span::call_site());
-	func.sig.ident = ident.clone();
-	func.vis = Visibility::Inherited;
-	func.attrs.clear();
-
-	let input_idents = sig
+	let input_idents = func
+		.sig
 		.inputs
 		.iter()
 		.map(|fn_arg| match fn_arg {
@@ -115,57 +130,68 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 		.map(|ident| format!("{ident} = {{:?}}"))
 		.collect::<Vec<_>>()
 		.join(", ");
-	let strace_format = format!("{}({input_format} ", sig.ident);
+	let strace_format = format!("{}({input_format} ", func.sig.ident);
 
-	let block = func.block;
-	func.block = parse_quote! {{
-		#[allow(unreachable_code)]
-		#[allow(clippy::diverging_sub_expression)]
-		{
-			#[cfg(feature = "strace")]
-			print!(#strace_format, #(#input_idents),*);
-			let ret = #block;
-			#[cfg(feature = "strace")]
-			println!(") = {ret:?}");
-			ret
-		}
-	}};
-
-	let func_call = quote! {
-		kernel_function!(#ident(#(#args),*))
-	};
-
-	let func_call = if func.sig.unsafety.is_some() {
-		quote! {
-			unsafe { #func_call }
+	let set_errno: Vec<Stmt> = if errno {
+		parse_quote! {
+			crate::errno::ToErrno::set_errno(ret);
 		}
 	} else {
-		func_call
+		vec![]
 	};
 
-	let func = parse_quote! {
-		#(#attrs)*
-		#vis #sig {
-			#func
+	let args = &sig.args;
+	let unsafety = &func.sig.unsafety;
+	let kernel_ident = Ident::new(&format!("_{}", func.sig.ident), Span::call_site());
+	let kernel_func = ItemFn {
+		attrs: vec![parse_quote!(#[allow(unreachable_code)])],
+		vis: Visibility::Inherited,
+		sig: Signature {
+			ident: kernel_ident.clone(),
+			..func.sig.clone()
+		},
+		block: parse_quote! {{
+			#[cfg(feature = "strace")]
+			print!(#strace_format, #(#input_idents),*);
 
-			#func_call
-		}
+			#[allow(clippy::diverging_sub_expression)]
+			let ret = #unsafety { #inner_ident(#(#args),*) };
+
+			#[cfg(feature = "strace")]
+			println!(") = {ret:?}");
+
+			#(#set_errno)*
+
+			ret
+		}},
 	};
 
-	Ok(func)
+	let sys_func = ItemFn {
+		block: parse_quote! {{
+			#inner_func
+
+			#kernel_func
+
+			#unsafety { kernel_function!(#kernel_ident(#(#args),*)) }
+		}},
+		..func
+	};
+
+	Ok(sys_func)
 }
 
-pub fn system_attribute(func: ItemFn) -> Result<Item> {
+pub fn system_attribute(attr: Option<Ident>, func: ItemFn) -> Result<Item> {
+	let errno = parse_attr(attr)?;
 	validate_vis(&func.vis)?;
 	let sig = parse_sig(&func.sig)?;
 	validate_attrs(&func.attrs)?;
-	let func = emit_func(func, &sig)?;
+	let func = emit_func(func, &sig, errno)?;
 	Ok(Item::Fn(func))
 }
 
 #[cfg(test)]
 mod tests {
-	use quote::ToTokens;
+	use quote::{ToTokens, quote};
 
 	use super::*;
 
@@ -178,6 +204,10 @@ mod tests {
 			#[cfg(target_os = "none")]
 			#[unsafe(no_mangle)]
 			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
+				if a == 0 {
+					return 0;
+				}
+
 				let c = i16::from(a) + b;
 				i32::from(c)
 			}
@@ -191,26 +221,33 @@ mod tests {
 			#[unsafe(no_mangle)]
 			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
-					#[allow(unreachable_code)]
-					#[allow(clippy::diverging_sub_expression)]
-					{
-						#[cfg(feature = "strace")]
-						print!("sys_test(a = {:?}, b = {:?} ", a, b);
-						let ret = {
-							let c = i16::from(a) + b;
-							i32::from(c)
-						};
-						#[cfg(feature = "strace")]
-						println!(") = {ret:?}");
-						ret
+					if a == 0 {
+						return 0;
 					}
+
+					let c = i16::from(a) + b;
+					i32::from(c)
 				}
 
-				kernel_function!(__sys_test(a, b))
+				#[allow(unreachable_code)]
+				extern "C" fn _sys_test(a: i8, b: i16) -> i32 {
+					#[cfg(feature = "strace")]
+					print!("sys_test(a = {:?}, b = {:?} ", a, b);
+
+					#[allow(clippy::diverging_sub_expression)]
+					let ret = { __sys_test(a, b) };
+
+					#[cfg(feature = "strace")]
+					println!(") = {ret:?}");
+
+					ret
+				}
+
+				{ kernel_function!(_sys_test(a, b)) }
 			}
 		};
 
-		let result = system_attribute(input)?.into_token_stream();
+		let result = system_attribute(None, input)?.into_token_stream();
 
 		assert_eq!(expected.to_string(), result.to_string());
 
@@ -226,6 +263,10 @@ mod tests {
 			#[cfg(target_os = "none")]
 			#[unsafe(no_mangle)]
 			pub unsafe extern "C" fn sys_test(a: i8, b: i16) -> i32 {
+				if a == 0 {
+					return 0;
+				}
+
 				let c = i16::from(a) + b;
 				i32::from(c)
 			}
@@ -239,26 +280,95 @@ mod tests {
 			#[unsafe(no_mangle)]
 			pub unsafe extern "C" fn sys_test(a: i8, b: i16) -> i32 {
 				unsafe extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
-					#[allow(unreachable_code)]
-					#[allow(clippy::diverging_sub_expression)]
-					{
-						#[cfg(feature = "strace")]
-						print!("sys_test(a = {:?}, b = {:?} ", a, b);
-						let ret = {
-							let c = i16::from(a) + b;
-							i32::from(c)
-						};
-						#[cfg(feature = "strace")]
-						println!(") = {ret:?}");
-						ret
+					if a == 0 {
+						return 0;
 					}
+
+					let c = i16::from(a) + b;
+					i32::from(c)
 				}
 
-				unsafe { kernel_function!(__sys_test(a, b)) }
+				#[allow(unreachable_code)]
+				unsafe extern "C" fn _sys_test(a: i8, b: i16) -> i32 {
+					#[cfg(feature = "strace")]
+					print!("sys_test(a = {:?}, b = {:?} ", a, b);
+
+					#[allow(clippy::diverging_sub_expression)]
+					let ret = unsafe { __sys_test(a, b) };
+
+					#[cfg(feature = "strace")]
+					println!(") = {ret:?}");
+
+					ret
+				}
+
+				unsafe { kernel_function!(_sys_test(a, b)) }
 			}
 		};
 
-		let result = system_attribute(input)?.into_token_stream();
+		let result = system_attribute(None, input)?.into_token_stream();
+
+		assert_eq!(expected.to_string(), result.to_string());
+
+		Ok(())
+	}
+
+	#[test]
+	fn test_errno() -> Result<()> {
+		let input = parse_quote! {
+			/// Adds two numbers together.
+			///
+			/// This is very important.
+			#[cfg(target_os = "none")]
+			#[unsafe(no_mangle)]
+			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
+				if a == 0 {
+					return 0;
+				}
+
+				let c = i16::from(a) + b;
+				i32::from(c)
+			}
+		};
+
+		let expected = quote! {
+			/// Adds two numbers together.
+			///
+			/// This is very important.
+			#[cfg(target_os = "none")]
+			#[unsafe(no_mangle)]
+			pub extern "C" fn sys_test(a: i8, b: i16) -> i32 {
+				extern "C" fn __sys_test(a: i8, b: i16) -> i32 {
+					if a == 0 {
+						return 0;
+					}
+
+					let c = i16::from(a) + b;
+					i32::from(c)
+				}
+
+				#[allow(unreachable_code)]
+				extern "C" fn _sys_test(a: i8, b: i16) -> i32 {
+					#[cfg(feature = "strace")]
+					print!("sys_test(a = {:?}, b = {:?} ", a, b);
+
+					#[allow(clippy::diverging_sub_expression)]
+					let ret = { __sys_test(a, b) };
+
+					#[cfg(feature = "strace")]
+					println!(") = {ret:?}");
+
+					crate::errno::ToErrno::set_errno(ret);
+
+					ret
+				}
+
+				{ kernel_function!(_sys_test(a, b)) }
+			}
+		};
+
+		let result = system_attribute(Some(Ident::new("errno", Span::call_site())), input)?
+			.into_token_stream();
 
 		assert_eq!(expected.to_string(), result.to_string());
 
