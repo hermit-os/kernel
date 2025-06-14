@@ -202,8 +202,10 @@ pub fn boot_next_processor() {
 			next_hart_id
 		);
 
+		// TODO: Old: Changing cpu_online will cause uhyve to start the next processor
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
 
+		//When running bare-metal/QEMU we use the firmware to start the next hart
 		if !env::is_uhyve() {
 			sbi_rt::hart_start(next_hart_id as usize, start::_start as usize, 0).unwrap();
 		}
