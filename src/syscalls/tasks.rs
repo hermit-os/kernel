@@ -22,7 +22,7 @@ pub extern "C" fn sys_getpid() -> Tid {
 }
 
 #[cfg(feature = "newlib")]
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let task = core_scheduler().get_current_task_handle();
@@ -35,7 +35,7 @@ pub unsafe extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 }
 
 #[cfg(feature = "newlib")]
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
@@ -90,13 +90,13 @@ pub extern "C" fn sys_msleep(ms: u32) {
 	usleep(u64::from(ms) * 1000);
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_usleep(usecs: u64) {
 	usleep(usecs);
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
 	assert!(
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timesp
 
 /// Creates a new thread based on the configuration of the current thread.
 #[cfg(feature = "newlib")]
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
 	let task_id = core_scheduler().clone(func, arg);
@@ -132,14 +132,14 @@ pub unsafe extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_yield() {
 	core_scheduler().reschedule();
 }
 
 #[cfg(feature = "newlib")]
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {dest} with signal {signum}");
@@ -147,7 +147,7 @@ pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 }
 
 #[cfg(feature = "newlib")]
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 	debug!("sys_signal is unimplemented");
@@ -237,14 +237,14 @@ pub extern "C" fn sys_wakeup_task(id: Tid) {
 }
 
 /// Determine the priority of the current thread
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_get_priority() -> u8 {
 	core_scheduler().get_current_task_prio().into()
 }
 
 /// Set priority of the thread with the identifier `id`
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_set_priority(id: Tid, prio: u8) {
 	if prio > 0 {

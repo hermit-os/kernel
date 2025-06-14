@@ -14,7 +14,7 @@ pub type sem_t = *const Semaphore;
 ///
 /// Stores the raw memory location of the new semaphore in parameter `sem`.
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32) -> i32 {
 	if sem.is_null() || pshared != 0 {
@@ -34,7 +34,7 @@ pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32)
 /// This function can be used to manually deallocate a semaphore via a reference.
 ///
 /// Returns `0` on success, `-EINVAL` if `sem` is null.
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
@@ -56,7 +56,7 @@ pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 /// The semaphore is not deallocated after being released.
 ///
 /// Returns `0` on success, or `-EINVAL` if `sem` is null.
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
@@ -75,7 +75,7 @@ pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 /// If the acquire fails (i.e. the semaphore's count is already 0), the function returns immediately.
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if `sem` is null, or `-ECANCELED` if the decrement fails.
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_trywait(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
@@ -108,7 +108,7 @@ unsafe fn sem_timedwait(sem: *mut sem_t, ms: u32) -> i32 {
 /// Blocks until semaphore is acquired or until specified time passed
 ///
 /// Returns `0` on lock acquire, `-EINVAL` if sem is null, or `-ETIME` on timeout.
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_timedwait(sem: *mut sem_t, ts: *const timespec) -> i32 {
 	if ts.is_null() {
