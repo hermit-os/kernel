@@ -316,11 +316,11 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 			let mut pinned_obj = core::pin::pin!(core_scheduler().get_object(fd));
 			if let Ready(Ok(obj)) = pinned_obj.as_mut().poll(cx) {
 				let mut pinned = core::pin::pin!(obj.poll(i.events));
-				if let Ready(Ok(e)) = pinned.as_mut().poll(cx) {
-					if !e.is_empty() {
-						counter += 1;
-						i.revents = e;
-					}
+				if let Ready(Ok(e)) = pinned.as_mut().poll(cx)
+					&& !e.is_empty()
+				{
+					counter += 1;
+					i.revents = e;
 				}
 			}
 		}
@@ -342,12 +342,12 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 /// of structs of `PollFd`.
 pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	let result = block_on(poll_fds(fds), timeout);
-	if let Err(ref e) = result {
-		if timeout.is_some() {
-			// A return value of zero indicates that the system call timed out
-			if *e == io::Error::EAGAIN {
-				return Ok(0);
-			}
+	if let Err(ref e) = result
+		&& timeout.is_some()
+	{
+		// A return value of zero indicates that the system call timed out
+		if *e == io::Error::EAGAIN {
+			return Ok(0);
 		}
 	}
 

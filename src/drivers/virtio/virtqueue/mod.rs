@@ -415,7 +415,11 @@ impl UsedDeviceWritableBuffer {
 		}
 
 		// May panic, but we have written data remaining so there should always be an item
-		let elem = self.elems.remove(0);
+		let elem = if self.elems.len() <= 2 {
+			self.elems.swap_remove(0)
+		} else {
+			self.elems.remove(0)
+		};
 
 		if let BufferElem::Sized(sized) = elem {
 			match sized.downcast::<MaybeUninit<T>>() {
@@ -423,16 +427,12 @@ impl UsedDeviceWritableBuffer {
 					self.remaining_written_len -= u32::try_from(size_of::<T>()).unwrap();
 					Some(unsafe { cast.assume_init() })
 				}
-				Err(sized) => {
-					// Unlikely and wrong usage, we should not optimize for this case
-					self.elems.insert(0, BufferElem::Sized(sized));
-					None
+				Err(_) => {
+					panic!("Attempted to downcast element to wrong type");
 				}
 			}
 		} else {
-			// Unlikely and wrong usage, we should not optimize for this case
-			self.elems.insert(0, elem);
-			None
+			panic!("Attempted to pop elements in order different from insertion");
 		}
 	}
 
@@ -441,7 +441,11 @@ impl UsedDeviceWritableBuffer {
 			return None;
 		}
 
-		let elem = self.elems.remove(0);
+		let elem = if self.elems.len() <= 2 {
+			self.elems.swap_remove(0)
+		} else {
+			self.elems.remove(0)
+		};
 
 		if let BufferElem::Vector(mut vector) = elem {
 			let new_len = u32::min(
@@ -452,9 +456,7 @@ impl UsedDeviceWritableBuffer {
 			unsafe { vector.set_len(new_len.try_into().unwrap()) };
 			Some(vector)
 		} else {
-			// Unlikely and wrong usage, we should not optimize for this case
-			self.elems.insert(0, elem);
-			None
+			panic!("Attempted to pop elements in order different from insertion");
 		}
 	}
 }

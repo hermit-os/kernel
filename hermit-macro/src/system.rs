@@ -61,13 +61,12 @@ fn parse_sig(sig: &Signature) -> Result<ParsedSig> {
 fn validate_attrs(attrs: &[Attribute]) -> Result<()> {
 	let mut no_mangle_found = false;
 	for attr in attrs {
-		if attr.path().is_ident("unsafe") {
-			if let Ok(ident) = attr.parse_args::<Ident>() {
-				if ident == "no_mangle" {
-					no_mangle_found = true;
-					continue;
-				}
-			}
+		if attr.path().is_ident("unsafe")
+			&& let Ok(ident) = attr.parse_args::<Ident>()
+			&& ident == "no_mangle"
+		{
+			no_mangle_found = true;
+			continue;
 		}
 
 		if !attr.path().is_ident("cfg") && !attr.path().is_ident("doc") {
@@ -116,7 +115,7 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 		.map(|ident| format!("{ident} = {{:?}}"))
 		.collect::<Vec<_>>()
 		.join(", ");
-	let strace_format = format!("{}({input_format}) = ", sig.ident);
+	let strace_format = format!("{}({input_format} ", sig.ident);
 
 	let block = func.block;
 	func.block = parse_quote! {{
@@ -127,7 +126,7 @@ fn emit_func(mut func: ItemFn, sig: &ParsedSig) -> Result<ItemFn> {
 			print!(#strace_format, #(#input_idents),*);
 			let ret = #block;
 			#[cfg(feature = "strace")]
-			println!("{ret:?}");
+			println!(") = {ret:?}");
 			ret
 		}
 	}};
@@ -196,13 +195,13 @@ mod tests {
 					#[allow(clippy::diverging_sub_expression)]
 					{
 						#[cfg(feature = "strace")]
-						print!("sys_test(a = {:?}, b = {:?}) = ", a, b);
+						print!("sys_test(a = {:?}, b = {:?} ", a, b);
 						let ret = {
 							let c = i16::from(a) + b;
 							i32::from(c)
 						};
 						#[cfg(feature = "strace")]
-						println!("{ret:?}");
+						println!(") = {ret:?}");
 						ret
 					}
 				}
@@ -244,13 +243,13 @@ mod tests {
 					#[allow(clippy::diverging_sub_expression)]
 					{
 						#[cfg(feature = "strace")]
-						print!("sys_test(a = {:?}, b = {:?}) = ", a, b);
+						print!("sys_test(a = {:?}, b = {:?} ", a, b);
 						let ret = {
 							let c = i16::from(a) + b;
 							i32::from(c)
 						};
 						#[cfg(feature = "strace")]
-						println!("{ret:?}");
+						println!(") = {ret:?}");
 						ret
 					}
 				}

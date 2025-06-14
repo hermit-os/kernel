@@ -66,44 +66,44 @@ pub fn init() {
 			for node in dtb.enum_subnodes("/") {
 				let parts: Vec<_> = node.split('@').collect();
 
-				if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-					if str::from_utf8(compatible).unwrap().contains("pl031") {
-						let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
-						let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
-						let addr = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
-						let (slice, _residual_slice) =
-							residual_slice.split_at(core::mem::size_of::<u64>());
-						let size = u64::from_be_bytes(slice.try_into().unwrap());
+				if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible")
+					&& str::from_utf8(compatible).unwrap().contains("pl031")
+				{
+					let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
+					let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
+					let addr = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
+					let (slice, _residual_slice) =
+						residual_slice.split_at(core::mem::size_of::<u64>());
+					let size = u64::from_be_bytes(slice.try_into().unwrap());
 
-						debug!("Found RTC at {addr:p} (size {size:#X})");
+					debug!("Found RTC at {addr:p} (size {size:#X})");
 
-						let pl031_address = virtualmem::allocate_aligned(
-							size.try_into().unwrap(),
-							BasePageSize::SIZE.try_into().unwrap(),
-						)
+					let pl031_address = virtualmem::allocate_aligned(
+						size.try_into().unwrap(),
+						BasePageSize::SIZE.try_into().unwrap(),
+					)
+					.unwrap();
+					PL031_ADDRESS.set(pl031_address).unwrap();
+					debug!("Mapping RTC to virtual address {pl031_address:p}",);
+
+					let mut flags = PageTableEntryFlags::empty();
+					flags.device().writable().execute_disable();
+					paging::map::<BasePageSize>(
+						pl031_address,
+						addr,
+						(size / BasePageSize::SIZE).try_into().unwrap(),
+						flags,
+					);
+
+					let boot_time =
+						OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
+					info!("Hermit booted on {boot_time}");
+
+					BOOT_TIME
+						.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap())
 						.unwrap();
-						PL031_ADDRESS.set(pl031_address).unwrap();
-						debug!("Mapping RTC to virtual address {pl031_address:p}",);
 
-						let mut flags = PageTableEntryFlags::empty();
-						flags.device().writable().execute_disable();
-						paging::map::<BasePageSize>(
-							pl031_address,
-							addr,
-							(size / BasePageSize::SIZE).try_into().unwrap(),
-							flags,
-						);
-
-						let boot_time =
-							OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
-						info!("Hermit booted on {boot_time}");
-
-						BOOT_TIME
-							.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap())
-							.unwrap();
-
-						return;
-					}
+					return;
 				}
 			}
 		}

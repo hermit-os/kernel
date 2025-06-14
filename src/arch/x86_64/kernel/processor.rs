@@ -66,6 +66,9 @@ struct Features {
 	supports_fsgs: bool,
 	supports_rdtscp: bool,
 	cpu_speedstep: CpuSpeedStep,
+	xcr0_supports_avx512_opmask: bool,
+	xcr0_supports_avx512_zmm_hi16: bool,
+	xcr0_supports_avx512_zmm_hi256: bool,
 }
 
 static FEATURES: Lazy<Features> = Lazy::new(|| {
@@ -83,6 +86,10 @@ static FEATURES: Lazy<Features> = Lazy::new(|| {
 	let extend_processor_identifiers = cpuid
 		.get_extended_processor_and_feature_identifiers()
 		.expect("Extended Processor and Processor Feature Identifiers not available");
+	let extended_state_info = cpuid
+		.get_extended_state_info()
+		.expect("CPUID Extended state info not available");
+
 	Features {
 		physical_address_bits: processor_capacity_info.physical_address_bits(),
 		linear_address_bits: processor_capacity_info.linear_address_bits(),
@@ -102,6 +109,9 @@ static FEATURES: Lazy<Features> = Lazy::new(|| {
 			cpu_speedstep.detect_features(&cpuid);
 			cpu_speedstep
 		},
+		xcr0_supports_avx512_opmask: extended_state_info.xcr0_supports_avx512_opmask(),
+		xcr0_supports_avx512_zmm_hi16: extended_state_info.xcr0_supports_avx512_zmm_hi16(),
+		xcr0_supports_avx512_zmm_hi256: extended_state_info.xcr0_supports_avx512_zmm_hi256(),
 	}
 });
 
@@ -167,6 +177,22 @@ pub struct XSaveBndcsr {
 	pub bndstatus_register: u64,
 }
 
+/// Saved AVX512 register state.
+///
+/// AVX512 extends the existing 16 AVX/SSE registers to be 512-bit wide and
+/// adds 16 more.
+///
+/// It also adds 8 opmask registers, which are up to 64-bit wide.
+#[repr(C)]
+pub struct XSaveAVX512State {
+	/// Opmask registers k0-k7.
+	pub opmask: [u8; 8 * 8],
+	/// Upper halves (32 bytes) of the lower ZMM registers (16).
+	pub zmm_hi256: [u8; 32 * 16],
+	/// Upper ZMM registers (64 bytes long, 16 registers).
+	pub hi16_zmm: [u8; 64 * 16],
+}
+
 #[repr(C, align(64))]
 pub struct FPUState {
 	pub legacy_region: XSaveLegacyRegion,
@@ -175,6 +201,7 @@ pub struct FPUState {
 	pub lwp_state: XSaveLWPState,
 	pub bndregs: XSaveBndregs,
 	pub bndcsr: XSaveBndcsr,
+	pub avx512_state: XSaveAVX512State,
 }
 
 impl FPUState {
@@ -222,6 +249,11 @@ impl FPUState {
 			bndcsr: XSaveBndcsr {
 				bndcfgu_register: 0,
 				bndstatus_register: 0,
+			},
+			avx512_state: XSaveAVX512State {
+				opmask: [0; 8 * 8],
+				zmm_hi256: [0; 32 * 16],
+				hi16_zmm: [0; 64 * 16],
 			},
 		}
 	}
@@ -911,6 +943,18 @@ pub fn configure() {
 			flags.insert(XCr0Flags::AVX);
 		}
 
+		if xcr0_supports_avx512_opmask() {
+			flags.insert(XCr0Flags::OPMASK);
+		}
+
+		if xcr0_supports_avx512_zmm_hi16() {
+			flags.insert(XCr0Flags::HI16_ZMM);
+		}
+
+		if xcr0_supports_avx512_zmm_hi256() {
+			flags.insert(XCr0Flags::ZMM_HI256);
+		}
+
 		debug!("Setting XCR0 = {flags:?}");
 		unsafe {
 			XCr0::write(flags);
@@ -1064,6 +1108,21 @@ pub fn supports_clflush() -> bool {
 #[inline]
 pub fn supports_fsgs() -> bool {
 	FEATURES.supports_fsgs
+}
+
+#[inline]
+pub fn xcr0_supports_avx512_opmask() -> bool {
+	FEATURES.xcr0_supports_avx512_opmask
+}
+
+#[inline]
+pub fn xcr0_supports_avx512_zmm_hi16() -> bool {
+	FEATURES.xcr0_supports_avx512_zmm_hi16
+}
+
+#[inline]
+pub fn xcr0_supports_avx512_zmm_hi256() -> bool {
+	FEATURES.xcr0_supports_avx512_zmm_hi256
 }
 
 /// The halt function stops the processor until the next interrupt arrives

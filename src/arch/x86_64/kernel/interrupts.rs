@@ -172,11 +172,11 @@ fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Op
 	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
-	if let Some(handlers) = IRQ_HANDLERS.get() {
-		if let Some(map) = handlers.get(&(index - 32)) {
-			for handler in map.iter() {
-				handler();
-			}
+	if let Some(handlers) = IRQ_HANDLERS.get()
+		&& let Some(map) = handlers.get(&(index - 32))
+	{
+		for handler in map.iter() {
+			handler();
 		}
 	}
 

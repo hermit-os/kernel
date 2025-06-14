@@ -1,4 +1,5 @@
 pub(crate) mod allocator;
+#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 pub(crate) mod device_alloc;
 pub(crate) mod physicalmem;
 pub(crate) mod virtualmem;

@@ -88,7 +88,8 @@ impl Qemu {
 			.args(&["-m".to_string(), format!("{memory}M")])
 			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.netdev_args())
-			.args(self.virtiofsd_args(memory));
+			.args(self.virtiofsd_args(memory))
+			.args(self.cmdline_args(image_name));
 
 		eprintln!("$ {qemu}");
 		let mut qemu = KillChildOnDrop(
@@ -195,7 +196,6 @@ impl Qemu {
 
 	fn machine_args(&self, arch: Arch) -> Vec<String> {
 		if self.microvm {
-			let frequency = get_frequency();
 			vec![
 				"-M".to_string(),
 				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off"
@@ -204,8 +204,6 @@ impl Qemu {
 				"virtio-mmio.force-legacy=off".to_string(),
 				"-nodefaults".to_string(),
 				"-no-user-config".to_string(),
-				"-append".to_string(),
-				format!("-freq {frequency}"),
 			]
 		} else if arch == Arch::Aarch64 {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
@@ -351,6 +349,38 @@ impl Qemu {
 			]
 		} else {
 			vec![]
+		}
+	}
+
+	fn cmdline_args(&self, image_name: &str) -> Vec<String> {
+		let mut cmdline = self.kernel_args();
+
+		let mut app_args = self.app_args(image_name);
+		if !app_args.is_empty() {
+			cmdline.push("--".to_owned());
+			cmdline.append(&mut app_args);
+		}
+
+		if cmdline.is_empty() {
+			return vec![];
+		}
+
+		vec!["-append".to_owned(), cmdline.join(" ")]
+	}
+
+	fn kernel_args(&self) -> Vec<String> {
+		if self.microvm {
+			let frequency = get_frequency();
+			vec!["-freq".to_owned(), frequency.to_string()]
+		} else {
+			vec![]
+		}
+	}
+
+	fn app_args(&self, image_name: &str) -> Vec<String> {
+		match image_name {
+			"hermit-wasm" => vec!["/root/hello_world.wasm".to_owned()],
+			_ => vec![],
 		}
 	}
 

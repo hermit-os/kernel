@@ -12,6 +12,7 @@ cfg_if::cfg_if! {
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::mem::{MaybeUninit, transmute};
 
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
@@ -104,24 +105,26 @@ impl RxQueues {
 	}
 }
 
+fn buffer_token_from_hdr(
+	hdr: Box<MaybeUninit<Hdr>, DeviceAlloc>,
+	packet_size: u32,
+) -> AvailBufferToken {
+	AvailBufferToken::new(SmallVec::new(), {
+		SmallVec::from_buf([
+			BufferElem::Sized(hdr),
+			BufferElem::Vector(Vec::with_capacity_in(
+				packet_size.try_into().unwrap(),
+				DeviceAlloc,
+			)),
+		])
+	})
+	.unwrap()
+}
+
 fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
-		let buff_tkn = match AvailBufferToken::new(
-			SmallVec::new(),
-			SmallVec::from_buf([
-				BufferElem::Sized(Box::<Hdr, _>::new_uninit_in(DeviceAlloc)),
-				BufferElem::Vector(Vec::with_capacity_in(
-					packet_size.try_into().unwrap(),
-					DeviceAlloc,
-				)),
-			]),
-		) {
-			Ok(tkn) => tkn,
-			Err(_vq_err) => {
-				error!("Setup of network queue failed, which should not happen!");
-				panic!("setup of network queue failed!");
-			}
-		};
+		let buff_tkn =
+			buffer_token_from_hdr(Box::<Hdr, _>::new_uninit_in(DeviceAlloc), packet_size);
 
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
@@ -303,17 +306,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	}
 
 	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
-		let mut receive_single_packet = || {
-			let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
-			RxQueues::post_processing(&mut buffer_tkn)
-				.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
-				.ok()?;
-			let header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
-			let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
-			Some((header, packet))
-		};
-
-		let (first_header, first_packet) = receive_single_packet()?;
+		let (first_header, first_packet) = self.receive_single_packet()?;
 
 		// According to VIRTIO spec v1.2 sec. 5.1.6.3.2, "num_buffers will always be 1 if VIRTIO_NET_F_MRG_RXBUF is not negotiated."
 		// Unfortunately, NVIDIA MLX5 does not comply with this requirement and we have to manually set the value to the correct one.
@@ -325,16 +318,32 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 
 		let mut combined_packets = first_packet;
 
-		for _ in 1..num_buffers {
-			let (_header, packet) = receive_single_packet()?;
-			combined_packets.extend_from_slice(&packet);
-		}
-
-		fill_queue(
-			&mut self.inner.recv_vqs.vqs[0],
-			num_buffers,
+		let first_tkn = buffer_token_from_hdr(
+			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+			unsafe {
+				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
+			},
 			self.inner.recv_vqs.packet_size,
 		);
+		self.inner.recv_vqs.vqs[0]
+			.dispatch(first_tkn, false, BufferType::Direct)
+			.unwrap();
+
+		for _ in 1..num_buffers {
+			let (header, packet) = self.receive_single_packet()?;
+			combined_packets.extend_from_slice(&packet);
+
+			let tkn = buffer_token_from_hdr(
+				// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+				unsafe {
+					transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(header)
+				},
+				self.inner.recv_vqs.packet_size,
+			);
+			self.inner.recv_vqs.vqs[0]
+				.dispatch(tkn, false, BufferType::Direct)
+				.unwrap();
+		}
 
 		Some((RxToken::new(combined_packets), TxToken::new()))
 	}
@@ -453,6 +462,17 @@ impl VirtioNetDriver<Init> {
 		// For send and receive queues?
 		// Only for receive? Because send is off anyway?
 		self.inner.recv_vqs.enable_notifs();
+	}
+
+	fn receive_single_packet(&mut self) -> Option<(Box<Hdr, DeviceAlloc>, Vec<u8, DeviceAlloc>)> {
+		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
+		RxQueues::post_processing(&mut buffer_tkn)
+			.inspect_err(|vnet_err| warn!("Post processing failed. Err: {vnet_err:?}"))
+			.ok()?;
+		let header = buffer_tkn.used_recv_buff.pop_front_downcast::<Hdr>()?;
+		let packet = buffer_tkn.used_recv_buff.pop_front_vec()?;
+
+		Some((header, packet))
 	}
 }
 
