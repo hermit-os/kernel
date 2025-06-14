@@ -4,7 +4,6 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
-use core::ptr;
 
 use hermit_sync::Lazy;
 
@@ -324,6 +323,7 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap())
 	} else {
+		error!("sys opendir invalid name");
 		-crate::errno::EINVAL
 	}
 }
@@ -549,19 +549,64 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 		.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)
 }
 
-#[repr(C)]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy)]
+// Same numbers as a normal Linux (no guarantee)
+pub enum FileType {
+	DtUnknown = 0,
+	DtFifo = 1,
+	DtChr = 2,
+	DtDir = 4,
+	DtBlk = 6,
+	DtReg = 8,
+	DtLnk = 10,
+	DtSock = 12,
+	DtWht = 14,
+}
+impl TryFrom<u8> for FileType {
+	type Error = &'static str;
+	fn try_from(value: u8) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(Self::DtUnknown),
+			1 => Ok(Self::DtFifo),
+			2 => Ok(Self::DtChr),
+			4 => Ok(Self::DtDir),
+			6 => Ok(Self::DtBlk),
+			8 => Ok(Self::DtReg),
+			10 => Ok(Self::DtLnk),
+			12 => Ok(Self::DtSock),
+			14 => Ok(Self::DtWht),
+			_ => Err("inv. Discriminant"),
+		}
+	}
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct Dirent64 {
 	/// 64-bit inode number
 	pub d_ino: u64,
-	/// 64-bit offset to next structure
+	/// Field without meaning. Kept for BW compatibility.
 	pub d_off: i64,
 	/// Size of this dirent
 	pub d_reclen: u16,
 	/// File type
-	pub d_type: u8,
+	pub d_type: FileType,
 	/// Filename (null-terminated)
 	pub d_name: PhantomData<c_char>,
+}
+impl core::fmt::Debug for Dirent64 {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		let cstr = unsafe { CStr::from_ptr((&raw const self.d_name).cast::<c_char>()) };
+
+		f.debug_struct("Dirent64")
+			.field("d_ino", &self.d_ino)
+			.field("d_off", &self.d_off)
+			.field("d_reclen", &self.d_reclen)
+			.field("d_type", &self.d_type)
+			.field("d_name", &cstr)
+			.finish()
+	}
 }
 
 #[hermit_macro::system]
@@ -569,51 +614,23 @@ pub struct Dirent64 {
 pub unsafe extern "C" fn sys_getdents64(
 	fd: FileDescriptor,
 	dirp: *mut Dirent64,
+	// rename: bytes/size/length
 	count: usize,
 ) -> i64 {
+	debug!("getdents for fd {fd:?} - count: {count}");
 	if dirp.is_null() || count == 0 {
+		error!("dirp is null");
 		return (-crate::errno::EINVAL).into();
 	}
 
-	const ALIGN_DIRENT: usize = core::mem::align_of::<Dirent64>();
-	let mut dirp: *mut Dirent64 = dirp;
-	let mut offset: i64 = 0;
+	let slice = unsafe { core::slice::from_raw_parts_mut(dirp.cast(), count) };
+
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|_| (-crate::errno::EINVAL).into(),
 		|v| {
-			block_on((*v).readdir(), None).map_or_else(
-				|e| -num::ToPrimitive::to_i64(&e).unwrap(),
-				|v| {
-					for i in v.iter() {
-						let len = i.name.len();
-						let aligned_len = ((core::mem::size_of::<Dirent64>() + len + 1)
-							+ (ALIGN_DIRENT - 1)) & (!(ALIGN_DIRENT - 1));
-						if offset as usize + aligned_len >= count {
-							return (-crate::errno::EINVAL).into();
-						}
-
-						let dir = unsafe { &mut *dirp };
-
-						dir.d_ino = 0;
-						dir.d_type = 0;
-						dir.d_reclen = aligned_len.try_into().unwrap();
-						offset += i64::try_from(aligned_len).unwrap();
-						dir.d_off = offset;
-
-						// copy null-terminated filename
-						let s = ptr::from_mut(&mut dir.d_name).cast::<u8>();
-						unsafe {
-							core::ptr::copy_nonoverlapping(i.name.as_ptr(), s, len);
-							s.add(len).write_bytes(0, 1);
-						}
-
-						dirp = unsafe { dirp.byte_add(aligned_len) };
-					}
-
-					offset
-				},
-			)
+			block_on((*v).getdents(slice), None)
+				.map_or_else(|e| -num::ToPrimitive::to_i64(&e).unwrap(), |cnt| cnt as i64)
 		},
 	)
 }
@@ -688,6 +705,8 @@ pub extern "C" fn sys_image_start_addr() -> usize {
 
 #[cfg(test)]
 mod tests {
+	use core::ptr;
+
 	use super::*;
 
 	#[cfg(target_os = "none")]
