@@ -127,6 +127,12 @@ pub(crate) fn init() {
 		any(feature = "tcp", feature = "udp")
 	))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
+	#[cfg(all(
+		not(feature = "pci"),
+		target_arch = "aarch64",
+		any(feature = "tcp", feature = "udp")
+	))]
+	crate::arch::aarch64::kernel::mmio::init_drivers();
 
 	#[cfg(target_arch = "riscv64")]
 	crate::arch::riscv64::kernel::init_drivers();
