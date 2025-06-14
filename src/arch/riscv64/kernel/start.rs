@@ -50,22 +50,26 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 	CURRENT_BOOT_ID.store(hart_id as u32, Ordering::Relaxed);
 
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
-		unsafe {
-			env::set_boot_info(*boot_info.unwrap());
-			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
-			// Init HART_MASK
-			let mut hart_mask = 0;
-			for cpu in fdt.cpus() {
-				let hart_id = cpu.property("reg").unwrap().as_usize().unwrap();
-				let status = cpu.property("status").unwrap().as_str().unwrap();
+		// Boot CPU Initialization
+		env::set_boot_info(*boot_info.unwrap());
+		let fdt = unsafe { Fdt::from_ptr(get_dtb_ptr()) }.expect("FDT is invalid");
 
-				if status != "disabled\u{0}" {
-					hart_mask |= 1 << hart_id;
-				}
+		// Build HART_MASK using readable conditional checks
+		let mut hart_mask = 0u64;
+		for cpu in fdt.cpus() {
+			if let Some(cpu_id) = cpu.property("reg").and_then(|p| p.as_usize())
+				&& cpu
+					.property("status")
+					.and_then(|p| p.as_str())
+					.is_some_and(|s| s != "disabled\u{0}")
+			{
+				hart_mask |= 1 << cpu_id;
 			}
-			NUM_CPUS.store(fdt.cpus().count().try_into().unwrap(), Ordering::Relaxed);
-			HART_MASK.store(hart_mask, Ordering::Relaxed);
 		}
+
+		NUM_CPUS.store(fdt.cpus().count().try_into().unwrap(), Ordering::Relaxed);
+		HART_MASK.store(hart_mask, Ordering::Relaxed);
+
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
@@ -76,6 +80,9 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 			}
 		}
 		#[cfg(feature = "smp")]
-		crate::application_processor_main();
+		{
+			// Optimized Secondary-HART initialization
+			crate::application_processor_main()
+		}
 	}
 }
