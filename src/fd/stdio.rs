@@ -43,9 +43,11 @@ impl ObjectInterface for GenericStdin {
 				read_bytes += 1;
 
 				if read_bytes >= buf.len() {
+					guard.flush();
 					return Poll::Ready(Ok(read_bytes));
 				}
 			}
+			guard.flush();
 
 			if read_bytes > 0 {
 				Poll::Ready(Ok(read_bytes))
