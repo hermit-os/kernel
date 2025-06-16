@@ -9,7 +9,9 @@ use uhyve_interface::{GuestVirtAddr, Hypercall};
 use zerocopy::IntoBytes;
 
 use crate::console::CONSOLE;
-use crate::fd::{ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO};
+use crate::fd::{
+	AccessPermission, FileAttr, ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO,
+};
 use crate::io;
 use crate::syscalls::interfaces::uhyve_hypercall;
 
@@ -58,6 +60,14 @@ impl ObjectInterface for GenericStdin {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
 	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
+	}
 }
 
 impl GenericStdin {
@@ -83,6 +93,14 @@ impl ObjectInterface for GenericStdout {
 
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
 	}
 }
 
@@ -110,6 +128,14 @@ impl ObjectInterface for GenericStderr {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
 	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
+	}
 }
 
 impl GenericStderr {
@@ -125,6 +151,14 @@ pub struct UhyveStdin;
 impl ObjectInterface for UhyveStdin {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
 	}
 }
 
@@ -158,6 +192,14 @@ impl ObjectInterface for UhyveStdout {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
 	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
+	}
 }
 
 impl UhyveStdout {
@@ -189,6 +231,14 @@ impl ObjectInterface for UhyveStderr {
 
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
+	}
+
+	async fn fstat(&self) -> io::Result<FileAttr> {
+		let attr = FileAttr {
+			st_mode: AccessPermission::S_IFCHR,
+			..Default::default()
+		};
+		Ok(attr)
 	}
 }
 
