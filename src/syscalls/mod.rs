@@ -543,8 +543,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	let whence = u8::try_from(whence).unwrap();
 	let whence = SeekWhence::try_from(whence).unwrap();
-	crate::fd::lseek(fd, offset, whence)
-		.map_or_else(|e| isize::try_from(-i32::from(e)).unwrap(), |_| 0)
+	crate::fd::lseek(fd, offset, whence).unwrap_or_else(|e| isize::try_from(-i32::from(e)).unwrap())
 }
 
 #[repr(C)]
