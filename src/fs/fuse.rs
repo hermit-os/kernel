@@ -234,7 +234,7 @@ pub(crate) mod ops {
 				nid,
 				fuse_lseek_in {
 					fh,
-					offset: offset.try_into().unwrap(),
+					offset: i64::try_from(offset).unwrap() as u64,
 					whence: num::ToPrimitive::to_u32(&whence).unwrap(),
 					..Default::default()
 				},
