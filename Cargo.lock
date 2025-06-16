@@ -724,6 +724,7 @@ dependencies = [
  "num",
  "num-derive",
  "num-traits",
+ "num_enum",
  "pci-ids",
  "pci_types",
  "rand_chacha",
