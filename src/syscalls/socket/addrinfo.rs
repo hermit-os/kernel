@@ -1,5 +1,7 @@
 use core::ffi::c_char;
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 use super::{sockaddr, socklen_t};
 use crate::errno::Errno;
 
@@ -16,17 +18,21 @@ struct addrinfo {
 	ai_next: *mut addrinfo,
 }
 
-const EAI_AGAIN: i32 = 2;
-const EAI_BADFLAGS: i32 = 3;
-const EAI_FAIL: i32 = 4;
-const EAI_FAMILY: i32 = 5;
-const EAI_MEMORY: i32 = 6;
-const EAI_NODATA: i32 = 7;
-const EAI_NONAME: i32 = 8;
-const EAI_SERVICE: i32 = 9;
-const EAI_SOCKTYPE: i32 = 10;
-const EAI_SYSTEM: i32 = 11;
-const EAI_OVERFLOW: i32 = 14;
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
+enum Eai {
+	Again = 2,
+	Badflags = 3,
+	Fail = 4,
+	Family = 5,
+	Memory = 6,
+	Nodata = 7,
+	Noname = 8,
+	Service = 9,
+	Socktype = 10,
+	System = 11,
+	Overflow = 14,
+}
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
