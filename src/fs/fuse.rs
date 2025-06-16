@@ -713,6 +713,7 @@ impl FuseFileHandleInner {
 			}
 
 			let rsp_offset = rsp.headers.op_header.offset;
+			self.offset = rsp.headers.op_header.offset.try_into().unwrap();
 
 			Ok(rsp_offset.try_into().unwrap())
 		} else {
