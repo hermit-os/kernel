@@ -24,7 +24,7 @@ use crate::fd::{
 	self, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd, dup_object,
 	dup_object2, get_object, isatty, remove_object,
 };
-use crate::fs::{self, FileAttr};
+use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
 use crate::syscalls::interfaces::SyscallInterface;
@@ -545,7 +545,9 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
-	crate::fd::lseek(fd, offset, num::FromPrimitive::from_i32(whence).unwrap())
+	let whence = u8::try_from(whence).unwrap();
+	let whence = SeekWhence::try_from(whence).unwrap();
+	crate::fd::lseek(fd, offset, whence)
 		.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)
 }
 
