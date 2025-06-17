@@ -69,14 +69,28 @@ pub type socklen_t = u32;
 pub type in_addr_t = u32;
 pub type in_port_t = u16;
 
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
+pub enum Sock {
+	Stream = 1,
+	Dgram = 2,
+}
+
 bitflags! {
 	#[derive(Debug, Copy, Clone)]
 	#[repr(C)]
-	pub struct SockType: i32 {
-		const SOCK_DGRAM = 2;
-		const SOCK_STREAM = 1;
+	pub struct SockFlags: i32 {
 		const SOCK_NONBLOCK = 0o4000;
 		const SOCK_CLOEXEC = 0o40000;
+		const _ = !0;
+	}
+}
+
+impl Sock {
+	pub fn from_bits(bits: i32) -> Option<(Self, SockFlags)> {
+		let sock = Sock::try_from(bits as u8).ok()?;
+		let flags = SockFlags::from_bits_retain(bits & !0xff);
+		Some((sock, flags))
 	}
 }
 
@@ -398,10 +412,14 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
+pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
 
 	let Ok(Ok(domain)) = u8::try_from(domain).map(Af::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
+
+	let Some((sock, sock_flags)) = Sock::from_bits(type_) else {
 		return -i32::from(Errno::Inval);
 	};
 
@@ -410,10 +428,10 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	}
 
 	#[cfg(feature = "vsock")]
-	if domain == Af::Vsock && type_.intersects(SockType::SOCK_STREAM) {
+	if domain == Af::Vsock && sock == Sock::Stream {
 		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
 
-		if type_.contains(SockType::SOCK_NONBLOCK) {
+		if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 			block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 		}
 
@@ -423,19 +441,18 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	if (domain == Af::Inet || domain == Af::Inet6)
-		&& type_.intersects(SockType::SOCK_STREAM | SockType::SOCK_DGRAM)
+	if (domain == Af::Inet || domain == Af::Inet6) && (sock == Sock::Stream || sock == Sock::Dgram)
 	{
 		let mut guard = NIC.lock();
 
 		if let NetworkState::Initialized(nic) = &mut *guard {
 			#[cfg(feature = "udp")]
-			if type_.contains(SockType::SOCK_DGRAM) {
+			if sock == Sock::Dgram {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
 				let socket = Arc::new(async_lock::RwLock::new(udp::Socket::new(handle, domain)));
 
-				if type_.contains(SockType::SOCK_NONBLOCK) {
+				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
@@ -445,12 +462,12 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			}
 
 			#[cfg(feature = "tcp")]
-			if type_.contains(SockType::SOCK_STREAM) {
+			if sock == Sock::Stream {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
 				let socket = Arc::new(async_lock::RwLock::new(tcp::Socket::new(handle, domain)));
 
-				if type_.contains(SockType::SOCK_NONBLOCK) {
+				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
