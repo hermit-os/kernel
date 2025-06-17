@@ -8,7 +8,7 @@ use crate::errno::Errno;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 struct addrinfo {
-	ai_flags: i32,
+	ai_flags: Ai,
 	ai_family: i32,
 	ai_socktype: i32,
 	ai_protocol: i32,
@@ -16,6 +16,23 @@ struct addrinfo {
 	ai_canonname: *mut c_char,
 	ai_addr: *mut sockaddr,
 	ai_next: *mut addrinfo,
+}
+
+bitflags! {
+	#[repr(transparent)]
+	#[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
+	pub struct Ai: i32 {
+		const PASSIVE = 0x001;
+		const CANONNAME = 0x002;
+		const NUMERICHOST = 0x004;
+		const NUMERICSERV = 0x008;
+		const ALL = 0x100;
+		const ADDRCONFIG = 0x400;
+		const V4MAPPED = 0x800;
+
+		// The source may set any bits
+		const _ = !0;
+	}
 }
 
 #[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
