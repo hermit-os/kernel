@@ -22,7 +22,7 @@ pub(crate) const TIMER_ABSTIME: i32 = 4;
 /// - `CLOCK_PROCESS_CPUTIME_ID`
 /// - `CLOCK_THREAD_CPUTIME_ID`
 /// - `CLOCK_MONOTONIC`
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespec) -> i32 {
 	assert!(
@@ -52,7 +52,7 @@ pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespe
 /// Supported clocks:
 /// - `CLOCK_REALTIME`
 /// - `CLOCK_MONOTONIC`
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespec) -> i32 {
 	assert!(
@@ -124,7 +124,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 	}
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_clock_settime(_clock_id: clockid_t, _tp: *const timespec) -> i32 {
 	// We don't support setting any clocks yet.
@@ -138,7 +138,7 @@ pub unsafe extern "C" fn sys_clock_settime(_clock_id: clockid_t, _tp: *const tim
 /// Returns `0` on success, `-EINVAL` otherwise.
 ///
 /// **Parameter `tz` should be set to `0` since tz is obsolete.**
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
@@ -156,7 +156,7 @@ pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	0
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_setitimer(
 	_which: i32,
