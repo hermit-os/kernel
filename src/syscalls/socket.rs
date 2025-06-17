@@ -408,7 +408,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 
 			0
 		}
-		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+		Err(e) => -i32::from(e),
 	}
 }
 
@@ -481,10 +481,10 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|e| -i32::from(e),
 		|v| {
 			block_on((*v).accept(), None).map_or_else(
-				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+				|e| -i32::from(e),
 				|(obj, endpoint)| match endpoint {
 					#[cfg(any(feature = "tcp", feature = "udp"))]
 					Endpoint::Ip(endpoint) => {
@@ -546,11 +546,8 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-		|v| {
-			block_on((*v).listen(backlog), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
-		},
+		|e| -i32::from(e),
+		|v| block_on((*v).listen(backlog), None).map_or_else(|e| -i32::from(e), |()| 0),
 	)
 }
 
@@ -565,7 +562,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|e| -i32::from(e),
 		|v| match family {
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET_OLD | AF_INET => {
@@ -574,7 +571,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
+					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET6 => {
@@ -583,7 +580,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
+					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(feature = "vsock")]
 			AF_VSOCK => {
@@ -592,7 +589,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() });
 				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
+					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			_ => -crate::errno::EINVAL,
 		},
@@ -637,11 +634,8 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-		|v| {
-			block_on((*v).connect(endpoint), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
-		},
+		|e| -i32::from(e),
+		|v| block_on((*v).connect(endpoint), None).map_or_else(|e| -i32::from(e), |()| 0),
 	)
 }
 
@@ -654,7 +648,7 @@ pub unsafe extern "C" fn sys_getsockname(
 ) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|e| -i32::from(e),
 		|v| {
 			if let Ok(Some(endpoint)) = block_on((*v).getsockname(), None) {
 				if !addr.is_null() && !addrlen.is_null() {
@@ -733,10 +727,10 @@ pub unsafe extern "C" fn sys_setsockopt(
 		let value = unsafe { *optval.cast::<i32>() };
 		let obj = get_object(fd);
 		obj.map_or_else(
-			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|e| -i32::from(e),
 			|v| {
 				block_on((*v).setsockopt(SocketOption::TcpNoDelay, value != 0), None)
-					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
+					.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
 	} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
@@ -766,10 +760,10 @@ pub unsafe extern "C" fn sys_getsockopt(
 		let optlen = unsafe { &mut *optlen };
 		let obj = get_object(fd);
 		obj.map_or_else(
-			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|e| -i32::from(e),
 			|v| {
 				block_on((*v).getsockopt(SocketOption::TcpNoDelay), None).map_or_else(
-					|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+					|e| -i32::from(e),
 					|value| {
 						if value {
 							*optval = 1;
@@ -797,7 +791,7 @@ pub unsafe extern "C" fn sys_getpeername(
 ) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|e| -i32::from(e),
 		|v| {
 			if let Ok(Some(endpoint)) = block_on((*v).getpeername(), None) {
 				if !addr.is_null() && !addrlen.is_null() {
@@ -872,11 +866,8 @@ pub unsafe extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags
 fn shutdown(sockfd: i32, how: i32) -> i32 {
 	let obj = get_object(sockfd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-		|v| {
-			block_on((*v).shutdown(how), None)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |()| 0)
-		},
+		|e| -i32::from(e),
+		|v| block_on((*v).shutdown(how), None).map_or_else(|e| -i32::from(e), |()| 0),
 	)
 }
 
@@ -898,7 +889,7 @@ pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32)
 	if flags == 0 {
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 		crate::fd::read(fd, slice).map_or_else(
-			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|e| isize::try_from(-i32::from(e)).unwrap(),
 			|v| v.try_into().unwrap(),
 		)
 	} else {
@@ -951,10 +942,10 @@ pub unsafe extern "C" fn sys_sendto(
 		let obj = get_object(fd);
 
 		obj.map_or_else(
-			|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+			|e| isize::try_from(-i32::from(e)).unwrap(),
 			|v| {
 				block_on((*v).sendto(slice, endpoint), None).map_or_else(
-					|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+					|e| isize::try_from(-i32::from(e)).unwrap(),
 					|v| v.try_into().unwrap(),
 				)
 			},
@@ -977,10 +968,10 @@ pub unsafe extern "C" fn sys_recvfrom(
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| {
 			block_on((*v).recvfrom(slice), None).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+				|e| isize::try_from(-i32::from(e)).unwrap(),
 				|(len, endpoint)| {
 					if !addr.is_null() && !addrlen.is_null() {
 						#[allow(unused_variables)]

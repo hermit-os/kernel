@@ -12,7 +12,6 @@ use core::{future, mem};
 use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
-use num_traits::FromPrimitive;
 use zerocopy::FromBytes;
 
 use crate::alloc::string::ToString;
@@ -235,7 +234,7 @@ pub(crate) mod ops {
 				fuse_lseek_in {
 					fh,
 					offset: i64::try_from(offset).unwrap() as u64,
-					whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+					whence: u8::from(whence).into(),
 					..Default::default()
 				},
 			);
@@ -1034,7 +1033,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
-			return Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap());
+			return Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap());
 		}
 
 		let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
@@ -1061,7 +1060,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
-			Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
+			Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap())
 		} else {
 			let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
 			Ok(FileAttr::from(entry_out.attr))
@@ -1103,7 +1102,7 @@ impl VfsNode for FuseDirectory {
 					Err(io::Error::ENOTDIR)
 				}
 			} else {
-				Err(io::Error::from_i32(-rsp.headers.out_header.error).unwrap())
+				Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap())
 			}
 		} else {
 			let file = FuseFileHandle::new();
@@ -1187,7 +1186,7 @@ impl VfsNode for FuseDirectory {
 		if rsp.headers.out_header.error == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(-rsp.headers.out_header.error).unwrap())
+			Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap())
 		}
 	}
 }

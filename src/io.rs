@@ -2,27 +2,30 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::{fmt, result};
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 // TODO: Integrate with src/errno.rs ?
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive)]
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
 pub enum Error {
-	ENOENT = crate::errno::ENOENT as isize,
-	ENOSYS = crate::errno::ENOSYS as isize,
-	EIO = crate::errno::EIO as isize,
-	EBADF = crate::errno::EBADF as isize,
-	EISDIR = crate::errno::EISDIR as isize,
-	EINVAL = crate::errno::EINVAL as isize,
-	ETIME = crate::errno::ETIME as isize,
-	EAGAIN = crate::errno::EAGAIN as isize,
-	EFAULT = crate::errno::EFAULT as isize,
-	ENOBUFS = crate::errno::ENOBUFS as isize,
-	ENOTCONN = crate::errno::ENOTCONN as isize,
-	ENOTDIR = crate::errno::ENOTDIR as isize,
-	EMFILE = crate::errno::EMFILE as isize,
-	EEXIST = crate::errno::EEXIST as isize,
-	EADDRINUSE = crate::errno::EADDRINUSE as isize,
-	EOVERFLOW = crate::errno::EOVERFLOW as isize,
-	ENOTSOCK = crate::errno::ENOTSOCK as isize,
+	ENOENT = crate::errno::ENOENT,
+	ENOSYS = crate::errno::ENOSYS,
+	EIO = crate::errno::EIO,
+	EBADF = crate::errno::EBADF,
+	EISDIR = crate::errno::EISDIR,
+	EINVAL = crate::errno::EINVAL,
+	ETIME = crate::errno::ETIME,
+	EAGAIN = crate::errno::EAGAIN,
+	EFAULT = crate::errno::EFAULT,
+	ENOBUFS = crate::errno::ENOBUFS,
+	ENOTCONN = crate::errno::ENOTCONN,
+	ENOTDIR = crate::errno::ENOTDIR,
+	EMFILE = crate::errno::EMFILE,
+	EEXIST = crate::errno::EEXIST,
+	EADDRINUSE = crate::errno::EADDRINUSE,
+	EOVERFLOW = crate::errno::EOVERFLOW,
+	ENOTSOCK = crate::errno::ENOTSOCK,
 }
 
 pub type Result<T> = result::Result<T, Error>;

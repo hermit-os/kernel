@@ -61,7 +61,7 @@ impl UhyveFileHandleInner {
 		let mut lseek_params = LseekParams {
 			fd: self.0,
 			offset,
-			whence: num::ToPrimitive::to_i32(&whence).unwrap(),
+			whence: u8::from(whence).into(),
 		};
 		uhyve_hypercall(Hypercall::FileLseek(&mut lseek_params));
 
