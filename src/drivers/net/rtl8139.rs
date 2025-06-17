@@ -13,7 +13,7 @@ use crate::arch::kernel::interrupts::*;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::NetworkDriver;
+use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::pci::PciDevice;
 use crate::executor::device::{RxToken, TxToken};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -565,7 +565,7 @@ pub(crate) fn init_device(
 
 	Ok(RTL8139Driver {
 		iobase,
-		mtu: 1514,
+		mtu: mtu(),
 		irq,
 		mac,
 		tx_in_use: [false; NO_TX_BUFFERS],

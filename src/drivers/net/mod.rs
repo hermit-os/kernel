@@ -5,6 +5,8 @@ pub mod rtl8139;
 #[cfg(not(all(target_arch = "x86_64", feature = "rtl8139")))]
 pub mod virtio;
 
+use core::str::FromStr;
+
 use smoltcp::phy::ChecksumCapabilities;
 
 #[allow(unused_imports)]
@@ -35,4 +37,22 @@ pub(crate) trait NetworkDriver: Driver {
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
 	fn handle_interrupt(&mut self);
+}
+
+// Default IP level MTU to use.
+const DEFAULT_IP_MTU: u16 = 1500;
+
+/// Default MTU to use.
+///
+/// This is 1500 IP MTU and a 14-byte ethernet header.
+const DEFAULT_MTU: u16 = DEFAULT_IP_MTU + 14;
+
+/// Determines the MTU that should be used as configured by crate features
+/// or environment variables.
+pub(crate) fn mtu() -> u16 {
+	if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
+		u16::from_str(&my_mtu).unwrap()
+	} else {
+		DEFAULT_MTU
+	}
 }

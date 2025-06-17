@@ -26,7 +26,7 @@ use crate::arch::kernel::interrupts::*;
 use crate::arch::kernel::mmio as hardware;
 use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::NetworkDriver;
+use crate::drivers::net::{NetworkDriver, mtu};
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci as hardware;
 use crate::drivers::{Driver, InterruptLine};
@@ -705,7 +705,7 @@ pub fn init_device(
 
 	Ok(GEMDriver {
 		gem,
-		mtu: 1500,
+		mtu: mtu(),
 		irq,
 		mac,
 		rx_counter: 0,

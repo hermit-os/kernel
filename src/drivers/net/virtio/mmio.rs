@@ -2,8 +2,6 @@
 //!
 //! The module contains ...
 
-use core::str::FromStr;
-
 use smoltcp::phy::ChecksumCapabilities;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
@@ -38,13 +36,6 @@ impl VirtioNetDriver<Uninit> {
 		let isr_stat = IsrStatus::new(registers.borrow_mut());
 		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
-		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-			u16::from_str(&my_mtu).unwrap()
-		} else {
-			// fallback to the default MTU
-			1514
-		};
-
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),
@@ -52,7 +43,6 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			inner: Uninit,
 			num_vqs: 0,
-			mtu,
 			irq,
 			checksums: ChecksumCapabilities::default(),
 		})
