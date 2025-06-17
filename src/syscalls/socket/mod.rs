@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 #![allow(nonstandard_style)]
+
+mod addrinfo;
+
 use alloc::sync::Arc;
 use core::ffi::{c_char, c_void};
 use core::mem::size_of;
@@ -54,17 +57,6 @@ pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
 pub const TCP_NODELAY: i32 = 1;
 pub const MSG_PEEK: i32 = 1;
-pub const EAI_AGAIN: i32 = 2;
-pub const EAI_BADFLAGS: i32 = 3;
-pub const EAI_FAIL: i32 = 4;
-pub const EAI_FAMILY: i32 = 5;
-pub const EAI_MEMORY: i32 = 6;
-pub const EAI_NODATA: i32 = 7;
-pub const EAI_NONAME: i32 = 8;
-pub const EAI_SERVICE: i32 = 9;
-pub const EAI_SOCKTYPE: i32 = 10;
-pub const EAI_SYSTEM: i32 = 11;
-pub const EAI_OVERFLOW: i32 = 14;
 pub type sa_family_t = u8;
 pub type socklen_t = u32;
 pub type in_addr_t = u32;
@@ -296,20 +288,6 @@ pub struct ipv6_mreq {
 	pub ipv6mr_multiaddr: in6_addr,
 	pub ipv6mr_interface: u32,
 }
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct addrinfo {
-	pub ai_flags: i32,
-	pub ai_family: i32,
-	pub ai_socktype: i32,
-	pub ai_protocol: i32,
-	pub ai_addrlen: socklen_t,
-	pub ai_canonname: *mut c_char,
-	pub ai_addr: *mut sockaddr,
-	pub ai_next: *mut addrinfo,
-}
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct linger {
@@ -828,21 +806,6 @@ pub unsafe extern "C" fn sys_getpeername(
 			0
 		},
 	)
-}
-
-#[hermit_macro::system]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_freeaddrinfo(_ai: *mut addrinfo) {}
-
-#[hermit_macro::system]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_getaddrinfo(
-	_nodename: *const c_char,
-	_servname: *const c_char,
-	_hints: *const addrinfo,
-	_res: *mut *mut addrinfo,
-) -> i32 {
-	-i32::from(Errno::Inval)
 }
 
 #[hermit_macro::system(errno)]
