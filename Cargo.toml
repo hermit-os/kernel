@@ -48,11 +48,15 @@ harness = false
 default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "vsock"]
 acpi = []
 common-os = []
-dhcpv4 = ["smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
+dhcpv4 = [
+    "smoltcp",
+    "smoltcp/proto-dhcpv4",
+    "smoltcp/socket-dhcpv4",
+]
 dns = ["smoltcp", "smoltcp/socket-dns"]
 fs = ["fuse"]
-fsgsbase = []
 fuse = ["pci", "dep:fuse-abi", "fuse-abi/num_enum"]
+fsgsbase = []
 gem-net = ["tcp", "dep:tock-registers"]
 idle-poll = []
 mmap = []
