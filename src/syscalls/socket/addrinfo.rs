@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
-use core::ffi::c_char;
+use core::ffi::{CStr, c_char};
+use core::{fmt, ptr};
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 
-use super::{sockaddr, socklen_t};
+use super::{Af, Ipproto, Sock, SockFlags, sockaddr, sockaddrRef, socklen_t};
 use crate::errno::Errno;
 
 #[repr(C)]
-#[derive(Debug)]
 struct addrinfo {
 	ai_flags: Ai,
 	ai_family: i32,
@@ -17,6 +17,55 @@ struct addrinfo {
 	ai_canonname: *mut c_char,
 	ai_addr: *mut sockaddr,
 	ai_next: Option<Box<addrinfo>>,
+}
+
+impl addrinfo {
+	fn ai_family(&self) -> Option<Af> {
+		let ai_family = u8::try_from(self.ai_family).ok()?;
+		Af::try_from(ai_family).ok()
+	}
+
+	fn ai_socktype(&self) -> Option<(Sock, SockFlags)> {
+		Sock::from_bits(self.ai_socktype)
+	}
+
+	fn ai_protocol(&self) -> Option<Ipproto> {
+		let ai_protocol = u8::try_from(self.ai_protocol).ok()?;
+		Ipproto::try_from(ai_protocol).ok()
+	}
+
+	fn ai_addr(&self) -> Option<Result<sockaddrRef<'_>, TryFromPrimitiveError<Af>>> {
+		if self.ai_addr.is_null() {
+			return None;
+		}
+
+		let ai_addr = unsafe { &*ptr::from_ref(&self.ai_addr).cast() };
+		let ret = unsafe { sockaddr::as_ref(ai_addr) };
+		Some(ret)
+	}
+
+	fn ai_canonname(&self) -> Option<&CStr> {
+		if self.ai_canonname.is_null() {
+			return None;
+		}
+
+		let ai_canonname = unsafe { CStr::from_ptr(self.ai_canonname) };
+		Some(ai_canonname)
+	}
+}
+
+impl fmt::Debug for addrinfo {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.debug_struct("addrinfo")
+			.field("ai_flags", &self.ai_flags)
+			.field("ai_family", &self.ai_family())
+			.field("ai_socktype", &self.ai_socktype())
+			.field("ai_protocol", &self.ai_protocol())
+			.field("ai_addrlen", &self.ai_addrlen)
+			.field("ai_addr", &self.ai_addr())
+			.field("ai_canonname", &self.ai_canonname())
+			.finish()
+	}
 }
 
 bitflags! {
