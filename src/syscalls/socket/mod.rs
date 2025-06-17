@@ -38,10 +38,15 @@ pub enum Af {
 	Vsock = 2,
 }
 
-pub const IPPROTO_IP: i32 = 0;
-pub const IPPROTO_IPV6: i32 = 41;
-pub const IPPROTO_TCP: i32 = 6;
-pub const IPPROTO_UDP: i32 = 17;
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
+pub enum Ipproto {
+	Ip = 0,
+	Ipv6 = 41,
+	Tcp = 6,
+	Udp = 17,
+}
+
 pub const IPV6_ADD_MEMBERSHIP: i32 = 12;
 pub const IPV6_DROP_MEMBERSHIP: i32 = 13;
 pub const IPV6_MULTICAST_LOOP: i32 = 19;
@@ -716,9 +721,17 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	debug!("sys_setsockopt: {fd}, level {level}, optname {optname}");
+	if level == SOL_SOCKET && optname == SO_REUSEADDR {
+		return 0;
+	}
 
-	if level == IPPROTO_TCP
+	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
+
+	debug!("sys_setsockopt: {fd}, level {level:?}, optname {optname}");
+
+	if level == Ipproto::Tcp
 		&& optname == TCP_NODELAY
 		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
 	{
@@ -735,8 +748,6 @@ pub unsafe extern "C" fn sys_setsockopt(
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
-	} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
-		0
 	} else {
 		-i32::from(Errno::Inval)
 	}
@@ -751,9 +762,13 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	debug!("sys_getsockopt: {fd}, level {level}, optname {optname}");
+	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
 
-	if level == IPPROTO_TCP && optname == TCP_NODELAY {
+	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname}");
+
+	if level == Ipproto::Tcp && optname == TCP_NODELAY {
 		if optval.is_null() || optlen.is_null() {
 			return -i32::from(Errno::Inval);
 		}
