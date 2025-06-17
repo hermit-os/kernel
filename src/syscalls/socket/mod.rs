@@ -10,7 +10,7 @@ use core::mem::size_of;
 use core::ops::DerefMut;
 
 use cfg_if::cfg_if;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
@@ -119,6 +119,35 @@ pub struct sockaddr {
 	pub sa_len: u8,
 	pub sa_family: sa_family_t,
 	pub sa_data: [c_char; 14],
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum sockaddrRef<'a> {
+	sockaddr(&'a sockaddr),
+	sockaddr_in(&'a sockaddr_in),
+	sockaddr_in6(&'a sockaddr_in6),
+	#[cfg(feature = "vsock")]
+	sockaddr_vm(&'a sockaddr_vm),
+}
+
+impl sockaddr {
+	pub unsafe fn sa_family(ptr: *const Self) -> Result<Af, TryFromPrimitiveError<Af>> {
+		let sa_family = unsafe { (*ptr).sa_family };
+		Af::try_from(sa_family)
+	}
+
+	pub unsafe fn as_ref(ptr: &*const Self) -> Result<sockaddrRef<'_>, TryFromPrimitiveError<Af>> {
+		let ptr = *ptr;
+		let sa_family = unsafe { Self::sa_family(ptr)? };
+		let ret = match sa_family {
+			Af::Unspec => sockaddrRef::sockaddr(unsafe { &*ptr }),
+			Af::Inet => sockaddrRef::sockaddr_in(unsafe { &*ptr.cast() }),
+			Af::Inet6 => sockaddrRef::sockaddr_in6(unsafe { &*ptr.cast() }),
+			#[cfg(feature = "vsock")]
+			Af::Vsock => sockaddrRef::sockaddr_vm(unsafe { &*ptr.cast() }),
+		};
+		Ok(ret)
+	}
 }
 
 #[cfg(feature = "vsock")]
