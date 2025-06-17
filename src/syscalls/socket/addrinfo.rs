@@ -10,8 +10,8 @@ struct addrinfo {
 	ai_socktype: i32,
 	ai_protocol: i32,
 	ai_addrlen: socklen_t,
-	ai_canonname: *mut c_char,
 	ai_addr: *mut sockaddr,
+	ai_canonname: *mut c_char,
 	ai_next: *mut addrinfo,
 }
 
