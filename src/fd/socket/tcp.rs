@@ -16,7 +16,7 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
-use crate::syscalls::socket::{AF_INET, AF_INET6};
+use crate::syscalls::socket::Af;
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
 /// further receives will be disallowed
@@ -43,16 +43,16 @@ pub struct Socket {
 }
 
 impl Socket {
-	pub fn new(h: Handle, domain: i32) -> Self {
+	pub fn new(h: Handle, domain: Af) -> Self {
 		let mut handle = BTreeSet::new();
 		handle.insert(h);
 
-		let endpoint = if domain == AF_INET {
+		let endpoint = if domain == Af::Inet {
 			IpEndpoint::new(Ipv4Address::UNSPECIFIED.into(), 0)
-		} else if domain == AF_INET6 {
+		} else if domain == Af::Inet6 {
 			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
 		} else {
-			panic!("Unsupported domain for TCP socket: {}", domain);
+			panic!("Unsupported domain for TCP socket: {domain:?}");
 		};
 
 		Self {

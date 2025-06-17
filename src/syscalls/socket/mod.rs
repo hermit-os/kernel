@@ -10,6 +10,7 @@ use core::mem::size_of;
 use core::ops::DerefMut;
 
 use cfg_if::cfg_if;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
@@ -27,10 +28,16 @@ use crate::fd::{
 };
 use crate::syscalls::block_on;
 
-pub const AF_UNSPEC: i32 = 0;
-pub const AF_INET: i32 = 3;
-pub const AF_INET6: i32 = 1;
-pub const AF_VSOCK: i32 = 2;
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
+pub enum Af {
+	Unspec = 0,
+	Inet = 3,
+	Inet6 = 1,
+	#[cfg(feature = "vsock")]
+	Vsock = 2,
+}
+
 pub const IPPROTO_IP: i32 = 0;
 pub const IPPROTO_IPV6: i32 = 41;
 pub const IPPROTO_TCP: i32 = 6;
@@ -134,7 +141,7 @@ impl From<VsockEndpoint> for sockaddr_vm {
 	fn from(endpoint: VsockEndpoint) -> Self {
 		Self {
 			svm_len: core::mem::size_of::<sockaddr_vm>().try_into().unwrap(),
-			svm_family: AF_VSOCK.try_into().unwrap(),
+			svm_family: Af::Vsock.into(),
 			svm_port: endpoint.port,
 			svm_cid: endpoint.cid,
 			..Default::default()
@@ -191,7 +198,7 @@ impl From<IpEndpoint> for sockaddr_in {
 				Self {
 					sin_len: core::mem::size_of::<sockaddr_in>().try_into().unwrap(),
 					sin_port: endpoint.port.to_be(),
-					sin_family: AF_INET.try_into().unwrap(),
+					sin_family: Af::Inet.into(),
 					sin_addr,
 					..Default::default()
 				}
@@ -265,7 +272,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 				Self {
 					sin6_len: core::mem::size_of::<sockaddr_in6>().try_into().unwrap(),
 					sin6_port: endpoint.port.to_be(),
-					sin6_family: AF_INET6.try_into().unwrap(),
+					sin6_family: Af::Inet6.into(),
 					sin6_addr: in6_addr,
 					..Default::default()
 				}
@@ -394,12 +401,16 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
 	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
 
+	let Ok(Ok(domain)) = u8::try_from(domain).map(Af::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
+
 	if protocol != 0 {
 		return -i32::from(Errno::Inval);
 	}
 
 	#[cfg(feature = "vsock")]
-	if domain == AF_VSOCK && type_.intersects(SockType::SOCK_STREAM) {
+	if domain == Af::Vsock && type_.intersects(SockType::SOCK_STREAM) {
 		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
 
 		if type_.contains(SockType::SOCK_NONBLOCK) {
@@ -412,7 +423,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	if (domain == AF_INET || domain == AF_INET6)
+	if (domain == Af::Inet || domain == Af::Inet6)
 		&& type_.intersects(SockType::SOCK_STREAM | SockType::SOCK_DGRAM)
 	{
 		let mut guard = NIC.lock();
@@ -532,14 +543,16 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 		return -i32::from(Errno::Destaddrreq);
 	}
 
-	let family: i32 = unsafe { (*name).sa_family.into() };
+	let Ok(family) = (unsafe { Af::try_from((*name).sa_family) }) else {
+		return -i32::from(Errno::Inval);
+	};
 
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| match family {
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			AF_INET => {
+			Af::Inet => {
 				if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return -i32::from(Errno::Inval);
 				}
@@ -548,7 +561,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			AF_INET6 => {
+			Af::Inet6 => {
 				if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return -i32::from(Errno::Inval);
 				}
@@ -557,7 +570,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(feature = "vsock")]
-			AF_VSOCK => {
+			Af::Vsock => {
 				if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 					return -i32::from(Errno::Inval);
 				}
@@ -577,25 +590,27 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		return -i32::from(Errno::Inval);
 	}
 
-	let sa_family = unsafe { i32::from((*name).sa_family) };
+	let Ok(sa_family) = (unsafe { Af::try_from((*name).sa_family) }) else {
+		return -i32::from(Errno::Inval);
+	};
 
 	let endpoint = match sa_family {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		AF_INET => {
+		Af::Inet => {
 			if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in>() }))
 		}
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		AF_INET6 => {
+		Af::Inet6 => {
 			if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() }))
 		}
 		#[cfg(feature = "vsock")]
-		AF_VSOCK => {
+		Af::Vsock => {
 			if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
@@ -866,15 +881,17 @@ pub unsafe extern "C" fn sys_sendto(
 
 	cfg_if! {
 		if #[cfg(any(feature = "tcp", feature = "udp"))] {
-			let sa_family = unsafe { i32::from((*addr).sa_family) };
+			let Ok(sa_family) = (unsafe { Af::try_from((*addr).sa_family) }) else {
+				return (-i32::from(Errno::Inval)).try_into().unwrap();
+			};
 
-			if sa_family == AF_INET {
+			if sa_family == Af::Inet {
 				if addr_len < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
 
 				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr.cast::<sockaddr_in>())})));
-			} else if sa_family == AF_INET6 {
+			} else if sa_family == Af::Inet6 {
 				if addr_len < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
