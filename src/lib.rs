@@ -16,6 +16,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(maybe_uninit_write_slice)]
 #![feature(never_type)]
+#![feature(new_zeroed_alloc)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
 #![cfg_attr(
