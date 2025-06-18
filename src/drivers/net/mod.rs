@@ -2,7 +2,10 @@
 pub mod gem;
 #[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 pub mod rtl8139;
-#[cfg(not(all(target_arch = "x86_64", feature = "rtl8139")))]
+#[cfg(not(any(
+	all(target_arch = "x86_64", feature = "rtl8139"),
+	all(target_arch = "riscv64", not(feature = "pci"), feature = "gem-net")
+)))]
 pub mod virtio;
 
 use core::str::FromStr;

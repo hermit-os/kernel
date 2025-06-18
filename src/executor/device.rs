@@ -235,7 +235,22 @@ impl phy::RxToken for RxToken {
 	where
 		F: FnOnce(&[u8]) -> R,
 	{
-		f(&self.buffer[..])
+		let res = f(&self.buffer[..]);
+
+		#[cfg(all(
+			not(all(target_arch = "x86_64", feature = "pci", feature = "rtl8139")),
+			not(all(target_arch = "riscv64", not(feature = "pci"), feature = "gem-net")),
+			any(feature = "tcp", feature = "udp")
+		))]
+		if let Some(driver) = hardware::get_network_driver() {
+			driver
+				.lock()
+				.inner
+				.recv_vqs
+				.return_packet_buffer(self.buffer);
+		}
+
+		res
 	}
 }
 
