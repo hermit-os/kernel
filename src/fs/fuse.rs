@@ -431,15 +431,15 @@ impl From<fuse_attr> for FileAttr {
 			st_blocks: attr.blocks.try_into().unwrap(),
 			st_atim: timespec {
 				tv_sec: attr.atime as time_t,
-				tv_nsec: attr.atimensec as i32,
+				tv_nsec: i64::from(attr.atimensec),
 			},
 			st_mtim: timespec {
 				tv_sec: attr.mtime as time_t,
-				tv_nsec: attr.mtimensec as i32,
+				tv_nsec: i64::from(attr.mtimensec),
 			},
 			st_ctim: timespec {
 				tv_sec: attr.ctime as time_t,
-				tv_nsec: attr.ctimensec as i32,
+				tv_nsec: i64::from(attr.ctimensec),
 			},
 			..Default::default()
 		}
