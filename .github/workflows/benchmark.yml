@@ -17,6 +17,7 @@ jobs:
     benchmark:
         name: Run Benchmarks
         runs-on: [self-hosted]
+        environment: ${{ github.event_name == 'push' && 'benchmark' || 'default' }}
 
         strategy:
           matrix:
@@ -80,9 +81,9 @@ jobs:
             with:
               tool: 'hermit-bench'
               output-file-path: ${{ steps.run-bench.outputs.result-file }}
-              github-token: ${{ secrets.GITHUB_TOKEN }}
+              github-token: ${{ github.event_name == 'push' && secrets.HERMIT_BENCH_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
               benchmark-data-dir-path: benchmarks
               gh-repository: github.com/hermit-os/hermit-bench
               comment-always: true
               benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
-              auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }} 
+              auto-push: ${{ github.event_name == 'push' }} 
