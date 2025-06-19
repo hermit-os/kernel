@@ -3,19 +3,19 @@
         "name": "alloc_benchmarks",
         "path": "target/x86_64-unknown-hermit/release/alloc_benchmarks",
         "group": "File Size",
-        "plot_group": "Benchmark File Size"
+        "plot_group": "Misc Benchmark File Size"
     },
     {
         "name": "micro_benchmarks",
         "path": "target/x86_64-unknown-hermit/release/micro_benchmarks",
         "group": "File Size",
-        "plot_group": "Benchmark File Size"
+        "plot_group": "Misc Benchmark File Size"
     },
     {
         "name": "mutex test",
         "path": "target/x86_64-unknown-hermit/release/mutex",
         "group": "File Size",
-        "plot_group": "Benchmark File Size"
+        "plot_group": "Misc Benchmark File Size"
     },
     {
         "name": "Micro Benchmarks",
