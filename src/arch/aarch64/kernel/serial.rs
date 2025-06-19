@@ -1,10 +1,17 @@
 use core::arch::asm;
 
+#[cfg(all(feature = "pci", feature = "console"))]
+use crate::drivers::pci::get_console_driver;
+#[cfg(all(not(feature = "pci"), feature = "console"))]
+use crate::kernel::mmio::get_console_driver;
 use crate::syscalls::interfaces::serial_buf_hypercall;
 
 enum SerialInner {
+	None,
 	Uart(u32),
 	Uhyve,
+	#[cfg(feature = "console")]
+	Virtio,
 }
 
 pub struct SerialPort {
@@ -12,20 +19,32 @@ pub struct SerialPort {
 }
 
 impl SerialPort {
-	pub fn new(port_address: u32) -> Self {
+	pub fn new(port_address: Option<u64>) -> Self {
 		if crate::env::is_uhyve() {
 			Self {
 				inner: SerialInner::Uhyve,
 			}
+		} else if let Some(port_address) = port_address {
+			Self {
+				inner: SerialInner::Uart(port_address.try_into().unwrap()),
+			}
 		} else {
 			Self {
-				inner: SerialInner::Uart(port_address),
+				inner: SerialInner::None,
 			}
 		}
 	}
 
+	#[cfg(feature = "console")]
+	pub fn switch_to_virtio_console(&mut self) {
+		self.inner = SerialInner::Virtio;
+	}
+
 	pub fn write_buf(&mut self, buf: &[u8]) {
 		match &mut self.inner {
+			SerialInner::None => {
+				// No serial port configured, do nothing.
+			}
 			SerialInner::Uhyve => {
 				serial_buf_hypercall(buf);
 			}
@@ -52,6 +71,12 @@ impl SerialPort {
 							options(nostack),
 						);
 					}
+				}
+			}
+			#[cfg(feature = "console")]
+			SerialInner::Virtio => {
+				if let Some(console_driver) = get_console_driver() {
+					let _ = console_driver.lock().write(buf);
 				}
 			}
 		}

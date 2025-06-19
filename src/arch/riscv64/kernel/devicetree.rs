@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use core::ptr::NonNull;
 
@@ -216,6 +218,7 @@ pub fn init_drivers() {
 				// Verify the device-ID to find the network card
 				let id = mmio.as_ptr().device_id().read();
 
+				#[cfg(any(feature = "tcp", feature = "udp"))]
 				if id != virtio::Id::Net {
 					debug!("It's not a network card at {mmio:p}");
 					return;

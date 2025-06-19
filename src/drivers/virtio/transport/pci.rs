@@ -3,7 +3,7 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-#[cfg(feature = "vsock")]
+#[cfg(any(feature = "vsock", feature = "console"))]
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -21,6 +21,8 @@ use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::memory_barrier;
 use crate::arch::pci::PciConfigRegion;
+#[cfg(feature = "console")]
+use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
@@ -829,6 +831,22 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "console")]
+		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
+			Ok(virt_console_drv) => {
+				info!("Virtio console driver initialized.");
+
+				let irq = device.get_irq().unwrap();
+				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {irq}");
+
+				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio console driver could not be initialized with device: {device_id:x}");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
 			Ok(virt_sock_drv) => {
@@ -879,6 +897,8 @@ pub(crate) enum VirtioDriver {
 		any(feature = "tcp", feature = "udp")
 	))]
 	Network(VirtioNetDriver),
+	#[cfg(feature = "console")]
+	Console(Box<VirtioConsoleDriver>),
 	#[cfg(feature = "vsock")]
 	Vsock(Box<VirtioVsockDriver>),
 	#[cfg(feature = "fuse")]

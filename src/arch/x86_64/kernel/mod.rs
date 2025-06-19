@@ -18,7 +18,10 @@ pub mod apic;
 pub mod core_local;
 pub mod gdt;
 pub mod interrupts;
-#[cfg(all(not(feature = "pci"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(
+	not(feature = "pci"),
+	any(feature = "console", feature = "tcp", feature = "udp")
+))]
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
@@ -78,6 +81,11 @@ impl Console {
 
 	pub fn register_waker(&mut self, waker: &Waker) {
 		self.serial_port.register_waker(waker);
+	}
+
+	#[cfg(all(feature = "pci", feature = "console"))]
+	pub fn switch_to_virtio_console(&mut self) {
+		self.serial_port.switch_to_virtio_console();
 	}
 }
 

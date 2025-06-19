@@ -2,11 +2,16 @@ use alloc::vec::Vec;
 use core::ptr::NonNull;
 
 use align_address::Align;
+use arm_gic::{IntId, Trigger};
 use hermit_sync::{InterruptTicketMutex, without_interrupts};
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
+use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, PageSize};
+#[cfg(feature = "console")]
+use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 use crate::init_cell::InitCell;
@@ -17,6 +22,8 @@ pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::n
 pub(crate) enum MmioDriver {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
+	#[cfg(feature = "console")]
+	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
@@ -24,6 +31,17 @@ impl MmioDriver {
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
+			#[cfg(feature = "console")]
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "console")]
+	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
+		match self {
+			Self::VirtioConsole(drv) => Some(drv),
+			#[cfg(any(feature = "tcp", feature = "udp"))]
+			_ => None,
 		}
 	}
 }
@@ -40,6 +58,14 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.find_map(|drv| drv.get_network_driver())
 }
 
+#[cfg(feature = "console")]
+pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_console_driver())
+}
+
 pub fn init_drivers() {
 	without_interrupts(|| {
 		if let Some(fdt) = crate::env::fdt() {
@@ -53,12 +79,16 @@ pub fn init_drivers() {
 								.next()
 								.unwrap();
 							let mut irq = 0;
+							let mut irqtype = 0;
+							let mut irqflags = 0;
 
 							for prop in node.properties() {
 								if prop.name == "interrupts" {
-									irq = u32::from_be_bytes(prop.value[4..8].try_into().unwrap())
-										.try_into()
-										.unwrap();
+									irqtype =
+										u32::from_be_bytes(prop.value[0..4].try_into().unwrap());
+									irq = u32::from_be_bytes(prop.value[4..8].try_into().unwrap());
+									irqflags =
+										u32::from_be_bytes(prop.value[8..12].try_into().unwrap());
 									break;
 								}
 							}
@@ -95,17 +125,100 @@ pub fn init_drivers() {
 
 							// Verify the device-ID to find the network card
 							let id = mmio.as_ptr().device_id().read();
+							let cpu_id: usize = 0;
 
-							#[cfg(any(feature = "tcp", feature = "udp"))]
-							if id == virtio::Id::Net {
-								trace!("Found network card at {mmio:p}, irq: {irq}");
-								if let Ok(VirtioDriver::Network(drv)) =
-									mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-								{
-									register_driver(MmioDriver::VirtioNet(
-										hermit_sync::InterruptTicketMutex::new(drv),
-									));
+							match id {
+								#[cfg(any(feature = "tcp", feature = "udp"))]
+								virtio::Id::Net => {
+									debug!(
+										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+									);
+									if let Ok(VirtioDriver::Network(drv)) =
+										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+										&& let Some(gic) = GIC.lock().as_mut()
+									{
+										// enable timer interrupt
+										let virtio_irqid = if irqtype == 1 {
+											IntId::ppi(irq)
+										} else if irqtype == 0 {
+											IntId::spi(irq)
+										} else {
+											panic!("Invalid interrupt type");
+										};
+										gic.set_interrupt_priority(
+											virtio_irqid,
+											Some(cpu_id),
+											0x00,
+										);
+										if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+											gic.set_trigger(
+												virtio_irqid,
+												Some(cpu_id),
+												Trigger::Level,
+											);
+										} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+											gic.set_trigger(
+												virtio_irqid,
+												Some(cpu_id),
+												Trigger::Edge,
+											);
+										} else {
+											panic!("Invalid interrupt level!");
+										}
+										gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+
+										register_driver(MmioDriver::VirtioNet(
+											hermit_sync::InterruptTicketMutex::new(drv),
+										));
+									}
 								}
+								#[cfg(feature = "console")]
+								virtio::Id::Console => {
+									debug!(
+										"Found console at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+									);
+									if let Ok(VirtioDriver::Console(drv)) =
+										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+									{
+										if let Some(gic) = GIC.lock().as_mut() {
+											// enable timer interrupt
+											let virtio_irqid = if irqtype == 1 {
+												IntId::ppi(irq)
+											} else if irqtype == 0 {
+												IntId::spi(irq)
+											} else {
+												panic!("Invalid interrupt type");
+											};
+											gic.set_interrupt_priority(
+												virtio_irqid,
+												Some(cpu_id),
+												0x00,
+											);
+											if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+												gic.set_trigger(
+													virtio_irqid,
+													Some(cpu_id),
+													Trigger::Level,
+												);
+											} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1
+											{
+												gic.set_trigger(
+													virtio_irqid,
+													Some(cpu_id),
+													Trigger::Edge,
+												);
+											} else {
+												panic!("Invalid interrupt level!");
+											}
+											gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+
+											register_driver(MmioDriver::VirtioConsole(
+												hermit_sync::InterruptTicketMutex::new(*drv),
+											));
+										}
+									}
+								}
+								_ => {}
 							}
 						}
 					}
@@ -117,4 +230,15 @@ pub fn init_drivers() {
 	});
 
 	MMIO_DRIVERS.finalize();
+
+	#[cfg(feature = "console")]
+	{
+		if get_console_driver().is_some() {
+			info!("Switch to virtio console");
+			crate::console::CONSOLE
+				.lock()
+				.inner
+				.switch_to_virtio_console();
+		}
+	}
 }
