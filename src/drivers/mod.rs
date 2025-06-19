@@ -1,5 +1,7 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
+#[cfg(feature = "console")]
+pub mod console;
 #[cfg(feature = "fuse")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
@@ -11,7 +13,8 @@ pub mod pci;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 	feature = "fuse",
-	feature = "vsock"
+	feature = "vsock",
+	feature = "console"
 ))]
 pub mod virtio;
 #[cfg(feature = "vsock")]
@@ -37,17 +40,25 @@ pub mod error {
 	#[cfg(any(
 		all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 		feature = "fuse",
-		feature = "vsock"
+		feature = "vsock",
+		feature = "console"
 	))]
 	use crate::drivers::virtio::error::VirtioError;
 
-	#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
+	#[cfg(any(
+		feature = "tcp",
+		feature = "udp",
+		feature = "fuse",
+		feature = "vsock",
+		feature = "console"
+	))]
 	#[derive(Debug)]
 	pub enum DriverError {
 		#[cfg(any(
 			all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 			feature = "fuse",
-			feature = "vsock"
+			feature = "vsock",
+			feature = "console"
 		))]
 		InitVirtioDevFail(VirtioError),
 		#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
@@ -59,7 +70,8 @@ pub mod error {
 	#[cfg(any(
 		all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 		feature = "fuse",
-		feature = "vsock"
+		feature = "vsock",
+		feature = "console"
 	))]
 	impl From<VirtioError> for DriverError {
 		fn from(err: VirtioError) -> Self {
@@ -81,7 +93,13 @@ pub mod error {
 		}
 	}
 
-	#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
+	#[cfg(any(
+		feature = "tcp",
+		feature = "udp",
+		feature = "fuse",
+		feature = "vsock",
+		feature = "console"
+	))]
 	impl core::fmt::Display for DriverError {
 		#[allow(unused_variables)]
 		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -89,7 +107,8 @@ pub mod error {
 				#[cfg(any(
 					all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 					feature = "fuse",
-					feature = "vsock"
+					feature = "vsock",
+					feature = "console"
 				))]
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {err:?}")
@@ -130,7 +149,7 @@ pub(crate) fn init() {
 	#[cfg(all(
 		not(feature = "pci"),
 		target_arch = "aarch64",
-		any(feature = "tcp", feature = "udp")
+		any(feature = "tcp", feature = "udp", feature = "console")
 	))]
 	crate::arch::aarch64::kernel::mmio::init_drivers();
 

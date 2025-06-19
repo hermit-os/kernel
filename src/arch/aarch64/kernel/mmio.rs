@@ -7,6 +7,9 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::arch::aarch64::mm::paging::{self, PageSize};
+#[cfg(feature = "console")]
+use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 use crate::init_cell::InitCell;
@@ -17,6 +20,8 @@ pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::n
 pub(crate) enum MmioDriver {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
+	#[cfg(feature = "console")]
+	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
@@ -24,6 +29,17 @@ impl MmioDriver {
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
+			#[cfg(feature = "console")]
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "console")]
+	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
+		match self {
+			Self::VirtioConsole(drv) => Some(drv),
+			#[cfg(any(feature = "tcp", feature = "udp"))]
+			_ => None,
 		}
 	}
 }
@@ -38,6 +54,14 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_network_driver())
+}
+
+#[cfg(feature = "console")]
+pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_console_driver())
 }
 
 pub fn init_drivers() {
@@ -96,16 +120,30 @@ pub fn init_drivers() {
 							// Verify the device-ID to find the network card
 							let id = mmio.as_ptr().device_id().read();
 
-							#[cfg(any(feature = "tcp", feature = "udp"))]
-							if id == virtio::Id::Net {
-								trace!("Found network card at {mmio:p}, irq: {irq}");
-								if let Ok(VirtioDriver::Network(drv)) =
-									mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-								{
-									register_driver(MmioDriver::VirtioNet(
-										hermit_sync::InterruptTicketMutex::new(drv),
-									));
+							match id {
+								#[cfg(any(feature = "tcp", feature = "udp"))]
+								virtio::Id::Net => {
+									trace!("Found network card at {mmio:p}, irq: {irq}");
+									if let Ok(VirtioDriver::Network(drv)) =
+										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+									{
+										register_driver(MmioDriver::VirtioNet(
+											hermit_sync::InterruptTicketMutex::new(drv),
+										));
+									}
 								}
+								#[cfg(feature = "console")]
+								virtio::Id::Console => {
+									info!("Found console at {mmio:p}, irq: {irq}");
+									if let Ok(VirtioDriver::Console(drv)) =
+										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+									{
+										register_driver(MmioDriver::VirtioConsole(
+											hermit_sync::InterruptTicketMutex::new(*drv),
+										));
+									}
+								}
+								_ => {}
 							}
 						}
 					}
@@ -117,4 +155,15 @@ pub fn init_drivers() {
 	});
 
 	MMIO_DRIVERS.finalize();
+
+	#[cfg(feature = "console")]
+	{
+		if get_console_driver().is_some() {
+			info!("Switch to virtio console");
+			crate::console::CONSOLE
+				.lock()
+				.inner
+				.switch_to_virtio_console();
+		}
+	}
 }

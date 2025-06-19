@@ -3,7 +3,10 @@
 		not(feature = "tcp"),
 		not(feature = "udp"),
 		not(feature = "vsock"),
-		not(feature = "fuse")
+		not(feature = "fuse"),
+		not(all(target_arch = "x86_64", feature = "pci", feature = "console")),
+		not(all(target_arch = "aarch64", feature = "console")),
+		not(all(target_arch = "riscv64", feature = "pci", feature = "console")),
 	),
 	expect(dead_code)
 )]
