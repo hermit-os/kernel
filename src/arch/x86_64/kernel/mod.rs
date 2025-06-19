@@ -79,6 +79,11 @@ impl Console {
 	pub fn register_waker(&mut self, waker: &Waker) {
 		self.serial_port.register_waker(waker);
 	}
+
+	#[cfg(all(feature = "pci", feature = "console"))]
+	pub fn switch_to_virtio_console(&mut self) {
+		self.serial_port.switch_to_virtio_console();
+	}
 }
 
 impl Default for Console {

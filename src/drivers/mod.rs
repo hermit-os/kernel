@@ -1,5 +1,7 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
+#[cfg(feature = "console")]
+pub mod console;
 #[cfg(feature = "fuse")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
@@ -11,7 +13,8 @@ pub mod pci;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 	feature = "fuse",
-	feature = "vsock"
+	feature = "vsock",
+	feature = "console"
 ))]
 pub mod virtio;
 #[cfg(feature = "vsock")]

@@ -1,6 +1,9 @@
 pub mod core_local;
 pub mod interrupts;
-#[cfg(all(not(feature = "pci"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(
+	not(feature = "pci"),
+	any(feature = "tcp", feature = "udp", feature = "console")
+))]
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
@@ -39,10 +42,7 @@ impl Console {
 		let base = env::boot_info()
 			.hardware_info
 			.serial_port_base
-			.map(|uartport| uartport.get())
-			.unwrap_or_default()
-			.try_into()
-			.unwrap();
+			.map(|uartport| uartport.get());
 
 		let serial_port = SerialPort::new(base);
 
@@ -61,6 +61,11 @@ impl Console {
 
 	pub fn is_empty(&self) -> bool {
 		true
+	}
+
+	#[cfg(feature = "console")]
+	pub fn switch_to_virtio_console(&mut self) {
+		self.serial_port.switch_to_virtio_console();
 	}
 
 	pub fn register_waker(&mut self, _waker: &Waker) {}
