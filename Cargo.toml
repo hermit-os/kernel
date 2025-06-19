@@ -69,6 +69,7 @@ trace = []
 udp = ["smoltcp", "smoltcp/socket-udp"]
 vga = []
 vsock = ["pci"]
+console = []
 
 [lints.rust]
 rust_2018_idioms = "warn"
