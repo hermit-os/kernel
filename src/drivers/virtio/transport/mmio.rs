@@ -3,6 +3,8 @@
 //! The module contains ...
 #![allow(dead_code)]
 
+#[cfg(feature = "console")]
+use alloc::boxed::Box;
 use core::mem;
 
 use memory_addresses::PhysAddr;
@@ -15,6 +17,8 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::drivers::InterruptLine;
+#[cfg(feature = "console")]
+use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
@@ -362,6 +366,8 @@ impl IsrStatus {
 pub(crate) enum VirtioDriver {
 	#[cfg(any(feature = "tcp", feature = "udp"))]
 	Network(VirtioNetDriver),
+	#[cfg(feature = "console")]
+	Console(Box<VirtioConsoleDriver>),
 }
 
 #[allow(unused_variables)]
@@ -392,6 +398,21 @@ pub(crate) fn init_device(
 			}
 			Err(virtio_error) => {
 				error!("Virtio network driver could not be initialized with device");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
+		#[cfg(feature = "console")]
+		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no) {
+			Ok(virt_console_drv) => {
+				info!("Virtio console driver initialized.");
+
+				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
+				info!("Virtio interrupt handler at line {}", irq_no);
+
+				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio console driver could not be initialized with device");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
