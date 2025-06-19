@@ -17,7 +17,7 @@ jobs:
     benchmark:
         name: Run Benchmarks
         runs-on: [self-hosted]
-        environment: ${{ github.event_name == 'push' && 'benchmark' || 'default' }}
+        environment: ${{ github.event_name == 'push' && 'benchmark' || '' }}
 
         strategy:
           matrix:
@@ -27,9 +27,6 @@ jobs:
                 benchmark-build: true
               - benchmark-file: /kernel/.github/benchmarks/misc.json
                 benchmark-matrix-name: Misc
-                benchmark-build: false
-              - benchmark-file: /kernel/.github/benchmarks/netbench.json
-                benchmark-matrix-name: Netbench
                 benchmark-build: false
 
         steps:
