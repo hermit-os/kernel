@@ -6,7 +6,7 @@ use super::{sockaddr, socklen_t};
 use crate::errno::Errno;
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 struct addrinfo {
 	ai_flags: Ai,
 	ai_family: i32,
