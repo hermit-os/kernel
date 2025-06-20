@@ -5,7 +5,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use super::{sockaddr, socklen_t};
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 struct addrinfo {
 	ai_flags: Ai,
 	ai_family: i32,
