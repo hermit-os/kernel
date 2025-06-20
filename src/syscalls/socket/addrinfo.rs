@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::ffi::c_char;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -15,7 +16,7 @@ struct addrinfo {
 	ai_addrlen: socklen_t,
 	ai_canonname: *mut c_char,
 	ai_addr: *mut sockaddr,
-	ai_next: *mut addrinfo,
+	ai_next: Option<Box<addrinfo>>,
 }
 
 bitflags! {
