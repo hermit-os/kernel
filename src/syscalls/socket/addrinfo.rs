@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::ffi::CString;
 use core::ffi::{CStr, c_char};
 use core::{fmt, ptr};
 
@@ -68,6 +69,20 @@ impl fmt::Debug for addrinfo {
 	}
 }
 
+impl Drop for addrinfo {
+	fn drop(&mut self) {
+		if !self.ai_addr.is_null() {
+			let ai_addr = unsafe { sockaddr::as_box(self.ai_addr).unwrap() };
+			drop(ai_addr);
+		}
+
+		if !self.ai_canonname.is_null() {
+			let ai_canonname = unsafe { CString::from_raw(self.ai_canonname) };
+			drop(ai_canonname);
+		}
+	}
+}
+
 bitflags! {
 	#[repr(transparent)]
 	#[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
@@ -114,7 +129,9 @@ pub unsafe extern "C" fn sys_getaddrinfo(
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_freeaddrinfo(_ai: *mut addrinfo) {}
+pub unsafe extern "C" fn sys_freeaddrinfo(ai: Option<Box<addrinfo>>) {
+	drop(ai);
+}
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
