@@ -15,7 +15,7 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
-use crate::syscalls::socket::{AF_INET, AF_INET_OLD, AF_INET6};
+use crate::syscalls::socket::Af;
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
 /// further receives will be disallowed
@@ -39,20 +39,19 @@ pub struct Socket {
 	endpoint: IpEndpoint,
 	is_nonblocking: bool,
 	is_listen: bool,
-	domain: i32,
 }
 
 impl Socket {
-	pub fn new(h: Handle, domain: i32) -> Self {
+	pub fn new(h: Handle, domain: Af) -> Self {
 		let mut handle = BTreeSet::new();
 		handle.insert(h);
 
-		let endpoint = if domain == AF_INET || domain == AF_INET_OLD {
+		let endpoint = if domain == Af::Inet {
 			IpEndpoint::new(Ipv4Address::UNSPECIFIED.into(), 0)
-		} else if domain == AF_INET6 {
+		} else if domain == Af::Inet6 {
 			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
 		} else {
-			panic!("Unsupported domain for TCP socket: {}", domain);
+			panic!("Unsupported domain for TCP socket: {domain:?}");
 		};
 
 		Self {
@@ -60,7 +59,6 @@ impl Socket {
 			endpoint,
 			is_nonblocking: false,
 			is_listen: false,
-			domain,
 		}
 	}
 
@@ -366,7 +364,6 @@ impl Socket {
 			endpoint: self.endpoint,
 			is_nonblocking: self.is_nonblocking,
 			is_listen: false,
-			domain: self.domain,
 		};
 
 		Ok((socket, endpoint))
@@ -545,10 +542,5 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
-	}
-
-	async fn inet_domain(&self) -> io::Result<i32> {
-		let domain = self.read().await.domain;
-		Ok(domain)
 	}
 }
