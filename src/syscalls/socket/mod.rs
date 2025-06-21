@@ -3,6 +3,7 @@
 
 mod addrinfo;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::ffi::{c_char, c_void};
 use core::mem::size_of;
@@ -121,6 +122,15 @@ pub struct sockaddr {
 	pub sa_data: [c_char; 14],
 }
 
+#[derive(Clone, Debug)]
+pub enum sockaddrBox {
+	sockaddr(Box<sockaddr>),
+	sockaddr_in(Box<sockaddr_in>),
+	sockaddr_in6(Box<sockaddr_in6>),
+	#[cfg(feature = "vsock")]
+	sockaddr_vm(Box<sockaddr_vm>),
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum sockaddrRef<'a> {
 	sockaddr(&'a sockaddr),
@@ -145,6 +155,18 @@ impl sockaddr {
 			Af::Inet6 => sockaddrRef::sockaddr_in6(unsafe { &*ptr.cast() }),
 			#[cfg(feature = "vsock")]
 			Af::Vsock => sockaddrRef::sockaddr_vm(unsafe { &*ptr.cast() }),
+		};
+		Ok(ret)
+	}
+
+	pub unsafe fn as_box(ptr: *mut Self) -> Result<sockaddrBox, TryFromPrimitiveError<Af>> {
+		let sa_family = unsafe { Self::sa_family(ptr)? };
+		let ret = match sa_family {
+			Af::Unspec => sockaddrBox::sockaddr(unsafe { Box::from_raw(ptr) }),
+			Af::Inet => sockaddrBox::sockaddr_in(unsafe { Box::from_raw(ptr.cast()) }),
+			Af::Inet6 => sockaddrBox::sockaddr_in6(unsafe { Box::from_raw(ptr.cast()) }),
+			#[cfg(feature = "vsock")]
+			Af::Vsock => sockaddrBox::sockaddr_vm(unsafe { Box::from_raw(ptr.cast()) }),
 		};
 		Ok(ret)
 	}
