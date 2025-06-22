@@ -25,7 +25,7 @@ use volatile::access::ReadOnly;
 use self::constants::MAX_NUM_VQ;
 use self::error::VirtioNetError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-use crate::drivers::net::NetworkDriver;
+use crate::drivers::net::{NetworkDriver, mtu};
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -48,22 +48,52 @@ pub(crate) struct NetDevCfg {
 	pub features: virtio::net::F,
 }
 
+fn determine_mtu(dev_cfg: &NetDevCfg) -> u16 {
+	// If VIRTIO_NET_F_MTU is negotiated, "the driver uses mtu as the maximum MTU value"
+	// (VirtIO specification, 5.1.3, "Feature bits")
+	if dev_cfg.features.contains(virtio::net::F::MTU) {
+		dev_cfg.raw.as_ptr().mtu().read().to_ne()
+	} else {
+		// Otherwise, we can just use the MTU we want to use
+		mtu()
+	}
+}
+
+fn determine_buf_size(dev_cfg: &NetDevCfg) -> u32 {
+	// See Virtio specification v1.1 - 5.1.6.3.1 and 5.1.4.2
+
+	// Our desired minimum buffer size - we want it to be at least the MTU generally
+	let mut min_buf_size = determine_mtu(dev_cfg).into();
+
+	// If VIRTIO_NET_F_MRG_RXBUF is negotiated, each buffer MUST be at least the size of the struct virtio_net_hdr.
+	// We just use MTU in that case, but otherwise...
+	if !dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
+		// If [...] are negotiated, the driver SHOULD populate the receive queue(s) with buffers of at least 65562 bytes.
+		if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
+			|| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
+			|| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
+		{
+			min_buf_size = u32::max(min_buf_size, 65562 - size_of::<Hdr>() as u32);
+		} else {
+			// Otherwise, the driver SHOULD populate the receive queue(s) with buffers of at least 1526 bytes.
+			min_buf_size = u32::max(min_buf_size, 1526 - size_of::<Hdr>() as u32);
+		}
+	}
+
+	min_buf_size
+}
+
 pub struct RxQueues {
 	vqs: Vec<VirtQueue>,
-	packet_size: u32,
+	buf_size: u32,
 }
 
 impl RxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
-		// See Virtio specification v1.1 - 5.1.6.3.1
-		//
-		let packet_size = if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
-			1514
-		} else {
-			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
-		};
-
-		Self { vqs, packet_size }
+		Self {
+			vqs,
+			buf_size: determine_buf_size(dev_cfg),
+		}
 	}
 
 	/// Takes care of handling packets correctly which need some processing after being received.
@@ -79,8 +109,8 @@ impl RxQueues {
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
-		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		fill_queue(&mut vq, num_packets, self.packet_size);
+		let num_bufs: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
 	}
 
@@ -107,13 +137,13 @@ impl RxQueues {
 
 fn buffer_token_from_hdr(
 	hdr: Box<MaybeUninit<Hdr>, DeviceAlloc>,
-	packet_size: u32,
+	buf_size: u32,
 ) -> AvailBufferToken {
 	AvailBufferToken::new(SmallVec::new(), {
 		SmallVec::from_buf([
 			BufferElem::Sized(hdr),
 			BufferElem::Vector(Vec::with_capacity_in(
-				packet_size.try_into().unwrap(),
+				buf_size.try_into().unwrap(),
 				DeviceAlloc,
 			)),
 		])
@@ -121,10 +151,9 @@ fn buffer_token_from_hdr(
 	.unwrap()
 }
 
-fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
-	for _ in 0..num_packets {
-		let buff_tkn =
-			buffer_token_from_hdr(Box::<Hdr, _>::new_uninit_in(DeviceAlloc), packet_size);
+fn fill_queue(vq: &mut VirtQueue, num_bufs: u16, buf_size: u32) {
+	for _ in 0..num_bufs {
+		let buff_tkn = buffer_token_from_hdr(Box::<Hdr, _>::new_uninit_in(DeviceAlloc), buf_size);
 
 		// BufferTokens are directly provided to the queue
 		// TransferTokens are directly dispatched
@@ -142,22 +171,17 @@ pub struct TxQueues {
 	vqs: Vec<VirtQueue>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
-	packet_length: u32,
+	buf_size: u32,
 }
 
 impl TxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
-		let packet_length = if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
-			| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
-			| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
-		{
-			0x0001_000e
-		} else {
-			dev_cfg.raw.as_ptr().mtu().read().to_ne().into()
-		};
-
-		Self { vqs, packet_length }
+		Self {
+			vqs,
+			buf_size: determine_buf_size(dev_cfg),
+		}
 	}
+
 	#[allow(dead_code)]
 	fn enable_notifs(&mut self) {
 		for vq in &mut self.vqs {
@@ -189,6 +213,7 @@ impl TxQueues {
 
 pub(crate) struct Uninit;
 pub(crate) struct Init {
+	pub(super) mtu: u16,
 	pub(super) ctrl_vq: Option<VirtQueue>,
 	pub(super) recv_vqs: RxQueues,
 	pub(super) send_vqs: TxQueues,
@@ -207,7 +232,6 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) inner: T,
 
 	pub(super) num_vqs: u16,
-	pub(super) mtu: u16,
 	pub(super) irq: InterruptLine,
 	pub(super) checksums: ChecksumCapabilities,
 }
@@ -227,7 +251,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 
 	/// Returns the current MTU of the device.
 	fn get_mtu(&self) -> u16 {
-		self.mtu
+		self.inner.mtu
 	}
 
 	fn get_checksums(&self) -> ChecksumCapabilities {
@@ -249,7 +273,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 		// what we are about to add
 		self.inner.send_vqs.poll();
 
-		assert!(len < usize::try_from(self.inner.send_vqs.packet_length).unwrap());
+		assert!(len < usize::try_from(self.inner.send_vqs.buf_size).unwrap());
 		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
 		let result = unsafe {
 			let result = f(packet.spare_capacity_mut().assume_init_mut());
@@ -323,7 +347,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 			unsafe {
 				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
 			},
-			self.inner.recv_vqs.packet_size,
+			self.inner.recv_vqs.buf_size,
 		);
 		self.inner.recv_vqs.vqs[0]
 			.dispatch(first_tkn, false, BufferType::Direct)
@@ -338,7 +362,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 				unsafe {
 					transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(header)
 				},
-				self.inner.recv_vqs.packet_size,
+				self.inner.recv_vqs.buf_size,
 			);
 			self.inner.recv_vqs.vqs[0]
 				.dispatch(tkn, false, BufferType::Direct)
@@ -609,10 +633,13 @@ impl VirtioNetDriver<Uninit> {
 		}
 
 		let mut inner = Init {
+			mtu: determine_mtu(&self.dev_cfg),
 			ctrl_vq: None,
 			recv_vqs: RxQueues::new(Vec::new(), &self.dev_cfg),
 			send_vqs: TxQueues::new(Vec::new(), &self.dev_cfg),
 		};
+
+		debug!("Using RX buffer size of {}", inner.recv_vqs.buf_size);
 
 		self.dev_spec_init(&mut inner)?;
 		info!(
@@ -637,10 +664,6 @@ impl VirtioNetDriver<Uninit> {
 		}
 		debug!("{:?}", self.checksums);
 
-		if self.dev_cfg.features.contains(virtio::net::F::MTU) {
-			self.mtu = self.dev_cfg.raw.as_ptr().mtu().read().to_ne();
-		}
-
 		Ok(VirtioNetDriver {
 			dev_cfg: self.dev_cfg,
 			com_cfg: self.com_cfg,
@@ -648,7 +671,6 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg: self.notif_cfg,
 			inner,
 			num_vqs: self.num_vqs,
-			mtu: self.mtu,
 			irq: self.irq,
 			checksums: self.checksums,
 		})

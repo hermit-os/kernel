@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use async_trait::async_trait;
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
@@ -299,7 +300,8 @@ pub struct FileAttr {
 	pub st_ctim: timespec,
 }
 
-#[derive(Debug, FromPrimitive, ToPrimitive)]
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
 pub enum FileType {
 	Unknown = 0,         // DT_UNKNOWN
 	Fifo = 1,            // DT_FIFO
@@ -312,7 +314,8 @@ pub enum FileType {
 	Whiteout = 14,       // DT_WHT
 }
 
-#[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive, PartialEq)]
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
 pub enum SeekWhence {
 	Set = 0,
 	Cur = 1,

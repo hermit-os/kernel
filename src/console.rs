@@ -21,13 +21,15 @@ impl Console {
 		}
 	}
 
+	/// Writes a buffer to the console.
+	/// The content is buffered until a newline is encountered or the internal buffer is full.
+	/// To force early output, use [`flush`](Self::flush).
 	pub fn write(&mut self, buf: &[u8]) {
 		if SERIAL_BUFFER_SIZE - self.buffer.len() >= buf.len() {
 			// unwrap: we checked that buf fits in self.buffer
 			self.buffer.extend_from_slice(buf).unwrap();
 			if buf.contains(&b'\n') {
-				self.inner.write(&self.buffer);
-				self.buffer.clear();
+				self.flush();
 			}
 		} else {
 			self.inner.write(&self.buffer);
@@ -38,11 +40,16 @@ impl Console {
 				// unwrap: we checked that buf fits in self.buffer
 				self.buffer.extend_from_slice(buf).unwrap();
 				if buf.contains(&b'\n') {
-					self.inner.write(&self.buffer);
-					self.buffer.clear();
+					self.flush();
 				}
 			}
 		}
+	}
+
+	/// Immediately writes everything in the internal buffer to the output.
+	pub fn flush(&mut self) {
+		self.inner.write(&self.buffer);
+		self.buffer.clear();
 	}
 
 	pub fn read(&mut self) -> Option<u8> {

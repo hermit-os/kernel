@@ -42,8 +42,6 @@ extern crate log;
 #[cfg(not(target_os = "none"))]
 #[macro_use]
 extern crate std;
-#[macro_use]
-extern crate num_derive;
 
 #[cfg(feature = "smp")]
 use core::hint::spin_loop;
