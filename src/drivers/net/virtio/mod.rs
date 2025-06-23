@@ -169,8 +169,6 @@ fn fill_queue(vq: &mut VirtQueue, num_bufs: u16, buf_size: u32) {
 /// to the respective queue structures.
 pub struct TxQueues {
 	vqs: Vec<VirtQueue>,
-	/// Indicates, whether the Driver/Device are using multiple
-	/// queues for communication.
 	buf_size: u32,
 }
 
