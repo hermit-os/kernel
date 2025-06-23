@@ -1,8 +1,11 @@
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 use core::str;
 
+use fuse_abi::linux::fuse_out_header;
+use num_enum::TryFromPrimitive;
 use pci_types::InterruptLine;
 use smallvec::SmallVec;
 use virtio::FeatureBits;
@@ -22,7 +25,8 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq, VqIndex, VqSize,
 };
-use crate::fs::fuse::{self, FuseInterface, Rsp, RspHeader};
+use crate::fs::fuse::{self, FuseError, FuseInterface, Rsp, RspHeader};
+use crate::io;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -159,7 +163,7 @@ impl FuseInterface for VirtioFsDriver {
 		&mut self,
 		cmd: fuse::Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<fuse::Rsp<O>, VirtqError>
+	) -> Result<fuse::Rsp<O>, FuseError>
 	where
 		<O as fuse::ops::Op>::InStruct: Send,
 		<O as fuse::ops::Op>::OutStruct: Send,
@@ -179,7 +183,11 @@ impl FuseInterface for VirtioFsDriver {
 			vec
 		};
 
-		let rsp_headers = Box::<RspHeader<O>, _>::new_uninit_in(DeviceAlloc);
+		// If the operation fails, it is possible for its header to be uninitialized.
+		// For this reason, we use a instantiation of the RspHeader structure where
+		// the op_header field is MaybeUninit
+		let rsp_headers =
+			Box::<RspHeader<O, MaybeUninit<O::OutStruct>>, _>::new_uninit_in(DeviceAlloc);
 		let recv = if rsp_payload_len == 0 {
 			let mut vec = SmallVec::new();
 			vec.push(BufferElem::Sized(rsp_headers));
@@ -195,7 +203,37 @@ impl FuseInterface for VirtioFsDriver {
 		let mut transfer_result =
 			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
 
-		let headers = unsafe { transfer_result.used_recv_buff.pop_front_downcast().unwrap() };
+		let (dyn_headers, written_header_len) =
+			transfer_result.used_recv_buff.pop_front_raw().unwrap();
+		let headers = dyn_headers
+			.downcast::<MaybeUninit<RspHeader<O, MaybeUninit<O::OutStruct>>>>()
+			.unwrap();
+		if written_header_len < size_of::<fuse_out_header>() {
+			return Err(VirtqError::IncompleteWrite.into());
+		}
+
+		// SAFETY: we confirmed that the out_header was written. The op_header does not need to be initialized at this stage,
+		// as it is behind a nested MaybeUninit.
+		let headers = unsafe { headers.assume_init() };
+
+		if headers.out_header.error != 0
+			|| (written_header_len - size_of::<fuse_out_header>()) != size_of::<O::OutStruct>()
+		{
+			// "However, if the reply is an error reply (i.e., error is set), then no further payload data should be sent,
+			// independent of the request." (fuse man page)
+
+			return Err(FuseError::IOError(
+				io::Error::try_from_primitive(-headers.out_header.error).unwrap_or(io::Error::EIO),
+			));
+		}
+
+		// SAFETY: the conditional above ensures that the second field was filled in, so we can transmute it from MaybeUninit to normal.
+		let headers = unsafe {
+			core::mem::transmute::<
+				Box<RspHeader<O, MaybeUninit<O::OutStruct>>, _>,
+				Box<RspHeader<O>, _>,
+			>(headers)
+		};
 		let payload = transfer_result.used_recv_buff.pop_front_vec();
 		Ok(Rsp { headers, payload })
 	}

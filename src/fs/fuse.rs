@@ -4,6 +4,7 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
@@ -47,7 +48,7 @@ pub(crate) trait FuseInterface {
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<Rsp<O>, VirtqError>
+	) -> Result<Rsp<O>, FuseError>
 	where
 		<O as ops::Op>::InStruct: Send,
 		<O as ops::Op>::OutStruct: Send;
@@ -534,15 +535,40 @@ where
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct RspHeader<O: ops::Op> {
-	out_header: fuse_out_header,
-	op_header: O::OutStruct,
+// The generic H parameter allows us to handle RspHeaders with their op_header
+// potenitally uninitialized. After checking for the error code in the out_header,
+// the object can be transmuted to one with an initialized op_header.
+pub(crate) struct RspHeader<O: ops::Op, H = <O as ops::Op>::OutStruct> {
+	pub out_header: fuse_out_header,
+	op_header: H,
+	_phantom: PhantomData<O::OutStruct>,
 }
 
 #[derive(Debug)]
 pub(crate) struct Rsp<O: ops::Op> {
 	pub headers: Box<RspHeader<O>, DeviceAlloc>,
 	pub payload: Option<Vec<u8, DeviceAlloc>>,
+}
+
+#[derive(Debug)]
+pub(crate) enum FuseError {
+	VirtqError(VirtqError),
+	IOError(io::Error),
+}
+
+impl From<VirtqError> for FuseError {
+	fn from(value: VirtqError) -> Self {
+		Self::VirtqError(value)
+	}
+}
+
+impl From<FuseError> for io::Error {
+	fn from(value: FuseError) -> Self {
+		match value {
+			FuseError::VirtqError(virtq_error) => virtq_error.into(),
+			FuseError::IOError(io_error) => io_error,
+		}
+	}
 }
 
 fn lookup(name: CString) -> Option<u64> {
