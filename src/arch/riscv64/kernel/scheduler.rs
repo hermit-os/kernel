@@ -311,7 +311,7 @@ impl TaskTLS {
 		}
 
 		debug!(
-			"Set up TLS at 0x{tls_pointer:x}, tdata_size 0x{tdata_size:x}, tls_size 0x{tls_size:x}"
+			"Set up TLS at {tls_pointer:#x}, tdata_size {tdata_size:#x}, tls_size {tls_size:#x}"
 		);
 
 		Some(Box::new(Self {
