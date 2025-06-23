@@ -184,9 +184,12 @@ fn finish_processor_init() {
 pub fn boot_next_processor() {
 	let new_hart_mask = HART_MASK.load(Ordering::Relaxed);
 
+	debug!("Current HART_MASK: 0x{new_hart_mask:x}");
 	let next_hart_index = lsb(new_hart_mask);
 
 	if let Some(next_hart_id) = next_hart_index {
+		debug!("Preparing to start HART {next_hart_id}");
+
 		{
 			let stack = physicalmem::allocate(KERNEL_STACK_SIZE)
 				.expect("Failed to allocate boot stack for new core");
