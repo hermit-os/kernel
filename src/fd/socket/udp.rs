@@ -12,7 +12,7 @@ use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
-use crate::syscalls::socket::{AF_INET, AF_INET_OLD, AF_INET6};
+use crate::syscalls::socket::{AF_INET, AF_INET6};
 
 #[derive(Debug)]
 pub struct Socket {
@@ -20,13 +20,11 @@ pub struct Socket {
 	nonblocking: bool,
 	local_endpoint: IpEndpoint,
 	remote_endpoint: Option<IpEndpoint>,
-	// FIXME: remove once the ecosystem has migrated away from `AF_INET_OLD`.
-	domain: i32,
 }
 
 impl Socket {
 	pub fn new(handle: Handle, domain: i32) -> Self {
-		let local_endpoint = if domain == AF_INET || domain == AF_INET_OLD {
+		let local_endpoint = if domain == AF_INET {
 			IpEndpoint::new(Ipv4Address::UNSPECIFIED.into(), 0)
 		} else if domain == AF_INET6 {
 			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
@@ -39,7 +37,6 @@ impl Socket {
 			nonblocking: false,
 			local_endpoint,
 			remote_endpoint: None,
-			domain,
 		}
 	}
 
@@ -299,10 +296,5 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
-	}
-
-	async fn inet_domain(&self) -> io::Result<i32> {
-		let domain = self.read().await.domain;
-		Ok(domain)
 	}
 }
