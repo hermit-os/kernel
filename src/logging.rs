@@ -82,7 +82,7 @@ pub unsafe fn init() {
 	log::set_max_level(max_level);
 }
 
-#[cfg(any(not(target_arch = "riscv64"), feature = "pci", feature = "tcp"))]
+#[cfg_attr(target_arch = "riscv64", allow(unused))]
 macro_rules! infoheader {
 	// This should work on paper, but it's currently not supported :(
 	// Refer to https://github.com/rust-lang/rust/issues/46569
@@ -102,7 +102,7 @@ macro_rules! infoentry {
 	($str:expr, $($arg:tt)+) => (::log::info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));
 }
 
-#[cfg(any(not(target_arch = "riscv64"), feature = "pci", feature = "tcp"))]
+#[cfg_attr(target_arch = "riscv64", allow(unused))]
 macro_rules! infofooter {
 	() => {{
 		::log::info!("{:=^70}", '=');

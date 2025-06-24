@@ -1,25 +1,37 @@
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use core::ptr::NonNull;
 
 use fdt::Fdt;
 use memory_addresses::PhysAddr;
-#[cfg(all(feature = "tcp", feature = "gem-net", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	feature = "gem-net",
+	not(feature = "pci")
+))]
 use memory_addresses::VirtAddr;
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging::{self, PageSize};
-#[cfg(all(feature = "tcp", feature = "gem-net", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	feature = "gem-net",
+	not(feature = "pci")
+))]
 use crate::drivers::net::gem;
-#[cfg(all(feature = "tcp", not(feature = "pci"), not(feature = "gem-net")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	not(feature = "pci"),
+	not(feature = "gem-net")
+))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(feature = "tcp", not(feature = "pci")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
@@ -158,7 +170,7 @@ pub fn init_drivers() {
 			}
 
 			// Init virtio-mmio
-			#[cfg(all(feature = "tcp", not(feature = "pci")))]
+			#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
 				debug!("Found virtio mmio device");
 				let virtio_region = virtio_node
@@ -216,7 +228,7 @@ pub fn init_drivers() {
 				// 	BasePageSize::SIZE as usize,
 				// );
 
-				#[cfg(all(feature = "tcp", not(feature = "gem-net")))]
+				#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "gem-net")))]
 				if let Ok(VirtioDriver::Network(drv)) =
 					mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 				{

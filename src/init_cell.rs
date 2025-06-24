@@ -1,9 +1,9 @@
 #![cfg_attr(
 	all(
-		not(feature = "pci"),
-		not(all(target_arch = "x86_64", feature = "tcp")),
-		not(all(target_arch = "aarch64", feature = "tcp")),
-		not(all(target_arch = "riscv64", feature = "tcp")),
+		not(feature = "tcp"),
+		not(feature = "udp"),
+		not(feature = "vsock"),
+		not(feature = "fuse")
 	),
 	expect(dead_code)
 )]
@@ -31,7 +31,6 @@ impl<T> InitCell<T> {
 		f((*guard).as_mut());
 	}
 
-	#[cfg_attr(all(feature = "pci", not(feature = "tcp")), expect(dead_code))]
 	pub fn get(&self) -> Option<&T> {
 		self.once.get()
 	}
