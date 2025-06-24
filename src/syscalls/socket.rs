@@ -485,6 +485,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 		|v| {
 			block_on((*v).accept(), None).map_or_else(
 				|e| -i32::from(e),
+				#[cfg_attr(not(any(feature = "tcp", feature = "udp")), expect(unused_variables))]
 				|(obj, endpoint)| match endpoint {
 					#[cfg(any(feature = "tcp", feature = "udp"))]
 					Endpoint::Ip(endpoint) => {

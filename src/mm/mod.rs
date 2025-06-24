@@ -137,6 +137,7 @@ pub(crate) fn init() {
 	#[cfg(not(feature = "common-os"))]
 	{
 		// we reserve 10% of the memory for stack allocations
+		#[cfg(not(feature = "mmap"))]
 		let stack_reserve: usize = (avail_mem * 10) / 100;
 
 		// At first, we map only a small part into the heap.
