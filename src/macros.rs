@@ -76,132 +76,130 @@ macro_rules! dbg {
     };
 }
 
-/// Runs `f` on the kernel stack.
-///
-/// All arguments and return values have to fit into registers:
-///
-/// ```
-/// assert!(mem::size_of::<T>() <= mem::size_of::<usize>());
-/// ```
-///
-/// When working with bigger types, manually route the data over pointers:
-///
-/// ```
-/// f(&arg1, &mut ret);
-/// // instead of
-/// let ret = f(arg);
-/// ```
-#[allow(unused_macro_rules)]
-#[cfg(not(any(
-	target_arch = "riscv64",
-	all(target_arch = "x86_64", feature = "newlib"),
-	feature = "common-os"
-)))]
-macro_rules! kernel_function {
-	($f:ident()) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f();
-		}
+cfg_if::cfg_if! {
+	if #[cfg(not(any(
+		target_arch = "riscv64",
+		all(target_arch = "x86_64", feature = "newlib"),
+		feature = "common-os"
+	)))] {
+		/// Runs `f` on the kernel stack.
+		///
+		/// All arguments and return values have to fit into registers:
+		///
+		/// ```
+		/// assert!(mem::size_of::<T>() <= mem::size_of::<usize>());
+		/// ```
+		///
+		/// When working with bigger types, manually route the data over pointers:
+		///
+		/// ```
+		/// f(&arg1, &mut ret);
+		/// // instead of
+		/// let ret = f(arg);
+		/// ```
+		#[allow(unused_macro_rules)]
+		macro_rules! kernel_function {
+			($f:ident()) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f();
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function0($f)
-		}
-	}};
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function0($f)
+				}
+			}};
 
-	($f:ident($arg1:expr)) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f($arg1);
-		}
+			($f:ident($arg1:expr)) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f($arg1);
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function1($f, $arg1)
-		}
-	}};
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function1($f, $arg1)
+				}
+			}};
 
-	($f:ident($arg1:expr, $arg2:expr)) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f($arg1, $arg2);
-		}
+			($f:ident($arg1:expr, $arg2:expr)) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f($arg1, $arg2);
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function2($f, $arg1, $arg2)
-		}
-	}};
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function2($f, $arg1, $arg2)
+				}
+			}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f($arg1, $arg2, $arg3);
-		}
+			($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f($arg1, $arg2, $arg3);
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3)
-		}
-	}};
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3)
+				}
+			}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f($arg1, $arg2, $arg3, $arg4);
-		}
+			($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f($arg1, $arg2, $arg3, $arg4);
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4)
-		}
-	}};
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4)
+				}
+			}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f($arg1, $arg2, $arg3, $arg4, $arg5);
-		}
+			($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f($arg1, $arg2, $arg3, $arg4, $arg5);
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5)
-		}
-	}};
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5)
+				}
+			}};
 
-	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {{
-		// This propagates any unsafety requirements of `f` to the caller.
-		if false {
-			$f($arg1, $arg2, $arg3, $arg4, $arg5, $arg6);
-		}
+			($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {{
+				// This propagates any unsafety requirements of `f` to the caller.
+				if false {
+					$f($arg1, $arg2, $arg3, $arg4, $arg5, $arg6);
+				}
 
-		#[allow(unreachable_code)]
-		#[allow(unused_unsafe)]
-		unsafe {
-			$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
+				#[allow(unreachable_code)]
+				#[allow(unused_unsafe)]
+				unsafe {
+					$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
+				}
+			}};
 		}
-	}};
-}
-
-// TODO: Properly switch kernel stack with newlib
-// https://github.com/hermit-os/kernel/issues/471
-// TODO: Switch kernel stack on RISC-V
-#[cfg(any(
-	target_arch = "riscv64",
-	all(target_arch = "x86_64", feature = "newlib"),
-	feature = "common-os"
-))]
-macro_rules! kernel_function {
-	($f:ident($($x:tt)*)) => {{
-		$f($($x)*)
-	}};
+	} else {
+		// TODO: Properly switch kernel stack with newlib
+		// https://github.com/hermit-os/kernel/issues/471
+		// TODO: Switch kernel stack on RISC-V
+		macro_rules! kernel_function {
+			($f:ident($($x:tt)*)) => {{
+				$f($($x)*)
+			}};
+		}
+	}
 }
 
 /// Returns the value of the specified environment variable.
