@@ -195,7 +195,7 @@ impl FuseInterface for VirtioFsDriver {
 		let mut transfer_result =
 			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
 
-		let headers = transfer_result.used_recv_buff.pop_front_downcast().unwrap();
+		let headers = unsafe { transfer_result.used_recv_buff.pop_front_downcast().unwrap() };
 		let payload = transfer_result.used_recv_buff.pop_front_vec();
 		Ok(Rsp { headers, payload })
 	}

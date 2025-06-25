@@ -406,7 +406,14 @@ pub(crate) struct UsedDeviceWritableBuffer {
 }
 
 impl UsedDeviceWritableBuffer {
-	pub fn pop_front_downcast<T>(&mut self) -> Option<Box<T, DeviceAlloc>>
+	/// # Safety
+	/// The type `T` of the [`MaybeUninit<T>`] that was provided for the [BufferElem] must have
+	/// been what the device will write at that portion of the buffer. This may not be the case if
+	/// the descriptor is used by the device for another type (e.g. in the case of merged buffers
+	/// in the network driver), as the objects are assumed to be initialized by this function and
+	/// it's undefined behavior to call [MaybeUninit::assume_init] when an object of the correct type
+	/// is not initialized.
+	pub unsafe fn pop_front_downcast<T>(&mut self) -> Option<Box<T, DeviceAlloc>>
 	where
 		T: Any,
 	{
@@ -457,6 +464,29 @@ impl UsedDeviceWritableBuffer {
 			Some(vector)
 		} else {
 			panic!("Attempted to pop elements in order different from insertion");
+		}
+	}
+
+	/// It is possible for devices to use descriptors for a type other than what they were meant.
+	/// (e.g. for a portion of the received frame in the network driver when [virtio::net::F::MRG_RXBUF] is negotiated).
+	/// In that case, we hand over the popped box directly with the used length.
+	///
+	/// We may not return a vector as its layout would be different and deallocation would not be correct
+	/// (see the information for [Box::into_non_null_with_allocator]).
+	pub fn pop_front_raw(&mut self) -> Option<(Box<dyn Any + Send, DeviceAlloc>, usize)> {
+		let elem = if self.elems.len() <= 2 {
+			self.elems.swap_remove(0)
+		} else {
+			self.elems.remove(0)
+		};
+
+		if let BufferElem::Sized(sized) = elem {
+			let capacity = u32::try_from(size_of_val(sized.as_ref())).unwrap();
+			let len = u32::min(capacity, self.remaining_written_len);
+			self.remaining_written_len -= len;
+			Some((sized, len.try_into().unwrap()))
+		} else {
+			panic!("This function is meant for the Sized variant of the BufferElem enum.");
 		}
 	}
 }
