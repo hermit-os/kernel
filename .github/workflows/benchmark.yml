@@ -66,13 +66,18 @@ jobs:
           - uses: mkroening/rust-toolchain-toml@main
             with:
               toolchain-file: "kernel/rust-toolchain.toml"
+          - name: Set up tap device
+            if: matrix.benchmark-matrix-name == 'Netbench'
+            run: |
+              sudo ip tuntap add tap10 mode tap
+              sudo ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap10
+              sudo ip link set dev tap10 
+              echo 1 | sudo tee /proc/sys/net/ipv4/conf/tap10/proxy_arp
           - name: Run benchmarks
             uses: hermit-os/hermit-bench@main
             id: run-bench
             with: 
               benchmark-file: ${{ matrix.benchmark-file }}
-              benchmark-build: ${{ matrix.benchmark-build }}
-              build-command: "cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --release"
           - name: Store benchmark results
             uses: hermit-os/github-action-benchmark@main
             with:

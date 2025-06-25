@@ -1,38 +1,26 @@
 [
     {
-        "name": "alloc_benchmarks",
-        "path": "target/x86_64-unknown-hermit/release/alloc_benchmarks",
-        "group": "File Size",
-        "plot_group": "Misc Benchmark File Size"
-    },
-    {
-        "name": "micro_benchmarks",
-        "path": "target/x86_64-unknown-hermit/release/micro_benchmarks",
-        "group": "File Size",
-        "plot_group": "Misc Benchmark File Size"
-    },
-    {
-        "name": "mutex test",
-        "path": "target/x86_64-unknown-hermit/release/mutex",
-        "group": "File Size",
-        "plot_group": "Misc Benchmark File Size"
-    },
-    {
         "name": "Micro Benchmarks",
+        "bin": "micro_benchmarks",
+        "manifest_path": "benches/micro/Cargo.toml",
         "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 512M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/micro_benchmarks",
-        "iterations": 20,
+        "iterations": 25,
         "group": "Micro"
     },
     {
         "name": "Allocation Benchmarks",
+        "bin": "alloc_benchmarks",
+        "manifest_path": "benches/alloc/Cargo.toml",
         "command": "sudo qemu-system-x86_64 -display none -smp 1 -m 5G -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/alloc_benchmarks",
-        "iterations": 30,
+        "iterations": 50,
         "group": "Allocations"
     },
     {
         "name": "Mutex Stress Test",
+        "bin": "mutex",
+        "manifest_path": "benches/mutex/Cargo.toml",
         "command": "sudo qemu-system-x86_64 -display none -smp 2 -m 512M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/mutex",
-        "iterations": 40,
+        "iterations": 50,
         "group": "Mutex"
     }
 ]

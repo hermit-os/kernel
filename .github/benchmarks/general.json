@@ -1,6 +1,8 @@
 [
     {
        "name": "1 core",
+       "bin": "startup_benchmark",
+       "manifest_path": "Cargo.toml",
        "command": "sudo qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
        "external_time": true,
        "iterations": 25,
@@ -9,6 +11,8 @@
     },
     {
         "name": "2 cores",
+        "bin": "startup_benchmark",
+        "manifest_path": "Cargo.toml",
         "command": "sudo qemu-system-x86_64 -display none -smp 2 -m 128M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
         "external_time": true,
         "iterations": 25,
@@ -17,6 +21,8 @@
      },
     {
         "name": "4 cores",
+        "bin": "startup_benchmark",
+        "manifest_path": "Cargo.toml",
         "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 128M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/startup_benchmark",
         "external_time": true,
         "iterations": 25,
@@ -25,21 +31,11 @@
     },
     {
         "name": "Pi Multithreaded Benchmark",
+        "bin": "multithreaded_benchmark",
+        "manifest_path": "Cargo.toml",
         "command": "sudo qemu-system-x86_64 -display none -smp 4 -m 512M -serial stdio -enable-kvm -cpu host,migratable=no,+invtsc -kernel hermit-loader-x86_64 -initrd target/x86_64-unknown-hermit/release/multithreaded_benchmark",
-        "iterations": 15,
+        "iterations": 25,
         "group": "General",
         "plot_group": "Multithreaded Pi Efficiency"
-    },
-    {
-        "name": "Pi Multithreaded Benchmark",
-        "path": "target/x86_64-unknown-hermit/release/multithreaded_benchmark",
-        "group": "File Size",
-        "plot_group": "General Benchmark File Size"
-    },
-    {
-        "name": "Startup Benchmark",
-        "path": "target/x86_64-unknown-hermit/release/startup_benchmark",
-        "group": "File Size",
-        "plot_group": "General Benchmark File Size"
     }
 ]
