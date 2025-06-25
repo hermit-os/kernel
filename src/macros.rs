@@ -79,7 +79,6 @@ macro_rules! dbg {
 cfg_if::cfg_if! {
 	if #[cfg(not(any(
 		target_arch = "riscv64",
-		all(target_arch = "x86_64", feature = "newlib"),
 		feature = "common-os"
 	)))] {
 		/// Runs `f` on the kernel stack.
@@ -191,8 +190,6 @@ cfg_if::cfg_if! {
 			}};
 		}
 	} else {
-		// TODO: Properly switch kernel stack with newlib
-		// https://github.com/hermit-os/kernel/issues/471
 		// TODO: Switch kernel stack on RISC-V
 		macro_rules! kernel_function {
 			($f:ident($($x:tt)*)) => {{
