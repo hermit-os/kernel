@@ -5,7 +5,13 @@ pub const DEFAULT_STACK_SIZE: usize = 0x0001_0000;
 pub(crate) const USER_STACK_SIZE: usize = 0x0010_0000;
 
 #[cfg(any(
-	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
+	all(
+		any(feature = "tcp", feature = "udp"),
+		not(any(
+			all(target_arch = "x86_64", feature = "rtl8139",),
+			all(target_arch = "riscv64", not(feature = "pci"), feature = "gem-net")
+		))
+	),
 	feature = "fuse",
 	feature = "vsock"
 ))]

@@ -76,6 +76,12 @@ pub mod fs;
 mod init_cell;
 pub mod io;
 pub mod mm;
+#[cfg(all(
+	not(all(target_arch = "x86_64", feature = "pci", feature = "rtl8139")),
+	not(all(target_arch = "riscv64", not(feature = "pci"), feature = "gem-net")),
+	any(feature = "tcp", feature = "udp")
+))]
+mod object_pool;
 pub mod scheduler;
 #[cfg(all(feature = "shell", target_arch = "x86_64"))]
 mod shell;
