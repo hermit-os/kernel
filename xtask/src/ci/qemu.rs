@@ -33,32 +33,44 @@ pub struct Qemu {
 	#[arg(long)]
 	uefi: bool,
 
-	/// Enable a network device.
+	/// Devices to enable.
 	#[arg(long)]
-	netdev: Option<NetworkDevice>,
+	devices: Vec<Device>,
 
 	/// Do not activate additional virtio features.
 	#[arg(long)]
 	no_default_virtio_features: bool,
-
-	/// Enable the `virtiofsd` virtio-fs vhost-user device daemon.
-	#[arg(long)]
-	virtiofsd: bool,
 }
 
-#[derive(ValueEnum, Clone, Copy)]
-pub enum NetworkDevice {
-	VirtioNetPci,
-	VirtioNetMmio,
+#[derive(ValueEnum, PartialEq, Eq, Clone, Copy)]
+pub enum Device {
+	/// Cadence Gigabit Ethernet MAC (GEM).
+	CadenceGem,
+
+	/// RTL8139.
 	Rtl8139,
-	GEMNet,
+
+	/// virtio-fs via PCI.
+	///
+	/// This option also starts the `virtiofsd` virtio-fs vhost-user device daemon.
+	VirtioFsPci,
+
+	/// virtio-net via MMIO.
+	VirtioNetMmio,
+
+	/// virtio-net via PCI.
+	VirtioNetPci,
 }
 
 impl Qemu {
 	pub fn run(self, image: &Path, smp: usize, arch: Arch, small: bool) -> Result<()> {
 		let sh = crate::sh()?;
 
-		let virtiofsd = self.virtiofsd.then(spawn_virtiofsd).transpose()?;
+		let virtiofsd = self
+			.devices
+			.contains(&Device::VirtioFsPci)
+			.then(spawn_virtiofsd)
+			.transpose()?;
 		thread::sleep(Duration::from_millis(100));
 
 		let image_name = image.file_name().unwrap().to_str().unwrap();
@@ -71,8 +83,8 @@ impl Qemu {
 		let arg = self.sudo.then_some(qemu.as_str());
 		let memory = self.memory(image_name, arch, small);
 
-		// GEM requires sifive_u, which in turn requires an SMP of at least 2.
-		let effective_smp = if matches!(self.netdev, Some(NetworkDevice::GEMNet)) {
+		// CadenceGem requires sifive_u, which in turn requires an SMP of at least 2.
+		let effective_smp = if self.devices.contains(&Device::CadenceGem) {
 			usize::max(smp, 2)
 		} else {
 			smp
@@ -87,8 +99,7 @@ impl Qemu {
 			.args(&["-smp", &effective_smp.to_string()])
 			.args(&["-m".to_string(), format!("{memory}M")])
 			.args(&["-global", "virtio-mmio.force-legacy=off"])
-			.args(self.netdev_args())
-			.args(self.virtiofsd_args(memory))
+			.args(self.device_args(memory))
 			.args(self.cmdline_args(image_name));
 
 		eprintln!("$ {qemu}");
@@ -120,8 +131,8 @@ impl Qemu {
 		if matches!(
 			image_name,
 			"axum-example" | "http_server" | "http_server_poll"
-		) || matches!(self.netdev, Some(NetworkDevice::GEMNet))
-		// sifive_u, on which we test GEMNet, does not support software shutdowns, so we have to kill the machine ourselves.
+		) || self.devices.contains(&Device::CadenceGem)
+		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to kill the machine ourselves.
 		{
 			qemu.0.kill()?;
 		}
@@ -208,10 +219,11 @@ impl Qemu {
 		} else if arch == Arch::Aarch64 {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if arch == Arch::Riscv64 {
-			// GEM requires sifive_u
-			let machine = match self.netdev {
-				Some(NetworkDevice::GEMNet) => "sifive_u",
-				_ => "virt",
+			// CadenceGem requires sifive_u
+			let machine = if self.devices.contains(&Device::CadenceGem) {
+				"sifive_u"
+			} else {
+				"virt"
 			};
 			vec![
 				"-machine".to_string(),
@@ -256,13 +268,12 @@ impl Qemu {
 			Arch::Riscv64 => {
 				if self.accel {
 					todo!()
+				} else if self.devices.contains(&Device::CadenceGem) {
+					// CadenceGem does not seem to work with rv64 as the CPU,
+					// possibly because it requires sifive_u as the machine.
+					vec![]
 				} else {
-					match self.netdev {
-						// GEM does not seem to work with rv64 as the CPU,
-						// possibly because it requires sifive_u as the machine.
-						Some(NetworkDevice::GEMNet) => vec![],
-						_ => vec!["-cpu".to_string(), "rv64".to_string()],
-					}
+					vec!["-cpu".to_string(), "rv64".to_string()]
 				}
 			}
 		}
@@ -286,70 +297,67 @@ impl Qemu {
 		1024
 	}
 
-	fn netdev_args(&self) -> Vec<String> {
+	fn device_args(&self, memory: usize) -> Vec<String> {
 		const NETDEV_OPTIONS: &str = "user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9";
-		match self.netdev {
-			Some(NetworkDevice::GEMNet) => {
-				vec![
-					"-nic".to_string(),
-					format!("{NETDEV_OPTIONS},model=cadence_gem"),
-				]
-			}
-			Some(netdev) => {
-				let mut netdev_args = vec![
-					"-netdev".to_string(),
-					NETDEV_OPTIONS.to_string(),
-					"-device".to_string(),
-				];
 
-				let mut device_arg = match netdev {
-					NetworkDevice::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
-					NetworkDevice::VirtioNetMmio => "virtio-net-device,netdev=u1",
-					NetworkDevice::Rtl8139 => "rtl8139,netdev=u1",
-					NetworkDevice::GEMNet => {
-						unreachable!("We should have already checked for GEM earlier.")
+		self.devices
+			.iter()
+			.copied()
+			.flat_map(|device| match device {
+				Device::CadenceGem => {
+					vec![
+						"-nic".to_string(),
+						format!("{NETDEV_OPTIONS},model=cadence_gem"),
+					]
+				}
+				device @ (Device::Rtl8139 | Device::VirtioNetMmio | Device::VirtioNetPci) => {
+					let mut netdev_args = vec![
+						"-netdev".to_string(),
+						NETDEV_OPTIONS.to_string(),
+						"-device".to_string(),
+					];
+
+					let mut device_arg = match device {
+						Device::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
+						Device::VirtioNetMmio => "virtio-net-device,netdev=u1",
+						Device::Rtl8139 => "rtl8139,netdev=u1",
+						Device::CadenceGem | Device::VirtioFsPci => unreachable!(),
 					}
+					.to_string();
+
+					if !self.no_default_virtio_features
+						&& (device == Device::VirtioNetPci || device == Device::VirtioNetMmio)
+					{
+						device_arg.push_str(",packed=on,mq=on");
+					}
+
+					netdev_args.push(device_arg);
+
+					netdev_args
 				}
-				.to_string();
-
-				if !self.no_default_virtio_features
-					&& matches!(
-						netdev,
-						NetworkDevice::VirtioNetPci | NetworkDevice::VirtioNetMmio
-					) {
-					device_arg.push_str(",packed=on,mq=on");
+				Device::VirtioFsPci => {
+					let default_virtio_features = if !self.no_default_virtio_features {
+						",packed=on"
+					} else {
+						""
+					};
+					vec![
+						"-chardev".to_string(),
+						"socket,id=char0,path=./vhostqemu".to_string(),
+						"-device".to_string(),
+						format!(
+							"vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"
+						),
+						"-object".to_string(),
+						format!(
+							"memory-backend-file,id=mem,size={memory}M,mem-path=/dev/shm,share=on"
+						),
+						"-numa".to_string(),
+						"node,memdev=mem".to_string(),
+					]
 				}
-
-				netdev_args.push(device_arg);
-
-				netdev_args
-			}
-			None => vec![],
-		}
-	}
-
-	fn virtiofsd_args(&self, memory: usize) -> Vec<String> {
-		if self.virtiofsd {
-			let default_virtio_features = if !self.no_default_virtio_features {
-				",packed=on"
-			} else {
-				""
-			};
-			vec![
-				"-chardev".to_string(),
-				"socket,id=char0,path=./vhostqemu".to_string(),
-				"-device".to_string(),
-				format!(
-					"vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"
-				),
-				"-object".to_string(),
-				format!("memory-backend-file,id=mem,size={memory}M,mem-path=/dev/shm,share=on"),
-				"-numa".to_string(),
-				"node,memdev=mem".to_string(),
-			]
-		} else {
-			vec![]
-		}
+			})
+			.collect()
 	}
 
 	fn cmdline_args(&self, image_name: &str) -> Vec<String> {
