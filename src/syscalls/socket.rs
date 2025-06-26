@@ -305,8 +305,8 @@ pub struct addrinfo {
 	pub ai_socktype: i32,
 	pub ai_protocol: i32,
 	pub ai_addrlen: socklen_t,
-	pub ai_canonname: *mut c_char,
 	pub ai_addr: *mut sockaddr,
+	pub ai_canonname: *mut c_char,
 	pub ai_next: *mut addrinfo,
 }
 
