@@ -57,21 +57,27 @@ impl ConfigRegionAccess for PciConfigRegion {
 }
 
 pub(crate) fn init() {
-	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
+	if let Some(_fdt) = crate::env::fdt() {
+		info!("Device Tree is available");
 
-	// Hermit only uses PCI for network devices.
-	// Therefore, multifunction devices as well as additional bridges are not scanned.
-	// We also limit scanning to the first 32 buses.
-	let pci_config = PciConfigRegion::new();
-	for bus in 0..PCI_MAX_BUS_NUMBER {
-		for device in 0..PCI_MAX_DEVICE_NUMBER {
-			let pci_address = PciAddress::new(0, bus, device, 0);
-			let header = PciHeader::new(pci_address);
+		// Do nothing here, as the PCI devices are scanned in the device tree.
+	} else {
+		debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 
-			let (device_id, vendor_id) = header.id(pci_config);
-			if device_id != u16::MAX && vendor_id != u16::MAX {
-				let device = PciDevice::new(pci_address, pci_config);
-				PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(device));
+		// Hermit only uses PCI for network devices.
+		// Therefore, multifunction devices as well as additional bridges are not scanned.
+		// We also limit scanning to the first 32 buses.
+		let pci_config = PciConfigRegion::new();
+		for bus in 0..PCI_MAX_BUS_NUMBER {
+			for device in 0..PCI_MAX_DEVICE_NUMBER {
+				let pci_address = PciAddress::new(0, bus, device, 0);
+				let header = PciHeader::new(pci_address);
+
+				let (device_id, vendor_id) = header.id(pci_config);
+				if device_id != u16::MAX && vendor_id != u16::MAX {
+					let device = PciDevice::new(pci_address, pci_config);
+					PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(device));
+				}
 			}
 		}
 	}
