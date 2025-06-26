@@ -1,5 +1,6 @@
 #![allow(clippy::result_unit_err)]
 
+use alloc::ffi::CString;
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
@@ -339,6 +340,43 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 
 	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::open(name, flags, mode).unwrap_or_else(|e| -i32::from(e))
+	} else {
+		-crate::errno::EINVAL
+	}
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> i32 {
+	let cwd = crate::fs::get_cwd();
+	if let Err(e) = cwd {
+		return -i32::from(e);
+	}
+
+	let Ok(cwd) = cwd else { unreachable!() };
+
+	let Ok(cwd) = CString::new(cwd) else {
+		return -crate::errno::ENOENT; // extremely unlikely
+	};
+
+	if (cwd.count_bytes() + 1) > size {
+		return -crate::errno::ERANGE;
+	}
+
+	unsafe {
+		buf.copy_from(cwd.as_ptr(), size);
+	}
+
+	i32::try_from(cwd.count_bytes() + 1).unwrap_or(-crate::errno::ERANGE)
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
+	if let Ok(name) = unsafe { CStr::from_ptr(path) }.to_str() {
+		crate::fs::set_cwd(name)
+			.map(|()| 0)
+			.unwrap_or_else(|e| -i32::from(e))
 	} else {
 		-crate::errno::EINVAL
 	}
