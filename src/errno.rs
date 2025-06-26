@@ -751,6 +751,12 @@ impl ToErrno for isize {
 	}
 }
 
+impl ToErrno for Errno {
+	fn to_errno(&self) -> Option<i32> {
+		Some(i32::from(*self))
+	}
+}
+
 impl ToErrno for u8 {}
 impl ToErrno for u16 {}
 impl ToErrno for u32 {}
