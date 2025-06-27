@@ -3,6 +3,8 @@ use core::fmt;
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
+static KERNEL_LOGGER: KernelLogger = KernelLogger;
+
 /// Data structure to filter kernel messages
 struct KernelLogger;
 
@@ -55,7 +57,7 @@ fn no_color() -> bool {
 }
 
 pub unsafe fn init() {
-	log::set_logger(&KernelLogger).expect("Can't initialize logger");
+	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
 	let mut max_level = LevelFilter::Info;
