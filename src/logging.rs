@@ -22,8 +22,9 @@ impl log::Log for KernelLogger {
 
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
+		let target = record.target();
 		let args = record.args();
-		println!("[{core_id}][{level}] {args}");
+		println!("[{core_id}][{level} {target}] {args}");
 	}
 }
 
