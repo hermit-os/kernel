@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+#[cfg(all(feature = "pci", feature = "console"))]
+use crate::drivers::pci::get_console_driver;
 #[cfg(all(not(feature = "pci"), feature = "console"))]
 use crate::kernel::mmio::get_console_driver;
 use crate::syscalls::interfaces::serial_buf_hypercall;
@@ -8,7 +10,7 @@ enum SerialInner {
 	None,
 	Uart(u32),
 	Uhyve,
-	#[cfg(all(not(feature = "pci"), feature = "console"))]
+	#[cfg(feature = "console")]
 	Virtio,
 }
 
@@ -33,7 +35,7 @@ impl SerialPort {
 		}
 	}
 
-	#[cfg(all(not(feature = "pci"), feature = "console"))]
+	#[cfg(feature = "console")]
 	pub fn switch_to_virtio_console(&mut self) {
 		self.inner = SerialInner::Virtio;
 	}
@@ -71,7 +73,7 @@ impl SerialPort {
 					}
 				}
 			}
-			#[cfg(all(not(feature = "pci"), feature = "console"))]
+			#[cfg(feature = "console")]
 			SerialInner::Virtio => {
 				if let Some(console_driver) = get_console_driver() {
 					let _ = console_driver.lock().write(buf);

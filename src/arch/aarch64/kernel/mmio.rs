@@ -2,10 +2,12 @@ use alloc::vec::Vec;
 use core::ptr::NonNull;
 
 use align_address::Align;
+use arm_gic::{IntId, Trigger};
 use hermit_sync::{InterruptTicketMutex, without_interrupts};
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
+use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, PageSize};
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioConsoleDriver;
@@ -77,12 +79,16 @@ pub fn init_drivers() {
 								.next()
 								.unwrap();
 							let mut irq = 0;
+							let mut irqtype = 0;
+							let mut irqflags = 0;
 
 							for prop in node.properties() {
 								if prop.name == "interrupts" {
-									irq = u32::from_be_bytes(prop.value[4..8].try_into().unwrap())
-										.try_into()
-										.unwrap();
+									irqtype =
+										u32::from_be_bytes(prop.value[0..4].try_into().unwrap());
+									irq = u32::from_be_bytes(prop.value[4..8].try_into().unwrap());
+									irqflags =
+										u32::from_be_bytes(prop.value[8..12].try_into().unwrap());
 									break;
 								}
 							}
@@ -119,14 +125,48 @@ pub fn init_drivers() {
 
 							// Verify the device-ID to find the network card
 							let id = mmio.as_ptr().device_id().read();
+							let cpu_id: usize = 0;
 
 							match id {
 								#[cfg(any(feature = "tcp", feature = "udp"))]
 								virtio::Id::Net => {
-									trace!("Found network card at {mmio:p}, irq: {irq}");
+									debug!(
+										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+									);
 									if let Ok(VirtioDriver::Network(drv)) =
 										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+										&& let Some(gic) = GIC.lock().as_mut()
 									{
+										// enable timer interrupt
+										let virtio_irqid = if irqtype == 1 {
+											IntId::ppi(irq)
+										} else if irqtype == 0 {
+											IntId::spi(irq)
+										} else {
+											panic!("Invalid interrupt type");
+										};
+										gic.set_interrupt_priority(
+											virtio_irqid,
+											Some(cpu_id),
+											0x00,
+										);
+										if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+											gic.set_trigger(
+												virtio_irqid,
+												Some(cpu_id),
+												Trigger::Level,
+											);
+										} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+											gic.set_trigger(
+												virtio_irqid,
+												Some(cpu_id),
+												Trigger::Edge,
+											);
+										} else {
+											panic!("Invalid interrupt level!");
+										}
+										gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+
 										register_driver(MmioDriver::VirtioNet(
 											hermit_sync::InterruptTicketMutex::new(drv),
 										));
@@ -134,13 +174,48 @@ pub fn init_drivers() {
 								}
 								#[cfg(feature = "console")]
 								virtio::Id::Console => {
-									info!("Found console at {mmio:p}, irq: {irq}");
+									debug!(
+										"Found console at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+									);
 									if let Ok(VirtioDriver::Console(drv)) =
 										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 									{
-										register_driver(MmioDriver::VirtioConsole(
-											hermit_sync::InterruptTicketMutex::new(*drv),
-										));
+										if let Some(gic) = GIC.lock().as_mut() {
+											// enable timer interrupt
+											let virtio_irqid = if irqtype == 1 {
+												IntId::ppi(irq)
+											} else if irqtype == 0 {
+												IntId::spi(irq)
+											} else {
+												panic!("Invalid interrupt type");
+											};
+											gic.set_interrupt_priority(
+												virtio_irqid,
+												Some(cpu_id),
+												0x00,
+											);
+											if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+												gic.set_trigger(
+													virtio_irqid,
+													Some(cpu_id),
+													Trigger::Level,
+												);
+											} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1
+											{
+												gic.set_trigger(
+													virtio_irqid,
+													Some(cpu_id),
+													Trigger::Edge,
+												);
+											} else {
+												panic!("Invalid interrupt level!");
+											}
+											gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+
+											register_driver(MmioDriver::VirtioConsole(
+												hermit_sync::InterruptTicketMutex::new(*drv),
+											));
+										}
 									}
 								}
 								_ => {}
