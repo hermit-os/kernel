@@ -1,12 +1,31 @@
 use core::fmt;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
-pub static KERNEL_LOGGER: KernelLogger = KernelLogger;
+pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 
 /// Data structure to filter kernel messages
-pub struct KernelLogger;
+pub struct KernelLogger {
+	time: AtomicBool,
+}
+
+impl KernelLogger {
+	pub const fn new() -> Self {
+		Self {
+			time: AtomicBool::new(false),
+		}
+	}
+
+	pub fn time(&self) -> bool {
+		self.time.load(Ordering::Relaxed)
+	}
+
+	pub fn set_time(&self, time: bool) {
+		self.time.store(time, Ordering::Relaxed);
+	}
+}
 
 impl log::Log for KernelLogger {
 	fn enabled(&self, _: &Metadata<'_>) -> bool {
@@ -22,10 +41,28 @@ impl log::Log for KernelLogger {
 			return;
 		}
 
+		// FIXME: Use `super let` once stable
+		let time;
+		let format_time = if self.time() {
+			time = Microseconds(crate::processor::get_timer_ticks());
+			format_args!("[{time}]")
+		} else {
+			format_args!("[            ]")
+		};
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
 		let args = record.args();
-		println!("[{core_id}][{level}] {args}");
+		println!("{format_time}[{core_id}][{level}] {args}");
+	}
+}
+
+struct Microseconds(u64);
+
+impl fmt::Display for Microseconds {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let seconds = self.0 / 1_000_000;
+		let microseconds = self.0 % 1_000_000;
+		write!(f, "{seconds:5}.{microseconds:06}")
 	}
 }
 

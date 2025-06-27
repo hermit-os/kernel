@@ -50,6 +50,8 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 	CURRENT_BOOT_ID.store(hart_id as u32, Ordering::Relaxed);
 
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
+		crate::logging::KERNEL_LOGGER.set_time(true);
+
 		env::set_boot_info(*boot_info.unwrap());
 		let fdt = unsafe { Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid") };
 		// Init HART_MASK

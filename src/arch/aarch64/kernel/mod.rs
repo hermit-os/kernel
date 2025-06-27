@@ -151,6 +151,7 @@ pub fn boot_processor_init() {
 	env::init();
 	interrupts::init();
 	processor::detect_frequency();
+	crate::logging::KERNEL_LOGGER.set_time(true);
 	processor::print_information();
 	systemtime::init();
 	#[cfg(feature = "pci")]
