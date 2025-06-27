@@ -53,6 +53,9 @@ pub(crate) static NIC: InterruptTicketMutex<NetworkState<'_>> =
 pub(crate) struct NetworkInterface<'a> {
 	pub(super) iface: smoltcp::iface::Interface,
 	pub(super) sockets: SocketSet<'a>,
+	#[cfg(feature = "trace")]
+	pub(super) device: smoltcp::phy::Tracer<HermitNet>,
+	#[cfg(not(feature = "trace"))]
 	pub(super) device: HermitNet,
 	#[cfg(feature = "dhcpv4")]
 	pub(super) dhcp_handle: SocketHandle,

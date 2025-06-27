@@ -65,7 +65,7 @@ shell = ["simple-shell"]
 smp = []
 strace = []
 tcp = ["smoltcp", "smoltcp/socket-tcp"]
-trace = []
+trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["smoltcp", "smoltcp/socket-udp"]
 vga = []
 vsock = ["pci"]
@@ -151,10 +151,6 @@ features = [
     # Assume a MTU size of 9000
     #"fragmentation-buffer-size-8192",
     #"reassembly-buffer-size-8192",
-    #
-    # Enable for increased output
-    # "log",
-    # "verbose",
 ]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
