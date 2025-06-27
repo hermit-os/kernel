@@ -16,14 +16,14 @@ impl log::Log for KernelLogger {
 	}
 
 	fn log(&self, record: &Record<'_>) {
-		if self.enabled(record.metadata()) {
-			println!(
-				"[{}][{}] {}",
-				crate::arch::core_local::core_id(),
-				ColorLevel(record.level()),
-				record.args()
-			);
+		if !self.enabled(record.metadata()) {
+			return;
 		}
+
+		let core_id = crate::arch::core_local::core_id();
+		let level = ColorLevel(record.level());
+		let args = record.args();
+		println!("[{core_id}][{level}] {args}");
 	}
 }
 
