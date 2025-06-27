@@ -7,6 +7,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::BitAnd;
 
 use async_trait::async_trait;
 use hermit_sync::{InterruptSpinMutex, OnceCell};
@@ -22,6 +23,9 @@ use crate::time::{SystemTime, timespec};
 static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 
 static WORKING_DIRECTORY: InterruptSpinMutex<Option<String>> = InterruptSpinMutex::new(None);
+
+static UMASK: InterruptSpinMutex<AccessPermission> =
+	InterruptSpinMutex::new(AccessPermission::from_bits_retain(0o777));
 
 #[derive(Debug, Clone)]
 pub struct DirectoryEntry {
@@ -385,8 +389,13 @@ pub fn unlink(path: &str) -> io::Result<()> {
 
 /// Creates a new, empty directory at the provided path
 pub fn create_dir(path: &str, mode: AccessPermission) -> io::Result<()> {
+	let mask = *UMASK.lock();
+
 	with_relative_filename(path, |path| {
-		FILESYSTEM.get().ok_or(Errno::Inval)?.mkdir(path, mode)
+		FILESYSTEM
+			.get()
+			.ok_or(Errno::Inval)?
+			.mkdir(path, mode.bitand(mask))
 	})
 }
 
@@ -428,7 +437,7 @@ where
 			callback(&path)
 		} else {
 			// Relative path with no CWD, this is weird/impossible
-			Err(io::Error::EBADF)
+			Err(Errno::Badf)
 		}
 	}
 }
@@ -437,12 +446,13 @@ pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result
 	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
 	// flags is bitmask of O_DEC_* defined above.
 	// (taken from rust stdlib/sys hermit target )
+	let mask = *UMASK.lock();
 
 	with_relative_filename(name, |name| {
 		debug!("Open {name}, {flags:?}, {mode:?}");
 
 		let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
-		if let Ok(file) = fs.open(name, flags, mode) {
+		if let Ok(file) = fs.open(name, flags, mode.bitand(mask)) {
 			let fd = insert_object(file)?;
 			Ok(fd)
 		} else {
@@ -456,7 +466,7 @@ pub fn get_cwd() -> io::Result<String> {
 	if let Some(cwd) = cwd.as_ref() {
 		Ok(cwd.clone())
 	} else {
-		Err(io::Error::ENOENT)
+		Err(Errno::Noent)
 	}
 }
 
@@ -468,13 +478,20 @@ pub fn set_cwd(cwd: &str) -> io::Result<()> {
 		*working_dir = Some(cwd.to_string());
 	} else {
 		let Some(working_dir) = working_dir.as_mut() else {
-			return Err(io::Error::EBADF);
+			return Err(Errno::Badf);
 		};
 		working_dir.push('/');
 		working_dir.push_str(cwd);
 	}
 
 	Ok(())
+}
+
+pub fn umask(new_mask: AccessPermission) -> AccessPermission {
+	let mut lock = UMASK.lock();
+	let old = *lock;
+	*lock = new_mask;
+	old
 }
 
 /// Open a directory to read the directory entries
