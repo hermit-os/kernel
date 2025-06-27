@@ -398,6 +398,12 @@ pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
 	}
 }
 
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_umask(umask: u32) -> u32 {
+	crate::fs::umask(AccessPermission::from_bits_truncate(umask)).bits()
+}
+
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
