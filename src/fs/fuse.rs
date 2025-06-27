@@ -24,6 +24,7 @@ use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
+use crate::fs::fuse::ops::SetAttrValidFields;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
@@ -32,7 +33,6 @@ use crate::mm::device_alloc::DeviceAlloc;
 use crate::syscalls::Dirent64;
 use crate::time::{time_t, timespec};
 use crate::{arch, io};
-
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
 // possible responses for command: qemu/tools/virtiofsd/fuse_lowlevel.h
@@ -67,7 +67,7 @@ pub(crate) mod ops {
 
 	use super::Cmd;
 	use crate::fd::PollEvent;
-	use crate::fs::SeekWhence;
+	use crate::fs::{FileAttr, SeekWhence};
 
 	#[repr(C)]
 	#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
@@ -266,6 +266,76 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
+			(cmd, 0)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Setattr;
+
+	impl Op for Setattr {
+		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_SETATTR;
+		type InStruct = fuse_setattr_in;
+		type InPayload = ();
+		type OutStruct = fuse_attr_out;
+		type OutPayload = ();
+	}
+
+	bitflags! {
+		#[derive(Debug, Copy, Clone, Default)]
+		pub struct SetAttrValidFields: u32 {
+			const FATTR_MODE = 1 << 0;
+			const FATTR_UID = 1 << 1;
+			const FATTR_GID = 1 << 2;
+			const FATTR_SIZE = 1 << 3;
+			const FATTR_ATIME = 1 << 4;
+			const FATTR_MTIME = 1 << 5;
+			const FATTR_FH = 1 << 6;
+			const FATTR_ATIME_NOW = 1 << 7;
+			const FATTR_MTIME_NOW = 1 << 8;
+			const FATTR_LOCKOWNER = 1 << 9;
+			const FATTR_CTIME = 1 << 10;
+			const FATTR_KILL_SUIDGID = 1 << 11;
+		}
+	}
+
+	impl Setattr {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			attr: FileAttr,
+			valid_attr: SetAttrValidFields,
+		) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::new(
+				nid,
+				fuse_setattr_in {
+					valid: valid_attr
+						.difference(
+							// Remove unsupported attributes
+							SetAttrValidFields::FATTR_LOCKOWNER,
+						)
+						.bits(),
+					padding: 0,
+					fh,
+
+					// Fuse attributes mapping: https://github.com/libfuse/libfuse/blob/fc1c8da0cf8a18d222cb1feed0057ba44ea4d18f/lib/fuse_lowlevel.c#L105
+					size: attr.st_size as u64,
+					atime: attr.st_atim.tv_sec as u64,
+					atimensec: attr.st_atim.tv_nsec as u32,
+					mtime: attr.st_ctim.tv_sec as u64,
+					mtimensec: attr.st_ctim.tv_nsec as u32,
+					ctime: attr.st_ctim.tv_sec as u64,
+					ctimensec: attr.st_ctim.tv_nsec as u32,
+					mode: attr.st_mode.bits(),
+					unused4: 0,
+					uid: attr.st_uid,
+					gid: attr.st_gid,
+					unused5: 0,
+
+					lock_owner: 0, // unsupported
+				},
+			);
+
 			(cmd, 0)
 		}
 	}
@@ -758,6 +828,23 @@ impl FuseFileHandleInner {
 			Err(Errno::Io)
 		}
 	}
+
+	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
+		debug!("FUSE setattr");
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let (cmd, rsp_payload_len) = ops::Setattr::create(nid, fh, attr, valid);
+			let rsp = get_filesystem_driver()
+				.ok_or(Errno::Nosys)?
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+			if rsp.headers.out_header.error < 0 {
+				return Err(Errno::Io);
+			}
+			Ok(rsp.headers.op_header.attr.into())
+		} else {
+			Err(Errno::Io)
+		}
+	}
 }
 
 impl Drop for FuseFileHandleInner {
@@ -803,6 +890,32 @@ impl ObjectInterface for FuseFileHandle {
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
 		self.0.lock().await.fstat()
+	}
+
+	async fn truncate(&self, size: usize) -> io::Result<()> {
+		let attr = FileAttr {
+			st_size: size.try_into().unwrap(),
+			..FileAttr::default()
+		};
+
+		self.0
+			.lock()
+			.await
+			.set_attr(attr, SetAttrValidFields::FATTR_SIZE)
+			.map(|_| ())
+	}
+
+	async fn chmod(&self, access_permission: AccessPermission) -> io::Result<()> {
+		let attr = FileAttr {
+			st_mode: access_permission,
+			..FileAttr::default()
+		};
+
+		self.0
+			.lock()
+			.await
+			.set_attr(attr, SetAttrValidFields::FATTR_MODE)
+			.map(|_| ())
 	}
 }
 
