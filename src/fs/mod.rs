@@ -14,6 +14,7 @@ use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
 use crate::io::Write;
@@ -438,6 +439,17 @@ where
 			Err(io::Error::EBADF)
 		}
 	}
+}
+
+pub fn truncate(name: &str, size: usize) -> io::Result<()> {
+	with_relative_filename(name, |name| {
+		let fs = FILESYSTEM.get().ok_or(io::Error::EINVAL)?;
+		if let Ok(file) = fs.open(name, OpenOption::O_TRUNC, AccessPermission::empty()) {
+			block_on(file.truncate(size), None)
+		} else {
+			Err(io::Error::EBADF)
+		}
+	})
 }
 
 pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result<FileDescriptor> {
