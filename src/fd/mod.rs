@@ -70,6 +70,52 @@ bitflags! {
 }
 
 bitflags! {
+	/// Options for checking file permissions or existence
+	#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+	pub struct AccessOption: i32 {
+		/// Test for read permission
+		const R_OK = 4;
+		/// Test for write permission
+		const W_OK = 2;
+		/// Test for execution permission
+		const X_OK = 1;
+		/// Test for existence
+		const F_OK = 0;
+	}
+}
+
+impl AccessOption {
+	/// Verifies if the current access options are all valid for the provided file access permissions
+	pub fn can_access(&self, access_permissions: AccessPermission) -> bool {
+		if self.contains(AccessOption::R_OK)
+			&& !access_permissions.contains(AccessPermission::S_IRUSR)
+			&& !access_permissions.contains(AccessPermission::S_IRGRP)
+			&& !access_permissions.contains(AccessPermission::S_IROTH)
+		{
+			return false;
+		}
+
+		if self.contains(AccessOption::W_OK)
+			&& !access_permissions.contains(AccessPermission::S_IWUSR)
+			&& !access_permissions.contains(AccessPermission::S_IWGRP)
+			&& !access_permissions.contains(AccessPermission::S_IWOTH)
+		{
+			return false;
+		}
+
+		if self.contains(AccessOption::X_OK)
+			&& !access_permissions.contains(AccessPermission::S_IXUSR)
+			&& !access_permissions.contains(AccessPermission::S_IXGRP)
+			&& !access_permissions.contains(AccessPermission::S_IXOTH)
+		{
+			return false;
+		}
+
+		true
+	}
+}
+
+bitflags! {
 	/// File status flags.
 	#[derive(Debug, Copy, Clone, Default)]
 	pub struct StatusFlags: i32 {
