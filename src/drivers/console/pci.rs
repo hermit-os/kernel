@@ -1,3 +1,4 @@
+use pci_types::CommandRegister;
 use virtio::console::Config;
 use volatile::VolatileRef;
 
@@ -58,6 +59,9 @@ impl VirtioConsoleDriver {
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<VirtioConsoleDriver, VirtioError> {
+		// enable bus master mode
+		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
+
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioConsoleDriver::new(caps, device) {
 				Ok(driver) => driver,

@@ -63,7 +63,7 @@ impl Console {
 		true
 	}
 
-	#[cfg(all(not(feature = "pci"), feature = "console"))]
+	#[cfg(feature = "console")]
 	pub fn switch_to_virtio_console(&mut self) {
 		self.serial_port.switch_to_virtio_console();
 	}

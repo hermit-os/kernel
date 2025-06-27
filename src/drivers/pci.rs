@@ -53,7 +53,7 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 	),
 	feature = "fuse",
 	feature = "vsock",
-	all(target_arch = "x86_64", feature = "console")
+	feature = "console"
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "vsock")]
@@ -573,7 +573,7 @@ pub(crate) fn init() {
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)));
 				}
-				#[cfg(all(target_arch = "x86_64", feature = "console"))]
+				#[cfg(feature = "console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					register_driver(PciDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
 					crate::console::CONSOLE
