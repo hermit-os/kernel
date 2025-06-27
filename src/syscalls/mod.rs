@@ -357,18 +357,18 @@ pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> i32 {
 	let Ok(cwd) = cwd else { unreachable!() };
 
 	let Ok(cwd) = CString::new(cwd) else {
-		return -crate::errno::ENOENT; // extremely unlikely
+		return -i32::from(Errno::Noent); // extremely unlikely
 	};
 
 	if (cwd.count_bytes() + 1) > size {
-		return -crate::errno::ERANGE;
+		return -i32::from(Errno::Range);
 	}
 
 	unsafe {
 		buf.copy_from(cwd.as_ptr(), size);
 	}
 
-	i32::try_from(cwd.count_bytes() + 1).unwrap_or(-crate::errno::ERANGE)
+	i32::try_from(cwd.count_bytes() + 1).unwrap_or(-i32::from(Errno::Range))
 }
 
 #[hermit_macro::system]
@@ -379,8 +379,14 @@ pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
 			.map(|()| 0)
 			.unwrap_or_else(|e| -i32::from(e))
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_umask(umask: u32) -> u32 {
+	crate::fs::umask(AccessPermission::from_bits_truncate(umask)).bits()
 }
 
 #[hermit_macro::system(errno)]
