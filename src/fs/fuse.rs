@@ -24,6 +24,7 @@ use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
+use crate::fs::fuse::ops::SetAttrValidFields;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
@@ -63,11 +64,12 @@ pub(crate) mod ops {
 	use alloc::boxed::Box;
 	use alloc::ffi::CString;
 
+	use fuse_abi::linux;
 	use fuse_abi::linux::*;
 
 	use super::Cmd;
 	use crate::fd::PollEvent;
-	use crate::fs::SeekWhence;
+	use crate::fs::{FileAttr, SeekWhence};
 
 	#[repr(C)]
 	#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
@@ -266,6 +268,76 @@ pub(crate) mod ops {
 					..Default::default()
 				},
 			);
+			(cmd, 0)
+		}
+	}
+
+	#[derive(Debug)]
+	pub(crate) struct Setattr;
+
+	impl Op for Setattr {
+		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_SETATTR;
+		type InStruct = fuse_setattr_in;
+		type InPayload = ();
+		type OutStruct = fuse_attr_out;
+		type OutPayload = ();
+	}
+
+	bitflags! {
+		#[derive(Debug, Copy, Clone, Default)]
+		pub struct SetAttrValidFields: u32 {
+			const FATTR_MODE = linux::FATTR_MODE;
+			const FATTR_UID = linux::FATTR_UID;
+			const FATTR_GID = linux::FATTR_GID;
+			const FATTR_SIZE = linux::FATTR_SIZE;
+			const FATTR_ATIME = linux::FATTR_ATIME;
+			const FATTR_MTIME = linux::FATTR_MTIME;
+			const FATTR_FH = linux::FATTR_FH;
+			const FATTR_ATIME_NOW = linux::FATTR_ATIME_NOW;
+			const FATTR_MTIME_NOW = linux::FATTR_MTIME_NOW;
+			const FATTR_LOCKOWNER = linux::FATTR_LOCKOWNER;
+			const FATTR_CTIME = linux::FATTR_CTIME;
+			const FATTR_KILL_SUIDGID = linux::FATTR_KILL_SUIDGID;
+		}
+	}
+
+	impl Setattr {
+		pub(crate) fn create(
+			nid: u64,
+			fh: u64,
+			attr: FileAttr,
+			valid_attr: SetAttrValidFields,
+		) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::new(
+				nid,
+				fuse_setattr_in {
+					valid: valid_attr
+						.difference(
+							// Remove unsupported attributes
+							SetAttrValidFields::FATTR_LOCKOWNER,
+						)
+						.bits(),
+					padding: 0,
+					fh,
+
+					// Fuse attributes mapping: https://github.com/libfuse/libfuse/blob/fc1c8da0cf8a18d222cb1feed0057ba44ea4d18f/lib/fuse_lowlevel.c#L105
+					size: attr.st_size as u64,
+					atime: attr.st_atim.tv_sec as u64,
+					atimensec: attr.st_atim.tv_nsec as u32,
+					mtime: attr.st_ctim.tv_sec as u64,
+					mtimensec: attr.st_ctim.tv_nsec as u32,
+					ctime: attr.st_ctim.tv_sec as u64,
+					ctimensec: attr.st_ctim.tv_nsec as u32,
+					mode: attr.st_mode.bits(),
+					unused4: 0,
+					uid: attr.st_uid,
+					gid: attr.st_gid,
+					unused5: 0,
+
+					lock_owner: 0, // unsupported
+				},
+			);
+
 			(cmd, 0)
 		}
 	}
@@ -758,6 +830,23 @@ impl FuseFileHandleInner {
 			Err(Errno::Io)
 		}
 	}
+
+	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
+		debug!("FUSE setattr");
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let (cmd, rsp_payload_len) = ops::Setattr::create(nid, fh, attr, valid);
+			let rsp = get_filesystem_driver()
+				.ok_or(Errno::Nosys)?
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+			if rsp.headers.out_header.error < 0 {
+				return Err(Errno::Io);
+			}
+			Ok(rsp.headers.op_header.attr.into())
+		} else {
+			Err(Errno::Io)
+		}
+	}
 }
 
 impl Drop for FuseFileHandleInner {
@@ -803,6 +892,32 @@ impl ObjectInterface for FuseFileHandle {
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
 		self.0.lock().await.fstat()
+	}
+
+	async fn truncate(&self, size: usize) -> io::Result<()> {
+		let attr = FileAttr {
+			st_size: size.try_into().unwrap(),
+			..FileAttr::default()
+		};
+
+		self.0
+			.lock()
+			.await
+			.set_attr(attr, SetAttrValidFields::FATTR_SIZE)
+			.map(|_| ())
+	}
+
+	async fn chmod(&self, access_permission: AccessPermission) -> io::Result<()> {
+		let attr = FileAttr {
+			st_mode: access_permission,
+			..FileAttr::default()
+		};
+
+		self.0
+			.lock()
+			.await
+			.set_attr(attr, SetAttrValidFields::FATTR_MODE)
+			.map(|_| ())
 	}
 }
 

@@ -314,6 +314,16 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
+	/// Truncates the file
+	async fn truncate(&self, _size: usize) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
+	/// Changes access permissions to the file
+	async fn chmod(&self, _access_permission: AccessPermission) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
 	/// `isatty` returns `true` for a terminal device
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
@@ -336,6 +346,12 @@ pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io
 	block_on(obj.lseek(offset, whence), None)
 }
 
+pub(crate) fn chmod(fd: FileDescriptor, mode: AccessPermission) -> io::Result<()> {
+	let obj = get_object(fd)?;
+
+	block_on(obj.chmod(mode), None)
+}
+
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
@@ -344,6 +360,11 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 	}
 
 	block_on(obj.write(buf), None)
+}
+
+pub(crate) fn truncate(fd: FileDescriptor, length: usize) -> io::Result<()> {
+	let obj = get_object(fd)?;
+	block_on(obj.truncate(length), None)
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
