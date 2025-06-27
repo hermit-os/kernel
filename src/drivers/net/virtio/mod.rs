@@ -13,6 +13,7 @@ cfg_if::cfg_if! {
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::{ManuallyDrop, MaybeUninit, transmute};
+use core::str::FromStr;
 
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
@@ -59,7 +60,7 @@ fn determine_mtu(dev_cfg: &NetDevCfg) -> u16 {
 	}
 }
 
-fn determine_buf_size(dev_cfg: &NetDevCfg) -> u32 {
+fn determine_rx_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 	// See Virtio specification v1.1 - 5.1.6.3.1 and 5.1.4.2
 
 	// Our desired minimum buffer size - we want it to be at least the MTU generally
@@ -67,7 +68,16 @@ fn determine_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 
 	// If VIRTIO_NET_F_MRG_RXBUF is negotiated, each buffer MUST be at least the size of the struct virtio_net_hdr.
 	// We just use MTU in that case, but otherwise...
-	if !dev_cfg.features.contains(virtio::net::F::MRG_RXBUF) {
+	if dev_cfg.features.contains(virtio::net::F::MRG_RXBUF)
+		&& let Some(my_mrg_rxbuf_size) = hermit_var!("HERMIT_MRG_RXBUF_SIZE")
+	{
+		let my_mrg_rxbuf_size = u32::from_str(&my_mrg_rxbuf_size).unwrap();
+		assert!(
+			my_mrg_rxbuf_size > 0,
+			"VIRTIO does not allow buffer elements of size 0."
+		);
+		min_buf_size = my_mrg_rxbuf_size;
+	} else {
 		// If [...] are negotiated, the driver SHOULD populate the receive queue(s) with buffers of at least 65562 bytes.
 		if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
 			|| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
@@ -92,7 +102,7 @@ impl RxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
-			buf_size: determine_buf_size(dev_cfg),
+			buf_size: determine_rx_buf_size(dev_cfg),
 		}
 	}
 
@@ -167,7 +177,7 @@ impl TxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
-			buf_size: determine_buf_size(dev_cfg),
+			buf_size: determine_mtu(dev_cfg).into(),
 		}
 	}
 
