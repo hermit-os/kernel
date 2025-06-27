@@ -22,8 +22,8 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::executor::block_on;
 use crate::fd::{
-	self, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd, dup_object,
-	dup_object2, get_object, isatty, remove_object,
+	self, AccessOption, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd,
+	dup_object, dup_object2, get_object, isatty, remove_object,
 };
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
@@ -389,6 +389,84 @@ pub unsafe extern "C" fn sys_umask(umask: u32) -> u32 {
 }
 
 #[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_faccessat(
+	dirfd: FileDescriptor,
+	name: *const c_char,
+	_mode: i32,
+	flags: i32,
+) -> i32 {
+	let access_option = AccessOption::from_bits_truncate(flags);
+	if access_option.bits() != flags {
+		return -crate::errno::EINVAL;
+	}
+
+	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
+		return -crate::errno::EINVAL;
+	};
+
+	const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
+	const AT_FDCWD: i32 = -100;
+
+	let stat = if name.starts_with("/") || dirfd == AT_FDCWD {
+		let no_follow: bool = (flags & AT_SYMLINK_NOFOLLOW) != 0;
+
+		if no_follow {
+			crate::fs::read_stat(name)
+		} else {
+			crate::fs::read_lstat(name)
+		}
+	} else {
+		warn!("faccessat with directory relative to fd is not implemented!");
+		return -crate::errno::ENOSYS;
+	};
+
+	if let Err(e) = stat {
+		return -i32::from(e);
+	}
+
+	let Ok(stat) = stat else { unreachable!() };
+	if access_option.can_access(stat.st_mode) {
+		0
+	} else {
+		-crate::errno::EACCES
+	}
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
+	// This is an implementation of libc's access, not of linux's faccessat
+	// See https://linux.die.net/man/2/faccessat for differences
+
+	let access_option = AccessOption::from_bits_truncate(flags);
+	if access_option.bits() != flags {
+		return -crate::errno::EINVAL;
+	}
+
+	if access_option.contains(AccessOption::F_OK) && access_option != AccessOption::F_OK {
+		return -crate::errno::EINVAL;
+	}
+
+	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
+		return -crate::errno::EINVAL;
+	};
+	let stat = crate::fs::read_lstat(name);
+
+	if let Err(e) = stat {
+		return -i32::from(e);
+	}
+
+	let Ok(stat) = stat else { unreachable!() };
+
+	if access_option.can_access(stat.st_mode) {
+		0
+	} else {
+		-crate::errno::EACCES
+	}
+}
+
+#[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 	let obj = remove_object(fd);
