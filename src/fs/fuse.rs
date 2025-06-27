@@ -4,6 +4,7 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
@@ -12,7 +13,6 @@ use core::{future, mem};
 use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
-use zerocopy::FromBytes;
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -47,7 +47,7 @@ pub(crate) trait FuseInterface {
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<Rsp<O>, VirtqError>
+	) -> Result<Rsp<O>, FuseError>
 	where
 		<O as ops::Op>::InStruct: Send,
 		<O as ops::Op>::OutStruct: Send;
@@ -403,16 +403,14 @@ pub(crate) mod ops {
 		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_LOOKUP;
 		type InStruct = ();
 		type InPayload = CString;
-		type OutStruct = ();
-		// Lookups return [fuse_entry_out] only when there actually is a result. For this reason,
-		// it is not part of the header (since all other headers are always there).
-		type OutPayload = [u8];
+		type OutStruct = fuse_entry_out;
+		type OutPayload = ();
 	}
 
 	impl Lookup {
 		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
-			(cmd, size_of::<fuse_entry_out>().try_into().unwrap())
+			(cmd, 0)
 		}
 	}
 }
@@ -534,15 +532,40 @@ where
 
 #[repr(C)]
 #[derive(Debug)]
-pub(crate) struct RspHeader<O: ops::Op> {
-	out_header: fuse_out_header,
-	op_header: O::OutStruct,
+// The generic H parameter allows us to handle RspHeaders with their op_header
+// potenitally uninitialized. After checking for the error code in the out_header,
+// the object can be transmuted to one with an initialized op_header.
+pub(crate) struct RspHeader<O: ops::Op, H = <O as ops::Op>::OutStruct> {
+	pub out_header: fuse_out_header,
+	op_header: H,
+	_phantom: PhantomData<O::OutStruct>,
 }
 
 #[derive(Debug)]
 pub(crate) struct Rsp<O: ops::Op> {
 	pub headers: Box<RspHeader<O>, DeviceAlloc>,
 	pub payload: Option<Vec<u8, DeviceAlloc>>,
+}
+
+#[derive(Debug)]
+pub(crate) enum FuseError {
+	VirtqError(VirtqError),
+	IOError(io::Error),
+}
+
+impl From<VirtqError> for FuseError {
+	fn from(value: VirtqError) -> Self {
+		Self::VirtqError(value)
+	}
+}
+
+impl From<FuseError> for io::Error {
+	fn from(value: FuseError) -> Self {
+		match value {
+			FuseError::VirtqError(virtq_error) => virtq_error.into(),
+			FuseError::IOError(io_error) => io_error,
+		}
+	}
 }
 
 fn lookup(name: CString) -> Option<u64> {
@@ -552,12 +575,7 @@ fn lookup(name: CString) -> Option<u64> {
 		.lock()
 		.send_command(cmd, rsp_payload_len)
 		.ok()?;
-	if rsp.headers.out_header.error == 0 {
-		let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
-		Some(entry_out.nodeid)
-	} else {
-		None
-	}
+	Some(rsp.headers.op_header.nodeid)
 }
 
 fn readlink(nid: u64) -> io::Result<String> {
@@ -1037,7 +1055,7 @@ impl VfsNode for FuseDirectory {
 			return Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap());
 		}
 
-		let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
+		let entry_out = rsp.headers.op_header;
 		let attr = entry_out.attr;
 
 		if attr.mode & S_IFMT != S_IFLNK {
@@ -1059,13 +1077,7 @@ impl VfsNode for FuseDirectory {
 			.unwrap()
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
-
-		if rsp.headers.out_header.error != 0 {
-			Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap())
-		} else {
-			let entry_out = fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
-			Ok(FileAttr::from(entry_out.attr))
-		}
+		Ok(FileAttr::from(rsp.headers.op_header.attr))
 	}
 
 	fn traverse_open(
@@ -1091,19 +1103,13 @@ impl VfsNode for FuseDirectory {
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 
-			if rsp.headers.out_header.error == 0 {
-				let entry_out =
-					fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
-				let attr = FileAttr::from(entry_out.attr);
-				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-					let mut path = path.into_string().unwrap();
-					path.remove(0);
-					Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
-				} else {
-					Err(io::Error::ENOTDIR)
-				}
+			let attr = FileAttr::from(rsp.headers.op_header.attr);
+			if attr.st_mode.contains(AccessPermission::S_IFDIR) {
+				let mut path = path.into_string().unwrap();
+				path.remove(0);
+				Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
 			} else {
-				Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap())
+				Err(io::Error::ENOTDIR)
 			}
 		} else {
 			let file = FuseFileHandle::new();
@@ -1293,12 +1299,7 @@ pub(crate) fn init() {
 					.send_command(cmd, rsp_payload_len)
 					.unwrap();
 
-				assert_eq!(rsp.headers.out_header.error, 0);
-				let entry_out =
-					fuse_entry_out::ref_from_bytes(rsp.payload.as_ref().unwrap()).unwrap();
-				let attr = entry_out.attr;
-				let attr = FileAttr::from(attr);
-
+				let attr = FileAttr::from(rsp.headers.op_header.attr);
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
 					info!("Fuse mount {i} to /{i}");
 					fs::FILESYSTEM
