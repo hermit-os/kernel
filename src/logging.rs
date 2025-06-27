@@ -3,10 +3,10 @@ use core::fmt;
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
-static KERNEL_LOGGER: KernelLogger = KernelLogger;
+pub static KERNEL_LOGGER: KernelLogger = KernelLogger;
 
 /// Data structure to filter kernel messages
-struct KernelLogger;
+pub struct KernelLogger;
 
 impl log::Log for KernelLogger {
 	fn enabled(&self, _: &Metadata<'_>) -> bool {
