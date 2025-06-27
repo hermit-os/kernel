@@ -1,10 +1,31 @@
 use core::fmt;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
+pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
+
 /// Data structure to filter kernel messages
-struct KernelLogger;
+pub struct KernelLogger {
+	time: AtomicBool,
+}
+
+impl KernelLogger {
+	pub const fn new() -> Self {
+		Self {
+			time: AtomicBool::new(false),
+		}
+	}
+
+	pub fn time(&self) -> bool {
+		self.time.load(Ordering::Relaxed)
+	}
+
+	pub fn set_time(&self, time: bool) {
+		self.time.store(time, Ordering::Relaxed);
+	}
+}
 
 impl log::Log for KernelLogger {
 	fn enabled(&self, _: &Metadata<'_>) -> bool {
@@ -16,14 +37,31 @@ impl log::Log for KernelLogger {
 	}
 
 	fn log(&self, record: &Record<'_>) {
-		if self.enabled(record.metadata()) {
-			println!(
-				"[{}][{}] {}",
-				crate::arch::core_local::core_id(),
-				ColorLevel(record.level()),
-				record.args()
-			);
+		if !self.enabled(record.metadata()) {
+			return;
 		}
+
+		let core_id = crate::arch::core_local::core_id();
+		let level = ColorLevel(record.level());
+		let target = record.target();
+		let args = record.args();
+		if self.time() {
+			let time = crate::processor::get_timer_ticks();
+			let time = Microseconds(time);
+			println!("[{time}][{core_id}][{level} {target}] {args}");
+		} else {
+			println!("[            ][{core_id}][{level} {target}] {args}");
+		}
+	}
+}
+
+struct Microseconds(u64);
+
+impl fmt::Display for Microseconds {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let seconds = self.0 / 1_000_000;
+		let microseconds = self.0 % 1_000_000;
+		write!(f, "{seconds:5}.{microseconds:06}")
 	}
 }
 
@@ -55,7 +93,7 @@ fn no_color() -> bool {
 }
 
 pub unsafe fn init() {
-	log::set_logger(&KernelLogger).expect("Can't initialize logger");
+	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
 	let mut max_level = LevelFilter::Info;
