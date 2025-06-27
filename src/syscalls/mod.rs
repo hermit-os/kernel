@@ -399,11 +399,11 @@ pub unsafe extern "C" fn sys_faccessat(
 ) -> i32 {
 	let access_option = AccessOption::from_bits_truncate(flags);
 	if access_option.bits() != flags {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	};
 
 	const AT_SYMLINK_NOFOLLOW: i32 = 0x100;
@@ -413,13 +413,13 @@ pub unsafe extern "C" fn sys_faccessat(
 		let no_follow: bool = (flags & AT_SYMLINK_NOFOLLOW) != 0;
 
 		if no_follow {
-			crate::fs::read_stat(name)
+			fs::read_stat(name)
 		} else {
-			crate::fs::read_lstat(name)
+			fs::read_lstat(name)
 		}
 	} else {
 		warn!("faccessat with directory relative to fd is not implemented!");
-		return -crate::errno::ENOSYS;
+		return -i32::from(Errno::Nosys);
 	};
 
 	if let Err(e) = stat {
@@ -430,27 +430,24 @@ pub unsafe extern "C" fn sys_faccessat(
 	if access_option.can_access(stat.st_mode) {
 		0
 	} else {
-		-crate::errno::EACCES
+		-i32::from(Errno::Acces)
 	}
 }
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
-	// This is an implementation of libc's access, not of linux's faccessat
-	// See https://linux.die.net/man/2/faccessat for differences
-
 	let access_option = AccessOption::from_bits_truncate(flags);
 	if access_option.bits() != flags {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	if access_option.contains(AccessOption::F_OK) && access_option != AccessOption::F_OK {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	};
 	let stat = crate::fs::read_lstat(name);
 
@@ -463,8 +460,21 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 	if access_option.can_access(stat.st_mode) {
 		0
 	} else {
-		-crate::errno::EACCES
+		-i32::from(Errno::Acces)
 	}
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_fchmod(fd: FileDescriptor, mode: u32) -> i32 {
+	let access_permission = AccessPermission::from_bits_truncate(mode);
+	if access_permission.bits() != mode {
+		return -i32::from(Errno::Inval);
+	}
+
+	crate::fd::chmod(fd, access_permission)
+		.map(|()| 0)
+		.unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system]
@@ -535,7 +545,7 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 
 unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
-	crate::fd::write(fd, slice).map_or_else(
+	fd::write(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| v.try_into().unwrap(),
 	)
@@ -545,6 +555,22 @@ unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	unsafe { write(fd, buf, len) }
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_ftruncate(fd: FileDescriptor, size: usize) -> i32 {
+	fd::truncate(fd, size).map_or_else(|e| -i32::from(e), |()| 0)
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_truncate(path: *const c_char, size: usize) -> i32 {
+	let Ok(path) = unsafe { CStr::from_ptr(path) }.to_str() else {
+		return -i32::from(Errno::Inval);
+	};
+
+	fs::truncate(path, size).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
 /// `write()` attempts to write `nbyte` of data to the object referenced by the

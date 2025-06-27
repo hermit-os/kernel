@@ -256,6 +256,19 @@ impl ObjectInterface for RamFileInterface {
 		let guard = self.inner.read().await;
 		Ok(guard.attr)
 	}
+
+	async fn truncate(&self, size: usize) -> io::Result<()> {
+		let mut guard = self.inner.write().await;
+		guard.data.resize(size, 0);
+		guard.attr.st_size = size as i64;
+		Ok(())
+	}
+
+	async fn chmod(&self, access_permission: AccessPermission) -> io::Result<()> {
+		let mut guard = self.inner.write().await;
+		guard.attr.st_mode = access_permission;
+		Ok(())
+	}
 }
 
 impl RamFileInterface {
