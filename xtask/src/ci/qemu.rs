@@ -40,6 +40,10 @@ pub struct Qemu {
 	/// Do not activate additional virtio features.
 	#[arg(long)]
 	no_default_virtio_features: bool,
+
+	/// Use a TAP device for networking.
+	#[arg(long)]
+	tap: bool,
 }
 
 #[derive(ValueEnum, PartialEq, Eq, Clone, Copy)]
@@ -300,7 +304,11 @@ impl Qemu {
 	}
 
 	fn device_args(&self, memory: usize) -> Vec<String> {
-		const NETDEV_OPTIONS: &str = "user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9";
+		let netdev_options = if self.tap {
+			"tap,id=net0,script=xtask/hermit-ifup,vhost=on"
+		} else {
+			"user,id=net0,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9"
+		};
 
 		self.devices
 			.iter()
@@ -309,20 +317,20 @@ impl Qemu {
 				Device::CadenceGem => {
 					vec![
 						"-nic".to_string(),
-						format!("{NETDEV_OPTIONS},model=cadence_gem"),
+						format!("{netdev_options},model=cadence_gem"),
 					]
 				}
 				device @ (Device::Rtl8139 | Device::VirtioNetMmio | Device::VirtioNetPci) => {
 					let mut netdev_args = vec![
 						"-netdev".to_string(),
-						NETDEV_OPTIONS.to_string(),
+						netdev_options.to_string(),
 						"-device".to_string(),
 					];
 
 					let mut device_arg = match device {
-						Device::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
-						Device::VirtioNetMmio => "virtio-net-device,netdev=u1",
-						Device::Rtl8139 => "rtl8139,netdev=u1",
+						Device::VirtioNetPci => "virtio-net-pci,netdev=net0,disable-legacy=on",
+						Device::VirtioNetMmio => "virtio-net-device,netdev=net0",
+						Device::Rtl8139 => "rtl8139,netdev=net0",
 						Device::CadenceGem | Device::VirtioFsPci => unreachable!(),
 					}
 					.to_string();
@@ -407,7 +415,15 @@ impl Qemu {
 	}
 
 	fn guest_ip(&self) -> IpAddr {
-		Ipv4Addr::LOCALHOST.into()
+		if self.tap {
+			if let Ok(ip) = env::var("HERMIT_IP") {
+				ip.parse().unwrap()
+			} else {
+				Ipv4Addr::new(10, 0, 5, 3).into()
+			}
+		} else {
+			Ipv4Addr::LOCALHOST.into()
+		}
 	}
 }
 
