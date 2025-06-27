@@ -515,10 +515,6 @@ impl VirtioNetDriver<Uninit> {
 			// Packed Vq can be used
 			| virtio::net::F::RING_PACKED
 			| virtio::net::F::NOTIFICATION_DATA
-			// Host should avoid the creation of checksums
-			| virtio::net::F::CSUM
-			// Guest avoids the creation of checksums
-			| virtio::net::F::GUEST_CSUM
 			// MTU setting can be used
 			| virtio::net::F::MTU
 			// Driver can merge receive buffers

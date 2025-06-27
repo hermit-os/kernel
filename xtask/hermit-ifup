@@ -1,0 +1,7 @@
+#!/bin/sh
+# This script brings up the TAP device for QEMU.
+# The device itself is created and destroyed by QEMU.
+# Usage: .. -netdev tap,script=hermit-ifup,..
+
+ip address add dev "$1" local 10.0.5.1/24 broadcast 10.0.5.255
+ip link set "$1" up

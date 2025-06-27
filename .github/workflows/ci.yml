@@ -215,6 +215,8 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci qemu --sudo --devices virtio-net-pci --tap
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 qemu ${{ matrix.flags }} --devices virtio-net-pci --no-default-virtio-features
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4 qemu ${{ matrix.flags }} --devices virtio-net-pci --uefi
