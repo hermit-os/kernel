@@ -45,18 +45,15 @@ unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	}
 }
 
-unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
-	unsafe { read_entropy(buf, len, flags) }
-}
-
 /// Fill `len` bytes in `buf` with cryptographically secure random data.
 ///
 /// Returns either the number of bytes written to buf (a positive value) or
 /// * `-EINVAL` if `flags` contains unknown flags.
 /// * `-ENOSYS` if the system does not support random data generation.
+#[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
-	unsafe { kernel_function!(__sys_read_entropy(buf, len, flags)) }
+	unsafe { read_entropy(buf, len, flags) }
 }
 
 /// Create a cryptographicly secure 32bit random number with the support of
