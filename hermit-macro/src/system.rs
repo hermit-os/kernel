@@ -165,6 +165,8 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 			ret
 		}},
 	};
+	let kernel_function_ident =
+		Ident::new(&format!("kernel_function{}", args.len()), Span::call_site());
 
 	let sys_func = ItemFn {
 		block: parse_quote! {{
@@ -172,7 +174,17 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 
 			#kernel_func
 
-			#unsafety { kernel_function!(#kernel_ident(#(#args),*)) }
+			#[cfg(not(any(
+				target_arch = "riscv64",
+				feature = "common-os"
+			)))]
+			unsafe { crate::arch::switch::#kernel_function_ident(#kernel_ident, #(#args),*) }
+
+			#[cfg(any(
+				target_arch = "riscv64",
+				feature = "common-os"
+			))]
+			#unsafety { #kernel_ident(#(#args),*) }
 		}},
 		..func
 	};
@@ -243,7 +255,17 @@ mod tests {
 					ret
 				}
 
-				{ kernel_function!(_sys_test(a, b)) }
+				#[cfg(not(any(
+					target_arch = "riscv64",
+					feature = "common-os"
+				)))]
+				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
+
+				#[cfg(any(
+					target_arch = "riscv64",
+					feature = "common-os"
+				))]
+				{ _sys_test(a, b) }
 			}
 		};
 
@@ -302,7 +324,17 @@ mod tests {
 					ret
 				}
 
-				unsafe { kernel_function!(_sys_test(a, b)) }
+				#[cfg(not(any(
+					target_arch = "riscv64",
+					feature = "common-os"
+				)))]
+				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
+
+				#[cfg(any(
+					target_arch = "riscv64",
+					feature = "common-os"
+				))]
+				unsafe { _sys_test(a, b) }
 			}
 		};
 
@@ -363,7 +395,17 @@ mod tests {
 					ret
 				}
 
-				{ kernel_function!(_sys_test(a, b)) }
+				#[cfg(not(any(
+					target_arch = "riscv64",
+					feature = "common-os"
+				)))]
+				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
+
+				#[cfg(any(
+					target_arch = "riscv64",
+					feature = "common-os"
+				))]
+				{ _sys_test(a, b) }
 			}
 		};
 
