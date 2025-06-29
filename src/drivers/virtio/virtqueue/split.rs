@@ -8,6 +8,7 @@ use core::mem::{self, MaybeUninit};
 use core::ptr;
 
 use memory_addresses::PhysAddr;
+use smallvec::SmallVec;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -228,15 +229,14 @@ impl VirtqPrivate for SplitVq {
 	type Descriptor = virtq::Desc;
 	fn create_indirect_ctrl(
 		buffer_tkn: &AvailBufferToken,
-	) -> Result<Box<[Self::Descriptor]>, VirtqError> {
+	) -> Result<SmallVec<[Self::Descriptor; 4]>, VirtqError> {
 		Ok(Self::descriptor_iter(buffer_tkn)?
 			.zip(1..)
 			.map(|(descriptor, next_id)| Self::Descriptor {
 				next: next_id.into(),
 				..descriptor
 			})
-			.collect::<Vec<_>>()
-			.into_boxed_slice())
+			.collect::<SmallVec<_>>())
 	}
 }
 
