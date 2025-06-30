@@ -113,7 +113,7 @@ crossbeam-utils = { version = "0.8", default-features = false }
 enum_dispatch = "0.3"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
-fuse-abi = { version = "0.2", features = ["linux", "zerocopy"], optional = true }
+fuse-abi = { version = "0.2", features = ["linux"], optional = true }
 hashbrown = { version = "0.15", default-features = false }
 heapless = "0.8"
 hermit-entry = { version = "0.10", features = ["kernel"] }
