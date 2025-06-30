@@ -390,7 +390,7 @@ impl VirtioVsockDriver {
 			)
 			.unwrap(),
 		));
-		// Interrupt for communicating that a sended packet left, is not needed
+		// Interrupt for communicating that a sent packet left, is not needed
 		self.send_vq.disable_notifs();
 
 		// create the queues and tell device about them

@@ -793,7 +793,7 @@ impl VirtioNetDriver<Uninit> {
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
-				// Interrupt for communicating that a sended packet left, is not needed
+				// Interrupt for communicating that a sent packet left, is not needed
 				vq.disable_notifs();
 
 				inner.send_vqs.add(VirtQueue::Packed(vq));
@@ -819,7 +819,7 @@ impl VirtioNetDriver<Uninit> {
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
-				// Interrupt for communicating that a sended packet left, is not needed
+				// Interrupt for communicating that a sent packet left, is not needed
 				vq.disable_notifs();
 
 				inner.send_vqs.add(VirtQueue::Split(vq));
