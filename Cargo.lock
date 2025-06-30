@@ -734,6 +734,7 @@ dependencies = [
  "smoltcp",
  "take-static",
  "talc",
+ "thiserror",
  "time",
  "tock-registers 0.9.0",
  "trapframe",

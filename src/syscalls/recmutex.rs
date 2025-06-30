@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
 
-use crate::errno::*;
+use crate::errno::Errno;
 use crate::synch::recmutex::RecursiveMutex;
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	// Create a new boxed recursive mutex and return a pointer to the raw memory.
@@ -23,7 +23,7 @@ pub unsafe extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	// Consume the pointer to the raw memory into a Box again
@@ -39,7 +39,7 @@ pub unsafe extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let mutex = unsafe { &*recmutex };
@@ -52,7 +52,7 @@ pub unsafe extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let mutex = unsafe { &*recmutex };

@@ -5,7 +5,7 @@ use hermit_sync::InterruptTicketMutex;
 use crate::arch::core_local::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
-use crate::errno::*;
+use crate::errno::Errno;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
 use crate::time::timespec;
@@ -30,7 +30,7 @@ pub unsafe extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	if id.is_null() || unsafe { *id } == task.get_id().into() {
 		i32::from(task.get_priority().into())
 	} else {
-		-EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
-	-ENOSYS
+	-i32::from(Errno::Nosys)
 }
 
 fn exit(arg: i32) -> ! {
@@ -106,7 +106,7 @@ pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timesp
 	let requested_time = unsafe { &*rqtp };
 	if requested_time.tv_sec < 0 || requested_time.tv_nsec > 999_999_999 {
 		debug!("sys_nanosleep called with an invalid requested time, returning -EINVAL");
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let microseconds =
@@ -143,7 +143,7 @@ pub extern "C" fn sys_yield() {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {dest} with signal {signum}");
-	-ENOSYS
+	-i32::from(Errno::Nosys)
 }
 
 #[cfg(feature = "newlib")]
@@ -193,7 +193,7 @@ pub unsafe extern "C" fn sys_spawn(
 pub extern "C" fn sys_join(id: Tid) -> i32 {
 	match scheduler::join(TaskId::from(id)) {
 		Ok(()) => 0,
-		_ => -EINVAL,
+		_ => -i32::from(Errno::Inval),
 	}
 }
 

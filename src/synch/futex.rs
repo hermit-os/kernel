@@ -8,7 +8,7 @@ use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
-use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
+use crate::errno::Errno;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::TaskHandlePriorityQueue;
 
@@ -43,7 +43,7 @@ pub(crate) fn futex_wait(
 	let mut parking_lot = PARKING_LOT.lock();
 	// Check the futex value after locking the parking lot so that all changes are observed.
 	if address.load(SeqCst) != expected {
-		return -EAGAIN;
+		return -i32::from(Errno::Again);
 	}
 
 	let wakeup_time = if flags.contains(Flags::RELATIVE) {
@@ -76,7 +76,7 @@ pub(crate) fn futex_wait(
 			if wakeup {
 				return 0;
 			} else {
-				return -ETIMEDOUT;
+				return -i32::from(Errno::Timedout);
 			}
 		} else {
 			// If we are not in the waking queue, this must have been a wakeup.
@@ -112,7 +112,7 @@ pub(crate) fn futex_wait_and_set(
 	let mut parking_lot = PARKING_LOT.lock();
 	// Check the futex value after locking the parking lot so that all changes are observed.
 	if address.swap(new_value, SeqCst) != expected {
-		return -EAGAIN;
+		return -i32::from(Errno::Again);
 	}
 
 	let wakeup_time = if flags.contains(Flags::RELATIVE) {
@@ -145,7 +145,7 @@ pub(crate) fn futex_wait_and_set(
 			if wakeup {
 				return 0;
 			} else {
-				return -ETIMEDOUT;
+				return -i32::from(Errno::Timedout);
 			}
 		} else {
 			// If we are not in the waking queue, this must have been a wakeup.
@@ -171,7 +171,7 @@ pub(crate) fn futex_wait_and_set(
 /// It is safe to pass a dangling pointer.
 pub(crate) fn futex_wake(address: *const AtomicU32, count: i32) -> i32 {
 	if count < 0 {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let mut parking_lot = PARKING_LOT.lock();
@@ -203,7 +203,7 @@ pub(crate) fn futex_wake(address: *const AtomicU32, count: i32) -> i32 {
 /// the futex at address will set to `new_value`.
 pub(crate) fn futex_wake_or_set(address: &AtomicU32, count: i32, new_value: u32) -> i32 {
 	if count < 0 {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let mut parking_lot = PARKING_LOT.lock();

@@ -10,7 +10,7 @@ use cfg_if::cfg_if;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
-use crate::errno::*;
+use crate::errno::Errno;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::executor::network::{NIC, NetworkState};
 #[cfg(feature = "tcp")]
@@ -326,7 +326,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	_len: usize,
 ) -> i32 {
 	error!("Please enable the feature 'dns' to determine the network ip by name.");
-	-ENOSYS
+	-i32::from(Errno::Nosys)
 }
 
 /// The system call `sys_getaddrbyname` determine the network host entry.
@@ -367,11 +367,11 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	use crate::executor::network::get_query_result;
 
 	if len != size_of::<in_addr>() && len != size_of::<in6_addr>() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	if inaddr.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let query_type = if len == size_of::<in6_addr>() {
@@ -384,7 +384,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	let name = if let Ok(name) = name.to_str() {
 		name.to_owned()
 	} else {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	};
 
 	let query = {
@@ -417,7 +417,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
 
 	if protocol != 0 {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	#[cfg(feature = "vsock")]
@@ -472,7 +472,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 		}
 	}
 
-	-EINVAL
+	-i32::from(Errno::Inval)
 }
 
 #[hermit_macro::system(errno)]
@@ -551,7 +551,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	if name.is_null() {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let family: i32 = unsafe { (*name).sa_family.into() };
@@ -563,7 +563,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET => {
 				if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
-					return -crate::errno::EINVAL;
+					return -i32::from(Errno::Inval);
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
@@ -572,7 +572,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			AF_INET6 => {
 				if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
-					return -crate::errno::EINVAL;
+					return -i32::from(Errno::Inval);
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() });
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
@@ -581,13 +581,13 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 			#[cfg(feature = "vsock")]
 			AF_VSOCK => {
 				if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
-					return -crate::errno::EINVAL;
+					return -i32::from(Errno::Inval);
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() });
 				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
-			_ => -crate::errno::EINVAL,
+			_ => -i32::from(Errno::Inval),
 		},
 	)
 }
@@ -596,7 +596,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	if name.is_null() {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let sa_family = unsafe { i32::from((*name).sa_family) };
@@ -605,26 +605,26 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		AF_INET => {
 			if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
-				return -crate::errno::EINVAL;
+				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in>() }))
 		}
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		AF_INET6 => {
 			if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
-				return -crate::errno::EINVAL;
+				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() }))
 		}
 		#[cfg(feature = "vsock")]
 		AF_VSOCK => {
 			if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
-				return -crate::errno::EINVAL;
+				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Vsock(VsockEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() }))
 		}
 		_ => {
-			return -crate::errno::EINVAL;
+			return -i32::from(Errno::Inval);
 		}
 	};
 
@@ -661,7 +661,7 @@ pub unsafe extern "C" fn sys_getsockname(
 
 									0
 								} else {
-									-crate::errno::EINVAL
+									-i32::from(Errno::Inval)
 								}
 							}
 							#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -673,7 +673,7 @@ pub unsafe extern "C" fn sys_getsockname(
 
 									0
 								} else {
-									-crate::errno::EINVAL
+									-i32::from(Errno::Inval)
 								}
 							}
 						},
@@ -683,15 +683,15 @@ pub unsafe extern "C" fn sys_getsockname(
 								warn!("unsupported device");
 								0
 							} else {
-								-crate::errno::EINVAL
+								-i32::from(Errno::Inval)
 							}
 						}
 					}
 				} else {
-					-crate::errno::EINVAL
+					-i32::from(Errno::Inval)
 				}
 			} else {
-				-crate::errno::EINVAL
+				-i32::from(Errno::Inval)
 			}
 		},
 	)
@@ -713,7 +713,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
 	{
 		if optval.is_null() {
-			return -crate::errno::EINVAL;
+			return -i32::from(Errno::Inval);
 		}
 
 		let value = unsafe { *optval.cast::<i32>() };
@@ -728,7 +728,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 	} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
 		0
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -745,7 +745,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 
 	if level == IPPROTO_TCP && optname == TCP_NODELAY {
 		if optval.is_null() || optlen.is_null() {
-			return -crate::errno::EINVAL;
+			return -i32::from(Errno::Inval);
 		}
 
 		let optval = unsafe { &mut *optval.cast::<i32>() };
@@ -770,7 +770,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 			},
 		)
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -798,7 +798,7 @@ pub unsafe extern "C" fn sys_getpeername(
 									*addr = sockaddr_in::from(endpoint);
 									*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
 								} else {
-									return -crate::errno::EINVAL;
+									return -i32::from(Errno::Inval);
 								}
 							}
 							IpAddress::Ipv6(_) => {
@@ -807,7 +807,7 @@ pub unsafe extern "C" fn sys_getpeername(
 									*addr = sockaddr_in6::from(endpoint);
 									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
 								} else {
-									return -crate::errno::EINVAL;
+									return -i32::from(Errno::Inval);
 								}
 							}
 						},
@@ -816,12 +816,12 @@ pub unsafe extern "C" fn sys_getpeername(
 							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								warn!("unsupported device");
 							} else {
-								return -crate::errno::EINVAL;
+								return -i32::from(Errno::Inval);
 							}
 						}
 					}
 				} else {
-					return -crate::errno::EINVAL;
+					return -i32::from(Errno::Inval);
 				}
 			}
 
@@ -842,7 +842,7 @@ pub unsafe extern "C" fn sys_getaddrinfo(
 	_hints: *const addrinfo,
 	_res: *mut *mut addrinfo,
 ) -> i32 {
-	-EINVAL
+	-i32::from(Errno::Inval)
 }
 
 #[hermit_macro::system(errno)]
@@ -881,7 +881,7 @@ pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32)
 			|v| v.try_into().unwrap(),
 		)
 	} else {
-		(-crate::errno::EINVAL).try_into().unwrap()
+		(-i32::from(Errno::Inval)).try_into().unwrap()
 	}
 }
 
@@ -898,7 +898,7 @@ pub unsafe extern "C" fn sys_sendto(
 	let endpoint;
 
 	if addr.is_null() || addr_len == 0 {
-		return (-crate::errno::EINVAL).try_into().unwrap();
+		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
 
 	cfg_if! {
@@ -907,13 +907,13 @@ pub unsafe extern "C" fn sys_sendto(
 
 			if sa_family == AF_INET {
 				if addr_len < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
-					return (-crate::errno::EINVAL).try_into().unwrap();
+					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
 
 				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr.cast::<sockaddr_in>())})));
 			} else if sa_family == AF_INET6 {
 				if addr_len < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
-					return (-crate::errno::EINVAL).try_into().unwrap();
+					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
 
 				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe { *(addr.cast::<sockaddr_in6>()) })));
@@ -939,7 +939,7 @@ pub unsafe extern "C" fn sys_sendto(
 			},
 		)
 	} else {
-		(-crate::errno::EINVAL).try_into().unwrap()
+		(-i32::from(Errno::Inval)).try_into().unwrap()
 	}
 }
 
@@ -975,7 +975,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 										*addr = sockaddr_in::from(endpoint);
 										*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
 									} else {
-										return (-crate::errno::EINVAL).try_into().unwrap();
+										return (-i32::from(Errno::Inval)).try_into().unwrap();
 									}
 								}
 								IpAddress::Ipv6(_) => {
@@ -985,13 +985,13 @@ pub unsafe extern "C" fn sys_recvfrom(
 										*addr = sockaddr_in6::from(endpoint);
 										*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
 									} else {
-										return (-crate::errno::EINVAL).try_into().unwrap();
+										return (-i32::from(Errno::Inval)).try_into().unwrap();
 									}
 								}
 							},
 							#[cfg(feature = "vsock")]
 							_ => {
-								return (-crate::errno::EINVAL).try_into().unwrap();
+								return (-i32::from(Errno::Inval)).try_into().unwrap();
 							}
 						}
 					}
