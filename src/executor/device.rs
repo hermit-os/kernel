@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 
 use smoltcp::iface::{Config, Interface, SocketSet};
+#[cfg(feature = "trace")]
+use smoltcp::phy::Tracer;
 use smoltcp::phy::{self, ChecksumCapabilities, Device, DeviceCapabilities, Medium};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
@@ -53,7 +55,12 @@ impl<'a> NetworkInterface<'a> {
 			return NetworkState::InitializationFailed;
 		};
 
-		let mut device = HermitNet::new(mtu, checksums.clone());
+		let mut device = {
+			let device = HermitNet::new(mtu, checksums.clone());
+			#[cfg(feature = "trace")]
+			let device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
+			device
+		};
 
 		if hermit_var!("HERMIT_IP").is_some() {
 			warn!(
@@ -104,7 +111,12 @@ impl<'a> NetworkInterface<'a> {
 			return NetworkState::InitializationFailed;
 		};
 
-		let mut device = HermitNet::new(mtu, checksums.clone());
+		let mut device = {
+			let device = HermitNet::new(mtu, checksums.clone());
+			#[cfg(feature = "trace")]
+			let device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
+			device
+		};
 
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
