@@ -235,7 +235,7 @@ impl Qemu {
 				"-machine".to_string(),
 				machine.to_string(),
 				"-bios".to_string(),
-				"opensbi-1.6-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
+				"opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
 			]
 		} else {
 			vec![]
