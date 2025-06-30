@@ -13,10 +13,10 @@ use smoltcp::socket::dhcpv4;
 use smoltcp::socket::dns;
 use smoltcp::time::Instant;
 #[cfg(not(feature = "dhcpv4"))]
+use smoltcp::wire::IpCidr;
+#[cfg(not(feature = "dhcpv4"))]
 use smoltcp::wire::Ipv4Address;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
-#[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::{IpAddress, IpCidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
@@ -135,15 +135,7 @@ impl<'a> NetworkInterface<'a> {
 
 		let ethernet_addr = EthernetAddress(mac);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
-		let ip_addrs = [IpCidr::new(
-			IpAddress::v4(
-				myip.octets()[0],
-				myip.octets()[1],
-				myip.octets()[2],
-				myip.octets()[3],
-			),
-			prefix_len,
-		)];
+		let ip_addrs = [IpCidr::new(myip.into(), prefix_len)];
 
 		info!("MAC address {hardware_addr}");
 		info!("Configure network interface with address {}", ip_addrs[0]);
@@ -160,17 +152,7 @@ impl<'a> NetworkInterface<'a> {
 
 		let mut iface = Interface::new(config, &mut device, crate::executor::network::now());
 		iface.update_ip_addrs(|ip_addrs| {
-			ip_addrs
-				.push(IpCidr::new(
-					IpAddress::v4(
-						myip.octets()[0],
-						myip.octets()[1],
-						myip.octets()[2],
-						myip.octets()[3],
-					),
-					prefix_len,
-				))
-				.unwrap();
+			ip_addrs.push(IpCidr::new(myip.into(), prefix_len)).unwrap();
 		});
 		iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
 
