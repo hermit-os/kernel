@@ -14,7 +14,7 @@ use smoltcp::socket::dns;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
@@ -128,10 +128,10 @@ impl<'a> NetworkInterface<'a> {
 
 		let ethernet_addr = EthernetAddress(mac);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
-		let ip_addrs = [Ipv4Cidr::from_netmask(myip, mymask).unwrap()];
+		let ip_addr = IpCidr::from(Ipv4Cidr::from_netmask(myip, mymask).unwrap());
 
 		info!("MAC address {hardware_addr}");
-		info!("Configure network interface with address {}", ip_addrs[0]);
+		info!("Configure network interface with address {ip_addr}");
 		info!("Configure gateway with address {mygw}");
 		info!("{checksums:?}");
 		info!("MTU: {mtu} bytes");
@@ -145,9 +145,7 @@ impl<'a> NetworkInterface<'a> {
 
 		let mut iface = Interface::new(config, &mut device, crate::executor::network::now());
 		iface.update_ip_addrs(|ip_addrs| {
-			ip_addrs
-				.push(Ipv4Cidr::from_netmask(myip, mymask).unwrap().into())
-				.unwrap();
+			ip_addrs.push(ip_addr).unwrap();
 		});
 		iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
 
