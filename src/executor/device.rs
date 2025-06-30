@@ -14,7 +14,7 @@ use smoltcp::socket::dns;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::{IpCidr, Ipv4Address};
+use smoltcp::wire::{Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
@@ -126,14 +126,9 @@ impl<'a> NetworkInterface<'a> {
 		#[cfg(feature = "dns")]
 		let mydns2 = Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS2", "1.1.1.1")).unwrap();
 
-		// calculate the netmask length
-		// => count the number of contiguous 1 bits
-		let prefix_len = mymask.to_bits().leading_ones();
-		let prefix_len = u8::try_from(prefix_len).unwrap();
-
 		let ethernet_addr = EthernetAddress(mac);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
-		let ip_addrs = [IpCidr::new(myip.into(), prefix_len)];
+		let ip_addrs = [Ipv4Cidr::from_netmask(myip, mymask).unwrap()];
 
 		info!("MAC address {hardware_addr}");
 		info!("Configure network interface with address {}", ip_addrs[0]);
@@ -150,7 +145,9 @@ impl<'a> NetworkInterface<'a> {
 
 		let mut iface = Interface::new(config, &mut device, crate::executor::network::now());
 		iface.update_ip_addrs(|ip_addrs| {
-			ip_addrs.push(IpCidr::new(myip.into(), prefix_len)).unwrap();
+			ip_addrs
+				.push(Ipv4Cidr::from_netmask(myip, mymask).unwrap().into())
+				.unwrap();
 		});
 		iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
 
