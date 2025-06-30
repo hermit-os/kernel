@@ -129,18 +129,9 @@ impl<'a> NetworkInterface<'a> {
 		let mydns2 = Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS2", "1.1.1.1")).unwrap();
 
 		// calculate the netmask length
-		// => count the number of contiguous 1 bits,
-		// starting at the most significant bit in the first octet
-		let mut prefix_len = (!mymask.octets()[0]).trailing_zeros();
-		if prefix_len == 8 {
-			prefix_len += (!mymask.octets()[1]).trailing_zeros();
-		}
-		if prefix_len == 16 {
-			prefix_len += (!mymask.octets()[2]).trailing_zeros();
-		}
-		if prefix_len == 24 {
-			prefix_len += (!mymask.octets()[3]).trailing_zeros();
-		}
+		// => count the number of contiguous 1 bits
+		let prefix_len = mymask.to_bits().leading_ones();
+		let prefix_len = u8::try_from(prefix_len).unwrap();
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
@@ -151,7 +142,7 @@ impl<'a> NetworkInterface<'a> {
 				myip.octets()[2],
 				myip.octets()[3],
 			),
-			prefix_len.try_into().unwrap(),
+			prefix_len,
 		)];
 
 		info!("MAC address {hardware_addr}");
@@ -177,7 +168,7 @@ impl<'a> NetworkInterface<'a> {
 						myip.octets()[2],
 						myip.octets()[3],
 					),
-					prefix_len.try_into().unwrap(),
+					prefix_len,
 				))
 				.unwrap();
 		});
