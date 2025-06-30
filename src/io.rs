@@ -1,6 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::{fmt, result};
+use core::fmt;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
@@ -28,7 +28,7 @@ pub enum Error {
 	ENOTSOCK = crate::errno::ENOTSOCK,
 }
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 /// The Read trait allows for reading bytes from a source.
 ///
