@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::arch::kernel::core_local::core_scheduler;
+use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
 use crate::io;
@@ -159,66 +160,66 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
 	async fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
 	async fn write(&self, _buf: &[u8]) -> io::Result<usize> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
 	async fn lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// `fstat`
 	async fn fstat(&self) -> io::Result<FileAttr> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
 	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn connect(&self, _endpoint: Endpoint) -> io::Result<()> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn bind(&self, _name: ListenEndpoint) -> io::Result<()> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// `listen` for connections on a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn listen(&self, _backlog: i32) -> io::Result<()> {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()> {
-		Err(io::Error::ENOTSOCK)
+		Err(Errno::Notsock)
 	}
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
-		Err(io::Error::ENOTSOCK)
+		Err(Errno::Notsock)
 	}
 
 	/// `getsockname` gets socket name
@@ -237,7 +238,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	/// receive a message from a socket
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn recvfrom(&self, _buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// send a message from a socket
@@ -249,23 +250,23 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	/// address).
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn sendto(&self, _buffer: &[u8], _endpoint: Endpoint) -> io::Result<usize> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// shut down part of a full-duplex connection
 	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	async fn shutdown(&self, _how: i32) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Returns the file status flags.
 	async fn status_flags(&self) -> io::Result<StatusFlags> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Sets the file status flags.
 	async fn set_status_flags(&self, _status_flags: StatusFlags) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// `isatty` returns `true` for a terminal device
@@ -340,7 +341,7 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 		&& timeout.is_some()
 	{
 		// A return value of zero indicates that the system call timed out
-		if *e == io::Error::EAGAIN {
+		if *e == Errno::Again {
 			return Ok(0);
 		}
 	}

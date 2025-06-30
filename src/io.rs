@@ -2,33 +2,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use crate::errno::Errno;
 
-// TODO: Integrate with src/errno.rs ?
-#[allow(clippy::upper_case_acronyms)]
-#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
-#[repr(i32)]
-pub enum Error {
-	ENOENT = 2,
-	ENOSYS = 38,
-	EIO = 5,
-	EBADF = 9,
-	EISDIR = 21,
-	EINVAL = 22,
-	ETIME = 62,
-	EAGAIN = 11,
-	EFAULT = 14,
-	ENOBUFS = 105,
-	ENOTCONN = 107,
-	ENOTDIR = 20,
-	EMFILE = 24,
-	EEXIST = 17,
-	EADDRINUSE = 98,
-	EOVERFLOW = 75,
-	ENOTSOCK = 88,
-}
-
-pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, crate::errno::Errno>;
 
 /// The Read trait allows for reading bytes from a source.
 ///
@@ -73,7 +49,7 @@ pub trait Write {
 		while !buf.is_empty() {
 			match self.write(buf) {
 				Ok(0) => {
-					return Err(Error::EIO);
+					return Err(Errno::Io);
 				}
 				Ok(n) => buf = &buf[n..],
 				Err(e) => return Err(e),
@@ -115,7 +91,7 @@ pub trait Write {
 				if output.error.is_err() {
 					output.error
 				} else {
-					Err(Error::EINVAL)
+					Err(Errno::Inval)
 				}
 			}
 		}

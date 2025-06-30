@@ -16,6 +16,7 @@ use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
 
 use crate::arch::mm::paging;
 use crate::env::is_uhyve;
+use crate::errno::Errno;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
@@ -42,7 +43,7 @@ impl UhyveFileHandleInner {
 		if read_params.ret >= 0 {
 			Ok(read_params.ret.try_into().unwrap())
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -68,7 +69,7 @@ impl UhyveFileHandleInner {
 		if lseek_params.offset >= 0 {
 			Ok(lseek_params.offset)
 		} else {
-			Err(io::Error::EINVAL)
+			Err(Errno::Inval)
 		}
 	}
 }
@@ -147,11 +148,11 @@ impl VfsNode for UhyveDirectory {
 	}
 
 	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	fn traverse_open(
@@ -177,7 +178,7 @@ impl VfsNode for UhyveDirectory {
 		if open_params.ret > 0 {
 			Ok(Arc::new(UhyveFileHandle::new(open_params.ret)))
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -197,12 +198,12 @@ impl VfsNode for UhyveDirectory {
 		if unlink_params.ret == 0 {
 			Ok(())
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
 	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	fn traverse_mkdir(
@@ -210,7 +211,7 @@ impl VfsNode for UhyveDirectory {
 		_components: &mut Vec<&str>,
 		_mode: AccessPermission,
 	) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 }
 

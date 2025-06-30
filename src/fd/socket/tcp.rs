@@ -12,6 +12,7 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
+use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
@@ -82,7 +83,7 @@ impl Socket {
 					socket.close();
 					Poll::Ready(Ok(()))
 				} else {
-					Poll::Ready(Err(io::Error::EIO))
+					Poll::Ready(Err(Errno::Io))
 				}
 			})
 		})
@@ -191,7 +192,7 @@ impl Socket {
 					tcp::State::FinWait1
 					| tcp::State::FinWait2
 					| tcp::State::Listen
-					| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
+					| tcp::State::TimeWait => Poll::Ready(Err(Errno::Io)),
 					_ => {
 						if socket.can_recv() {
 							Poll::Ready(
@@ -201,14 +202,14 @@ impl Socket {
 										buffer[..len].write_copy_of_slice(&data[..len]);
 										(len, len)
 									})
-									.map_err(|_| io::Error::EIO),
+									.map_err(|_| Errno::Io),
 							)
 						} else if state == tcp::State::CloseWait {
 							// The local end-point has received a connection termination request
 							// and not data are in the receive buffer => return 0 to close the connection
 							Poll::Ready(Ok(0))
 						} else if self.is_nonblocking {
-							Poll::Ready(Err(io::Error::EAGAIN))
+							Poll::Ready(Err(Errno::Again))
 						} else {
 							socket.register_recv_waker(cx.waker());
 							Poll::Pending
@@ -233,20 +234,18 @@ impl Socket {
 						tcp::State::FinWait1
 						| tcp::State::FinWait2
 						| tcp::State::Listen
-						| tcp::State::TimeWait => Poll::Ready(Err(io::Error::EIO)),
+						| tcp::State::TimeWait => Poll::Ready(Err(Errno::Io)),
 						_ => {
 							if socket.can_send() {
 								Poll::Ready(
-									socket
-										.send_slice(&buffer[pos..])
-										.map_err(|_| io::Error::EIO),
+									socket.send_slice(&buffer[pos..]).map_err(|_| Errno::Io),
 								)
 							} else if pos > 0 {
 								// we already send some data => return 0 as signal to stop the
 								// async write
 								Poll::Ready(Ok(0))
 							} else if self.is_nonblocking {
-								Poll::Ready(Err(io::Error::EAGAIN))
+								Poll::Ready(Err(Errno::Again))
 							} else {
 								socket.register_send_waker(cx.waker());
 								Poll::Pending
@@ -276,7 +275,7 @@ impl Socket {
 			}
 			Ok(())
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -284,14 +283,12 @@ impl Socket {
 		#[allow(irrefutable_let_patterns)]
 		if let Endpoint::Ip(endpoint) = endpoint {
 			self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
-				.map_err(|_| io::Error::EIO)?;
+				.map_err(|_| Errno::Io)?;
 
 			future::poll_fn(|cx| {
 				self.with(|socket| match socket.state() {
-					tcp::State::Closed | tcp::State::TimeWait => {
-						Poll::Ready(Err(io::Error::EFAULT))
-					}
-					tcp::State::Listen => Poll::Ready(Err(io::Error::EIO)),
+					tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(Errno::Fault)),
+					tcp::State::Listen => Poll::Ready(Err(Errno::Io)),
 					tcp::State::SynSent | tcp::State::SynReceived => {
 						socket.register_send_waker(cx.waker());
 						Poll::Pending
@@ -301,7 +298,7 @@ impl Socket {
 			})
 			.await
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -328,7 +325,7 @@ impl Socket {
 				self.handle.remove(&handle);
 				Poll::Ready(Ok(handle))
 			} else if self.is_nonblocking {
-				Poll::Ready(Err(io::Error::EAGAIN))
+				Poll::Ready(Err(Errno::Again))
 			} else {
 				for handle in self.handle.iter() {
 					let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
@@ -341,7 +338,7 @@ impl Socket {
 		.await?;
 
 		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().map_err(|_| io::Error::EIO)?;
+		let nic = guard.as_nic_mut().map_err(|_| Errno::Io)?;
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(connection_handle);
 		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
 		let endpoint = Endpoint::Ip(socket.remote_endpoint().unwrap());
@@ -352,9 +349,7 @@ impl Socket {
 		self.handle.insert(new_handle);
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(new_handle);
 		socket.set_nagle_enabled(nagle_enabled);
-		socket
-			.listen(self.endpoint.port)
-			.map_err(|_| io::Error::EIO)?;
+		socket.listen(self.endpoint.port).map_err(|_| Errno::Io)?;
 
 		let mut handle = BTreeSet::new();
 		handle.insert(connection_handle);
@@ -395,16 +390,14 @@ impl Socket {
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 
 		if socket.is_open() {
-			return Err(io::Error::EIO);
+			return Err(Errno::Io);
 		}
 
 		if backlog <= 0 {
-			return Err(io::Error::EINVAL);
+			return Err(Errno::Inval);
 		}
 
-		socket
-			.listen(self.endpoint.port)
-			.map_err(|_| io::Error::EIO)?;
+		socket.listen(self.endpoint.port).map_err(|_| Errno::Io)?;
 
 		self.is_listen = true;
 
@@ -413,7 +406,7 @@ impl Socket {
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 			s.set_nagle_enabled(nagle_enabled);
-			s.listen(self.endpoint.port).map_err(|_| io::Error::EIO)?;
+			s.listen(self.endpoint.port).map_err(|_| Errno::Io)?;
 
 			self.handle.insert(handle);
 		}
@@ -433,7 +426,7 @@ impl Socket {
 
 			Ok(())
 		} else {
-			Err(io::Error::EINVAL)
+			Err(Errno::Inval)
 		}
 	}
 
@@ -445,7 +438,7 @@ impl Socket {
 
 			Ok(socket.nagle_enabled())
 		} else {
-			Err(io::Error::EINVAL)
+			Err(Errno::Inval)
 		}
 	}
 
@@ -454,7 +447,7 @@ impl Socket {
 			SHUT_RD /* Read  */ |
 			SHUT_WR /* Write */ |
 			SHUT_RDWR /* Both */ => Ok(()),
-			_ => Err(io::Error::EINVAL),
+			_ => Err(Errno::Inval),
 		}
 	}
 

@@ -11,9 +11,9 @@ use virtio::{le16, le32};
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
+use crate::errno::Errno;
 use crate::executor::{WakerRegistration, spawn};
 use crate::io;
-use crate::io::Error::EADDRINUSE;
 
 pub(crate) static VSOCK_MAP: InterruptTicketMutex<VsockMap> =
 	InterruptTicketMutex::new(VsockMap::new());
@@ -170,7 +170,7 @@ impl VsockMap {
 	pub fn bind(&mut self, port: u32) -> io::Result<()> {
 		self.port_map
 			.try_insert(port, RawSocket::new(VsockState::Listen))
-			.map_err(|_| EADDRINUSE)?;
+			.map_err(|_| Errno::Addrinuse)?;
 		Ok(())
 	}
 
@@ -185,7 +185,7 @@ impl VsockMap {
 			}
 		}
 
-		Err(io::Error::EBADF)
+		Err(Errno::Badf)
 	}
 
 	pub fn get_socket(&self, port: u32) -> Option<&RawSocket> {
