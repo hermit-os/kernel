@@ -133,9 +133,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 
 		GicV3::end_interrupt(irqid);
 
-		return core_scheduler()
-			.scheduler()
-			.unwrap_or(core::ptr::null_mut());
+		return core_scheduler().scheduler().unwrap_or_default();
 	}
 
 	core::ptr::null_mut()
@@ -161,9 +159,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 		GicV3::end_interrupt(irqid);
 
-		return core_scheduler()
-			.scheduler()
-			.unwrap_or(core::ptr::null_mut());
+		return core_scheduler().scheduler().unwrap_or_default();
 	}
 
 	core::ptr::null_mut()
