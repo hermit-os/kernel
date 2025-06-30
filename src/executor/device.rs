@@ -133,7 +133,7 @@ impl<'a> NetworkInterface<'a> {
 		let prefix_len = mymask.to_bits().leading_ones();
 		let prefix_len = u8::try_from(prefix_len).unwrap();
 
-		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
+		let ethernet_addr = EthernetAddress(mac);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 		let ip_addrs = [IpCidr::new(
 			IpAddress::v4(
