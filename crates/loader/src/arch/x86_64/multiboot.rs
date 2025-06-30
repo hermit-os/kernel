@@ -81,7 +81,7 @@ pub fn find_kernel() -> &'static [u8] {
 	// Identity-map the Multiboot information.
 	unsafe {
 		assert!(mb_info > 0, "Could not find Multiboot information");
-		info!("Found Multiboot information at {:#x}", mb_info);
+		info!("Found Multiboot information at {mb_info:#x}");
 		paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty())
 	}
 
@@ -104,7 +104,7 @@ pub fn find_kernel() -> &'static [u8] {
 	);
 	let elf_start = first_module.start as usize;
 	let elf_len = (first_module.end - first_module.start) as usize;
-	info!("Module length: {:#x}", elf_len);
+	info!("Module length: {elf_len:#x}");
 
 	// Find the maximum end address from the remaining modules
 	let mut end_address = first_module.end;

@@ -40,7 +40,7 @@ pub fn find_kernel() -> &'static [u8] {
 	// Identity-map the Multiboot information.
 	unsafe {
 		assert!(boot_params > 0, "Could not find boot_params");
-		info!("Found boot_params at 0x{:x}", boot_params);
+		info!("Found boot_params at {boot_params:#x}");
 	}
 	let page_address = unsafe { boot_params }.align_down(Size4KiB::SIZE as usize);
 	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
@@ -58,18 +58,17 @@ pub fn find_kernel() -> &'static [u8] {
 		info!("Found Linux kernel boot flag and header magic! Probably booting in firecracker.");
 	} else {
 		info!(
-			"Kernel boot flag and hdr magic have values 0x{:x} and 0x{:x} which does not align with the normal linux kernel values",
-			linux_kernel_boot_flag_magic, linux_kernel_header_magic
+			"Kernel boot flag and hdr magic have values {linux_kernel_boot_flag_magic:#x} and {linux_kernel_header_magic:#x} which does not align with the normal linux kernel values"
 		);
 	}
 
 	// Load the boot_param memory-map information
 	let linux_e820_entries: u8 =
 		unsafe { *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET)) };
-	info!("Number of e820-entries: {}", linux_e820_entries);
+	info!("Number of e820-entries: {linux_e820_entries}");
 
 	let e820_entries_address = unsafe { boot_params } + E820_TABLE_OFFSET;
-	info!("e820-entry-table at 0x{:x}", e820_entries_address);
+	info!("e820-entry-table at {e820_entries_address:#x}");
 	let page_address = e820_entries_address.align_down(Size4KiB::SIZE as usize);
 
 	if !(unsafe { boot_params } >= page_address
@@ -86,10 +85,7 @@ pub fn find_kernel() -> &'static [u8] {
 		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + RAMDISK_SIZE_OFFSET))
 	};
 
-	info!(
-		"Initrd: Address 0x{:x}, Size 0x{:x}",
-		ramdisk_address, ramdisk_size
-	);
+	info!("Initrd: Address {ramdisk_address:#x}, Size {ramdisk_size:#x}");
 
 	let elf_start = ramdisk_address as usize;
 	let elf_len = ramdisk_size as usize;
@@ -99,12 +95,12 @@ pub fn find_kernel() -> &'static [u8] {
 		.align_up(Size2MiB::SIZE as usize);
 	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
 	let free_memory_address = cmp::max(free_memory_address, 0x800000);
-	info!("Intialize PhysAlloc with {:#x}", free_memory_address);
+	info!("Intialize PhysAlloc with {free_memory_address:#x}");
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	PhysAlloc::init(free_memory_address);
 
 	assert!(ramdisk_address > 0);
-	info!("Found an ELF module at {:#x}", elf_start);
+	info!("Found an ELF module at {elf_start:#x}");
 	let page_address = elf_start.align_down(Size4KiB::SIZE as usize);
 	let counter =
 		(elf_start.align_up(Size2MiB::SIZE as usize) - page_address) / Size4KiB::SIZE as usize;
@@ -142,7 +138,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		let page_address = (cmdline_ptr as usize).align_down(Size4KiB::SIZE as usize);
 		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
-		info!("Found command line at {:#x}", cmdline_ptr);
+		info!("Found command line at {cmdline_ptr:#x}");
 		let slice = unsafe {
 			core::slice::from_raw_parts(
 				sptr::from_exposed_addr(cmdline_ptr),
@@ -180,7 +176,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	// Load the boot_param memory-map information
 	let linux_e820_entries =
 		unsafe { *(sptr::from_exposed_addr::<u8>(boot_params + E820_ENTRIES_OFFSET)) };
-	info!("Number of e820-entries: {}", linux_e820_entries);
+	info!("Number of e820-entries: {linux_e820_entries}");
 
 	let mut found_entry = false;
 	let mut start_address: usize = 0;
@@ -199,8 +195,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		let entry_type: u32 = unsafe { sptr::from_exposed_addr::<u32>(entry_address + 16).read() };
 
 		info!(
-			"e820-Entry with index {}: Address 0x{:x}, Size 0x{:x}, Type 0x{:x}",
-			index, entry_start, entry_size, entry_type
+			"e820-Entry with index {index}: Address {entry_start:#x}, Size {entry_size:#x}, Type {entry_type:#x}"
 		);
 
 		let entry_end = entry_start + entry_size;
@@ -219,10 +214,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	// Identity-map the start of RAM
 	assert!(found_entry, "Could not find any free RAM areas!");
 
-	info!(
-		"Found available RAM: [0x{:x} - 0x{:x}]",
-		start_address, end_address
-	);
+	info!("Found available RAM: [{start_address:#x} - {end_address:#x}]");
 
 	if let Some(command_line) = command_line {
 		fdt = fdt.bootargs(command_line).unwrap();
