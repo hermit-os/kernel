@@ -1,5 +1,5 @@
 use std::io::{Read, Write};
-use std::net::{TcpStream, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus};
 use std::str::from_utf8;
@@ -40,6 +40,10 @@ pub struct Qemu {
 	/// Do not activate additional virtio features.
 	#[arg(long)]
 	no_default_virtio_features: bool,
+
+	/// Use a TAP device for networking.
+	#[arg(long)]
+	tap: bool,
 }
 
 #[derive(ValueEnum, PartialEq, Eq, Clone, Copy)]
@@ -118,13 +122,15 @@ impl Qemu {
 			);
 		}
 
+		let guest_ip = self.guest_ip();
+
 		match image_name {
-			"axum-example" | "http_server" | "http_server_poll" => test_http_server()?,
-			"httpd" => test_httpd()?,
-			"testudp" => test_testudp()?,
-			"miotcp" => test_miotcp()?,
-			"mioudp" => test_mioudp()?,
-			"poll" => test_poll()?,
+			"axum-example" | "http_server" | "http_server_poll" => test_http_server(guest_ip)?,
+			"httpd" => test_httpd(guest_ip)?,
+			"testudp" => test_testudp(guest_ip)?,
+			"miotcp" => test_miotcp(guest_ip)?,
+			"mioudp" => test_mioudp(guest_ip)?,
+			"poll" => test_poll(guest_ip)?,
 			_ => {}
 		}
 
@@ -298,7 +304,11 @@ impl Qemu {
 	}
 
 	fn device_args(&self, memory: usize) -> Vec<String> {
-		const NETDEV_OPTIONS: &str = "user,id=u1,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9";
+		let netdev_options = if self.tap {
+			"tap,id=net0,script=xtask/hermit-ifup,vhost=on"
+		} else {
+			"user,id=net0,hostfwd=tcp::9975-:9975,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9"
+		};
 
 		self.devices
 			.iter()
@@ -307,20 +317,20 @@ impl Qemu {
 				Device::CadenceGem => {
 					vec![
 						"-nic".to_string(),
-						format!("{NETDEV_OPTIONS},model=cadence_gem"),
+						format!("{netdev_options},model=cadence_gem"),
 					]
 				}
 				device @ (Device::Rtl8139 | Device::VirtioNetMmio | Device::VirtioNetPci) => {
 					let mut netdev_args = vec![
 						"-netdev".to_string(),
-						NETDEV_OPTIONS.to_string(),
+						netdev_options.to_string(),
 						"-device".to_string(),
 					];
 
 					let mut device_arg = match device {
-						Device::VirtioNetPci => "virtio-net-pci,netdev=u1,disable-legacy=on",
-						Device::VirtioNetMmio => "virtio-net-device,netdev=u1",
-						Device::Rtl8139 => "rtl8139,netdev=u1",
+						Device::VirtioNetPci => "virtio-net-pci,netdev=net0,disable-legacy=on",
+						Device::VirtioNetMmio => "virtio-net-device,netdev=net0",
+						Device::Rtl8139 => "rtl8139,netdev=net0",
 						Device::CadenceGem | Device::VirtioFsPci => unreachable!(),
 					}
 					.to_string();
@@ -403,6 +413,18 @@ impl Qemu {
 			status.success()
 		}
 	}
+
+	fn guest_ip(&self) -> IpAddr {
+		if self.tap {
+			if let Ok(ip) = env::var("HERMIT_IP") {
+				ip.parse().unwrap()
+			} else {
+				Ipv4Addr::new(10, 0, 5, 3).into()
+			}
+		} else {
+			Ipv4Addr::LOCALHOST.into()
+		}
+	}
 }
 
 fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
@@ -430,9 +452,9 @@ fn get_frequency() -> u64 {
 	frequency
 }
 
-fn test_http_server() -> Result<()> {
+fn test_http_server(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let url = "http://127.0.0.1:9975";
+	let url = format!("http://{guest_ip}:9975");
 	eprintln!("[CI] GET {url}");
 	let body = ureq::get(url)
 		.config()
@@ -446,10 +468,11 @@ fn test_http_server() -> Result<()> {
 	Ok(())
 }
 
-fn test_httpd() -> Result<()> {
+fn test_httpd(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	eprintln!("[CI] GET http://127.0.0.1:9975");
-	let body = ureq::get("http://127.0.0.1:9975")
+	let url = format!("http://{guest_ip}:9975");
+	eprintln!("[CI] GET {url}");
+	let body = ureq::get(url)
 		.config()
 		.timeout_global(Some(Duration::from_secs(3)))
 		.build()
@@ -461,22 +484,24 @@ fn test_httpd() -> Result<()> {
 	Ok(())
 }
 
-fn test_testudp() -> Result<()> {
+fn test_testudp(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let buf = "exit";
-	eprintln!("[CI] send {buf:?} via UDP to 127.0.0.1:9975");
-	let socket = UdpSocket::bind("127.0.0.1:0")?;
-	socket.connect("127.0.0.1:9975")?;
+	let socket_addr = SocketAddr::new(guest_ip, 9975);
+	eprintln!("[CI] send {buf:?} via UDP to {socket_addr}");
+	let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+	socket.connect(socket_addr)?;
 	socket.send(buf.as_bytes())?;
 
 	Ok(())
 }
 
-fn test_miotcp() -> Result<()> {
+fn test_miotcp(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let buf = "exit";
-	eprintln!("[CI] send {buf:?} via TCP to 127.0.0.1:9975");
-	let mut stream = TcpStream::connect("127.0.0.1:9975")?;
+	let socket_addr = SocketAddr::new(guest_ip, 9975);
+	eprintln!("[CI] send {buf:?} via TCP to {socket_addr}");
+	let mut stream = TcpStream::connect(socket_addr)?;
 	stream.write_all(buf.as_bytes())?;
 
 	let mut buf = vec![];
@@ -486,11 +511,12 @@ fn test_miotcp() -> Result<()> {
 	Ok(())
 }
 
-fn test_poll() -> Result<()> {
+fn test_poll(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let buf = "exit";
-	eprintln!("[CI] send {buf:?} via TCP to 127.0.0.1:9975");
-	let mut stream = TcpStream::connect("127.0.0.1:9975")?;
+	let socket_addr = SocketAddr::new(guest_ip, 9975);
+	eprintln!("[CI] send {buf:?} via TCP to {socket_addr}");
+	let mut stream = TcpStream::connect(socket_addr)?;
 	stream.write_all(buf.as_bytes())?;
 
 	let mut buf = vec![];
@@ -500,12 +526,13 @@ fn test_poll() -> Result<()> {
 	Ok(())
 }
 
-fn test_mioudp() -> Result<()> {
+fn test_mioudp(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let buf = "exit";
-	eprintln!("[CI] send {buf:?} via UDP to 127.0.0.1:9975");
-	let socket = UdpSocket::bind("127.0.0.1:0")?;
-	socket.connect("127.0.0.1:9975")?;
+	let socket_addr = SocketAddr::new(guest_ip, 9975);
+	eprintln!("[CI] send {buf:?} via UDP to {socket_addr}");
+	let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+	socket.connect(socket_addr)?;
 	socket.send(buf.as_bytes())?;
 
 	socket.set_read_timeout(Some(Duration::from_secs(10)))?;
