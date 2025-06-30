@@ -1,3 +1,5 @@
+//! System error numbers.
+
 /// Operation not permitted
 pub const EPERM: i32 = 1;
 
