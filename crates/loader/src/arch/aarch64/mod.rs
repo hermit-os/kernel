@@ -93,7 +93,7 @@ pub fn find_kernel() -> &'static [u8] {
 		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
 	};
 
-	info!("Found ELF file with size {}", file_size);
+	info!("Found ELF file with size {file_size}");
 
 	unsafe {
 		core::slice::from_raw_parts(
@@ -117,7 +117,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	info!("Detect {cpus} CPU(s)");
 
 	let uart_address: u32 = CONSOLE.lock().get().get_stdout().as_ptr() as u32;
-	info!("Detect UART at {:#x}", uart_address);
+	info!("Detect UART at {uart_address:#x}");
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l0_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
