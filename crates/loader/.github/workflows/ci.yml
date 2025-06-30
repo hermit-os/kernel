@@ -88,8 +88,8 @@ jobs:
       - name: Dowload OpenSBI
         if: matrix.target == 'riscv64'
         run: |
-          gh release download v1.6 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
-          tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.6-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+          gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
+          tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - name: Run VM (hello_world, dev)
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
       - name: Run VM (hello_world, release)
