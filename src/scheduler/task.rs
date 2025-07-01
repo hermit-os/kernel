@@ -383,7 +383,6 @@ pub(crate) struct Task {
 	/// Last stack pointer on the user stack before jumping to kernel space
 	pub user_stack_pointer: VirtAddr,
 	/// Last FPU state before a context switch to another task using the FPU
-	#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 	pub last_fpu_state: arch::processor::FPUState,
 	/// ID of the core this task is running on
 	pub core_id: CoreId,
@@ -424,7 +423,6 @@ impl Task {
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
 			user_stack_pointer: VirtAddr::zero(),
-			#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks,
@@ -489,7 +487,6 @@ impl Task {
 			prio: IDLE_PRIO,
 			last_stack_pointer: VirtAddr::zero(),
 			user_stack_pointer: VirtAddr::zero(),
-			#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),

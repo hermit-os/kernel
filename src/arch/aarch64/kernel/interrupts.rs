@@ -159,6 +159,12 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 		GicV3::end_interrupt(irqid);
 
+		trace!("Disabling floating point");
+
+		// Disable floating point support to trigger a trap instead so we can lazily
+		// restore FPU state
+		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapEl0El1);
+
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
 
@@ -168,12 +174,15 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &State) {
 	let esr = ESR_EL1.get();
-	let ec = esr >> 26;
-	let iss = esr & 0x00ff_ffff;
+	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
+	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
+	let iss = ESR_EL1.read(ESR_EL1::ISS);
 	let pc = ELR_EL1.get();
 
 	/* data abort from lower or current level */
-	if (ec == 0b10_0100) || (ec == 0b10_0101) {
+	if (ec == ESR_EL1::EC::Value::SoftwareStepCurrentEL)
+		|| (ec == ESR_EL1::EC::Value::SoftwareStepLowerEL)
+	{
 		/* check if value in far_el1 is valid */
 		if (iss & (1 << 10)) == 0 {
 			/* read far_el1 register, which holds the faulting virtual address */
@@ -198,13 +207,26 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 		} else {
 			error!("Unknown exception");
 		}
-	} else if ec == 0x3c {
+	} else if ec == ESR_EL1::EC::Value::Brk64 {
 		error!("Trap to debugger, PC={pc:#x}");
 		loop {
 			core::hint::spin_loop();
 		}
+	} else if ec == ESR_EL1::EC::Value::TrappedFP {
+		trace!("Floating point trap");
+
+		// We disabled floating point support to lazily save the FPU state
+		// This synchronous exception is triggered when floating point is used
+		// So now save and restore the FPU state
+
+		// Re-enable floating point
+		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapNothing);
+
+		// Let the scheduler set up the FPU for the current task
+		core_scheduler().fpu_switch();
 	} else {
-		error!("Unsupported exception class: {ec:#x}, PC={pc:#x}");
+		error!("Unsupported exception class: {ec_raw:#x}, PC={pc:#x}");
+
 		loop {
 			core::hint::spin_loop();
 		}
