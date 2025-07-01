@@ -66,3 +66,24 @@ jobs:
             -device virtio-net-pci,netdev=net0,disable-legacy=on &
           sleep 10
           curl -4 -v 10.0.5.3:9975
+      - run: |
+          pushd ../benches/netbench
+          cargo build --target=x86_64-unknown-hermit -Zbuild-std=std,panic_abort --bin tcp-server-bw --release
+          popd
+        env:
+          HERMIT_LOG_LEVEL_FILTER: trace
+      - run: |
+          sudo qemu-system-x86_64 \
+            -display none -serial stdio \
+            -kernel hermit-loader-x86_64 \
+            -initrd ../target/x86_64-unknown-hermit/release/tcp-server-bw \
+            -enable-kvm -cpu host \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -smp 1 -m 1024M \
+            -netdev tap,id=net0,ifname=tap10,script=xtask/hermit-ifup,vhost=on \
+            -device virtio-net-pci,netdev=net0,disable-legacy=on \
+            -append "-- --address 10.0.5.1 --bytes 1048576 --rounds 10" &
+          sleep 10
+          pushd ../benches/netbench
+          cargo run --bin tcp-client-bw --release -- --address 10.0.5.3 --bytes 1048576 --rounds 10
+          popd
