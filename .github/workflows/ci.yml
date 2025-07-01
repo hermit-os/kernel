@@ -91,7 +91,7 @@ jobs:
           popd
       - run: |
           pushd ../benches/netbench
-          cargo run --bin tcp-server-bw --release -- --address 10.0.5.3 --bytes 1048576 --rounds 10
+          cargo run --bin tcp-server-bw --release -- --address 10.0.5.3 --bytes 1048576 --rounds 10 &
           popd
           sleep 30
           sudo qemu-system-x86_64 \
@@ -103,4 +103,4 @@ jobs:
             -smp 1 -m 1024M \
             -netdev tap,id=net0,ifname=tap10,script=xtask/hermit-ifup,vhost=on \
             -device virtio-net-pci,netdev=net0,disable-legacy=on \
-            -append "-- --address 10.0.5.1 --bytes 1048576 --rounds 10" &
+            -append "-- --address 10.0.5.1 --bytes 1048576 --rounds 10"
