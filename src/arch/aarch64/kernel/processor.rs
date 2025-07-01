@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::mem::offset_of;
 use core::{fmt, str};
 
 use aarch64::regs::*;
@@ -6,6 +7,128 @@ use hermit_dtb::Dtb;
 use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
 use crate::env;
+
+/// Current FPU state. Saved at context switch when changed.
+///
+/// AArch64 mandates 32 NEON SIMD registers, which are named v0-v32.
+/// Only the lower 64 bits of v8-v15 must be saved (the d parts).
+///
+/// See the ABI documentation for aarch64 on this topic:
+/// <https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst#612simd-and-floating-point-registers>
+///
+/// FPCR is the floating point control register and controls things like NaN
+/// propagation, FPSR contains info like carry condition and over overflow
+/// condition. These are callee-saved bits.
+#[derive(Clone, Copy, Debug)]
+pub struct FPUState {
+	/// d8 register
+	d8: u64,
+	/// d9 register
+	d9: u64,
+	/// d10 register
+	d10: u64,
+	/// d11 register
+	d11: u64,
+	/// d12 register
+	d12: u64,
+	/// d13 register
+	d13: u64,
+	/// d14 register
+	d14: u64,
+	/// d15 register
+	d15: u64,
+	/// fpcr register.
+	fpcr: u64,
+	/// fpsr register.
+	fpsr: u64,
+}
+
+impl FPUState {
+	pub fn new() -> Self {
+		Self {
+			d8: 0,
+			d9: 0,
+			d10: 0,
+			d11: 0,
+			d12: 0,
+			d13: 0,
+			d14: 0,
+			d15: 0,
+			fpcr: 0,
+			fpsr: 0,
+		}
+	}
+
+	pub fn restore(&self) {
+		trace!("Restore FPUState at {self:p}");
+
+		unsafe {
+			asm!(
+				".arch_extension fp",
+				"ldr d8, [{fpu_state}, {off_d8}]",
+				"ldr d9, [{fpu_state}, {off_d9}]",
+				"ldr d10, [{fpu_state}, {off_d10}]",
+				"ldr d11, [{fpu_state}, {off_d11}]",
+				"ldr d12, [{fpu_state}, {off_d12}]",
+				"ldr d13, [{fpu_state}, {off_d13}]",
+				"ldr d14, [{fpu_state}, {off_d14}]",
+				"ldr d15, [{fpu_state}, {off_d15}]",
+				"ldr {intermediate}, [{fpu_state}, {off_fpcr}]",
+				"msr fpcr, {intermediate}",
+				"ldr {intermediate}, [{fpu_state}, {off_fpsr}]",
+				"msr fpsr, {intermediate}",
+				".arch_extension nofp",
+				fpu_state = in(reg) self,
+				off_d8 = const offset_of!(FPUState, d8),
+				off_d9 = const offset_of!(FPUState, d9),
+				off_d10 = const offset_of!(FPUState, d10),
+				off_d11 = const offset_of!(FPUState, d11),
+				off_d12 = const offset_of!(FPUState, d12),
+				off_d13 = const offset_of!(FPUState, d13),
+				off_d14 = const offset_of!(FPUState, d14),
+				off_d15 = const offset_of!(FPUState, d15),
+				off_fpcr = const offset_of!(FPUState, fpcr),
+				off_fpsr = const offset_of!(FPUState, fpsr),
+				intermediate = out(reg) _,
+			);
+		}
+	}
+
+	pub fn save(&mut self) {
+		trace!("Save FPUState at {self:p}");
+
+		unsafe {
+			asm!(
+				".arch_extension fp",
+				"str d8, [{fpu_state}, {off_d8}]",
+				"str d9, [{fpu_state}, {off_d9}]",
+				"str d10, [{fpu_state}, {off_d10}]",
+				"str d11, [{fpu_state}, {off_d11}]",
+				"str d12, [{fpu_state}, {off_d12}]",
+				"str d13, [{fpu_state}, {off_d13}]",
+				"str d14, [{fpu_state}, {off_d14}]",
+				"str d15, [{fpu_state}, {off_d15}]",
+				"mrs {intermediate}, fpcr",
+				"str {intermediate}, [{fpu_state}, {off_fpcr}]",
+				"mrs {intermediate}, fpsr",
+				"str {intermediate}, [{fpu_state}, {off_fpsr}]",
+				".arch_extension nofp",
+				fpu_state = in(reg) self,
+				off_d8 = const offset_of!(FPUState, d8),
+				off_d9 = const offset_of!(FPUState, d9),
+				off_d10 = const offset_of!(FPUState, d10),
+				off_d11 = const offset_of!(FPUState, d11),
+				off_d12 = const offset_of!(FPUState, d12),
+				off_d13 = const offset_of!(FPUState, d13),
+				off_d14 = const offset_of!(FPUState, d14),
+				off_d15 = const offset_of!(FPUState, d15),
+				off_fpcr = const offset_of!(FPUState, fpcr),
+				off_fpsr = const offset_of!(FPUState, fpsr),
+				intermediate = out(reg) _,
+			);
+		}
+	}
+}
 
 // System counter frequency in KHz
 static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {

@@ -84,7 +84,7 @@ pub(crate) struct PerCoreScheduler {
 	/// Idle Task
 	idle_task: Rc<RefCell<Task>>,
 	/// Task that currently owns the FPU
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 	fpu_owner: Rc<RefCell<Task>>,
 	/// Queue of tasks, which are ready
 	ready_queue: PriorityTaskQueue,
@@ -684,7 +684,7 @@ impl PerCoreScheduler {
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 	pub fn fpu_switch(&mut self) {
 		if !Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
 			debug!(
@@ -909,7 +909,7 @@ pub(crate) fn add_current_core() {
 		#[cfg(feature = "smp")]
 		core_id,
 		current_task: idle_task.clone(),
-		#[cfg(target_arch = "x86_64")]
+		#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 		fpu_owner: idle_task.clone(),
 		idle_task,
 		ready_queue: PriorityTaskQueue::new(),
