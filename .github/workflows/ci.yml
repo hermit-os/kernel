@@ -91,7 +91,7 @@ jobs:
           popd
       - run: |
           pushd ../benches/netbench
-          cargo run --bin tcp-client-bw --release -- --address 10.0.5.3 --bytes 1048576 --rounds 10
+          cargo run --bin tcp-server-bw --release -- --address 10.0.5.3 --bytes 1048576 --rounds 10
           popd
           sleep 30
           sudo qemu-system-x86_64 \
