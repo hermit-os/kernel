@@ -735,7 +735,7 @@ dependencies = [
  "take-static",
  "talc",
  "time",
- "tock-registers 0.9.0",
+ "tock-registers 0.10.0",
  "trapframe",
  "uart_16550",
  "uhyve-interface",
@@ -1612,6 +1612,12 @@ name = "tock-registers"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b9e2fdb3a1e862c0661768b7ed25390811df1947a8acbfbefe09b47078d93c4"
+
+[[package]]
+name = "tock-registers"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0293f99756f16ff352cc78c99673766a305bdb5ed7652e78df649e9967c885a"
 
 [[package]]
 name = "trapframe"
