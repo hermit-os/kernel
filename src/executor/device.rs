@@ -12,11 +12,9 @@ use smoltcp::socket::dhcpv4;
 #[cfg(all(feature = "dns", not(feature = "dhcpv4")))]
 use smoltcp::socket::dns;
 use smoltcp::time::Instant;
-#[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::Ipv4Address;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::{IpAddress, IpCidr};
+use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
@@ -128,34 +126,12 @@ impl<'a> NetworkInterface<'a> {
 		#[cfg(feature = "dns")]
 		let mydns2 = Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS2", "1.1.1.1")).unwrap();
 
-		// calculate the netmask length
-		// => count the number of contiguous 1 bits,
-		// starting at the most significant bit in the first octet
-		let mut prefix_len = (!mymask.octets()[0]).trailing_zeros();
-		if prefix_len == 8 {
-			prefix_len += (!mymask.octets()[1]).trailing_zeros();
-		}
-		if prefix_len == 16 {
-			prefix_len += (!mymask.octets()[2]).trailing_zeros();
-		}
-		if prefix_len == 24 {
-			prefix_len += (!mymask.octets()[3]).trailing_zeros();
-		}
-
-		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
+		let ethernet_addr = EthernetAddress(mac);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
-		let ip_addrs = [IpCidr::new(
-			IpAddress::v4(
-				myip.octets()[0],
-				myip.octets()[1],
-				myip.octets()[2],
-				myip.octets()[3],
-			),
-			prefix_len.try_into().unwrap(),
-		)];
+		let ip_addr = IpCidr::from(Ipv4Cidr::from_netmask(myip, mymask).unwrap());
 
 		info!("MAC address {hardware_addr}");
-		info!("Configure network interface with address {}", ip_addrs[0]);
+		info!("Configure network interface with address {ip_addr}");
 		info!("Configure gateway with address {mygw}");
 		info!("{checksums:?}");
 		info!("MTU: {mtu} bytes");
@@ -169,17 +145,7 @@ impl<'a> NetworkInterface<'a> {
 
 		let mut iface = Interface::new(config, &mut device, crate::executor::network::now());
 		iface.update_ip_addrs(|ip_addrs| {
-			ip_addrs
-				.push(IpCidr::new(
-					IpAddress::v4(
-						myip.octets()[0],
-						myip.octets()[1],
-						myip.octets()[2],
-						myip.octets()[3],
-					),
-					prefix_len.try_into().unwrap(),
-				))
-				.unwrap();
+			ip_addrs.push(ip_addr).unwrap();
 		});
 		iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
 
