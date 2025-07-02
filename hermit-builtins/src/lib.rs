@@ -1,4 +1,5 @@
 #![no_std]
+#![feature(linkage)]
 
 pub mod math;
 
