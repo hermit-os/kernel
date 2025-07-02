@@ -462,12 +462,9 @@ pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result
 		debug!("Open {name}, {flags:?}, {mode:?}");
 
 		let fs = FILESYSTEM.get().ok_or(io::Error::EINVAL)?;
-		if let Ok(file) = fs.open(name, flags, mode.bitand(mask)) {
-			let fd = insert_object(file)?;
-			Ok(fd)
-		} else {
-			Err(io::Error::EINVAL)
-		}
+		let file = fs.open(name, flags, mode.bitand(mask))?;
+		let fd = insert_object(file)?;
+		Ok(fd)
 	})
 }
 
