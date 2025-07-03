@@ -135,10 +135,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hermit-os/hermit-rs
-          submodules: true
-      - name: Remove hermit-kernel submodule
-        run: git rm -r kernel
-        working-directory: .
       - name: Checkout hermit-kernel
         uses: actions/checkout@v4
         with:
