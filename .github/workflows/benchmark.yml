@@ -1,7 +1,7 @@
 name: Benchmark
 
 on:
-  pull_request_target:
+  pull_request:
   push:
     branches:
       - main
@@ -11,12 +11,7 @@ env:
 
 jobs:
   benchmark:
-    name: Run Benchmarks
     runs-on: [self-hosted]
-    environment: ${{ github.event_name == 'push' && 'benchmark' || '' }}
-
-    permissions:
-      pull-requests: write
 
     strategy:
       matrix:
@@ -50,14 +45,8 @@ jobs:
         id: run-bench
         with:
           benchmark-file: ${{ matrix.benchmark-file }}
-      - name: Store benchmark results
-        uses: hermit-os/github-action-benchmark@main
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
         with:
-          tool: "hermit-bench"
-          output-file-path: ${{ steps.run-bench.outputs.result-file }}
-          github-token: ${{ github.event_name == 'push' && secrets.HERMIT_BENCH_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
-          benchmark-data-dir-path: .
-          gh-repository: github.com/hermit-os/hermit-bench
-          comment-always: true
-          benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
-          auto-push: ${{ github.event_name == 'push' }}
+          name: ${{ matrix.benchmark-matrix-name }}-benchmark-results
+          path: ${{ steps.run-bench.outputs.result-file }}
