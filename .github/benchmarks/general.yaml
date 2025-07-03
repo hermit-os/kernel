@@ -1,0 +1,71 @@
+- group: General
+  plot_group: Startup Time
+  name: 1 core
+  bin: startup_benchmark
+  hermit_rs_manifest_path: benches/startup/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 1 \
+      -m 128M \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/startup_benchmark
+  iterations: 25
+  external_time: true
+
+- group: General
+  plot_group: Startup Time
+  name: 2 cores
+  bin: startup_benchmark
+  hermit_rs_manifest_path: benches/startup/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 2 \
+      -m 128M \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/startup_benchmark
+  iterations: 25
+  external_time: true
+
+- group: General
+  plot_group: Startup Time
+  name: 4 cores
+  bin: startup_benchmark
+  hermit_rs_manifest_path: benches/startup/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 4 \
+      -m 128M \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/startup_benchmark
+  iterations: 25
+  external_time: true
+
+- group: General
+  plot_group: Multithreaded Pi Efficiency
+  name: Pi Multithreaded Benchmark
+  bin: multithreaded_benchmark
+  hermit_rs_manifest_path: benches/multithreaded/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 4 \
+      -m 512M \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/multithreaded_benchmark
+  iterations: 25
+  external_time: false

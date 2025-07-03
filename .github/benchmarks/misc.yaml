@@ -1,0 +1,47 @@
+- group: Micro
+  name: Micro Benchmarks
+  bin: micro_benchmarks
+  hermit_rs_manifest_path: benches/micro/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 4 \
+      -m 512M \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/micro_benchmarks
+  iterations: 25
+
+- group: Allocations
+  name: Allocation Benchmarks
+  bin: alloc_benchmarks
+  hermit_rs_manifest_path: benches/alloc/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 1 \
+      -m 5G \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/alloc_benchmarks
+  iterations: 50
+
+- group: Mutex
+  name: Mutex Stress Test
+  bin: mutex_benchmark
+  hermit_rs_manifest_path: benches/mutex/Cargo.toml
+  command: |
+    sudo qemu-system-x86_64 \
+      -enable-kvm \
+      -cpu host,migratable=no,+invtsc \
+      -smp 2 \
+      -m 512M \
+      -display none \
+      -serial stdio \
+      -kernel hermit-loader-x86_64 \
+      -initrd target/x86_64-unknown-hermit/release/mutex_benchmark
+  iterations: 50
