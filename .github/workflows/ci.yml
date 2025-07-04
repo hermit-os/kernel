@@ -112,6 +112,7 @@ jobs:
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     env:
       HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
+      HERMIT_LOG_LEVEL_FILTER: trace
     defaults:
       run:
         working-directory: kernel
