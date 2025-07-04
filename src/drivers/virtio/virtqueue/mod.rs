@@ -19,10 +19,12 @@ use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
 use enum_dispatch::enum_dispatch;
+use memory_addresses::VirtAddr;
 use smallvec::SmallVec;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
+use crate::arch::mm::paging;
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
@@ -203,9 +205,10 @@ trait VirtqPrivate {
 	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
 
 	fn indirect_desc(table: &[Self::Descriptor]) -> Self::Descriptor {
-		let addr = table.as_ptr().expose_provenance();
 		Self::Descriptor::incomplete_desc(
-			u64::try_from(addr).unwrap().into(),
+			paging::virt_to_phys(VirtAddr::from_ptr(table.as_ptr()))
+				.as_u64()
+				.into(),
 			(mem::size_of_val(table) as u32).into(),
 			virtq::DescF::INDIRECT,
 		)
@@ -246,9 +249,10 @@ trait VirtqPrivate {
 			send_desc_iter
 				.chain(recv_desc_iter)
 				.map(|(mem_descr, len, incomplete_flags)| {
-					let addr = mem_descr.addr().expose_provenance();
 					Self::Descriptor::incomplete_desc(
-						u64::try_from(addr).unwrap().into(),
+						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
+							.as_u64()
+							.into(),
 						len.into(),
 						incomplete_flags | virtq::DescF::NEXT,
 					)

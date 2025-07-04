@@ -7,7 +7,7 @@ use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 use core::ptr;
 
-use memory_addresses::PhysAddr;
+use memory_addresses::VirtAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -24,6 +24,7 @@ use super::{
 	VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
+use crate::arch::mm::paging;
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
@@ -287,16 +288,16 @@ impl SplitVq {
 		};
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(PhysAddr::from(
+		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
 			ptr::from_ref(descr_table_cell.as_ref()).expose_provenance(),
-		));
+		)));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(PhysAddr::from(
+		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
 			ptr::from_ref(avail_ring_cell.as_ref()).expose_provenance(),
-		));
-		vq_handler.set_dev_ctrl_addr(PhysAddr::from(
+		)));
+		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(
 			ptr::from_ref(used_ring_cell.as_ref()).expose_provenance(),
-		));
+		)));
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
