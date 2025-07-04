@@ -18,7 +18,7 @@ unsafe impl Allocator for DeviceAlloc {
 
 		let phys_addr = super::physicalmem::allocate(size).unwrap();
 
-		let ptr = ptr::with_exposed_provenance_mut(phys_addr.as_usize());
+		let ptr = self.ptr(phys_addr.as_usize());
 		let slice = ptr::slice_from_raw_parts_mut(ptr, size);
 		Ok(NonNull::new(slice).unwrap())
 	}
@@ -34,6 +34,11 @@ unsafe impl Allocator for DeviceAlloc {
 }
 
 impl DeviceAlloc {
+	/// Returns a pointer corresponding to `phys_addr`.
+	pub fn ptr<T>(&self, phys_addr: usize) -> *mut T {
+		ptr::with_exposed_provenance_mut(phys_addr)
+	}
+
 	/// Returns the physical address of `ptr`.
 	///
 	/// The address is only correct if `ptr` has been allocated by this allocator.
