@@ -125,7 +125,9 @@ impl Qemu {
 		let guest_ip = self.guest_ip();
 
 		match image_name {
-			"axum-example" | "http_server" | "http_server_poll" => test_http_server(guest_ip)?,
+			"axum-example" | "http_server" | "http_server_poll" | "http_server_select" => {
+				test_http_server(guest_ip)?
+			}
 			"httpd" => test_httpd(guest_ip)?,
 			"testudp" => test_testudp(guest_ip)?,
 			"miotcp" => test_miotcp(guest_ip)?,
@@ -136,7 +138,7 @@ impl Qemu {
 
 		if matches!(
 			image_name,
-			"axum-example" | "http_server" | "http_server_poll"
+			"axum-example" | "http_server" | "http_server_poll" | "http_server_select"
 		) || self.devices.contains(&Device::CadenceGem)
 		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to kill the machine ourselves.
 		{
