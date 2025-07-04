@@ -250,7 +250,7 @@ trait VirtqPrivate {
 				.chain(recv_desc_iter)
 				.map(|(mem_descr, len, incomplete_flags)| {
 					Self::Descriptor::incomplete_desc(
-						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.addr()))
+						paging::virt_to_phys(VirtAddr::from_ptr(mem_descr.as_ptr()))
 							.as_u64()
 							.into(),
 						len.into(),
@@ -365,7 +365,7 @@ impl BufferElem {
 		.unwrap()
 	}
 
-	pub fn addr(&self) -> *const u8 {
+	pub fn as_ptr(&self) -> *const u8 {
 		match self {
 			BufferElem::Sized(sized) => ptr::from_ref(sized.as_ref()).cast::<u8>(),
 			BufferElem::Vector(vec) => vec.as_ptr(),
