@@ -1,0 +1,71 @@
+name: Publish Benchmarks
+
+on:
+  workflow_run:
+    workflows: ["Benchmark"]
+    types:
+      - completed
+
+jobs:
+  publish_benchmarks:
+    runs-on: ubuntu-latest
+    environment: benchmark
+
+    permissions:
+      pull-requests: write
+
+    strategy:
+      matrix:
+        include:
+          - benchmark-matrix-name: General
+          - benchmark-matrix-name: Misc
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Download artifact from another workflow
+        run: |
+          run_id="${{ github.event.workflow_run.id }}"
+          artifact_name="${{ matrix.benchmark-matrix-name }}-benchmark-results"
+
+          echo "Fetching artifact '${artifact_name}' from run ${run_id}"
+
+          # List artifacts and extract matching ID
+          artifact_id=$(gh api \
+            repos/${{ github.repository }}/actions/runs/$run_id/artifacts \
+            --jq ".artifacts[] | select(.name == \"${artifact_name}\") | .id")
+
+          if [ -z "$artifact_id" ]; then
+            echo "Artifact '$artifact_name' not found"
+            exit 1
+          fi
+
+          gh api /repos/${{ github.repository }}/actions/artifacts/$artifact_id/zip > results.zip
+
+          unzip results.zip
+      - name: Comment benchmark results to PR
+        if: github.event.workflow_run.event == 'pull_request'
+        uses: hermit-os/github-action-benchmark@main
+        with:
+          tool: "hermit-bench"
+          output-file-path: results.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          benchmark-data-dir-path: .
+          gh-repository: github.com/hermit-os/hermit-bench
+          comment-always: true
+          benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+      - name: Publish benchmark results to hermit-bench
+        if: github.event.workflow_run.event == 'push'
+        uses: hermit-os/github-action-benchmark@main
+        with:
+          tool: "hermit-bench"
+          output-file-path: results.json
+          github-token: ${{ secrets.HERMIT_BENCH_GITHUB_TOKEN }}
+          benchmark-data-dir-path: .
+          gh-repository: github.com/hermit-os/hermit-bench
+          benchmark-matrix-name: ${{ matrix.benchmark-matrix-name }}
+          auto-push: true
+          ref: ${{ github.event.workflow_run.head_sha }}
