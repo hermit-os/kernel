@@ -14,7 +14,7 @@ use core::ptr::NonNull;
 use core::{mem, slice};
 
 use align_address::Align;
-use memory_addresses::VirtAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::*;
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
@@ -24,7 +24,7 @@ use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::interrupts::*;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
 use crate::arch::kernel::mmio as hardware;
-use crate::arch::mm::paging::{PageTableEntryFlags, virt_to_phys};
+use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
@@ -643,7 +643,8 @@ pub fn init_device(
 		for i in 0..RX_BUF_NUM {
 			let word0 = (rxbuffer_list + u64::from(i * 8)).as_mut_ptr::<u32>();
 			let word1 = (rxbuffer_list + u64::from(i * 8 + 4)).as_mut_ptr::<u32>();
-			let buffer = virt_to_phys(rxbuffer + u64::from(i * RX_BUF_LEN));
+			let buffer = DeviceAlloc
+				.phys_addr_from((rxbuffer + u64::from(i * RX_BUF_LEN)).as_mut_ptr::<()>());
 			if (buffer.as_u64() & 0b11) != 0 {
 				error!("Wrong buffer alignment");
 				return Err(DriverError::InitGEMDevFail(GEMError::Unknown));
@@ -660,7 +661,11 @@ pub fn init_device(
 			core::ptr::write_volatile(word1, 0x0);
 		}
 
-		let rx_qbar: u32 = virt_to_phys(rxbuffer_list).as_u64().try_into().unwrap();
+		let rx_qbar: u32 = DeviceAlloc
+			.phys_addr_from(rxbuffer_list.as_mut_ptr::<()>())
+			.as_u64()
+			.try_into()
+			.unwrap();
 		debug!("Set rx_qbar to {rx_qbar:x}");
 		(*gem).rx_qbar.set(rx_qbar);
 
@@ -668,7 +673,8 @@ pub fn init_device(
 		for i in 0..TX_BUF_NUM {
 			let word0 = (txbuffer_list + u64::from(i * 8)).as_mut_ptr::<u32>();
 			let word1 = (txbuffer_list + u64::from(i * 8 + 4)).as_mut_ptr::<u32>();
-			let buffer = virt_to_phys(txbuffer + u64::from(i * TX_BUF_LEN));
+			let buffer = DeviceAlloc
+				.phys_addr_from((txbuffer + u64::from(i * TX_BUF_LEN)).as_mut_ptr::<()>());
 
 			// This can fail if address of buffers is > 32 bit
 			// TODO: 64-bit addresses
@@ -682,7 +688,11 @@ pub fn init_device(
 			core::ptr::write_volatile(word1, word1_entry);
 		}
 
-		let tx_qbar: u32 = virt_to_phys(txbuffer_list).as_u64().try_into().unwrap();
+		let tx_qbar: u32 = DeviceAlloc
+			.phys_addr_from(txbuffer_list.as_mut_ptr::<()>())
+			.as_u64()
+			.try_into()
+			.unwrap();
 		debug!("Set tx_qbar to {tx_qbar:x}");
 		(*gem).tx_qbar.set(tx_qbar);
 

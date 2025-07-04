@@ -27,9 +27,18 @@ unsafe impl Allocator for DeviceAlloc {
 		assert!(layout.align() <= BasePageSize::SIZE as usize);
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
 
-		let virt_addr = ptr.as_ptr().expose_provenance();
-		let phys_addr = PhysAddr::from(virt_addr);
+		let phys_addr = self.phys_addr_from(ptr.as_ptr());
 
 		super::physicalmem::deallocate(phys_addr, size);
+	}
+}
+
+impl DeviceAlloc {
+	/// Returns the physical address of `ptr`.
+	///
+	/// The address is only correct if `ptr` has been allocated by this allocator.
+	pub fn phys_addr_from<T: ?Sized>(&self, ptr: *mut T) -> PhysAddr {
+		let addr = u64::try_from(ptr.expose_provenance()).unwrap();
+		PhysAddr::new(addr)
 	}
 }

@@ -6,12 +6,10 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 
-use memory_addresses::VirtAddr;
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use x86_64::instructions::port::Port;
 
 use crate::arch::kernel::interrupts::*;
-use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
@@ -516,31 +514,28 @@ pub(crate) fn init_device(
 	}
 
 	let rxbuffer = Box::new_zeroed_slice_in(RX_BUF_LEN, DeviceAlloc);
-	let rxbuffer = unsafe { rxbuffer.assume_init() };
+	let mut rxbuffer = unsafe { rxbuffer.assume_init() };
 	let txbuffer = Box::new_zeroed_slice_in(NO_TX_BUFFERS * TX_BUF_LEN, DeviceAlloc);
-	let txbuffer = unsafe { txbuffer.assume_init() };
+	let mut txbuffer = unsafe { txbuffer.assume_init() };
 
 	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 
-	let phys_addr = |p| {
-		virt_to_phys(VirtAddr::from_ptr(p))
-			.as_u64()
-			.try_into()
-			.unwrap()
-	};
+	let phys_addr = |p| DeviceAlloc.phys_addr_from(p).as_u64().try_into().unwrap();
 
 	unsafe {
 		// register the receive buffer
-		Port::<u32>::new(iobase + RBSTART).write(phys_addr(rxbuffer.as_ptr()));
+		Port::<u32>::new(iobase + RBSTART).write(phys_addr(rxbuffer.as_mut_ptr()));
 
 		// set each of the transmitter start address descriptors
-		Port::<u32>::new(iobase + TSAD0).write(phys_addr(txbuffer[..TX_BUF_LEN].as_ptr()));
+		Port::<u32>::new(iobase + TSAD0).write(phys_addr(txbuffer[..TX_BUF_LEN].as_mut_ptr()));
 		Port::<u32>::new(iobase + TSAD1)
-			.write(phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()));
-		Port::<u32>::new(iobase + TSAD2)
-			.write(phys_addr(txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()));
-		Port::<u32>::new(iobase + TSAD3)
-			.write(phys_addr(txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()));
+			.write(phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr()));
+		Port::<u32>::new(iobase + TSAD2).write(phys_addr(
+			txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
+		));
+		Port::<u32>::new(iobase + TSAD3).write(phys_addr(
+			txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
+		));
 
 		// Enable all known interrupts by setting the interrupt mask.
 		Port::<u16>::new(iobase + IMR).write(INT_MASK);

@@ -9,7 +9,6 @@ use core::ops;
 use core::sync::atomic::{Ordering, fence};
 
 use align_address::Align;
-use memory_addresses::VirtAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -27,7 +26,6 @@ use super::{
 	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
 	VirtqPrivate, VqIndex, VqSize,
 };
-use crate::arch::mm::paging;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -706,12 +704,10 @@ impl PackedVq {
 		let dev_event = Box::leak(dev_event);
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from_ptr(
-			descr_ring.as_mut_ptr().cast_const(),
-		)));
+		vq_handler.set_ring_addr(DeviceAlloc.phys_addr_from(descr_ring.as_mut_ptr()));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from_ptr(drv_event)));
-		vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from_ptr(dev_event)));
+		vq_handler.set_drv_ctrl_addr(DeviceAlloc.phys_addr_from(drv_event));
+		vq_handler.set_dev_ctrl_addr(DeviceAlloc.phys_addr_from(dev_event));
 
 		let mut drv_event = DrvNotif {
 			f_notif_idx: false,
