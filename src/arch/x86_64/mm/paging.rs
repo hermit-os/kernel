@@ -301,6 +301,10 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 
 pub fn init() {
 	unsafe {
+		disect(
+			identity_mapped_page_table(),
+			x86_64::VirtAddr::new(0x2000_0160_0000),
+		);
 		print_page_tables(4);
 	}
 	make_p4_writable();
