@@ -324,7 +324,7 @@ fn make_p4_writable() {
 
 	let make_writable = || unsafe {
 		let flags = flags | PageTableEntryFlags::WRITABLE;
-		match frame {
+		match dbg!(frame) {
 			MappedFrame::Size1GiB(_) => pt.set_flags_p3_entry(p4_page, flags).unwrap().ignore(),
 			MappedFrame::Size2MiB(_) => pt.set_flags_p2_entry(p4_page, flags).unwrap().ignore(),
 			MappedFrame::Size4KiB(_) => pt.update_flags(p4_page, flags).unwrap().ignore(),
