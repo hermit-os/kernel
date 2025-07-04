@@ -300,6 +300,9 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 }
 
 pub fn init() {
+	unsafe {
+		print_page_tables(4);
+	}
 	make_p4_writable();
 }
 
