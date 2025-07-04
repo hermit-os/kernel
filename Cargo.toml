@@ -73,6 +73,7 @@ vsock = ["pci"]
 
 [lints.rust]
 rust_2018_idioms = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
 unsafe_op_in_unsafe_fn = "warn"
 
 [lints.clippy]
