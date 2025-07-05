@@ -55,8 +55,8 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 		(start..end)
 			.step_by(IdentityPageSize::SIZE.try_into().unwrap())
 			.for_each(|addr| {
-				let phys_addr = dbg!(PhysAddr::new(addr.try_into().unwrap()));
-				let virt_addr = dbg!(VirtAddr::from_ptr(DeviceAlloc.ptr::<()>(addr)));
+				let phys_addr = PhysAddr::new(addr.try_into().unwrap());
+				let virt_addr = VirtAddr::from_ptr(DeviceAlloc.ptr::<()>(addr));
 				paging::map::<IdentityPageSize>(virt_addr, phys_addr, 1, flags);
 			});
 	}
