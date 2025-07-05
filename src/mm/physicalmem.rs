@@ -136,6 +136,13 @@ fn detect_from_limits() -> Result<(), ()> {
 }
 
 pub fn init() {
+	if env::is_uefi() && DeviceAlloc.phys_offset() != 0 {
+		let start = VirtAddr::from(DeviceAlloc.phys_offset());
+		let count = DeviceAlloc.phys_offset()
+			/ usize::try_from(crate::arch::mm::paging::HugePageSize::SIZE).unwrap();
+		paging::unmap::<crate::arch::mm::paging::HugePageSize>(start, count);
+	}
+
 	if let Err(_err) = detect_from_fdt() {
 		cfg_if::cfg_if! {
 			if #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))] {
