@@ -5,8 +5,11 @@ use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::mm::paging::{self, BasePageSize, PageSize};
+#[cfg(target_arch = "x86_64")]
+use crate::arch::mm::paging::PageTableEntryFlagsExt;
+use crate::arch::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
+use crate::mm::device_alloc::DeviceAlloc;
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -42,6 +45,21 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 		.step_by(IdentityPageSize::SIZE.try_into().unwrap())
 		.map(|addr| PhysAddr::new(addr.try_into().unwrap()))
 		.for_each(paging::identity_map::<IdentityPageSize>);
+
+	if DeviceAlloc.phys_offset() != 0 {
+		let flags = {
+			let mut flags = PageTableEntryFlags::empty();
+			flags.normal().writable().execute_disable();
+			flags
+		};
+		(start..end)
+			.step_by(IdentityPageSize::SIZE.try_into().unwrap())
+			.for_each(|addr| {
+				let phys_addr = PhysAddr::new(addr.try_into().unwrap());
+				let virt_addr = VirtAddr::from_ptr(DeviceAlloc.ptr::<()>(addr));
+				paging::map::<IdentityPageSize>(virt_addr, phys_addr, 1, flags);
+			});
+	}
 
 	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }
@@ -118,6 +136,13 @@ fn detect_from_limits() -> Result<(), ()> {
 }
 
 pub fn init() {
+	if env::is_uefi() && DeviceAlloc.phys_offset() != 0 {
+		let start = VirtAddr::from(DeviceAlloc.phys_offset());
+		let count = DeviceAlloc.phys_offset()
+			/ usize::try_from(crate::arch::mm::paging::HugePageSize::SIZE).unwrap();
+		paging::unmap::<crate::arch::mm::paging::HugePageSize>(start, count);
+	}
+
 	if let Err(_err) = detect_from_fdt() {
 		cfg_if::cfg_if! {
 			if #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))] {

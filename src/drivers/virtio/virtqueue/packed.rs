@@ -5,8 +5,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
+use core::ops;
 use core::sync::atomic::{Ordering, fence};
-use core::{ops, ptr};
 
 use align_address::Align;
 use memory_addresses::PhysAddr;
@@ -210,10 +210,8 @@ impl DescriptorRing {
 		Ok(ctrl)
 	}
 
-	/// # Unsafe
-	/// Returns the memory address of the first element of the descriptor ring
-	fn raw_addr(&self) -> usize {
-		self.ring.as_ptr() as usize
+	fn as_mut_ptr(&mut self) -> *mut pvirtq::Desc {
+		self.ring.as_mut_ptr()
 	}
 
 	/// Returns an initialized write controller in order
@@ -693,7 +691,7 @@ impl PackedVq {
 			vq_handler.set_vq_size(size.0)
 		};
 
-		let descr_ring = DescriptorRing::new(vq_size);
+		let mut descr_ring = DescriptorRing::new(vq_size);
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len =
 			core::mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
@@ -707,10 +705,12 @@ impl PackedVq {
 		let dev_event = Box::leak(dev_event);
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(PhysAddr::from(descr_ring.raw_addr()));
+		vq_handler.set_ring_addr(PhysAddr::from(
+			DeviceAlloc.phys_addr(descr_ring.as_mut_ptr()),
+		));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(PhysAddr::from(ptr::from_mut(drv_event).expose_provenance()));
-		vq_handler.set_dev_ctrl_addr(PhysAddr::from(ptr::from_mut(dev_event).expose_provenance()));
+		vq_handler.set_drv_ctrl_addr(PhysAddr::from(DeviceAlloc.phys_addr(drv_event)));
+		vq_handler.set_dev_ctrl_addr(PhysAddr::from(DeviceAlloc.phys_addr(dev_event)));
 
 		let mut drv_event = DrvNotif {
 			f_notif_idx: false,
