@@ -91,7 +91,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86
+          sudo apt-get install --no-install-recommends qemu-system-x86
       - uses: mkroening/rust-toolchain-toml@main
       - name: Unit tests
         run: cargo test --lib
@@ -126,7 +126,7 @@ jobs:
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
             flags: --accel --sudo
           - arch: aarch64
-            packages: qemu-system-aarch64
+            packages: qemu-system-aarch64 ipxe-qemu
           - arch: riscv64
             packages: qemu-system-misc
 
@@ -142,7 +142,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install ${{ matrix.packages }}
+          sudo apt-get install --no-install-recommends ${{ matrix.packages }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@nightly
         with:
