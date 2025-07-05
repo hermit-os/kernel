@@ -20,6 +20,7 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
+use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
 use crate::fs::{
@@ -550,7 +551,7 @@ pub(crate) struct Rsp<O: ops::Op> {
 #[derive(Debug)]
 pub(crate) enum FuseError {
 	VirtqError(VirtqError),
-	IOError(io::Error),
+	IOError(Errno),
 }
 
 impl From<VirtqError> for FuseError {
@@ -559,7 +560,7 @@ impl From<VirtqError> for FuseError {
 	}
 }
 
-impl From<FuseError> for io::Error {
+impl From<FuseError> for Errno {
 	fn from(value: FuseError) -> Self {
 		match value {
 			FuseError::VirtqError(virtq_error) => virtq_error.into(),
@@ -620,12 +621,12 @@ impl FuseFileHandleInner {
 			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 				let (cmd, rsp_payload_len) = ops::Poll::create(nid, fh, kh, events);
 				let rsp = get_filesystem_driver()
-					.ok_or(io::Error::ENOSYS)?
+					.ok_or(Errno::Nosys)?
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 
 				if rsp.headers.out_header.error < 0 {
-					Poll::Ready(Err(io::Error::EIO))
+					Poll::Ready(Err(Errno::Io))
 				} else {
 					let revents =
 						PollEvent::from_bits(i16::try_from(rsp.headers.op_header.revents).unwrap())
@@ -657,7 +658,7 @@ impl FuseFileHandleInner {
 			let (cmd, rsp_payload_len) =
 				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
 			let rsp = get_filesystem_driver()
-				.ok_or(io::Error::ENOSYS)?
+				.ok_or(Errno::Nosys)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 			let len: usize =
@@ -674,7 +675,7 @@ impl FuseFileHandleInner {
 			Ok(len)
 		} else {
 			debug!("File not open, cannot read!");
-			Err(io::Error::ENOENT)
+			Err(Errno::Noent)
 		}
 	}
 
@@ -694,12 +695,12 @@ impl FuseFileHandleInner {
 			let (cmd, rsp_payload_len) =
 				ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
 			let rsp = get_filesystem_driver()
-				.ok_or(io::Error::ENOSYS)?
+				.ok_or(Errno::Nosys)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error < 0 {
-				return Err(io::Error::EIO);
+				return Err(Errno::Io);
 			}
 
 			let rsp_size = rsp.headers.op_header.size;
@@ -712,7 +713,7 @@ impl FuseFileHandleInner {
 			Ok(rsp_len)
 		} else {
 			warn!("File not open, cannot read!");
-			Err(io::Error::ENOENT)
+			Err(Errno::Noent)
 		}
 	}
 
@@ -722,12 +723,12 @@ impl FuseFileHandleInner {
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 			let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
 			let rsp = get_filesystem_driver()
-				.ok_or(io::Error::ENOSYS)?
+				.ok_or(Errno::Nosys)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error < 0 {
-				return Err(io::Error::EIO);
+				return Err(Errno::Io);
 			}
 
 			let rsp_offset = rsp.headers.op_header.offset;
@@ -735,7 +736,7 @@ impl FuseFileHandleInner {
 
 			Ok(rsp_offset.try_into().unwrap())
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -744,15 +745,15 @@ impl FuseFileHandleInner {
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 			let (cmd, rsp_payload_len) = ops::Getattr::create(nid, fh, FUSE_GETATTR_FH);
 			let rsp = get_filesystem_driver()
-				.ok_or(io::Error::ENOSYS)?
+				.ok_or(Errno::Nosys)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
 			if rsp.headers.out_header.error < 0 {
-				return Err(io::Error::EIO);
+				return Err(Errno::Io);
 			}
 			Ok(rsp.headers.op_header.attr.into())
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 }
@@ -832,14 +833,14 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		debug!("FUSE opendir: {path:#?}");
 
-		let fuse_nid = lookup(path.clone()).ok_or(io::Error::ENOENT)?;
+		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
@@ -854,7 +855,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_READDIR as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
@@ -868,7 +869,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
 			debug!("FUSE no new dirs");
-			return Err(io::Error::ENOENT);
+			return Err(Errno::Noent);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -964,14 +965,14 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE opendir: {path:#?}");
 
-		let fuse_nid = lookup(path.clone()).ok_or(io::Error::ENOENT)?;
+		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
@@ -986,7 +987,7 @@ impl VfsNode for FuseDirectory {
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_READDIR as u32;
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
@@ -1000,7 +1001,7 @@ impl VfsNode for FuseDirectory {
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
 			debug!("FUSE no new dirs");
-			return Err(io::Error::ENOENT);
+			return Err(Errno::Noent);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -1052,7 +1053,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
-			return Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap());
+			return Err(Errno::try_from(-rsp.headers.out_header.error).unwrap());
 		}
 
 		let entry_out = rsp.headers.op_header;
@@ -1094,7 +1095,7 @@ impl VfsNode for FuseDirectory {
 			if opt.contains(OpenOption::O_CREAT) {
 				// See https://lwn.net/Articles/926782/
 				warn!("O_DIRECTORY and O_CREAT are together invalid as open options.");
-				return Err(io::Error::EINVAL);
+				return Err(Errno::Inval);
 			}
 
 			let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
@@ -1109,7 +1110,7 @@ impl VfsNode for FuseDirectory {
 				path.remove(0);
 				Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
 			} else {
-				Err(io::Error::ENOTDIR)
+				Err(Errno::Notdir)
 			}
 		} else {
 			let file = FuseFileHandle::new();
@@ -1124,7 +1125,7 @@ impl VfsNode for FuseDirectory {
 				let (cmd, rsp_payload_len) =
 					ops::Create::create(path, opt.bits().try_into().unwrap(), mode.bits());
 				let rsp = get_filesystem_driver()
-					.ok_or(io::Error::ENOSYS)?
+					.ok_or(Errno::Nosys)?
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 
@@ -1137,14 +1138,14 @@ impl VfsNode for FuseDirectory {
 
 				if file_guard.fuse_nid.is_none() {
 					warn!("Fuse lookup seems to have failed!");
-					return Err(io::Error::ENOENT);
+					return Err(Errno::Noent);
 				}
 
 				// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 				let (cmd, rsp_payload_len) =
 					ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
 				let rsp = get_filesystem_driver()
-					.ok_or(io::Error::ENOSYS)?
+					.ok_or(Errno::Nosys)?
 					.lock()
 					.send_command(cmd, rsp_payload_len)?;
 				file_guard.fuse_fh = Some(rsp.headers.op_header.fh);
@@ -1161,7 +1162,7 @@ impl VfsNode for FuseDirectory {
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		trace!("unlink answer {rsp:?}");
@@ -1174,7 +1175,7 @@ impl VfsNode for FuseDirectory {
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		trace!("rmdir answer {rsp:?}");
@@ -1187,13 +1188,13 @@ impl VfsNode for FuseDirectory {
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
 		let rsp = get_filesystem_driver()
-			.ok_or(io::Error::ENOSYS)?
+			.ok_or(Errno::Nosys)?
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		if rsp.headers.out_header.error == 0 {
 			Ok(())
 		} else {
-			Err(io::Error::try_from(-rsp.headers.out_header.error).unwrap())
+			Err(Errno::try_from(-rsp.headers.out_header.error).unwrap())
 		}
 	}
 }

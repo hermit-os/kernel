@@ -19,6 +19,8 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+use crate::env;
+use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{
 	self, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd, dup_object,
@@ -28,7 +30,6 @@ use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
 use crate::syscalls::interfaces::SyscallInterface;
-use crate::{env, io};
 
 mod condvar;
 mod entropy;
@@ -259,7 +260,7 @@ pub unsafe extern "C" fn sys_unlink(name: *const c_char) -> i32 {
 pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 	let Some(mode) = AccessPermission::from_bits(mode) else {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	};
 
 	crate::fs::create_dir(name, mode).map_or_else(|e| -i32::from(e), |()| 0)
@@ -305,7 +306,7 @@ pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
 	if stat.is_null() {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	crate::fd::fstat(fd).map_or_else(
@@ -323,7 +324,7 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -i32::from(e))
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -331,16 +332,16 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) -> FileDescriptor {
 	let Some(flags) = OpenOption::from_bits(flags) else {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	};
 	let Some(mode) = AccessPermission::from_bits(mode) else {
-		return -crate::errno::EINVAL;
+		return -i32::from(Errno::Inval);
 	};
 
 	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::open(name, flags, mode).unwrap_or_else(|e| -i32::from(e))
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -380,7 +381,7 @@ pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) -> isize {
 	if !(0..=IOV_MAX).contains(&iovcnt) {
-		return (-crate::errno::EINVAL).try_into().unwrap();
+		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
 
 	let mut read_bytes: isize = 0;
@@ -443,7 +444,7 @@ pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usiz
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: usize) -> isize {
 	if !(0..=IOV_MAX).contains(&iovcnt) {
-		return (-crate::errno::EINVAL).try_into().unwrap();
+		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
 
 	let mut written_bytes: isize = 0;
@@ -497,7 +498,7 @@ pub unsafe extern "C" fn sys_ioctl(
 			},
 		)
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -534,7 +535,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 			},
 		)
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 
@@ -569,7 +570,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	count: usize,
 ) -> i64 {
 	if dirp.is_null() || count == 0 {
-		return (-crate::errno::EINVAL).into();
+		return (-i32::from(Errno::Inval)).into();
 	}
 
 	const ALIGN_DIRENT: usize = core::mem::align_of::<Dirent64>();
@@ -577,7 +578,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	let mut offset: i64 = 0;
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|_| (-crate::errno::EINVAL).into(),
+		|_| (-i32::from(Errno::Inval)).into(),
 		|v| {
 			block_on((*v).readdir(), None).map_or_else(
 				|e| i64::from(-i32::from(e)),
@@ -587,7 +588,7 @@ pub unsafe extern "C" fn sys_getdents64(
 						let aligned_len = ((core::mem::size_of::<Dirent64>() + len + 1)
 							+ (ALIGN_DIRENT - 1)) & (!(ALIGN_DIRENT - 1));
 						if offset as usize + aligned_len >= count {
-							return (-crate::errno::EINVAL).into();
+							return (-i32::from(Errno::Inval)).into();
 						}
 
 						let dir = unsafe { &mut *dirp };
@@ -656,11 +657,7 @@ pub unsafe extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -
 
 	crate::fd::poll(slice, timeout).map_or_else(
 		|e| {
-			if e == io::Error::ETIME {
-				0
-			} else {
-				-i32::from(e)
-			}
+			if e == Errno::Time { 0 } else { -i32::from(e) }
 		},
 		|v| v.try_into().unwrap(),
 	)
@@ -672,7 +669,7 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 	if let Some(flags) = EventFlags::from_bits(flags) {
 		crate::fd::eventfd(initval, flags).unwrap_or_else(|e| -i32::from(e))
 	} else {
-		-crate::errno::EINVAL
+		-i32::from(Errno::Inval)
 	}
 }
 

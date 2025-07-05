@@ -19,6 +19,7 @@ use core::mem::MaybeUninit;
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 
+use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, NodeKind, SeekWhence, VfsNode};
@@ -94,7 +95,7 @@ impl ObjectInterface for RomFileInterface {
 
 		let new_pos: isize = if whence == SeekWhence::Set {
 			if offset < 0 {
-				return Err(io::Error::EINVAL);
+				return Err(Errno::Inval);
 			}
 
 			offset
@@ -103,14 +104,14 @@ impl ObjectInterface for RomFileInterface {
 		} else if whence == SeekWhence::Cur {
 			(*pos_guard as isize) + offset
 		} else {
-			return Err(io::Error::EINVAL);
+			return Err(Errno::Inval);
 		};
 
 		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
 			*pos_guard = new_pos.try_into().unwrap();
 			Ok(new_pos)
 		} else {
-			Err(io::Error::EBADF)
+			Err(Errno::Badf)
 		}
 	}
 
@@ -227,7 +228,7 @@ impl ObjectInterface for RamFileInterface {
 
 		let new_pos: isize = if whence == SeekWhence::Set {
 			if offset < 0 {
-				return Err(io::Error::EINVAL);
+				return Err(Errno::Inval);
 			}
 
 			offset
@@ -236,7 +237,7 @@ impl ObjectInterface for RamFileInterface {
 		} else if whence == SeekWhence::Cur {
 			(*pos_guard as isize) + offset
 		} else {
-			return Err(io::Error::EINVAL);
+			return Err(Errno::Inval);
 		};
 
 		if new_pos > isize::try_from(guard.data.len()).unwrap() {
@@ -289,7 +290,7 @@ impl VfsNode for RomFile {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(io::Error::EBADF)
+			Err(Errno::Badf)
 		}
 	}
 
@@ -297,7 +298,7 @@ impl VfsNode for RomFile {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(io::Error::EBADF)
+			Err(Errno::Badf)
 		}
 	}
 }
@@ -343,7 +344,7 @@ impl VfsNode for RamFile {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(io::Error::EBADF)
+			Err(Errno::Badf)
 		}
 	}
 
@@ -351,7 +352,7 @@ impl VfsNode for RamFile {
 		if components.is_empty() {
 			self.get_file_attributes()
 		} else {
-			Err(io::Error::EBADF)
+			Err(Errno::Badf)
 		}
 	}
 }
@@ -442,20 +443,20 @@ impl MemDirectory {
 					if opt.contains(OpenOption::O_DIRECTORY)
 						&& file.get_kind() != NodeKind::Directory
 					{
-						return Err(io::Error::ENOTDIR);
+						return Err(Errno::Notdir);
 					}
 
 					if file.get_kind() == NodeKind::File || file.get_kind() == NodeKind::Directory {
 						return file.get_object();
 					} else {
-						return Err(io::Error::ENOENT);
+						return Err(Errno::Noent);
 					}
 				} else if opt.contains(OpenOption::O_CREAT) {
 					let file = Box::new(RamFile::new(mode));
 					guard.insert(node_name, file.clone());
 					return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
 				} else {
-					return Err(io::Error::ENOENT);
+					return Err(Errno::Noent);
 				}
 			}
 
@@ -464,7 +465,7 @@ impl MemDirectory {
 			}
 		}
 
-		Err(io::Error::ENOENT)
+		Err(Errno::Noent)
 	}
 }
 
@@ -500,7 +501,7 @@ impl VfsNode for MemDirectory {
 					}
 				}
 
-				Err(io::Error::EBADF)
+				Err(Errno::Badf)
 			},
 			None,
 		)
@@ -515,19 +516,19 @@ impl VfsNode for MemDirectory {
 					if components.is_empty() {
 						let mut guard = self.inner.write().await;
 
-						let obj = guard.remove(&node_name).ok_or(io::Error::ENOENT)?;
+						let obj = guard.remove(&node_name).ok_or(Errno::Noent)?;
 						if obj.get_kind() == NodeKind::Directory {
 							return Ok(());
 						} else {
 							guard.insert(node_name, obj);
-							return Err(io::Error::ENOTDIR);
+							return Err(Errno::Notdir);
 						}
 					} else if let Some(directory) = self.inner.read().await.get(&node_name) {
 						return directory.traverse_rmdir(components);
 					}
 				}
 
-				Err(io::Error::EBADF)
+				Err(Errno::Badf)
 			},
 			None,
 		)
@@ -542,19 +543,19 @@ impl VfsNode for MemDirectory {
 					if components.is_empty() {
 						let mut guard = self.inner.write().await;
 
-						let obj = guard.remove(&node_name).ok_or(io::Error::ENOENT)?;
+						let obj = guard.remove(&node_name).ok_or(Errno::Noent)?;
 						if obj.get_kind() == NodeKind::File {
 							return Ok(());
 						} else {
 							guard.insert(node_name, obj);
-							return Err(io::Error::EISDIR);
+							return Err(Errno::Isdir);
 						}
 					} else if let Some(directory) = self.inner.read().await.get(&node_name) {
 						return directory.traverse_unlink(components);
 					}
 				}
 
-				Err(io::Error::EBADF)
+				Err(Errno::Badf)
 			},
 			None,
 		)
@@ -569,7 +570,7 @@ impl VfsNode for MemDirectory {
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
 						directory.traverse_readdir(components)
 					} else {
-						Err(io::Error::EBADF)
+						Err(Errno::Badf)
 					}
 				} else {
 					let mut entries: Vec<DirectoryEntry> = Vec::new();
@@ -599,10 +600,10 @@ impl VfsNode for MemDirectory {
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
 						directory.traverse_lstat(components)
 					} else {
-						Err(io::Error::EBADF)
+						Err(Errno::Badf)
 					}
 				} else {
-					Err(io::Error::ENOSYS)
+					Err(Errno::Nosys)
 				}
 			},
 			None,
@@ -624,10 +625,10 @@ impl VfsNode for MemDirectory {
 					if let Some(directory) = self.inner.read().await.get(&node_name) {
 						directory.traverse_stat(components)
 					} else {
-						Err(io::Error::EBADF)
+						Err(Errno::Badf)
 					}
 				} else {
-					Err(io::Error::ENOSYS)
+					Err(Errno::Nosys)
 				}
 			},
 			None,
@@ -654,7 +655,7 @@ impl VfsNode for MemDirectory {
 					}
 				}
 
-				Err(io::Error::EBADF)
+				Err(Errno::Badf)
 			},
 			None,
 		)
@@ -691,7 +692,7 @@ impl VfsNode for MemDirectory {
 					}
 				}
 
-				Err(io::Error::ENOENT)
+				Err(Errno::Noent)
 			},
 			None,
 		)

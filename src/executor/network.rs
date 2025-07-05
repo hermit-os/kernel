@@ -23,6 +23,8 @@ use smoltcp::wire::{DnsQueryType, IpAddress};
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch;
+#[cfg(feature = "dns")]
+use crate::errno::Errno;
 use crate::executor::device::HermitNet;
 use crate::executor::spawn;
 #[cfg(feature = "dns")]
@@ -211,7 +213,7 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 			}
 			Err(e) => {
 				warn!("DNS query failed: {e:?}");
-				Poll::Ready(Err(io::Error::ENOENT))
+				Poll::Ready(Err(Errno::Noent))
 			}
 		}
 	})
@@ -302,23 +304,23 @@ impl<'a> NetworkInterface<'a> {
 		name: &str,
 		query_type: DnsQueryType,
 	) -> io::Result<QueryHandle> {
-		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
+		let dns_handle = self.dns_handle.ok_or(Errno::Inval)?;
 		let socket: &mut dns::Socket<'a> = self.sockets.get_mut(dns_handle);
 		socket
 			.start_query(self.iface.context(), name, query_type)
-			.map_err(|_| io::Error::EIO)
+			.map_err(|_| Errno::Io)
 	}
 
 	#[allow(dead_code)]
 	#[cfg(feature = "dns")]
 	pub(crate) fn get_dns_socket(&self) -> io::Result<&dns::Socket<'a>> {
-		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
+		let dns_handle = self.dns_handle.ok_or(Errno::Inval)?;
 		Ok(self.sockets.get(dns_handle))
 	}
 
 	#[cfg(feature = "dns")]
 	pub(crate) fn get_mut_dns_socket(&mut self) -> io::Result<&mut dns::Socket<'a>> {
-		let dns_handle = self.dns_handle.ok_or(io::Error::EINVAL)?;
+		let dns_handle = self.dns_handle.ok_or(Errno::Inval)?;
 		Ok(self.sockets.get_mut(dns_handle))
 	}
 }

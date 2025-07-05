@@ -25,8 +25,8 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq, VqIndex, VqSize,
 };
+use crate::errno::Errno;
 use crate::fs::fuse::{self, FuseError, FuseInterface, Rsp, RspHeader};
-use crate::io;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -223,7 +223,7 @@ impl FuseInterface for VirtioFsDriver {
 			// independent of the request." (fuse man page)
 
 			return Err(FuseError::IOError(
-				io::Error::try_from_primitive(-headers.out_header.error).unwrap_or(io::Error::EIO),
+				Errno::try_from_primitive(-headers.out_header.error).unwrap_or(Errno::Io),
 			));
 		}
 

@@ -6,7 +6,7 @@ use hermit_sync::TicketMutex;
 
 use crate::arch;
 use crate::entropy::{self, Flags};
-use crate::errno::EINVAL;
+use crate::errno::Errno;
 
 static PARK_MILLER_LEHMER_SEED: TicketMutex<u32> = TicketMutex::new(0);
 const RAND_MAX: u64 = 0x7fff_ffff;
@@ -20,7 +20,7 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 
 unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	let Some(flags) = Flags::from_bits(flags) else {
-		return -EINVAL as isize;
+		return -i32::from(Errno::Inval) as isize;
 	};
 
 	let buf = unsafe {

@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 
-use crate::errno::*;
+use crate::errno::Errno;
 use crate::synch::semaphore::Semaphore;
 use crate::syscalls::{CLOCK_REALTIME, sys_clock_gettime};
 use crate::time::timespec;
@@ -18,7 +18,7 @@ pub type sem_t = *const Semaphore;
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32) -> i32 {
 	if sem.is_null() || pshared != 0 {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	// Create a new boxed semaphore and return a pointer to the raw memory.
@@ -38,7 +38,7 @@ pub unsafe extern "C" fn sys_sem_init(sem: *mut sem_t, pshared: i32, value: u32)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	// Consume the pointer to the raw memory into a Box again
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn sys_sem_destroy(sem: *mut sem_t) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	// Get a reference to the given semaphore and release it.
@@ -79,7 +79,7 @@ pub unsafe extern "C" fn sys_sem_post(sem: *mut sem_t) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sem_trywait(sem: *mut sem_t) -> i32 {
 	if sem.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	// Get a reference to the given semaphore and acquire it in a non-blocking fashion.
@@ -87,20 +87,24 @@ pub unsafe extern "C" fn sys_sem_trywait(sem: *mut sem_t) -> i32 {
 	if semaphore.try_acquire() {
 		0
 	} else {
-		-ECANCELED
+		-i32::from(Errno::Canceled)
 	}
 }
 
 unsafe fn sem_timedwait(sem: *mut sem_t, ms: u32) -> i32 {
 	if sem.is_null() {
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	let delay = if ms > 0 { Some(u64::from(ms)) } else { None };
 
 	// Get a reference to the given semaphore and wait until we have acquired it or the wakeup time has elapsed.
 	let semaphore = unsafe { &**sem };
-	if semaphore.acquire(delay) { 0 } else { -ETIME }
+	if semaphore.acquire(delay) {
+		0
+	} else {
+		-i32::from(Errno::Time)
+	}
 }
 
 /// Try to acquire a lock on a semaphore.

@@ -7,6 +7,7 @@ use core::task::{Poll, Waker, ready};
 use async_lock::Mutex;
 use async_trait::async_trait;
 
+use crate::errno::Errno;
 use crate::fd::{EventFlags, ObjectInterface, PollEvent};
 use crate::io;
 
@@ -49,7 +50,7 @@ impl ObjectInterface for EventFd {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
-			return Err(io::Error::EINVAL);
+			return Err(Errno::Inval);
 		}
 
 		future::poll_fn(|cx| {
@@ -79,7 +80,7 @@ impl ObjectInterface for EventFd {
 					}
 					Poll::Ready(Ok(len))
 				} else if self.flags.contains(EventFlags::EFD_NONBLOCK) {
-					Poll::Ready(Err(io::Error::EAGAIN))
+					Poll::Ready(Err(Errno::Again))
 				} else {
 					guard.read_queue.push_back(cx.waker().clone());
 					Poll::Pending
@@ -93,7 +94,7 @@ impl ObjectInterface for EventFd {
 		let len = mem::size_of::<u64>();
 
 		if buf.len() < len {
-			return Err(io::Error::EINVAL);
+			return Err(Errno::Inval);
 		}
 
 		let c = u64::from_ne_bytes(buf[..len].try_into().unwrap());
@@ -117,7 +118,7 @@ impl ObjectInterface for EventFd {
 
 				Poll::Ready(Ok(len))
 			} else if self.flags.contains(EventFlags::EFD_NONBLOCK) {
-				Poll::Ready(Err(io::Error::EAGAIN))
+				Poll::Ready(Err(Errno::Again))
 			} else {
 				guard.write_queue.push_back(cx.waker().clone());
 				Poll::Pending

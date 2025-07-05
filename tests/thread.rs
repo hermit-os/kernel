@@ -19,7 +19,7 @@ mod common;
 
 use alloc::vec;
 
-use hermit::errno::{EAGAIN, ETIMEDOUT};
+use hermit::errno::Errno;
 use hermit::syscalls::{sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep};
 use hermit::time::timespec;
 
@@ -65,14 +65,14 @@ pub fn test_futex() {
 	let futex_ptr = futex.as_ptr();
 
 	let ret = unsafe { sys_futex_wait(futex_ptr, 1, ptr::null(), 0) };
-	assert_eq!(ret, -EAGAIN);
+	assert_eq!(ret, -i32::from(Errno::Again));
 
 	let timeout = timespec {
 		tv_sec: 0,
 		tv_nsec: 100_000_000,
 	};
 	let ret = unsafe { sys_futex_wait(futex_ptr, 0, &raw const timeout, 1) };
-	assert_eq!(ret, -ETIMEDOUT);
+	assert_eq!(ret, -i32::from(Errno::Timedout));
 
 	let waker = unsafe {
 		sys_spawn2(

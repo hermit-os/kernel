@@ -28,6 +28,7 @@ use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::arch::{get_processor_count, interrupts};
+use crate::errno::Errno;
 use crate::fd::{FileDescriptor, ObjectInterface};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
@@ -473,7 +474,7 @@ impl PerCoreScheduler {
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
 
 				let guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.get(&fd).cloned().ok_or(io::Error::EBADF))
+				Ready(guard.get(&fd).cloned().ok_or(Errno::Badf))
 			})
 		})
 		.await
@@ -527,7 +528,7 @@ impl PerCoreScheduler {
 						if !guard.contains_key(&fd) {
 							break Ok(fd);
 						} else if fd == FileDescriptor::MAX {
-							break Err(io::Error::EOVERFLOW);
+							break Err(Errno::Overflow);
 						}
 
 						fd = fd.saturating_add(1);
@@ -551,7 +552,7 @@ impl PerCoreScheduler {
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let obj = (*(guard.get(&fd).ok_or(io::Error::EINVAL)?)).clone();
+				let obj = (*(guard.get(&fd).ok_or(Errno::Inval)?)).clone();
 
 				let new_fd = || -> io::Result<FileDescriptor> {
 					let mut fd: FileDescriptor = 0;
@@ -559,7 +560,7 @@ impl PerCoreScheduler {
 						if !guard.contains_key(&fd) {
 							break Ok(fd);
 						} else if fd == FileDescriptor::MAX {
-							break Err(io::Error::EOVERFLOW);
+							break Err(Errno::Overflow);
 						}
 
 						fd = fd.saturating_add(1);
@@ -568,7 +569,7 @@ impl PerCoreScheduler {
 
 				let fd = new_fd()?;
 				if guard.try_insert(fd, obj).is_err() {
-					Ready(Err(io::Error::EMFILE))
+					Ready(Err(Errno::Mfile))
 				} else {
 					Ready(Ok(fd))
 				}
@@ -587,10 +588,10 @@ impl PerCoreScheduler {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let obj = guard.get(&fd1).cloned().ok_or(io::Error::EBADF)?;
+				let obj = guard.get(&fd1).cloned().ok_or(Errno::Badf)?;
 
 				if guard.try_insert(fd2, obj).is_err() {
-					Ready(Err(io::Error::EMFILE))
+					Ready(Err(Errno::Mfile))
 				} else {
 					Ready(Ok(fd2))
 				}
@@ -606,7 +607,7 @@ impl PerCoreScheduler {
 				let borrowed = self.current_task.borrow();
 				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
 				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.remove(&fd).ok_or(io::Error::EBADF))
+				Ready(guard.remove(&fd).ok_or(Errno::Badf))
 			})
 		})
 		.await

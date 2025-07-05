@@ -8,6 +8,7 @@ use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
+use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
@@ -65,14 +66,14 @@ impl Socket {
 							socket
 								.send_slice(buffer, *meta)
 								.map(|()| buffer.len())
-								.map_err(|_| io::Error::EIO),
+								.map_err(|_| Errno::Io),
 						)
 					} else {
 						socket.register_recv_waker(cx.waker());
 						Poll::Pending
 					}
 				} else {
-					Poll::Ready(Err(io::Error::EIO))
+					Poll::Ready(Err(Errno::Io))
 				}
 			})
 		})
@@ -131,9 +132,9 @@ impl Socket {
 			if let Some(addr) = endpoint.addr {
 				self.local_endpoint.addr = addr;
 			}
-			self.with(|socket| socket.bind(endpoint).map_err(|_| io::Error::EADDRINUSE))
+			self.with(|socket| socket.bind(endpoint).map_err(|_| Errno::Addrinuse))
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -143,7 +144,7 @@ impl Socket {
 			self.remote_endpoint = Some(endpoint);
 			Ok(())
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -153,7 +154,7 @@ impl Socket {
 			let meta = UdpMetadata::from(endpoint);
 			self.write_with_meta(buf, &meta).await
 		} else {
-			Err(io::Error::EIO)
+			Err(Errno::Io)
 		}
 	}
 
@@ -174,14 +175,14 @@ impl Socket {
 									Poll::Pending
 								}
 							}
-							_ => Poll::Ready(Err(io::Error::EIO)),
+							_ => Poll::Ready(Err(Errno::Io)),
 						}
 					} else {
 						socket.register_recv_waker(cx.waker());
 						Poll::Pending
 					}
 				} else {
-					Poll::Ready(Err(io::Error::EIO))
+					Poll::Ready(Err(Errno::Io))
 				}
 			})
 		})
@@ -206,14 +207,14 @@ impl Socket {
 									Poll::Pending
 								}
 							}
-							_ => Poll::Ready(Err(io::Error::EIO)),
+							_ => Poll::Ready(Err(Errno::Io)),
 						}
 					} else {
 						socket.register_recv_waker(cx.waker());
 						Poll::Pending
 					}
 				} else {
-					Poll::Ready(Err(io::Error::EIO))
+					Poll::Ready(Err(Errno::Io))
 				}
 			})
 		})
@@ -225,7 +226,7 @@ impl Socket {
 			let meta = UdpMetadata::from(endpoint);
 			self.write_with_meta(buf, &meta).await
 		} else {
-			Err(io::Error::EINVAL)
+			Err(Errno::Inval)
 		}
 	}
 

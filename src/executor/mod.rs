@@ -28,6 +28,7 @@ use crate::drivers::mmio::get_network_driver;
 use crate::drivers::net::NetworkDriver;
 #[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
 use crate::drivers::pci::get_network_driver;
+use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -213,7 +214,7 @@ where
 				}
 			}
 
-			return Err(io::Error::ETIME);
+			return Err(Errno::Time);
 		}
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]

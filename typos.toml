@@ -7,6 +7,7 @@ extend-ignore-identifiers-re = [
 ]
 
 [default.extend-identifiers]
+Acces = "Acces"
 BARs = "BARs"
 BMCR_ANE = "BMCR_ANE"
 DT_WHT = "DT_WHT"

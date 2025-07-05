@@ -13,6 +13,7 @@ use hermit_sync::OnceCell;
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::errno::Errno;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
 use crate::io::Write;
@@ -47,12 +48,12 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 
 	/// determines the current file attribute
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Determine the syscall interface
 	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to create a new directory node
@@ -61,32 +62,32 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_components: &mut Vec<&str>,
 		_mode: AccessPermission,
 	) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to delete a directory node
 	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to remove the specified file
 	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to open a directory
 	fn traverse_readdir(&self, _components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to get file status
 	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to get file status
 	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to mount a file system
@@ -95,7 +96,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_components: &mut Vec<&str>,
 		_obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
 	) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to open a file
@@ -105,7 +106,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_option: OpenOption,
 		_mode: AccessPermission,
 	) -> io::Result<Arc<dyn ObjectInterface>> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 
 	/// Helper function to create a read-only file
@@ -115,7 +116,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_data: &'static [u8],
 		_mode: AccessPermission,
 	) -> io::Result<()> {
-		Err(io::Error::ENOSYS)
+		Err(Errno::Nosys)
 	}
 }
 
@@ -356,37 +357,37 @@ pub(crate) fn init() {
 pub fn create_file(name: &str, data: &'static [u8], mode: AccessPermission) -> io::Result<()> {
 	FILESYSTEM
 		.get()
-		.ok_or(io::Error::EINVAL)?
+		.ok_or(Errno::Inval)?
 		.create_file(name, data, mode)
 }
 
 /// Removes an empty directory.
 pub fn remove_dir(path: &str) -> io::Result<()> {
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.rmdir(path)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.rmdir(path)
 }
 
 pub fn unlink(path: &str) -> io::Result<()> {
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.unlink(path)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.unlink(path)
 }
 
 /// Creates a new, empty directory at the provided path
 pub fn create_dir(path: &str, mode: AccessPermission) -> io::Result<()> {
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.mkdir(path, mode)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.mkdir(path, mode)
 }
 
 /// Returns an vector with all the entries within a directory.
 pub fn readdir(name: &str) -> io::Result<Vec<DirectoryEntry>> {
 	debug!("Read directory {name}");
 
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.readdir(name)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.readdir(name)
 }
 
 pub fn read_stat(name: &str) -> io::Result<FileAttr> {
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.stat(name)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.stat(name)
 }
 
 pub fn read_lstat(name: &str) -> io::Result<FileAttr> {
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.lstat(name)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.lstat(name)
 }
 
 pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result<FileDescriptor> {
@@ -396,25 +397,25 @@ pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result
 
 	debug!("Open {name}, {flags:?}, {mode:?}");
 
-	let fs = FILESYSTEM.get().ok_or(io::Error::EINVAL)?;
+	let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
 	if let Ok(file) = fs.open(name, flags, mode) {
 		let fd = insert_object(file)?;
 		Ok(fd)
 	} else {
-		Err(io::Error::EINVAL)
+		Err(Errno::Inval)
 	}
 }
 
 /// Open a directory to read the directory entries
 pub(crate) fn opendir(name: &str) -> io::Result<FileDescriptor> {
-	let obj = FILESYSTEM.get().ok_or(io::Error::EINVAL)?.opendir(name)?;
+	let obj = FILESYSTEM.get().ok_or(Errno::Inval)?.opendir(name)?;
 	insert_object(obj)
 }
 
 use crate::fd::{self, FileDescriptor};
 
 pub fn file_attributes(path: &str) -> io::Result<FileAttr> {
-	FILESYSTEM.get().ok_or(io::Error::EINVAL)?.lstat(path)
+	FILESYSTEM.get().ok_or(Errno::Inval)?.lstat(path)
 }
 
 #[allow(clippy::len_without_is_empty)]
