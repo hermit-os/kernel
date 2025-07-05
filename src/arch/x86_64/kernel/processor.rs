@@ -1,15 +1,13 @@
 #![allow(dead_code)]
 
-use alloc::boxed::Box;
 use core::arch::asm;
 use core::arch::x86_64::{
-	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdseed64_step, _rdtsc, _xrstor, _xsave, _xsavec,
-	_xsaveopt,
+	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdseed64_step, _rdtsc, _xrstor, _xsave,
 };
-use core::fmt;
 use core::hint::spin_loop;
 use core::num::{NonZero, NonZeroU32};
 use core::sync::atomic::{AtomicU64, Ordering};
+use core::{fmt, ptr};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
@@ -19,7 +17,6 @@ use x86_64::instructions::port::Port;
 use x86_64::instructions::tables::lidt;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags, Efer, EferFlags};
 use x86_64::registers::model_specific::{FsBase, GsBase, Msr};
-use x86_64::registers::mxcsr::MxCsr;
 use x86_64::registers::segmentation::{FS, GS, Segment64};
 use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
@@ -69,8 +66,6 @@ struct Features {
 	supports_fsgs: bool,
 	supports_rdtscp: bool,
 	cpu_speedstep: CpuSpeedStep,
-	has_xsaveopt: bool,
-	has_xsavec: bool,
 	xcr0_supports_avx512_opmask: bool,
 	xcr0_supports_avx512_zmm_hi16: bool,
 	xcr0_supports_avx512_zmm_hi256: bool,
@@ -114,8 +109,6 @@ static FEATURES: Lazy<Features> = Lazy::new(|| {
 			cpu_speedstep.detect_features(&cpuid);
 			cpu_speedstep
 		},
-		has_xsaveopt: extended_state_info.has_xsaveopt(),
-		has_xsavec: extended_state_info.has_xsavec(),
 		xcr0_supports_avx512_opmask: extended_state_info.xcr0_supports_avx512_opmask(),
 		xcr0_supports_avx512_zmm_hi16: extended_state_info.xcr0_supports_avx512_zmm_hi16(),
 		xcr0_supports_avx512_zmm_hi256: extended_state_info.xcr0_supports_avx512_zmm_hi256(),
@@ -140,55 +133,135 @@ pub struct XSaveLegacyRegion {
 	pub fpu_instruction_pointer_high_or_cs: u32,
 	pub fpu_data_pointer: u32,
 	pub fpu_data_pointer_high_or_ds: u32,
-	pub mxcsr: MxCsr,
+	pub mxcsr: u32,
 	pub mxcsr_mask: u32,
 	pub st_space: [u8; 8 * 16],
 	pub xmm_space: [u8; 16 * 16],
 	pub padding: [u8; 96],
 }
 
-#[derive(Clone)]
-#[repr(C, align(64))]
-struct AlignToSixtyFour([u8; 64]);
+#[repr(C)]
+pub struct XSaveHeader {
+	pub xstate_bv: u64,
+	pub xcomp_bv: u64,
+	pub reserved: [u64; 6],
+}
 
 #[repr(C)]
+pub struct XSaveAVXState {
+	pub ymmh_space: [u8; 16 * 16],
+}
+
+/// XSave Area for AMD Lightweight Profiling.
+/// Refer to AMD Lightweight Profiling Specification (Publication No. 43724), Figure 7-1.
+#[repr(C)]
+pub struct XSaveLWPState {
+	pub lwpcb_address: u64,
+	pub flags: u32,
+	pub buffer_head_offset: u32,
+	pub buffer_base: u64,
+	pub buffer_size: u32,
+	pub filters: u32,
+	pub saved_event_record: [u64; 4],
+	pub event_counter: [u32; 16],
+}
+
+#[repr(C)]
+pub struct XSaveBndregs {
+	pub bound_registers: [u8; 4 * 16],
+}
+
+#[repr(C)]
+pub struct XSaveBndcsr {
+	pub bndcfgu_register: u64,
+	pub bndstatus_register: u64,
+}
+
+/// Saved AVX512 register state.
+///
+/// AVX512 extends the existing 16 AVX/SSE registers to be 512-bit wide and
+/// adds 16 more.
+///
+/// It also adds 8 opmask registers, which are up to 64-bit wide.
+#[repr(C)]
+pub struct XSaveAVX512State {
+	/// Opmask registers k0-k7.
+	pub opmask: [u8; 8 * 8],
+	/// Upper halves (32 bytes) of the lower ZMM registers (16).
+	pub zmm_hi256: [u8; 32 * 16],
+	/// Upper ZMM registers (64 bytes long, 16 registers).
+	pub hi16_zmm: [u8; 64 * 16],
+}
+
+#[repr(C, align(64))]
 pub struct FPUState {
-	xsave_area: Box<[AlignToSixtyFour]>,
+	pub legacy_region: XSaveLegacyRegion,
+	pub header: XSaveHeader,
+	pub avx_state: XSaveAVXState,
+	pub lwp_state: XSaveLWPState,
+	pub bndregs: XSaveBndregs,
+	pub bndcsr: XSaveBndcsr,
+	pub avx512_state: XSaveAVX512State,
 }
 
 impl FPUState {
-	pub fn new() -> Self {
-		let xsave_size = if supports_xsave() {
-			CpuId::new()
-				.get_extended_state_info()
-				.expect("XSAVE requires extended state info")
-				.xsave_area_size_enabled_features() as usize
-		} else {
-			size_of::<XSaveLegacyRegion>()
-		};
+	pub const fn new() -> Self {
+		Self {
+			// Set FPU-related values to their default values after initialization.
+			// Refer to Intel Vol. 3A, Table 9-1. IA-32 and Intel 64 Processor States Following Power-up, Reset, or INIT
+			legacy_region: XSaveLegacyRegion {
+				fpu_control_word: 0x37f,
+				fpu_status_word: 0,
+				fpu_tag_word: 0xffff,
+				fpu_opcode: 0,
+				fpu_instruction_pointer: 0,
+				fpu_instruction_pointer_high_or_cs: 0,
+				fpu_data_pointer: 0,
+				fpu_data_pointer_high_or_ds: 0,
+				mxcsr: 0x1f80,
+				mxcsr_mask: 0,
+				st_space: [0; 8 * 16],
+				xmm_space: [0; 16 * 16],
+				padding: [0; 96],
+			},
 
-		debug!("XSAVE area size: {xsave_size}");
-
-		// Allocate a 64-byte aligned Vec
-		let n_units = xsave_size.div_ceil(size_of::<AlignToSixtyFour>());
-		let mut xsave_area = vec![AlignToSixtyFour([0; 64]); n_units].into_boxed_slice();
-
-		// SAFETY: We allocated at least the size of XSaveLegacyRegion bytes and have initialized them
-		let legacy_region = unsafe { &mut *xsave_area.as_mut_ptr().cast::<XSaveLegacyRegion>() };
-
-		// Set FPU-related values to their default values after initialization.
-		// Refer to Intel Vol. 3A, Table 9-1. IA-32 and Intel 64 Processor States Following Power-up, Reset, or INIT
-		legacy_region.fpu_control_word = 0x37f;
-		legacy_region.fpu_tag_word = 0xffff;
-		legacy_region.mxcsr = MxCsr::default();
-
-		Self { xsave_area }
+			header: XSaveHeader {
+				xstate_bv: 0,
+				xcomp_bv: 0,
+				reserved: [0; 6],
+			},
+			avx_state: XSaveAVXState {
+				ymmh_space: [0; 16 * 16],
+			},
+			lwp_state: XSaveLWPState {
+				lwpcb_address: 0,
+				flags: 0,
+				buffer_head_offset: 0,
+				buffer_base: 0,
+				buffer_size: 0,
+				filters: 0,
+				saved_event_record: [0; 4],
+				event_counter: [0; 16],
+			},
+			bndregs: XSaveBndregs {
+				bound_registers: [0; 4 * 16],
+			},
+			bndcsr: XSaveBndcsr {
+				bndcfgu_register: 0,
+				bndstatus_register: 0,
+			},
+			avx512_state: XSaveAVX512State {
+				opmask: [0; 8 * 8],
+				zmm_hi256: [0; 32 * 16],
+				hi16_zmm: [0; 64 * 16],
+			},
+		}
 	}
 
 	pub fn restore(&self) {
 		if supports_xsave() {
 			unsafe {
-				_xrstor(self.xsave_area.as_ptr().cast::<u8>(), u64::MAX);
+				_xrstor(ptr::from_ref(self).cast(), u64::MAX);
 			}
 		} else {
 			self.restore_common();
@@ -197,12 +270,8 @@ impl FPUState {
 
 	pub fn save(&mut self) {
 		if supports_xsave() {
-			if has_xsavec() {
-				unsafe { _xsavec(self.xsave_area.as_mut_ptr().cast::<u8>(), u64::MAX) }
-			} else if has_xsaveopt() {
-				unsafe { _xsaveopt(self.xsave_area.as_mut_ptr().cast::<u8>(), u64::MAX) }
-			} else {
-				unsafe { _xsave(self.xsave_area.as_mut_ptr().cast::<u8>(), u64::MAX) }
+			unsafe {
+				_xsave(ptr::from_mut(self).cast(), u64::MAX);
 			}
 		} else {
 			self.save_common();
@@ -211,13 +280,13 @@ impl FPUState {
 
 	pub fn restore_common(&self) {
 		unsafe {
-			_fxrstor(self.xsave_area.as_ptr().cast::<u8>());
+			_fxrstor(ptr::from_ref(self).cast());
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			_fxsave(self.xsave_area.as_mut_ptr().cast::<u8>());
+			_fxsave(ptr::from_mut(self).cast());
 			asm!("fnclex", options(nomem, nostack));
 		}
 	}
@@ -1039,16 +1108,6 @@ pub fn supports_clflush() -> bool {
 #[inline]
 pub fn supports_fsgs() -> bool {
 	FEATURES.supports_fsgs
-}
-
-#[inline]
-pub fn has_xsaveopt() -> bool {
-	FEATURES.has_xsaveopt
-}
-
-#[inline]
-pub fn has_xsavec() -> bool {
-	FEATURES.has_xsavec
 }
 
 #[inline]
