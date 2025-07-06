@@ -11,8 +11,7 @@ use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
-	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
-	Size4KiB, Translate,
+	Mapper, OffsetPageTable, Page, PageTable, PhysFrame, RecursivePageTable, Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
@@ -350,31 +349,6 @@ fn make_p4_writable() {
 }
 
 pub fn init_page_tables() {}
-
-#[allow(dead_code)]
-unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
-	assert!(page_table_indices.len() <= 4);
-
-	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	let mut pt = identity_mapped_page_table.level_4_table();
-
-	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
-		let level = 4 - i;
-		let entry = &pt[page_table_index];
-
-		let indent = &"        "[0..2 * i];
-		let page_table_index = u16::from(page_table_index);
-		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
-
-		if entry.is_unused() {
-			break;
-		}
-
-		let phys = entry.addr();
-		let virt = x86_64::VirtAddr::new(phys.as_u64());
-		pt = unsafe { &*virt.as_mut_ptr() };
-	}
-}
 
 #[allow(dead_code)]
 pub(crate) unsafe fn print_page_tables(levels: usize) {
