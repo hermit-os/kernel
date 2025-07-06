@@ -352,44 +352,6 @@ fn make_p4_writable() {
 pub fn init_page_tables() {}
 
 #[allow(dead_code)]
-unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
-	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
-
-	match pt.translate(virt_addr) {
-		TranslateResult::Mapped {
-			frame,
-			offset,
-			flags,
-		} => {
-			let phys_addr = frame.start_address() + offset;
-			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p}, flags: {flags:?}");
-			let indices = [
-				virt_addr.p4_index(),
-				virt_addr.p3_index(),
-				virt_addr.p2_index(),
-				virt_addr.p1_index(),
-			];
-			let valid_indices = match frame {
-				MappedFrame::Size4KiB(_) => &indices[..4],
-				MappedFrame::Size2MiB(_) => &indices[..3],
-				MappedFrame::Size1GiB(_) => &indices[..2],
-			};
-			for (i, page_table_index) in valid_indices.iter().copied().enumerate() {
-				print!("p{}: {}, ", 4 - i, u16::from(page_table_index));
-			}
-			println!();
-			unsafe {
-				print_page_table_entries(valid_indices);
-			}
-		}
-		TranslateResult::NotMapped => println!("virt_addr: {virt_addr:p} not mapped"),
-		TranslateResult::InvalidFrameAddress(phys_addr) => {
-			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p} (invalid)");
-		}
-	}
-}
-
-#[allow(dead_code)]
 unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
 	assert!(page_table_indices.len() <= 4);
 
