@@ -353,6 +353,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const_fn"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f8a2ca5ac02d09563609681103aada9e1777d54fc57a5acd7a41404f9c93b6e"
+
+[[package]]
 name = "const_parse"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2069,11 +2075,11 @@ dependencies = [
 [[package]]
 name = "x86_64"
 version = "0.15.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f042214de98141e9c8706e8192b73f56494087cc55ebec28ce10f26c5c364ae"
+source = "git+https://github.com/rust-osdev/x86_64.git#72954bba37d591341ee5a982df4e06f23ec9b738"
 dependencies = [
  "bit_field",
  "bitflags 2.9.1",
+ "const_fn",
  "rustversion",
  "volatile 0.4.6",
 ]

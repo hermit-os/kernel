@@ -59,6 +59,9 @@ pub fn create_new_root_page_table() -> usize {
 pub fn init() {
 	paging::init();
 	crate::mm::physicalmem::init();
+	unsafe {
+		paging::log_page_tables();
+	}
 	crate::mm::virtualmem::init();
 
 	#[cfg(feature = "common-os")]
