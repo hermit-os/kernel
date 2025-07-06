@@ -349,35 +349,3 @@ fn make_p4_writable() {
 }
 
 pub fn init_page_tables() {}
-
-#[allow(dead_code)]
-pub(crate) unsafe fn print_page_tables(levels: usize) {
-	assert!((1..=4).contains(&levels));
-
-	fn print(table: &x86_64::structures::paging::PageTable, level: usize, min_level: usize) {
-		for (i, entry) in table
-			.iter()
-			.enumerate()
-			.filter(|(_i, entry)| !entry.is_unused())
-		{
-			if level < min_level {
-				break;
-			}
-			let indent = &"        "[0..2 * (4 - level)];
-			println!("{indent}L{level} Entry {i}: {entry:?}");
-
-			if level > min_level && !entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
-				let phys = entry.frame().unwrap().start_address();
-				let virt = x86_64::VirtAddr::new(phys.as_u64());
-				let entry_table = unsafe { &*virt.as_mut_ptr() };
-
-				print(entry_table, level - 1, min_level);
-			}
-		}
-	}
-
-	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	let pt = identity_mapped_page_table.level_4_table();
-
-	print(pt, 4, 5 - levels);
-}
