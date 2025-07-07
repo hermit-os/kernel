@@ -175,7 +175,10 @@ pub fn map<S>(
 				debug!("Had to unmap page {page:?} before mapping.");
 			}
 			let map = unsafe { mapper.map_to(page, frame, flags, &mut *frame_allocator) };
-			map.unwrap().flush();
+			match map {
+				Ok(mapper_flush) => mapper_flush.flush(),
+				Err(err) => panic!("Could not map {page:?} to {frame:?}: {err:?}"),
+			}
 		}
 		unmapped
 	}
