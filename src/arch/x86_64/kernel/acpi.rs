@@ -561,6 +561,7 @@ pub fn init() {
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
 				"MCFG at {table_physical_address:p} has invalid checksum"
 			);
+			#[cfg(feature = "pci")]
 			MCFG.set(table).unwrap();
 		}
 	}
