@@ -1,3 +1,45 @@
+//! Memory management.
+//!
+//! This is an overview of Hermit's memory layout:
+//!
+//! - `DeviceAlloc.device_offset` is 0 if `!cfg!(careful)`
+//! - User space virtual memory is only used if `!cfg!(feature = "common-os")`
+//! - On x86-64, PCI BARs, I/O APICs, and local APICs may be in `0xc0000000..0xffffffff`, which could be inside of `MEM`.
+//!
+//! ```text
+//!                               Virtual address
+//!                                    space
+//!
+//!                                 ...┌───┬──► 00000000
+//!           Physical address   ...   │   │
+//!                space      ...      │   │ Identity map
+//!                        ...         │   │
+//!    00000000 ◄──┬───┐...         ...├───┼──► mem_size
+//!                │   │   ...   ...   │   │
+//! PHYS_FREE_LIST │MEM│      ...      │   │ Unused
+//!                │   │   ...   ...   │   │
+//!    mem_size ◄──┼───┤...         ...├───┼──► DeviceAlloc.phys_offset
+//!                │   │   ...         │   │
+//!                │   │      ...      │   │ DeviceAlloc
+//!                │   │         ...   │   │
+//!          Empty │   │            ...├───┼──► DeviceAlloc.phys_offset + mem_size
+//!                │   │               │   │
+//!                │   │               │   │
+//!                │   │               │   │ Unused
+//!     Unknown ◄──┼───┤               │   │
+//!                │   │               │   │
+//!            PCI │   │               ├───┼──► kernel_virt_start
+//!                │   │               │   │
+//!     Unknown ◄──┼───┤               │   │ KERNEL_FREE_LIST
+//!                │   │               │   │
+//!                │   │               ├───┼──► kernel_virt_end
+//!                │   │               │   │
+//!          Empty │   │               │   │
+//!                │   │               │   │ User space
+//!                │   │               │   │
+//!                │   │               │   │
+//! ```
+
 pub(crate) mod allocator;
 #[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
 pub(crate) mod device_alloc;
