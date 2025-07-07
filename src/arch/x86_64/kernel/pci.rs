@@ -12,7 +12,7 @@ const CONFIG_ADDRESS: Port<u32> = Port::new(0xcf8);
 const CONFIG_DATA: Port<u32> = Port::new(0xcfc);
 
 #[derive(Debug, Copy, Clone)]
-struct PciConfigRegion;
+pub struct PciConfigRegion;
 
 impl PciConfigRegion {
 	pub const fn new() -> Self {
@@ -30,15 +30,21 @@ pub enum PciConfigAccess {
 impl ConfigRegionAccess for PciConfigAccess {
 	unsafe fn read(&self, address: PciAddress, offset: u16) -> u32 {
 		match self {
-			PciConfigAccess::PciConfigRegion(entry) => entry.read(address, offset),
-			PciConfigAccess::PcieConfigRegion(entry) => entry.read(address, offset),
+			PciConfigAccess::PciConfigRegion(entry) => unsafe { entry.read(address, offset) },
+			#[cfg(feature = "acpi")]
+			PciConfigAccess::PcieConfigRegion(entry) => unsafe { entry.read(address, offset) },
 		}
 	}
 
 	unsafe fn write(&self, address: PciAddress, offset: u16, value: u32) {
 		match self {
-			PciConfigAccess::PciConfigRegion(entry) => entry.write(address, offset, value),
-			PciConfigAccess::PcieConfigRegion(entry) => entry.write(address, offset, value),
+			PciConfigAccess::PciConfigRegion(entry) => unsafe {
+				entry.write(address, offset, value);
+			},
+			#[cfg(feature = "acpi")]
+			PciConfigAccess::PcieConfigRegion(entry) => unsafe {
+				entry.write(address, offset, value);
+			},
 		}
 	}
 }
@@ -83,9 +89,15 @@ pub(crate) fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 
 	#[cfg(feature = "acpi")]
-	if pcie::init_pcie() { return; }
+	if pcie::init_pcie() {
+		return;
+	}
 
-	enumerate_devices(0, PCI_MAX_BUS_NUMBER, PciConfigAccess::PciConfigRegion(PciConfigRegion::new()))
+	enumerate_devices(
+		0,
+		PCI_MAX_BUS_NUMBER,
+		PciConfigAccess::PciConfigRegion(PciConfigRegion::new()),
+	);
 }
 
 fn enumerate_devices(bus_start: u8, bus_end: u8, access: PciConfigAccess) {
@@ -108,18 +120,21 @@ fn enumerate_devices(bus_start: u8, bus_end: u8, access: PciConfigAccess) {
 
 #[cfg(feature = "acpi")]
 mod pcie {
-	use core::ptr;
+	use memory_addresses::PhysAddr;
 	use pci_types::{ConfigRegionAccess, PciAddress};
-	use memory_addresses::{PhysAddr, VirtAddr};
-	use super::{PciConfigAccess, PCI_MAX_BUS_NUMBER};
-	use crate::env;
+
+	use super::{PCI_MAX_BUS_NUMBER, PciConfigAccess};
 	use crate::env::kernel::acpi;
 
 	pub fn init_pcie() -> bool {
-		let Some(table) = acpi::get_mcfg_table() else { return false; };
+		let Some(table) = acpi::get_mcfg_table() else {
+			return false;
+		};
 
-		let mut start_addr: *const McfgTableEntry = core::ptr::with_exposed_provenance(table.table_start_address() + 8);
-		let end_addr: *const McfgTableEntry = core::ptr::with_exposed_provenance(table.table_end_address() + 8);
+		let mut start_addr: *const McfgTableEntry =
+			core::ptr::with_exposed_provenance(table.table_start_address() + 8);
+		let end_addr: *const McfgTableEntry =
+			core::ptr::with_exposed_provenance(table.table_end_address() + 8);
 
 		if start_addr == end_addr {
 			return false;
@@ -127,21 +142,13 @@ mod pcie {
 
 		while start_addr < end_addr {
 			unsafe {
-				let read = ptr::read_unaligned(start_addr);
+				let read = core::ptr::read_unaligned(start_addr);
 				init_pcie_bus(read);
 				start_addr = start_addr.add(1);
 			}
 		}
 
 		true
-	}
-
-	#[derive(Debug)]
-	#[repr(C)]
-	struct PcieDeviceConfig {
-		vendor_id: u16,
-		device_id: u16,
-		_reserved: [u8; 4096 - 8]
 	}
 
 	#[derive(Debug, Copy, Clone)]
@@ -151,33 +158,22 @@ mod pcie {
 		pub pci_segment_number: u16,
 		pub start_pci_bus: u8,
 		pub end_pci_bus: u8,
-		_reserved: u32
+		_reserved: u32,
 	}
 
 	impl McfgTableEntry {
-		pub fn pci_config_space_address(&self, bus_number: u8, device: u8, function: u8) -> PhysAddr {
+		pub fn pci_config_space_address(
+			&self,
+			bus_number: u8,
+			device: u8,
+			function: u8,
+		) -> PhysAddr {
 			PhysAddr::new(
-				self.base_address +
-					((bus_number as u64) << 20) |
-					(((device as u64) & 0x1f) << 15) |
-					(((function as u64) & 0x7) << 12)
+				self.base_address
+					+ ((u64::from(bus_number) << 20)
+						| ((u64::from(device) & 0x1f) << 15)
+						| ((u64::from(function) & 0x7) << 12)),
 			)
-		}
-	}
-
-	#[derive(Debug)]
-	#[cfg(feature = "pci")]
-	struct McfgTable(alloc::vec::Vec<McfgTableEntry>);
-
-	impl PcieDeviceConfig {
-		fn get<'a>(physical_address: PhysAddr) -> &'a Self {
-			assert!(env::is_uefi());
-
-			// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
-			let allocated_virtual_address = VirtAddr::new(physical_address.as_u64());
-			let ptr: *const PcieDeviceConfig = allocated_virtual_address.as_ptr();
-
-			unsafe { ptr.as_ref().unwrap() }
 		}
 	}
 
@@ -187,7 +183,9 @@ mod pcie {
 			assert!(address.bus() >= self.start_pci_bus);
 			assert!(address.bus() <= self.end_pci_bus);
 
-			let ptr = self.pci_config_space_address(address.bus(), address.device(), address.function()) + offset as u64;
+			let ptr =
+				self.pci_config_space_address(address.bus(), address.device(), address.function())
+					+ u64::from(offset);
 			let ptr = ptr.as_usize() as *const u32;
 
 			unsafe { *ptr }
@@ -198,10 +196,14 @@ mod pcie {
 			assert!(address.bus() >= self.start_pci_bus);
 			assert!(address.bus() <= self.end_pci_bus);
 
-			let ptr = self.pci_config_space_address(address.bus(), address.device(), address.function()) + offset as u64;
+			let ptr =
+				self.pci_config_space_address(address.bus(), address.device(), address.function())
+					+ u64::from(offset);
 			let ptr = ptr.as_usize() as *mut u32;
 
-			unsafe { *ptr = value; }
+			unsafe {
+				*ptr = value;
+			}
 		}
 	}
 
@@ -210,7 +212,15 @@ mod pcie {
 			return;
 		}
 
-		let end = if bus_entry.end_pci_bus > PCI_MAX_BUS_NUMBER { PCI_MAX_BUS_NUMBER } else { bus_entry.end_pci_bus };
-		super::enumerate_devices(bus_entry.start_pci_bus, end, PciConfigAccess::PcieConfigRegion(bus_entry));
+		let end = if bus_entry.end_pci_bus > PCI_MAX_BUS_NUMBER {
+			PCI_MAX_BUS_NUMBER
+		} else {
+			bus_entry.end_pci_bus
+		};
+		super::enumerate_devices(
+			bus_entry.start_pci_bus,
+			end,
+			PciConfigAccess::PcieConfigRegion(bus_entry),
+		);
 	}
 }

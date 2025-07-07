@@ -23,6 +23,9 @@ const PCI_MAX_FUNCTION_NUMBER: u8 = 8;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct PciConfigRegion(VirtAddr);
 
+// Compatibility with x86_64
+pub(crate) use PciConfigRegion as PciConfigAccess;
+
 impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
 		assert!(
