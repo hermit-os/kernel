@@ -190,6 +190,28 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		"msr ttbr0_el1, x5",
 
 		// Prepare system control register (SCTRL)
+		//
+		// UCI     [26] Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
+		//				DC CVAC and IC IVAU instructions
+		// EE      [25] Explicit data accesses at EL1 and Stage 1 translation
+		//				table walks at EL1 & EL0 are little-endian
+		// EOE     [24] Explicit data accesses at EL0 are little-endian
+		// WXN     [19] Regions with write permission are not forced to XN
+		// nTWE    [18] WFE instructions are executed as normal
+		// nTWI    [16] WFI instructions are executed as normal
+		// UCT     [15] Enables EL0 access in AArch64 to the CTR_EL0 register
+		// DZE     [14] Execution of the DC ZVA instruction is allowed at EL0
+		// I       [12] Instruction caches enabled at EL0 and EL1
+		// UMA     [9]  Disable access to the interrupt masks from EL0
+		// SED     [8]  The SETEND instruction is available
+		// ITD     [7]  The IT instruction functionality is available
+		// THEE    [6]  ThumbEE is disabled
+		// CP15BEN [5]  CP15 barrier operations disabled
+		// SA0     [4]  Stack Alignment check for EL0 enabled
+		// SA      [3]  Stack Alignment check enabled
+		// C       [2]  Data and unified enabled
+		// A       [1]  Alignment fault checking disabled
+		// M       [0]  MMU enable
 		"ldr x0, =0x405d01d",
 		  "msr sctlr_el1, x0",
 
