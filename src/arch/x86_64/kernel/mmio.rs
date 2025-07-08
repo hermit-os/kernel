@@ -32,12 +32,13 @@ pub(crate) enum MmioDriver {
 }
 
 impl MmioDriver {
-	#[allow(unreachable_patterns)]
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
-		match self {
-			Self::VirtioNet(drv) => Some(drv),
-			_ => None,
+		#[allow(clippy::irrefutable_let_patterns)]
+		if let MmioDriver::VirtioNet(drv) = self {
+			return Some(drv);
 		}
+
+		None
 	}
 }
 

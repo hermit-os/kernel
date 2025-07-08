@@ -555,7 +555,14 @@ impl BlockedTaskQueue {
 		borrowed.status = TaskStatus::Ready;
 	}
 
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(all(
+		any(feature = "tcp", feature = "udp"),
+		any(
+			feature = "virtio-net",
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			all(target_arch = "x86_64", feature = "rtl8139"),
+		)
+	))]
 	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
 		self.network_wakeup_time = wakeup_time;
 
@@ -691,7 +698,14 @@ impl BlockedTaskQueue {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
 
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(all(
+			any(feature = "tcp", feature = "udp"),
+			any(
+				feature = "virtio-net",
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+			)
+		))]
 		if let Some(mut guard) = crate::executor::network::NIC.try_lock()
 			&& let crate::executor::network::NetworkState::Initialized(nic) = &mut *guard
 		{

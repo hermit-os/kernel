@@ -1,8 +1,22 @@
 #![allow(dead_code)]
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)
+))]
 pub(crate) mod device;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)
+))]
 pub(crate) mod network;
 pub(crate) mod task;
 #[cfg(feature = "vsock")]
@@ -18,20 +32,55 @@ use core::time::Duration;
 
 use crossbeam_utils::Backoff;
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)
+))]
 use smoltcp::time::Instant;
 
 use crate::arch::core_local::*;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	not(feature = "pci"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))
+	),
+))]
 use crate::drivers::mmio::get_network_driver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)
+))]
 use crate::drivers::net::NetworkDriver;
-#[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	feature = "pci",
+	any(
+		feature = "virtio-net",
+		all(target_arch = "x86_64", feature = "rtl8139")
+	)
+))]
 use crate::drivers::pci::get_network_driver;
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)
+))]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::synch::futex::*;
 
@@ -124,7 +173,14 @@ where
 }
 
 pub fn init() {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(all(
+		any(feature = "tcp", feature = "udp"),
+		any(
+			feature = "virtio-net",
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			all(target_arch = "x86_64", feature = "rtl8139"),
+		)
+	))]
 	crate::executor::network::init();
 	#[cfg(feature = "vsock")]
 	crate::executor::vsock::init();
@@ -153,7 +209,14 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result
 where
 	F: Future<Output = io::Result<T>>,
 {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(all(
+		any(feature = "tcp", feature = "udp"),
+		any(
+			feature = "virtio-net",
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			all(target_arch = "x86_64", feature = "rtl8139"),
+		)
+	))]
 	let device = get_network_driver();
 
 	let backoff = Backoff::new();
@@ -173,7 +236,14 @@ where
 		let now = crate::arch::kernel::systemtime::now_micros();
 		if let Poll::Ready(t) = result {
 			// allow network interrupts
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(all(
+				any(feature = "tcp", feature = "udp"),
+				any(
+					feature = "virtio-net",
+					all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+					all(target_arch = "x86_64", feature = "rtl8139"),
+				)
+			))]
 			{
 				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
 					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
@@ -197,7 +267,14 @@ where
 			&& Duration::from_micros(now - start) >= duration
 		{
 			// allow network interrupts
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(all(
+				any(feature = "tcp", feature = "udp"),
+				any(
+					feature = "virtio-net",
+					all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+					all(target_arch = "x86_64", feature = "rtl8139"),
+				)
+			))]
 			{
 				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
 					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
@@ -217,7 +294,14 @@ where
 			return Err(Errno::Time);
 		}
 
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(all(
+			any(feature = "tcp", feature = "udp"),
+			any(
+				feature = "virtio-net",
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+			)
+		))]
 		if backoff.is_completed() {
 			let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
 				nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
@@ -252,7 +336,14 @@ where
 			backoff.snooze();
 		}
 
-		#[cfg(not(any(feature = "tcp", feature = "udp")))]
+		#[cfg(not(all(
+			any(feature = "tcp", feature = "udp"),
+			any(
+				feature = "virtio-net",
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+			)
+		)))]
 		{
 			if backoff.is_completed() {
 				let wakeup_time =

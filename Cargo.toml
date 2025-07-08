@@ -69,6 +69,7 @@ tcp = ["smoltcp", "smoltcp/socket-tcp"]
 trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["smoltcp", "smoltcp/socket-udp"]
 vga = []
+virtio-net = []
 vsock = ["pci"]
 
 [lints.rust]

@@ -41,7 +41,17 @@ mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
-#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
+#[cfg(any(
+	all(
+		any(feature = "tcp", feature = "udp"),
+		any(
+			feature = "virtio-net",
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			all(target_arch = "x86_64", feature = "rtl8139"),
+		)
+	),
+	feature = "vsock"
+))]
 pub mod socket;
 mod spinlock;
 mod system;

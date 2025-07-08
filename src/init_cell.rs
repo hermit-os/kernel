@@ -1,7 +1,17 @@
 #![cfg_attr(
 	all(
-		not(feature = "tcp"),
-		not(feature = "udp"),
+		not(all(
+			any(feature = "tcp", feature = "udp"),
+			target_arch = "x86_64",
+			feature = "rtl8139"
+		)),
+		not(all(
+			any(feature = "tcp", feature = "udp"),
+			target_arch = "riscv64",
+			feature = "gem-net",
+			not(feature = "pci")
+		)),
+		not(all(any(feature = "tcp", feature = "udp"), feature = "virtio-net")),
 		not(feature = "vsock"),
 		not(feature = "fuse")
 	),
