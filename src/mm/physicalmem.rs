@@ -5,7 +5,7 @@ use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::mm::paging::{self, BasePageSize, PageSize};
+use crate::arch::mm::paging::{self, BasePageSize, LargePageSize, PageSize};
 use crate::env;
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
@@ -59,9 +59,21 @@ fn detect_from_fdt() -> Result<(), ()> {
 		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
 		found_ram = true;
 
+		let size = {
+			let base = biggest_region.size.unwrap();
+			if base.is_multiple_of(LargePageSize::SIZE as usize) {
+				base
+			} else {
+				base.next_multiple_of(LargePageSize::SIZE as usize) - LargePageSize::SIZE as usize
+			}
+		};
+
 		let range = PageRange::from_start_len(
-			biggest_region.starting_address.addr(),
-			biggest_region.size.unwrap(),
+			biggest_region
+				.starting_address
+				.addr()
+				.next_multiple_of(LargePageSize::SIZE as usize),
+			size,
 		)
 		.unwrap();
 
