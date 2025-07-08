@@ -483,7 +483,7 @@ pub unsafe extern "C" fn sys_ioctl(
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| {
-			(*v).handle_ioctl(IoCtlCall(cmd as u32), argp)
+			(*v).handle_ioctl(IoCtlCall::from_bits(cmd as u32), argp)
 				.map_or_else(|e| -i32::from(e), |()| 0)
 		},
 	)

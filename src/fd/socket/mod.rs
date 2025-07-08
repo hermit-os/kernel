@@ -18,7 +18,7 @@ fn socket_handle_ioctl(
 ) -> io::Result<()> {
 	const FIONBIO: u32 = 0x8008_667eu32;
 
-	if cmd.0 == FIONBIO {
+	if cmd.into_bits() == FIONBIO {
 		let value = unsafe { *(argp as *const i32) };
 		let status_flags = if value != 0 {
 			fd::StatusFlags::O_NONBLOCK
