@@ -1,4 +1,4 @@
-use crate::arch::pci::PciConfigAccess;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
@@ -31,7 +31,7 @@ impl VirtioVsockDriver {
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		caps_coll: UniCapsColl,
-		device: &PciDevice<PciConfigAccess>,
+		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioVsockError> {
 		let device_id = device.device_id();
 
@@ -64,7 +64,7 @@ impl VirtioVsockDriver {
 	///
 	/// Returns a driver instance of VirtioVsockDriver.
 	pub(crate) fn init(
-		device: &PciDevice<PciConfigAccess>,
+		device: &PciDevice<PciConfigRegion>,
 	) -> Result<VirtioVsockDriver, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioVsockDriver::new(caps, device) {

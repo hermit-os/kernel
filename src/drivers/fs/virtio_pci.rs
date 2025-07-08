@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use volatile::VolatileRef;
 
-use crate::arch::pci::PciConfigAccess;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::fs::virtio_fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
@@ -26,7 +26,7 @@ impl VirtioFsDriver {
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		caps_coll: UniCapsColl,
-		device: &PciDevice<PciConfigAccess>,
+		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioFsError> {
 		let device_id = device.device_id();
 
@@ -54,7 +54,7 @@ impl VirtioFsDriver {
 	}
 
 	/// Initializes virtio filesystem device
-	pub fn init(device: &PciDevice<PciConfigAccess>) -> Result<VirtioFsDriver, VirtioError> {
+	pub fn init(device: &PciDevice<PciConfigRegion>) -> Result<VirtioFsDriver, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioFsDriver::new(caps, device) {
 				Ok(driver) => driver,
