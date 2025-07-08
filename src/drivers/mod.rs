@@ -4,7 +4,14 @@
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(
+		feature = "virtio-net",
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)
+))]
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
@@ -30,7 +37,7 @@ pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
 /// [DriverError](error::DriverError) values will be
 /// passed on to higher layers.
 pub mod error {
-	#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
+	#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 	use crate::drivers::net::gem::GEMError;
 	#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 	use crate::drivers::net::rtl8139::RTL8139Error;
@@ -52,7 +59,7 @@ pub mod error {
 		InitVirtioDevFail(VirtioError),
 		#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 		InitRTL8139DevFail(RTL8139Error),
-		#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
+		#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 		InitGEMDevFail(GEMError),
 	}
 
@@ -74,7 +81,7 @@ pub mod error {
 		}
 	}
 
-	#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
+	#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 	impl From<GEMError> for DriverError {
 		fn from(err: GEMError) -> Self {
 			DriverError::InitGEMDevFail(err)
@@ -98,7 +105,7 @@ pub mod error {
 				DriverError::InitRTL8139DevFail(ref err) => {
 					write!(f, "RTL8139 driver failed: {err:?}")
 				}
-				#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
+				#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 				DriverError::InitGEMDevFail(ref err) => {
 					write!(f, "GEM driver failed: {err:?}")
 				}
@@ -123,12 +130,14 @@ pub(crate) fn init() {
 	crate::drivers::pci::init();
 	#[cfg(all(
 		not(feature = "pci"),
+		feature = "virtio-net",
 		target_arch = "x86_64",
-		any(feature = "tcp", feature = "udp")
+		any(feature = "tcp", feature = "udp"),
 	))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
 	#[cfg(all(
 		not(feature = "pci"),
+		feature = "virtio-net",
 		target_arch = "aarch64",
 		any(feature = "tcp", feature = "udp")
 	))]

@@ -150,7 +150,14 @@ impl Socket {
 				}
 				VSOCK_MAP.lock().bind(ep.port)
 			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(all(
+				any(feature = "tcp", feature = "udp"),
+				any(
+					feature = "virtio-net",
+					all(target_arch = "riscv64", feature = "gem-net"),
+					all(target_arch = "x86_64", feature = "rtl8139"),
+				)
+			))]
 			_ => Err(Errno::Inval),
 		}
 	}
@@ -207,7 +214,14 @@ impl Socket {
 				})
 				.await
 			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(all(
+				any(feature = "tcp", feature = "udp"),
+				any(
+					feature = "virtio-net",
+					all(target_arch = "riscv64", feature = "gem-net"),
+					all(target_arch = "x86_64", feature = "rtl8139"),
+				)
+			))]
 			_ => Err(Errno::Inval),
 		}
 	}
