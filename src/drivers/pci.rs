@@ -16,7 +16,7 @@ use pci_types::{
 	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
 };
 
-use crate::arch::pci::PciConfigAccess;
+use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -53,7 +53,7 @@ use crate::drivers::{Driver, InterruptHandlerQueue};
 use crate::env;
 use crate::init_cell::InitCell;
 
-pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigAccess>>> =
+pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigRegion>>> =
 	InitCell::new(Vec::new());
 static PCI_DRIVERS: InitCell<Vec<PciDriver>> = InitCell::new(Vec::new());
 

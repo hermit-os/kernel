@@ -11,45 +11,46 @@ const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
 const CONFIG_ADDRESS: Port<u32> = Port::new(0xcf8);
 const CONFIG_DATA: Port<u32> = Port::new(0xcfc);
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Copy, Clone)]
-pub struct PciConfigRegion;
-
-impl PciConfigRegion {
-	pub const fn new() -> Self {
-		Self {}
-	}
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum PciConfigAccess {
-	PciConfigRegion(PciConfigRegion),
+pub enum PciConfigRegion {
+	PCI(LegacyPciConfigRegion),
 	#[cfg(feature = "acpi")]
-	PcieConfigRegion(pcie::McfgTableEntry),
+	PCIe(pcie::McfgTableEntry),
 }
 
-impl ConfigRegionAccess for PciConfigAccess {
+impl ConfigRegionAccess for PciConfigRegion {
 	unsafe fn read(&self, address: PciAddress, offset: u16) -> u32 {
 		match self {
-			PciConfigAccess::PciConfigRegion(entry) => unsafe { entry.read(address, offset) },
+			PciConfigRegion::PCI(entry) => unsafe { entry.read(address, offset) },
 			#[cfg(feature = "acpi")]
-			PciConfigAccess::PcieConfigRegion(entry) => unsafe { entry.read(address, offset) },
+			PciConfigRegion::PCIe(entry) => unsafe { entry.read(address, offset) },
 		}
 	}
 
 	unsafe fn write(&self, address: PciAddress, offset: u16, value: u32) {
 		match self {
-			PciConfigAccess::PciConfigRegion(entry) => unsafe {
+			PciConfigRegion::PCI(entry) => unsafe {
 				entry.write(address, offset, value);
 			},
 			#[cfg(feature = "acpi")]
-			PciConfigAccess::PcieConfigRegion(entry) => unsafe {
+			PciConfigRegion::PCIe(entry) => unsafe {
 				entry.write(address, offset, value);
 			},
 		}
 	}
 }
 
-impl ConfigRegionAccess for PciConfigRegion {
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct LegacyPciConfigRegion;
+
+impl LegacyPciConfigRegion {
+	pub const fn new() -> Self {
+		Self {}
+	}
+}
+
+impl ConfigRegionAccess for LegacyPciConfigRegion {
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, register: u16) -> u32 {
 		let mut config_address = CONFIG_ADDRESS;
@@ -96,11 +97,11 @@ pub(crate) fn init() {
 	enumerate_devices(
 		0,
 		PCI_MAX_BUS_NUMBER,
-		PciConfigAccess::PciConfigRegion(PciConfigRegion::new()),
+		PciConfigRegion::PCI(LegacyPciConfigRegion::new()),
 	);
 }
 
-fn enumerate_devices(bus_start: u8, bus_end: u8, access: PciConfigAccess) {
+fn enumerate_devices(bus_start: u8, bus_end: u8, access: PciConfigRegion) {
 	// Hermit only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.
 	// We also limit scanning to the first 32 buses.
@@ -123,7 +124,7 @@ mod pcie {
 	use memory_addresses::PhysAddr;
 	use pci_types::{ConfigRegionAccess, PciAddress};
 
-	use super::{PCI_MAX_BUS_NUMBER, PciConfigAccess};
+	use super::{PCI_MAX_BUS_NUMBER, PciConfigRegion};
 	use crate::env::kernel::acpi;
 
 	pub fn init_pcie() -> bool {
@@ -220,7 +221,7 @@ mod pcie {
 		super::enumerate_devices(
 			bus_entry.start_pci_bus,
 			end,
-			PciConfigAccess::PcieConfigRegion(bus_entry),
+			PciConfigRegion::PCIe(bus_entry),
 		);
 	}
 }

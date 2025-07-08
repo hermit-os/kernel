@@ -20,7 +20,7 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::memory_barrier;
-use crate::arch::pci::PciConfigAccess;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
@@ -675,7 +675,7 @@ impl PciBar {
 ///
 /// Returns ONLY Virtio specific capabilities, which allow to locate the actual capability
 /// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
-fn read_caps(device: &PciDevice<PciConfigAccess>) -> Result<Vec<PciCap>, PciError> {
+fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciError> {
 	let device_id = device.device_id();
 
 	let capabilities = device
@@ -706,7 +706,7 @@ fn read_caps(device: &PciDevice<PciConfigAccess>) -> Result<Vec<PciCap>, PciErro
 	}
 }
 
-pub(crate) fn map_caps(device: &PciDevice<PciConfigAccess>) -> Result<UniCapsColl, VirtioError> {
+pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, VirtioError> {
 	let device_id = device.device_id();
 
 	// In case caplist pointer is not used, abort as it is essential
@@ -790,7 +790,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigAccess>) -> Result<UniCapsCol
 /// driver with a [`PciDevice<PciConfigRegion>`] reference, allowing access to the capabilities
 /// list of the given device through [map_caps].
 pub(crate) fn init_device(
-	device: &PciDevice<PciConfigAccess>,
+	device: &PciDevice<PciConfigRegion>,
 ) -> Result<VirtioDriver, DriverError> {
 	let device_id = device.device_id();
 

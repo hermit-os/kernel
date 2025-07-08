@@ -3,9 +3,6 @@ use pci_types::{ConfigRegionAccess, PciAddress};
 #[derive(Debug, Copy, Clone)]
 pub struct PciConfigRegion;
 
-// Compatibility with x86_64
-pub use PciConfigRegion as PciConfigAccess;
-
 impl ConfigRegionAccess for PciConfigRegion {
 	unsafe fn read(&self, addr: PciAddress, offset: u16) -> u32 {
 		warn!("pci_config_region.read({addr}, {offset}) called but not implemented");
