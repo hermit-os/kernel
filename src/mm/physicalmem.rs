@@ -7,7 +7,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -78,9 +78,21 @@ fn detect_from_fdt() -> Result<(), ()> {
 		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
 		found_ram = true;
 
+		let size = {
+			let base = biggest_region.size.unwrap();
+			if base.is_multiple_of(LargePageSize::SIZE as usize) {
+				base
+			} else {
+				base.next_multiple_of(LargePageSize::SIZE as usize) - LargePageSize::SIZE as usize
+			}
+		};
+
 		let range = PageRange::from_start_len(
-			biggest_region.starting_address.addr(),
-			biggest_region.size.unwrap(),
+			biggest_region
+				.starting_address
+				.addr()
+				.next_multiple_of(LargePageSize::SIZE as usize),
+			size,
 		)
 		.unwrap();
 
