@@ -199,3 +199,6 @@ members = [
 exclude = [
 	"hermit-builtins",
 ]
+
+[patch.crates-io]
+x86_64 = { git = "https://github.com/rust-osdev/x86_64.git" }

@@ -11,8 +11,7 @@ use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
-	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
-	Size4KiB, Translate,
+	Mapper, OffsetPageTable, Page, PageTable, PhysFrame, RecursivePageTable, Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
@@ -303,6 +302,9 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 }
 
 pub fn init() {
+	unsafe {
+		log_page_tables();
+	}
 	make_p4_writable();
 }
 
@@ -354,97 +356,645 @@ fn make_p4_writable() {
 
 pub fn init_page_tables() {}
 
-#[allow(dead_code)]
-unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
-	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
+pub unsafe fn log_page_tables() {
+	use log::Level;
 
-	match pt.translate(virt_addr) {
-		TranslateResult::Mapped {
-			frame,
-			offset,
-			flags,
-		} => {
-			let phys_addr = frame.start_address() + offset;
-			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p}, flags: {flags:?}");
-			let indices = [
-				virt_addr.p4_index(),
-				virt_addr.p3_index(),
-				virt_addr.p2_index(),
-				virt_addr.p1_index(),
-			];
-			let valid_indices = match frame {
-				MappedFrame::Size4KiB(_) => &indices[..4],
-				MappedFrame::Size2MiB(_) => &indices[..3],
-				MappedFrame::Size1GiB(_) => &indices[..2],
+	use self::mapped_page_range_display::OffsetPageTableExt;
+
+	if !log_enabled!(Level::Debug) {
+		return;
+	}
+
+	let page_table = unsafe { identity_mapped_page_table() };
+	debug!("Page tables:\n{}", page_table.display());
+}
+
+pub mod mapped_page_range_display {
+	use core::fmt::{self, Write};
+
+	use x86_64::structures::paging::mapper::PageTableFrameMapping;
+	use x86_64::structures::paging::{MappedPageTable, OffsetPageTable, PageSize};
+
+	use super::mapped_page_table_iter::{
+		self, MappedPageRangeInclusive, MappedPageRangeInclusiveItem,
+		MappedPageTableRangeInclusiveIter,
+	};
+	use super::offset_page_table::PhysOffset;
+
+	#[expect(dead_code)]
+	pub trait MappedPageTableExt<P: PageTableFrameMapping + Clone> {
+		fn display(&self) -> MappedPageTableDisplay<'_, &P>;
+	}
+
+	impl<P: PageTableFrameMapping + Clone> MappedPageTableExt<P> for MappedPageTable<'_, P> {
+		fn display(&self) -> MappedPageTableDisplay<'_, &P> {
+			MappedPageTableDisplay {
+				inner: mapped_page_table_iter::mapped_page_table_range_iter(self),
+			}
+		}
+	}
+
+	pub trait OffsetPageTableExt {
+		fn display(&self) -> MappedPageTableDisplay<'_, PhysOffset>;
+	}
+
+	impl OffsetPageTableExt for OffsetPageTable<'_> {
+		fn display(&self) -> MappedPageTableDisplay<'_, PhysOffset> {
+			MappedPageTableDisplay {
+				inner: mapped_page_table_iter::offset_page_table_range_iter(self),
+			}
+		}
+	}
+
+	pub struct MappedPageTableDisplay<'a, P: PageTableFrameMapping + Clone> {
+		inner: MappedPageTableRangeInclusiveIter<'a, P>,
+	}
+
+	impl<P: PageTableFrameMapping + Clone> fmt::Display for MappedPageTableDisplay<'_, P> {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			let mut has_fields = false;
+
+			for mapped_page_range in self.inner.clone() {
+				if has_fields {
+					f.write_char('\n')?;
+				}
+				write!(f, "{}", mapped_page_range.display())?;
+
+				has_fields = true;
+			}
+
+			Ok(())
+		}
+	}
+
+	pub trait MappedPageRangeInclusiveItemExt {
+		fn display(&self) -> MappedPageRangeInclusiveItemDisplay<'_>;
+	}
+
+	impl MappedPageRangeInclusiveItemExt for MappedPageRangeInclusiveItem {
+		fn display(&self) -> MappedPageRangeInclusiveItemDisplay<'_> {
+			MappedPageRangeInclusiveItemDisplay { inner: self }
+		}
+	}
+
+	pub struct MappedPageRangeInclusiveItemDisplay<'a> {
+		inner: &'a MappedPageRangeInclusiveItem,
+	}
+
+	impl fmt::Display for MappedPageRangeInclusiveItemDisplay<'_> {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			match self.inner {
+				MappedPageRangeInclusiveItem::Size4KiB(range) => range.display().fmt(f),
+				MappedPageRangeInclusiveItem::Size2MiB(range) => range.display().fmt(f),
+				MappedPageRangeInclusiveItem::Size1GiB(range) => range.display().fmt(f),
+			}
+		}
+	}
+
+	pub trait MappedPageRangeInclusiveExt<S: PageSize> {
+		fn display(&self) -> MappedPageRangeInclusiveDisplay<'_, S>;
+	}
+
+	impl<S: PageSize> MappedPageRangeInclusiveExt<S> for MappedPageRangeInclusive<S> {
+		fn display(&self) -> MappedPageRangeInclusiveDisplay<'_, S> {
+			MappedPageRangeInclusiveDisplay { inner: self }
+		}
+	}
+
+	pub struct MappedPageRangeInclusiveDisplay<'a, S: PageSize> {
+		inner: &'a MappedPageRangeInclusive<S>,
+	}
+
+	impl<S: PageSize> fmt::Display for MappedPageRangeInclusiveDisplay<'_, S> {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			let size = S::DEBUG_STR;
+			let len = self.inner.page_range.len();
+			let page_start = self.inner.page_range.start.start_address();
+			let page_end = self.inner.page_range.end.start_address();
+			let frame_start = self.inner.frame_range.start.start_address();
+			let frame_end = self.inner.frame_range.end.start_address();
+			let flags = self.inner.flags;
+			let format_phys = if page_start.as_u64() == frame_start.as_u64() {
+				assert_eq!(page_end.as_u64(), frame_end.as_u64());
+				format_args!("{:>39}", "identity mapped")
+			} else {
+				format_args!("{frame_start:18p}..={frame_end:18p}")
 			};
-			for (i, page_table_index) in valid_indices.iter().copied().enumerate() {
-				print!("p{}: {}, ", 4 - i, u16::from(page_table_index));
-			}
-			println!();
-			unsafe {
-				print_page_table_entries(valid_indices);
-			}
-		}
-		TranslateResult::NotMapped => println!("virt_addr: {virt_addr:p} not mapped"),
-		TranslateResult::InvalidFrameAddress(phys_addr) => {
-			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p} (invalid)");
+			write!(
+				f,
+				"size: {size}, len: {len:5}, virt: {page_start:18p}..={page_end:18p}, phys: {format_phys}, flags: {flags:?}"
+			)
 		}
 	}
 }
 
-#[allow(dead_code)]
-unsafe fn print_page_table_entries(page_table_indices: &[PageTableIndex]) {
-	assert!(page_table_indices.len() <= 4);
+pub mod mapped_page_table_iter {
+	//! TODO: try to upstream this to [`x86_64`].
 
-	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	let mut pt = identity_mapped_page_table.level_4_table();
+	use core::fmt;
+	use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-	for (i, page_table_index) in page_table_indices.iter().copied().enumerate() {
-		let level = 4 - i;
-		let entry = &pt[page_table_index];
+	use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
+	use x86_64::structures::paging::mapper::PageTableFrameMapping;
+	use x86_64::structures::paging::page::{AddressNotAligned, PageRangeInclusive};
+	use x86_64::structures::paging::{
+		MappedPageTable, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags,
+		PageTableIndex, PhysFrame, Size1GiB, Size2MiB, Size4KiB,
+	};
 
-		let indent = &"        "[0..2 * i];
-		let page_table_index = u16::from(page_table_index);
-		println!("{indent}L{level} Entry {page_table_index}: {entry:?}");
+	use super::offset_page_table::PhysOffset;
+	use super::walker::{PageTableWalkError, PageTableWalker};
 
-		if entry.is_unused() {
-			break;
+	#[derive(Debug)]
+	pub struct MappedPageRangeInclusive<S: PageSize> {
+		pub page_range: PageRangeInclusive<S>,
+		pub frame_range: PhysFrameRangeInclusive<S>,
+		pub flags: PageTableFlags,
+	}
+
+	impl<S: PageSize> TryFrom<(MappedPage<S>, MappedPage<S>)> for MappedPageRangeInclusive<S> {
+		type Error = TryFromMappedPageError;
+
+		fn try_from((start, end): (MappedPage<S>, MappedPage<S>)) -> Result<Self, Self::Error> {
+			if start.flags != end.flags {
+				return Err(TryFromMappedPageError);
+			}
+
+			Ok(Self {
+				page_range: PageRangeInclusive {
+					start: start.page,
+					end: end.page,
+				},
+				frame_range: PhysFrameRangeInclusive {
+					start: start.frame,
+					end: end.frame,
+				},
+				flags: start.flags,
+			})
+		}
+	}
+
+	#[derive(Debug)]
+	pub enum MappedPageRangeInclusiveItem {
+		Size4KiB(MappedPageRangeInclusive<Size4KiB>),
+		Size2MiB(MappedPageRangeInclusive<Size2MiB>),
+		Size1GiB(MappedPageRangeInclusive<Size1GiB>),
+	}
+
+	impl TryFrom<(MappedPageItem, MappedPageItem)> for MappedPageRangeInclusiveItem {
+		type Error = TryFromMappedPageError;
+
+		fn try_from((start, end): (MappedPageItem, MappedPageItem)) -> Result<Self, Self::Error> {
+			match (start, end) {
+				(MappedPageItem::Size4KiB(start), MappedPageItem::Size4KiB(end)) => {
+					let range = MappedPageRangeInclusive::try_from((start, end))?;
+					Ok(Self::Size4KiB(range))
+				}
+				(MappedPageItem::Size2MiB(start), MappedPageItem::Size2MiB(end)) => {
+					let range = MappedPageRangeInclusive::try_from((start, end))?;
+					Ok(Self::Size2MiB(range))
+				}
+				(MappedPageItem::Size1GiB(start), MappedPageItem::Size1GiB(end)) => {
+					let range = MappedPageRangeInclusive::try_from((start, end))?;
+					Ok(Self::Size1GiB(range))
+				}
+				(_, _) => Err(TryFromMappedPageError),
+			}
+		}
+	}
+
+	#[derive(PartialEq, Eq, Clone, Debug)]
+	pub struct TryFromMappedPageError;
+
+	impl fmt::Display for TryFromMappedPageError {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			f.write_str("provided mapped pages were not compatible")
+		}
+	}
+
+	#[derive(Clone)]
+	pub struct MappedPageTableRangeInclusiveIter<'a, P: PageTableFrameMapping> {
+		inner: MappedPageTableIter<'a, P>,
+		start: Option<MappedPageItem>,
+		end: Option<MappedPageItem>,
+	}
+
+	#[expect(dead_code)]
+	pub fn mapped_page_table_range_iter<'a, P: PageTableFrameMapping>(
+		page_table: &'a MappedPageTable<'a, P>,
+	) -> MappedPageTableRangeInclusiveIter<'a, &'a P> {
+		MappedPageTableRangeInclusiveIter {
+			inner: mapped_page_table_iter(page_table),
+			start: None,
+			end: None,
+		}
+	}
+
+	pub fn offset_page_table_range_iter<'a>(
+		page_table: &'a OffsetPageTable<'a>,
+	) -> MappedPageTableRangeInclusiveIter<'a, PhysOffset> {
+		MappedPageTableRangeInclusiveIter {
+			inner: offset_page_table_iter(page_table),
+			start: None,
+			end: None,
+		}
+	}
+
+	impl<'a, P: PageTableFrameMapping> Iterator for MappedPageTableRangeInclusiveIter<'a, P> {
+		type Item = MappedPageRangeInclusiveItem;
+
+		fn next(&mut self) -> Option<Self::Item> {
+			if self.start.is_none() {
+				self.start = self.inner.next();
+				self.end = self.start;
+			}
+
+			let Some(start) = &mut self.start else {
+				return None;
+			};
+			let end = self.end.as_mut().unwrap();
+
+			for mapped_page in self.inner.by_ref() {
+				if mapped_page == *end + 1 {
+					*end = mapped_page;
+					continue;
+				}
+
+				let range = MappedPageRangeInclusiveItem::try_from((*start, *end)).unwrap();
+				*start = mapped_page;
+				*end = mapped_page;
+				return Some(range);
+			}
+
+			let range = MappedPageRangeInclusiveItem::try_from((*start, *end)).unwrap();
+			self.start = None;
+			self.end = None;
+			Some(range)
+		}
+	}
+
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+	pub struct MappedPage<S: PageSize> {
+		pub page: Page<S>,
+		pub frame: PhysFrame<S>,
+		pub flags: PageTableFlags,
+	}
+
+	impl<S: PageSize> Add<u64> for MappedPage<S> {
+		type Output = Self;
+
+		fn add(self, rhs: u64) -> Self::Output {
+			Self {
+				page: self.page + rhs,
+				frame: self.frame + rhs,
+				flags: self.flags,
+			}
+		}
+	}
+
+	impl<S: PageSize> Sub<u64> for MappedPage<S> {
+		type Output = Self;
+
+		fn sub(self, rhs: u64) -> Self::Output {
+			Self {
+				page: self.page - rhs,
+				frame: self.frame - rhs,
+				flags: self.flags,
+			}
+		}
+	}
+
+	#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
+	pub enum MappedPageItem {
+		Size4KiB(MappedPage<Size4KiB>),
+		Size2MiB(MappedPage<Size2MiB>),
+		Size1GiB(MappedPage<Size1GiB>),
+	}
+
+	impl Add<u64> for MappedPageItem {
+		type Output = Self;
+
+		fn add(self, rhs: u64) -> Self::Output {
+			match self {
+				Self::Size4KiB(mapped_page) => Self::Size4KiB(mapped_page + rhs),
+				Self::Size2MiB(mapped_page) => Self::Size2MiB(mapped_page + rhs),
+				Self::Size1GiB(mapped_page) => Self::Size1GiB(mapped_page + rhs),
+			}
+		}
+	}
+
+	impl AddAssign<u64> for MappedPageItem {
+		fn add_assign(&mut self, rhs: u64) {
+			*self = *self + rhs;
+		}
+	}
+
+	impl Sub<u64> for MappedPageItem {
+		type Output = Self;
+
+		fn sub(self, rhs: u64) -> Self::Output {
+			match self {
+				Self::Size4KiB(mapped_page) => Self::Size4KiB(mapped_page - rhs),
+				Self::Size2MiB(mapped_page) => Self::Size2MiB(mapped_page - rhs),
+				Self::Size1GiB(mapped_page) => Self::Size1GiB(mapped_page - rhs),
+			}
+		}
+	}
+
+	impl SubAssign<u64> for MappedPageItem {
+		fn sub_assign(&mut self, rhs: u64) {
+			*self = *self - rhs;
+		}
+	}
+
+	#[derive(Clone)]
+	pub struct MappedPageTableIter<'a, P: PageTableFrameMapping> {
+		page_table_walker: PageTableWalker<P>,
+		level_4_table: &'a PageTable,
+		p4_index: u16,
+		p3_index: u16,
+		p2_index: u16,
+		p1_index: u16,
+	}
+
+	pub fn mapped_page_table_iter<'a, P: PageTableFrameMapping>(
+		page_table: &'a MappedPageTable<'a, P>,
+	) -> MappedPageTableIter<'a, &'a P> {
+		MappedPageTableIter {
+			page_table_walker: unsafe {
+				PageTableWalker::new(page_table.page_table_frame_mapping())
+			},
+			level_4_table: page_table.level_4_table(),
+			p4_index: 0,
+			p3_index: 0,
+			p2_index: 0,
+			p1_index: 0,
+		}
+	}
+
+	pub fn offset_page_table_iter<'a>(
+		page_table: &'a OffsetPageTable<'a>,
+	) -> MappedPageTableIter<'a, PhysOffset> {
+		MappedPageTableIter {
+			page_table_walker: unsafe {
+				PageTableWalker::new(PhysOffset {
+					offset: page_table.phys_offset(),
+				})
+			},
+			level_4_table: page_table.level_4_table(),
+			p4_index: 0,
+			p3_index: 0,
+			p2_index: 0,
+			p1_index: 0,
+		}
+	}
+
+	impl<'a, P: PageTableFrameMapping> MappedPageTableIter<'a, P> {
+		fn p4_index(&self) -> Option<PageTableIndex> {
+			if self.p4_index >= 512 {
+				return None;
+			}
+
+			Some(PageTableIndex::new(self.p4_index))
 		}
 
-		let phys = entry.addr();
-		let virt = x86_64::VirtAddr::new(phys.as_u64());
-		pt = unsafe { &*virt.as_mut_ptr() };
+		fn p3_index(&self) -> Option<PageTableIndex> {
+			if self.p3_index >= 512 {
+				return None;
+			}
+
+			Some(PageTableIndex::new(self.p3_index))
+		}
+
+		fn p2_index(&self) -> Option<PageTableIndex> {
+			if self.p2_index >= 512 {
+				return None;
+			}
+
+			Some(PageTableIndex::new(self.p2_index))
+		}
+
+		fn p1_index(&self) -> Option<PageTableIndex> {
+			if self.p1_index >= 512 {
+				return None;
+			}
+
+			Some(PageTableIndex::new(self.p1_index))
+		}
+
+		fn increment_p4_index(&mut self) -> Option<()> {
+			if self.p4_index >= 511 {
+				self.p4_index += 1;
+				return None;
+			}
+
+			self.p4_index += 1;
+			self.p3_index = 0;
+			self.p2_index = 0;
+			self.p1_index = 0;
+			Some(())
+		}
+
+		fn increment_p3_index(&mut self) -> Option<()> {
+			if self.p3_index == 511 {
+				self.increment_p4_index()?;
+				return None;
+			}
+
+			self.p3_index += 1;
+			self.p2_index = 0;
+			self.p1_index = 0;
+			Some(())
+		}
+
+		fn increment_p2_index(&mut self) -> Option<()> {
+			if self.p2_index == 511 {
+				self.increment_p3_index()?;
+				return None;
+			}
+
+			self.p2_index += 1;
+			self.p1_index = 0;
+			Some(())
+		}
+
+		fn increment_p1_index(&mut self) -> Option<()> {
+			if self.p1_index == 511 {
+				self.increment_p2_index()?;
+				return None;
+			}
+
+			self.p1_index += 1;
+			Some(())
+		}
+
+		fn next_forward(&mut self) -> Option<MappedPageItem> {
+			let p4 = self.level_4_table;
+
+			let p3 = loop {
+				match self.page_table_walker.next_table(&p4[self.p4_index()?]) {
+					Ok(page_table) => break page_table,
+					Err(PageTableWalkError::NotMapped) => self.increment_p4_index()?,
+					Err(PageTableWalkError::MappedToHugePage) => {
+						panic!("level 4 entry has huge page bit set")
+					}
+				}
+			};
+
+			let p2 = loop {
+				match self.page_table_walker.next_table(&p3[self.p3_index()?]) {
+					Ok(page_table) => break page_table,
+					Err(PageTableWalkError::NotMapped) => self.increment_p3_index()?,
+					Err(PageTableWalkError::MappedToHugePage) => {
+						let page =
+							Page::from_page_table_indices_1gib(self.p4_index()?, self.p3_index()?);
+						let entry = &p3[self.p3_index()?];
+						let frame = PhysFrame::containing_address(entry.addr());
+						let flags = entry.flags();
+						let mapped_page =
+							MappedPageItem::Size1GiB(MappedPage { page, frame, flags });
+
+						self.increment_p3_index();
+						return Some(mapped_page);
+					}
+				}
+			};
+
+			let p1 = loop {
+				match self.page_table_walker.next_table(&p2[self.p2_index()?]) {
+					Ok(page_table) => break page_table,
+					Err(PageTableWalkError::NotMapped) => self.increment_p2_index()?,
+					Err(PageTableWalkError::MappedToHugePage) => {
+						let page = Page::from_page_table_indices_2mib(
+							self.p4_index()?,
+							self.p3_index()?,
+							self.p2_index()?,
+						);
+						let entry = &p2[self.p2_index()?];
+						let frame = PhysFrame::containing_address(entry.addr());
+						let flags = entry.flags();
+						let mapped_page =
+							MappedPageItem::Size2MiB(MappedPage { page, frame, flags });
+
+						self.increment_p2_index();
+						return Some(mapped_page);
+					}
+				}
+			};
+
+			loop {
+				let p1_entry = &p1[self.p1_index()?];
+
+				if p1_entry.is_unused() {
+					self.increment_p1_index()?;
+					continue;
+				}
+
+				let frame = match PhysFrame::from_start_address(p1_entry.addr()) {
+					Ok(frame) => frame,
+					Err(AddressNotAligned) => {
+						warn!("Invalid frame address: {:p}", p1_entry.addr());
+						self.increment_p1_index()?;
+						continue;
+					}
+				};
+
+				let page = Page::from_page_table_indices(
+					self.p4_index()?,
+					self.p3_index()?,
+					self.p2_index()?,
+					self.p1_index()?,
+				);
+				let flags = p1_entry.flags();
+				let mapped_page = MappedPageItem::Size4KiB(MappedPage { page, frame, flags });
+
+				self.increment_p1_index();
+				return Some(mapped_page);
+			}
+		}
+	}
+
+	impl<'a, P: PageTableFrameMapping> Iterator for MappedPageTableIter<'a, P> {
+		type Item = MappedPageItem;
+
+		fn next(&mut self) -> Option<Self::Item> {
+			self.next_forward().or_else(|| self.next_forward())
+		}
 	}
 }
 
-#[allow(dead_code)]
-pub(crate) unsafe fn print_page_tables(levels: usize) {
-	assert!((1..=4).contains(&levels));
+mod walker {
+	//! Taken from [`x86_64`]
 
-	fn print(table: &x86_64::structures::paging::PageTable, level: usize, min_level: usize) {
-		for (i, entry) in table
-			.iter()
-			.enumerate()
-			.filter(|(_i, entry)| !entry.is_unused())
-		{
-			if level < min_level {
-				break;
+	use x86_64::structures::paging::PageTable;
+	use x86_64::structures::paging::mapper::PageTableFrameMapping;
+	use x86_64::structures::paging::page_table::{FrameError, PageTableEntry};
+
+	#[derive(Clone, Debug)]
+	pub(super) struct PageTableWalker<P: PageTableFrameMapping> {
+		page_table_frame_mapping: P,
+	}
+
+	impl<P: PageTableFrameMapping> PageTableWalker<P> {
+		#[inline]
+		pub unsafe fn new(page_table_frame_mapping: P) -> Self {
+			Self {
+				page_table_frame_mapping,
 			}
-			let indent = &"        "[0..2 * (4 - level)];
-			println!("{indent}L{level} Entry {i}: {entry:?}");
+		}
 
-			if level > min_level && !entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
-				let phys = entry.frame().unwrap().start_address();
-				let virt = x86_64::VirtAddr::new(phys.as_u64());
-				let entry_table = unsafe { &*virt.as_mut_ptr() };
+		/// Internal helper function to get a reference to the page table of the next level.
+		///
+		/// Returns `PageTableWalkError::NotMapped` if the entry is unused. Returns
+		/// `PageTableWalkError::MappedToHugePage` if the `HUGE_PAGE` flag is set
+		/// in the passed entry.
+		#[inline]
+		pub(super) fn next_table<'b>(
+			&self,
+			entry: &'b PageTableEntry,
+		) -> Result<&'b PageTable, PageTableWalkError> {
+			let page_table_ptr = self
+				.page_table_frame_mapping
+				.frame_to_pointer(entry.frame()?);
+			let page_table: &PageTable = unsafe { &*page_table_ptr };
 
-				print(entry_table, level - 1, min_level);
-			}
+			Ok(page_table)
 		}
 	}
 
-	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
-	let pt = identity_mapped_page_table.level_4_table();
+	#[derive(Debug)]
+	pub(super) enum PageTableWalkError {
+		NotMapped,
+		MappedToHugePage,
+	}
 
-	print(pt, 4, 5 - levels);
+	impl From<FrameError> for PageTableWalkError {
+		#[inline]
+		fn from(err: FrameError) -> Self {
+			match err {
+				FrameError::HugeFrame => PageTableWalkError::MappedToHugePage,
+				FrameError::FrameNotPresent => PageTableWalkError::NotMapped,
+			}
+		}
+	}
+}
+
+mod offset_page_table {
+	//! Taken from [`x86_64`]
+
+	use x86_64::VirtAddr;
+	use x86_64::structures::paging::mapper::PageTableFrameMapping;
+	use x86_64::structures::paging::{PageTable, PhysFrame};
+
+	#[derive(Clone, Debug)]
+	pub struct PhysOffset {
+		pub offset: VirtAddr,
+	}
+
+	unsafe impl PageTableFrameMapping for PhysOffset {
+		fn frame_to_pointer(&self, frame: PhysFrame) -> *mut PageTable {
+			let virt = self.offset + frame.start_address().as_u64();
+			virt.as_mut_ptr()
+		}
+	}
 }
