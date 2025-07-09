@@ -253,8 +253,3 @@ pub fn reserve(physical_address: PhysAddr, size: usize) {
 	// FIXME: Don't ignore errors anymore
 	PHYSICAL_FREE_LIST.lock().allocate_at(range).ok();
 }
-
-pub fn print_information() {
-	let free_list = PHYSICAL_FREE_LIST.lock();
-	info!("Physical memory free list:\n{free_list}");
-}
