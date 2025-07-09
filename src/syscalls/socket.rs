@@ -551,7 +551,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	if name.is_null() {
-		return -i32::from(Errno::Inval);
+		return -i32::from(Errno::Destaddrreq);
 	}
 
 	let family: i32 = unsafe { (*name).sa_family.into() };
