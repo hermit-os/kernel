@@ -2,9 +2,10 @@ use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::{self, NonNull};
 
 use align_address::Align;
-use memory_addresses::PhysAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::mm::virtualmem;
 
 /// An [`Allocator`] for memory that is used to communicate with devices.
 ///
@@ -18,7 +19,7 @@ unsafe impl Allocator for DeviceAlloc {
 
 		let phys_addr = super::physicalmem::allocate(size).unwrap();
 
-		let ptr = ptr::with_exposed_provenance_mut(phys_addr.as_usize());
+		let ptr = self.ptr_from(phys_addr);
 		let slice = ptr::slice_from_raw_parts_mut(ptr, size);
 		Ok(NonNull::new(slice).unwrap())
 	}
@@ -27,9 +28,38 @@ unsafe impl Allocator for DeviceAlloc {
 		assert!(layout.align() <= BasePageSize::SIZE as usize);
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
 
-		let virt_addr = ptr.as_ptr().expose_provenance();
-		let phys_addr = PhysAddr::from(virt_addr);
+		let phys_addr = self.phys_addr_from(ptr.as_ptr());
 
 		super::physicalmem::deallocate(phys_addr, size);
+	}
+}
+
+impl DeviceAlloc {
+	/// Returns a pointer corresponding to `phys_addr`.
+	#[inline]
+	pub fn ptr_from<T>(&self, phys_addr: PhysAddr) -> *mut T {
+		let addr = phys_addr.as_usize() + self.phys_offset().as_usize();
+		ptr::with_exposed_provenance_mut(addr)
+	}
+
+	/// Returns the physical address of `ptr`.
+	///
+	/// The address is only correct if `ptr` has been allocated by this allocator.
+	#[inline]
+	pub fn phys_addr_from<T: ?Sized>(&self, ptr: *mut T) -> PhysAddr {
+		let addr = u64::try_from(ptr.expose_provenance()).unwrap() - self.phys_offset().as_u64();
+		PhysAddr::new(addr)
+	}
+
+	/// Returns the physical address offset.
+	///
+	/// This device allocator expects the complete physical memory to be mapped device-readable at this offset.
+	#[inline]
+	pub fn phys_offset(&self) -> VirtAddr {
+		if cfg!(careful) {
+			virtualmem::kernel_heap_end().as_u64().div_ceil(4).into()
+		} else {
+			0u64.into()
+		}
 	}
 }

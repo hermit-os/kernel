@@ -50,7 +50,6 @@ use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
-use crate::env;
 use crate::init_cell::InitCell;
 
 pub(crate) static PCI_DEVICES: InitCell<Vec<PciDevice<PciConfigRegion>>> =
@@ -172,11 +171,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		// We therefore do not need to reserve any additional memory in our kernel.
 		// Map bar into RW^X virtual memory
 		let physical_address = address;
-		let virtual_address = if env::is_uefi() {
-			VirtAddr::new(address)
-		} else {
-			crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache)
-		};
+		let virtual_address =
+			crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache);
 
 		Some((virtual_address, size))
 	}

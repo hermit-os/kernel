@@ -203,9 +203,11 @@ trait VirtqPrivate {
 	) -> Result<Box<[Self::Descriptor]>, VirtqError>;
 
 	fn indirect_desc(table: &[Self::Descriptor]) -> Self::Descriptor {
-		let addr = table.as_ptr().expose_provenance();
 		Self::Descriptor::incomplete_desc(
-			u64::try_from(addr).unwrap().into(),
+			DeviceAlloc
+				.phys_addr_from(table.as_ptr().cast_mut())
+				.as_u64()
+				.into(),
 			(mem::size_of_val(table) as u32).into(),
 			virtq::DescF::INDIRECT,
 		)
@@ -246,9 +248,11 @@ trait VirtqPrivate {
 			send_desc_iter
 				.chain(recv_desc_iter)
 				.map(|(mem_descr, len, incomplete_flags)| {
-					let addr = mem_descr.addr().expose_provenance();
 					Self::Descriptor::incomplete_desc(
-						u64::try_from(addr).unwrap().into(),
+						DeviceAlloc
+							.phys_addr_from(mem_descr.as_ptr().cast_mut())
+							.as_u64()
+							.into(),
 						len.into(),
 						incomplete_flags | virtq::DescF::NEXT,
 					)
@@ -361,7 +365,7 @@ impl BufferElem {
 		.unwrap()
 	}
 
-	pub fn addr(&self) -> *const u8 {
+	pub fn as_ptr(&self) -> *const u8 {
 		match self {
 			BufferElem::Sized(sized) => ptr::from_ref(sized.as_ref()).cast::<u8>(),
 			BufferElem::Vector(vec) => vec.as_ptr(),

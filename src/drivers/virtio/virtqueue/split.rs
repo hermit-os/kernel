@@ -5,9 +5,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
-use core::ptr;
 
-use memory_addresses::PhysAddr;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -255,14 +253,14 @@ impl SplitVq {
 
 		let size = vq_handler.set_vq_size(size.0);
 
-		let descr_table_cell = unsafe {
+		let mut descr_table_cell = unsafe {
 			core::mem::transmute::<
 				Box<[MaybeUninit<virtq::Desc>], DeviceAlloc>,
 				Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 			>(Box::new_uninit_slice_in(size.into(), DeviceAlloc))
 		};
 
-		let avail_ring_cell = {
+		let mut avail_ring_cell = {
 			let avail = virtq::Avail::try_new_in(size, true, DeviceAlloc)
 				.map_err(|_| VirtqError::AllocationError)?;
 
@@ -274,7 +272,7 @@ impl SplitVq {
 			}
 		};
 
-		let used_ring_cell = {
+		let mut used_ring_cell = {
 			let used = virtq::Used::try_new_in(size, true, DeviceAlloc)
 				.map_err(|_| VirtqError::AllocationError)?;
 
@@ -287,16 +285,10 @@ impl SplitVq {
 		};
 
 		// Provide memory areas of the queues data structures to the device
-		vq_handler.set_ring_addr(PhysAddr::from(
-			ptr::from_ref(descr_table_cell.as_ref()).expose_provenance(),
-		));
+		vq_handler.set_ring_addr(DeviceAlloc.phys_addr_from(descr_table_cell.as_mut()));
 		// As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-		vq_handler.set_drv_ctrl_addr(PhysAddr::from(
-			ptr::from_ref(avail_ring_cell.as_ref()).expose_provenance(),
-		));
-		vq_handler.set_dev_ctrl_addr(PhysAddr::from(
-			ptr::from_ref(used_ring_cell.as_ref()).expose_provenance(),
-		));
+		vq_handler.set_drv_ctrl_addr(DeviceAlloc.phys_addr_from(avail_ring_cell.as_mut()));
+		vq_handler.set_dev_ctrl_addr(DeviceAlloc.phys_addr_from(used_ring_cell.as_mut()));
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
