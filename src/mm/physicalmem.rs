@@ -205,26 +205,3 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocErro
 			.unwrap(),
 	))
 }
-
-/// This function must only be called from mm::deallocate!
-/// Otherwise, it may fail due to an empty node pool (POOL.maintain() is called in virtualmem::deallocate)
-pub fn deallocate(physical_address: PhysAddr, size: usize) {
-	#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
-	assert!(
-		physical_address >= PhysAddr::new(crate::mm::kernel_end_address().as_u64()),
-		"Physical address {physical_address:#X} is not >= KERNEL_END_ADDRESS"
-	);
-	assert!(size > 0);
-	assert_eq!(
-		size % BasePageSize::SIZE as usize,
-		0,
-		"Size {:#X} is not a multiple of {:#X}",
-		size,
-		BasePageSize::SIZE
-	);
-
-	let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
-	if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
-		error!("Unable to deallocate {range:?}");
-	}
-}
