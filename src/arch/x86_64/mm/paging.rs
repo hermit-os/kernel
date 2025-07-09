@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 use core::ptr;
 
+use free_list::PageLayout;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -17,6 +18,7 @@ use x86_64::structures::paging::{
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::mm::physicalmem;
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 use crate::{env, scheduler};
 
 pub trait PageTableEntryFlagsExt {
@@ -207,8 +209,12 @@ where
 	let virt_addrs = (0..count).map(|n| virt_addr + n as u64 * S::SIZE);
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
-		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
+		let layout = PageLayout::from_size_align(S::SIZE as usize, S::SIZE as usize).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(layout)
 			.map_err(|_| map_counter)?;
+		let phys_addr = PhysAddr::from(frame_range.start());
 		map::<S>(virt_addr, phys_addr, 1, flags);
 	}
 
