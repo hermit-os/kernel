@@ -168,8 +168,3 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		virtual_address
 	);
 }*/
-
-pub fn print_information() {
-	let free_list = KERNEL_FREE_LIST.lock();
-	info!("Virtual memory free list:\n{free_list}");
-}
