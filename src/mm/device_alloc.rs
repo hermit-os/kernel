@@ -2,9 +2,11 @@ use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::{self, NonNull};
 
 use align_address::Align;
+use free_list::PageRange;
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 use crate::mm::virtualmem;
 
 /// An [`Allocator`] for memory that is used to communicate with devices.
@@ -29,8 +31,11 @@ unsafe impl Allocator for DeviceAlloc {
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
 
 		let phys_addr = self.phys_addr_from(ptr.as_ptr());
+		let range = PageRange::from_start_len(phys_addr.as_usize(), size).unwrap();
 
-		super::physicalmem::deallocate(phys_addr, size);
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 	}
 }
 
