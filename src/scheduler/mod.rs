@@ -141,7 +141,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		use core::arch::asm;
 
 		use arm_gic::IntId;
-		use arm_gic::gicv3::{GicV3, SgiTarget};
+		use arm_gic::gicv3::{GicV3, SgiTarget, SgiTargetGroup};
 
 		use crate::interrupts::SGI_RESCHED;
 
@@ -163,6 +163,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 				affinity1: 0,
 				target_list: 1 << core_id,
 			},
+			SgiTargetGroup::CurrentGroup1,
 		);
 
 		interrupts::enable();

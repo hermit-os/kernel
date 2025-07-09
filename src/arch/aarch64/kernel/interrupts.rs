@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
 use ahash::RandomState;
-use arm_gic::gicv3::{GicV3, SgiTarget};
+use arm_gic::gicv3::{GicV3, InterruptGroup, SgiTarget, SgiTargetGroup};
 use arm_gic::{IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
@@ -115,7 +115,7 @@ pub(crate) fn install_handlers() {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
-	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive fiq {vector}");
@@ -131,7 +131,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 		crate::executor::run();
 		core_scheduler().handle_waiting_tasks();
 
-		GicV3::end_interrupt(irqid);
+		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
 
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
@@ -141,7 +141,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
-	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive interrupt {vector}");
@@ -157,7 +157,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 		crate::executor::run();
 		core_scheduler().handle_waiting_tasks();
 
-		GicV3::end_interrupt(irqid);
+		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
 
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
@@ -188,8 +188,8 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			error!("Table Base Register {:#x}", TTBR0_EL1.get());
 			error!("Exception Syndrome Register {esr:#x}");
 
-			if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
-				GicV3::end_interrupt(irqid);
+			if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
+				GicV3::end_interrupt(irqid, InterruptGroup::Group1);
 			} else {
 				error!("Unable to acknowledge interrupt!");
 			}
@@ -237,6 +237,7 @@ pub fn wakeup_core(core_id: CoreId) {
 			affinity1: 0,
 			target_list: 1 << core_id,
 		},
+		SgiTargetGroup::CurrentGroup1,
 	);
 }
 
