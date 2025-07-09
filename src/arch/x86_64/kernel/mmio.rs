@@ -7,6 +7,7 @@ use core::ptr::NonNull;
 use core::{ptr, str};
 
 use align_address::Align;
+use free_list::PageRange;
 use hermit_sync::{InterruptTicketMutex, without_interrupts};
 use memory_addresses::PhysAddr;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
@@ -24,6 +25,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 use crate::init_cell::InitCell;
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -125,10 +127,16 @@ fn check_linux_args(
 					continue;
 				};
 
-				crate::mm::physicalmem::reserve(
-					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-					BasePageSize::SIZE as usize,
-				);
+				if cfg!(debug_assertions) {
+					let len = usize::try_from(BasePageSize::SIZE).unwrap();
+					let start = current_address.align_down(len);
+					let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+					PHYSICAL_FREE_LIST
+						.lock()
+						.allocate_at(frame_range)
+						.unwrap_err();
+				}
 
 				return Ok((mmio, irq));
 			}
@@ -176,10 +184,16 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 
 		info!("Found network card at {mmio:p}");
 
-		crate::mm::physicalmem::reserve(
-			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-			BasePageSize::SIZE as usize,
-		);
+		if cfg!(debug_assertions) {
+			let len = usize::try_from(BasePageSize::SIZE).unwrap();
+			let start = current_address.align_down(len);
+			let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+			PHYSICAL_FREE_LIST
+				.lock()
+				.allocate_at(frame_range)
+				.unwrap_err();
+		}
 
 		return Ok((mmio, IRQ_NUMBER));
 	}
