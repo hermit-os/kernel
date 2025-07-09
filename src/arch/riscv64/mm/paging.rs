@@ -2,6 +2,7 @@ use core::marker::PhantomData;
 use core::ptr;
 
 use align_address::Align;
+use free_list::PageLayout;
 use hermit_sync::SpinMutex;
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 use riscv::asm::sfence_vma;
@@ -9,6 +10,7 @@ use riscv::register::satp;
 use riscv::register::satp::Satp;
 
 use crate::mm::physicalmem;
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
 
@@ -610,8 +612,12 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 	let virt_addrs = (0..count as u64).map(|n| virt_addr + n * S::SIZE);
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
-		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
+		let layout = PageLayout::from_size_align(S::SIZE as usize, S::SIZE as usize).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(layout)
 			.map_err(|_| map_counter)?;
+		let phys_addr = PhysAddr::from(frame_range.start());
 		map::<S>(virt_addr, phys_addr, 1, flags);
 	}
 

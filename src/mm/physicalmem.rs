@@ -177,31 +177,3 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 			.unwrap(),
 	))
 }
-
-pub fn allocate_aligned(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
-	assert!(size > 0);
-	assert!(align > 0);
-	assert_eq!(
-		size % align,
-		0,
-		"Size {size:#X} is not a multiple of the given alignment {align:#X}"
-	);
-	assert_eq!(
-		align % BasePageSize::SIZE as usize,
-		0,
-		"Alignment {:#X} is not a multiple of {:#X}",
-		align,
-		BasePageSize::SIZE
-	);
-
-	let layout = PageLayout::from_size_align(size, align).unwrap();
-
-	Ok(PhysAddr::new(
-		PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(layout)?
-			.start()
-			.try_into()
-			.unwrap(),
-	))
-}
