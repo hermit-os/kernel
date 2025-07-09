@@ -228,28 +228,3 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		error!("Unable to deallocate {range:?}");
 	}
 }
-
-#[allow(dead_code)]
-#[cfg(not(feature = "pci"))]
-pub fn reserve(physical_address: PhysAddr, size: usize) {
-	use align_address::Align;
-	assert!(
-		physical_address.is_aligned_to(BasePageSize::SIZE),
-		"Physical address {:p} is not a multiple of {:#X}",
-		physical_address,
-		BasePageSize::SIZE
-	);
-	assert!(size > 0);
-	assert_eq!(
-		size % BasePageSize::SIZE as usize,
-		0,
-		"Size {:#X} is not a multiple of {:#X}",
-		size,
-		BasePageSize::SIZE
-	);
-
-	let range = PageRange::from_start_len(physical_address.as_usize(), size).unwrap();
-
-	// FIXME: Don't ignore errors anymore
-	PHYSICAL_FREE_LIST.lock().allocate_at(range).ok();
-}
