@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 #![allow(nonstandard_style)]
+
+mod addrinfo;
+
 use alloc::sync::Arc;
 use core::ffi::{c_char, c_void};
 use core::mem::size_of;
@@ -7,6 +10,7 @@ use core::mem::size_of;
 use core::ops::DerefMut;
 
 use cfg_if::cfg_if;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
@@ -24,14 +28,25 @@ use crate::fd::{
 };
 use crate::syscalls::block_on;
 
-pub const AF_UNSPEC: i32 = 0;
-pub const AF_INET: i32 = 3;
-pub const AF_INET6: i32 = 1;
-pub const AF_VSOCK: i32 = 2;
-pub const IPPROTO_IP: i32 = 0;
-pub const IPPROTO_IPV6: i32 = 41;
-pub const IPPROTO_TCP: i32 = 6;
-pub const IPPROTO_UDP: i32 = 17;
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
+pub enum Af {
+	Unspec = 0,
+	Inet = 3,
+	Inet6 = 1,
+	#[cfg(feature = "vsock")]
+	Vsock = 2,
+}
+
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
+pub enum Ipproto {
+	Ip = 0,
+	Ipv6 = 41,
+	Tcp = 6,
+	Udp = 17,
+}
+
 pub const IPV6_ADD_MEMBERSHIP: i32 = 12;
 pub const IPV6_DROP_MEMBERSHIP: i32 = 13;
 pub const IPV6_MULTICAST_LOOP: i32 = 19;
@@ -54,30 +69,33 @@ pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
 pub const TCP_NODELAY: i32 = 1;
 pub const MSG_PEEK: i32 = 1;
-pub const EAI_AGAIN: i32 = 2;
-pub const EAI_BADFLAGS: i32 = 3;
-pub const EAI_FAIL: i32 = 4;
-pub const EAI_FAMILY: i32 = 5;
-pub const EAI_MEMORY: i32 = 6;
-pub const EAI_NODATA: i32 = 7;
-pub const EAI_NONAME: i32 = 8;
-pub const EAI_SERVICE: i32 = 9;
-pub const EAI_SOCKTYPE: i32 = 10;
-pub const EAI_SYSTEM: i32 = 11;
-pub const EAI_OVERFLOW: i32 = 14;
 pub type sa_family_t = u8;
 pub type socklen_t = u32;
 pub type in_addr_t = u32;
 pub type in_port_t = u16;
 
+#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(u8)]
+pub enum Sock {
+	Stream = 1,
+	Dgram = 2,
+}
+
 bitflags! {
 	#[derive(Debug, Copy, Clone)]
 	#[repr(C)]
-	pub struct SockType: i32 {
-		const SOCK_DGRAM = 2;
-		const SOCK_STREAM = 1;
+	pub struct SockFlags: i32 {
 		const SOCK_NONBLOCK = 0o4000;
 		const SOCK_CLOEXEC = 0o40000;
+		const _ = !0;
+	}
+}
+
+impl Sock {
+	pub fn from_bits(bits: i32) -> Option<(Self, SockFlags)> {
+		let sock = Sock::try_from(bits as u8).ok()?;
+		let flags = SockFlags::from_bits_retain(bits & !0xff);
+		Some((sock, flags))
 	}
 }
 
@@ -142,7 +160,7 @@ impl From<VsockEndpoint> for sockaddr_vm {
 	fn from(endpoint: VsockEndpoint) -> Self {
 		Self {
 			svm_len: core::mem::size_of::<sockaddr_vm>().try_into().unwrap(),
-			svm_family: AF_VSOCK.try_into().unwrap(),
+			svm_family: Af::Vsock.into(),
 			svm_port: endpoint.port,
 			svm_cid: endpoint.cid,
 			..Default::default()
@@ -199,7 +217,7 @@ impl From<IpEndpoint> for sockaddr_in {
 				Self {
 					sin_len: core::mem::size_of::<sockaddr_in>().try_into().unwrap(),
 					sin_port: endpoint.port.to_be(),
-					sin_family: AF_INET.try_into().unwrap(),
+					sin_family: Af::Inet.into(),
 					sin_addr,
 					..Default::default()
 				}
@@ -273,7 +291,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 				Self {
 					sin6_len: core::mem::size_of::<sockaddr_in6>().try_into().unwrap(),
 					sin6_port: endpoint.port.to_be(),
-					sin6_family: AF_INET6.try_into().unwrap(),
+					sin6_family: Af::Inet6.into(),
 					sin6_addr: in6_addr,
 					..Default::default()
 				}
@@ -296,20 +314,6 @@ pub struct ipv6_mreq {
 	pub ipv6mr_multiaddr: in6_addr,
 	pub ipv6mr_interface: u32,
 }
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct addrinfo {
-	pub ai_flags: i32,
-	pub ai_family: i32,
-	pub ai_socktype: i32,
-	pub ai_protocol: i32,
-	pub ai_addrlen: socklen_t,
-	pub ai_canonname: *mut c_char,
-	pub ai_addr: *mut sockaddr,
-	pub ai_next: *mut addrinfo,
-}
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct linger {
@@ -413,18 +417,26 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32 {
+pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
+
+	let Ok(Ok(domain)) = u8::try_from(domain).map(Af::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
+
+	let Some((sock, sock_flags)) = Sock::from_bits(type_) else {
+		return -i32::from(Errno::Inval);
+	};
 
 	if protocol != 0 {
 		return -i32::from(Errno::Inval);
 	}
 
 	#[cfg(feature = "vsock")]
-	if domain == AF_VSOCK && type_.intersects(SockType::SOCK_STREAM) {
+	if domain == Af::Vsock && sock == Sock::Stream {
 		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
 
-		if type_.contains(SockType::SOCK_NONBLOCK) {
+		if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 			block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 		}
 
@@ -434,19 +446,18 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	if (domain == AF_INET || domain == AF_INET6)
-		&& type_.intersects(SockType::SOCK_STREAM | SockType::SOCK_DGRAM)
+	if (domain == Af::Inet || domain == Af::Inet6) && (sock == Sock::Stream || sock == Sock::Dgram)
 	{
 		let mut guard = NIC.lock();
 
 		if let NetworkState::Initialized(nic) = &mut *guard {
 			#[cfg(feature = "udp")]
-			if type_.contains(SockType::SOCK_DGRAM) {
+			if sock == Sock::Dgram {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
 				let socket = Arc::new(async_lock::RwLock::new(udp::Socket::new(handle, domain)));
 
-				if type_.contains(SockType::SOCK_NONBLOCK) {
+				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
@@ -456,12 +467,12 @@ pub extern "C" fn sys_socket(domain: i32, type_: SockType, protocol: i32) -> i32
 			}
 
 			#[cfg(feature = "tcp")]
-			if type_.contains(SockType::SOCK_STREAM) {
+			if sock == Sock::Stream {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
 				let socket = Arc::new(async_lock::RwLock::new(tcp::Socket::new(handle, domain)));
 
-				if type_.contains(SockType::SOCK_NONBLOCK) {
+				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
@@ -554,14 +565,16 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 		return -i32::from(Errno::Destaddrreq);
 	}
 
-	let family: i32 = unsafe { (*name).sa_family.into() };
+	let Ok(family) = (unsafe { Af::try_from((*name).sa_family) }) else {
+		return -i32::from(Errno::Inval);
+	};
 
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| match family {
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			AF_INET => {
+			Af::Inet => {
 				if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return -i32::from(Errno::Inval);
 				}
@@ -570,7 +583,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			AF_INET6 => {
+			Af::Inet6 => {
 				if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return -i32::from(Errno::Inval);
 				}
@@ -579,7 +592,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(feature = "vsock")]
-			AF_VSOCK => {
+			Af::Vsock => {
 				if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 					return -i32::from(Errno::Inval);
 				}
@@ -599,25 +612,27 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 		return -i32::from(Errno::Inval);
 	}
 
-	let sa_family = unsafe { i32::from((*name).sa_family) };
+	let Ok(sa_family) = (unsafe { Af::try_from((*name).sa_family) }) else {
+		return -i32::from(Errno::Inval);
+	};
 
 	let endpoint = match sa_family {
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		AF_INET => {
+		Af::Inet => {
 			if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in>() }))
 		}
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		AF_INET6 => {
+		Af::Inet6 => {
 			if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() }))
 		}
 		#[cfg(feature = "vsock")]
-		AF_VSOCK => {
+		Af::Vsock => {
 			if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
@@ -706,9 +721,17 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	debug!("sys_setsockopt: {fd}, level {level}, optname {optname}");
+	if level == SOL_SOCKET && optname == SO_REUSEADDR {
+		return 0;
+	}
 
-	if level == IPPROTO_TCP
+	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
+
+	debug!("sys_setsockopt: {fd}, level {level:?}, optname {optname}");
+
+	if level == Ipproto::Tcp
 		&& optname == TCP_NODELAY
 		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
 	{
@@ -725,8 +748,6 @@ pub unsafe extern "C" fn sys_setsockopt(
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
-	} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
-		0
 	} else {
 		-i32::from(Errno::Inval)
 	}
@@ -741,9 +762,13 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	debug!("sys_getsockopt: {fd}, level {level}, optname {optname}");
+	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
+		return -i32::from(Errno::Inval);
+	};
 
-	if level == IPPROTO_TCP && optname == TCP_NODELAY {
+	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname}");
+
+	if level == Ipproto::Tcp && optname == TCP_NODELAY {
 		if optval.is_null() || optlen.is_null() {
 			return -i32::from(Errno::Inval);
 		}
@@ -830,21 +855,6 @@ pub unsafe extern "C" fn sys_getpeername(
 	)
 }
 
-#[hermit_macro::system]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_freeaddrinfo(_ai: *mut addrinfo) {}
-
-#[hermit_macro::system]
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_getaddrinfo(
-	_nodename: *const c_char,
-	_servname: *const c_char,
-	_hints: *const addrinfo,
-	_res: *mut *mut addrinfo,
-) -> i32 {
-	-i32::from(Errno::Inval)
-}
-
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) -> isize {
@@ -903,15 +913,17 @@ pub unsafe extern "C" fn sys_sendto(
 
 	cfg_if! {
 		if #[cfg(any(feature = "tcp", feature = "udp"))] {
-			let sa_family = unsafe { i32::from((*addr).sa_family) };
+			let Ok(sa_family) = (unsafe { Af::try_from((*addr).sa_family) }) else {
+				return (-i32::from(Errno::Inval)).try_into().unwrap();
+			};
 
-			if sa_family == AF_INET {
+			if sa_family == Af::Inet {
 				if addr_len < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
 
 				endpoint = Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr.cast::<sockaddr_in>())})));
-			} else if sa_family == AF_INET6 {
+			} else if sa_family == Af::Inet6 {
 				if addr_len < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}

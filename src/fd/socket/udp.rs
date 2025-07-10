@@ -13,7 +13,7 @@ use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
-use crate::syscalls::socket::{AF_INET, AF_INET6};
+use crate::syscalls::socket::Af;
 
 #[derive(Debug)]
 pub struct Socket {
@@ -24,13 +24,13 @@ pub struct Socket {
 }
 
 impl Socket {
-	pub fn new(handle: Handle, domain: i32) -> Self {
-		let local_endpoint = if domain == AF_INET {
+	pub fn new(handle: Handle, domain: Af) -> Self {
+		let local_endpoint = if domain == Af::Inet {
 			IpEndpoint::new(Ipv4Address::UNSPECIFIED.into(), 0)
-		} else if domain == AF_INET6 {
+		} else if domain == Af::Inet6 {
 			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
 		} else {
-			panic!("Unsupported domain for TCP socket: {}", domain);
+			panic!("Unsupported domain for TCP socket: {domain:?}");
 		};
 
 		Self {
