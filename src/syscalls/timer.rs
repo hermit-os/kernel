@@ -1,5 +1,5 @@
 use crate::arch;
-use crate::errno::*;
+use crate::errno::Errno;
 use crate::syscalls::usleep;
 use crate::time::{itimerval, timespec, timeval};
 
@@ -39,7 +39,7 @@ pub unsafe extern "C" fn sys_clock_getres(clock_id: clockid_t, res: *mut timespe
 		}
 		_ => {
 			debug!("Called sys_clock_getres for unsupported clock {clock_id}");
-			-EINVAL
+			-i32::from(Errno::Inval)
 		}
 	}
 }
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespe
 		}
 		_ => {
 			debug!("Called sys_clock_gettime for unsupported clock {clock_id}");
-			-EINVAL
+			-i32::from(Errno::Inval)
 		}
 	}
 }
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 	let requested_time = unsafe { &*rqtp };
 	if requested_time.tv_sec < 0 || requested_time.tv_nsec > 999_999_999 {
 		debug!("sys_clock_nanosleep called with an invalid requested time, returning -EINVAL");
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	match clock_id {
@@ -120,7 +120,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 			usleep(microseconds);
 			0
 		}
-		_ => -EINVAL,
+		_ => -i32::from(Errno::Inval),
 	}
 }
 
@@ -129,7 +129,7 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 pub unsafe extern "C" fn sys_clock_settime(_clock_id: clockid_t, _tp: *const timespec) -> i32 {
 	// We don't support setting any clocks yet.
 	debug!("sys_clock_settime is unimplemented, returning -EINVAL");
-	-EINVAL
+	-i32::from(Errno::Inval)
 }
 
 /// Get the system's clock time.
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 
 	if tz > 0 {
 		debug!("The tz parameter in sys_gettimeofday is unimplemented, returning -EINVAL");
-		return -EINVAL;
+		return -i32::from(Errno::Inval);
 	}
 
 	0

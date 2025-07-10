@@ -604,7 +604,7 @@ impl MemPool {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
-	use crate::io;
+	use crate::errno::Errno;
 
 	#[derive(Debug)]
 	// Internal Error Handling for Buffers
@@ -674,9 +674,9 @@ pub mod error {
 		}
 	}
 
-	impl core::convert::From<VirtqError> for io::Error {
+	impl core::convert::From<VirtqError> for Errno {
 		fn from(_: VirtqError) -> Self {
-			io::Error::EIO
+			Errno::Io
 		}
 	}
 }

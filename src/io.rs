@@ -1,34 +1,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::{fmt, result};
+use core::fmt;
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use crate::errno::Errno;
 
-// TODO: Integrate with src/errno.rs ?
-#[allow(clippy::upper_case_acronyms)]
-#[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
-#[repr(i32)]
-pub enum Error {
-	ENOENT = crate::errno::ENOENT,
-	ENOSYS = crate::errno::ENOSYS,
-	EIO = crate::errno::EIO,
-	EBADF = crate::errno::EBADF,
-	EISDIR = crate::errno::EISDIR,
-	EINVAL = crate::errno::EINVAL,
-	ETIME = crate::errno::ETIME,
-	EAGAIN = crate::errno::EAGAIN,
-	EFAULT = crate::errno::EFAULT,
-	ENOBUFS = crate::errno::ENOBUFS,
-	ENOTCONN = crate::errno::ENOTCONN,
-	ENOTDIR = crate::errno::ENOTDIR,
-	EMFILE = crate::errno::EMFILE,
-	EEXIST = crate::errno::EEXIST,
-	EADDRINUSE = crate::errno::EADDRINUSE,
-	EOVERFLOW = crate::errno::EOVERFLOW,
-	ENOTSOCK = crate::errno::ENOTSOCK,
-}
-
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, crate::errno::Errno>;
 
 /// The Read trait allows for reading bytes from a source.
 ///
@@ -73,7 +49,7 @@ pub trait Write {
 		while !buf.is_empty() {
 			match self.write(buf) {
 				Ok(0) => {
-					return Err(Error::EIO);
+					return Err(Errno::Io);
 				}
 				Ok(n) => buf = &buf[n..],
 				Err(e) => return Err(e),
@@ -115,7 +91,7 @@ pub trait Write {
 				if output.error.is_err() {
 					output.error
 				} else {
-					Err(Error::EINVAL)
+					Err(Errno::Inval)
 				}
 			}
 		}

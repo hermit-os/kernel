@@ -13,9 +13,10 @@ use virtio::{le16, le32, le64};
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
+use crate::errno::Errno;
 use crate::executor::vsock::{VSOCK_MAP, VsockState};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
-use crate::io::{self, Error};
+use crate::io;
 
 #[derive(Debug)]
 pub struct VsockListenEndpoint {
@@ -72,7 +73,7 @@ impl Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(self.port).ok_or(Error::EINVAL)?;
+			let raw = guard.get_mut_socket(self.port).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Shutdown | VsockState::ReceiveRequest => {
@@ -150,7 +151,7 @@ impl Socket {
 				VSOCK_MAP.lock().bind(ep.port)
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => Err(io::Error::EINVAL),
+			_ => Err(Errno::Inval),
 		}
 	}
 
@@ -193,7 +194,7 @@ impl Socket {
 
 				future::poll_fn(|cx| {
 					let mut guard = VSOCK_MAP.lock();
-					let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+					let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
 					match raw.state {
 						VsockState::Connected => Poll::Ready(Ok(())),
@@ -201,19 +202,19 @@ impl Socket {
 							raw.rx_waker.register(cx.waker());
 							Poll::Pending
 						}
-						_ => Poll::Ready(Err(io::Error::EBADF)),
+						_ => Poll::Ready(Err(Errno::Badf)),
 					}
 				})
 				.await
 			}
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => Err(io::Error::EINVAL),
+			_ => Err(Errno::Inval),
 		}
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
 		let guard = VSOCK_MAP.lock();
-		let raw = guard.get_socket(self.port).ok_or(Error::EINVAL)?;
+		let raw = guard.get_socket(self.port).ok_or(Errno::Inval)?;
 
 		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
 			raw.remote_port,
@@ -240,12 +241,12 @@ impl Socket {
 
 		let endpoint = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Listen => {
 					if self.is_nonblocking {
-						Poll::Ready(Err(io::Error::EAGAIN))
+						Poll::Ready(Err(Errno::Again))
 					} else {
 						raw.rx_waker.register(cx.waker());
 						Poll::Pending
@@ -285,7 +286,7 @@ impl Socket {
 
 					Poll::Ready(result)
 				}
-				_ => Poll::Ready(Err(Error::EBADF)),
+				_ => Poll::Ready(Err(Errno::Badf)),
 			}
 		})
 		.await?;
@@ -316,7 +317,7 @@ impl Socket {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Connected => {
@@ -324,7 +325,7 @@ impl Socket {
 
 					if len == 0 {
 						if self.is_nonblocking {
-							Poll::Ready(Err(io::Error::EAGAIN))
+							Poll::Ready(Err(Errno::Again))
 						} else {
 							raw.rx_waker.register(cx.waker());
 							Poll::Pending
@@ -348,7 +349,7 @@ impl Socket {
 						Poll::Ready(Ok(len))
 					}
 				}
-				_ => Poll::Ready(Err(Error::EIO)),
+				_ => Poll::Ready(Err(Errno::Io)),
 			}
 		})
 		.await
@@ -358,14 +359,14 @@ impl Socket {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Error::EINVAL)?;
+			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 			let diff = raw.tx_cnt.abs_diff(raw.peer_fwd_cnt);
 
 			match raw.state {
 				VsockState::Connected => {
 					if diff >= raw.peer_buf_alloc {
 						if self.is_nonblocking {
-							Poll::Ready(Err(io::Error::EAGAIN))
+							Poll::Ready(Err(Errno::Again))
 						} else {
 							raw.tx_waker.register(cx.waker());
 							Poll::Pending
@@ -404,7 +405,7 @@ impl Socket {
 						Poll::Ready(Ok(len))
 					}
 				}
-				_ => Poll::Ready(Err(Error::EIO)),
+				_ => Poll::Ready(Err(Errno::Io)),
 			}
 		})
 		.await

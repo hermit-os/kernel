@@ -8,7 +8,7 @@ use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::{RngCore, SeedableRng};
 
 use crate::arch::kernel::processor::{get_timer_ticks, seed_entropy};
-use crate::errno::ENOSYS;
+use crate::errno::Errno;
 
 // Reseed every second for increased security while maintaining the performance of
 // the PRNG.
@@ -41,7 +41,7 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> isize {
 					last_reseed: now,
 				})
 			} else {
-				return -ENOSYS as isize;
+				return -i32::from(Errno::Nosys) as isize;
 			}
 		}
 	};
