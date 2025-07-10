@@ -15,6 +15,8 @@ use self::allocator::LockedAllocator;
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -241,8 +243,8 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn print_information() {
-	self::physicalmem::print_information();
-	self::virtualmem::print_information();
+	info!("Physical memory free list:\n{}", PHYSICAL_FREE_LIST.lock());
+	info!("Virtual memory free list:\n{}", KERNEL_FREE_LIST.lock());
 }
 
 /// Maps a given physical address and size in virtual space and returns address.

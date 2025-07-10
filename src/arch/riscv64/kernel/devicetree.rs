@@ -223,10 +223,20 @@ pub fn init_drivers() {
 
 				info!("Found network card at {mmio:p}");
 
-				// crate::mm::physicalmem::reserve(
-				// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-				// 	BasePageSize::SIZE as usize,
-				// );
+				if cfg!(debug_assertions) {
+					use free_list::PageRange;
+
+					use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+
+					let start = virtio_region.starting_address.addr();
+					let len = virtio_region.size.unwrap();
+					let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+					PHYSICAL_FREE_LIST
+						.lock()
+						.allocate_at(frame_range)
+						.unwrap_err();
+				}
 
 				#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "gem-net")))]
 				if let Ok(VirtioDriver::Network(drv)) =
