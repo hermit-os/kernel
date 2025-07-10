@@ -3,6 +3,7 @@
 
 mod addrinfo;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::ffi::{c_char, c_void};
 use core::mem::size_of;
@@ -10,7 +11,7 @@ use core::mem::size_of;
 use core::ops::DerefMut;
 
 use cfg_if::cfg_if;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
@@ -117,6 +118,56 @@ pub struct sockaddr {
 	pub sa_len: u8,
 	pub sa_family: sa_family_t,
 	pub sa_data: [c_char; 14],
+}
+
+#[derive(Clone, Debug)]
+pub enum sockaddrBox {
+	sockaddr(Box<sockaddr>),
+	sockaddr_in(Box<sockaddr_in>),
+	sockaddr_in6(Box<sockaddr_in6>),
+	#[cfg(feature = "vsock")]
+	sockaddr_vm(Box<sockaddr_vm>),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum sockaddrRef<'a> {
+	sockaddr(&'a sockaddr),
+	sockaddr_in(&'a sockaddr_in),
+	sockaddr_in6(&'a sockaddr_in6),
+	#[cfg(feature = "vsock")]
+	sockaddr_vm(&'a sockaddr_vm),
+}
+
+impl sockaddr {
+	pub unsafe fn sa_family(ptr: *const Self) -> Result<Af, TryFromPrimitiveError<Af>> {
+		let sa_family = unsafe { (*ptr).sa_family };
+		Af::try_from(sa_family)
+	}
+
+	pub unsafe fn as_ref(ptr: &*const Self) -> Result<sockaddrRef<'_>, TryFromPrimitiveError<Af>> {
+		let ptr = *ptr;
+		let sa_family = unsafe { Self::sa_family(ptr)? };
+		let ret = match sa_family {
+			Af::Unspec => sockaddrRef::sockaddr(unsafe { &*ptr }),
+			Af::Inet => sockaddrRef::sockaddr_in(unsafe { &*ptr.cast() }),
+			Af::Inet6 => sockaddrRef::sockaddr_in6(unsafe { &*ptr.cast() }),
+			#[cfg(feature = "vsock")]
+			Af::Vsock => sockaddrRef::sockaddr_vm(unsafe { &*ptr.cast() }),
+		};
+		Ok(ret)
+	}
+
+	pub unsafe fn as_box(ptr: *mut Self) -> Result<sockaddrBox, TryFromPrimitiveError<Af>> {
+		let sa_family = unsafe { Self::sa_family(ptr)? };
+		let ret = match sa_family {
+			Af::Unspec => sockaddrBox::sockaddr(unsafe { Box::from_raw(ptr) }),
+			Af::Inet => sockaddrBox::sockaddr_in(unsafe { Box::from_raw(ptr.cast()) }),
+			Af::Inet6 => sockaddrBox::sockaddr_in6(unsafe { Box::from_raw(ptr.cast()) }),
+			#[cfg(feature = "vsock")]
+			Af::Vsock => sockaddrBox::sockaddr_vm(unsafe { Box::from_raw(ptr.cast()) }),
+		};
+		Ok(ret)
+	}
 }
 
 #[cfg(feature = "vsock")]
