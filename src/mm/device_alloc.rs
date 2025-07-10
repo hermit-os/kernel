@@ -2,7 +2,7 @@ use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::{self, NonNull};
 
 use align_address::Align;
-use free_list::PageRange;
+use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
@@ -18,9 +18,14 @@ unsafe impl Allocator for DeviceAlloc {
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 		assert!(layout.align() <= BasePageSize::SIZE as usize);
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
+		let frame_layout = PageLayout::from_size(size).unwrap();
 
-		let phys_addr = super::physicalmem::allocate(size).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(frame_layout)
+			.map_err(|_| AllocError)?;
 
+		let phys_addr = PhysAddr::from(frame_range.start());
 		let ptr = self.ptr_from(phys_addr);
 		let slice = ptr::slice_from_raw_parts_mut(ptr, size);
 		Ok(NonNull::new(slice).unwrap())

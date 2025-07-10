@@ -9,7 +9,6 @@ use riscv::asm::sfence_vma;
 use riscv::register::satp;
 use riscv::register::satp::Satp;
 
-use crate::mm::physicalmem;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
@@ -435,7 +434,9 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let new_entry = physicalmem::allocate(BasePageSize::SIZE as usize).unwrap();
+				let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+				let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+				let new_entry = PhysAddr::from(frame_range.start());
 				self.entries[index].set(new_entry, PageTableEntryFlags::BLANK);
 
 				// trace!("new_entry {:#X}", new_entry);

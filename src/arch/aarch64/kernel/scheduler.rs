@@ -11,7 +11,7 @@ use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
 use align_address::Align;
-use free_list::PageRange;
+use free_list::{PageLayout, PageRange};
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
@@ -137,8 +137,12 @@ impl TaskStacks {
 		let virt_addr =
 			crate::mm::virtualmem::allocate(total_size + 3 * BasePageSize::SIZE as usize)
 				.expect("Failed to allocate Virtual Memory for TaskStacks");
-		let phys_addr = crate::mm::physicalmem::allocate(total_size)
+		let frame_layout = PageLayout::from_size(total_size).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(frame_layout)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
+		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
 			"Create stacks at {:p} with a size of {} KB",

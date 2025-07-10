@@ -496,8 +496,12 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE as usize)
+				let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+				let frame_range = PHYSICAL_FREE_LIST
+					.lock()
+					.allocate(frame_layout)
 					.expect("Unable to allocate physical memory");
+				let physical_address = PhysAddr::from(frame_range.start());
 				self.entries[index].set(
 					physical_address,
 					PageTableEntryFlags::NORMAL | PageTableEntryFlags::TABLE_OR_4KIB_PAGE,

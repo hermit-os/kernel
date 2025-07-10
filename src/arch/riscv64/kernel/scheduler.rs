@@ -7,7 +7,7 @@ use core::convert::TryInto;
 use core::{mem, ptr};
 
 use align_address::Align;
-use free_list::PageRange;
+use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
@@ -122,8 +122,12 @@ impl TaskStacks {
 			crate::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
 				//let virt_addr = crate::arch::mm::virtualmem::allocate(total_size)
 				.expect("Failed to allocate Virtual Memory for TaskStacks");
-		let phys_addr = crate::mm::physicalmem::allocate(total_size)
+		let frame_layout = PageLayout::from_size(total_size).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(frame_layout)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
+		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
 			"Create stacks at {:#X} with a size of {} KB",
