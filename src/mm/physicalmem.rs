@@ -1,13 +1,13 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
-use free_list::{AllocError, FreeList, PageLayout, PageRange};
+use free_list::{FreeList, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, BasePageSize, HugePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -154,26 +154,4 @@ pub fn init() {
 			}
 		}
 	}
-}
-
-pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
-	assert!(size > 0);
-	assert_eq!(
-		size % BasePageSize::SIZE as usize,
-		0,
-		"Size {:#X} is not a multiple of {:#X}",
-		size,
-		BasePageSize::SIZE
-	);
-
-	let layout = PageLayout::from_size(size).unwrap();
-
-	Ok(PhysAddr::new(
-		PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(layout)?
-			.start()
-			.try_into()
-			.unwrap(),
-	))
 }
