@@ -2,7 +2,10 @@
 
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 use core::fmt;
+#[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+use core::fmt::{self, Write};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -312,7 +315,150 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 	}
 }
 
-pub(crate) fn print_information() {
+// Currently, this function is only implemented for x86_64
+// TODO: Implement reading PCI information from devicetree on aarch64
+#[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+fn print_from_fdt() -> Result<(), ()> {
+	let mut f = alloc::string::String::new();
+
+	let fdt = env::fdt().ok_or(())?;
+
+	infoheader!(" PCI BUS INFORMATION ");
+
+	if let Some(pci) = fdt.find_node("/pci") {
+		for node in pci.children() {
+			let reg = node.property("reg").unwrap().value;
+			let addr = u32::from_be_bytes(reg[0..4].try_into().unwrap());
+
+			let pci_config = PciConfigRegion::new();
+
+			let pci_address = PciAddress::new(
+				0,
+				((addr >> 16) & 0xff) as u8,
+				((addr >> 11) & 0x1f) as u8,
+				0,
+			);
+
+			let vendor_id = u32::from_be_bytes(
+				node.property("vendor-id").unwrap().value[..]
+					.try_into()
+					.unwrap(),
+			) as u16;
+			let device_id = u32::from_be_bytes(
+				node.property("device-id").unwrap().value[..]
+					.try_into()
+					.unwrap(),
+			) as u16;
+
+			let header = PciHeader::new(pci_address);
+			let (_dev_rev, class_id, subclass_id, _interface) =
+				header.revision_and_class(pci_config);
+
+			#[cfg(feature = "pci-ids")]
+			let (class_name, vendor_name, device_name) = {
+				use pci_ids::{Class, Device, FromId, Subclass};
+
+				let class_name = Class::from_id(class_id).map_or("Unknown Class", |class| {
+					class
+						.subclasses()
+						.find(|s| s.id() == subclass_id)
+						.map(Subclass::name)
+						.unwrap_or_else(|| class.name())
+				});
+
+				let (vendor_name, device_name) = Device::from_vid_pid(vendor_id, device_id)
+					.map(|device| (device.vendor().name(), device.name()))
+					.unwrap_or(("Unknown Vendor", "Unknown Device"));
+
+				(class_name, vendor_name, device_name)
+			};
+
+			#[cfg(not(feature = "pci-ids"))]
+			let (class_name, vendor_name, device_name) =
+				("Unknown Class", "Unknown Vendor", "Unknown Device");
+
+			// Output detailed readable information about this device.
+			write!(
+				&mut f,
+				"{:02X}:{:02X} {} [{:02X}{:02X}]: {} {} [{:04X}:{:04X}]",
+				pci_address.bus(),
+				pci_address.device(),
+				class_name,
+				class_id,
+				subclass_id,
+				vendor_name,
+				device_name,
+				vendor_id,
+				device_id
+			)
+			.unwrap();
+
+			// If the devices uses an IRQ, output this one as well.
+			if let Some(irq_prop) = node.property("interrupts") {
+				let irq = u32::from_be_bytes(irq_prop.value[..].try_into().unwrap()) as u8;
+
+				if irq != 0 && irq != u8::MAX {
+					write!(&mut f, ", IRQ {irq}").unwrap();
+				}
+			}
+
+			let mut assigned_addresses = node.property("assigned-addresses").unwrap().value;
+			let mut value_slice;
+
+			let mut slot: u8 = 0;
+			while !assigned_addresses.is_empty() {
+				(value_slice, assigned_addresses) =
+					assigned_addresses.split_at(core::mem::size_of::<u32>());
+				let bar = u32::from_be_bytes(value_slice.try_into().unwrap());
+
+				match bar ^ addr {
+					0x8100_0014 => {
+						(value_slice, assigned_addresses) =
+							assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let port = u64::from_be_bytes(value_slice.try_into().unwrap());
+						(value_slice, assigned_addresses) =
+							assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let _size = u64::from_be_bytes(value_slice.try_into().unwrap());
+						write!(&mut f, ", BAR{slot} IO {{ port: {port:#X} }}").unwrap();
+					}
+					0x8200_0010 => {
+						(value_slice, assigned_addresses) =
+							assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let address = u64::from_be_bytes(value_slice.try_into().unwrap());
+						(value_slice, assigned_addresses) =
+							assigned_addresses.split_at(core::mem::size_of::<u64>());
+						let size = u64::from_be_bytes(value_slice.try_into().unwrap());
+
+						if address.leading_zeros() >= 32 && size.leading_zeros() >= 32 {
+							write!(
+								&mut f,
+								", BAR{slot} Memory32 {{ address: {address:#X}, size: {size:#X} }}"
+							)
+							.unwrap();
+						} else {
+							write!(
+								&mut f,
+								", BAR{slot} Memory64 {{ address: {address:#X}, size: {size:#X} }}"
+							)
+							.unwrap();
+							slot += 1;
+						}
+					}
+					_ => {}
+				}
+				slot += 1;
+			}
+		}
+	}
+
+	info!("{}", f);
+
+	infofooter!();
+
+	Ok(())
+}
+
+fn print_from_pci() -> Result<(), ()> {
 	infoheader!(" PCI BUS INFORMATION ");
 
 	for adapter in PCI_DEVICES.finalize().iter() {
@@ -320,6 +466,16 @@ pub(crate) fn print_information() {
 	}
 
 	infofooter!();
+
+	Ok(())
+}
+
+pub(crate) fn print_information() {
+	#[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+	print_from_fdt().or_else(|_e| print_from_pci()).unwrap();
+
+	#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+	print_from_pci().unwrap();
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -508,7 +664,44 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.find_map(|drv| drv.get_filesystem_driver())
 }
 
-pub(crate) fn init() {
+fn init_from_fdt() -> Result<(), ()> {
+	let fdt = env::fdt().ok_or(())?;
+
+	info!(
+		"Initializing PCI devices from FDT at {:#x}",
+		core::ptr::from_ref::<fdt::Fdt<'_>>(&fdt) as usize
+	);
+
+	#[cfg(feature = "rtl8139")]
+	if let Some(node) = fdt.find_compatible(&["realtek,rtl8139"]) {
+		info!(
+			"Found Realtek network device with device id {:#x}",
+			node.property("device-id").unwrap().as_usize().unwrap()
+		);
+
+		let reg = node.property("reg").unwrap().value;
+		let addr = u32::from_be_bytes(reg[0..4].try_into().unwrap());
+
+		let pci_config = PciConfigRegion::new();
+
+		let pci_address = PciAddress::new(
+			0,
+			((addr >> 16) & 0xff) as u8,
+			((addr >> 11) & 0x1f) as u8,
+			0,
+		);
+
+		let adapter = PciDevice::new(pci_address, pci_config);
+
+		if let Ok(drv) = rtl8139::init_device(&adapter) {
+			register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
+		}
+	}
+
+	Ok(())
+}
+
+fn init_from_pci() -> Result<(), ()> {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
@@ -564,6 +757,12 @@ pub(crate) fn init() {
 			}
 		}
 	});
+
+	Ok(())
+}
+
+pub(crate) fn init() {
+	init_from_fdt().or_else(|_e| init_from_pci()).unwrap();
 }
 
 /// A module containing PCI specific errors
