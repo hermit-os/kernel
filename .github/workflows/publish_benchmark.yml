@@ -44,6 +44,14 @@ jobs:
           jq -s 'add' General.json Misc.json > results.json
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Find PR Number
+        if: github.event.workflow_run.event == 'pull_request'
+        id: find_pr
+        run: |
+          PR=$(gh pr list --repo ${{ github.repository }} --head ${{ github.event.workflow_run.head_branch}} --json number -q '.[0].number')
+          echo "pr_number=$PR" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Comment benchmark results to PR
         if: github.event.workflow_run.event == 'pull_request'
         uses: hermit-os/github-action-benchmark@main
@@ -55,7 +63,7 @@ jobs:
           gh-repository: github.com/hermit-os/hermit-bench
           comment-always: true
           ref: ${{ github.event.workflow_run.head_sha }}
-          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          pr-number: ${{ steps.find_pr.outputs.pr_number }}
       - name: Publish benchmark results to hermit-bench
         if: github.event.workflow_run.event == 'push'
         uses: hermit-os/github-action-benchmark@main
