@@ -1,5 +1,13 @@
 #[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
 pub mod gem;
+#[cfg(all(
+	not(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+	)),
+	feature = "net"
+))]
+pub mod loopback;
 #[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
 pub mod rtl8139;
 #[cfg(not(all(target_arch = "x86_64", feature = "rtl8139")))]
@@ -58,9 +66,27 @@ pub(crate) fn mtu() -> u16 {
 }
 
 cfg_if::cfg_if! {
-	if #[cfg(not(feature = "pci"))] {
+	if #[cfg(all(
+		not(feature = "pci"),
+		not(all(
+			feature = "net",
+			not(all(target_arch = "riscv64", feature = "gem-net"))
+		))
+	))] {
 		pub(crate) use crate::arch::kernel::mmio::get_network_driver;
-	} else {
+	} else if #[cfg(all(
+		feature = "pci",
+		not(all(
+			feature = "net",
+			not(all(target_arch = "x86_64", feature = "rtl8139"))
+		))
+	))] {
 		pub(crate) use crate::drivers::pci::get_network_driver;
+	} else {
+		use hermit_sync::InterruptTicketMutex;
+
+		pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<loopback::LoopbackDriver>> {
+			Some(&loopback::LOOPBACK)
+		}
 	}
 }
