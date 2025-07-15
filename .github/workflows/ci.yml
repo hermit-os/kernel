@@ -134,7 +134,8 @@ jobs:
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
         with:
-          repository: hermit-os/hermit-rs
+          repository: Gelbpunkt/hermit-rs
+          ref: virtio-net-optional
       - name: Checkout hermit-kernel
         uses: actions/checkout@v4
         with:
