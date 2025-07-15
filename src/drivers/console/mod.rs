@@ -46,8 +46,7 @@ fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
-				error!("Setup of network queue failed, which should not happen!");
-				panic!("setup of network queue failed!");
+				panic!("Setup of console queue failed, which should not happen!");
 			}
 		};
 
