@@ -2,7 +2,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::errno::Errno;
+pub use crate::errno::Errno;
 
 pub type Result<T> = core::result::Result<T, crate::errno::Errno>;
 
