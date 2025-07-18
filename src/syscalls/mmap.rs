@@ -1,10 +1,12 @@
 use align_address::Align;
-use memory_addresses::VirtAddr;
+use free_list::{PageLayout, PageRange};
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 
 bitflags! {
 	#[repr(transparent)]
@@ -32,7 +34,9 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
 	}
-	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+	let frame_layout = PageLayout::from_size(size).unwrap();
+	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+	let physical_address = PhysAddr::from(frame_range.start());
 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
@@ -65,7 +69,12 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 			size / BasePageSize::SIZE as usize,
 		);
 		debug!("Unmapping {virtual_address:X} ({size}) -> {physical_address:X}");
-		crate::mm::physicalmem::deallocate(physical_address, size);
+
+		let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
+		if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
+			// FIXME: return EINVAL instead, once wasmtime can handle it
+			error!("Unable to deallocate {range:?}");
+		}
 	}
 
 	crate::mm::virtualmem::deallocate(virtual_address, size);
@@ -97,7 +106,9 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	} else {
-		let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+		let frame_layout = PageLayout::from_size(size).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+		let physical_address = PhysAddr::from(frame_range.start());
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	}
