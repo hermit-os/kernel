@@ -10,6 +10,7 @@ pub mod mmio;
 pub mod pci;
 pub mod processor;
 pub mod scheduler;
+pub mod serial;
 mod start;
 pub mod switch;
 pub mod systemtime;
@@ -17,54 +18,18 @@ pub mod systemtime;
 use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
-use core::task::Waker;
 
 use fdt::Fdt;
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::sstatus;
 
-use crate::arch::riscv64::kernel::core_local::{CoreLocal, core_id};
+use crate::arch::riscv64::kernel::core_local::core_id;
 pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
 use crate::arch::riscv64::kernel::processor::lsb;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
 use crate::init_cell::InitCell;
 use crate::mm::physicalmem;
-
-pub(crate) struct Console {}
-
-impl Console {
-	pub fn new() -> Self {
-		CoreLocal::install();
-
-		Self {}
-	}
-
-	pub fn write(&mut self, buf: &[u8]) {
-		for byte in buf {
-			sbi_rt::console_write_byte(*byte);
-		}
-	}
-
-	pub fn read(&mut self) -> Option<u8> {
-		None
-	}
-
-	pub fn is_empty(&self) -> bool {
-		true
-	}
-
-	pub fn register_waker(&mut self, _waker: &Waker) {}
-
-	#[allow(dead_code)]
-	pub fn switch_to_virtio_console(&mut self) {}
-}
-
-impl Default for Console {
-	fn default() -> Self {
-		Self::new()
-	}
-}
 
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
@@ -163,7 +128,7 @@ pub fn boot_processor_init() {
 #[cfg(feature = "smp")]
 pub fn application_processor_init() {
 	super::mm::paging::init_application_processor();
-	CoreLocal::install();
+	crate::CoreLocal::install();
 	interrupts::install();
 	finish_processor_init();
 }

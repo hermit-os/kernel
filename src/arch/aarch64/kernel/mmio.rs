@@ -10,7 +10,11 @@ use volatile::VolatileRef;
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, PageSize};
 #[cfg(feature = "console")]
+use crate::console::IoDevice;
+#[cfg(feature = "console")]
 use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(feature = "console")]
+use crate::drivers::console::VirtioUART;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
@@ -237,8 +241,7 @@ pub fn init_drivers() {
 			info!("Switch to virtio console");
 			crate::console::CONSOLE
 				.lock()
-				.inner
-				.switch_to_virtio_console();
+				.replace_device(IoDevice::Virtio(VirtioUART::new()));
 		}
 	}
 }

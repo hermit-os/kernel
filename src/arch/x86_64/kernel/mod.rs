@@ -2,13 +2,11 @@
 use core::arch::asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
-use core::task::Waker;
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::registers::control::{Cr0, Cr4};
 
-use self::serial::SerialPort;
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::env::{self, is_uhyve};
 
@@ -37,63 +35,7 @@ pub mod switch;
 mod syscall;
 pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
-mod vga;
-
-pub(crate) struct Console {
-	serial_port: SerialPort,
-}
-
-impl Console {
-	pub fn new() -> Self {
-		CoreLocal::install();
-
-		let base = env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.unwrap()
-			.get();
-		let serial_port = unsafe { SerialPort::new(base) };
-		Self { serial_port }
-	}
-
-	pub fn write(&mut self, buf: &[u8]) {
-		self.serial_port.send(buf);
-
-		#[cfg(feature = "vga")]
-		for &byte in buf {
-			// vga::write_byte() checks if VGA support has been initialized,
-			// so we don't need any additional if clause around it.
-			vga::write_byte(byte);
-		}
-	}
-
-	pub fn buffer_input(&mut self) {
-		self.serial_port.buffer_input();
-	}
-
-	pub fn read(&mut self) -> Option<u8> {
-		self.serial_port.read()
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.serial_port.is_empty()
-	}
-
-	pub fn register_waker(&mut self, waker: &Waker) {
-		self.serial_port.register_waker(waker);
-	}
-
-	#[cfg(all(feature = "pci", feature = "console"))]
-	pub fn switch_to_virtio_console(&mut self) {
-		self.serial_port.switch_to_virtio_console();
-	}
-}
-
-impl Default for Console {
-	fn default() -> Self {
-		Self::new()
-	}
-}
+pub mod vga;
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
@@ -185,7 +127,6 @@ pub fn boot_processor_init() {
 
 	apic::init();
 	scheduler::install_timer_handler();
-	serial::install_serial_interrupt();
 	finish_processor_init();
 }
 

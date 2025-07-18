@@ -24,7 +24,9 @@ use pci_types::{
 
 use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "console")]
-use crate::drivers::console::VirtioConsoleDriver;
+use crate::console::IoDevice;
+#[cfg(feature = "console")]
+use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -463,7 +465,11 @@ impl PciDriver {
 			}
 			#[cfg(feature = "console")]
 			Self::VirtioConsole(drv) => {
-				fn console_handler() {}
+				fn console_handler() {
+					if let Some(driver) = get_console_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
 
 				let irq_number = drv.lock().get_interrupt_number();
 				(irq_number, console_handler)
@@ -484,6 +490,20 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 
 	for drv in PCI_DRIVERS.finalize().iter() {
 		let (irq_number, handler) = drv.get_interrupt_handler();
+
+		if let Some(map) = handlers.get_mut(&irq_number) {
+			map.push_back(handler);
+		} else {
+			let mut map: InterruptHandlerQueue = VecDeque::new();
+			map.push_back(handler);
+			handlers.insert(irq_number, map);
+		}
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	{
+		use crate::kernel::serial::get_serial_handler;
+		let (irq_number, handler) = get_serial_handler();
 
 		if let Some(map) = handlers.get_mut(&irq_number) {
 			map.push_back(handler);
@@ -579,8 +599,7 @@ pub(crate) fn init() {
 					info!("Switch to virtio console");
 					crate::console::CONSOLE
 						.lock()
-						.inner
-						.switch_to_virtio_console();
+						.replace_device(IoDevice::Virtio(VirtioUART::new()));
 				}
 				#[cfg(feature = "vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
