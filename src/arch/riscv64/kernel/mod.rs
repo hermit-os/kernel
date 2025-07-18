@@ -1,7 +1,11 @@
 pub mod core_local;
 mod devicetree;
 pub mod interrupts;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp"),
+	any(feature = "virtio-net", feature = "gem-net"),
+	not(feature = "pci")
+))]
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
