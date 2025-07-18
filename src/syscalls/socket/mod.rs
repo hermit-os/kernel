@@ -79,6 +79,7 @@ pub type in_port_t = u16;
 pub enum Sock {
 	Stream = 1,
 	Dgram = 2,
+	Raw = 3,
 }
 
 bitflags! {
