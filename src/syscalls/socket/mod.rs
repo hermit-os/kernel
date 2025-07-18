@@ -80,6 +80,7 @@ pub enum Sock {
 	Stream = 1,
 	Dgram = 2,
 	Raw = 3,
+	Seqpacket = 5,
 }
 
 bitflags! {
