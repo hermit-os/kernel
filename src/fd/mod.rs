@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::future::{self, Future};
 use core::mem::MaybeUninit;
 use core::task::Poll::{Pending, Ready};
@@ -13,7 +12,7 @@ use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::fs::{DirectoryEntry, FileAttr, SeekWhence};
+use crate::fs::{FileAttr, SeekWhence};
 use crate::io;
 
 mod eventfd;
@@ -179,10 +178,10 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(Errno::Inval)
 	}
 
-	/// 'readdir' returns a pointer to a dirent structure
-	/// representing the next directory entry in the directory stream
-	/// pointed to by the file descriptor
-	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
+	/// `getdents` fills the given buffer `_buf` with [`Dirent64`](crate::syscalls::Dirent64)
+	/// formatted entries of a directory, imitating the Linux `getdents64` syscall.
+	/// On success, the number of bytes read is returned.  On end of directory, 0 is returned.  On error, -1 is returned
+	async fn getdents(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		Err(Errno::Inval)
 	}
 

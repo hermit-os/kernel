@@ -14,15 +14,18 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
+use core::marker::PhantomData;
+use core::mem::{MaybeUninit, offset_of};
 
+use align_address::Align;
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, PollEvent};
-use crate::fs::{DirectoryEntry, FileAttr, NodeKind, SeekWhence, VfsNode};
+use crate::fs::{DirectoryEntry, FileAttr, FileType, NodeKind, SeekWhence, VfsNode};
+use crate::syscalls::Dirent64;
 use crate::time::timespec;
 use crate::{arch, io};
 
@@ -375,11 +378,12 @@ impl RamFile {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MemDirectoryInterface {
 	/// Directory entries
 	inner:
 		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
+	read_idx: Mutex<usize>,
 }
 
 impl MemDirectoryInterface {
@@ -388,19 +392,71 @@ impl MemDirectoryInterface {
 			RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
 		>,
 	) -> Self {
-		Self { inner }
+		Self {
+			inner,
+			read_idx: Mutex::new(0),
+		}
 	}
 }
 
 #[async_trait]
 impl ObjectInterface for MemDirectoryInterface {
-	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
-		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		for name in self.inner.read().await.keys() {
-			entries.push(DirectoryEntry::new(name.clone()));
-		}
+	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+		let mut buf_offset: usize = 0;
+		let mut ret = 0;
+		let mut read_idx = self.read_idx.lock().await;
+		for name in self.inner.read().await.keys().skip(*read_idx) {
+			let namelen = name.len();
 
-		Ok(entries)
+			let dirent_len = offset_of!(Dirent64, d_name) + namelen + 1;
+			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
+
+			if next_dirent > buf.len() {
+				// target buffer full -> we return the nr. of bytes written (like linux does)
+				break;
+			}
+
+			*read_idx += 1;
+
+			// could be replaced with slice_as_ptr once maybe_uninit_slice is stabilized.
+			let target_dirent = buf[buf_offset].as_mut_ptr().cast::<Dirent64>();
+
+			unsafe {
+				target_dirent.write(Dirent64 {
+					d_ino: 1, // TODO: we don't have inodes in the mem filesystem. Maybe this could lead to problems
+					d_off: 0,
+					d_reclen: (dirent_len.align_up(align_of::<Dirent64>()))
+						.try_into()
+						.unwrap(),
+					d_type: FileType::Unknown, // TODO: Proper filetype
+					d_name: PhantomData {},
+				});
+				let nameptr = core::ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
+				core::ptr::copy_nonoverlapping(
+					name.as_bytes().as_ptr().cast::<u8>(),
+					nameptr,
+					namelen,
+				);
+				nameptr.add(namelen).write(0); // zero termination
+			}
+
+			buf_offset = next_dirent;
+			ret = buf_offset;
+		}
+		Ok(ret)
+	}
+
+	/// lseek for a directory entry is the equivalent for seekdir on linux. But on Hermit this is
+	/// logically the same operation, so we can just use the same fn in the backend.
+	/// Any other offset than 0 is not supported. (Mostly because it doesn't make any sense, as
+	/// userspace applications have no way of knowing valid offsets)
+	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		if whence != SeekWhence::Set && offset != 0 {
+			error!("Invalid offset for directory lseek ({offset})");
+			return Err(Errno::Inval);
+		}
+		*self.read_idx.lock().await = offset as usize;
+		Ok(offset)
 	}
 }
 
