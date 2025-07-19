@@ -13,6 +13,7 @@ cfg_if::cfg_if! {
 		#[cfg(feature = "pci")]
 		pub(crate) use self::aarch64::kernel::pci;
 		pub(crate) use self::aarch64::kernel::processor;
+		pub(crate) use self::aarch64::kernel::serial::SerialDevice;
 		pub(crate) use self::aarch64::kernel::processor::set_oneshot_timer;
 		pub(crate) use self::aarch64::kernel::scheduler;
 		#[cfg(not(feature = "common-os"))]
@@ -39,6 +40,7 @@ cfg_if::cfg_if! {
 		#[cfg(feature = "pci")]
 		pub(crate) use self::x86_64::kernel::pci;
 		pub(crate) use self::x86_64::kernel::processor;
+		pub(crate) use self::x86_64::kernel::serial::SerialDevice;
 		pub(crate) use self::x86_64::kernel::scheduler;
 		pub(crate) use self::x86_64::kernel::switch;
 		#[cfg(target_os = "none")]
@@ -60,6 +62,7 @@ cfg_if::cfg_if! {
 		#[cfg(feature = "pci")]
 		pub(crate) use self::riscv64::kernel::pci;
 		pub(crate) use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
+		pub(crate) use self::riscv64::kernel::serial::SerialDevice;
 		pub(crate) use self::riscv64::kernel::{
 			boot_processor_init,
 			core_local,

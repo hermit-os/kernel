@@ -6,9 +6,8 @@ use core::task::Poll;
 use async_trait::async_trait;
 use uhyve_interface::parameters::WriteParams;
 use uhyve_interface::{GuestVirtAddr, Hypercall};
-use zerocopy::IntoBytes;
 
-use crate::console::CONSOLE;
+use crate::console::{CONSOLE, CONSOLE_WAKER};
 use crate::fd::{
 	AccessPermission, FileAttr, ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO,
 };
@@ -21,10 +20,10 @@ pub struct GenericStdin;
 #[async_trait]
 impl ObjectInterface for GenericStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let available = if CONSOLE.lock().is_empty() {
-			PollEvent::empty()
-		} else {
+		let available = if CONSOLE.lock().can_read() {
 			PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND
+		} else {
+			PollEvent::empty()
 		};
 
 		Ok(event & available)
@@ -32,27 +31,15 @@ impl ObjectInterface for GenericStdin {
 
 	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
-			let mut read_bytes = 0;
-			let mut guard = CONSOLE.lock();
-
-			while let Some(byte) = guard.read() {
-				let c = unsafe { char::from_u32_unchecked(byte.into()) };
-				guard.write(c.as_bytes());
-
-				buf[read_bytes].write(byte);
-				read_bytes += 1;
-
-				if read_bytes >= buf.len() {
-					guard.flush();
-					return Poll::Ready(Ok(read_bytes));
-				}
-			}
-			guard.flush();
-
+			let read_bytes = CONSOLE.lock().read(buf)?;
 			if read_bytes > 0 {
+				unsafe {
+					CONSOLE.lock().write(buf[..read_bytes].assume_init_mut());
+				}
+				CONSOLE.lock().flush();
 				Poll::Ready(Ok(read_bytes))
 			} else {
-				guard.register_waker(cx.waker());
+				CONSOLE_WAKER.lock().register(cx.waker());
 				Poll::Pending
 			}
 		})

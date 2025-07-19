@@ -1,94 +1,87 @@
 use alloc::collections::VecDeque;
-use core::task::Waker;
+use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 
-use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::core_local::increment_irq_counter;
-use crate::arch::x86_64::kernel::interrupts::{self, IDT};
-use crate::executor::WakerRegistration;
-use crate::syscalls::interfaces::serial_buf_hypercall;
+use hermit_sync::{InterruptTicketMutex, Lazy};
 
-const SERIAL_IRQ: u8 = 36;
+#[cfg(feature = "pci")]
+use crate::arch::x86_64::kernel::interrupts;
+#[cfg(feature = "pci")]
+use crate::drivers::InterruptLine;
 
-enum SerialInner {
-	Uart(uart_16550::SerialPort),
-	Uhyve,
+#[cfg(feature = "pci")]
+const SERIAL_IRQ: u8 = 4;
+
+static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
+	Lazy::new(|| unsafe { InterruptTicketMutex::new(UartDevice::new()) });
+
+struct UartDevice {
+	pub uart: uart_16550::SerialPort,
+	pub buffer: VecDeque<u8>,
 }
 
-pub struct SerialPort {
-	inner: SerialInner,
-	buffer: VecDeque<u8>,
-	waker: WakerRegistration,
+impl UartDevice {
+	pub unsafe fn new() -> Self {
+		let base = crate::env::boot_info()
+			.hardware_info
+			.serial_port_base
+			.unwrap()
+			.get();
+		let mut uart = unsafe { uart_16550::SerialPort::new(base) };
+		uart.init();
+
+		Self {
+			uart,
+			buffer: VecDeque::new(),
+		}
+	}
 }
 
-impl SerialPort {
-	pub unsafe fn new(base: u16) -> Self {
-		if crate::env::is_uhyve() {
-			Self {
-				inner: SerialInner::Uhyve,
-				buffer: VecDeque::new(),
-				waker: WakerRegistration::new(),
-			}
+pub(crate) struct SerialDevice;
+
+impl SerialDevice {
+	pub fn new() -> Self {
+		Self {}
+	}
+
+	pub fn write(&self, buf: &[u8]) {
+		let mut guard = UART_DEVICE.lock();
+
+		for &data in buf {
+			guard.uart.send(data);
+		}
+	}
+
+	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> crate::io::Result<usize> {
+		let mut guard = UART_DEVICE.lock();
+		if guard.buffer.is_empty() {
+			Ok(0)
 		} else {
-			let mut serial = unsafe { uart_16550::SerialPort::new(base) };
-			serial.init();
-			Self {
-				inner: SerialInner::Uart(serial),
-				buffer: VecDeque::new(),
-				waker: WakerRegistration::new(),
-			}
+			let min = core::cmp::min(buf.len(), guard.buffer.len());
+			let drained = guard.buffer.drain(..min).collect::<Vec<_>>();
+			buf[..min].write_copy_of_slice(drained.as_slice());
+			Ok(min)
 		}
 	}
 
-	pub fn buffer_input(&mut self) {
-		if let SerialInner::Uart(s) = &mut self.inner {
-			let c = s.receive();
-			if c == b'\r' {
-				self.buffer.push_back(b'\n');
-			} else {
-				self.buffer.push_back(c);
-			}
-			self.waker.wake();
-		}
-	}
-
-	pub fn register_waker(&mut self, waker: &Waker) {
-		self.waker.register(waker);
-	}
-
-	pub fn read(&mut self) -> Option<u8> {
-		self.buffer.pop_front()
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.buffer.is_empty()
-	}
-
-	pub fn send(&mut self, buf: &[u8]) {
-		match &mut self.inner {
-			SerialInner::Uhyve => serial_buf_hypercall(buf),
-			SerialInner::Uart(s) => {
-				for &data in buf {
-					s.send(data);
-				}
-			}
-		}
+	pub fn can_read(&self) -> bool {
+		!UART_DEVICE.lock().buffer.is_empty()
 	}
 }
 
-extern "x86-interrupt" fn serial_interrupt(_stack_frame: crate::interrupts::ExceptionStackFrame) {
-	crate::console::CONSOLE.lock().inner.buffer_input();
-	increment_irq_counter(SERIAL_IRQ);
-	crate::executor::run();
+#[cfg(feature = "pci")]
+pub(crate) fn get_serial_handler() -> (InterruptLine, fn()) {
+	fn serial_handler() {
+		let mut guard = UART_DEVICE.lock();
+		if let Ok(c) = guard.uart.try_receive() {
+			guard.buffer.push_back(c);
+		}
 
-	apic::eoi();
-}
-
-pub(crate) fn install_serial_interrupt() {
-	unsafe {
-		let mut idt = IDT.lock();
-		idt[SERIAL_IRQ]
-			.set_handler_fn(serial_interrupt)
-			.set_stack_index(0);
+		drop(guard);
+		crate::console::CONSOLE_WAKER.lock().wake();
 	}
-	interrupts::add_irq_name(SERIAL_IRQ - 32, "COM1");
+
+	interrupts::add_irq_name(SERIAL_IRQ, "COM1");
+
+	(SERIAL_IRQ, serial_handler)
 }

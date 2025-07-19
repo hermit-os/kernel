@@ -1,63 +1,52 @@
 use core::arch::asm;
+use core::mem::MaybeUninit;
 
-use crate::syscalls::interfaces::serial_buf_hypercall;
-
-enum SerialInner {
-	Uart(u32),
-	Uhyve,
+pub(crate) struct SerialDevice {
+	pub addr: u32,
 }
 
-pub struct SerialPort {
-	inner: SerialInner,
-}
+impl SerialDevice {
+	pub fn new() -> Self {
+		let base = crate::env::boot_info()
+			.hardware_info
+			.serial_port_base
+			.map(|uartport| uartport.get())
+			.unwrap();
 
-impl SerialPort {
-	pub fn new(port_address: u32) -> Self {
-		if crate::env::is_uhyve() {
-			Self {
-				inner: SerialInner::Uhyve,
-			}
-		} else {
-			Self {
-				inner: SerialInner::Uart(port_address),
-			}
-		}
+		Self { addr: base as u32 }
 	}
 
-	pub fn write_buf(&mut self, buf: &[u8]) {
-		match &mut self.inner {
-			SerialInner::Uhyve => {
-				serial_buf_hypercall(buf);
-			}
-			SerialInner::Uart(port_address) => {
-				let port = core::ptr::with_exposed_provenance_mut::<u8>(*port_address as usize);
-				for &byte in buf {
-					// LF newline characters need to be extended to CRLF over a real serial port.
-					if byte == b'\n' {
-						unsafe {
-							asm!(
-								"strb w8, [{port}]",
-								port = in(reg) port,
-								in("x8") b'\r',
-								options(nostack),
-							);
-						}
-					}
-
-					unsafe {
-						asm!(
-							"strb w8, [{port}]",
-							port = in(reg) port,
-							in("x8") byte,
-							options(nostack),
-						);
-					}
+	pub fn write(&self, buf: &[u8]) {
+		let port = core::ptr::with_exposed_provenance_mut::<u8>(self.addr as usize);
+		for &byte in buf {
+			// LF newline characters need to be extended to CRLF over a real serial port.
+			if byte == b'\n' {
+				unsafe {
+					asm!(
+						"strb w8, [{port}]",
+						port = in(reg) port,
+						in("x8") b'\r',
+						options(nostack),
+					);
 				}
 			}
+
+			unsafe {
+				asm!(
+					"strb w8, [{port}]",
+					port = in(reg) port,
+					in("x8") byte,
+					options(nostack),
+				);
+			}
 		}
 	}
 
-	pub fn init(&self, _baudrate: u32) {
-		// We don't do anything here (yet).
+	pub fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> crate::io::Result<usize> {
+		Ok(0)
+	}
+
+	pub fn can_read(&self) -> bool {
+		false
 	}
 }
