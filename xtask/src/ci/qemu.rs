@@ -54,6 +54,12 @@ pub enum Device {
 	/// RTL8139.
 	Rtl8139,
 
+	/// virtio-console via MMIO.
+	VirtioConsoleMmio,
+
+	/// virtio-console via PCI.
+	VirtioConsolePci,
+
 	/// virtio-fs via PCI.
 	///
 	/// This option also starts the `virtiofsd` virtio-fs vhost-user device daemon.
@@ -96,7 +102,7 @@ impl Qemu {
 
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
-			.args(&["-serial", "stdio"])
+			.args(self.serial_args())
 			.args(self.image_args(image, arch)?)
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
@@ -308,6 +314,18 @@ impl Qemu {
 		1024
 	}
 
+	fn serial_args(&self) -> &[&str] {
+		if self
+			.devices
+			.iter()
+			.any(|device| matches!(device, Device::VirtioConsoleMmio | Device::VirtioConsolePci))
+		{
+			&[]
+		} else {
+			&["-serial", "stdio"]
+		}
+	}
+
 	fn device_args(&self, memory: usize) -> Vec<String> {
 		let netdev_options = if self.tap {
 			"tap,id=net0,script=xtask/hermit-ifup,vhost=on"
@@ -336,7 +354,7 @@ impl Qemu {
 						Device::VirtioNetPci => "virtio-net-pci,netdev=net0,disable-legacy=on",
 						Device::VirtioNetMmio => "virtio-net-device,netdev=net0",
 						Device::Rtl8139 => "rtl8139,netdev=net0",
-						Device::CadenceGem | Device::VirtioFsPci => unreachable!(),
+						_ => unreachable!(),
 					}
 					.to_string();
 
@@ -369,6 +387,24 @@ impl Qemu {
 						),
 						"-numa".to_string(),
 						"node,memdev=mem".to_string(),
+					]
+				}
+				device @ (Device::VirtioConsoleMmio | Device::VirtioConsolePci) => {
+					let device_arg = match device {
+						Device::VirtioConsoleMmio => "virtio-serial-mmio",
+						Device::VirtioConsolePci => "virtio-serial-pci,disable-legacy=on",
+						_ => unreachable!(),
+					};
+
+					vec![
+						"-chardev".to_owned(),
+						"stdio,id=char0,mux=on".to_owned(),
+						"-serial".to_owned(),
+						"chardev:char0".to_owned(),
+						"-device".to_owned(),
+						device_arg.to_owned(),
+						"-device".to_owned(),
+						"virtconsole,chardev=char0".to_owned(),
 					]
 				}
 			})
