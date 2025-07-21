@@ -391,7 +391,7 @@ impl Qemu {
 				}
 				device @ (Device::VirtioConsoleMmio | Device::VirtioConsolePci) => {
 					let device_arg = match device {
-						Device::VirtioConsoleMmio => "virtio-serial-mmio",
+						Device::VirtioConsoleMmio => "virtio-serial-device",
 						Device::VirtioConsolePci => "virtio-serial-pci,disable-legacy=on",
 						_ => unreachable!(),
 					};
