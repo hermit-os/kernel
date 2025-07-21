@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::path::Path;
-use std::process::{Child, Command, ExitStatus};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::from_utf8;
 use std::time::Duration;
 use std::{env, fs, thread};
@@ -107,11 +107,13 @@ impl Qemu {
 			.args(self.cmdline_args(image_name));
 
 		eprintln!("$ {qemu}");
-		let mut qemu = KillChildOnDrop(
-			Command::from(qemu)
-				.spawn()
-				.context("Failed to spawn QEMU")?,
-		);
+		let mut qemu = Command::from(qemu);
+
+		if image_name == "stdin" {
+			qemu.stdin(Stdio::piped()).stdout(Stdio::piped());
+		}
+
+		let mut qemu = KillChildOnDrop(qemu.spawn().context("Failed to spawn QEMU")?);
 
 		thread::sleep(Duration::from_millis(100));
 		if let Some(status) = qemu.0.try_wait()? {
@@ -133,6 +135,7 @@ impl Qemu {
 			"miotcp" => test_miotcp(guest_ip)?,
 			"mioudp" => test_mioudp(guest_ip)?,
 			"poll" => test_poll(guest_ip)?,
+			"stdin" => test_stdin(&mut qemu.0)?,
 			_ => {}
 		}
 
@@ -452,6 +455,35 @@ fn get_frequency() -> u64 {
 		eprintln!("CPU frequencies are not all equal");
 	}
 	frequency
+}
+
+fn test_stdin(child: &mut Child) -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+
+	let mut stdin = child.stdin.take().unwrap();
+	for message in messages {
+		writeln!(&mut stdin, "{message}")?;
+		stdin.flush()?;
+		thread::sleep(Duration::from_secs(1));
+	}
+
+	child.kill()?;
+
+	let stdout = child.stdout.take().unwrap();
+	let stdout_lines = BufReader::new(stdout)
+		.lines()
+		.collect::<Result<Vec<_>, _>>()?;
+
+	for line in &stdout_lines {
+		println!("{line}");
+	}
+
+	for message in messages {
+		assert!(stdout_lines.iter().any(|line| line.contains(message)));
+	}
+
+	Ok(())
 }
 
 fn test_http_server(guest_ip: IpAddr) -> Result<()> {
