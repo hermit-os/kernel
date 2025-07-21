@@ -30,7 +30,9 @@ bitflags! {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
+	let layout = PageLayout::from_size(size).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
 		return 0;

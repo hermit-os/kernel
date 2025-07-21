@@ -1,7 +1,7 @@
 use core::{mem, ptr, slice, str};
 
 use align_address::Align;
-use free_list::PageRange;
+use free_list::{PageLayout, PageRange};
 use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
@@ -12,7 +12,6 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::env;
-use crate::mm::virtualmem;
 use crate::mm::virtualmem::KERNEL_FREE_LIST;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
@@ -132,7 +131,9 @@ impl AcpiTable<'_> {
 
 		let physical_map_address = physical_address.align_down(BasePageSize::SIZE);
 		let offset = (physical_address - physical_map_address) as usize;
-		let mut virtual_address = virtualmem::allocate(allocated_length).unwrap();
+		let layout = PageLayout::from_size(allocated_length).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let mut virtual_address = VirtAddr::from(page_range.start());
 		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 		// Get a pointer to the header and query the table length.
@@ -150,7 +151,9 @@ impl AcpiTable<'_> {
 			allocated_length = (table_length + offset).align_up(BasePageSize::SIZE as usize);
 			count = allocated_length / BasePageSize::SIZE as usize;
 
-			virtual_address = virtualmem::allocate(allocated_length).unwrap();
+			let layout = PageLayout::from_size(allocated_length).unwrap();
+			let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+			virtual_address = VirtAddr::from(page_range.start());
 			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 			header_ptr = (virtual_address + offset).as_ptr();

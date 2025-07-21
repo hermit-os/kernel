@@ -277,7 +277,9 @@ pub(crate) fn map(
 		flags.device();
 	}
 
-	let virtual_address = self::virtualmem::allocate(size).unwrap();
+	let layout = PageLayout::from_size(size).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
 	virtual_address

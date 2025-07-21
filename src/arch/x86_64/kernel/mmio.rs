@@ -7,9 +7,9 @@ use core::ptr::NonNull;
 use core::{ptr, str};
 
 use align_address::Align;
-use free_list::PageRange;
+use free_list::{PageLayout, PageRange};
 use hermit_sync::{InterruptTicketMutex, without_interrupts};
-use memory_addresses::PhysAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
@@ -98,7 +98,9 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 fn check_linux_args(
 	linux_mmio: &'static [String],
 ) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
-	let virtual_address = crate::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 
 	for arg in linux_mmio {
 		trace!("check linux parameter: {arg}");
@@ -160,7 +162,9 @@ fn check_linux_args(
 fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
-	let virtual_address = crate::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {

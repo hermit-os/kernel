@@ -1,8 +1,6 @@
-use free_list::{AllocError, FreeList, PageLayout, PageRange};
+use free_list::{FreeList, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
-
-use crate::arch::{BasePageSize, PageSize};
 
 pub static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -45,26 +43,4 @@ pub fn kernel_heap_end() -> VirtAddr {
 			VirtAddr::new_truncate(addr - 1)
 		}
 	}
-}
-
-pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
-	assert!(size > 0);
-	assert_eq!(
-		size % BasePageSize::SIZE as usize,
-		0,
-		"Size {:#X} is not a multiple of {:#X}",
-		size,
-		BasePageSize::SIZE
-	);
-
-	let layout = PageLayout::from_size(size).unwrap();
-
-	Ok(VirtAddr::new(
-		KERNEL_FREE_LIST
-			.lock()
-			.allocate(layout)?
-			.start()
-			.try_into()
-			.unwrap(),
-	))
 }

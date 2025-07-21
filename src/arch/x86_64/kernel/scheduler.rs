@@ -103,9 +103,9 @@ impl TaskStacks {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + IST_SIZE;
-		let virt_addr =
-			crate::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
-				.expect("Failed to allocate Virtual Memory for TaskStacks");
+		let layout = PageLayout::from_size(total_size + 4 * BasePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let virt_addr = VirtAddr::from(page_range.start());
 
 		let frame_layout = PageLayout::from_size(total_size).unwrap();
 		let frame_range = PHYSICAL_FREE_LIST
