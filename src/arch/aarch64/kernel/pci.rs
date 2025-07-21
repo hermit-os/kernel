@@ -3,6 +3,7 @@ use core::str;
 
 use arm_gic::{IntId, Trigger};
 use bit_field::BitField;
+use free_list::PageLayout;
 use hermit_dtb::Dtb;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use pci_types::{
@@ -13,7 +14,7 @@ use pci_types::{
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
-use crate::mm::virtualmem;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::{core_id, env};
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -244,8 +245,10 @@ pub fn init() {
 				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 
-				let pci_address =
-					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x1000_0000).unwrap();
+				let layout =
+					PageLayout::from_size_align(size.try_into().unwrap(), 0x1000_0000).unwrap();
+				let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+				let pci_address = VirtAddr::from(page_range.start());
 				info!(
 					"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"
 				);

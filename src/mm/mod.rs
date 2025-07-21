@@ -7,7 +7,7 @@ use core::mem;
 use core::ops::Range;
 
 use align_address::Align;
-use free_list::PageRange;
+use free_list::{PageLayout, PageRange};
 use hermit_sync::Lazy;
 pub use memory_addresses::{PhysAddr, VirtAddr};
 
@@ -102,8 +102,9 @@ pub(crate) fn init() {
 		let reserve = core::cmp::min(reserve, 0x0400_0000);
 
 		let virt_size: usize = reserve.align_down(LargePageSize::SIZE as usize);
-		let virt_addr =
-			self::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize).unwrap();
+		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let virt_addr = VirtAddr::from(page_range.start());
 		heap_start_addr = virt_addr;
 
 		info!(
@@ -151,9 +152,9 @@ pub(crate) fn init() {
 		#[cfg(feature = "mmap")]
 		let virt_size: usize = ((avail_mem * 75) / 100).align_down(LargePageSize::SIZE as usize);
 
-		let virt_addr =
-			crate::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize)
-				.unwrap();
+		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let virt_addr = VirtAddr::from(page_range.start());
 		heap_start_addr = virt_addr;
 
 		info!(

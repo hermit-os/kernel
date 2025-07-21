@@ -20,11 +20,9 @@ pub fn create_new_root_page_table() -> usize {
 	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
 
-	let virtaddr = crate::mm::virtualmem::allocate_aligned(
-		2 * BasePageSize::SIZE as usize,
-		BasePageSize::SIZE as usize,
-	)
-	.unwrap();
+	let layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtaddr = VirtAddr::from(page_range.start());
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 
