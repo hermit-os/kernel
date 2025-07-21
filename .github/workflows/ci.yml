@@ -193,6 +193,8 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features qemu ${{ matrix.flags }} --microvm
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin qemu
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs qemu ${{ matrix.flags }} --devices virtio-fs-pci
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --smp 4 qemu ${{ matrix.flags }} --devices virtio-fs-pci
