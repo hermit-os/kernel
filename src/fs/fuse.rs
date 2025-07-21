@@ -5,11 +5,12 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-use core::mem::MaybeUninit;
+use core::mem::{MaybeUninit, align_of, offset_of, size_of};
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
 use core::{future, mem};
 
+use align_address::Align;
 use async_lock::Mutex;
 use async_trait::async_trait;
 use fuse_abi::linux::*;
@@ -28,6 +29,7 @@ use crate::fs::{
 	SeekWhence, VfsNode,
 };
 use crate::mm::device_alloc::DeviceAlloc;
+use crate::syscalls::Dirent64;
 use crate::time::{time_t, timespec};
 use crate::{arch, io};
 
@@ -811,20 +813,24 @@ impl Clone for FuseFileHandle {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FuseDirectoryHandle {
 	name: Option<String>,
+	read_position: Mutex<usize>,
 }
 
 impl FuseDirectoryHandle {
 	pub fn new(name: Option<String>) -> Self {
-		Self { name }
+		Self {
+			name,
+			read_position: Mutex::new(0),
+		}
 	}
 }
 
 #[async_trait]
 impl ObjectInterface for FuseDirectoryHandle {
-	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
+	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let path: CString = if let Some(name) = &self.name {
 			CString::new("/".to_string() + name).unwrap()
 		} else {
@@ -849,7 +855,8 @@ impl ObjectInterface for FuseDirectoryHandle {
 
 		// Linux seems to allocate a single page to store the dirfile
 		let len = MAX_READ_LEN as u32;
-		let mut offset: usize = 0;
+		let rsp_offset: &mut usize = &mut *self.read_position.lock().await;
+		let mut buf_offset: usize = 0;
 
 		// read content of the directory
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
@@ -859,44 +866,63 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
-			>= usize::try_from(len).unwrap()
-		{
-			len.try_into().unwrap()
-		} else {
-			(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
-		};
+		let len = usize::min(
+			MAX_READ_LEN,
+			rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>(),
+		);
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
 			debug!("FUSE no new dirs");
 			return Err(Errno::Noent);
 		}
 
-		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while (rsp.headers.out_header.len as usize) - offset > core::mem::size_of::<fuse_dirent>() {
+		let mut ret = 0;
+
+		while (rsp.headers.out_header.len as usize) - *rsp_offset > size_of::<fuse_dirent>() {
 			let dirent = unsafe {
 				&*rsp
 					.payload
 					.as_ref()
 					.unwrap()
 					.as_ptr()
-					.byte_add(offset)
+					.byte_add(*rsp_offset)
 					.cast::<fuse_dirent>()
 			};
 
-			offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
-			// Align to dirent struct
-			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
+			let dirent_len = offset_of!(Dirent64, d_name) + dirent.namelen as usize + 1;
+			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
 
-			let name: &'static [u8] = unsafe {
-				core::slice::from_raw_parts(
-					dirent.name.as_ptr().cast(),
-					dirent.namelen.try_into().unwrap(),
-				)
-			};
-			entries.push(DirectoryEntry::new(unsafe {
-				core::str::from_utf8_unchecked(name).to_string()
-			}));
+			if next_dirent > buf.len() {
+				// target buffer full -> we return the nr. of bytes written (like linux does)
+				break;
+			}
+
+			// could be replaced with slice_as_ptr once maybe_uninit_slice is stabilized.
+			let target_dirent = buf[buf_offset].as_mut_ptr().cast::<Dirent64>();
+			unsafe {
+				target_dirent.write(Dirent64 {
+					d_ino: dirent.ino,
+					d_off: 0,
+					d_reclen: (dirent_len.align_up(align_of::<Dirent64>()))
+						.try_into()
+						.unwrap(),
+					d_type: (dirent.type_ as u8).try_into().unwrap(),
+					d_name: PhantomData {},
+				});
+				let nameptr = core::ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
+				core::ptr::copy_nonoverlapping(
+					dirent.name.as_ptr().cast::<u8>(),
+					nameptr,
+					dirent.namelen as usize,
+				);
+				nameptr.add(dirent.namelen as usize).write(0); // zero termination
+			}
+
+			*rsp_offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+			// Align to dirent struct
+			*rsp_offset = ((*rsp_offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
+			buf_offset = next_dirent;
+			ret = buf_offset;
 		}
 
 		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
@@ -905,7 +931,20 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		Ok(entries)
+		Ok(ret)
+	}
+
+	/// lseek for a directory entry is the equivalent for seekdir on linux. But on Hermit this is
+	/// logically the same operation, so we can just use the same fn in the backend.
+	/// Any other offset than 0 is not supported. (Mostly because it doesn't make any sense, as
+	/// userspace applications have no way of knowing valid offsets)
+	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		if whence != SeekWhence::Set && offset != 0 {
+			error!("Invalid offset for directory lseek ({offset})");
+			return Err(Errno::Inval);
+		}
+		*self.read_position.lock().await = offset as usize;
+		Ok(offset)
 	}
 }
 
