@@ -1,4 +1,3 @@
-use align_address::Align;
 use free_list::{AllocError, FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
@@ -96,37 +95,4 @@ pub fn allocate_aligned(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 			.try_into()
 			.unwrap(),
 	))
-}
-
-pub fn deallocate(virtual_address: VirtAddr, size: usize) {
-	#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
-	assert!(
-		virtual_address >= super::kernel_end_address()
-			|| virtual_address < super::kernel_start_address(),
-		"Virtual address {virtual_address:p} belongs to the kernel"
-	);
-	assert!(
-		virtual_address <= kernel_heap_end(),
-		"Virtual address {virtual_address:p} is not <= kernel_heap_end()"
-	);
-	assert!(
-		virtual_address.is_aligned_to(BasePageSize::SIZE),
-		"Virtual address {:p} is not a multiple of {:#X}",
-		virtual_address,
-		BasePageSize::SIZE
-	);
-	assert!(size > 0);
-	assert_eq!(
-		size % BasePageSize::SIZE as usize,
-		0,
-		"Size {:#X} is not a multiple of {:#X}",
-		size,
-		BasePageSize::SIZE
-	);
-
-	let range = PageRange::from_start_len(virtual_address.as_u64() as usize, size).unwrap();
-
-	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
-	}
 }

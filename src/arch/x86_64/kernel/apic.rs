@@ -13,6 +13,7 @@ use align_address::Align;
 #[cfg(feature = "smp")]
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
+use free_list::PageRange;
 use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
@@ -30,6 +31,7 @@ use crate::arch::x86_64::mm::paging::{
 use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::mm::virtualmem;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
 
@@ -408,7 +410,11 @@ fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static Apic
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	let range =
+		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	Err(())
 }
@@ -456,7 +462,12 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("Invalid MP config table");
-		virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+		let range =
+			PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize)
+				.unwrap();
+		unsafe {
+			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 		return Err(());
 	}
 

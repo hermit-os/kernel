@@ -26,6 +26,7 @@ use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 use crate::init_cell::InitCell;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -147,7 +148,11 @@ fn check_linux_args(
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	let range =
+		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	Err("Network card not found!")
 }
@@ -199,7 +204,11 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	let range =
+		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	Err("Network card not found!")
 }

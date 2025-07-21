@@ -22,6 +22,7 @@ use crate::arch::x86_64::mm::paging::{
 use crate::config::*;
 use crate::env;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
 
@@ -238,10 +239,14 @@ impl Drop for TaskStacks {
 						stacks.total_size / BasePageSize::SIZE as usize + 4,
 					);
 				}
-				crate::mm::virtualmem::deallocate(
-					stacks.virt_addr,
+				let range = PageRange::from_start_len(
+					stacks.virt_addr.as_usize(),
 					stacks.total_size + 4 * BasePageSize::SIZE as usize,
-				);
+				)
+				.unwrap();
+				unsafe {
+					KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				}
 
 				let range =
 					PageRange::from_start_len(stacks.phys_addr.as_usize(), stacks.total_size)

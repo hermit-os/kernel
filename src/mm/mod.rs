@@ -7,6 +7,7 @@ use core::mem;
 use core::ops::Range;
 
 use align_address::Align;
+use free_list::PageRange;
 use hermit_sync::Lazy;
 pub use memory_addresses::{PhysAddr, VirtAddr};
 
@@ -291,7 +292,11 @@ pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
-		self::virtualmem::deallocate(virtual_address, size);
+
+		let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+		unsafe {
+			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 	} else {
 		panic!(
 			"No page table entry for virtual address {:p}",

@@ -7,6 +7,7 @@ use crate::arch;
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 
 bitflags! {
 	#[repr(transparent)]
@@ -77,7 +78,10 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 		}
 	}
 
-	crate::mm::virtualmem::deallocate(virtual_address, size);
+	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	0
 }

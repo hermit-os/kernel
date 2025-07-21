@@ -16,6 +16,7 @@ use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFla
 #[cfg(not(feature = "common-os"))]
 use crate::env;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
@@ -257,11 +258,14 @@ impl Drop for TaskStacks {
 					stacks.total_size / BasePageSize::SIZE as usize + 4,
 					//stacks.total_size / BasePageSize::SIZE as usize,
 				);
-				crate::mm::virtualmem::deallocate(
-					stacks.virt_addr,
+				let range = PageRange::from_start_len(
+					stacks.virt_addr.as_usize(),
 					stacks.total_size + 4 * BasePageSize::SIZE as usize,
-					//stacks.total_size,
-				);
+				)
+				.unwrap();
+				unsafe {
+					KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				}
 
 				let range =
 					PageRange::from_start_len(stacks.phys_addr.as_usize(), stacks.total_size)
