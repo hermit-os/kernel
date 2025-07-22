@@ -1,6 +1,5 @@
-use core::cell::UnsafeCell;
-
 use align_address::Align;
+use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
 
 use crate::arch;
@@ -55,8 +54,8 @@ pub type wasmtime_trap_handler_t =
 #[allow(non_camel_case_types)]
 pub enum wasmtime_memory_image {}
 
-#[thread_local]
-static TLS: UnsafeCell<*mut u8> = UnsafeCell::new(core::ptr::null_mut());
+/// We support only single threaded application and use lock to get access to the TLS variable.
+static TLS: InterruptTicketMutex<usize> = InterruptTicketMutex::new(0);
 
 /// Wasmtime requires a single pointer's space of TLS to be used at runtime,
 /// and this function returns the current value of the TLS variable.
@@ -64,7 +63,7 @@ static TLS: UnsafeCell<*mut u8> = UnsafeCell::new(core::ptr::null_mut());
 /// This value should default to `NULL`.
 #[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_tls_get() -> *mut u8 {
-	unsafe { TLS.get().read() }
+	*TLS.lock() as *mut u8
 }
 
 // Sets the current TLS value for Wasmtime to the provided value.
@@ -72,9 +71,7 @@ pub extern "C" fn wasmtime_tls_get() -> *mut u8 {
 /// This value should be returned when later calling `wasmtime_tls_get`.
 #[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_tls_set(ptr: *mut u8) {
-	unsafe {
-		TLS.get().write(ptr);
-	}
+	*TLS.lock() = ptr as usize;
 }
 
 /// Returns the page size, in bytes, of the current system.

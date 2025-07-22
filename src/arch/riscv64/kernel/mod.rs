@@ -36,38 +36,6 @@ use crate::env;
 use crate::init_cell::InitCell;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 
-pub(crate) struct Console {}
-
-impl Console {
-	pub fn new() -> Self {
-		CoreLocal::install();
-
-		Self {}
-	}
-
-	pub fn write(&mut self, buf: &[u8]) {
-		for byte in buf {
-			sbi_rt::console_write_byte(*byte);
-		}
-	}
-
-	pub fn read(&mut self) -> Option<u8> {
-		None
-	}
-
-	pub fn is_empty(&self) -> bool {
-		true
-	}
-
-	pub fn register_waker(&mut self, _waker: &Waker) {}
-}
-
-impl Default for Console {
-	fn default() -> Self {
-		Self::new()
-	}
-}
-
 global_asm!(include_str!("setjmp.s"));
 global_asm!(include_str!("longjmp.s"));
 

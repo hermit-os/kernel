@@ -46,57 +46,6 @@ pub mod vga;
 global_asm!(include_str!("setjmp.s"));
 global_asm!(include_str!("longjmp.s"));
 
-pub(crate) struct Console {
-	serial_port: SerialPort,
-}
-
-impl Console {
-	pub fn new() -> Self {
-		CoreLocal::install();
-
-		let base = env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.unwrap()
-			.get();
-		let serial_port = unsafe { SerialPort::new(base) };
-		Self { serial_port }
-	}
-
-	pub fn write(&mut self, buf: &[u8]) {
-		self.serial_port.send(buf);
-
-		#[cfg(feature = "vga")]
-		for &byte in buf {
-			// vga::write_byte() checks if VGA support has been initialized,
-			// so we don't need any additional if clause around it.
-			vga::write_byte(byte);
-		}
-	}
-
-	pub fn buffer_input(&mut self) {
-		self.serial_port.buffer_input();
-	}
-
-	pub fn read(&mut self) -> Option<u8> {
-		self.serial_port.read()
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.serial_port.is_empty()
-	}
-
-	pub fn register_waker(&mut self, waker: &Waker) {
-		self.serial_port.register_waker(waker);
-	}
-}
-
-impl Default for Console {
-	fn default() -> Self {
-		Self::new()
-	}
-}
-
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }

@@ -3,13 +3,13 @@ use alloc::vec::Vec;
 use core::hint::black_box;
 use core::mem::MaybeUninit;
 
-use hermit_sync::{InterruptTicketMutex, without_interrupts};
+use hermit_sync::InterruptTicketMutex;
 use wasi::*;
 use wasmtime::*;
 use zerocopy::IntoBytes;
 
+use crate::fd;
 use crate::kernel::systemtime::now_micros;
-use crate::syscalls::sys_write;
 
 mod capi;
 
@@ -49,17 +49,15 @@ pub(crate) struct WasmManager {
 }
 
 impl WasmManager {
-	pub fn new(slice: &[u8]) -> Self {
+	pub fn new(data: &[u8]) -> Self {
 		let mut config: Config = Config::new();
 		config.memory_init_cow(false);
 		config.memory_guard_size(8192);
 		config.wasm_simd(false);
 		config.wasm_relaxed_simd(false);
-		//config.wasm_reference_types(true);
-		//config.wasm_gc(true);
 
 		let engine = Engine::new(&config).unwrap();
-		let module = unsafe { Module::deserialize(&engine, slice).unwrap() };
+		let module = unsafe { Module::deserialize(&engine, data).unwrap() };
 		let mut linker = Linker::new(&engine);
 		linker
 			.func_wrap("env", "now", || {
@@ -75,23 +73,28 @@ impl WasmManager {
 				 iovs_ptr: i32,
 				 iovs_len: i32,
 				 nread_ptr: i32| {
-					without_interrupts(|| {
-						if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
-							info!("A");
-							let mut iovs = vec![0i32; (2 * iovs_len).try_into().unwrap()];
-							let _ = mem.read(
-								caller.as_context(),
-								iovs_ptr.try_into().unwrap(),
-								iovs.as_mut_bytes(),
-							);
+					let _fd = if fd <= 2 {
+						fd
+					} else {
+						panic!("fd_read: invalid file descriptor {}", fd);
+					};
 
-							info!("B");
-							let mut nread_bytes: i32 = 0;
-							let mut i = 0;
-							//if let Some(data) = INPUT.lock().pop_front() {
-							info!("iovs.len() = {}, {}", iovs.len(), 0); //data.len());
+					info!("fd {}", fd);
+					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
+						let mut iovs = vec![0i32; (2 * iovs_len).try_into().unwrap()];
+						let _ = mem.read(
+							caller.as_context(),
+							iovs_ptr.try_into().unwrap(),
+							iovs.as_mut_bytes(),
+						);
 
-							/*while i < iovs.len() {
+						let mut nread_bytes: i32 = 0;
+						let mut i = 0;
+						if let Some(data) = INPUT.lock().pop_front() {
+							let len = iovs[i + 1];
+							info!("len = {}, {}", len, data.len());
+
+							while i < iovs.len() {
 								let _ = mem.write(
 									caller.as_context_mut(),
 									iovs[i].try_into().unwrap(),
@@ -99,25 +102,21 @@ impl WasmManager {
 								);
 
 								nread_bytes += data.len() as i32;
-								//if result < len.try_into().unwrap() {
-									break;
-								//}
 
 								i += 2;
-							}*/
-							//}
-
-							let _ = mem.write(
-								caller.as_context_mut(),
-								nread_ptr.try_into().unwrap(),
-								nread_bytes.as_bytes(),
-							);
-
-							return ERRNO_SUCCESS.raw() as i32;
+							}
 						}
 
-						ERRNO_INVAL.raw() as i32
-					})
+						let _ = mem.write(
+							caller.as_context_mut(),
+							nread_ptr.try_into().unwrap(),
+							nread_bytes.as_bytes(),
+						);
+
+						return ERRNO_SUCCESS.raw() as i32;
+					}
+
+					ERRNO_INVAL.raw() as i32
 				},
 			)
 			.unwrap();
@@ -136,7 +135,6 @@ impl WasmManager {
 						panic!("fd_write: invalid file descriptor {}", fd);
 					};
 
-					info!("fd_write: fd = {}", fd);
 					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
 						let mut iovs = vec![0i32; (2 * iovs_len).try_into().unwrap()];
 						let _ = mem.read(
@@ -147,11 +145,9 @@ impl WasmManager {
 
 						let mut nwritten_bytes: i32 = 0;
 						let mut i = 0;
-						info!("iovs.len() = {}", iovs.len());
 						while i < iovs.len() {
 							let len = iovs[i + 1];
 
-							info!("len = {}", len);
 							// len = 0 => ignore entry nothing to write
 							if len == 0 {
 								i += 2;
@@ -169,38 +165,24 @@ impl WasmManager {
 								iovs[i].try_into().unwrap(),
 								unsafe { data.assume_init_mut() },
 							);
-							let result = unsafe {
-								sys_write(
-									fd,
-									data.assume_init_ref().as_ptr(),
-									len.try_into().unwrap(),
-								)
-							};
+							let result = fd::write(fd, unsafe { data.assume_init_ref() });
 
-							info!("fd_write: result = {}", result);
-
-							if result >= 0 {
-								nwritten_bytes += result as i32;
-								info!("nwritten_bytes = {}, len = {}", nwritten_bytes, len);
-								if result < len.try_into().unwrap() {
-									info!("break");
-									break;
+							match result {
+								Ok(n) => {
+									nwritten_bytes += n as i32;
 								}
-							} else {
-								return (-result).try_into().unwrap();
+								Err(err) => return -i32::from(err),
 							}
 
 							i += 2;
 						}
 
-						info!("JJ");
 						let _ = mem.write(
 							caller.as_context_mut(),
 							nwritten_ptr.try_into().unwrap(),
 							nwritten_bytes.as_bytes(),
 						);
 
-						info!("KK");
 						return ERRNO_SUCCESS.raw() as i32;
 					}
 
@@ -212,10 +194,7 @@ impl WasmManager {
 			.func_wrap(
 				"wasi_snapshot_preview1",
 				"environ_get",
-				|mut caller: Caller<'_, _>, env_ptr: i32, env_buffer_ptr: i32| {
-					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
-						let mut _pos: u32 = env_buffer_ptr as u32;
-					}
+				|mut _caller: Caller<'_, _>, _env_ptr: i32, _env_buffer_ptr: i32| {
 					ERRNO_SUCCESS.raw() as i32
 				},
 			)
@@ -261,11 +240,6 @@ impl WasmManager {
 		let mut store = Store::new(&engine, 4);
 		let instance = linker.instantiate(&mut store, &module).unwrap();
 
-		let func = instance
-			.get_typed_func::<(), ()>(&mut store, "hello_world")
-			.unwrap();
-		func.call(&mut store, ()).unwrap();
-
 		Self { store, instance }
 	}
 
@@ -280,23 +254,27 @@ impl WasmManager {
 		func.call(&mut self.store, arg)
 	}
 }
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_unload_binary() -> i32 {
+	*WASM_MANAGER.lock() = None;
+
+	0
+}
+
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_load_binary(ptr: *const u8, len: usize) -> i32 {
 	info!("Loading WebAssembly binary...");
 
-	// copy module into the kernel space
 	let slice = unsafe { core::slice::from_raw_parts(ptr, len) };
 	let wasm_manager = WasmManager::new(slice);
 
 	*WASM_MANAGER.lock() = Some(wasm_manager);
 
-	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
-		info!("Call function fibonacci");
-		let result = wasm_manager.call_func::<u64, u64>("fibonacci", 30).unwrap();
-		info!("fibonacci(30) = {}", result);
-
-		wasm_manager.call_func::<(), ()>("hello_world", ()).unwrap();
+	if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
+		let _ = wasm_manager.call_func::<(), ()>("hello_world", ());
 	}
 
 	0

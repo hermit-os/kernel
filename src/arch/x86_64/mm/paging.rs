@@ -173,7 +173,7 @@ pub fn map<S>(
 			if let Ok((_frame, flush)) = unmap {
 				unmapped = true;
 				flush.flush();
-				debug!("Had to unmap page {page:?} before mapping.");
+				trace!("Had to unmap page {page:?} before mapping.");
 			}
 			let map = unsafe { mapper.map_to(page, frame, flags, &mut *frame_allocator) };
 			match map {
@@ -267,7 +267,7 @@ where
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
 			Err(UnmapError::PageNotMapped) => {
-				debug!("Tried to unmap {page:?}, which was not mapped.");
+				trace!("Tried to unmap {page:?}, which was not mapped.");
 			}
 			Err(err) => panic!("{err:?}"),
 		}
