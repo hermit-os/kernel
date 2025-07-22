@@ -182,10 +182,10 @@ impl WasmManager {
 							if result >= 0 {
 								nwritten_bytes += result as i32;
 								info!("nwritten_bytes = {}, len = {}", nwritten_bytes, len);
-								/*if result >= len.try_into().unwrap() {
+								if result < len.try_into().unwrap() {
 									info!("break");
 									break;
-								}*/
+								}
 							} else {
 								return (-result).try_into().unwrap();
 							}
