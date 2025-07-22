@@ -27,8 +27,10 @@ use crate::drivers::error::DriverError;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(
+	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
-	any(feature = "tcp", feature = "udp")
+	feature = "virtio-net",
+	any(feature = "tcp", feature = "udp"),
 ))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
@@ -811,8 +813,10 @@ pub(crate) fn init_device(
 
 	match id {
 		#[cfg(all(
+			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
-			any(feature = "tcp", feature = "udp")
+			feature = "virtio-net",
+			any(feature = "tcp", feature = "udp"),
 		))]
 		virtio::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
@@ -893,8 +897,10 @@ pub(crate) fn init_device(
 
 pub(crate) enum VirtioDriver {
 	#[cfg(all(
+		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
-		any(feature = "tcp", feature = "udp")
+		feature = "virtio-net",
+		any(feature = "tcp", feature = "udp"),
 	))]
 	Network(VirtioNetDriver),
 	#[cfg(feature = "console")]

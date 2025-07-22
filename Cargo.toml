@@ -45,15 +45,15 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "vsock"]
+default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "virtio-net", "vsock"]
 acpi = []
 common-os = []
-console = []
+console = ["virtio"]
 dhcpv4 = ["smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
 dns = ["smoltcp", "smoltcp/socket-dns"]
 fs = ["fuse"]
 fsgsbase = []
-fuse = ["pci", "dep:fuse-abi", "fuse-abi/num_enum"]
+fuse = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 gem-net = ["tcp", "dep:tock-registers"]
 idle-poll = []
 log-target = []
@@ -61,7 +61,7 @@ net = []
 mmap = []
 newlib = []
 nostd = []
-pci = ["virtio/pci"]
+pci = ["virtio?/pci"]
 rtl8139 = ["tcp", "pci"]
 semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
@@ -71,7 +71,9 @@ tcp = ["smoltcp", "smoltcp/socket-tcp"]
 trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["smoltcp", "smoltcp/socket-udp"]
 vga = []
-vsock = ["pci"]
+virtio = ["dep:virtio"]
+virtio-net = ["virtio"]
+vsock = ["virtio", "pci"]
 
 [lints.rust]
 rust_2018_idioms = "warn"
@@ -103,7 +105,7 @@ unreadable_literal = "warn"
 
 [dependencies]
 hermit-macro = { version = "=0.1.0", path = "hermit-macro" }
-virtio = { package = "virtio-spec", version = "0.3", features = ["alloc", "mmio", "nightly", "zerocopy"] }
+virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }

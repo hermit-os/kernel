@@ -1,4 +1,13 @@
-#[cfg(any(feature = "tcp", feature = "udp", feature = "console"))]
+#[cfg(any(
+	feature = "console",
+	all(
+		any(
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			feature = "virtio-net",
+		),
+		any(feature = "tcp", feature = "udp")
+	)
+))]
 use alloc::collections::VecDeque;
 
 use ahash::RandomState;
@@ -6,11 +15,32 @@ use hashbrown::HashMap;
 
 #[cfg(feature = "console")]
 pub(crate) use crate::arch::kernel::mmio::get_console_driver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "virtio-net",
+	),
+	any(feature = "tcp", feature = "udp")
+))]
 pub(crate) use crate::arch::kernel::mmio::get_network_driver;
-#[cfg(any(feature = "tcp", feature = "udp", feature = "console"))]
+#[cfg(any(
+	feature = "console",
+	all(
+		any(
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			feature = "virtio-net",
+		),
+		any(feature = "tcp", feature = "udp")
+	)
+))]
 use crate::drivers::Driver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(all(
+	any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "virtio-net",
+	),
+	any(feature = "tcp", feature = "udp")
+))]
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
@@ -20,7 +50,13 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
 
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(all(
+		any(
+			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+			feature = "virtio-net",
+		),
+		any(feature = "tcp", feature = "udp")
+	))]
 	if let Some(drv) = get_network_driver() {
 		fn network_handler() {
 			if let Some(driver) = get_network_driver() {
