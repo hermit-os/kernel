@@ -76,7 +76,7 @@ vga = []
 virtio = ["dep:virtio"]
 virtio-net = ["virtio"]
 vsock = ["virtio", "pci"]
-wasm = ["wasmtime"]
+wasm = ["wasmtime", "mmap"]
 
 [lints.rust]
 rust_2018_idioms = "warn"
@@ -145,7 +145,8 @@ time = { version = "0.3", default-features = false }
 volatile = "0.6"
 zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.3"
-wasmtime = { version = "24.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
+wasmtime = { version = "34.0.2", default-features = false, features = ["runtime", "custom-virtual-memory"], optional = true }
+wasi = { version = "0.11", default-features = false }
 
 [dependencies.smoltcp]
 version = "0.12"
@@ -183,7 +184,6 @@ semihosting = { version = "0.1", optional = true }
 memory_addresses = { version = "0.2.3", default-features = false, features = [
 	"aarch64",
 ] }
-wasmtime = { version = "22.0", default-features = false, features = ["runtime", "gc", "component-model"], optional = true }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = "0.14"

@@ -1,12 +1,12 @@
 use core::cell::UnsafeCell;
 
 use align_address::Align;
+use memory_addresses::VirtAddr;
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::mm::VirtAddr;
 
 bitflags! {
 	/// Flags to either `wasmtime_mmap_{new,remap}` or `wasmtime_mprotect`.
@@ -62,7 +62,7 @@ static TLS: UnsafeCell<*mut u8> = UnsafeCell::new(core::ptr::null_mut());
 /// and this function returns the current value of the TLS variable.
 ///
 /// This value should default to `NULL`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_tls_get() -> *mut u8 {
 	unsafe { TLS.get().read() }
 }
@@ -70,7 +70,7 @@ pub extern "C" fn wasmtime_tls_get() -> *mut u8 {
 // Sets the current TLS value for Wasmtime to the provided value.
 ///
 /// This value should be returned when later calling `wasmtime_tls_get`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_tls_set(ptr: *mut u8) {
 	unsafe {
 		TLS.get().write(ptr);
@@ -78,7 +78,7 @@ pub extern "C" fn wasmtime_tls_set(ptr: *mut u8) {
 }
 
 /// Returns the page size, in bytes, of the current system.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_page_size() -> usize {
 	BasePageSize::SIZE as usize
 }
@@ -93,15 +93,15 @@ pub extern "C" fn wasmtime_page_size() -> usize {
 /// Returns 0 on success and an error code on failure.
 ///
 /// Similar to `mmap(0, size, prot_flags, MAP_PRIVATE, 0, -1)` on Linux.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_mmap_new(size: usize, prot_flags: WasmProt, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
+	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
 	}
-	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
 
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
@@ -130,7 +130,7 @@ pub extern "C" fn wasmtime_mmap_new(size: usize, prot_flags: WasmProt, ret: &mut
 /// Returns 0 on success and an error code on failure.
 ///
 /// Similar to `mmap(addr, size, prot_flags, MAP_PRIVATE | MAP_FIXED, 0, -1)` on Linux.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_mmap_remap(_addr: *mut u8, _size: usize, _prot_flags: WasmProt) -> i32 {
 	error!("Currently. HermitOS doesn't support wasmtime_mmap_remap!");
 	-1
@@ -144,9 +144,9 @@ pub extern "C" fn wasmtime_mmap_remap(_addr: *mut u8, _size: usize, _prot_flags:
 /// Returns 0 on success and an error code on failure.
 ///
 /// Similar to `munmap` on Linux.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_munmap(ptr: *mut u8, size: usize) -> i32 {
-	let virtual_address = VirtAddr::from_usize(ptr as usize);
+	let virtual_address = VirtAddr::new(ptr as u64);
 	let size = size.align_up(BasePageSize::SIZE as usize);
 
 	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
@@ -154,10 +154,10 @@ pub extern "C" fn wasmtime_munmap(ptr: *mut u8, size: usize) -> i32 {
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
-		arch::mm::physicalmem::deallocate(phys_addr, size);
+		crate::mm::physicalmem::deallocate(phys_addr, size);
 	}
 
-	arch::mm::virtualmem::deallocate(virtual_address, size);
+	crate::mm::virtualmem::deallocate(virtual_address, size);
 
 	0
 }
@@ -168,7 +168,7 @@ pub extern "C" fn wasmtime_munmap(ptr: *mut u8, size: usize) -> i32 {
 /// Returns 0 on success and an error code on failure.
 ///
 /// Similar to `mprotect` on Linux.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_mprotect(ptr: *mut u8, size: usize, prot_flags: WasmProt) -> i32 {
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
@@ -180,19 +180,19 @@ pub extern "C" fn wasmtime_mprotect(ptr: *mut u8, size: usize, prot_flags: WasmP
 		flags.execute_disable();
 	}
 
-	let virtual_address = VirtAddr::from_usize(ptr as usize);
+	let virtual_address = VirtAddr::new(ptr as u64);
 
 	if let Some(physical_address) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	} else {
-		let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+		let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	}
 }
 
-extern "C" {
+unsafe extern "C" {
 	fn setjmp(buf: *const u8) -> i32;
 	fn longjmp(jmp_buf: *const u8, val: i32) -> !;
 }
@@ -210,7 +210,7 @@ extern "C" {
 ///
 /// Returns 0 if `wasmtime_longjmp` was used to return to this function.
 /// Returns 1 if `wasmtime_longjmp` was not called and `callback` returned.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_setjmp(
 	jmp_buf: *mut *const u8,
 	callback: extern "C" fn(*mut u8, *mut u8),
@@ -242,7 +242,7 @@ pub extern "C" fn wasmtime_setjmp(
 ///
 /// This function may be invoked from the `wasmtime_trap_handler_t`
 /// configured by `wasmtime_init_traps`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_longjmp(jmp_buf: *const u8) -> ! {
 	unsafe {
 		longjmp(jmp_buf, 1);
@@ -261,7 +261,7 @@ pub extern "C" fn wasmtime_longjmp(jmp_buf: *const u8) -> ! {
 /// the system.
 ///
 /// Returns 0 on success and an error code on failure.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_init_traps(_handler: wasmtime_trap_handler_t) -> i32 {
 	0
 }
@@ -285,7 +285,7 @@ pub extern "C" fn wasmtime_init_traps(_handler: wasmtime_trap_handler_t) -> i32 
 /// `NULL` into `ret` is not considered a failure, and failure is used to
 /// indicate that something fatal has happened and Wasmtime will propagate
 /// the error upwards.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_memory_image_new(
 	_ptr: *const u8,
 	_len: usize,
@@ -309,7 +309,7 @@ pub extern "C" fn wasmtime_memory_image_new(
 /// the future.
 ///
 /// Aborts the process on failure.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_memory_image_map_at(
 	_image: *mut wasmtime_memory_image,
 	_addr: *mut u8,
@@ -323,7 +323,7 @@ pub extern "C" fn wasmtime_memory_image_map_at(
 ///
 /// Note that mappings created from this image are not guaranteed to be
 /// deallocated and/or unmapped before this is called.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_memory_image_free(_image: *mut wasmtime_memory_image) {
 	error!("Currently. HermitOS doesn't support wasmtime_memory_image_free!");
 }
