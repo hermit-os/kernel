@@ -18,7 +18,10 @@ pub mod gdt;
 pub mod interrupts;
 #[cfg(all(
 	not(feature = "pci"),
-	any(feature = "console", feature = "tcp", feature = "udp")
+	any(
+		feature = "console",
+		all(feature = "virtio-net", any(feature = "tcp", feature = "udp"))
+	),
 ))]
 pub mod mmio;
 #[cfg(feature = "pci")]
