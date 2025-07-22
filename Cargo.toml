@@ -48,6 +48,7 @@ harness = false
 default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "vsock"]
 acpi = []
 common-os = []
+console = []
 dhcpv4 = ["smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
 dns = ["smoltcp", "smoltcp/socket-dns"]
 fs = ["fuse"]

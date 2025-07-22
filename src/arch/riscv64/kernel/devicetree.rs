@@ -1,37 +1,62 @@
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#![allow(dead_code)]
+
+#[cfg(all(
+	any(feature = "tcp", feature = "udp", feature = "console"),
+	not(feature = "pci")
+))]
 use core::ptr::NonNull;
 
 use fdt::Fdt;
 use memory_addresses::PhysAddr;
 #[cfg(all(
-	any(feature = "tcp", feature = "udp"),
+	any(feature = "tcp", feature = "udp", feature = "console"),
 	feature = "gem-net",
 	not(feature = "pci")
 ))]
 use memory_addresses::VirtAddr;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp", feature = "console"),
+	not(feature = "pci")
+))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp", feature = "console"),
+	not(feature = "pci")
+))]
 use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp", feature = "console"),
+	not(feature = "pci")
+))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging::{self, PageSize};
+#[cfg(feature = "console")]
+use crate::console::IoDevice;
+#[cfg(feature = "console")]
+use crate::drivers::console::VirtioUART;
+#[cfg(all(feature = "console", not(feature = "pci")))]
+use crate::drivers::mmio::get_console_driver;
 #[cfg(all(
 	any(feature = "tcp", feature = "udp"),
 	feature = "gem-net",
 	not(feature = "pci")
 ))]
 use crate::drivers::net::gem;
+#[cfg(all(feature = "console", feature = "pci"))]
+use crate::drivers::pci::get_console_driver;
 #[cfg(all(
-	any(feature = "tcp", feature = "udp"),
+	any(feature = "tcp", feature = "udp", feature = "console"),
 	not(feature = "pci"),
 	not(feature = "gem-net")
 ))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "tcp", feature = "udp", feature = "console"),
+	not(feature = "pci")
+))]
 use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
@@ -170,7 +195,10 @@ pub fn init_drivers() {
 			}
 
 			// Init virtio-mmio
-			#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+			#[cfg(all(
+				any(feature = "tcp", feature = "udp", feature = "console"),
+				not(feature = "pci")
+			))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
 				debug!("Found virtio mmio device");
 				let virtio_region = virtio_node
@@ -216,30 +244,57 @@ pub fn init_drivers() {
 				// Verify the device-ID to find the network card
 				let id = mmio.as_ptr().device_id().read();
 
-				if id != virtio::Id::Net {
-					debug!("It's not a network card at {mmio:p}");
-					return;
-				}
-
-				info!("Found network card at {mmio:p}");
-
 				// crate::mm::physicalmem::reserve(
 				// 	PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 				// 	BasePageSize::SIZE as usize,
 				// );
 
-				#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "gem-net")))]
-				if let Ok(VirtioDriver::Network(drv)) =
-					mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-				{
-					register_driver(MmioDriver::VirtioNet(hermit_sync::InterruptSpinMutex::new(
-						drv,
-					)));
+				match id {
+					#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "gem-net")))]
+					virtio::Id::Net => {
+						debug!("Found virtio network card at {mmio:p}");
+
+						if let Ok(VirtioDriver::Network(drv)) =
+							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+						{
+							register_driver(MmioDriver::VirtioNet(
+								hermit_sync::InterruptSpinMutex::new(drv),
+							));
+						}
+					}
+					#[cfg(feature = "console")]
+					virtio::Id::Console => {
+						debug!("Found virtio console at {mmio:p}");
+
+						if let Ok(VirtioDriver::Console(drv)) =
+							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+						{
+							register_driver(MmioDriver::VirtioConsole(
+								hermit_sync::InterruptSpinMutex::new(*drv),
+							));
+						}
+					}
+					_ => {
+						warn!("Found unknown virtio device with ID {id:?} at {mmio:p}");
+					}
 				}
 			}
 		}
 	}
 
-	#[cfg(all(feature = "tcp", not(feature = "pci")))]
+	#[cfg(all(
+		any(feature = "tcp", feature = "udp", feature = "console"),
+		not(feature = "pci")
+	))]
 	super::mmio::MMIO_DRIVERS.finalize();
+
+	#[cfg(feature = "console")]
+	{
+		if get_console_driver().is_some() {
+			info!("Switch to virtio console");
+			crate::console::CONSOLE
+				.lock()
+				.replace_device(IoDevice::Virtio(VirtioUART::new()));
+		}
+	}
 }

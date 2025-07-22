@@ -1,13 +1,28 @@
+use core::mem::MaybeUninit;
+
 use simple_shell::*;
 
 use crate::interrupts::print_statistics;
 
 fn read() -> Option<u8> {
-	crate::console::CONSOLE.lock().read()
+	let mut buf = [MaybeUninit::uninit(); 1];
+	let len = crate::console::CONSOLE.lock().read(&mut buf).ok()?;
+	if len > 0 {
+		Some(unsafe { buf[0].assume_init() })
+	} else {
+		None
+	}
 }
 
 pub(crate) fn init() {
-	let (print, read) = (|s: &str| print!("{}", s), read);
+	let (print, read) = (
+		|s: &str| {
+			print!("{s}");
+			// flush buffer to see the input
+			crate::console::CONSOLE.lock().flush();
+		},
+		read,
+	);
 	let mut shell = Shell::new(print, read);
 
 	shell.commands.insert(

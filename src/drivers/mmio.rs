@@ -1,12 +1,14 @@
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "console"))]
 use alloc::collections::VecDeque;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
 
+#[cfg(feature = "console")]
+pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) use crate::arch::kernel::mmio::get_network_driver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "console"))]
 use crate::drivers::Driver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::NetworkDriver;
@@ -33,6 +35,25 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		} else {
 			let mut map: InterruptHandlerQueue = VecDeque::new();
 			map.push_back(network_handler);
+			handlers.insert(irq_number, map);
+		}
+	}
+
+	#[cfg(feature = "console")]
+	if let Some(drv) = get_console_driver() {
+		fn console_handler() {
+			if let Some(driver) = get_console_driver() {
+				driver.lock().handle_interrupt();
+			}
+		}
+
+		let irq_number = drv.lock().get_interrupt_number();
+
+		if let Some(map) = handlers.get_mut(&irq_number) {
+			map.push_back(console_handler);
+		} else {
+			let mut map: InterruptHandlerQueue = VecDeque::new();
+			map.push_back(console_handler);
 			handlers.insert(irq_number, map);
 		}
 	}
