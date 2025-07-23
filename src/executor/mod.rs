@@ -22,12 +22,8 @@ use hermit_sync::without_interrupts;
 use smoltcp::time::Instant;
 
 use crate::arch::core_local::*;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
-use crate::drivers::mmio::get_network_driver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::NetworkDriver;
-#[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
-use crate::drivers::pci::get_network_driver;
+use crate::drivers::net::{NetworkDriver, get_network_driver};
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;

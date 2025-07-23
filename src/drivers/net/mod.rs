@@ -56,3 +56,11 @@ pub(crate) fn mtu() -> u16 {
 		DEFAULT_MTU
 	}
 }
+
+cfg_if::cfg_if! {
+	if #[cfg(not(feature = "pci"))] {
+		pub(crate) use crate::arch::kernel::mmio::get_network_driver;
+	} else {
+		pub(crate) use crate::drivers::pci::get_network_driver;
+	}
+}
