@@ -120,7 +120,7 @@ pub(crate) fn spawn<F>(future: F)
 where
 	F: Future<Output = ()> + Send + 'static,
 {
-	without_interrupts(|| async_tasks().push(AsyncTask::new(future)));
+	without_interrupts(|| async_tasks().push_back(AsyncTask::new(future)));
 }
 
 pub fn init() {

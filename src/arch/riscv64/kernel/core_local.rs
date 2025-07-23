@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
+use alloc::collections::vec_deque::VecDeque;
 use core::arch::asm;
 use core::cell::{Cell, RefCell, RefMut};
 use core::ptr;
@@ -22,7 +22,7 @@ pub struct CoreLocal {
 	/// start address of the kernel stack
 	pub kernel_stack: Cell<u64>,
 	/// Queue of async tasks
-	async_tasks: RefCell<Vec<AsyncTask>>,
+	async_tasks: RefCell<VecDeque<AsyncTask>>,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
@@ -41,7 +41,7 @@ impl CoreLocal {
 				core_id,
 				scheduler: Cell::new(ptr::null_mut()),
 				kernel_stack: Cell::new(0),
-				async_tasks: RefCell::new(Vec::new()),
+				async_tasks: RefCell::new(VecDeque::new()),
 				#[cfg(feature = "smp")]
 				scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 			};
@@ -84,6 +84,6 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	CoreLocal::get().scheduler.set(scheduler);
 }
 
-pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
+pub(crate) fn async_tasks() -> RefMut<'static, VecDeque<AsyncTask>> {
 	CoreLocal::get().async_tasks.borrow_mut()
 }
