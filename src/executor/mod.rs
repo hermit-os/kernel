@@ -104,14 +104,15 @@ pub(crate) fn run() {
 	let mut cx = Context::from_waker(Waker::noop());
 
 	without_interrupts(|| {
-		async_tasks().retain_mut(|task| {
+		// FIXME(mkroening): Not all tasks register wakers and never sleep
+		for _ in 0..({ async_tasks().len() }) {
+			let mut task = { async_tasks().pop_front().unwrap() };
 			trace!("Run async task {}", task.id());
 
-			match task.poll(&mut cx) {
-				Poll::Ready(()) => false,
-				Poll::Pending => true,
+			if task.poll(&mut cx).is_pending() {
+				async_tasks().push_back(task);
 			}
-		});
+		}
 	});
 }
 
