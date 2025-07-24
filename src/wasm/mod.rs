@@ -1,14 +1,17 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
+use core::future;
 use core::hint::black_box;
 use core::mem::MaybeUninit;
+use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
 use wasi::*;
 use wasmtime::*;
 use zerocopy::IntoBytes;
 
-use crate::fd;
+use crate::console::CONSOLE;
+use crate::executor::{WakerRegistration, spawn};
 use crate::kernel::systemtime::now_micros;
 
 mod capi;
@@ -42,6 +45,26 @@ pub(crate) static WASM_MANAGER: InterruptTicketMutex<Option<WasmManager>> =
 	InterruptTicketMutex::new(None);
 pub(crate) static INPUT: InterruptTicketMutex<VecDeque<Vec<u8>>> =
 	InterruptTicketMutex::new(VecDeque::new());
+static OUTPUT: InterruptTicketMutex<WasmStdout> = InterruptTicketMutex::new(WasmStdout::new());
+
+struct WasmStdout {
+	pub data: VecDeque<Vec<u8>>,
+	pub waker: WakerRegistration,
+}
+
+impl WasmStdout {
+	pub const fn new() -> Self {
+		Self {
+			data: VecDeque::new(),
+			waker: WakerRegistration::new(),
+		}
+	}
+
+	pub fn write(&mut self, buf: &[u8]) {
+		self.data.push_back(buf.to_vec());
+		self.waker.wake();
+	}
+}
 
 pub(crate) struct WasmManager {
 	store: Store<u32>,
@@ -79,7 +102,6 @@ impl WasmManager {
 						panic!("fd_read: invalid file descriptor {}", fd);
 					};
 
-					info!("fd {}", fd);
 					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
 						let mut iovs = vec![0i32; (2 * iovs_len).try_into().unwrap()];
 						let _ = mem.read(
@@ -89,12 +111,11 @@ impl WasmManager {
 						);
 
 						let mut nread_bytes: i32 = 0;
-						let mut i = 0;
+						let i = 0;
 						if let Some(data) = INPUT.lock().pop_front() {
-							let len = iovs[i + 1];
-							info!("len = {}, {}", len, data.len());
+							let _len = iovs[i + 1];
 
-							while i < iovs.len() {
+							if !data.is_empty() {
 								let _ = mem.write(
 									caller.as_context_mut(),
 									iovs[i].try_into().unwrap(),
@@ -102,8 +123,6 @@ impl WasmManager {
 								);
 
 								nread_bytes += data.len() as i32;
-
-								i += 2;
 							}
 						}
 
@@ -125,16 +144,10 @@ impl WasmManager {
 				"wasi_snapshot_preview1",
 				"fd_write",
 				|mut caller: Caller<'_, u32>,
-				 fd: i32,
+				 _fd: i32,
 				 iovs_ptr: i32,
 				 iovs_len: i32,
 				 nwritten_ptr: i32| {
-					let fd = if fd <= 2 {
-						fd
-					} else {
-						panic!("fd_write: invalid file descriptor {}", fd);
-					};
-
 					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
 						let mut iovs = vec![0i32; (2 * iovs_len).try_into().unwrap()];
 						let _ = mem.read(
@@ -165,14 +178,8 @@ impl WasmManager {
 								iovs[i].try_into().unwrap(),
 								unsafe { data.assume_init_mut() },
 							);
-							let result = fd::write(fd, unsafe { data.assume_init_ref() });
-
-							match result {
-								Ok(n) => {
-									nwritten_bytes += n as i32;
-								}
-								Err(err) => return -i32::from(err),
-							}
+							OUTPUT.lock().write(unsafe { data.assume_init_mut() });
+							nwritten_bytes += len;
 
 							i += 2;
 						}
@@ -263,6 +270,18 @@ pub extern "C" fn sys_unload_binary() -> i32 {
 	0
 }
 
+async fn wasm_run() {
+	future::poll_fn(|cx| {
+		let mut guard = OUTPUT.lock();
+		while let Some(data) = guard.data.pop_front() {
+			CONSOLE.lock().write(&data);
+		}
+		guard.waker.register(cx.waker());
+		Poll::<()>::Pending
+	})
+	.await;
+}
+
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_load_binary(ptr: *const u8, len: usize) -> i32 {
@@ -276,6 +295,8 @@ pub extern "C" fn sys_load_binary(ptr: *const u8, len: usize) -> i32 {
 	if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
 		let _ = wasm_manager.call_func::<(), ()>("hello_world", ());
 	}
+
+	spawn(wasm_run());
 
 	0
 }
