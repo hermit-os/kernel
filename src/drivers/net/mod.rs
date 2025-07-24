@@ -48,13 +48,14 @@ pub(crate) trait NetworkDriver: Driver {
 	fn handle_interrupt(&mut self);
 }
 
-// All drivers except the loopback driver make use of these
+/// Determines the MTU that should be used as configured by crate features
+/// or environment variables.
 #[cfg(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 	all(target_arch = "x86_64", feature = "rtl8139"),
 	feature = "virtio-net",
 ))]
-mod mtu {
+pub(crate) fn mtu() -> u16 {
 	use core::str::FromStr;
 
 	// Default IP level MTU to use.
@@ -65,23 +66,12 @@ mod mtu {
 	/// This is 1500 IP MTU and a 14-byte ethernet header.
 	const DEFAULT_MTU: u16 = DEFAULT_IP_MTU + 14;
 
-	/// Determines the MTU that should be used as configured by crate features
-	/// or environment variables.
-	pub fn mtu() -> u16 {
-		if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-			u16::from_str(&my_mtu).unwrap()
-		} else {
-			DEFAULT_MTU
-		}
+	if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
+		u16::from_str(&my_mtu).unwrap()
+	} else {
+		DEFAULT_MTU
 	}
 }
-
-#[cfg(any(
-	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-	all(target_arch = "x86_64", feature = "rtl8139"),
-	feature = "virtio-net",
-))]
-pub(crate) use mtu::*;
 
 cfg_if::cfg_if! {
 	if #[cfg(all(
