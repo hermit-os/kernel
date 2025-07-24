@@ -307,8 +307,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 		for i in &mut *fds {
 			let fd = i.fd;
 			i.revents = PollEvent::empty();
-			let mut pinned_obj = core::pin::pin!(core_scheduler().get_object(fd));
-			if let Ready(Ok(obj)) = pinned_obj.as_mut().poll(cx) {
+			if let Ok(obj) = core_scheduler().get_object(fd) {
 				let mut pinned = core::pin::pin!(obj.poll(i.events));
 				if let Ready(Ok(e)) = pinned.as_mut().poll(cx)
 					&& !e.is_empty()
@@ -374,17 +373,17 @@ pub fn fstat(fd: FileDescriptor) -> io::Result<FileAttr> {
 pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<FileDescriptor> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
 
-	let fd = block_on(core_scheduler().insert_object(Arc::new(obj)), None)?;
+	let fd = core_scheduler().insert_object(Arc::new(obj))?;
 
 	Ok(fd)
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
-	block_on(core_scheduler().get_object(fd), None)
+	core_scheduler().get_object(fd)
 }
 
 pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
-	block_on(core_scheduler().insert_object(obj), None)
+	core_scheduler().insert_object(obj)
 }
 
 // The dup system call allocates a new file descriptor that refers
@@ -392,15 +391,15 @@ pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> io::Result<FileDes
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
 pub(crate) fn dup_object(fd: FileDescriptor) -> io::Result<FileDescriptor> {
-	block_on(core_scheduler().dup_object(fd), None)
+	core_scheduler().dup_object(fd)
 }
 
 pub(crate) fn dup_object2(fd1: FileDescriptor, fd2: FileDescriptor) -> io::Result<FileDescriptor> {
-	block_on(core_scheduler().dup_object2(fd1, fd2), None)
+	core_scheduler().dup_object2(fd1, fd2)
 }
 
 pub(crate) fn remove_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
-	block_on(core_scheduler().remove_object(fd), None)
+	core_scheduler().remove_object(fd)
 }
 
 pub(crate) fn isatty(fd: FileDescriptor) -> io::Result<bool> {
