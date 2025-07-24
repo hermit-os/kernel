@@ -10,8 +10,8 @@ use wasi::*;
 use wasmtime::*;
 use zerocopy::IntoBytes;
 
-use crate::console::CONSOLE;
 use crate::executor::{WakerRegistration, spawn};
+use crate::fd;
 use crate::kernel::systemtime::now_micros;
 
 mod capi;
@@ -271,15 +271,27 @@ pub extern "C" fn sys_unload_binary() -> i32 {
 }
 
 async fn wasm_run() {
-	future::poll_fn(|cx| {
-		let mut guard = OUTPUT.lock();
-		while let Some(data) = guard.data.pop_front() {
-			CONSOLE.lock().write(&data);
+	loop {
+		let obj = crate::core_scheduler()
+			.get_object(fd::STDOUT_FILENO)
+			.await
+			.unwrap();
+
+		while let Some(data) = OUTPUT.lock().data.pop_front() {
+			obj.write(&data).await.unwrap();
 		}
-		guard.waker.register(cx.waker());
-		Poll::<()>::Pending
-	})
-	.await;
+
+		future::poll_fn(|cx| {
+			let mut guard = OUTPUT.lock();
+			if guard.data.is_empty() {
+				guard.waker.register(cx.waker());
+				Poll::Pending
+			} else {
+				Poll::Ready(())
+			}
+		})
+		.await;
+	}
 }
 
 #[hermit_macro::system]
