@@ -7,13 +7,10 @@ use alloc::sync::Arc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
-use core::future::{self, Future};
 use core::ptr;
 #[cfg(all(target_arch = "x86_64", feature = "smp"))]
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
-use core::task::Poll::Ready;
-use core::task::ready;
 
 use ahash::RandomState;
 use crossbeam_utils::Backoff;
@@ -223,8 +220,7 @@ struct NewTask {
 	prio: Priority,
 	core_id: CoreId,
 	stacks: TaskStacks,
-	object_map:
-		Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+	object_map: Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 }
 
 impl From<NewTask> for Task {
@@ -461,55 +457,41 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_object_map(
 		&self,
-	) -> Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>> {
+	) -> Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>> {
 		without_interrupts(|| self.current_task.borrow().object_map.clone())
 	}
 
 	/// Map a file descriptor to their IO interface and returns
 	/// the shared reference
 	#[inline]
-	pub async fn get_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
-
-				let guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.get(&fd).cloned().ok_or(Errno::Badf))
-			})
-		})
-		.await
+	pub fn get_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
+		let current_task = self.current_task.borrow();
+		let object_map = current_task.object_map.read();
+		object_map.get(&fd).cloned().ok_or(Errno::Badf)
 	}
 
 	/// Creates a new map between file descriptor and their IO interface and
 	/// clone the standard descriptors.
 	#[cfg(feature = "common-os")]
 	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
-	pub async fn recreate_objmap(&self) -> io::Result<()> {
+	pub fn recreate_objmap(&self) -> io::Result<()> {
 		let mut map = HashMap::<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.read());
-
-				let guard = ready!(pinned_obj.as_mut().poll(cx));
-				// clone standard file descriptors
-				for i in 0..3 {
-					if let Some(obj) = guard.get(&i) {
-						map.insert(i, obj.clone());
-					}
-				}
-
-				Ready(io::Result::Ok(()))
-			})
-		})
-		.await?;
-
 		without_interrupts(|| {
-			self.current_task.borrow_mut().object_map = Arc::new(async_lock::RwLock::new(map));
+			let mut current_task = self.current_task.borrow_mut();
+			let object_map = current_task.object_map.read();
+
+			// clone standard file descriptors
+			for i in 0..3 {
+				if let Some(obj) = object_map.get(&i) {
+					map.insert(i, obj.clone());
+				}
+			}
+
+			drop(object_map);
+			current_task.object_map = Arc::new(RwSpinLock::new(map));
 		});
 
 		Ok(())
@@ -517,102 +499,88 @@ impl PerCoreScheduler {
 
 	/// Insert a new IO interface and returns a file descriptor as
 	/// identifier to this object
-	pub async fn insert_object(&self, obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+	pub fn insert_object(&self, obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
+		without_interrupts(|| {
+			let current_task = self.current_task.borrow();
+			let mut object_map = current_task.object_map.write();
 
-				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let new_fd = || -> io::Result<FileDescriptor> {
-					let mut fd: FileDescriptor = 0;
-					loop {
-						if !guard.contains_key(&fd) {
-							break Ok(fd);
-						} else if fd == FileDescriptor::MAX {
-							break Err(Errno::Overflow);
-						}
-
-						fd = fd.saturating_add(1);
+			let new_fd = || -> io::Result<FileDescriptor> {
+				let mut fd: FileDescriptor = 0;
+				loop {
+					if !object_map.contains_key(&fd) {
+						break Ok(fd);
+					} else if fd == FileDescriptor::MAX {
+						break Err(Errno::Overflow);
 					}
-				};
 
-				let fd = new_fd()?;
-				let _ = guard.insert(fd, obj.clone());
-				Ready(Ok(fd))
-			})
+					fd = fd.saturating_add(1);
+				}
+			};
+
+			let fd = new_fd()?;
+			let _ = object_map.insert(fd, obj.clone());
+			Ok(fd)
 		})
-		.await
 	}
 
 	/// Duplicate a IO interface and returns a new file descriptor as
 	/// identifier to the new copy
-	pub async fn dup_object(&self, fd: FileDescriptor) -> io::Result<FileDescriptor> {
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
+	pub fn dup_object(&self, fd: FileDescriptor) -> io::Result<FileDescriptor> {
+		without_interrupts(|| {
+			let current_task = self.current_task.borrow();
+			let mut object_map = current_task.object_map.write();
 
-				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let obj = (*(guard.get(&fd).ok_or(Errno::Inval)?)).clone();
+			let obj = (*(object_map.get(&fd).ok_or(Errno::Inval)?)).clone();
 
-				let new_fd = || -> io::Result<FileDescriptor> {
-					let mut fd: FileDescriptor = 0;
-					loop {
-						if !guard.contains_key(&fd) {
-							break Ok(fd);
-						} else if fd == FileDescriptor::MAX {
-							break Err(Errno::Overflow);
-						}
-
-						fd = fd.saturating_add(1);
+			let new_fd = || -> io::Result<FileDescriptor> {
+				let mut fd: FileDescriptor = 0;
+				loop {
+					if !object_map.contains_key(&fd) {
+						break Ok(fd);
+					} else if fd == FileDescriptor::MAX {
+						break Err(Errno::Overflow);
 					}
-				};
 
-				let fd = new_fd()?;
-				if guard.try_insert(fd, obj).is_err() {
-					Ready(Err(Errno::Mfile))
-				} else {
-					Ready(Ok(fd))
+					fd = fd.saturating_add(1);
 				}
-			})
+			};
+
+			let fd = new_fd()?;
+			if object_map.try_insert(fd, obj).is_err() {
+				Err(Errno::Mfile)
+			} else {
+				Ok(fd)
+			}
 		})
-		.await
 	}
 
-	pub async fn dup_object2(
+	pub fn dup_object2(
 		&self,
 		fd1: FileDescriptor,
 		fd2: FileDescriptor,
 	) -> io::Result<FileDescriptor> {
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
-				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				let obj = guard.get(&fd1).cloned().ok_or(Errno::Badf)?;
+		without_interrupts(|| {
+			let current_task = self.current_task.borrow();
+			let mut object_map = current_task.object_map.write();
 
-				if guard.try_insert(fd2, obj).is_err() {
-					Ready(Err(Errno::Mfile))
-				} else {
-					Ready(Ok(fd2))
-				}
-			})
+			let obj = object_map.get(&fd1).cloned().ok_or(Errno::Badf)?;
+
+			if object_map.try_insert(fd2, obj).is_err() {
+				Err(Errno::Mfile)
+			} else {
+				Ok(fd2)
+			}
 		})
-		.await
 	}
 
 	/// Remove a IO interface, which is named by the file descriptor
-	pub async fn remove_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
-		future::poll_fn(|cx| {
-			without_interrupts(|| {
-				let borrowed = self.current_task.borrow();
-				let mut pinned_obj = core::pin::pin!(borrowed.object_map.write());
-				let mut guard = ready!(pinned_obj.as_mut().poll(cx));
-				Ready(guard.remove(&fd).ok_or(Errno::Badf))
-			})
+	pub fn remove_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
+		without_interrupts(|| {
+			let current_task = self.current_task.borrow();
+			let mut object_map = current_task.object_map.write();
+
+			object_map.remove(&fd).ok_or(Errno::Badf)
 		})
-		.await
 	}
 
 	#[inline]

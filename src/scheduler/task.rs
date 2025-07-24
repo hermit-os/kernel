@@ -12,7 +12,7 @@ use core::{cmp, fmt};
 use ahash::RandomState;
 use crossbeam_utils::CachePadded;
 use hashbrown::HashMap;
-use hermit_sync::OnceCell;
+use hermit_sync::{OnceCell, RwSpinLock};
 use memory_addresses::VirtAddr;
 
 use crate::arch::core_local::*;
@@ -390,8 +390,7 @@ pub(crate) struct Task {
 	/// Stack of the task
 	pub stacks: TaskStacks,
 	/// Mapping between file descriptor and the referenced IO interface
-	pub object_map:
-		Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+	pub object_map: Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Box<TaskTLS>>,
@@ -412,9 +411,7 @@ impl Task {
 		task_status: TaskStatus,
 		task_prio: Priority,
 		stacks: TaskStacks,
-		object_map: Arc<
-			async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>,
-		>,
+		object_map: Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 	) -> Task {
 		debug!("Creating new task {tid} on core {core_id}");
 
@@ -440,12 +437,12 @@ impl Task {
 
 		/// All cores use the same mapping between file descriptor and the referenced object
 		static OBJECT_MAP: OnceCell<
-			Arc<async_lock::RwLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+			Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
 		> = OnceCell::new();
 
 		if core_id == 0 {
 			OBJECT_MAP
-				.set(Arc::new(async_lock::RwLock::new(HashMap::<
+				.set(Arc::new(RwSpinLock::new(HashMap::<
 					FileDescriptor,
 					Arc<dyn ObjectInterface>,
 					RandomState,
@@ -455,7 +452,7 @@ impl Task {
 				.unwrap();
 			let objmap = OBJECT_MAP.get().unwrap().clone();
 			let _ = poll_on(async {
-				let mut guard = objmap.write().await;
+				let mut guard = objmap.write();
 				if env::is_uhyve() {
 					guard
 						.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
