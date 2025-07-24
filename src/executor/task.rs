@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use alloc::boxed::Box;
 use core::fmt;
 use core::future::Future;

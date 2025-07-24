@@ -281,6 +281,7 @@ impl<'a> NetworkInterface<'a> {
 		self.sockets.get_mut(handle)
 	}
 
+	#[cfg(feature = "tcp")]
 	pub(crate) fn get_socket_and_context<T: AnySocket<'a>>(
 		&mut self,
 		handle: SocketHandle,
