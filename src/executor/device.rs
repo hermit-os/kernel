@@ -194,9 +194,6 @@ impl Device for HermitNet {
 	}
 }
 
-// Unique handle to identify the RxToken
-pub(crate) type RxHandle = usize;
-
 #[doc(hidden)]
 pub(crate) struct RxToken {
 	buffer: Vec<u8, DeviceAlloc>,
