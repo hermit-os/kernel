@@ -1,6 +1,7 @@
 use align_address::Align;
+use free_list::{PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
-use memory_addresses::VirtAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
@@ -93,12 +94,22 @@ pub extern "C" fn wasmtime_page_size() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn wasmtime_mmap_new(size: usize, prot_flags: WasmProt, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
+	let layout = PageLayout::from_size(size).unwrap();
+	let page_range = crate::mm::virtualmem::KERNEL_FREE_LIST
+		.lock()
+		.allocate(layout)
+		.unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
 	}
-	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+	let frame_layout = PageLayout::from_size(size).unwrap();
+	let frame_range = crate::mm::physicalmem::PHYSICAL_FREE_LIST
+		.lock()
+		.allocate(frame_layout)
+		.expect("Failed to allocate Physical Memory for wasmtime");
+	let physical_address = PhysAddr::from(frame_range.start());
 
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
@@ -151,10 +162,22 @@ pub extern "C" fn wasmtime_munmap(ptr: *mut u8, size: usize) -> i32 {
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
-		crate::mm::physicalmem::deallocate(phys_addr, size);
+		let range = PageRange::from_start_len(phys_addr.as_usize(), size).unwrap();
+		unsafe {
+			crate::mm::physicalmem::PHYSICAL_FREE_LIST
+				.lock()
+				.deallocate(range)
+				.unwrap();
+		}
 	}
 
-	crate::mm::virtualmem::deallocate(virtual_address, size);
+	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+	unsafe {
+		crate::mm::virtualmem::KERNEL_FREE_LIST
+			.lock()
+			.deallocate(range)
+			.unwrap();
+	}
 
 	0
 }
@@ -183,7 +206,12 @@ pub extern "C" fn wasmtime_mprotect(ptr: *mut u8, size: usize, prot_flags: WasmP
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	} else {
-		let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+		let frame_layout = PageLayout::from_size(size).unwrap();
+		let frame_range = crate::mm::physicalmem::PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(frame_layout)
+			.expect("Failed to allocate Physical Memory for TaskStacks");
+		let physical_address = PhysAddr::from(frame_range.start());
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	}

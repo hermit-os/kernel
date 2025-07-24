@@ -274,7 +274,6 @@ async fn wasm_run() {
 	loop {
 		let obj = crate::core_scheduler()
 			.get_object(fd::STDOUT_FILENO)
-			.await
 			.unwrap();
 
 		while let Some(data) = OUTPUT.lock().data.pop_front() {
