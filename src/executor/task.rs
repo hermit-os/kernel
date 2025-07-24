@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use alloc::boxed::Box;
 use core::fmt;
 use core::future::Future;
@@ -7,16 +9,6 @@ use core::task::{Context, Poll};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct AsyncTaskId(u32);
-
-impl AsyncTaskId {
-	pub const fn into(self) -> u32 {
-		self.0
-	}
-
-	pub const fn from(x: u32) -> Self {
-		AsyncTaskId(x)
-	}
-}
 
 impl fmt::Display for AsyncTaskId {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

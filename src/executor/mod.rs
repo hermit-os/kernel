@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) mod device;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -58,6 +56,7 @@ impl WakerRegistration {
 	}
 
 	/// Wake the registered waker, if any.
+	#[allow(dead_code)]
 	pub fn wake(&mut self) {
 		if let Some(w) = self.waker.take() {
 			w.wake();
@@ -113,6 +112,10 @@ pub(crate) fn run() {
 }
 
 /// Spawns a future on the executor.
+#[cfg_attr(
+	not(any(feature = "shell", feature = "tcp", feature = "udp", feature = "vsock")),
+	expect(dead_code)
+)]
 pub(crate) fn spawn<F>(future: F)
 where
 	F: Future<Output = ()> + Send + 'static,
