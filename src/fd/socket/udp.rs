@@ -48,13 +48,8 @@ impl Socket {
 	}
 
 	async fn close(&self) -> io::Result<()> {
-		future::poll_fn(|_cx| {
-			self.with(|socket| {
-				socket.close();
-				Poll::Ready(Ok(()))
-			})
-		})
-		.await
+		self.with(|socket| socket.close());
+		Ok(())
 	}
 
 	async fn write_with_meta(&self, buffer: &[u8], meta: &UdpMetadata) -> io::Result<usize> {

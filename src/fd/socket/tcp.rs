@@ -77,17 +77,14 @@ impl Socket {
 	}
 
 	async fn close(&self) -> io::Result<()> {
-		future::poll_fn(|_cx| {
-			self.with(|socket| {
-				if socket.is_active() {
-					socket.close();
-					Poll::Ready(Ok(()))
-				} else {
-					Poll::Ready(Err(Errno::Io))
-				}
-			})
-		})
-		.await?;
+		self.with(|socket| {
+			if !socket.is_active() {
+				return Err(Errno::Io);
+			}
+
+			socket.close();
+			Ok(())
+		})?;
 
 		if self.handle.len() > 1 {
 			let mut guard = NIC.lock();
