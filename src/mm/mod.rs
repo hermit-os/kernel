@@ -7,6 +7,7 @@ use core::mem;
 use core::ops::Range;
 
 use align_address::Align;
+use free_list::{PageLayout, PageRange};
 use hermit_sync::Lazy;
 pub use memory_addresses::{PhysAddr, VirtAddr};
 
@@ -15,6 +16,8 @@ use self::allocator::LockedAllocator;
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -99,8 +102,9 @@ pub(crate) fn init() {
 		let reserve = core::cmp::min(reserve, 0x0400_0000);
 
 		let virt_size: usize = reserve.align_down(LargePageSize::SIZE as usize);
-		let virt_addr =
-			self::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize).unwrap();
+		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let virt_addr = VirtAddr::from(page_range.start());
 		heap_start_addr = virt_addr;
 
 		info!(
@@ -148,9 +152,9 @@ pub(crate) fn init() {
 		#[cfg(feature = "mmap")]
 		let virt_size: usize = ((avail_mem * 75) / 100).align_down(LargePageSize::SIZE as usize);
 
-		let virt_addr =
-			crate::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize)
-				.unwrap();
+		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let virt_addr = VirtAddr::from(page_range.start());
 		heap_start_addr = virt_addr;
 
 		info!(
@@ -241,8 +245,8 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn print_information() {
-	self::physicalmem::print_information();
-	self::virtualmem::print_information();
+	info!("Physical memory free list:\n{}", PHYSICAL_FREE_LIST.lock());
+	info!("Virtual memory free list:\n{}", KERNEL_FREE_LIST.lock());
 }
 
 /// Maps a given physical address and size in virtual space and returns address.
@@ -273,7 +277,9 @@ pub(crate) fn map(
 		flags.device();
 	}
 
-	let virtual_address = self::virtualmem::allocate(size).unwrap();
+	let layout = PageLayout::from_size(size).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
 	virtual_address
@@ -289,7 +295,11 @@ pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
-		self::virtualmem::deallocate(virtual_address, size);
+
+		let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+		unsafe {
+			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
 	} else {
 		panic!(
 			"No page table entry for virtual address {:p}",

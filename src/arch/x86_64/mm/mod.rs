@@ -10,18 +10,19 @@ use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
+	use free_list::{PageLayout, PageRange};
 	use x86_64::registers::control::Cr3;
 
-	let physaddr = crate::mm::physicalmem::allocate_aligned(
-		BasePageSize::SIZE as usize,
-		BasePageSize::SIZE as usize,
-	)
-	.unwrap();
-	let virtaddr = crate::mm::virtualmem::allocate_aligned(
-		2 * BasePageSize::SIZE as usize,
-		BasePageSize::SIZE as usize,
-	)
-	.unwrap();
+	use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+	use crate::mm::virtualmem::KERNEL_FREE_LIST;
+
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout).unwrap();
+	let physaddr = PhysAddr::from(frame_range.start());
+
+	let layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtaddr = VirtAddr::from(page_range.start());
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 
@@ -51,7 +52,11 @@ pub fn create_new_root_page_table() -> usize {
 	};
 
 	paging::unmap::<BasePageSize>(virtaddr, 2);
-	crate::mm::virtualmem::deallocate(virtaddr, 2 * BasePageSize::SIZE as usize);
+	let range =
+		PageRange::from_start_len(virtaddr.as_usize(), 2 * BasePageSize::SIZE as usize).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	physaddr.as_usize()
 }

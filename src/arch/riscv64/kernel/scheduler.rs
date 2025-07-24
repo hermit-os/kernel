@@ -7,6 +7,7 @@ use core::convert::TryInto;
 use core::{mem, ptr};
 
 use align_address::Align;
+use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
@@ -14,6 +15,8 @@ use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 #[cfg(not(feature = "common-os"))]
 use crate::env;
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
@@ -116,12 +119,15 @@ impl TaskStacks {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
-		let virt_addr =
-			crate::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
-				//let virt_addr = crate::arch::mm::virtualmem::allocate(total_size)
-				.expect("Failed to allocate Virtual Memory for TaskStacks");
-		let phys_addr = crate::mm::physicalmem::allocate(total_size)
+		let layout = PageLayout::from_size(total_size + 4 * BasePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let virt_addr = VirtAddr::from(page_range.start());
+		let frame_layout = PageLayout::from_size(total_size).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(frame_layout)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
+		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
 			"Create stacks at {:#X} with a size of {} KB",
@@ -251,12 +257,21 @@ impl Drop for TaskStacks {
 					stacks.total_size / BasePageSize::SIZE as usize + 4,
 					//stacks.total_size / BasePageSize::SIZE as usize,
 				);
-				crate::mm::virtualmem::deallocate(
-					stacks.virt_addr,
+				let range = PageRange::from_start_len(
+					stacks.virt_addr.as_usize(),
 					stacks.total_size + 4 * BasePageSize::SIZE as usize,
-					//stacks.total_size,
-				);
-				crate::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
+				)
+				.unwrap();
+				unsafe {
+					KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				}
+
+				let range =
+					PageRange::from_start_len(stacks.phys_addr.as_usize(), stacks.total_size)
+						.unwrap();
+				unsafe {
+					PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				}
 			}
 		}
 	}

@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use core::str;
 
+use free_list::PageLayout;
 use hermit_dtb::Dtb;
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
@@ -13,6 +14,7 @@ use time::OffsetDateTime;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
 use crate::mm::virtualmem;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
@@ -78,11 +80,9 @@ pub fn init() {
 
 					debug!("Found RTC at {addr:p} (size {size:#X})");
 
-					let pl031_address = virtualmem::allocate_aligned(
-						size.try_into().unwrap(),
-						BasePageSize::SIZE.try_into().unwrap(),
-					)
-					.unwrap();
+					let layout = PageLayout::from_size(size.try_into().unwrap()).unwrap();
+					let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+					let pl031_address = VirtAddr::from(page_range.start());
 					PL031_ADDRESS.set(pl031_address).unwrap();
 					debug!("Mapping RTC to virtual address {pl031_address:p}",);
 

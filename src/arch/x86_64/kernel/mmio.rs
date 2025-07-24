@@ -7,8 +7,9 @@ use core::ptr::NonNull;
 use core::{ptr, str};
 
 use align_address::Align;
+use free_list::{PageLayout, PageRange};
 use hermit_sync::{InterruptTicketMutex, without_interrupts};
-use memory_addresses::PhysAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
@@ -24,6 +25,8 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 use crate::init_cell::InitCell;
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -95,7 +98,9 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 fn check_linux_args(
 	linux_mmio: &'static [String],
 ) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
-	let virtual_address = crate::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 
 	for arg in linux_mmio {
 		trace!("check linux parameter: {arg}");
@@ -125,10 +130,16 @@ fn check_linux_args(
 					continue;
 				};
 
-				crate::mm::physicalmem::reserve(
-					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-					BasePageSize::SIZE as usize,
-				);
+				if cfg!(debug_assertions) {
+					let len = usize::try_from(BasePageSize::SIZE).unwrap();
+					let start = current_address.align_down(len);
+					let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+					PHYSICAL_FREE_LIST
+						.lock()
+						.allocate_at(frame_range)
+						.unwrap_err();
+				}
 
 				return Ok((mmio, irq));
 			}
@@ -139,7 +150,11 @@ fn check_linux_args(
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	let range =
+		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	Err("Network card not found!")
 }
@@ -147,7 +162,9 @@ fn check_linux_args(
 fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
-	let virtual_address = crate::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
@@ -176,16 +193,26 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 
 		info!("Found network card at {mmio:p}");
 
-		crate::mm::physicalmem::reserve(
-			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-			BasePageSize::SIZE as usize,
-		);
+		if cfg!(debug_assertions) {
+			let len = usize::try_from(BasePageSize::SIZE).unwrap();
+			let start = current_address.align_down(len);
+			let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+			PHYSICAL_FREE_LIST
+				.lock()
+				.allocate_at(frame_range)
+				.unwrap_err();
+		}
 
 		return Ok((mmio, IRQ_NUMBER));
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
+	let range =
+		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	Err("Network card not found!")
 }

@@ -1,10 +1,13 @@
 use align_address::Align;
-use memory_addresses::VirtAddr;
+use free_list::{PageLayout, PageRange};
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::virtualmem::KERNEL_FREE_LIST;
 
 bitflags! {
 	#[repr(transparent)]
@@ -27,12 +30,16 @@ bitflags! {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let virtual_address = crate::mm::virtualmem::allocate(size).unwrap();
+	let layout = PageLayout::from_size(size).unwrap();
+	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
 	}
-	let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+	let frame_layout = PageLayout::from_size(size).unwrap();
+	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+	let physical_address = PhysAddr::from(frame_range.start());
 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
@@ -65,10 +72,18 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 			size / BasePageSize::SIZE as usize,
 		);
 		debug!("Unmapping {virtual_address:X} ({size}) -> {physical_address:X}");
-		crate::mm::physicalmem::deallocate(physical_address, size);
+
+		let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
+		if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
+			// FIXME: return EINVAL instead, once wasmtime can handle it
+			error!("Unable to deallocate {range:?}");
+		}
 	}
 
-	crate::mm::virtualmem::deallocate(virtual_address, size);
+	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+	unsafe {
+		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+	}
 
 	0
 }
@@ -97,7 +112,9 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	} else {
-		let physical_address = crate::mm::physicalmem::allocate(size).unwrap();
+		let frame_layout = PageLayout::from_size(size).unwrap();
+		let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+		let physical_address = PhysAddr::from(frame_range.start());
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	}
