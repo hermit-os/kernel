@@ -277,11 +277,6 @@ impl<'a> NetworkInterface<'a> {
 		self.iface.poll_delay(timestamp, &self.sockets)
 	}
 
-	#[allow(dead_code)]
-	pub(crate) fn get_socket<T: AnySocket<'a>>(&self, handle: SocketHandle) -> &T {
-		self.sockets.get(handle)
-	}
-
 	pub(crate) fn get_mut_socket<T: AnySocket<'a>>(&mut self, handle: SocketHandle) -> &mut T {
 		self.sockets.get_mut(handle)
 	}
@@ -309,13 +304,6 @@ impl<'a> NetworkInterface<'a> {
 		socket
 			.start_query(self.iface.context(), name, query_type)
 			.map_err(|_| Errno::Io)
-	}
-
-	#[allow(dead_code)]
-	#[cfg(feature = "dns")]
-	pub(crate) fn get_dns_socket(&self) -> io::Result<&dns::Socket<'a>> {
-		let dns_handle = self.dns_handle.ok_or(Errno::Inval)?;
-		Ok(self.sockets.get(dns_handle))
 	}
 
 	#[cfg(feature = "dns")]
