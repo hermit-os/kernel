@@ -175,16 +175,20 @@ async fn dhcpv4_run() {
 }
 
 async fn network_run() {
-	future::poll_fn(|_cx| {
+	future::poll_fn(|cx| {
 		if let Some(mut guard) = NIC.try_lock() {
 			match &mut *guard {
 				NetworkState::Initialized(nic) => {
 					nic.poll_common(now());
+					// FIXME: only wake when progress can be made
+					cx.waker().wake_by_ref();
 					Poll::Pending
 				}
 				_ => Poll::Ready(()),
 			}
 		} else {
+			// FIXME: only wake when progress can be made
+			cx.waker().wake_by_ref();
 			// another task is already using the NIC => don't check
 			Poll::Pending
 		}

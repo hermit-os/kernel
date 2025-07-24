@@ -163,7 +163,7 @@ impl Socket {
 				self.port = port;
 				self.port = ep.cid;
 
-				future::poll_fn(|_cx| {
+				future::poll_fn(|cx| {
 					if let Some(mut driver_guard) = hardware::get_vsock_driver().unwrap().try_lock()
 					{
 						let local_cid = driver_guard.get_cid();
@@ -187,6 +187,8 @@ impl Socket {
 
 						Poll::Ready(())
 					} else {
+						// FIXME: only wake when progress can be made
+						cx.waker().wake_by_ref();
 						Poll::Pending
 					}
 				})

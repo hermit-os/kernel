@@ -61,7 +61,7 @@ impl RawSocket {
 }
 
 async fn vsock_run() {
-	future::poll_fn(|_cx| {
+	future::poll_fn(|cx| {
 		if let Some(driver) = hardware::get_vsock_driver() {
 			const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
 			let mut driver_guard = driver.lock();
@@ -148,6 +148,8 @@ async fn vsock_run() {
 				});
 			}
 
+			// FIXME: only wake when progress can be made
+			cx.waker().wake_by_ref();
 			Poll::Pending
 		} else {
 			Poll::Ready(())
