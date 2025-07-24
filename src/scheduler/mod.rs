@@ -483,7 +483,8 @@ impl PerCoreScheduler {
 
 	/// Creates a new map between file descriptor and their IO interface and
 	/// clone the standard descriptors.
-	#[allow(dead_code)]
+	#[cfg(feature = "common-os")]
+	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
 	pub async fn recreate_objmap(&self) -> io::Result<()> {
 		let mut map = HashMap::<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
