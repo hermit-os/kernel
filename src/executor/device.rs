@@ -18,11 +18,7 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
-#[cfg(not(feature = "pci"))]
-use crate::arch::kernel::mmio as hardware;
-use crate::drivers::net::NetworkDriver;
-#[cfg(feature = "pci")]
-use crate::drivers::pci as hardware;
+use crate::drivers::net::{NetworkDriver, get_network_driver};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// Data type to determine the mac address
@@ -42,7 +38,7 @@ impl HermitNet {
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "dhcpv4")]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac, checksums) = if let Some(driver) = hardware::get_network_driver() {
+		let (mtu, mac, checksums) = if let Some(driver) = get_network_driver() {
 			let guard = driver.lock();
 			(
 				guard.get_mtu(),
@@ -98,7 +94,7 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac, checksums) = if let Some(driver) = hardware::get_network_driver() {
+		let (mtu, mac, checksums) = if let Some(driver) = get_network_driver() {
 			let guard = driver.lock();
 			(
 				guard.get_mtu(),
@@ -182,7 +178,7 @@ impl Device for HermitNet {
 	}
 
 	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		if let Some(driver) = hardware::get_network_driver() {
+		if let Some(driver) = get_network_driver() {
 			driver.lock().receive_packet()
 		} else {
 			None
@@ -231,9 +227,6 @@ impl phy::TxToken for TxToken {
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		hardware::get_network_driver()
-			.unwrap()
-			.lock()
-			.send_packet(len, f)
+		get_network_driver().unwrap().lock().send_packet(len, f)
 	}
 }
