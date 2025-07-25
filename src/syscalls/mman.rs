@@ -1,4 +1,4 @@
-use core::ffi::c_void;
+use core::ffi::{c_int, c_void};
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
@@ -132,6 +132,20 @@ pub extern "C" fn sys_mlock(_addr: *const c_void, _size: usize) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_munlock(_addr: *const c_void, _size: usize) -> i32 {
+	// Hermit does not do any swapping yet.
+	0
+}
+
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_mlockall(_flags: c_int) -> i32 {
+	// Hermit does not do any swapping yet.
+	0
+}
+
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_munlockall(_flags: c_int) -> i32 {
 	// Hermit does not do any swapping yet.
 	0
 }
