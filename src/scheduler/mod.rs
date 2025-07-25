@@ -465,9 +465,11 @@ impl PerCoreScheduler {
 	/// the shared reference
 	#[inline]
 	pub fn get_object(&self, fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
-		let current_task = self.current_task.borrow();
-		let object_map = current_task.object_map.read();
-		object_map.get(&fd).cloned().ok_or(Errno::Badf)
+		without_interrupts(|| {
+			let current_task = self.current_task.borrow();
+			let object_map = current_task.object_map.read();
+			object_map.get(&fd).cloned().ok_or(Errno::Badf)
+		})
 	}
 
 	/// Creates a new map between file descriptor and their IO interface and
