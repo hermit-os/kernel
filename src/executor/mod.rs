@@ -9,7 +9,7 @@ pub(crate) mod vsock;
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use core::future::Future;
-use core::pin::{Pin, pin};
+use core::pin::pin;
 use core::sync::atomic::AtomicU32;
 use core::task::{Context, Poll, Waker};
 use core::time::Duration;
@@ -94,14 +94,13 @@ impl Wake for TaskNotify {
 }
 
 pub(crate) fn run() {
-	let mut cx = Context::from_waker(Waker::noop());
-
 	without_interrupts(|| {
-		// FIXME(mkroening): Not all tasks register wakers and never sleep
-		for _ in 0..({ core_local::async_tasks().len() }) {
-			let mut task = { core_local::async_tasks().pop_front().unwrap() };
-			if Pin::new(&mut task).poll(&mut cx).is_pending() {
-				core_local::async_tasks().push_back(task);
+		// FIXME: We currently have no more than 3 tasks at a time, so this is fine.
+		// Ideally, we would set this value to 200, but the network task currently immediately wakes up again.
+		// This would lead to the network task being polled 200 times back to back, slowing things down considerably.
+		for _ in 0..3 {
+			if !core_local::ex().try_tick() {
+				break;
 			}
 		}
 	});
@@ -116,7 +115,7 @@ pub(crate) fn spawn<F>(future: F)
 where
 	F: Future<Output = ()> + Send + 'static,
 {
-	without_interrupts(|| core_local::async_tasks().push_back(AsyncTask::new(future)));
+	core_local::ex().spawn(AsyncTask::new(future)).detach();
 }
 
 pub fn init() {

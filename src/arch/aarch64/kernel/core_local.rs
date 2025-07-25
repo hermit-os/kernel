@@ -1,16 +1,16 @@
 use alloc::boxed::Box;
-use alloc::collections::vec_deque::VecDeque;
 use core::arch::asm;
-use core::cell::{Cell, RefCell, RefMut};
+use core::cell::Cell;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
+use async_executor::StaticExecutor;
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
+use hermit_sync::{RawRwSpinLock, RawSpinMutex};
 
 use super::CPU_ONLINE;
 use super::interrupts::{IRQ_COUNTERS, IrqStatistics};
-use crate::executor::task::AsyncTask;
 #[cfg(feature = "smp")]
 use crate::scheduler::SchedulerInput;
 use crate::scheduler::{CoreId, PerCoreScheduler};
@@ -23,8 +23,8 @@ pub(crate) struct CoreLocal {
 	scheduler: Cell<*mut PerCoreScheduler>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
-	/// Queue of async tasks
-	async_tasks: RefCell<VecDeque<AsyncTask>>,
+	/// The core-local async executor.
+	ex: StaticExecutor<RawSpinMutex, RawRwSpinLock>,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
@@ -46,7 +46,7 @@ impl CoreLocal {
 			core_id,
 			scheduler: Cell::new(ptr::null_mut()),
 			irq_statistics,
-			async_tasks: RefCell::new(VecDeque::new()),
+			ex: StaticExecutor::new(),
 			#[cfg(feature = "smp")]
 			scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 		};
@@ -96,8 +96,8 @@ pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
 }
 
-pub(crate) fn async_tasks() -> RefMut<'static, VecDeque<AsyncTask>> {
-	CoreLocal::get().async_tasks.borrow_mut()
+pub(crate) fn ex() -> &'static StaticExecutor<RawSpinMutex, RawRwSpinLock> {
+	&CoreLocal::get().ex
 }
 
 pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
