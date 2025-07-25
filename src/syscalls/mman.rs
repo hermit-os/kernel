@@ -1,3 +1,5 @@
+use core::ffi::c_void;
+
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -118,4 +120,18 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
 	}
+}
+
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_mlock(_addr: *const c_void, _size: usize) -> i32 {
+	// Hermit does not do any swapping yet.
+	0
+}
+
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_munlock(_addr: *const c_void, _size: usize) -> i32 {
+	// Hermit does not do any swapping yet.
+	0
 }
