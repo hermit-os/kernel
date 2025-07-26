@@ -5,7 +5,7 @@ use core::hint::black_box;
 use core::mem::MaybeUninit;
 use core::task::Poll;
 
-use hermit_sync::InterruptTicketMutex;
+use hermit_sync::{InterruptTicketMutex, Lazy};
 use wasi::*;
 use wasmtime::*;
 use zerocopy::IntoBytes;
@@ -24,6 +24,9 @@ fn native_fibonacci(n: u64) -> u64 {
 		_ => native_fibonacci(n - 1) + native_fibonacci(n - 2),
 	}
 }
+
+#[inline(never)]
+fn native_foo() {}
 
 pub fn measure_fibonacci(n: u64) {
 	const RUNS: u64 = 100;
@@ -73,6 +76,7 @@ pub(crate) struct WasmManager {
 
 impl WasmManager {
 	pub fn new(data: &[u8]) -> Self {
+		static MODULE_AND_ARGS: Lazy<Vec<&[u8]>> = Lazy::new(|| vec![b"dummy\0"]);
 		let mut config: Config = Config::new();
 		config.memory_init_cow(false);
 		config.memory_guard_size(8192);
@@ -236,6 +240,122 @@ impl WasmManager {
 			)
 			.unwrap();
 		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"args_get",
+				|mut caller: Caller<'_, _>, argv_ptr: i32, argv_buf_ptr: i32| {
+					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
+						let mut pos: u32 = argv_buf_ptr as u32;
+						for (i, element) in MODULE_AND_ARGS.iter().enumerate() {
+							let _ = mem.write(
+								caller.as_context_mut(),
+								(argv_ptr + (i * size_of::<u32>()) as i32)
+									.try_into()
+									.unwrap(),
+								pos.as_bytes(),
+							);
+
+							let _ = mem.write(
+								caller.as_context_mut(),
+								pos.try_into().unwrap(),
+								element,
+							);
+
+							pos += element.len() as u32;
+						}
+					}
+					ERRNO_SUCCESS.raw() as i32
+				},
+			)
+			.unwrap();
+		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"args_sizes_get",
+				move |mut caller: Caller<'_, _>, number_args_ptr: i32, args_size_ptr: i32| {
+					let nargs: u32 = MODULE_AND_ARGS.len().try_into().unwrap();
+					// Currently, we ignore the arguments
+					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
+						let _ = mem.write(
+							caller.as_context_mut(),
+							number_args_ptr.try_into().unwrap(),
+							nargs.as_bytes(),
+						);
+
+						let nargs_size: u32 = MODULE_AND_ARGS
+							.iter()
+							.fold(0, |acc, arg| acc + arg.len())
+							.try_into()
+							.unwrap();
+						let _ = mem.write(
+							caller.as_context_mut(),
+							args_size_ptr.try_into().unwrap(),
+							nargs_size.as_bytes(),
+						);
+
+						return ERRNO_SUCCESS.raw() as i32;
+					}
+
+					ERRNO_INVAL.raw() as i32
+				},
+			)
+			.unwrap();
+		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"clock_time_get",
+				|mut caller: Caller<'_, _>, clock_id: i32, _precision: i64, timestamp_ptr: i32| {
+					match clock_id {
+						0 => {
+							let usec = crate::arch::kernel::systemtime::now_micros();
+							if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
+								let nanos = usec * 1000;
+								let _ = mem.write(
+									caller.as_context_mut(),
+									timestamp_ptr.try_into().unwrap(),
+									nanos.as_bytes(),
+								);
+
+								return ERRNO_SUCCESS.raw() as i32;
+							}
+
+							ERRNO_INVAL.raw() as i32
+						}
+						1 => {
+							warn!("Unsupported clock_id");
+							ERRNO_INVAL.raw() as i32
+						}
+						_ => ERRNO_INVAL.raw() as i32,
+					}
+				},
+			)
+			.unwrap();
+		linker
+			.func_wrap("wasi_snapshot_preview1", "fd_close", |_fd: i32| {
+				ERRNO_SUCCESS.raw() as i32
+			})
+			.unwrap();
+		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"fd_fdstat_get",
+				|_: i32, _: i32| {
+					warn!("Unsupported function fd_fdstat_get");
+					ERRNO_SUCCESS.raw() as i32
+				},
+			)
+			.unwrap();
+		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"fd_seek",
+				|_: i32, _: i64, _: i32, _: i32| {
+					warn!("Unsupported function fd_seek");
+					ERRNO_SUCCESS.raw() as i32
+				},
+			)
+			.unwrap();
+		linker
 			.func_wrap("wasi_snapshot_preview1", "proc_exit", |_: i32| {
 				error!("Panic in WASM module")
 			})
@@ -298,16 +418,66 @@ async fn wasm_run() {
 pub extern "C" fn sys_load_binary(ptr: *const u8, len: usize) -> i32 {
 	info!("Loading WebAssembly binary...");
 
+	let start = now_micros();
 	let slice = unsafe { core::slice::from_raw_parts(ptr, len) };
 	let wasm_manager = WasmManager::new(slice);
 
 	*WASM_MANAGER.lock() = Some(wasm_manager);
+	let end = now_micros();
+	info!("Time to initiate WASM module {} usec", end - start);
 
 	if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
 		let _ = wasm_manager.call_func::<(), ()>("hello_world", ());
 	}
 
 	spawn(wasm_run());
+
+	0
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_dhrystone() -> i32 {
+	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
+		// And finally we can call the wasm function
+		info!("Call function dhrystone");
+		let _result = wasm_manager.call_func::<(), ()>("_start", ()).unwrap();
+	}
+
+	0
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_foo() -> i32 {
+	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
+		// And finally we can call the wasm function
+		info!("Call function foo");
+		let _result = wasm_manager.call_func::<(), ()>("foo", ()).unwrap();
+
+		const RUNS: u64 = 1000000;
+		let start = now_micros();
+		for _ in 0..RUNS {
+			black_box(wasm_manager.call_func::<(), ()>("foo", ()).unwrap());
+		}
+		let end = now_micros();
+		info!(
+			"Average time to call the WASM function foo: {} nsec",
+			(1000 * (end - start)) / RUNS
+		);
+
+		let start = now_micros();
+		for _ in 0..RUNS {
+			black_box(native_foo());
+		}
+		let end = now_micros();
+
+		info!(
+			"Time to call {} times the function foo: {} nsec",
+			RUNS,
+			1000 * (end - start)
+		);
+	}
 
 	0
 }
