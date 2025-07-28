@@ -182,16 +182,16 @@ pub(crate) fn init() {
 	#[cfg(not(feature = "common-os"))]
 	{
 		// we reserve 10% of the memory for stack allocations
-		#[cfg(not(feature = "mmap"))]
+		#[cfg(not(feature = "mman"))]
 		let stack_reserve: usize = (avail_mem * 10) / 100;
 
 		// At first, we map only a small part into the heap.
 		// Afterwards, we already use the heap and map the rest into
 		// the virtual address space.
 
-		#[cfg(not(feature = "mmap"))]
+		#[cfg(not(feature = "mman"))]
 		let virt_size: usize = (avail_mem - stack_reserve).align_down(LargePageSize::SIZE as usize);
-		#[cfg(feature = "mmap")]
+		#[cfg(feature = "mman")]
 		let virt_size: usize = ((avail_mem * 75) / 100).align_down(LargePageSize::SIZE as usize);
 
 		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
