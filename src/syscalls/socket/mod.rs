@@ -3,14 +3,16 @@
 
 mod addrinfo;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::ffi::{c_char, c_void};
-use core::mem::size_of;
+use core::mem::{self, size_of};
+use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 #[allow(unused_imports)]
 use core::ops::DerefMut;
 
 use cfg_if::cfg_if;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
@@ -36,6 +38,15 @@ pub enum Af {
 	Inet6 = 1,
 	#[cfg(feature = "vsock")]
 	Vsock = 2,
+}
+
+impl From<IpAddr> for Af {
+	fn from(value: IpAddr) -> Self {
+		match value {
+			IpAddr::V4(_) => Self::Inet,
+			IpAddr::V6(_) => Self::Inet6,
+		}
+	}
 }
 
 #[derive(TryFromPrimitive, IntoPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
@@ -107,10 +118,26 @@ pub struct in_addr {
 	pub s_addr: in_addr_t,
 }
 
+impl From<Ipv4Addr> for in_addr {
+	fn from(value: Ipv4Addr) -> Self {
+		Self {
+			s_addr: u32::from_ne_bytes(value.octets()),
+		}
+	}
+}
+
 #[repr(C, align(4))]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct in6_addr {
 	pub s6_addr: [u8; 16],
+}
+
+impl From<Ipv6Addr> for in6_addr {
+	fn from(value: Ipv6Addr) -> Self {
+		Self {
+			s6_addr: value.octets(),
+		}
+	}
 }
 
 #[repr(C)]
@@ -119,6 +146,99 @@ pub struct sockaddr {
 	pub sa_len: u8,
 	pub sa_family: sa_family_t,
 	pub sa_data: [c_char; 14],
+}
+
+#[derive(Clone, Debug)]
+pub enum sockaddrBox {
+	sockaddr(Box<sockaddr>),
+	sockaddr_in(Box<sockaddr_in>),
+	sockaddr_in6(Box<sockaddr_in6>),
+	#[cfg(feature = "vsock")]
+	sockaddr_vm(Box<sockaddr_vm>),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum sockaddrRef<'a> {
+	sockaddr(&'a sockaddr),
+	sockaddr_in(&'a sockaddr_in),
+	sockaddr_in6(&'a sockaddr_in6),
+	#[cfg(feature = "vsock")]
+	sockaddr_vm(&'a sockaddr_vm),
+}
+
+impl sockaddr {
+	pub unsafe fn sa_family(ptr: *const Self) -> Result<Af, TryFromPrimitiveError<Af>> {
+		let sa_family = unsafe { (*ptr).sa_family };
+		Af::try_from(sa_family)
+	}
+
+	pub unsafe fn as_ref(ptr: &*const Self) -> Result<sockaddrRef<'_>, TryFromPrimitiveError<Af>> {
+		let ptr = *ptr;
+		let sa_family = unsafe { Self::sa_family(ptr)? };
+		let ret = match sa_family {
+			Af::Unspec => sockaddrRef::sockaddr(unsafe { &*ptr }),
+			Af::Inet => sockaddrRef::sockaddr_in(unsafe { &*ptr.cast() }),
+			Af::Inet6 => sockaddrRef::sockaddr_in6(unsafe { &*ptr.cast() }),
+			#[cfg(feature = "vsock")]
+			Af::Vsock => sockaddrRef::sockaddr_vm(unsafe { &*ptr.cast() }),
+		};
+		Ok(ret)
+	}
+
+	pub unsafe fn as_box(ptr: *mut Self) -> Result<sockaddrBox, TryFromPrimitiveError<Af>> {
+		let sa_family = unsafe { Self::sa_family(ptr)? };
+		let ret = match sa_family {
+			Af::Unspec => sockaddrBox::sockaddr(unsafe { Box::from_raw(ptr) }),
+			Af::Inet => sockaddrBox::sockaddr_in(unsafe { Box::from_raw(ptr.cast()) }),
+			Af::Inet6 => sockaddrBox::sockaddr_in6(unsafe { Box::from_raw(ptr.cast()) }),
+			#[cfg(feature = "vsock")]
+			Af::Vsock => sockaddrBox::sockaddr_vm(unsafe { Box::from_raw(ptr.cast()) }),
+		};
+		Ok(ret)
+	}
+}
+
+impl sockaddrBox {
+	pub fn into_raw(self) -> *mut sockaddr {
+		match self {
+			sockaddrBox::sockaddr(sockaddr) => Box::into_raw(sockaddr),
+			sockaddrBox::sockaddr_in(sockaddr_in) => Box::into_raw(sockaddr_in).cast(),
+			sockaddrBox::sockaddr_in6(sockaddr_in6) => Box::into_raw(sockaddr_in6).cast(),
+			#[cfg(feature = "vsock")]
+			sockaddrBox::sockaddr_vm(sockaddr_vm) => Box::into_raw(sockaddr_vm).cast(),
+		}
+	}
+
+	pub fn as_ref(&self) -> sockaddrRef<'_> {
+		match self {
+			Self::sockaddr(sockaddr) => sockaddrRef::sockaddr(sockaddr.as_ref()),
+			Self::sockaddr_in(sockaddr_in) => sockaddrRef::sockaddr_in(sockaddr_in.as_ref()),
+			Self::sockaddr_in6(sockaddr_in6) => sockaddrRef::sockaddr_in6(sockaddr_in6.as_ref()),
+			#[cfg(feature = "vsock")]
+			Self::sockaddr_vm(sockaddr_vm) => sockaddrRef::sockaddr_vm(sockaddr_vm.as_ref()),
+		}
+	}
+}
+
+impl From<SocketAddr> for sockaddrBox {
+	fn from(value: SocketAddr) -> Self {
+		match value {
+			SocketAddr::V4(socket_addr_v4) => Self::sockaddr_in(Box::new(socket_addr_v4.into())),
+			SocketAddr::V6(socket_addr_v6) => Self::sockaddr_in6(Box::new(socket_addr_v6.into())),
+		}
+	}
+}
+
+impl sockaddrRef<'_> {
+	pub fn addrlen(self) -> u8 {
+		match self {
+			sockaddrRef::sockaddr(sockaddr) => sockaddr.sa_len,
+			sockaddrRef::sockaddr_in(sockaddr_in) => sockaddr_in.sin_len,
+			sockaddrRef::sockaddr_in6(sockaddr_in6) => sockaddr_in6.sin6_len,
+			#[cfg(feature = "vsock")]
+			sockaddrRef::sockaddr_vm(sockaddr_vm) => sockaddr_vm.svm_len,
+		}
+	}
 }
 
 #[cfg(feature = "vsock")]
@@ -229,6 +349,18 @@ impl From<IpEndpoint> for sockaddr_in {
 	}
 }
 
+impl From<SocketAddrV4> for sockaddr_in {
+	fn from(value: SocketAddrV4) -> Self {
+		Self {
+			sin_len: mem::size_of::<Self>().try_into().unwrap(),
+			sin_family: Af::Inet.into(),
+			sin_port: value.port().to_be(),
+			sin_addr: (*value.ip()).into(),
+			sin_zero: Default::default(),
+		}
+	}
+}
+
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct sockaddr_in6 {
@@ -299,6 +431,19 @@ impl From<IpEndpoint> for sockaddr_in6 {
 				}
 			}
 			IpAddress::Ipv4(_) => panic!("Unable to convert IPv4 address to sockadd_in6"),
+		}
+	}
+}
+
+impl From<SocketAddrV6> for sockaddr_in6 {
+	fn from(value: SocketAddrV6) -> Self {
+		Self {
+			sin6_len: mem::size_of::<Self>().try_into().unwrap(),
+			sin6_family: Af::Inet6.into(),
+			sin6_port: value.port().to_be(),
+			sin6_flowinfo: Default::default(),
+			sin6_addr: (*value.ip()).into(),
+			sin6_scope_id: Default::default(),
 		}
 	}
 }
