@@ -175,15 +175,17 @@ where
 			// allow network interrupts
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			{
-				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
-					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
-						.map(|d| d.total_micros())
-				} else {
-					None
-				};
-				core_scheduler().add_network_timer(
-					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
-				);
+				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+					let delay = if let Ok(nic) = guard.as_nic_mut() {
+						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+							.map(|d| d.total_micros())
+					} else {
+						None
+					};
+					core_scheduler().add_network_timer(
+						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
+					);
+				}
 
 				if let Some(device) = device {
 					device.lock().set_polling_mode(false);
@@ -199,15 +201,17 @@ where
 			// allow network interrupts
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			{
-				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
-					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
-						.map(|d| d.total_micros())
-				} else {
-					None
-				};
-				core_scheduler().add_network_timer(
-					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
-				);
+				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+					let delay = if let Ok(nic) = guard.as_nic_mut() {
+						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+							.map(|d| d.total_micros())
+					} else {
+						None
+					};
+					core_scheduler().add_network_timer(
+						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
+					);
+				}
 
 				if let Some(device) = device {
 					device.lock().set_polling_mode(false);
@@ -219,9 +223,13 @@ where
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		if backoff.is_completed() {
-			let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
-				nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
-					.map(|d| d.total_micros())
+			let delay = if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+				if let Ok(nic) = guard.as_nic_mut() {
+					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+						.map(|d| d.total_micros())
+				} else {
+					None
+				}
 			} else {
 				None
 			};

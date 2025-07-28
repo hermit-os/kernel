@@ -102,11 +102,15 @@ pub(crate) fn now() -> Instant {
 
 #[cfg(feature = "dhcpv4")]
 async fn dhcpv4_run() {
-	let dhcp_handle = NIC.lock().as_nic_mut().unwrap().dhcp_handle;
-
 	future::poll_fn(|cx| {
-		let mut guard = NIC.lock();
+		let Some(mut guard) = NIC.try_lock() else {
+			// FIXME: only wake when progress can be made
+			cx.waker().wake_by_ref();
+			return Poll::Pending;
+		};
+
 		let nic = guard.as_nic_mut().unwrap();
+		let dhcp_handle = nic.dhcp_handle;
 		let socket = nic.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp_handle);
 
 		socket.register_waker(cx.waker());
@@ -199,7 +203,12 @@ async fn network_run() {
 #[cfg(feature = "dns")]
 pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAddress>> {
 	future::poll_fn(|cx| {
-		let mut guard = NIC.lock();
+		let Some(mut guard) = NIC.try_lock() else {
+			// FIXME: only wake when progress can be made
+			cx.waker().wake_by_ref();
+			return Poll::Pending;
+		};
+
 		let nic = guard.as_nic_mut().unwrap();
 		let socket = nic.get_mut_dns_socket()?;
 		match socket.get_query_result(query) {
