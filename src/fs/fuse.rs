@@ -63,6 +63,7 @@ pub(crate) mod ops {
 	use alloc::boxed::Box;
 	use alloc::ffi::CString;
 
+	use fuse_abi::linux;
 	use fuse_abi::linux::*;
 
 	use super::Cmd;
@@ -284,18 +285,18 @@ pub(crate) mod ops {
 	bitflags! {
 		#[derive(Debug, Copy, Clone, Default)]
 		pub struct SetAttrValidFields: u32 {
-			const FATTR_MODE = 1 << 0;
-			const FATTR_UID = 1 << 1;
-			const FATTR_GID = 1 << 2;
-			const FATTR_SIZE = 1 << 3;
-			const FATTR_ATIME = 1 << 4;
-			const FATTR_MTIME = 1 << 5;
-			const FATTR_FH = 1 << 6;
-			const FATTR_ATIME_NOW = 1 << 7;
-			const FATTR_MTIME_NOW = 1 << 8;
-			const FATTR_LOCKOWNER = 1 << 9;
-			const FATTR_CTIME = 1 << 10;
-			const FATTR_KILL_SUIDGID = 1 << 11;
+			const FATTR_MODE = linux::FATTR_MODE;
+			const FATTR_UID = linux::FATTR_UID;
+			const FATTR_GID = linux::FATTR_GID;
+			const FATTR_SIZE = linux::FATTR_SIZE;
+			const FATTR_ATIME = linux::FATTR_ATIME;
+			const FATTR_MTIME = linux::FATTR_MTIME;
+			const FATTR_FH = linux::FATTR_FH;
+			const FATTR_ATIME_NOW = linux::FATTR_ATIME_NOW;
+			const FATTR_MTIME_NOW = linux::FATTR_MTIME_NOW;
+			const FATTR_LOCKOWNER = linux::FATTR_LOCKOWNER;
+			const FATTR_CTIME = linux::FATTR_CTIME;
+			const FATTR_KILL_SUIDGID = linux::FATTR_KILL_SUIDGID;
 		}
 	}
 
