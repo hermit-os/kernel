@@ -12,7 +12,9 @@ pub mod error {
 	#[cfg(feature = "fuse")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(
+		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
+		feature = "virtio-net",
 		any(feature = "tcp", feature = "udp")
 	))]
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
@@ -34,7 +36,9 @@ pub mod error {
 		NoNotifCfg(u16),
 		DevNotSupported(u16),
 		#[cfg(all(
+			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
+			feature = "virtio-net",
 			any(feature = "tcp", feature = "udp")
 		))]
 		NetDriver(VirtioNetError),
@@ -91,7 +95,9 @@ pub mod error {
 					write!(f, "Device with id {id:#x} not supported.")
 				}
 				#[cfg(all(
+					not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 					not(all(target_arch = "x86_64", feature = "rtl8139")),
+					feature = "virtio-net",
 					any(feature = "tcp", feature = "udp")
 				))]
 				VirtioError::NetDriver(net_error) => match net_error {
