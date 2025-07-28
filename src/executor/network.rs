@@ -182,7 +182,7 @@ async fn dhcpv4_run() {
 					nic.dns_handle = None;
 				}
 			}
-		};
+		}
 
 		Poll::<()>::Pending
 	})
@@ -229,7 +229,7 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 					ips.push(*x);
 				}
 
-				Poll::Ready(Ok(ips))
+					Poll::Ready(Ok(ips))
 			}
 			Err(GetQueryResultError::Pending) => {
 				socket.register_query_waker(query, cx.waker());
