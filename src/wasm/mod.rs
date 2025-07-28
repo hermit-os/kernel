@@ -1,5 +1,8 @@
+use alloc::borrow::ToOwned;
 use alloc::collections::VecDeque;
+use alloc::string::String;
 use alloc::vec::Vec;
+use core::ffi::CStr;
 use core::future;
 use core::hint::black_box;
 use core::mem::MaybeUninit;
@@ -11,7 +14,7 @@ use wasmtime::*;
 use zerocopy::IntoBytes;
 
 use crate::executor::{WakerRegistration, spawn};
-use crate::fd;
+use crate::fd::{self, remove_object};
 use crate::kernel::systemtime::now_micros;
 
 mod capi;
@@ -44,14 +47,47 @@ pub fn measure_fibonacci(n: u64) {
 	);
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum Descriptor {
+	None,
+	Stdin,
+	Stdout,
+	Stderr,
+	Directory(String),
+	RawFd(fd::FileDescriptor),
+}
+
+impl Descriptor {
+	#[inline]
+	pub fn is_none(&self) -> bool {
+		*self == Self::None
+	}
+}
+
+bitflags! {
+	/// Options for opening files
+	#[derive(Debug, Copy, Clone, Default)]
+	pub(crate) struct Oflags: i32 {
+		/// Create file if it does not exist.
+		const OFLAGS_CREAT = 1 << 0;
+		/// Fail if not a directory.
+		const OFLAGS_DIRECTORY = 1 << 1;
+		/// Fail if file already exists.
+		const OFLAGS_EXCL = 1 << 2;
+		/// Truncate file to size 0.
+		const OFLAGS_TRUNC = 1 << 3;
+	}
+}
+
 pub(crate) static WASM_MANAGER: InterruptTicketMutex<Option<WasmManager>> =
 	InterruptTicketMutex::new(None);
 pub(crate) static INPUT: InterruptTicketMutex<VecDeque<Vec<u8>>> =
 	InterruptTicketMutex::new(VecDeque::new());
 static OUTPUT: InterruptTicketMutex<WasmStdout> = InterruptTicketMutex::new(WasmStdout::new());
+static FD: InterruptTicketMutex<Vec<Descriptor>> = InterruptTicketMutex::new(Vec::new());
 
 struct WasmStdout {
-	pub data: VecDeque<Vec<u8>>,
+	pub data: VecDeque<(Descriptor, Vec<u8>)>,
 	pub waker: WakerRegistration,
 }
 
@@ -63,8 +99,8 @@ impl WasmStdout {
 		}
 	}
 
-	pub fn write(&mut self, buf: &[u8]) {
-		self.data.push_back(buf.to_vec());
+	pub fn write(&mut self, desc: &Descriptor, buf: &[u8]) {
+		self.data.push_back((desc.clone(), buf.to_vec()));
 		self.waker.wake();
 	}
 }
@@ -90,6 +126,80 @@ impl WasmManager {
 			.func_wrap("env", "now", || {
 				crate::arch::kernel::systemtime::now_micros()
 			})
+			.unwrap();
+		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"path_open",
+				|mut caller: Caller<'_, _>,
+				 _fd: i32,
+				 _dirflags: i32,
+				 path_ptr: i32,
+				 path_len: i32,
+				 oflags: i32,
+				 _fs_rights_base: Rights,
+				 _fs_rights_inheriting: Rights,
+				 _fdflags: i32,
+				 fd_ptr: i32| {
+					let oflags = Oflags::from_bits(oflags).unwrap();
+					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
+						let mut path = vec![0u8; path_len.try_into().unwrap()];
+
+						let _ = mem.read(
+							caller.as_context_mut(),
+							path_ptr.try_into().unwrap(),
+							path.as_mut_bytes(),
+						);
+						let path = "/".to_owned() + str::from_utf8(&path).unwrap();
+
+						let mut flags = fd::OpenOption::empty();
+						if oflags.contains(Oflags::OFLAGS_CREAT) {
+							flags |= fd::OpenOption::O_CREAT;
+						}
+						if oflags.contains(Oflags::OFLAGS_TRUNC) {
+							flags |= fd::OpenOption::O_TRUNC;
+						}
+						flags |= fd::OpenOption::O_RDWR;
+
+						let mode = fd::AccessPermission::from_bits(0).unwrap();
+						let mut c_path = vec![0u8; path.len() + 1];
+						c_path[..path.len()].copy_from_slice(path.as_bytes());
+						let path = CStr::from_bytes_until_nul(&c_path)
+							.unwrap()
+							.to_str()
+							.unwrap();
+						{
+							let raw_fd = crate::fs::open(path, flags, mode).unwrap();
+							let mut guard = FD.lock();
+							for (i, entry) in guard.iter_mut().enumerate() {
+								if entry.is_none() {
+									*entry = Descriptor::RawFd(raw_fd);
+									let _ = mem.write(
+										caller.as_context_mut(),
+										fd_ptr.try_into().unwrap(),
+										i.as_bytes(),
+									);
+
+									guard.push(Descriptor::RawFd(raw_fd));
+
+									return ERRNO_SUCCESS.raw() as i32;
+								}
+							}
+
+							let new_fd: i32 = (guard.len() - 1).try_into().unwrap();
+							let _ = mem.write(
+								caller.as_context_mut(),
+								fd_ptr.try_into().unwrap(),
+								new_fd.as_bytes(),
+							);
+						}
+
+						return ERRNO_SUCCESS.raw() as i32;
+					}
+
+					ERRNO_INVAL.raw() as i32
+				},
+			)
 			.unwrap();
 		linker
 			.func_wrap(
@@ -148,10 +258,17 @@ impl WasmManager {
 				"wasi_snapshot_preview1",
 				"fd_write",
 				|mut caller: Caller<'_, u32>,
-				 _fd: i32,
+				 fd: i32,
 				 iovs_ptr: i32,
 				 iovs_len: i32,
 				 nwritten_ptr: i32| {
+					let desc = match fd {
+						fd::STDIN_FILENO => Descriptor::Stdin,
+						fd::STDOUT_FILENO => Descriptor::Stdout,
+						fd::STDERR_FILENO => Descriptor::Stderr,
+						_ => Descriptor::RawFd(fd),
+					};
+
 					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
 						let mut iovs = vec![0i32; (2 * iovs_len).try_into().unwrap()];
 						let _ = mem.read(
@@ -182,7 +299,9 @@ impl WasmManager {
 								iovs[i].try_into().unwrap(),
 								unsafe { data.assume_init_mut() },
 							);
-							OUTPUT.lock().write(unsafe { data.assume_init_mut() });
+							OUTPUT
+								.lock()
+								.write(&desc, unsafe { data.assume_init_mut() });
 							nwritten_bytes += len;
 
 							i += 2;
@@ -303,6 +422,43 @@ impl WasmManager {
 		linker
 			.func_wrap(
 				"wasi_snapshot_preview1",
+				"fd_prestat_get",
+				|mut caller: Caller<'_, _>, fd: i32, prestat_ptr: i32| {
+					let guard = FD.lock();
+					if fd < guard.len().try_into().unwrap()
+						&& let Some(Extern::Memory(mem)) = caller.get_export("memory")
+						&& let Descriptor::Directory(name) = &guard[fd as usize]
+					{
+						let stat = Prestat {
+							tag: PREOPENTYPE_DIR.raw(),
+							u: PrestatU {
+								dir: PrestatDir {
+									pr_name_len: name.len(),
+								},
+							},
+						};
+
+						let _ = mem.write(
+							caller.as_context_mut(),
+							prestat_ptr.try_into().unwrap(),
+							unsafe {
+								core::slice::from_raw_parts(
+									(&stat as *const _) as *const u8,
+									size_of::<Prestat>(),
+								)
+							},
+						);
+
+						return ERRNO_SUCCESS.raw() as i32;
+					}
+
+					ERRNO_BADF.raw() as i32
+				},
+			)
+			.unwrap();
+		linker
+			.func_wrap(
+				"wasi_snapshot_preview1",
 				"clock_time_get",
 				|mut caller: Caller<'_, _>, clock_id: i32, _precision: i64, timestamp_ptr: i32| {
 					match clock_id {
@@ -331,7 +487,46 @@ impl WasmManager {
 			)
 			.unwrap();
 		linker
-			.func_wrap("wasi_snapshot_preview1", "fd_close", |_fd: i32| {
+			.func_wrap(
+				"wasi_snapshot_preview1",
+				"fd_prestat_dir_name",
+				|mut caller: Caller<'_, _>, fd: i32, path_ptr: i32, path_len: i32| {
+					let guard = FD.lock();
+					if fd < guard.len().try_into().unwrap()
+						&& let Descriptor::Directory(path) = &guard[fd as usize]
+					{
+						if let Some(Extern::Memory(mem)) = caller.get_export(
+							"memory
+",
+						) {
+							if path_len < path.len().try_into().unwrap() {
+								return ERRNO_INVAL.raw() as i32;
+							}
+
+							let _ = mem.write(
+								caller.as_context_mut(),
+								path_ptr.try_into().unwrap(),
+								path.as_bytes(),
+							);
+						}
+
+						return ERRNO_SUCCESS.raw() as i32;
+					}
+
+					ERRNO_BADF.raw() as i32
+				},
+			)
+			.unwrap();
+		linker
+			.func_wrap("wasi_snapshot_preview1", "fd_close", |fd: i32| {
+				let mut guard = FD.lock();
+				if fd < guard.len().try_into().unwrap()
+					&& let Descriptor::RawFd(os_fd) = guard[fd as usize]
+				{
+					let _obj = remove_object(os_fd);
+					guard[fd as usize] = Descriptor::None;
+				}
+
 				ERRNO_SUCCESS.raw() as i32
 			})
 			.unwrap();
@@ -382,21 +577,20 @@ impl WasmManager {
 	}
 }
 
-#[hermit_macro::system]
-#[unsafe(no_mangle)]
-pub extern "C" fn sys_unload_binary() -> i32 {
-	*WASM_MANAGER.lock() = None;
-
-	0
-}
-
 async fn wasm_run() {
 	loop {
-		let obj = crate::core_scheduler()
-			.get_object(fd::STDOUT_FILENO)
-			.unwrap();
+		while let Some((fd, data)) = OUTPUT.lock().data.pop_front() {
+			let obj = match fd {
+				Descriptor::Stdout => crate::core_scheduler()
+					.get_object(fd::STDOUT_FILENO)
+					.unwrap(),
+				Descriptor::Stderr => crate::core_scheduler()
+					.get_object(fd::STDERR_FILENO)
+					.unwrap(),
+				Descriptor::RawFd(raw_fd) => crate::core_scheduler().get_object(raw_fd).unwrap(),
+				_ => panic!("Unsuppted {fd:?}"),
+			};
 
-		while let Some(data) = OUTPUT.lock().data.pop_front() {
 			obj.write(&data).await.unwrap();
 		}
 
@@ -426,11 +620,29 @@ pub extern "C" fn sys_load_binary(ptr: *const u8, len: usize) -> i32 {
 	let end = now_micros();
 	info!("Time to initiate WASM module {} usec", end - start);
 
-	if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
-		let _ = wasm_manager.call_func::<(), ()>("hello_world", ());
+	{
+		let mut guard = FD.lock();
+		guard.push(Descriptor::Stdin);
+		guard.push(Descriptor::Stdout);
+		guard.push(Descriptor::Stderr);
+		guard.push(Descriptor::Directory(String::from("tmp")));
+		guard.push(Descriptor::Directory(String::from("root")));
 	}
 
+	/*if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
+		let _ = wasm_manager.call_func::<(), ()>("hello_world", ());
+	}*/
+
 	spawn(wasm_run());
+
+	0
+}
+
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_unload_binary() -> i32 {
+	*WASM_MANAGER.lock() = None;
+	FD.lock().clear();
 
 	0
 }
