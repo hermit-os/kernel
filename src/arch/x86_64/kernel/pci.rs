@@ -102,6 +102,10 @@ pub(crate) fn init() {
 }
 
 fn enumerate_devices(bus_start: u8, bus_end: u8, access: PciConfigRegion) {
+	debug!(
+		"Enumerating PCI devices on buses {bus_start}:{bus_end} using configuration accessor {access:?}"
+	);
+
 	// Hermit only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.
 	// We also limit scanning to the first 32 buses.
@@ -140,6 +144,13 @@ mod pcie {
 		if start_addr == end_addr {
 			return false;
 		}
+
+		debug!(
+			"Found MCFG ACPI table at {:p}:{:p} (should contain {} entries)",
+			start_addr,
+			end_addr,
+			unsafe { end_addr.offset_from(start_addr) }
+		);
 
 		while start_addr < end_addr {
 			unsafe {
@@ -210,6 +221,10 @@ mod pcie {
 
 	fn init_pcie_bus(bus_entry: McfgTableEntry) {
 		if bus_entry.start_pci_bus > PCI_MAX_BUS_NUMBER {
+			debug!(
+				"Skipping PCI bus {}: is higher than maximum number allowed ({PCI_MAX_BUS_NUMBER})",
+				bus_entry.start_pci_bus
+			);
 			return;
 		}
 
@@ -218,6 +233,7 @@ mod pcie {
 		} else {
 			bus_entry.end_pci_bus
 		};
+
 		super::enumerate_devices(
 			bus_entry.start_pci_bus,
 			end,
