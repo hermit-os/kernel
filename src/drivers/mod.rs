@@ -6,7 +6,7 @@ pub mod console;
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
@@ -14,8 +14,7 @@ pub mod pci;
 	all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
-		feature = "virtio-net",
-		any(feature = "tcp", feature = "udp"),
+		feature = "virtio-net"
 	),
 	feature = "fuse",
 	feature = "vsock",
@@ -46,8 +45,7 @@ pub mod error {
 		all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
-			feature = "virtio-net",
-			any(feature = "tcp", feature = "udp"),
+			feature = "virtio-net"
 		),
 		feature = "fuse",
 		feature = "vsock",
@@ -56,14 +54,9 @@ pub mod error {
 	use crate::drivers::virtio::error::VirtioError;
 
 	#[cfg(any(
-		all(
-			any(
-				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-				all(target_arch = "x86_64", feature = "rtl8139"),
-				feature = "virtio-net",
-			),
-			any(feature = "tcp", feature = "udp"),
-		),
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
 		feature = "console"
@@ -75,7 +68,6 @@ pub mod error {
 				not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 				not(all(target_arch = "x86_64", feature = "rtl8139")),
 				feature = "virtio-net",
-				any(feature = "tcp", feature = "udp"),
 			),
 			feature = "fuse",
 			feature = "vsock",
@@ -93,7 +85,6 @@ pub mod error {
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
 			feature = "virtio-net",
-			any(feature = "tcp", feature = "udp"),
 		),
 		feature = "fuse",
 		feature = "vsock",
@@ -120,14 +111,9 @@ pub mod error {
 	}
 
 	#[cfg(any(
-		all(
-			any(
-				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-				all(target_arch = "x86_64", feature = "rtl8139"),
-				feature = "virtio-net",
-			),
-			any(feature = "tcp", feature = "udp"),
-		),
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
 		feature = "console"
@@ -145,7 +131,6 @@ pub mod error {
 						)),
 						not(all(target_arch = "x86_64", feature = "rtl8139")),
 						feature = "virtio-net",
-						any(feature = "tcp", feature = "udp"),
 					),
 					feature = "fuse",
 					feature = "vsock",
@@ -181,20 +166,12 @@ pub(crate) fn init() {
 	// Initialize PCI Drivers
 	#[cfg(feature = "pci")]
 	crate::drivers::pci::init();
-	#[cfg(all(
-		not(feature = "pci"),
-		target_arch = "x86_64",
-		feature = "virtio-net",
-		any(feature = "tcp", feature = "udp")
-	))]
+	#[cfg(all(not(feature = "pci"), target_arch = "x86_64", feature = "virtio-net"))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
 	#[cfg(all(
 		not(feature = "pci"),
 		target_arch = "aarch64",
-		any(
-			feature = "console",
-			all(feature = "virtio-net", any(feature = "tcp", feature = "udp"))
-		)
+		any(feature = "console", feature = "virtio-net")
 	))]
 	crate::arch::aarch64::kernel::mmio::init_drivers();
 

@@ -27,13 +27,11 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
-	feature = "virtio-net",
-	any(feature = "tcp", feature = "udp")
+	feature = "virtio-net"
 ))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
 	all(
-		any(feature = "tcp", feature = "udp"),
 		feature = "virtio-net",
 		not(all(target_arch = "x86_64", feature = "rtl8139"))
 	),
@@ -44,7 +42,6 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
 	all(
-		any(feature = "tcp", feature = "udp"),
 		feature = "virtio-net",
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 	),
@@ -57,12 +54,9 @@ use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
-#[cfg(all(
-	any(feature = "tcp", feature = "udp"),
-	any(
-		all(target_arch = "x86_64", feature = "rtl8139"),
-		feature = "virtio-net",
-	)
+#[cfg(any(
+	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "virtio-net",
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -352,28 +346,31 @@ pub(crate) enum PciDriver {
 impl PciDriver {
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
-		#[allow(unreachable_patterns)]
-		match self {
-			Self::VirtioConsole(drv) => Some(drv),
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioConsole(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 
 	#[cfg(feature = "vsock")]
 	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
-		#[allow(unreachable_patterns)]
-		match self {
-			Self::VirtioVsock(drv) => Some(drv),
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioVsock(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 
 	#[cfg(feature = "fuse")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
-		match self {
-			Self::VirtioFs(drv) => Some(drv),
-			#[allow(unreachable_patterns)]
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioFs(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 
@@ -451,12 +448,9 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		}
 	}
 
-	#[cfg(all(
-		any(feature = "tcp", feature = "udp"),
-		any(
-			all(target_arch = "x86_64", feature = "rtl8139"),
-			feature = "virtio-net",
-		)
+	#[cfg(any(
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
 	))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
 		handlers
@@ -471,15 +465,10 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 #[cfg(all(
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	feature = "virtio-net",
-	any(feature = "tcp", feature = "udp")
 ))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
-#[cfg(all(
-	target_arch = "x86_64",
-	feature = "rtl8139",
-	any(feature = "tcp", feature = "udp")
-))]
+#[cfg(all(target_arch = "x86_64", feature = "rtl8139",))]
 pub(crate) type NetworkDevice = RTL8139Driver;
 
 #[cfg(feature = "console")]
@@ -520,7 +509,6 @@ pub(crate) fn init() {
 
 			#[cfg(any(
 				all(
-					any(feature = "tcp", feature = "udp"),
 					feature = "virtio-net",
 					not(all(target_arch = "x86_64", feature = "rtl8139"))
 				),
@@ -532,7 +520,6 @@ pub(crate) fn init() {
 				#[cfg(all(
 					not(all(target_arch = "x86_64", feature = "rtl8139")),
 					feature = "virtio-net",
-					any(feature = "tcp", feature = "udp")
 				))]
 				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
 

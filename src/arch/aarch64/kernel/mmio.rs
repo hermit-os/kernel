@@ -3,7 +3,9 @@ use core::ptr::NonNull;
 
 use align_address::Align;
 use arm_gic::{IntId, Trigger};
-use hermit_sync::{InterruptTicketMutex, without_interrupts};
+#[cfg(feature = "console")]
+use hermit_sync::InterruptTicketMutex;
+use hermit_sync::without_interrupts;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
@@ -15,23 +17,17 @@ use crate::console::IoDevice;
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioUART;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
-		feature = "virtio-net",
-	),
-	any(feature = "tcp", feature = "udp")
-))]
+#[cfg(feature = "virtio-net")]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::PhysAddr;
 
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
+#[non_exhaustive]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
@@ -40,19 +36,21 @@ pub(crate) enum MmioDriver {
 impl MmioDriver {
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
-		match self {
-			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioConsole(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 }
 
+#[cfg(feature = "console")]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "console")]
@@ -125,7 +123,7 @@ pub fn init_drivers() {
 							let cpu_id: usize = 0;
 
 							match id {
-								#[cfg(any(feature = "tcp", feature = "udp"))]
+								#[cfg(feature = "virtio-net")]
 								virtio::Id::Net => {
 									debug!(
 										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
