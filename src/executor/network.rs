@@ -33,8 +33,19 @@ use crate::scheduler::PerCoreSchedulerExt;
 
 pub(crate) enum NetworkState<'a> {
 	Missing,
+	// Never constructed if the kernel is configured for the loopback driver.
+	#[allow(dead_code)]
 	InitializationFailed,
 	Initialized(Box<NetworkInterface<'a>>),
+}
+
+#[cfg(any(
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "virtio-net",
+))]
+pub(crate) fn network_handler() {
+	NIC.lock().as_nic_mut().unwrap().handle_interrupt();
 }
 
 impl<'a> NetworkState<'a> {
@@ -324,5 +335,24 @@ impl<'a> NetworkInterface<'a> {
 	pub(crate) fn get_mut_dns_socket(&mut self) -> io::Result<&mut dns::Socket<'a>> {
 		let dns_handle = self.dns_handle.ok_or(Errno::Inval)?;
 		Ok(self.sockets.get_mut(dns_handle))
+	}
+
+	#[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
+	))]
+	fn handle_interrupt(&mut self) {
+		#[cfg(feature = "trace")]
+		self.device.get_mut().handle_interrupt();
+		#[cfg(not(feature = "trace"))]
+		self.device.handle_interrupt();
+	}
+
+	pub(crate) fn set_polling_mode(&mut self, value: bool) {
+		#[cfg(feature = "trace")]
+		self.device.get_mut().set_polling_mode(value);
+		#[cfg(not(feature = "trace"))]
+		self.device.set_polling_mode(value);
 	}
 }

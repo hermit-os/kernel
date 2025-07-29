@@ -20,8 +20,6 @@ use hermit_sync::without_interrupts;
 use smoltcp::time::Instant;
 
 use crate::arch::core_local::*;
-#[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::{NetworkDriver, get_network_driver};
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;
@@ -153,9 +151,6 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result
 where
 	F: Future<Output = io::Result<T>>,
 {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let device = get_network_driver();
-
 	let backoff = Backoff::new();
 	let start = crate::arch::kernel::systemtime::now_micros();
 	let task_notify = Arc::new(TaskNotify::new());
@@ -187,8 +182,8 @@ where
 					);
 				}
 
-				if let Some(device) = device {
-					device.lock().set_polling_mode(false);
+				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
+					device.set_polling_mode(false);
 				}
 			}
 
@@ -213,8 +208,8 @@ where
 					);
 				}
 
-				if let Some(device) = device {
-					device.lock().set_polling_mode(false);
+				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
+					device.set_polling_mode(false);
 				}
 			}
 
@@ -242,16 +237,16 @@ where
 					timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
 
 				// allow network interrupts
-				if let Some(device) = device {
-					device.lock().set_polling_mode(false);
+				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
+					device.set_polling_mode(false);
 				}
 
 				// switch to another task
 				task_notify.wait(wakeup_time);
 
 				// restore default values
-				if let Some(device) = device {
-					device.lock().set_polling_mode(true);
+				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
+					device.set_polling_mode(true);
 				}
 
 				backoff.reset();

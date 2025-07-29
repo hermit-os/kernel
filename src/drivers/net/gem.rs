@@ -318,7 +318,7 @@ impl NetworkDriver for GEMDriver {
 		self.next_rx_index().is_some()
 	}
 
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
 		debug!("receive_rx_buffer");
 
 		// Scan the buffer descriptor queue starting from rx_count
@@ -342,7 +342,10 @@ impl NetworkDriver for GEMDriver {
 				};
 				trace!("BUFFER: {buffer:x?}");
 				self.rx_buffer_consumed(index as usize);
-				Some((RxToken::new(buffer.to_vec_in(DeviceAlloc)), TxToken::new()))
+				Some((
+					RxToken::new(buffer.to_vec_in(DeviceAlloc)),
+					TxToken::new(self),
+				))
 			}
 			None => None,
 		}

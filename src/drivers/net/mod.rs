@@ -33,7 +33,7 @@ pub(crate) trait NetworkDriver: Driver {
 	/// Returns the current MTU of the device.
 	fn get_mtu(&self) -> u16;
 	/// Get buffer with the received packet
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)>;
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)>;
 	/// Send packet with the size `len`
 	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
 	where
@@ -81,7 +81,7 @@ cfg_if::cfg_if! {
 			feature = "virtio-net",
 		)
 	))] {
-		pub(crate) use crate::arch::kernel::mmio::get_network_driver;
+		pub(crate) use crate::arch::kernel::mmio::NetworkDevice;
 	} else if #[cfg(all(
 		feature = "pci",
 		any(
@@ -89,12 +89,8 @@ cfg_if::cfg_if! {
 			feature = "virtio-net",
 		)
 	))] {
-		pub(crate) use crate::drivers::pci::get_network_driver;
+		pub(crate) use crate::drivers::pci::NetworkDevice;
 	} else {
-		use hermit_sync::InterruptTicketMutex;
-
-		pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<loopback::LoopbackDriver>> {
-			Some(&loopback::LOOPBACK)
-		}
+		pub(crate) use loopback::NetworkDevice;
 	}
 }
