@@ -15,7 +15,7 @@ use crate::console::IoDevice;
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioUART;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 use crate::init_cell::InitCell;
@@ -23,29 +23,32 @@ use crate::mm::PhysAddr;
 
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
+#[non_exhaustive]
 pub(crate) enum MmioDriver {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(feature = "virtio-net")]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
 	#[cfg(feature = "console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(feature = "virtio-net")]
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
-		match self {
-			Self::VirtioNet(drv) => Some(drv),
-			#[cfg(feature = "console")]
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioNet(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
-		match self {
-			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioConsole(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 }
@@ -54,7 +57,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
 	MMIO_DRIVERS
 		.get()?
@@ -132,7 +135,7 @@ pub fn init_drivers() {
 							let cpu_id: usize = 0;
 
 							match id {
-								#[cfg(any(feature = "tcp", feature = "udp"))]
+								#[cfg(feature = "virtio-net")]
 								virtio::Id::Net => {
 									debug!(
 										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"

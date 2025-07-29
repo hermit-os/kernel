@@ -1,6 +1,6 @@
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 pub(crate) mod device;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 pub(crate) mod network;
 pub(crate) mod task;
 #[cfg(feature = "vsock")]
@@ -16,16 +16,16 @@ use core::time::Duration;
 
 use crossbeam_utils::Backoff;
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 use smoltcp::time::Instant;
 
 use crate::arch::core_local::*;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 use crate::drivers::net::{NetworkDriver, get_network_driver};
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::synch::futex::*;
 
@@ -113,7 +113,7 @@ pub(crate) fn run() {
 
 /// Spawns a future on the executor.
 #[cfg_attr(
-	not(any(feature = "shell", feature = "tcp", feature = "udp", feature = "vsock")),
+	not(any(feature = "shell", feature = "net", feature = "vsock")),
 	expect(dead_code)
 )]
 pub(crate) fn spawn<F>(future: F)
@@ -124,7 +124,7 @@ where
 }
 
 pub fn init() {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(feature = "net")]
 	crate::executor::network::init();
 	#[cfg(feature = "vsock")]
 	crate::executor::vsock::init();
@@ -153,7 +153,7 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result
 where
 	F: Future<Output = io::Result<T>>,
 {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(feature = "net")]
 	let device = get_network_driver();
 
 	let backoff = Backoff::new();
@@ -173,7 +173,7 @@ where
 		let now = crate::arch::kernel::systemtime::now_micros();
 		if let Poll::Ready(t) = result {
 			// allow network interrupts
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			{
 				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
 					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
@@ -197,7 +197,7 @@ where
 			&& Duration::from_micros(now - start) >= duration
 		{
 			// allow network interrupts
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			{
 				let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
 					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
@@ -217,7 +217,7 @@ where
 			return Err(Errno::Time);
 		}
 
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(feature = "net")]
 		if backoff.is_completed() {
 			let delay = if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
 				nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
@@ -252,7 +252,7 @@ where
 			backoff.snooze();
 		}
 
-		#[cfg(not(any(feature = "tcp", feature = "udp")))]
+		#[cfg(not(feature = "net"))]
 		{
 			if backoff.is_completed() {
 				let wakeup_time =
