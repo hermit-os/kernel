@@ -251,6 +251,9 @@ jobs:
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package loopback qemu ${{ matrix.flags }}
+        env:
+          HERMIT_IP: 127.0.0.1
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features firecracker --sudo
         if: matrix.arch == 'x86_64'
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features --smp 4 firecracker --sudo
