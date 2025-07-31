@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"macro":["map_field"],"mod":["access"],"struct":["VolatilePtr","VolatileRef"]};
