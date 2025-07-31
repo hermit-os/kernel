@@ -294,7 +294,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 		result
 	}
 
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
 		let mut buffer_tkn = self.inner.recv_vqs.get_next()?;
 		// Safety: any buffers that do not start with a `Hdr` must have been consumed by the previous call
 		// to this function.
@@ -346,7 +346,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 				.unwrap();
 		}
 
-		Some((RxToken::new(combined_packets), TxToken::new()))
+		Some((RxToken::new(combined_packets), TxToken::new(self)))
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
