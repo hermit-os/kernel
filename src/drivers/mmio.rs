@@ -1,12 +1,7 @@
 #[cfg(any(
 	feature = "console",
-	all(
-		any(
-			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-			feature = "virtio-net",
-		),
-		any(feature = "tcp", feature = "udp")
-	)
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "virtio-net",
 ))]
 use alloc::collections::VecDeque;
 
@@ -15,31 +10,20 @@ use hashbrown::HashMap;
 
 #[cfg(feature = "console")]
 pub(crate) use crate::arch::kernel::mmio::get_console_driver;
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		feature = "virtio-net",
-	),
-	any(feature = "tcp", feature = "udp")
+#[cfg(any(
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "virtio-net",
 ))]
 pub(crate) use crate::arch::kernel::mmio::get_network_driver;
 #[cfg(any(
 	feature = "console",
-	all(
-		any(
-			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-			feature = "virtio-net",
-		),
-		any(feature = "tcp", feature = "udp")
-	)
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "virtio-net",
 ))]
 use crate::drivers::Driver;
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		feature = "virtio-net",
-	),
-	any(feature = "tcp", feature = "udp")
+#[cfg(any(
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "virtio-net",
 ))]
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
@@ -50,12 +34,9 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
 
-	#[cfg(all(
-		any(
-			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-			feature = "virtio-net",
-		),
-		any(feature = "tcp", feature = "udp")
+	#[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "virtio-net",
 	))]
 	if let Some(drv) = get_network_driver() {
 		fn network_handler() {

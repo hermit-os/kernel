@@ -20,7 +20,7 @@ use crate::drivers::InterruptLine;
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
 
@@ -364,7 +364,7 @@ impl IsrStatus {
 }
 
 pub(crate) enum VirtioDriver {
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(feature = "virtio-net")]
 	Network(VirtioNetDriver),
 	#[cfg(feature = "console")]
 	Console(Box<VirtioConsoleDriver>),
@@ -386,7 +386,7 @@ pub(crate) fn init_device(
 
 	// Verify the device-ID to find the network card
 	match registers.as_ptr().device_id().read() {
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(feature = "virtio-net")]
 		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
