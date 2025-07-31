@@ -11,15 +11,17 @@ env:
 
 jobs:
   benchmark:
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, ${{ matrix.runner-tag }}]
 
     strategy:
       matrix:
         include:
           - benchmark-file: kernel/.github/benchmarks/general.yaml
             benchmark-matrix-name: General
+            runner-tag: benchmark1
           - benchmark-file: kernel/.github/benchmarks/misc.yaml
             benchmark-matrix-name: Misc
+            runner-tag: benchmark2
 
     steps:
       - name: Checkout hermit-rs
