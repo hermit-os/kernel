@@ -141,6 +141,7 @@ time = { version = "0.3", default-features = false }
 volatile = "0.6"
 zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.3"
+bitfield-struct = "0.11.0"
 
 [dependencies.smoltcp]
 version = "0.12"

@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use core::ffi::c_void;
 use core::future;
 use core::mem::MaybeUninit;
 use core::task::Poll;
@@ -292,5 +293,9 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
+	}
+
+	fn handle_ioctl(&self, cmd: crate::fs::ioctl::IoCtlCall, argp: *mut c_void) -> io::Result<()> {
+		super::socket_handle_ioctl(self, cmd, argp)
 	}
 }
