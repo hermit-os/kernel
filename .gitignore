@@ -1,1 +1,5 @@
 /target
+/opensbi-*-rv-bin
+/hermit-loader-*
+/shared
+/vhostqemu\.pid
