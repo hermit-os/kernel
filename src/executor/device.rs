@@ -1,60 +1,61 @@
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
 
+use cfg_if::cfg_if;
 use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "trace")]
 use smoltcp::phy::Tracer;
-use smoltcp::phy::{self, ChecksumCapabilities, Device, DeviceCapabilities, Medium};
+use smoltcp::phy::{Device, Medium};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 #[cfg(all(feature = "dns", not(feature = "dhcpv4")))]
 use smoltcp::socket::dns;
-use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
-use crate::drivers::net::{NetworkDriver, get_network_driver};
-use crate::mm::device_alloc::DeviceAlloc;
+use crate::drivers::net::NetworkDriver;
 
-/// Data type to determine the mac address
-#[derive(Debug, Clone)]
-#[repr(C)]
-pub(crate) struct HermitNet {
-	mtu: u16,
-	checksums: ChecksumCapabilities,
-}
+cfg_if! {
+	if #[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
+	))] {
+		use hermit_sync::SpinMutex;
+		use crate::drivers::net::NetworkDevice;
 
-impl HermitNet {
-	pub(crate) const fn new(mtu: u16, checksums: ChecksumCapabilities) -> Self {
-		Self { mtu, checksums }
+		pub(crate) static NETWORK_DEVICE: SpinMutex<Option<NetworkDevice>> = SpinMutex::new(Option::None);
+	} else {
+		use crate::drivers::net::loopback::LoopbackDriver;
 	}
 }
 
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "dhcpv4")]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac, checksums) = if let Some(driver) = get_network_driver() {
-			let guard = driver.lock();
-			(
-				guard.get_mtu(),
-				guard.get_mac_address(),
-				guard.get_checksums(),
-			)
-		} else {
-			return NetworkState::InitializationFailed;
-		};
+		cfg_if! {
+			if #[cfg(any(
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+				feature = "virtio-net",
+			))] {
+				#[cfg_attr(feature = "trace", expect(unused_mut))]
+				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
+					return NetworkState::InitializationFailed;
+				};
+			} else {
+				let mut device = LoopbackDriver::new();
+			}
+		}
 
-		let mut device = {
-			let device = HermitNet::new(mtu, checksums.clone());
-			#[cfg(feature = "trace")]
-			let device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
-			device
-		};
+		let mac = device.get_mac_address();
+
+		#[cfg(feature = "trace")]
+		let mut device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
 
 		if hermit_var!("HERMIT_IP").is_some() {
 			warn!(
@@ -66,15 +67,16 @@ impl<'a> NetworkInterface<'a> {
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 
 		info!("MAC address {hardware_addr}");
-		info!("{checksums:?}");
-		info!("MTU: {mtu} bytes");
+		let capabilities = device.capabilities();
+		info!("{:?}", capabilities.checksum);
+		info!("MTU: {} bytes", capabilities.max_transmission_unit);
 
 		let dhcp = dhcpv4::Socket::new();
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
 		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
-		if device.capabilities().medium == Medium::Ethernet {
+		if capabilities.medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}
 
@@ -94,23 +96,25 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac, checksums) = if let Some(driver) = get_network_driver() {
-			let guard = driver.lock();
-			(
-				guard.get_mtu(),
-				guard.get_mac_address(),
-				guard.get_checksums(),
-			)
-		} else {
-			return NetworkState::InitializationFailed;
-		};
+		cfg_if! {
+			if #[cfg(any(
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+				feature = "virtio-net",
+			))] {
+				#[cfg_attr(feature = "trace", expect(unused_mut))]
+				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
+					return NetworkState::InitializationFailed;
+				};
+			} else {
+				let mut device = LoopbackDriver::new();
+			}
+		}
 
-		let mut device = {
-			let device = HermitNet::new(mtu, checksums.clone());
-			#[cfg(feature = "trace")]
-			let device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
-			device
-		};
+		let mac = device.get_mac_address();
+
+		#[cfg(feature = "trace")]
+		let mut device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
 
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
@@ -129,13 +133,14 @@ impl<'a> NetworkInterface<'a> {
 		info!("MAC address {hardware_addr}");
 		info!("Configure network interface with address {ip_addr}");
 		info!("Configure gateway with address {mygw}");
-		info!("{checksums:?}");
-		info!("MTU: {mtu} bytes");
+		let capabilities = device.capabilities();
+		info!("{:?}", capabilities.checksum);
+		info!("MTU: {} bytes", capabilities.max_transmission_unit);
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
 		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
-		if device.capabilities().medium == Medium::Ethernet {
+		if capabilities.medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}
 
@@ -162,68 +167,5 @@ impl<'a> NetworkInterface<'a> {
 			#[cfg(feature = "dns")]
 			dns_handle: Some(dns_handle),
 		}))
-	}
-}
-
-impl Device for HermitNet {
-	type RxToken<'a> = RxToken;
-	type TxToken<'a> = TxToken;
-
-	fn capabilities(&self) -> DeviceCapabilities {
-		let mut cap = DeviceCapabilities::default();
-		cap.max_transmission_unit = self.mtu.into();
-		cap.max_burst_size = Some(0x10000 / cap.max_transmission_unit);
-		cap.checksum = self.checksums.clone();
-		cap
-	}
-
-	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		if let Some(driver) = get_network_driver() {
-			driver.lock().receive_packet()
-		} else {
-			None
-		}
-	}
-
-	fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
-		Some(TxToken::new())
-	}
-}
-
-#[doc(hidden)]
-pub(crate) struct RxToken {
-	buffer: Vec<u8, DeviceAlloc>,
-}
-
-impl RxToken {
-	pub(crate) fn new(buffer: Vec<u8, DeviceAlloc>) -> Self {
-		Self { buffer }
-	}
-}
-
-impl phy::RxToken for RxToken {
-	fn consume<R, F>(self, f: F) -> R
-	where
-		F: FnOnce(&[u8]) -> R,
-	{
-		f(&self.buffer[..])
-	}
-}
-
-#[doc(hidden)]
-pub(crate) struct TxToken;
-
-impl TxToken {
-	pub(crate) fn new() -> Self {
-		Self {}
-	}
-}
-
-impl phy::TxToken for TxToken {
-	fn consume<R, F>(self, len: usize, f: F) -> R
-	where
-		F: FnOnce(&mut [u8]) -> R,
-	{
-		get_network_driver().unwrap().lock().send_packet(len, f)
 	}
 }
