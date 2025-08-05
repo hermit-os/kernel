@@ -45,7 +45,7 @@ fn rtc_read(off: usize) -> u32 {
 		);
 	}
 
-	value
+	u32::from_le(value)
 }
 
 pub fn init() {
