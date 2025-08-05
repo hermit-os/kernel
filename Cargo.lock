@@ -145,9 +145,9 @@ checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "arm-gic"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "527b6e1c87b792f272e4964bef31a852077c35a395085833c8b51dc0ef3b4e13"
+checksum = "7ef1a9754e7f526d1740ac6bc7db15cd804294917e66fed899f9a94176ac19b9"
 dependencies = [
  "bitflags 2.9.1",
  "safe-mmio",
