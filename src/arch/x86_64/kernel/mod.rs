@@ -16,13 +16,7 @@ pub mod apic;
 pub mod core_local;
 pub mod gdt;
 pub mod interrupts;
-#[cfg(all(
-	not(feature = "pci"),
-	any(
-		feature = "console",
-		all(feature = "virtio-net", any(feature = "tcp", feature = "udp"))
-	),
-))]
+#[cfg(all(not(feature = "pci"), any(feature = "console", feature = "virtio-net")))]
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;

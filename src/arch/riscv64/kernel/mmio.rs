@@ -8,46 +8,50 @@ use hermit_sync::InterruptSpinMutex;
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem::GEMDriver;
-#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::init_cell::InitCell;
 
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
+#[non_exhaustive]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "gem-net")]
 	GEMNet(InterruptSpinMutex<GEMDriver>),
-	#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+	#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 	VirtioNet(InterruptSpinMutex<VirtioNetDriver>),
 	#[cfg(feature = "console")]
 	VirtioConsole(InterruptSpinMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
-	#[allow(unreachable_patterns)]
 	#[cfg(feature = "gem-net")]
 	fn get_network_driver(&self) -> Option<&InterruptSpinMutex<GEMDriver>> {
-		match self {
-			Self::GEMNet(drv) => Some(drv),
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::GEMNet(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 
-	#[allow(unreachable_patterns)]
-	#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+	#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 	fn get_network_driver(&self) -> Option<&InterruptSpinMutex<VirtioNetDriver>> {
-		match self {
-			Self::VirtioNet(drv) => Some(drv),
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioNet(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptSpinMutex<VirtioConsoleDriver>> {
-		match self {
-			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioConsole(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 }
@@ -64,7 +68,7 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptSpinMutex<GEMDriv
 		.find_map(|drv| drv.get_network_driver())
 }
 
-#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptSpinMutex<VirtioNetDriver>> {
 	MMIO_DRIVERS
 		.get()?

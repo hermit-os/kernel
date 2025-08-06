@@ -6,7 +6,16 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
-use smoltcp::iface::{PollResult, SocketHandle, SocketSet};
+#[cfg(any(
+	feature = "dhcpv4",
+	feature = "dns",
+	feature = "tcp",
+	feature = "udp",
+	feature = "vsock"
+))]
+use smoltcp::iface::SocketHandle;
+use smoltcp::iface::{PollResult, SocketSet};
+#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 use smoltcp::socket::AnySocket;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
@@ -46,6 +55,7 @@ impl<'a> NetworkState<'a> {
 	}
 }
 
+#[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) type Handle = SocketHandle;
 
 static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(0);
@@ -290,6 +300,7 @@ impl<'a> NetworkInterface<'a> {
 		self.iface.poll_delay(timestamp, &self.sockets)
 	}
 
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	pub(crate) fn get_mut_socket<T: AnySocket<'a>>(&mut self, handle: SocketHandle) -> &mut T {
 		self.sockets.get_mut(handle)
 	}
@@ -302,6 +313,7 @@ impl<'a> NetworkInterface<'a> {
 		(self.sockets.get_mut(handle), self.iface.context())
 	}
 
+	#[cfg(any(feature = "tcp", feature = "udp", feature = "vsock"))]
 	pub(crate) fn destroy_socket(&mut self, handle: Handle) {
 		// This deallocates the socket's buffers
 		self.sockets.remove(handle);
