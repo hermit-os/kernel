@@ -1,0 +1,1 @@
+searchState.loadedDescShard("const_parse", 0, "Provides <code>const fn</code> for parsing.\nParses the input into a <code>u128</code> value.")
