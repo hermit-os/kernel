@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
 
+use cfg_if::cfg_if;
 use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "trace")]
 use smoltcp::phy::Tracer;
@@ -18,39 +19,83 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
-use crate::drivers::net::{NetworkDriver, get_network_driver};
+use crate::drivers::net::{NetworkDevice, NetworkDriver};
 use crate::mm::device_alloc::DeviceAlloc;
 
+cfg_if! {
+	if #[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
+	))] {
+		use hermit_sync::SpinMutex;
+
+		pub(crate) static NETWORK_DEVICE: SpinMutex<Option<NetworkDevice>> = SpinMutex::new(Option::None);
+	} else {
+		use crate::drivers::net::loopback::LoopbackDriver;
+	}
+}
+
 /// Data type to determine the mac address
-#[derive(Debug, Clone)]
 #[repr(C)]
 pub(crate) struct HermitNet {
 	mtu: u16,
 	checksums: ChecksumCapabilities,
+	device: NetworkDevice,
 }
 
 impl HermitNet {
-	pub(crate) const fn new(mtu: u16, checksums: ChecksumCapabilities) -> Self {
-		Self { mtu, checksums }
+	pub(crate) const fn new(
+		mtu: u16,
+		checksums: ChecksumCapabilities,
+		device: NetworkDevice,
+	) -> Self {
+		Self {
+			mtu,
+			checksums,
+			device,
+		}
+	}
+
+	#[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
+	))]
+	pub(crate) fn handle_interrupt(&mut self) {
+		self.device.handle_interrupt();
+	}
+
+	pub(crate) fn set_polling_mode(&mut self, value: bool) {
+		self.device.set_polling_mode(value);
 	}
 }
 
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "dhcpv4")]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac, checksums) = if let Some(driver) = get_network_driver() {
-			let guard = driver.lock();
-			(
-				guard.get_mtu(),
-				guard.get_mac_address(),
-				guard.get_checksums(),
-			)
-		} else {
-			return NetworkState::InitializationFailed;
-		};
+		cfg_if! {
+			if #[cfg(any(
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+				feature = "virtio-net",
+			))] {
+				let Some(device) = NETWORK_DEVICE.lock().take() else {
+					return NetworkState::InitializationFailed;
+				};
+			} else {
+				let device = LoopbackDriver::new();
+			}
+		}
+
+		let (mtu, mac, checksums) = (
+			device.get_mtu(),
+			device.get_mac_address(),
+			device.get_checksums(),
+		);
 
 		let mut device = {
-			let device = HermitNet::new(mtu, checksums.clone());
+			let device = HermitNet::new(mtu, checksums.clone(), device);
 			#[cfg(feature = "trace")]
 			let device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
 			device
@@ -94,19 +139,28 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac, checksums) = if let Some(driver) = get_network_driver() {
-			let guard = driver.lock();
-			(
-				guard.get_mtu(),
-				guard.get_mac_address(),
-				guard.get_checksums(),
-			)
-		} else {
-			return NetworkState::InitializationFailed;
-		};
+		cfg_if! {
+			if #[cfg(any(
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				all(target_arch = "x86_64", feature = "rtl8139"),
+				feature = "virtio-net",
+			))] {
+				let Some(device) = NETWORK_DEVICE.lock().take() else {
+					return NetworkState::InitializationFailed;
+				};
+			} else {
+				let device = LoopbackDriver::new();
+			}
+		}
+
+		let (mtu, mac, checksums) = (
+			device.get_mtu(),
+			device.get_mac_address(),
+			device.get_checksums(),
+		);
 
 		let mut device = {
-			let device = HermitNet::new(mtu, checksums.clone());
+			let device = HermitNet::new(mtu, checksums.clone(), device);
 			#[cfg(feature = "trace")]
 			let device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
 			device
@@ -167,7 +221,7 @@ impl<'a> NetworkInterface<'a> {
 
 impl Device for HermitNet {
 	type RxToken<'a> = RxToken;
-	type TxToken<'a> = TxToken;
+	type TxToken<'a> = TxToken<'a>;
 
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
@@ -178,15 +232,11 @@ impl Device for HermitNet {
 	}
 
 	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		if let Some(driver) = get_network_driver() {
-			driver.lock().receive_packet()
-		} else {
-			None
-		}
+		self.device.receive_packet()
 	}
 
 	fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
-		Some(TxToken::new())
+		Some(TxToken::new(&mut self.device))
 	}
 }
 
@@ -211,19 +261,21 @@ impl phy::RxToken for RxToken {
 }
 
 #[doc(hidden)]
-pub(crate) struct TxToken;
+pub(crate) struct TxToken<'a> {
+	device: &'a mut NetworkDevice,
+}
 
-impl TxToken {
-	pub(crate) fn new() -> Self {
-		Self {}
+impl<'a> TxToken<'a> {
+	pub(crate) fn new(device: &'a mut NetworkDevice) -> Self {
+		Self { device }
 	}
 }
 
-impl phy::TxToken for TxToken {
+impl<'a> phy::TxToken for TxToken<'a> {
 	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		get_network_driver().unwrap().lock().send_packet(len, f)
+		self.device.send_packet(len, f)
 	}
 }
