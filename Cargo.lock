@@ -706,6 +706,7 @@ dependencies = [
  "async-lock",
  "async-trait",
  "bit_field",
+ "bitfield-struct",
  "bitflags 2.9.1",
  "build-time",
  "cfg-if",
