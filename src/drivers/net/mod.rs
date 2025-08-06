@@ -14,30 +14,14 @@ pub mod rtl8139;
 	feature = "virtio-net",
 ))]
 pub mod virtio;
-
-use smoltcp::phy::ChecksumCapabilities;
-
 #[allow(unused_imports)]
 use crate::arch::kernel::core_local::*;
 use crate::drivers::Driver;
-use crate::executor::device::{RxToken, TxToken};
 
 /// A trait for accessing the network interface
-pub(crate) trait NetworkDriver: Driver {
-	/// Returns smoltcp's checksum capabilities
-	fn get_checksums(&self) -> ChecksumCapabilities {
-		ChecksumCapabilities::default()
-	}
+pub(crate) trait NetworkDriver: Driver + smoltcp::phy::Device {
 	/// Returns the mac address of the device.
 	fn get_mac_address(&self) -> [u8; 6];
-	/// Returns the current MTU of the device.
-	fn get_mtu(&self) -> u16;
-	/// Get buffer with the received packet
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)>;
-	/// Send packet with the size `len`
-	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
-	where
-		F: FnOnce(&mut [u8]) -> R;
 	/// Check if a packet is available
 	#[allow(dead_code)]
 	fn has_packet(&self) -> bool;
@@ -81,7 +65,7 @@ cfg_if::cfg_if! {
 			feature = "virtio-net",
 		)
 	))] {
-		pub(crate) use crate::arch::kernel::mmio::get_network_driver;
+		pub(crate) use crate::arch::kernel::mmio::NetworkDevice;
 	} else if #[cfg(all(
 		feature = "pci",
 		any(
@@ -89,12 +73,8 @@ cfg_if::cfg_if! {
 			feature = "virtio-net",
 		)
 	))] {
-		pub(crate) use crate::drivers::pci::get_network_driver;
+		pub(crate) use crate::drivers::pci::NetworkDevice;
 	} else {
-		use hermit_sync::InterruptTicketMutex;
-
-		pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<loopback::LoopbackDriver>> {
-			Some(&loopback::LOOPBACK)
-		}
+		pub(crate) use loopback::NetworkDevice;
 	}
 }

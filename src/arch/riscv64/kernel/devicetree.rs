@@ -36,14 +36,7 @@ use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
-#[cfg(all(
-	any(
-		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console",
-		feature = "gem-net"
-	),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "console", not(feature = "pci")))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging::{self, PageSize};
 #[cfg(feature = "console")]
@@ -70,13 +63,12 @@ use crate::drivers::pci::get_console_driver;
 ))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(
-	any(
-		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console",
-		feature = "gem-net"
-	),
-	not(feature = "pci")
+	any(feature = "tcp", feature = "udp"),
+	any(feature = "gem-net", feature = "virtio-net"),
+	not(feature = "pci"),
 ))]
+use crate::executor::device::NETWORK_DEVICE;
+#[cfg(all(feature = "console", not(feature = "pci")))]
 use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
@@ -207,9 +199,7 @@ pub fn init_drivers() {
 					phy_addr,
 					<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
 				) {
-					Ok(drv) => register_driver(MmioDriver::GEMNet(
-						hermit_sync::InterruptSpinMutex::new(drv),
-					)),
+					Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
 					Err(err) => error!("Could not initialize GEM driver: {err}"),
 				}
 			}
@@ -294,9 +284,7 @@ pub fn init_drivers() {
 						if let Ok(VirtioDriver::Network(drv)) =
 							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 						{
-							register_driver(MmioDriver::VirtioNet(
-								hermit_sync::InterruptSpinMutex::new(drv),
-							));
+							*NETWORK_DEVICE.lock() = Some(drv);
 						}
 					}
 					#[cfg(feature = "console")]
