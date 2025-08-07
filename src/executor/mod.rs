@@ -2,7 +2,6 @@
 pub(crate) mod device;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) mod network;
-pub(crate) mod task;
 #[cfg(feature = "vsock")]
 pub(crate) mod vsock;
 
@@ -19,11 +18,10 @@ use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::time::Instant;
 
-use crate::arch::core_local::*;
+use crate::arch::core_local;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::{NetworkDriver, get_network_driver};
 use crate::errno::Errno;
-use crate::executor::task::AsyncTask;
 use crate::io;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::scheduler::PerCoreSchedulerExt;
@@ -96,16 +94,10 @@ impl Wake for TaskNotify {
 }
 
 pub(crate) fn run() {
-	let mut cx = Context::from_waker(Waker::noop());
-
 	without_interrupts(|| {
-		// FIXME(mkroening): Not all tasks register wakers and never sleep
-		for _ in 0..({ async_tasks().len() }) {
-			let mut task = { async_tasks().pop_front().unwrap() };
-			trace!("Run async task {}", task.id());
-
-			if task.poll(&mut cx).is_pending() {
-				async_tasks().push_back(task);
+		for _ in 0..200 {
+			if !core_local::ex().try_tick() {
+				break;
 			}
 		}
 	});
@@ -120,7 +112,7 @@ pub(crate) fn spawn<F>(future: F)
 where
 	F: Future<Output = ()> + Send + 'static,
 {
-	without_interrupts(|| async_tasks().push_back(AsyncTask::new(future)));
+	core_local::ex().spawn(future).detach();
 }
 
 pub fn init() {
@@ -182,7 +174,7 @@ where
 					} else {
 						None
 					};
-					core_scheduler().add_network_timer(
+					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
 				}
@@ -208,7 +200,7 @@ where
 					} else {
 						None
 					};
-					core_scheduler().add_network_timer(
+					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
 				}
@@ -235,7 +227,7 @@ where
 			};
 
 			if delay.unwrap_or(10_000_000) > 10_000 {
-				core_scheduler().add_network_timer(
+				core_local::core_scheduler().add_network_timer(
 					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 				);
 				let wakeup_time =
