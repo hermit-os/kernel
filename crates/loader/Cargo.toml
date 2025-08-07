@@ -31,8 +31,10 @@ x86_64 = { version = "0.15", default-features = false, features = ["instructions
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "10"
+enum_dispatch = "0.3"
 fdt = { version = "0.1" }
 goblin = { version = "0.10", default-features = false, features = ["elf64"] }
+volatile =  { version = "0.6", features = ["derive"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { version = "0.35", features = ["alloc", "panic_handler", "qemu"] }

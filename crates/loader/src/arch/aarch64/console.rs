@@ -1,12 +1,17 @@
-use core::ptr::NonNull;
+use core::num::NonZeroU32;
 
 use fdt::Fdt;
 
+use crate::arch::aarch64::drivers::SerialDriver;
+use crate::arch::drivers::qemu_serial::QemuSerial;
+use crate::arch::drivers::xlnx_serial::XlnxSerial;
+use crate::arch::drivers::{SerialPort, get_device};
+
 pub struct Console {
-	stdout: NonNull<u8>,
+	stdout: SerialPort,
 }
 
-fn stdout() -> u32 {
+fn stdout() -> SerialPort {
 	/// Physical address of UART0 at Qemu's virt emulation
 	const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 
@@ -16,40 +21,44 @@ fn stdout() -> u32 {
 	};
 
 	let property = dtb.chosen().stdout();
-	if let Some(stdout) = property {
-		let stdout = stdout.name.trim_matches(char::from(0));
-		if let Some(pos) = stdout.find('@') {
-			let len = stdout.len();
-			u32::from_str_radix(&stdout[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
-		} else {
-			SERIAL_PORT_ADDRESS
-		}
-	} else {
-		SERIAL_PORT_ADDRESS
-	}
+	property
+		.and_then(|node| get_device(node))
+		.unwrap_or(SerialPort::Qemu(QemuSerial::from_addr(
+			NonZeroU32::new(SERIAL_PORT_ADDRESS).unwrap(),
+		)))
 }
 
 impl Console {
 	pub fn write_bytes(&mut self, bytes: &[u8]) {
-		for byte in bytes.iter().copied() {
-			unsafe {
-				self.stdout.as_ptr().write_volatile(byte);
+		self.stdout.putstr(bytes);
+	}
+
+	pub(super) fn get_stdout(&self) -> u32 {
+		self.stdout.get_addr()
+	}
+
+	pub(crate) fn set_stdout(&mut self, stdout: u32) {
+		match self.stdout {
+			SerialPort::Qemu(_) => {
+				self.stdout =
+					SerialPort::Qemu(QemuSerial::from_addr(NonZeroU32::new(stdout).unwrap()))
+			}
+			SerialPort::Xlnx(_) => {
+				self.stdout =
+					SerialPort::Xlnx(XlnxSerial::from_addr(NonZeroU32::new(stdout).unwrap()))
 			}
 		}
+		self.stdout.init();
 	}
 
-	pub(super) fn get_stdout(&self) -> NonNull<u8> {
-		self.stdout
-	}
-
-	pub(super) fn set_stdout(&mut self, stdout: NonNull<u8>) {
-		self.stdout = stdout;
+	pub(crate) fn wait_empty(&mut self) {
+		self.stdout.wait_empty();
 	}
 }
 
 impl Default for Console {
 	fn default() -> Self {
-		let stdout = NonNull::new(stdout() as *mut u8).unwrap();
+		let stdout = stdout();
 		Self { stdout }
 	}
 }

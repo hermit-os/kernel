@@ -1,11 +1,14 @@
 mod console;
+
 pub use self::console::Console;
+pub mod drivers;
 pub mod entry;
 pub mod paging;
 
 use core::arch::asm;
-use core::ptr::{self, NonNull};
+use core::ptr::{self};
 
+use aarch64_cpu::asm::barrier::{NSH, SY, dmb, dsb, isb};
 use align_address::Align;
 use fdt::Fdt;
 use goblin::elf::header::header64::{EI_DATA, ELFDATA2LSB, ELFMAG, Header, SELFMAG};
@@ -54,7 +57,6 @@ pub fn find_kernel() -> &'static [u8] {
 		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
 	};
-
 	let module_start = dtb
 		.find_node("/chosen")
 		.unwrap()
@@ -77,7 +79,7 @@ pub fn find_kernel() -> &'static [u8] {
 	};
 
 	if header.e_ident[0..SELFMAG] != ELFMAG[..] {
-		panic!("Don't found valid ELF file!");
+		panic!("Didn't find valid ELF file!");
 	}
 
 	#[cfg(target_endian = "little")]
@@ -116,7 +118,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let cpus = dtb.cpus().count();
 	info!("Detect {cpus} CPU(s)");
 
-	let uart_address: u32 = CONSOLE.lock().get().get_stdout().as_ptr() as u32;
+	let uart_address: u32 = CONSOLE.lock().get().get_stdout();
 	info!("Detect UART at {uart_address:#x}");
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l0_pgtable), 512) };
@@ -162,10 +164,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
 	}
 
-	CONSOLE
-		.lock()
-		.get()
-		.set_stdout(NonNull::new(0x1000 as *mut u8).unwrap());
+	CONSOLE.lock().get().set_stdout(0x1000);
 
 	// Load TTBRx
 	unsafe {
@@ -192,6 +191,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
+	info!("Successfully set up paging.");
+
 	let dtb = unsafe {
 		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
@@ -206,11 +207,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			.trim_matches(char::from(0));
 		assert!(device_type == "memory");
 	}
-
+	info!("Memory found!");
 	let regions = dtb.memory().regions().next().unwrap();
 	let ram_start = regions.starting_address as u64;
 	let ram_size = regions.size.unwrap() as u64;
 
+	info!("ram_start: {ram_start:#x}, ram_size: {ram_size:#x}. Trying to jump into kernel soon.");
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
 			phys_addr_range: ram_start..ram_start + ram_size,
@@ -240,9 +242,11 @@ unsafe fn enter_kernel(stack: *mut u8, entry: *const (), raw_boot_info: &'static
 	info!("Entering kernel at {entry:p}, stack at {stack:p}, raw_boot_info at {raw_boot_info:p}");
 
 	// Memory barrier
-	unsafe {
-		asm!("dsb sy", options(nostack));
-	}
+	CONSOLE.lock().get().wait_empty();
+	dsb(SY);
+	isb(SY);
+	dmb(SY);
+	dsb(NSH);
 
 	unsafe {
 		asm!(
