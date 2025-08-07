@@ -4,6 +4,18 @@
 
 .section .text
 
+_linux: // Let's fake being linux! https://www.kernel.org/doc/Documentation/arm64/booting.txt
+    mov x0, #1                // code0: Do nothing here (no uefi)
+    b       _start     // code1: Branch to real stuff....
+    .quad   0          // text_offset: linux needs none, neither do we
+    .quad   prog_size
+    .quad   2          // flags: 4k pagesize. might need adjustment. Page size currently undefined.
+    .quad   0          // res2: reserved
+    .quad   0          // res3: reserved
+    .quad   0          // res4: reserved
+    .long   0x644d5241 // magic: "ARMx64"
+    .long   0          // res5: header size for efi boot. Not needed.
+    .align  8
 _start:
 	// Only proceed on the boot core. Park it otherwise.
 	mrs	x1, mpidr_el1
@@ -19,8 +31,57 @@ _start:
 	adrp	x4, __boot_core_stack_end_exclusive
 	add		x4, x4, #:lo12:__boot_core_stack_end_exclusive
 	mov		sp, x4
-	
+
+	// Set correct Exception level!
+
+	mrs	x0, CurrentEL
+	cmp	x0, #4  // EL = 1
+	b.eq	el_1_entry
+
+	// Test if EL2
+	cmp	x0, #8
+	b.eq	el_2_entry
+
+	//EL3
+	msr	SP_EL2, x4
+	msr	SP_EL1, x4
+	msr	SCTLR_EL2, xzr
+	msr	HCR_EL2, xzr
+
+	mrs	x0, SCR_EL3
+	and	x0, x0, #(~(1 << 3))
+	and	x0, x0, #(~(1 << 2))
+	and	x0, x0, #(~(1 << 1))
+	orr	x0, x0, #(1<<10)
+	orr	x0, x0, #(1<<0)
+	msr	SCR_EL3, x0
+
+	mov	x0, #0b1111001001 // D-Flag, I-FLAG, A-FLAG, F-FLAG, EL2h
+	msr	SPSR_EL3, x0
+
+	adr	x0, el_2_entry
+	msr	ELR_EL3, x0
+
+	eret
+
+// EL2
+el_2_entry:
+	msr	SP_EL1, x4
+	msr	SCTLR_EL1, xzr
+	mrs	x0, HCR_EL2
+	orr	x0, x0, #(1<<31)
+	msr	HCR_EL2, x0
+
+	mov	x0, #0b1111000101 // D-Flag, I-FLAG, A-FLAG, F-FLAG, EL1h
+	msr	SPSR_EL2, x0
+
+	adr	x0, el_1_entry
+	msr	ELR_EL2, x0
+
+	eret
+
 	// Jump to Rust code.
+el_1_entry:
 	b	{start_rust}
 
 	// Infinitely wait for events (aka "park the core").
