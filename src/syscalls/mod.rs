@@ -5,6 +5,7 @@ use alloc::ffi::CString;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
+use core::ptr::null;
 
 use dirent_display::Dirent64Display;
 use hermit_sync::Lazy;
@@ -21,7 +22,7 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
-use crate::errno::Errno;
+use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
 	self, AccessOption, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd,
@@ -348,27 +349,40 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> i32 {
-	let cwd = crate::fs::get_cwd();
+pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_char {
+	let error = |e: Errno| {
+		e.set_errno();
+		null::<c_char>()
+	};
+
+	if size == 0 {
+		return error(Errno::Inval);
+	}
+
+	let cwd = fs::get_cwd();
 	if let Err(e) = cwd {
-		return -i32::from(e);
+		return error(e);
 	}
 
 	let Ok(cwd) = cwd else { unreachable!() };
 
 	let Ok(cwd) = CString::new(cwd) else {
-		return -i32::from(Errno::Noent); // extremely unlikely
+		return error(Errno::Noent);
 	};
 
 	if (cwd.count_bytes() + 1) > size {
-		return -i32::from(Errno::Range);
+		return error(Errno::Range);
+	}
+
+	if buf.is_null() {
+		return cwd.into_raw();
 	}
 
 	unsafe {
 		buf.copy_from(cwd.as_ptr(), size);
 	}
 
-	i32::try_from(cwd.count_bytes() + 1).unwrap_or(-i32::from(Errno::Range))
+	buf
 }
 
 #[hermit_macro::system]
