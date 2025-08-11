@@ -8,5 +8,5 @@ anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 llvm-tools = "0.1"
 ovmf-prebuilt = "0.2"
-sysinfo = "0.36"
+sysinfo = "0.37"
 xshell = "0.2"
