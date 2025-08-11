@@ -144,9 +144,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends ${{ matrix.packages }}
       - uses: dtolnay/rust-toolchain@stable
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rust-src
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add llvm-tools
         working-directory: .
