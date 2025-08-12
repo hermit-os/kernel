@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PollIngressSingleResult","PollResult"],"struct":["Config","Context","Interface","Route","RouteTableFull","Routes","SocketHandle","SocketSet","SocketStorage"]};
