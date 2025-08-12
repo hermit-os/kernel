@@ -18,7 +18,7 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
@@ -41,7 +41,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add clippy
       - run: cargo xtask clippy
@@ -50,7 +50,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add rustfmt
       - run: |
@@ -61,14 +61,14 @@ jobs:
     name: Typos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: crate-ci/typos@master
 
   doc:
     name: Doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: mkroening/rust-toolchain-toml@main
       - run: cargo xtask doc
 
@@ -76,7 +76,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: mkroening/rust-toolchain-toml@main
       - name: Build minimal kernel
         run: |
@@ -87,7 +87,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install QEMU
         run: |
           sudo apt-get update
@@ -132,11 +132,11 @@ jobs:
 
     steps:
       - name: Checkout hermit-rs
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: hermit-os/hermit-rs
       - name: Checkout hermit-kernel
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: kernel
       - name: Install QEMU
