@@ -359,12 +359,17 @@ pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_c
 		return error(Errno::Inval);
 	}
 
-	let cwd = fs::get_cwd();
-	if let Err(e) = cwd {
-		return error(e);
+	if buf.is_null() {
+		// Behavior unspecified
+		return error(Errno::Noent);
 	}
 
-	let Ok(cwd) = cwd else { unreachable!() };
+	let cwd = match fs::get_cwd() {
+		Err(e) => {
+			return error(e);
+		}
+		Ok(cwd) => cwd,
+	};
 
 	let Ok(cwd) = CString::new(cwd) else {
 		return error(Errno::Noent);
@@ -372,10 +377,6 @@ pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_c
 
 	if (cwd.count_bytes() + 1) > size {
 		return error(Errno::Range);
-	}
-
-	if buf.is_null() {
-		return cwd.into_raw();
 	}
 
 	unsafe {
@@ -411,10 +412,9 @@ pub unsafe extern "C" fn sys_faccessat(
 	_mode: i32,
 	flags: i32,
 ) -> i32 {
-	let access_option = AccessOption::from_bits_truncate(flags);
-	if access_option.bits() != flags {
+	let Some(access_option) = AccessOption::from_bits(flags) else {
 		return -i32::from(Errno::Inval);
-	}
+	};
 
 	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
 		return -i32::from(Errno::Inval);
@@ -436,25 +436,19 @@ pub unsafe extern "C" fn sys_faccessat(
 		return -i32::from(Errno::Nosys);
 	};
 
-	if let Err(e) = stat {
-		return -i32::from(e);
-	}
-
-	let Ok(stat) = stat else { unreachable!() };
-	if access_option.can_access(stat.st_mode) {
-		0
-	} else {
-		-i32::from(Errno::Acces)
+	match stat {
+		Err(e) => -i32::from(e),
+		Ok(stat) if access_option.can_access(stat.st_mode) => 0,
+		Ok(_) => -i32::from(Errno::Acces),
 	}
 }
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
-	let access_option = AccessOption::from_bits_truncate(flags);
-	if access_option.bits() != flags {
+	let Some(access_option) = AccessOption::from_bits(flags) else {
 		return -i32::from(Errno::Inval);
-	}
+	};
 
 	if access_option.contains(AccessOption::F_OK) && access_option != AccessOption::F_OK {
 		return -i32::from(Errno::Inval);
@@ -463,28 +457,20 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
 		return -i32::from(Errno::Inval);
 	};
-	let stat = crate::fs::read_lstat(name);
 
-	if let Err(e) = stat {
-		return -i32::from(e);
-	}
-
-	let Ok(stat) = stat else { unreachable!() };
-
-	if access_option.can_access(stat.st_mode) {
-		0
-	} else {
-		-i32::from(Errno::Acces)
+	match crate::fs::read_lstat(name) {
+		Err(e) => -i32::from(e),
+		Ok(stat) if access_option.can_access(stat.st_mode) => 0,
+		Ok(_) => -i32::from(Errno::Acces),
 	}
 }
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_fchmod(fd: FileDescriptor, mode: u32) -> i32 {
-	let access_permission = AccessPermission::from_bits_truncate(mode);
-	if access_permission.bits() != mode {
+	let Some(access_permission) = AccessPermission::from_bits(mode) else {
 		return -i32::from(Errno::Inval);
-	}
+	};
 
 	crate::fd::chmod(fd, access_permission)
 		.map(|()| 0)
