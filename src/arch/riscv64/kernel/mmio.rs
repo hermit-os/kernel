@@ -2,6 +2,7 @@
 
 use alloc::vec::Vec;
 
+#[cfg(feature = "console")]
 use hermit_sync::InterruptSpinMutex;
 
 #[cfg(feature = "console")]
@@ -15,33 +16,11 @@ use crate::init_cell::InitCell;
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
-	#[cfg(feature = "gem-net")]
-	GEMNet(InterruptSpinMutex<GEMDriver>),
-	#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
-	VirtioNet(InterruptSpinMutex<VirtioNetDriver>),
 	#[cfg(feature = "console")]
 	VirtioConsole(InterruptSpinMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
-	#[allow(unreachable_patterns)]
-	#[cfg(feature = "gem-net")]
-	fn get_network_driver(&self) -> Option<&InterruptSpinMutex<GEMDriver>> {
-		match self {
-			Self::GEMNet(drv) => Some(drv),
-			_ => None,
-		}
-	}
-
-	#[allow(unreachable_patterns)]
-	#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
-	fn get_network_driver(&self) -> Option<&InterruptSpinMutex<VirtioNetDriver>> {
-		match self {
-			Self::VirtioNet(drv) => Some(drv),
-			_ => None,
-		}
-	}
-
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptSpinMutex<VirtioConsoleDriver>> {
 		match self {
@@ -57,20 +36,10 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 }
 
 #[cfg(feature = "gem-net")]
-pub(crate) fn get_network_driver() -> Option<&'static InterruptSpinMutex<GEMDriver>> {
-	MMIO_DRIVERS
-		.get()?
-		.iter()
-		.find_map(|drv| drv.get_network_driver())
-}
+pub(crate) type NetworkDevice = GEMDriver;
 
 #[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
-pub(crate) fn get_network_driver() -> Option<&'static InterruptSpinMutex<VirtioNetDriver>> {
-	MMIO_DRIVERS
-		.get()?
-		.iter()
-		.find_map(|drv| drv.get_network_driver())
-}
+pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "console")]
 pub(crate) fn get_console_driver() -> Option<&'static InterruptSpinMutex<VirtioConsoleDriver>> {
