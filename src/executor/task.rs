@@ -39,8 +39,12 @@ impl AsyncTask {
 	pub fn id(&self) -> AsyncTaskId {
 		self.id
 	}
+}
 
-	pub fn poll(&mut self, context: &mut Context<'_>) -> Poll<()> {
-		self.future.as_mut().poll(context)
+impl Future for AsyncTask {
+	type Output = ();
+
+	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		self.as_mut().future.as_mut().poll(cx)
 	}
 }

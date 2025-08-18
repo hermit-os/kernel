@@ -9,7 +9,7 @@ pub(crate) mod vsock;
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use core::future::Future;
-use core::pin::pin;
+use core::pin::{Pin, pin};
 use core::sync::atomic::AtomicU32;
 use core::task::{Context, Poll, Waker};
 use core::time::Duration;
@@ -102,7 +102,7 @@ pub(crate) fn run() {
 			let mut task = { core_local::async_tasks().pop_front().unwrap() };
 			trace!("Run async task {}", task.id());
 
-			if task.poll(&mut cx).is_pending() {
+			if Pin::new(&mut task).poll(&mut cx).is_pending() {
 				core_local::async_tasks().push_back(task);
 			}
 		}
