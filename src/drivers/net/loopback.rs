@@ -1,8 +1,6 @@
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
 
-use hermit_sync::InterruptTicketMutex;
-
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::{Driver, InterruptLine};
 use crate::executor::device::{RxToken, TxToken};
@@ -40,10 +38,10 @@ impl NetworkDriver for LoopbackDriver {
 		u16::MAX
 	}
 
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
 		self.0
 			.pop_front()
-			.map(move |buffer| (RxToken::new(buffer), TxToken::new()))
+			.map(move |buffer| (RxToken::new(buffer), TxToken::new(self)))
 	}
 
 	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
@@ -70,5 +68,4 @@ impl NetworkDriver for LoopbackDriver {
 	}
 }
 
-pub(crate) static LOOPBACK: InterruptTicketMutex<LoopbackDriver> =
-	InterruptTicketMutex::new(LoopbackDriver::new());
+pub(crate) type NetworkDevice = LoopbackDriver;

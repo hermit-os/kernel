@@ -265,7 +265,7 @@ impl NetworkDriver for RTL8139Driver {
 	}
 
 	/// Get buffer with the received packet
-	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken<'_>)> {
 		let cmd = unsafe { Port::<u8>::new(self.iobase + CR).read() };
 
 		if (cmd & CR_BUFE) == CR_BUFE {
@@ -303,7 +303,7 @@ impl NetworkDriver for RTL8139Driver {
 
 		self.consume_current_buffer();
 
-		Some((RxToken::new(vec_data), TxToken::new()))
+		Some((RxToken::new(vec_data), TxToken::new(self)))
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
