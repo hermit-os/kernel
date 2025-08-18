@@ -70,6 +70,52 @@ bitflags! {
 }
 
 bitflags! {
+	/// Options for checking file permissions or existence
+	#[derive(Debug, Copy, Clone, Default, Eq, PartialEq)]
+	pub struct AccessOption: i32 {
+		/// Test for read permission
+		const R_OK = 4;
+		/// Test for write permission
+		const W_OK = 2;
+		/// Test for execution permission
+		const X_OK = 1;
+		/// Test for existence
+		const F_OK = 0;
+	}
+}
+
+impl AccessOption {
+	/// Verifies if the current access options are all valid for the provided file access permissions
+	pub fn can_access(&self, access_permissions: AccessPermission) -> bool {
+		if self.contains(AccessOption::R_OK)
+			&& !access_permissions.contains(AccessPermission::S_IRUSR)
+			&& !access_permissions.contains(AccessPermission::S_IRGRP)
+			&& !access_permissions.contains(AccessPermission::S_IROTH)
+		{
+			return false;
+		}
+
+		if self.contains(AccessOption::W_OK)
+			&& !access_permissions.contains(AccessPermission::S_IWUSR)
+			&& !access_permissions.contains(AccessPermission::S_IWGRP)
+			&& !access_permissions.contains(AccessPermission::S_IWOTH)
+		{
+			return false;
+		}
+
+		if self.contains(AccessOption::X_OK)
+			&& !access_permissions.contains(AccessPermission::S_IXUSR)
+			&& !access_permissions.contains(AccessPermission::S_IXGRP)
+			&& !access_permissions.contains(AccessPermission::S_IXOTH)
+		{
+			return false;
+		}
+
+		true
+	}
+}
+
+bitflags! {
 	/// File status flags.
 	#[derive(Debug, Copy, Clone, Default)]
 	pub struct StatusFlags: i32 {
@@ -268,6 +314,16 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
+	/// Truncates the file
+	async fn truncate(&self, _size: usize) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
+	/// Changes access permissions to the file
+	async fn chmod(&self, _access_permission: AccessPermission) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
 	/// `isatty` returns `true` for a terminal device
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
@@ -290,6 +346,12 @@ pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io
 	block_on(obj.lseek(offset, whence), None)
 }
 
+pub(crate) fn chmod(fd: FileDescriptor, mode: AccessPermission) -> io::Result<()> {
+	let obj = get_object(fd)?;
+
+	block_on(obj.chmod(mode), None)
+}
+
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
@@ -298,6 +360,11 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 	}
 
 	block_on(obj.write(buf), None)
+}
+
+pub(crate) fn truncate(fd: FileDescriptor, length: usize) -> io::Result<()> {
+	let obj = get_object(fd)?;
+	block_on(obj.truncate(length), None)
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {

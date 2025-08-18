@@ -7,19 +7,26 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::BitAnd;
 
 use async_trait::async_trait;
-use hermit_sync::OnceCell;
+use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::errno::Errno;
+use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
 use crate::io::Write;
 use crate::time::{SystemTime, timespec};
 
 static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
+
+static WORKING_DIRECTORY: InterruptSpinMutex<Option<String>> = InterruptSpinMutex::new(None);
+
+static UMASK: InterruptSpinMutex<AccessPermission> =
+	InterruptSpinMutex::new(AccessPermission::from_bits_retain(0o777));
 
 #[derive(Debug, Clone)]
 pub struct DirectoryEntry {
@@ -350,61 +357,150 @@ pub(crate) fn init() {
 		error!("Unable to create /proc/version");
 	}
 
+	let mut cwd = WORKING_DIRECTORY.lock();
+	*cwd = Some("/tmp".to_string());
+	drop(cwd);
+
 	#[cfg(all(feature = "fuse", feature = "pci"))]
 	fuse::init();
 	uhyve::init();
 }
 
 pub fn create_file(name: &str, data: &'static [u8], mode: AccessPermission) -> io::Result<()> {
-	FILESYSTEM
-		.get()
-		.ok_or(Errno::Inval)?
-		.create_file(name, data, mode)
+	with_relative_filename(name, |name| {
+		FILESYSTEM
+			.get()
+			.ok_or(Errno::Inval)?
+			.create_file(name, data, mode)
+	})
 }
 
 /// Removes an empty directory.
 pub fn remove_dir(path: &str) -> io::Result<()> {
-	FILESYSTEM.get().ok_or(Errno::Inval)?.rmdir(path)
+	with_relative_filename(path, |path| {
+		FILESYSTEM.get().ok_or(Errno::Inval)?.rmdir(path)
+	})
 }
 
 pub fn unlink(path: &str) -> io::Result<()> {
-	FILESYSTEM.get().ok_or(Errno::Inval)?.unlink(path)
+	with_relative_filename(path, |path| {
+		FILESYSTEM.get().ok_or(Errno::Inval)?.unlink(path)
+	})
 }
 
 /// Creates a new, empty directory at the provided path
 pub fn create_dir(path: &str, mode: AccessPermission) -> io::Result<()> {
-	FILESYSTEM.get().ok_or(Errno::Inval)?.mkdir(path, mode)
+	let mask = *UMASK.lock();
+
+	with_relative_filename(path, |path| {
+		FILESYSTEM
+			.get()
+			.ok_or(Errno::Inval)?
+			.mkdir(path, mode.bitand(mask))
+	})
 }
 
 /// Returns an vector with all the entries within a directory.
 pub fn readdir(name: &str) -> io::Result<Vec<DirectoryEntry>> {
 	debug!("Read directory {name}");
 
-	FILESYSTEM.get().ok_or(Errno::Inval)?.readdir(name)
+	with_relative_filename(name, |name| {
+		FILESYSTEM.get().ok_or(Errno::Inval)?.readdir(name)
+	})
 }
 
 pub fn read_stat(name: &str) -> io::Result<FileAttr> {
-	FILESYSTEM.get().ok_or(Errno::Inval)?.stat(name)
+	with_relative_filename(name, |name| {
+		FILESYSTEM.get().ok_or(Errno::Inval)?.stat(name)
+	})
 }
 
 pub fn read_lstat(name: &str) -> io::Result<FileAttr> {
-	FILESYSTEM.get().ok_or(Errno::Inval)?.lstat(name)
+	with_relative_filename(name, |name| {
+		FILESYSTEM.get().ok_or(Errno::Inval)?.lstat(name)
+	})
+}
+
+fn with_relative_filename<F, T>(name: &str, callback: F) -> io::Result<T>
+where
+	F: FnOnce(&str) -> io::Result<T>,
+{
+	if name.starts_with("/") {
+		callback(name)
+	} else {
+		let cwd = WORKING_DIRECTORY.lock();
+		if let Some(cwd) = cwd.as_ref() {
+			let mut path = String::with_capacity(cwd.len() + name.len() + 1);
+			path.push_str(cwd);
+			path.push('/');
+			path.push_str(name);
+
+			callback(&path)
+		} else {
+			// Relative path with no CWD, this is weird/impossible
+			Err(Errno::Badf)
+		}
+	}
+}
+
+pub fn truncate(name: &str, size: usize) -> io::Result<()> {
+	with_relative_filename(name, |name| {
+		let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
+		if let Ok(file) = fs.open(name, OpenOption::O_TRUNC, AccessPermission::empty()) {
+			block_on(file.truncate(size), None)
+		} else {
+			Err(Errno::Badf)
+		}
+	})
 }
 
 pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result<FileDescriptor> {
 	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
 	// flags is bitmask of O_DEC_* defined above.
 	// (taken from rust stdlib/sys hermit target )
+	let mask = *UMASK.lock();
 
-	debug!("Open {name}, {flags:?}, {mode:?}");
+	with_relative_filename(name, |name| {
+		debug!("Open {name}, {flags:?}, {mode:?}");
 
-	let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
-	if let Ok(file) = fs.open(name, flags, mode) {
+		let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
+		let file = fs.open(name, flags, mode.bitand(mask))?;
 		let fd = insert_object(file)?;
 		Ok(fd)
+	})
+}
+
+pub fn get_cwd() -> io::Result<String> {
+	let cwd = WORKING_DIRECTORY.lock();
+	if let Some(cwd) = cwd.as_ref() {
+		Ok(cwd.clone())
 	} else {
-		Err(Errno::Inval)
+		Err(Errno::Noent)
 	}
+}
+
+pub fn set_cwd(cwd: &str) -> io::Result<()> {
+	// TODO: check that the directory exists and that permission flags are correct
+
+	let mut working_dir = WORKING_DIRECTORY.lock();
+	if cwd.starts_with("/") {
+		*working_dir = Some(cwd.to_string());
+	} else {
+		let Some(working_dir) = working_dir.as_mut() else {
+			return Err(Errno::Badf);
+		};
+		working_dir.push('/');
+		working_dir.push_str(cwd);
+	}
+
+	Ok(())
+}
+
+pub fn umask(new_mask: AccessPermission) -> AccessPermission {
+	let mut lock = UMASK.lock();
+	let old = *lock;
+	*lock = new_mask;
+	old
 }
 
 /// Open a directory to read the directory entries
