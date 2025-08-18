@@ -25,11 +25,11 @@ impl AsyncTaskId {
 
 pub(crate) struct AsyncTask {
 	id: AsyncTaskId,
-	future: Pin<Box<dyn Future<Output = ()>>>,
+	future: Pin<Box<dyn Future<Output = ()> + Send>>,
 }
 
 impl AsyncTask {
-	pub fn new(future: impl Future<Output = ()> + 'static) -> AsyncTask {
+	pub fn new(future: impl Future<Output = ()> + Send + 'static) -> AsyncTask {
 		AsyncTask {
 			id: AsyncTaskId::new(),
 			future: Box::pin(future),
