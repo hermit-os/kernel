@@ -8,7 +8,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct AsyncTaskId(u32);
+struct AsyncTaskId(u32);
 
 impl fmt::Display for AsyncTaskId {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -35,16 +35,13 @@ impl AsyncTask {
 			future: Box::pin(future),
 		}
 	}
-
-	pub fn id(&self) -> AsyncTaskId {
-		self.id
-	}
 }
 
 impl Future for AsyncTask {
 	type Output = ();
 
 	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		trace!("Run async task {}", self.id);
 		self.as_mut().future.as_mut().poll(cx)
 	}
 }

@@ -100,8 +100,6 @@ pub(crate) fn run() {
 		// FIXME(mkroening): Not all tasks register wakers and never sleep
 		for _ in 0..({ core_local::async_tasks().len() }) {
 			let mut task = { core_local::async_tasks().pop_front().unwrap() };
-			trace!("Run async task {}", task.id());
-
 			if Pin::new(&mut task).poll(&mut cx).is_pending() {
 				core_local::async_tasks().push_back(task);
 			}
