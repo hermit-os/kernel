@@ -56,6 +56,7 @@ module asm "
 	let status = Command::new(&rust_lld)
 		.arg("-flavor")
 		.arg("gnu")
+		.arg("--image-base=0x8000")
 		.arg("--section-start=.text=0x8000")
 		.arg("--oformat=binary")
 		.arg("-o")
