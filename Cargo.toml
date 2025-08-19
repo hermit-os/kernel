@@ -196,6 +196,7 @@ num-traits = { version = "0.2", default-features = false }
 
 [build-dependencies]
 anyhow = "1"
+built = { version = "0.8", features = ["git2", "chrono"] }
 llvm-tools = "0.1"
 
 [workspace]

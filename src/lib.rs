@@ -83,6 +83,10 @@ mod synch;
 pub mod syscalls;
 pub mod time;
 
+mod built_info {
+	include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
 hermit_entry::define_abi_tag!();
 
 #[cfg(target_os = "none")]
@@ -182,6 +186,24 @@ fn boot_processor_main() -> ! {
 	}
 
 	info!("Welcome to Hermit {}", env!("CARGO_PKG_VERSION"));
+	if let Some(git_version) = built_info::GIT_VERSION {
+		let dirty = if built_info::GIT_DIRTY == Some(true) {
+			" (dirty)"
+		} else {
+			""
+		};
+
+		let opt_level = if built_info::OPT_LEVEL == "3" {
+			format_args!("")
+		} else {
+			format_args!(" (opt-level={})", built_info::OPT_LEVEL)
+		};
+
+		info!("Git version: {git_version}{dirty}{opt_level}");
+	}
+	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
+	info!("Built on {}", built_info::BUILT_TIME_UTC);
+
 	info!("Kernel starts at {:p}", env::get_base_address());
 
 	if let Some(fdt) = env::fdt() {

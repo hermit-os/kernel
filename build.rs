@@ -8,6 +8,8 @@ use anyhow::{Context, Result, anyhow};
 use llvm_tools::LlvmTools;
 
 fn main() -> Result<()> {
+	built::write_built_file().unwrap();
+
 	if env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "x86_64"
 		&& env::var_os("CARGO_FEATURE_SMP").is_some()
 	{
