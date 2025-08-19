@@ -111,7 +111,7 @@ ahash = { version = "0.8", default-features = false }
 align-address = "0.3"
 anstyle = { version = "1", default-features = false }
 async-lock = { version = "3.4.1", default-features = false }
-async-trait = "0.1.86"
+async-trait = "0.1.89"
 bit_field = "0.10"
 bitflags = "2"
 build-time = "0.1.3"
