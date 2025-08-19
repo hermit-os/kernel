@@ -44,6 +44,8 @@ pub(crate) mod device_alloc;
 mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
+#[cfg(careful)]
+mod device_free_list;
 
 use core::alloc::Layout;
 use core::mem::MaybeUninit;
@@ -65,6 +67,7 @@ pub use self::virtualmem::{PageAlloc, PageBox};
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
+use crate::mm::device_alloc::DeviceAlloc;
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]

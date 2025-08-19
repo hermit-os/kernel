@@ -6,12 +6,14 @@ use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::mm::{FrameAlloc, PageRangeAllocator, virtualmem};
+use crate::mm::{PageRangeAllocator, virtualmem};
 
 /// An [`Allocator`] for memory that is used to communicate with devices.
 ///
 /// Allocations from this allocator always correspond to contiguous physical memory.
 pub struct DeviceAlloc;
+
+pub const ENABLE_PHYS_OFFSET: bool = cfg!(careful);
 
 unsafe impl Allocator for DeviceAlloc {
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
@@ -19,7 +21,11 @@ unsafe impl Allocator for DeviceAlloc {
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
 		let frame_layout = PageLayout::from_size(size).unwrap();
 
-		let frame_range = FrameAlloc::allocate(frame_layout).map_err(|_| AllocError)?;
+		let frame_range = cfg_select! {
+			careful => super::device_free_list::DeviceFreeList::allocate(frame_layout),
+			_ => crate::mm::FrameAlloc::allocate(frame_layout),
+		}
+		.map_err(|_| AllocError)?;
 
 		let phys_addr = PhysAddr::from(frame_range.start());
 		let ptr = self.ptr_from(phys_addr);
@@ -35,7 +41,10 @@ unsafe impl Allocator for DeviceAlloc {
 		let range = PageRange::from_start_len(phys_addr.as_usize(), size).unwrap();
 
 		unsafe {
-			FrameAlloc::deallocate(range);
+			cfg_select! {
+				careful => super::device_free_list::DeviceFreeList::deallocate(range),
+				_ => crate::mm::FrameAlloc::deallocate(range),
+			};
 		}
 	}
 }
@@ -46,6 +55,13 @@ impl DeviceAlloc {
 	pub fn ptr_from<T>(&self, phys_addr: PhysAddr) -> *mut T {
 		let addr = phys_addr.as_usize() + self.phys_offset().as_usize();
 		ptr::with_exposed_provenance_mut(addr)
+	}
+
+	/// Returns a VirtAddr corresponding to `phys_addr`.
+	#[inline]
+	pub fn virt_addr_from(&self, phys_addr: PhysAddr) -> VirtAddr {
+		let addr = phys_addr.as_usize() + self.phys_offset().as_usize();
+		VirtAddr::from(addr)
 	}
 
 	/// Returns the physical address of `ptr`.
@@ -62,7 +78,7 @@ impl DeviceAlloc {
 	/// This device allocator expects the complete physical memory to be mapped device-readable at this offset.
 	#[inline]
 	pub fn phys_offset(&self) -> VirtAddr {
-		if cfg!(careful) {
+		if ENABLE_PHYS_OFFSET {
 			virtualmem::kernel_heap_end().as_u64().div_ceil(4).into()
 		} else {
 			0u64.into()
