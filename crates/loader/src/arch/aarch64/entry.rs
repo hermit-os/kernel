@@ -165,10 +165,13 @@ unsafe fn pre_init() -> ! {
 			 or if loading and not setting them would be the appropriate action.
 	*/
 
+	#[cfg(target_endian = "big")]
+	let endian = SCTLR_EL1::EE::BigEndian + SCTLR_EL1::E0E::BigEndian;
+	#[cfg(target_endian = "little")]
+	let endian = SCTLR_EL1::EE::LittleEndian + SCTLR_EL1::E0E::LittleEndian;
+
 	SCTLR_EL1.write(
 		SCTLR_EL1::UCI::DontTrap
-			+ SCTLR_EL1::EE::LittleEndian
-			+ SCTLR_EL1::E0E::LittleEndian
 			+ SCTLR_EL1::WXN::Disable
 			+ SCTLR_EL1::NTWE::DontTrap
 			+ SCTLR_EL1::NTWI::DontTrap
@@ -181,7 +184,8 @@ unsafe fn pre_init() -> ! {
 			+ SCTLR_EL1::SA::Enable
 			+ SCTLR_EL1::C::Cacheable
 			+ SCTLR_EL1::A::Disable
-			+ SCTLR_EL1::M::Disable,
+			+ SCTLR_EL1::M::Disable
+			+ endian,
 	);
 
 	// Enter loader
