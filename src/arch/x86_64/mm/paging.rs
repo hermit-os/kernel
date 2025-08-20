@@ -279,8 +279,18 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
+	let addr = Cr2::read().unwrap();
+
+	#[cfg(feature = "mman")]
+	crate::arch::x86_64::kernel::core_local::increment_irq_counter(14);
+	#[cfg(feature = "mman")]
+	if crate::syscalls::mman::resolve_page_fault(addr.into()).is_ok() {
+		crate::kernel::apic::eoi();
+		return;
+	}
+
 	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
+	error!("page_fault_linear_address = {addr:p}");
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());
