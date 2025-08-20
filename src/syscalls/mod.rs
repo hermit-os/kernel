@@ -386,7 +386,7 @@ pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_c
 	buf
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
 	if let Ok(name) = unsafe { CStr::from_ptr(path) }.to_str() {
@@ -443,7 +443,7 @@ pub unsafe extern "C" fn sys_faccessat(
 	}
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 	let Some(access_option) = AccessOption::from_bits(flags) else {
@@ -465,7 +465,7 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 	}
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_fchmod(fd: FileDescriptor, mode: u32) -> i32 {
 	let Some(access_permission) = AccessPermission::from_bits(mode) else {
@@ -477,7 +477,7 @@ pub unsafe extern "C" fn sys_fchmod(fd: FileDescriptor, mode: u32) -> i32 {
 		.unwrap_or_else(|e| -i32::from(e))
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 	let obj = remove_object(fd);
@@ -557,13 +557,13 @@ pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usiz
 	unsafe { write(fd, buf, len) }
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_ftruncate(fd: FileDescriptor, size: usize) -> i32 {
 	fd::truncate(fd, size).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
-#[hermit_macro::system]
+#[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_truncate(path: *const c_char, size: usize) -> i32 {
 	let Ok(path) = unsafe { CStr::from_ptr(path) }.to_str() else {
