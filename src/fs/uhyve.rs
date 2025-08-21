@@ -1,4 +1,3 @@
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::{String, ToString};
@@ -225,7 +224,7 @@ pub(crate) fn init() {
 			.unwrap()
 			.mount(
 				&mount_point,
-				Box::new(UhyveDirectory::new(Some(mount_point.to_owned()))),
+				Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
 			)
 			.expect("Mount failed. Duplicate mount_point?");
 	}
