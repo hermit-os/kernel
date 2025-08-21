@@ -29,7 +29,7 @@ exclude = [
 ]
 
 [lib]
-crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
+crate-type = ["staticlib", "lib"] # "lib" required for integration tests
 name = "hermit"
 
 [[test]]
@@ -147,18 +147,18 @@ version = "0.12"
 optional = true
 default-features = false
 features = [
-    "alloc",
-    "async",
-    "medium-ethernet",
-    "proto-ipv4",
-    "proto-ipv6",
-    # Enable IP fragmentation
-    "proto-ipv4-fragmentation",
-    "proto-ipv6-fragmentation",
-    #
-    # Assume a MTU size of 9000
-    #"fragmentation-buffer-size-8192",
-    #"reassembly-buffer-size-8192",
+	"alloc",
+	"async",
+	"medium-ethernet",
+	"proto-ipv4",
+	"proto-ipv6",
+	# Enable IP fragmentation
+	"proto-ipv4-fragmentation",
+	"proto-ipv6-fragmentation",
+	#
+	# Assume a MTU size of 9000
+	#"fragmentation-buffer-size-8192",
+	#"reassembly-buffer-size-8192",
 ]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
@@ -167,8 +167,8 @@ raw-cpuid = "11"
 uart_16550 = "0.4"
 x86_64 = "0.15"
 memory_addresses = { version = "0.2.3", default-features = false, features = [
-  "x86_64",
-  "conv-x86_64",
+	"x86_64",
+	"conv-x86_64",
 ] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
@@ -177,7 +177,7 @@ arm-gic = { version = "0.6" }
 hermit-dtb = { version = "0.1" }
 semihosting = { version = "0.1", optional = true }
 memory_addresses = { version = "0.2.3", default-features = false, features = [
-  "aarch64",
+	"aarch64",
 ] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
@@ -187,7 +187,7 @@ semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
 trapframe = "0.10"
 memory_addresses = { version = "0.2.3", default-features = false, features = [
-  "riscv64",
+	"riscv64",
 ] }
 
 [dev-dependencies]
@@ -201,7 +201,7 @@ llvm-tools = "0.1"
 
 [workspace]
 members = [
-    "hermit-macro",
+	"hermit-macro",
 	"xtask",
 ]
 exclude = [
