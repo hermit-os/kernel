@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use core::mem::MaybeUninit;
 use core::{fmt, mem};
 
 use heapless::Vec;
@@ -42,7 +41,7 @@ impl IoDevice {
 		}
 	}
 
-	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		match self {
 			#[cfg(not(target_arch = "riscv64"))]
 			IoDevice::Uhyve(s) => s.read(buf),
@@ -76,7 +75,7 @@ impl UhyveSerial {
 		serial_buf_hypercall(buf);
 	}
 
-	pub fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	pub fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
 		Ok(0)
 	}
 
@@ -131,7 +130,7 @@ impl Console {
 		}
 	}
 
-	pub fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		self.device.read(buf)
 	}
 

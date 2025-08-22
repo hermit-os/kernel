@@ -722,7 +722,7 @@ impl FuseFileHandleInner {
 		.await
 	}
 
-	fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
 			debug!("Reading longer than max_read_len: {len}");
@@ -744,7 +744,7 @@ impl FuseFileHandleInner {
 				};
 			self.offset += len;
 
-			buf[..len].write_copy_of_slice(&rsp.payload.unwrap()[..len]);
+			buf[..len].copy_from_slice(&rsp.payload.unwrap()[..len]);
 
 			Ok(len)
 		} else {
@@ -878,7 +878,7 @@ impl ObjectInterface for FuseFileHandle {
 		self.0.lock().await.poll(event).await
 	}
 
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 

@@ -1,6 +1,5 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
@@ -53,14 +52,14 @@ impl SerialDevice {
 		}
 	}
 
-	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut guard = UART_DEVICE.lock();
 		if guard.buffer.is_empty() {
 			Ok(0)
 		} else {
 			let min = core::cmp::min(buf.len(), guard.buffer.len());
 			let drained = guard.buffer.drain(..min).collect::<Vec<_>>();
-			buf[..min].write_copy_of_slice(drained.as_slice());
+			buf[..min].copy_from_slice(drained.as_slice());
 			Ok(min)
 		}
 	}

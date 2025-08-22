@@ -1,17 +1,11 @@
-use core::mem::MaybeUninit;
-
 use simple_shell::*;
 
 use crate::interrupts::print_statistics;
 
 fn read() -> Option<u8> {
-	let mut buf = [MaybeUninit::uninit(); 1];
+	let mut buf = [0; 1];
 	let len = crate::console::CONSOLE.lock().read(&mut buf).ok()?;
-	if len > 0 {
-		Some(unsafe { buf[0].assume_init() })
-	} else {
-		None
-	}
+	if len > 0 { Some(buf[0]) } else { None }
 }
 
 pub(crate) fn init() {

@@ -9,7 +9,6 @@ cfg_if::cfg_if! {
 }
 
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 
 use smallvec::SmallVec;
 use virtio::FeatureBits;
@@ -75,7 +74,7 @@ impl VirtioUART {
 		}
 	}
 
-	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		if let Some(drv) = get_console_driver() {
 			drv.lock().read(buf).map_err(|_| Errno::Io)
 		} else {
@@ -259,9 +258,9 @@ impl VirtioConsoleDriver {
 		Ok(())
 	}
 
-	pub fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> Result<usize, DriverError> {
+	pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, DriverError> {
 		self.recv_vq.process_packet(|src| {
-			buf[..src.len()].write_copy_of_slice(src);
+			buf[..src.len()].copy_from_slice(src);
 			src.len()
 		})
 	}

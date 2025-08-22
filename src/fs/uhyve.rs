@@ -3,7 +3,6 @@ use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -30,7 +29,7 @@ impl UhyveFileHandleInner {
 		Self(fd)
 	}
 
-	fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut read_params = ReadParams {
 			fd: self.0,
 			buf: GuestVirtAddr::new(buf.as_mut_ptr() as u64),
@@ -95,7 +94,7 @@ impl UhyveFileHandle {
 
 #[async_trait]
 impl ObjectInterface for UhyveFileHandle {
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 

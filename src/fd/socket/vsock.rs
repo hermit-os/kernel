@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::future;
-use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use async_trait::async_trait;
@@ -315,7 +314,7 @@ impl Socket {
 		Ok(())
 	}
 
-	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -334,7 +333,7 @@ impl Socket {
 						}
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
-						buffer[..len].write_copy_of_slice(tmp.as_slice());
+						buffer[..len].copy_from_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
 					}
@@ -346,7 +345,7 @@ impl Socket {
 						Poll::Ready(Ok(0))
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
-						buffer[..len].write_copy_of_slice(tmp.as_slice());
+						buffer[..len].copy_from_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
 					}
@@ -427,7 +426,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.poll(event).await
 	}
 
-	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		self.read().await.read(buffer).await
 	}
 
