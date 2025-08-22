@@ -1,5 +1,7 @@
 pub mod core_local;
 pub mod interrupts;
+#[cfg(feature = "kernel-stack")]
+pub mod kernel_stack;
 #[cfg(all(
 	not(feature = "pci"),
 	any(
@@ -15,7 +17,6 @@ pub mod scheduler;
 pub mod serial;
 #[cfg(target_os = "none")]
 mod start;
-pub mod switch;
 pub mod systemtime;
 
 use alloc::alloc::{Layout, alloc};

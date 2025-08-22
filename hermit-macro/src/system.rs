@@ -174,17 +174,16 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 
 			#kernel_func
 
-			#[cfg(not(any(
-				target_arch = "riscv64",
-				feature = "common-os"
-			)))]
-			unsafe { crate::arch::switch::#kernel_function_ident(#kernel_ident, #(#args),*) }
-
-			#[cfg(any(
-				target_arch = "riscv64",
-				feature = "common-os"
-			))]
-			#unsafety { #kernel_ident(#(#args),*) }
+			cfg_if::cfg_if! {
+				if #[cfg(all(
+					feature = "kernel-stack",
+					not(any(target_arch = "riscv64", feature = "common-os"))
+				))] {
+					unsafe { crate::arch::kernel::kernel_stack::#kernel_function_ident(#kernel_ident, #(#args),*) }
+				} else {
+					#unsafety { #kernel_ident(#(#args),*) }
+				}
+			}
 		}},
 		..func
 	};
@@ -255,17 +254,16 @@ mod tests {
 					ret
 				}
 
-				#[cfg(not(any(
-					target_arch = "riscv64",
-					feature = "common-os"
-				)))]
-				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
-
-				#[cfg(any(
-					target_arch = "riscv64",
-					feature = "common-os"
-				))]
-				{ _sys_test(a, b) }
+				cfg_if::cfg_if! {
+					if #[cfg(all(
+						feature = "kernel-stack",
+						not(any(target_arch = "riscv64", feature = "common-os"))
+					))] {
+						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
+					} else {
+						{ _sys_test(a, b) }
+					}
+				}
 			}
 		};
 
@@ -324,17 +322,16 @@ mod tests {
 					ret
 				}
 
-				#[cfg(not(any(
-					target_arch = "riscv64",
-					feature = "common-os"
-				)))]
-				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
-
-				#[cfg(any(
-					target_arch = "riscv64",
-					feature = "common-os"
-				))]
-				unsafe { _sys_test(a, b) }
+				cfg_if::cfg_if! {
+					if #[cfg(all(
+						feature = "kernel-stack",
+						not(any(target_arch = "riscv64", feature = "common-os"))
+					))] {
+						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
+					} else {
+						unsafe { _sys_test(a, b) }
+					}
+				}
 			}
 		};
 
@@ -395,17 +392,16 @@ mod tests {
 					ret
 				}
 
-				#[cfg(not(any(
-					target_arch = "riscv64",
-					feature = "common-os"
-				)))]
-				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
-
-				#[cfg(any(
-					target_arch = "riscv64",
-					feature = "common-os"
-				))]
-				{ _sys_test(a, b) }
+				cfg_if::cfg_if! {
+					if #[cfg(all(
+						feature = "kernel-stack",
+						not(any(target_arch = "riscv64", feature = "common-os"))
+					))] {
+						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
+					} else {
+						{ _sys_test(a, b) }
+					}
+				}
 			}
 		};
 
