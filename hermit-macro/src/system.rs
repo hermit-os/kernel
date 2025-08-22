@@ -178,7 +178,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 				target_arch = "riscv64",
 				feature = "common-os"
 			)))]
-			unsafe { crate::arch::switch::#kernel_function_ident(#kernel_ident, #(#args),*) }
+			unsafe { crate::arch::kernel::kernel_stack::#kernel_function_ident(#kernel_ident, #(#args),*) }
 
 			#[cfg(any(
 				target_arch = "riscv64",
@@ -259,7 +259,7 @@ mod tests {
 					target_arch = "riscv64",
 					feature = "common-os"
 				)))]
-				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
+				unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
 
 				#[cfg(any(
 					target_arch = "riscv64",
@@ -328,7 +328,7 @@ mod tests {
 					target_arch = "riscv64",
 					feature = "common-os"
 				)))]
-				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
+				unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
 
 				#[cfg(any(
 					target_arch = "riscv64",
@@ -399,7 +399,7 @@ mod tests {
 					target_arch = "riscv64",
 					feature = "common-os"
 				)))]
-				unsafe { crate::arch::switch::kernel_function2(_sys_test, a, b) }
+				unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
 
 				#[cfg(any(
 					target_arch = "riscv64",

@@ -16,6 +16,7 @@ pub mod apic;
 pub mod core_local;
 pub mod gdt;
 pub mod interrupts;
+pub mod kernel_stack;
 #[cfg(all(
 	not(feature = "pci"),
 	any(
