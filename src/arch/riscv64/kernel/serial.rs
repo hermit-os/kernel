@@ -1,5 +1,7 @@
 use core::mem::MaybeUninit;
 
+use crate::io;
+
 pub(crate) struct SerialDevice;
 
 impl SerialDevice {
@@ -13,7 +15,7 @@ impl SerialDevice {
 		}
 	}
 
-	pub fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> crate::io::Result<usize> {
+	pub fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		Ok(0)
 	}
 

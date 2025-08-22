@@ -595,14 +595,14 @@ impl File {
 	}
 }
 
-impl crate::io::Read for File {
+impl io::Read for File {
 	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		let buf = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr().cast(), buf.len()) };
 		fd::read(self.fd, buf)
 	}
 }
 
-impl crate::io::Write for File {
+impl io::Write for File {
 	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		fd::write(self.fd, buf)
 	}

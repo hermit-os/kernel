@@ -8,6 +8,7 @@ use hermit_sync::{InterruptTicketMutex, Lazy};
 use crate::arch::x86_64::kernel::interrupts;
 #[cfg(feature = "pci")]
 use crate::drivers::InterruptLine;
+use crate::io;
 
 #[cfg(feature = "pci")]
 const SERIAL_IRQ: u8 = 4;
@@ -52,7 +53,7 @@ impl SerialDevice {
 		}
 	}
 
-	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> crate::io::Result<usize> {
+	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let mut guard = UART_DEVICE.lock();
 		if guard.buffer.is_empty() {
 			Ok(0)
