@@ -3,6 +3,7 @@ use core::future;
 use core::task::Poll;
 
 use async_trait::async_trait;
+use embedded_io::Write;
 use uhyve_interface::parameters::WriteParams;
 use uhyve_interface::{GuestVirtAddr, Hypercall};
 
@@ -32,8 +33,8 @@ impl ObjectInterface for GenericStdin {
 		future::poll_fn(|cx| {
 			let read_bytes = CONSOLE.lock().read(buf)?;
 			if read_bytes > 0 {
-				CONSOLE.lock().write(&buf[..read_bytes]);
-				CONSOLE.lock().flush();
+				CONSOLE.lock().write_all(&buf[..read_bytes])?;
+				CONSOLE.lock().flush()?;
 				Poll::Ready(Ok(read_bytes))
 			} else {
 				CONSOLE_WAKER.lock().register(cx.waker());
@@ -73,8 +74,7 @@ impl ObjectInterface for GenericStdout {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		CONSOLE.lock().write(buf);
-		Ok(buf.len())
+		CONSOLE.lock().write(buf)
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {
@@ -107,8 +107,7 @@ impl ObjectInterface for GenericStderr {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		CONSOLE.lock().write(buf);
-		Ok(buf.len())
+		CONSOLE.lock().write(buf)
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {

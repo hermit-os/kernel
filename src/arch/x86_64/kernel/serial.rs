@@ -1,12 +1,14 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
+use embedded_io::{ErrorType, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 #[cfg(feature = "pci")]
 use crate::arch::x86_64::kernel::interrupts;
 #[cfg(feature = "pci")]
 use crate::drivers::InterruptLine;
+use crate::errno::Errno;
 use crate::io;
 
 #[cfg(feature = "pci")]
@@ -44,14 +46,6 @@ impl SerialDevice {
 		Self {}
 	}
 
-	pub fn write(&self, buf: &[u8]) {
-		let mut guard = UART_DEVICE.lock();
-
-		for &data in buf {
-			guard.uart.send(data);
-		}
-	}
-
 	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		let mut guard = UART_DEVICE.lock();
 		if guard.buffer.is_empty() {
@@ -66,6 +60,26 @@ impl SerialDevice {
 
 	pub fn can_read(&self) -> bool {
 		!UART_DEVICE.lock().buffer.is_empty()
+	}
+}
+
+impl ErrorType for SerialDevice {
+	type Error = Errno;
+}
+
+impl Write for SerialDevice {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		let mut guard = UART_DEVICE.lock();
+
+		for &data in buf {
+			guard.uart.send(data);
+		}
+
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 

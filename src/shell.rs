@@ -1,3 +1,4 @@
+use embedded_io::Write;
 use simple_shell::*;
 
 use crate::interrupts::print_statistics;
@@ -13,7 +14,7 @@ pub(crate) fn init() {
 		|s: &str| {
 			print!("{s}");
 			// flush buffer to see the input
-			crate::console::CONSOLE.lock().flush();
+			crate::console::CONSOLE.lock().flush().unwrap();
 		},
 		read,
 	);

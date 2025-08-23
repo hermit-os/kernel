@@ -2,12 +2,14 @@
 
 use core::{fmt, mem};
 
+use embedded_io::{ErrorType, Write};
 use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch::SerialDevice;
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioUART;
+use crate::errno::Errno;
 use crate::executor::WakerRegistration;
 use crate::io;
 #[cfg(not(target_arch = "riscv64"))]
@@ -24,23 +26,6 @@ pub(crate) enum IoDevice {
 }
 
 impl IoDevice {
-	pub fn write(&self, buf: &[u8]) {
-		match self {
-			#[cfg(not(target_arch = "riscv64"))]
-			IoDevice::Uhyve(s) => s.write(buf),
-			IoDevice::Uart(s) => s.write(buf),
-			#[cfg(feature = "console")]
-			IoDevice::Virtio(s) => s.write(buf),
-		}
-
-		#[cfg(all(target_arch = "x86_64", feature = "vga"))]
-		for &byte in buf {
-			// vga::write_byte() checks if VGA support has been initialized,
-			// so we don't need any additional if clause around it.
-			crate::arch::kernel::vga::write_byte(byte);
-		}
-	}
-
 	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		match self {
 			#[cfg(not(target_arch = "riscv64"))]
@@ -62,6 +47,35 @@ impl IoDevice {
 	}
 }
 
+impl ErrorType for IoDevice {
+	type Error = Errno;
+}
+
+impl Write for IoDevice {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		match self {
+			#[cfg(not(target_arch = "riscv64"))]
+			IoDevice::Uhyve(s) => s.write_all(buf)?,
+			IoDevice::Uart(s) => s.write_all(buf)?,
+			#[cfg(feature = "console")]
+			IoDevice::Virtio(s) => s.write_all(buf)?,
+		};
+
+		#[cfg(all(target_arch = "x86_64", feature = "vga"))]
+		for &byte in buf {
+			// vga::write_byte() checks if VGA support has been initialized,
+			// so we don't need any additional if clause around it.
+			crate::arch::kernel::vga::write_byte(byte);
+		}
+
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
+	}
+}
+
 #[cfg(not(target_arch = "riscv64"))]
 pub(crate) struct UhyveSerial;
 
@@ -71,16 +85,29 @@ impl UhyveSerial {
 		Self {}
 	}
 
-	pub fn write(&self, buf: &[u8]) {
-		serial_buf_hypercall(buf);
-	}
-
 	pub fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
 		Ok(0)
 	}
 
 	pub fn can_read(&self) -> bool {
 		false
+	}
+}
+
+#[cfg(not(target_arch = "riscv64"))]
+impl ErrorType for UhyveSerial {
+	type Error = Errno;
+}
+
+#[cfg(not(target_arch = "riscv64"))]
+impl Write for UhyveSerial {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		serial_buf_hypercall(buf);
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 
@@ -94,39 +121,6 @@ impl Console {
 		Self {
 			device,
 			buffer: Vec::new(),
-		}
-	}
-
-	/// Writes a buffer to the console.
-	/// The content is buffered until a newline is encountered or the internal buffer is full.
-	/// To force early output, use [`flush`](Self::flush).
-	pub fn write(&mut self, buf: &[u8]) {
-		if SERIAL_BUFFER_SIZE - self.buffer.len() >= buf.len() {
-			// unwrap: we checked that buf fits in self.buffer
-			self.buffer.extend_from_slice(buf).unwrap();
-			if buf.contains(&b'\n') {
-				self.flush();
-			}
-		} else {
-			self.device.write(&self.buffer);
-			self.buffer.clear();
-			if buf.len() >= SERIAL_BUFFER_SIZE {
-				self.device.write(buf);
-			} else {
-				// unwrap: we checked that buf fits in self.buffer
-				self.buffer.extend_from_slice(buf).unwrap();
-				if buf.contains(&b'\n') {
-					self.flush();
-				}
-			}
-		}
-	}
-
-	/// Immediately writes everything in the internal buffer to the output.
-	pub fn flush(&mut self) {
-		if !self.buffer.is_empty() {
-			self.device.write(&self.buffer);
-			self.buffer.clear();
 		}
 	}
 
@@ -144,16 +138,44 @@ impl Console {
 	}
 }
 
-/// A collection of methods that are required to format
-/// a message to Hermit's console.
-impl fmt::Write for Console {
-	/// Print a string of characters.
-	#[inline]
-	fn write_str(&mut self, s: &str) -> fmt::Result {
-		if !s.is_empty() {
-			self.write(s.as_bytes());
+impl ErrorType for Console {
+	type Error = Errno;
+}
+
+impl Write for Console {
+	/// Writes a buffer to the console.
+	/// The content is buffered until a newline is encountered or the internal buffer is full.
+	/// To force early output, use [`flush`](Self::flush).
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		if SERIAL_BUFFER_SIZE - self.buffer.len() >= buf.len() {
+			// unwrap: we checked that buf fits in self.buffer
+			self.buffer.extend_from_slice(buf).unwrap();
+			if buf.contains(&b'\n') {
+				self.flush()?;
+			}
+		} else {
+			self.device.write_all(&self.buffer)?;
+			self.buffer.clear();
+			if buf.len() >= SERIAL_BUFFER_SIZE {
+				self.device.write_all(buf)?;
+			} else {
+				// unwrap: we checked that buf fits in self.buffer
+				self.buffer.extend_from_slice(buf).unwrap();
+				if buf.contains(&b'\n') {
+					self.flush()?;
+				}
+			}
 		}
 
+		Ok(buf.len())
+	}
+
+	/// Immediately writes everything in the internal buffer to the output.
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		if !self.buffer.is_empty() {
+			self.device.write_all(&self.buffer)?;
+			self.buffer.clear();
+		}
 		Ok(())
 	}
 }
@@ -175,13 +197,11 @@ pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments<'_>) {
-	use fmt::Write;
 	CONSOLE.lock().write_fmt(args).unwrap();
 }
 
 #[doc(hidden)]
 pub fn _panic_print(args: fmt::Arguments<'_>) {
-	use fmt::Write;
 	let mut console = unsafe { CONSOLE.make_guard_unchecked() };
 	console.write_fmt(args).ok();
 	mem::forget(console);

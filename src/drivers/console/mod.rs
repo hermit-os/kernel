@@ -10,6 +10,7 @@ cfg_if::cfg_if! {
 
 use alloc::vec::Vec;
 
+use embedded_io::{ErrorType, Write};
 use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::console::Config;
@@ -68,12 +69,6 @@ impl VirtioUART {
 		Self {}
 	}
 
-	pub fn write(&self, buf: &[u8]) {
-		if let Some(drv) = get_console_driver() {
-			let _ = drv.lock().write(buf);
-		}
-	}
-
 	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		if let Some(drv) = get_console_driver() {
 			drv.lock().read(buf).map_err(|_| Errno::Io)
@@ -88,6 +83,24 @@ impl VirtioUART {
 		} else {
 			false
 		}
+	}
+}
+
+impl ErrorType for VirtioUART {
+	type Error = Errno;
+}
+
+impl Write for VirtioUART {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		if let Some(drv) = get_console_driver() {
+			drv.lock().write_all(buf)?;
+		}
+
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 
@@ -252,12 +265,6 @@ impl Driver for VirtioConsoleDriver {
 }
 
 impl VirtioConsoleDriver {
-	pub fn write(&mut self, buf: &[u8]) -> Result<(), DriverError> {
-		self.send_vq.send_packet(buf);
-
-		Ok(())
-	}
-
 	pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, DriverError> {
 		self.recv_vq.process_packet(|src| {
 			buf[..src.len()].copy_from_slice(src);
@@ -369,6 +376,22 @@ impl VirtioConsoleDriver {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
+		Ok(())
+	}
+}
+
+impl ErrorType for VirtioConsoleDriver {
+	type Error = Errno;
+}
+
+impl Write for VirtioConsoleDriver {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		self.send_vq.send_packet(buf);
+
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
 		Ok(())
 	}
 }
