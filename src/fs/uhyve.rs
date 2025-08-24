@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
-use embedded_io::{ErrorType, Write};
+use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
 use uhyve_interface::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
@@ -30,22 +30,6 @@ impl UhyveFileHandleInner {
 		Self(fd)
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		let mut read_params = ReadParams {
-			fd: self.0,
-			buf: GuestVirtAddr::new(buf.as_mut_ptr() as u64),
-			len: buf.len(),
-			ret: 0,
-		};
-		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
-
-		if read_params.ret >= 0 {
-			Ok(read_params.ret.try_into().unwrap())
-		} else {
-			Err(Errno::Io)
-		}
-	}
-
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut lseek_params = LseekParams {
 			fd: self.0,
@@ -64,6 +48,24 @@ impl UhyveFileHandleInner {
 
 impl ErrorType for UhyveFileHandleInner {
 	type Error = Errno;
+}
+
+impl Read for UhyveFileHandleInner {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		let mut read_params = ReadParams {
+			fd: self.0,
+			buf: GuestVirtAddr::new(buf.as_mut_ptr() as u64),
+			len: buf.len(),
+			ret: 0,
+		};
+		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
+
+		if read_params.ret >= 0 {
+			Ok(read_params.ret.try_into().unwrap())
+		} else {
+			Err(Errno::Io)
+		}
+	}
 }
 
 impl Write for UhyveFileHandleInner {
