@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
+use embedded_io::{ErrorType, Write};
 use memory_addresses::VirtAddr;
 use uhyve_interface::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
@@ -45,17 +46,6 @@ impl UhyveFileHandleInner {
 		}
 	}
 
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-		let write_params = WriteParams {
-			fd: self.0,
-			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
-			len: buf.len(),
-		};
-		uhyve_hypercall(Hypercall::FileWrite(&write_params));
-
-		Ok(write_params.len)
-	}
-
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut lseek_params = LseekParams {
 			fd: self.0,
@@ -69,6 +59,27 @@ impl UhyveFileHandleInner {
 		} else {
 			Err(Errno::Inval)
 		}
+	}
+}
+
+impl ErrorType for UhyveFileHandleInner {
+	type Error = Errno;
+}
+
+impl Write for UhyveFileHandleInner {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		let write_params = WriteParams {
+			fd: self.0,
+			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
+			len: buf.len(),
+		};
+		uhyve_hypercall(Hypercall::FileWrite(&write_params));
+
+		Ok(write_params.len)
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 
