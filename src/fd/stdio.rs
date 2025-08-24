@@ -3,7 +3,7 @@ use core::future;
 use core::task::Poll;
 
 use async_trait::async_trait;
-use embedded_io::Write;
+use embedded_io::{Read, Write};
 use uhyve_interface::parameters::WriteParams;
 use uhyve_interface::{GuestVirtAddr, Hypercall};
 

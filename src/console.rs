@@ -2,7 +2,7 @@
 
 use core::{fmt, mem};
 
-use embedded_io::{ErrorType, Write};
+use embedded_io::{ErrorType, Read, Write};
 use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
@@ -11,7 +11,6 @@ use crate::arch::SerialDevice;
 use crate::drivers::console::VirtioUART;
 use crate::errno::Errno;
 use crate::executor::WakerRegistration;
-use crate::io;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::syscalls::interfaces::serial_buf_hypercall;
 
@@ -26,16 +25,6 @@ pub(crate) enum IoDevice {
 }
 
 impl IoDevice {
-	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-		match self {
-			#[cfg(not(target_arch = "riscv64"))]
-			IoDevice::Uhyve(s) => s.read(buf),
-			IoDevice::Uart(s) => s.read(buf),
-			#[cfg(feature = "console")]
-			IoDevice::Virtio(s) => s.read(buf),
-		}
-	}
-
 	pub fn can_read(&self) -> bool {
 		match self {
 			#[cfg(not(target_arch = "riscv64"))]
@@ -49,6 +38,18 @@ impl IoDevice {
 
 impl ErrorType for IoDevice {
 	type Error = Errno;
+}
+
+impl Read for IoDevice {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		match self {
+			#[cfg(not(target_arch = "riscv64"))]
+			IoDevice::Uhyve(s) => s.read(buf),
+			IoDevice::Uart(s) => s.read(buf),
+			#[cfg(feature = "console")]
+			IoDevice::Virtio(s) => s.read(buf),
+		}
+	}
 }
 
 impl Write for IoDevice {
@@ -85,10 +86,6 @@ impl UhyveSerial {
 		Self {}
 	}
 
-	pub fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
-		Ok(0)
-	}
-
 	pub fn can_read(&self) -> bool {
 		false
 	}
@@ -97,6 +94,14 @@ impl UhyveSerial {
 #[cfg(not(target_arch = "riscv64"))]
 impl ErrorType for UhyveSerial {
 	type Error = Errno;
+}
+
+#[cfg(not(target_arch = "riscv64"))]
+impl Read for UhyveSerial {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		let _ = buf;
+		Ok(0)
+	}
 }
 
 #[cfg(not(target_arch = "riscv64"))]
@@ -124,10 +129,6 @@ impl Console {
 		}
 	}
 
-	pub fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		self.device.read(buf)
-	}
-
 	pub fn can_read(&self) -> bool {
 		self.device.can_read()
 	}
@@ -140,6 +141,12 @@ impl Console {
 
 impl ErrorType for Console {
 	type Error = Errno;
+}
+
+impl Read for Console {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		self.device.read(buf)
+	}
 }
 
 impl Write for Console {

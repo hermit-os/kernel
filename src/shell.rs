@@ -1,4 +1,4 @@
-use embedded_io::Write;
+use embedded_io::{Read, Write};
 use simple_shell::*;
 
 use crate::interrupts::print_statistics;

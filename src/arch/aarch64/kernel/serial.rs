@@ -1,9 +1,8 @@
 use core::arch::asm;
 
-use embedded_io::{ErrorType, Write};
+use embedded_io::{ErrorType, Read, Write};
 
 use crate::errno::Errno;
-use crate::io;
 
 pub(crate) struct SerialDevice {
 	pub addr: u32,
@@ -20,10 +19,6 @@ impl SerialDevice {
 		Self { addr: base as u32 }
 	}
 
-	pub fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
-		Ok(0)
-	}
-
 	pub fn can_read(&self) -> bool {
 		false
 	}
@@ -31,6 +26,13 @@ impl SerialDevice {
 
 impl ErrorType for SerialDevice {
 	type Error = Errno;
+}
+
+impl Read for SerialDevice {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		let _ = buf;
+		Ok(0)
+	}
 }
 
 impl Write for SerialDevice {

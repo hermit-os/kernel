@@ -10,13 +10,14 @@ cfg_if::cfg_if! {
 
 use alloc::vec::Vec;
 
-use embedded_io::{ErrorType, Write};
+use embedded_io::{ErrorType, Read, Write};
 use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::console::Config;
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
+use crate::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::error::DriverError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_console_driver;
@@ -34,7 +35,6 @@ use crate::drivers::virtio::virtqueue::{
 use crate::drivers::{Driver, InterruptLine};
 use crate::errno::Errno;
 use crate::mm::device_alloc::DeviceAlloc;
-use crate::{VIRTIO_MAX_QUEUE_SIZE, io};
 
 fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
@@ -69,14 +69,6 @@ impl VirtioUART {
 		Self {}
 	}
 
-	pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-		if let Some(drv) = get_console_driver() {
-			drv.lock().read(buf).map_err(|_| Errno::Io)
-		} else {
-			Err(Errno::Io)
-		}
-	}
-
 	pub fn can_read(&self) -> bool {
 		if let Some(drv) = get_console_driver() {
 			drv.lock().has_packet()
@@ -88,6 +80,16 @@ impl VirtioUART {
 
 impl ErrorType for VirtioUART {
 	type Error = Errno;
+}
+
+impl Read for VirtioUART {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		if let Some(drv) = get_console_driver() {
+			drv.lock().read(buf)
+		} else {
+			Err(Errno::Io)
+		}
+	}
 }
 
 impl Write for VirtioUART {
@@ -265,13 +267,6 @@ impl Driver for VirtioConsoleDriver {
 }
 
 impl VirtioConsoleDriver {
-	pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, DriverError> {
-		self.recv_vq.process_packet(|src| {
-			buf[..src.len()].copy_from_slice(src);
-			src.len()
-		})
-	}
-
 	pub fn has_packet(&self) -> bool {
 		self.recv_vq.has_packet()
 	}
@@ -382,6 +377,17 @@ impl VirtioConsoleDriver {
 
 impl ErrorType for VirtioConsoleDriver {
 	type Error = Errno;
+}
+
+impl Read for VirtioConsoleDriver {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		self.recv_vq
+			.process_packet(|src| {
+				buf[..src.len()].copy_from_slice(src);
+				src.len()
+			})
+			.map_err(|_| Errno::Io)
+	}
 }
 
 impl Write for VirtioConsoleDriver {
