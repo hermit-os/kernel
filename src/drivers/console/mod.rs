@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
 
 use alloc::vec::Vec;
 
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{ErrorType, Read, ReadReady, Write};
 use smallvec::SmallVec;
 use virtio::FeatureBits;
 use virtio::console::Config;
@@ -68,14 +68,6 @@ impl VirtioUART {
 	pub const fn new() -> Self {
 		Self {}
 	}
-
-	pub fn can_read(&self) -> bool {
-		if let Some(drv) = get_console_driver() {
-			drv.lock().has_packet()
-		} else {
-			false
-		}
-	}
 }
 
 impl ErrorType for VirtioUART {
@@ -88,6 +80,16 @@ impl Read for VirtioUART {
 			drv.lock().read(buf)
 		} else {
 			Err(Errno::Io)
+		}
+	}
+}
+
+impl ReadReady for VirtioUART {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		if let Some(drv) = get_console_driver() {
+			Ok(drv.lock().has_packet())
+		} else {
+			Ok(false)
 		}
 	}
 }

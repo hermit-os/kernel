@@ -3,7 +3,7 @@ use core::future;
 use core::task::Poll;
 
 use async_trait::async_trait;
-use embedded_io::{Read, Write};
+use embedded_io::{Read, ReadReady, Write};
 use uhyve_interface::parameters::WriteParams;
 use uhyve_interface::{GuestVirtAddr, Hypercall};
 
@@ -20,7 +20,7 @@ pub struct GenericStdin;
 #[async_trait]
 impl ObjectInterface for GenericStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let available = if CONSOLE.lock().can_read() {
+		let available = if CONSOLE.lock().read_ready()? {
 			PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND
 		} else {
 			PollEvent::empty()

@@ -1,7 +1,7 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 #[cfg(feature = "pci")]
@@ -44,10 +44,6 @@ impl SerialDevice {
 	pub fn new() -> Self {
 		Self {}
 	}
-
-	pub fn can_read(&self) -> bool {
-		!UART_DEVICE.lock().buffer.is_empty()
-	}
 }
 
 impl ErrorType for SerialDevice {
@@ -65,6 +61,13 @@ impl Read for SerialDevice {
 			buf[..min].copy_from_slice(drained.as_slice());
 			Ok(min)
 		}
+	}
+}
+
+impl ReadReady for SerialDevice {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		let read_ready = !UART_DEVICE.lock().buffer.is_empty();
+		Ok(read_ready)
 	}
 }
 

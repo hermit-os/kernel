@@ -2,7 +2,7 @@
 
 use core::{fmt, mem};
 
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{ErrorType, Read, ReadReady, Write};
 use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
@@ -24,18 +24,6 @@ pub(crate) enum IoDevice {
 	Virtio(VirtioUART),
 }
 
-impl IoDevice {
-	pub fn can_read(&self) -> bool {
-		match self {
-			#[cfg(not(target_arch = "riscv64"))]
-			IoDevice::Uhyve(s) => s.can_read(),
-			IoDevice::Uart(s) => s.can_read(),
-			#[cfg(feature = "console")]
-			IoDevice::Virtio(s) => s.can_read(),
-		}
-	}
-}
-
 impl ErrorType for IoDevice {
 	type Error = Errno;
 }
@@ -48,6 +36,18 @@ impl Read for IoDevice {
 			IoDevice::Uart(s) => s.read(buf),
 			#[cfg(feature = "console")]
 			IoDevice::Virtio(s) => s.read(buf),
+		}
+	}
+}
+
+impl ReadReady for IoDevice {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		match self {
+			#[cfg(not(target_arch = "riscv64"))]
+			IoDevice::Uhyve(s) => s.read_ready(),
+			IoDevice::Uart(s) => s.read_ready(),
+			#[cfg(feature = "console")]
+			IoDevice::Virtio(s) => s.read_ready(),
 		}
 	}
 }
@@ -85,10 +85,6 @@ impl UhyveSerial {
 	pub const fn new() -> Self {
 		Self {}
 	}
-
-	pub fn can_read(&self) -> bool {
-		false
-	}
 }
 
 #[cfg(not(target_arch = "riscv64"))]
@@ -101,6 +97,13 @@ impl Read for UhyveSerial {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let _ = buf;
 		Ok(0)
+	}
+}
+
+#[cfg(not(target_arch = "riscv64"))]
+impl ReadReady for UhyveSerial {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		Ok(false)
 	}
 }
 
@@ -129,10 +132,6 @@ impl Console {
 		}
 	}
 
-	pub fn can_read(&self) -> bool {
-		self.device.can_read()
-	}
-
 	#[cfg(feature = "console")]
 	pub fn replace_device(&mut self, device: IoDevice) {
 		self.device = device;
@@ -146,6 +145,12 @@ impl ErrorType for Console {
 impl Read for Console {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		self.device.read(buf)
+	}
+}
+
+impl ReadReady for Console {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		self.device.read_ready()
 	}
 }
 
