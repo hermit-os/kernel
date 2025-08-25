@@ -575,8 +575,15 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	if protocol != 0 {
+	let Ok(Ok(proto)) = u8::try_from(protocol).map(Ipproto::try_from) else {
 		return -i32::from(Errno::Inval);
+	};
+
+	match (sock, proto) {
+		(_, Ipproto::Ip | Ipproto::Ipv6)
+		| (Sock::Stream, Ipproto::Tcp)
+		| (Sock::Dgram, Ipproto::Udp) => {}
+		(_, _) => return -i32::from(Errno::Inval),
 	}
 
 	#[cfg(feature = "vsock")]
