@@ -45,7 +45,7 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "virtio-net", "vsock"]
+default = ["kernel-stack", "pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "virtio-net", "vsock"]
 acpi = []
 common-os = []
 console = ["virtio"]
@@ -56,6 +56,7 @@ fsgsbase = []
 fuse = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 gem-net = ["tcp", "dep:tock-registers"]
 idle-poll = []
+kernel-stack = []
 log-target = []
 net = []
 mman = []
