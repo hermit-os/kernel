@@ -156,6 +156,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "arm-pl011-uart"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8797e113733a36b5fa906c81aefc126d255b88dd1c10a737749aa22ec7736b6a"
+dependencies = [
+ "bitflags 2.9.3",
+ "safe-mmio",
+ "thiserror",
+ "zerocopy",
+]
+
+[[package]]
 name = "async-executor"
 version = "1.13.2"
 source = "git+https://github.com/hermit-os/async-executor.git?branch=no_std#d703026ada41be60c55eb79d0b29a1fbf18b7a0b"
@@ -821,6 +833,7 @@ dependencies = [
  "anstyle",
  "anyhow",
  "arm-gic",
+ "arm-pl011-uart",
  "async-executor",
  "async-lock",
  "async-trait",

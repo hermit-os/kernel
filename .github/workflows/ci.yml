@@ -191,7 +191,7 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features qemu ${{ matrix.flags }} --microvm
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin qemu
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/console qemu --devices virtio-console-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/console --no-default-features qemu --devices virtio-console-mmio
