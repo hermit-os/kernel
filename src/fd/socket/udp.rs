@@ -185,7 +185,7 @@ impl Socket {
 		.map(|(len, endpoint)| (len, Endpoint::Ip(endpoint)))
 	}
 
-	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -195,7 +195,7 @@ impl Socket {
 							// fit the payload.
 							Ok((data, meta)) if data.len() <= buffer.len() => {
 								if self.remote_endpoint.is_none_or(|ep| meta.endpoint == ep) {
-									buffer[..data.len()].write_copy_of_slice(data);
+									buffer[..data.len()].copy_from_slice(data);
 									Poll::Ready(Ok(data.len()))
 								} else {
 									socket.register_recv_waker(cx.waker());
@@ -274,7 +274,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.recvfrom(buffer).await
 	}
 
-	async fn read(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
 		self.read().await.read(buffer).await
 	}
 

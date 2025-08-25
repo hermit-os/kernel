@@ -204,7 +204,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
 		Err(Errno::Nosys)
 	}
 
@@ -330,7 +330,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	}
 }
 
-pub(crate) fn read(fd: FileDescriptor, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {

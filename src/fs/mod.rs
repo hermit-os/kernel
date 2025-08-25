@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use core::ops::BitAnd;
 
 use async_trait::async_trait;
+use embedded_io::{Read, Write};
 use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -18,7 +19,6 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
-use crate::io::Write;
 use crate::time::{SystemTime, timespec};
 
 static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
@@ -595,16 +595,24 @@ impl File {
 	}
 }
 
-impl crate::io::Read for File {
-	fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+impl embedded_io::ErrorType for File {
+	type Error = crate::errno::Errno;
+}
+
+impl Read for File {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let buf = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr().cast(), buf.len()) };
 		fd::read(self.fd, buf)
 	}
 }
 
-impl crate::io::Write for File {
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+impl Write for File {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		fd::write(self.fd, buf)
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 

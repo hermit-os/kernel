@@ -3,10 +3,10 @@ use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
+use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
 use uhyve_interface::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
@@ -30,7 +30,28 @@ impl UhyveFileHandleInner {
 		Self(fd)
 	}
 
-	fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		let mut lseek_params = LseekParams {
+			fd: self.0,
+			offset,
+			whence: u8::from(whence).into(),
+		};
+		uhyve_hypercall(Hypercall::FileLseek(&mut lseek_params));
+
+		if lseek_params.offset >= 0 {
+			Ok(lseek_params.offset)
+		} else {
+			Err(Errno::Inval)
+		}
+	}
+}
+
+impl ErrorType for UhyveFileHandleInner {
+	type Error = Errno;
+}
+
+impl Read for UhyveFileHandleInner {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut read_params = ReadParams {
 			fd: self.0,
 			buf: GuestVirtAddr::new(buf.as_mut_ptr() as u64),
@@ -45,8 +66,10 @@ impl UhyveFileHandleInner {
 			Err(Errno::Io)
 		}
 	}
+}
 
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+impl Write for UhyveFileHandleInner {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let write_params = WriteParams {
 			fd: self.0,
 			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
@@ -57,19 +80,8 @@ impl UhyveFileHandleInner {
 		Ok(write_params.len)
 	}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		let mut lseek_params = LseekParams {
-			fd: self.0,
-			offset,
-			whence: u8::from(whence).into(),
-		};
-		uhyve_hypercall(Hypercall::FileLseek(&mut lseek_params));
-
-		if lseek_params.offset >= 0 {
-			Ok(lseek_params.offset)
-		} else {
-			Err(Errno::Inval)
-		}
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 
@@ -95,7 +107,7 @@ impl UhyveFileHandle {
 
 #[async_trait]
 impl ObjectInterface for UhyveFileHandle {
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 

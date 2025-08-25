@@ -64,7 +64,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -86,7 +86,7 @@ impl ObjectInterface for RomFileInterface {
 			buf.len()
 		};
 
-		buf[..len].write_copy_of_slice(&vec[pos..pos + len]);
+		buf[..len].copy_from_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)
@@ -175,7 +175,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -197,7 +197,7 @@ impl ObjectInterface for RamFileInterface {
 			buf.len()
 		};
 
-		buf[..len].write_copy_of_slice(&guard.data[pos..pos + len]);
+		buf[..len].copy_from_slice(&guard.data[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)

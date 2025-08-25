@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
 use core::future;
-use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use async_trait::async_trait;
+use embedded_io::{Read, ReadReady, Write};
 use uhyve_interface::parameters::WriteParams;
 use uhyve_interface::{GuestVirtAddr, Hypercall};
 
@@ -20,7 +20,7 @@ pub struct GenericStdin;
 #[async_trait]
 impl ObjectInterface for GenericStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let available = if CONSOLE.lock().can_read() {
+		let available = if CONSOLE.lock().read_ready()? {
 			PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND
 		} else {
 			PollEvent::empty()
@@ -29,14 +29,12 @@ impl ObjectInterface for GenericStdin {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			let read_bytes = CONSOLE.lock().read(buf)?;
 			if read_bytes > 0 {
-				unsafe {
-					CONSOLE.lock().write(buf[..read_bytes].assume_init_mut());
-				}
-				CONSOLE.lock().flush();
+				CONSOLE.lock().write_all(&buf[..read_bytes])?;
+				CONSOLE.lock().flush()?;
 				Poll::Ready(Ok(read_bytes))
 			} else {
 				CONSOLE_WAKER.lock().register(cx.waker());
@@ -76,8 +74,7 @@ impl ObjectInterface for GenericStdout {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		CONSOLE.lock().write(buf);
-		Ok(buf.len())
+		CONSOLE.lock().write(buf)
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {
@@ -110,8 +107,7 @@ impl ObjectInterface for GenericStderr {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		CONSOLE.lock().write(buf);
-		Ok(buf.len())
+		CONSOLE.lock().write(buf)
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {
