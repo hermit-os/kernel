@@ -1,9 +1,8 @@
 use core::arch::asm;
+use core::fmt;
 use core::mem::offset_of;
-use core::{fmt, str};
 
 use aarch64::regs::*;
-use hermit_dtb::Dtb;
 use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
 use crate::env;
@@ -351,19 +350,12 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn print_information() {
-	let dtb = unsafe {
-		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
-		))
-		.expect(".dtb file has invalid header")
-	};
-
-	let reg = dtb
-		.get_property("/cpus/cpu@0", "compatible")
-		.unwrap_or(b"unknown");
+	let fdt = env::fdt().unwrap();
+	let cpu0 = fdt.cpus().next().unwrap();
+	let cpu0_compatible = cpu0.property("compatible").unwrap().as_str().unwrap();
 
 	infoheader!(" CPU INFORMATION ");
-	infoentry!("Processor compatibility", str::from_utf8(reg).unwrap());
+	infoentry!("Processor compatibility", cpu0_compatible);
 	infoentry!("Counter frequency", *CPU_FREQUENCY);
 	infofooter!();
 }
