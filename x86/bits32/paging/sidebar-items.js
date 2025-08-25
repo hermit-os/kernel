@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BASE_PAGE_SHIFT","BASE_PAGE_SIZE","CACHE_LINE_SIZE","LARGE_PAGE_SIZE","PAGE_SIZE_ENTRIES"],"fn":["pd_index","pt_index"],"struct":["IOAddr","LargePage","PAddr","PDEntry","PDFlags","PTEntry","PTFlags","Page","VAddr"],"type":["PD","PT"]};
