@@ -1123,8 +1123,10 @@ impl VfsNode for FuseDirectory {
 		Ok(self.attr)
 	}
 
-	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
-		Ok(Arc::new(FuseDirectoryHandle::new(self.prefix.clone())))
+	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
+			self.prefix.clone(),
+		))))
 	}
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
@@ -1253,7 +1255,7 @@ impl VfsNode for FuseDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<dyn ObjectInterface>> {
+	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
@@ -1275,7 +1277,9 @@ impl VfsNode for FuseDirectory {
 			if attr.st_mode.contains(AccessPermission::S_IFDIR) {
 				let mut path = path.into_string().unwrap();
 				path.remove(0);
-				Ok(Arc::new(FuseDirectoryHandle::new(Some(path))))
+				Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
+					Some(path),
+				))))
 			} else {
 				Err(Errno::Notdir)
 			}
@@ -1320,7 +1324,7 @@ impl VfsNode for FuseDirectory {
 
 			drop(file_guard);
 
-			Ok(Arc::new(file))
+			Ok(Arc::new(async_lock::RwLock::new(file)))
 		}
 	}
 

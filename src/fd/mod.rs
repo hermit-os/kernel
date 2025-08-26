@@ -233,7 +233,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "net", feature = "vsock"))]
-	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
+	async fn accept(&self) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		Err(Errno::Inval)
 	}
 
@@ -337,19 +337,19 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	block_on(obj.read(buf), None)
+	block_on(async { obj.read().await.read(buf).await }, None)
 }
 
 pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 	let obj = get_object(fd)?;
 
-	block_on(obj.lseek(offset, whence), None)
+	block_on(async { obj.read().await.lseek(offset, whence).await }, None)
 }
 
 pub(crate) fn chmod(fd: FileDescriptor, mode: AccessPermission) -> io::Result<()> {
 	let obj = get_object(fd)?;
 
-	block_on(obj.chmod(mode), None)
+	block_on(async { obj.read().await.chmod(mode).await }, None)
 }
 
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
@@ -359,12 +359,12 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	block_on(obj.write(buf), None)
+	block_on(async { obj.read().await.write(buf).await }, None)
 }
 
 pub(crate) fn truncate(fd: FileDescriptor, length: usize) -> io::Result<()> {
 	let obj = get_object(fd)?;
-	block_on(obj.truncate(length), None)
+	block_on(async { obj.read().await.truncate(length).await }, None)
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
@@ -375,7 +375,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 			let fd = i.fd;
 			i.revents = PollEvent::empty();
 			if let Ok(obj) = core_scheduler().get_object(fd) {
-				let mut pinned = core::pin::pin!(obj.poll(i.events));
+				let mut pinned = core::pin::pin!(async { obj.read().await.poll(i.events).await });
 				if let Ready(Ok(e)) = pinned.as_mut().poll(cx)
 					&& !e.is_empty()
 				{
@@ -416,7 +416,7 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 
 pub fn fstat(fd: FileDescriptor) -> io::Result<FileAttr> {
 	let obj = get_object(fd)?;
-	block_on(obj.fstat(), None)
+	block_on(async { obj.read().await.fstat().await }, None)
 }
 
 /// Wait for some event on a file descriptor.
@@ -440,16 +440,20 @@ pub fn fstat(fd: FileDescriptor) -> io::Result<FileAttr> {
 pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<FileDescriptor> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
 
-	let fd = core_scheduler().insert_object(Arc::new(obj))?;
+	let fd = core_scheduler().insert_object(Arc::new(async_lock::RwLock::new(obj)))?;
 
 	Ok(fd)
 }
 
-pub(crate) fn get_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
+pub(crate) fn get_object(
+	fd: FileDescriptor,
+) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 	core_scheduler().get_object(fd)
 }
 
-pub(crate) fn insert_object(obj: Arc<dyn ObjectInterface>) -> io::Result<FileDescriptor> {
+pub(crate) fn insert_object(
+	obj: Arc<async_lock::RwLock<dyn ObjectInterface>>,
+) -> io::Result<FileDescriptor> {
 	core_scheduler().insert_object(obj)
 }
 
@@ -465,11 +469,13 @@ pub(crate) fn dup_object2(fd1: FileDescriptor, fd2: FileDescriptor) -> io::Resul
 	core_scheduler().dup_object2(fd1, fd2)
 }
 
-pub(crate) fn remove_object(fd: FileDescriptor) -> io::Result<Arc<dyn ObjectInterface>> {
+pub(crate) fn remove_object(
+	fd: FileDescriptor,
+) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 	core_scheduler().remove_object(fd)
 }
 
 pub(crate) fn isatty(fd: FileDescriptor) -> io::Result<bool> {
 	let obj = get_object(fd)?;
-	block_on(obj.isatty(), None)
+	block_on(async { obj.read().await.isatty().await }, None)
 }
