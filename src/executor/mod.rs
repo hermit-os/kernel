@@ -19,7 +19,7 @@ use hermit_sync::without_interrupts;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use smoltcp::time::Instant;
 
-use crate::arch::core_local::*;
+use crate::arch::core_local;
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;
@@ -94,16 +94,13 @@ impl Wake for TaskNotify {
 }
 
 pub(crate) fn run() {
-	let mut cx = Context::from_waker(Waker::noop());
-
 	without_interrupts(|| {
-		// FIXME(mkroening): Not all tasks register wakers and never sleep
-		for _ in 0..({ async_tasks().len() }) {
-			let mut task = { async_tasks().pop_front().unwrap() };
-			trace!("Run async task {}", task.id());
-
-			if task.poll(&mut cx).is_pending() {
-				async_tasks().push_back(task);
+		// FIXME: We currently have no more than 3 tasks at a time, so this is fine.
+		// Ideally, we would set this value to 200, but the network task currently immediately wakes up again.
+		// This would lead to the network task being polled 200 times back to back, slowing things down considerably.
+		for _ in 0..3 {
+			if !core_local::ex().try_tick() {
+				break;
 			}
 		}
 	});
@@ -118,7 +115,7 @@ pub(crate) fn spawn<F>(future: F)
 where
 	F: Future<Output = ()> + Send + 'static,
 {
-	without_interrupts(|| async_tasks().push_back(AsyncTask::new(future)));
+	core_local::ex().spawn(AsyncTask::new(future)).detach();
 }
 
 pub fn init() {
@@ -177,7 +174,7 @@ where
 					} else {
 						None
 					};
-					core_scheduler().add_network_timer(
+					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
 				}
@@ -203,7 +200,7 @@ where
 					} else {
 						None
 					};
-					core_scheduler().add_network_timer(
+					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
 				}
@@ -230,7 +227,7 @@ where
 			};
 
 			if delay.unwrap_or(10_000_000) > 10_000 {
-				core_scheduler().add_network_timer(
+				core_local::core_scheduler().add_network_timer(
 					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 				);
 				let wakeup_time =
