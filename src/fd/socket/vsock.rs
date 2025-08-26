@@ -51,7 +51,7 @@ impl NullSocket {
 }
 
 #[async_trait]
-impl ObjectInterface for async_lock::RwLock<NullSocket> {}
+impl ObjectInterface for NullSocket {}
 
 #[derive(Debug)]
 pub struct Socket {
@@ -444,7 +444,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 
 	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
 		let (handle, endpoint) = self.write().await.accept().await?;
-		Ok((Arc::new(async_lock::RwLock::new(handle)), endpoint))
+		Ok((Arc::new(handle), endpoint))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
