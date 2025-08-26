@@ -475,66 +475,63 @@ impl Drop for Socket {
 }
 
 #[async_trait]
-impl ObjectInterface for async_lock::RwLock<Socket> {
+impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		self.read().await.poll(event).await
+		self.poll(event).await
 	}
 
 	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
-		self.read().await.read(buffer).await
+		self.read(buffer).await
 	}
 
 	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
-		self.read().await.write(buffer).await
+		self.write(buffer).await
 	}
 
 	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
-		self.write().await.bind(endpoint).await
+		self.bind(endpoint).await
 	}
 
 	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
-		self.write().await.connect(endpoint).await
+		self.connect(endpoint).await
 	}
 
 	async fn accept(
 		&mut self,
 	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
-		let (socket, endpoint) = self.write().await.accept().await?;
-		Ok((
-			Arc::new(async_lock::RwLock::new(async_lock::RwLock::new(socket))),
-			endpoint,
-		))
+		let (socket, endpoint) = self.accept().await?;
+		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
-		self.read().await.getpeername().await
+		self.getpeername().await
 	}
 
 	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
-		self.read().await.getsockname().await
+		self.getsockname().await
 	}
 
 	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
-		self.write().await.listen(backlog).await
+		self.listen(backlog).await
 	}
 
 	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
-		self.read().await.setsockopt(opt, optval).await
+		self.setsockopt(opt, optval).await
 	}
 
 	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		self.read().await.getsockopt(opt).await
+		self.getsockopt(opt).await
 	}
 
 	async fn shutdown(&self, how: i32) -> io::Result<()> {
-		self.read().await.shutdown(how).await
+		self.shutdown(how).await
 	}
 
 	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
-		self.read().await.status_flags().await
+		self.status_flags().await
 	}
 
 	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
-		self.write().await.set_status_flags(status_flags).await
+		self.set_status_flags(status_flags).await
 	}
 }

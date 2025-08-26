@@ -588,7 +588,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 
 	#[cfg(feature = "vsock")]
 	if domain == Af::Vsock && sock == Sock::Stream {
-		let mut socket = async_lock::RwLock::new(vsock::Socket::new());
+		let mut socket = vsock::Socket::new();
 
 		if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 			block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
@@ -610,7 +610,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			if sock == Sock::Dgram {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
-				let mut socket = async_lock::RwLock::new(udp::Socket::new(handle, domain));
+				let mut socket = udp::Socket::new(handle, domain);
 
 				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
@@ -626,7 +626,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			if sock == Sock::Stream {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
-				let mut socket = async_lock::RwLock::new(tcp::Socket::new(handle, domain));
+				let mut socket = tcp::Socket::new(handle, domain);
 
 				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
