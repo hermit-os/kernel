@@ -16,8 +16,6 @@ cfg_if::cfg_if! {
 		pub(crate) use self::aarch64::kernel::serial::SerialDevice;
 		pub(crate) use self::aarch64::kernel::processor::set_oneshot_timer;
 		pub(crate) use self::aarch64::kernel::scheduler;
-		#[cfg(not(feature = "common-os"))]
-		pub(crate) use self::aarch64::kernel::switch;
 		#[cfg(feature = "smp")]
 		pub(crate) use self::aarch64::kernel::application_processor_init;
 		pub(crate) use self::aarch64::kernel::{
