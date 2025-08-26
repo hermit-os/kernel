@@ -1,13 +1,14 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
-use core::mem::MaybeUninit;
 
+use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 #[cfg(feature = "pci")]
 use crate::arch::x86_64::kernel::interrupts;
 #[cfg(feature = "pci")]
 use crate::drivers::InterruptLine;
+use crate::errno::Errno;
 
 #[cfg(feature = "pci")]
 const SERIAL_IRQ: u8 = 4;
@@ -43,29 +44,46 @@ impl SerialDevice {
 	pub fn new() -> Self {
 		Self {}
 	}
+}
 
-	pub fn write(&self, buf: &[u8]) {
-		let mut guard = UART_DEVICE.lock();
+impl ErrorType for SerialDevice {
+	type Error = Errno;
+}
 
-		for &data in buf {
-			guard.uart.send(data);
-		}
-	}
-
-	pub fn read(&self, buf: &mut [MaybeUninit<u8>]) -> crate::io::Result<usize> {
+impl Read for SerialDevice {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut guard = UART_DEVICE.lock();
 		if guard.buffer.is_empty() {
 			Ok(0)
 		} else {
 			let min = core::cmp::min(buf.len(), guard.buffer.len());
 			let drained = guard.buffer.drain(..min).collect::<Vec<_>>();
-			buf[..min].write_copy_of_slice(drained.as_slice());
+			buf[..min].copy_from_slice(drained.as_slice());
 			Ok(min)
 		}
 	}
+}
 
-	pub fn can_read(&self) -> bool {
-		!UART_DEVICE.lock().buffer.is_empty()
+impl ReadReady for SerialDevice {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		let read_ready = !UART_DEVICE.lock().buffer.is_empty();
+		Ok(read_ready)
+	}
+}
+
+impl Write for SerialDevice {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		let mut guard = UART_DEVICE.lock();
+
+		for &data in buf {
+			guard.uart.send(data);
+		}
+
+		Ok(buf.len())
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }
 

@@ -1,5 +1,8 @@
 use core::arch::asm;
-use core::mem::MaybeUninit;
+
+use embedded_io::{ErrorType, Read, ReadReady, Write};
+
+use crate::errno::Errno;
 
 pub(crate) struct SerialDevice {
 	pub addr: u32,
@@ -15,8 +18,27 @@ impl SerialDevice {
 
 		Self { addr: base as u32 }
 	}
+}
 
-	pub fn write(&self, buf: &[u8]) {
+impl ErrorType for SerialDevice {
+	type Error = Errno;
+}
+
+impl Read for SerialDevice {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		let _ = buf;
+		Ok(0)
+	}
+}
+
+impl ReadReady for SerialDevice {
+	fn read_ready(&mut self) -> Result<bool, Self::Error> {
+		Ok(false)
+	}
+}
+
+impl Write for SerialDevice {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let port = core::ptr::with_exposed_provenance_mut::<u8>(self.addr as usize);
 		for &byte in buf {
 			// LF newline characters need to be extended to CRLF over a real serial port.
@@ -40,13 +62,11 @@ impl SerialDevice {
 				);
 			}
 		}
+
+		Ok(buf.len())
 	}
 
-	pub fn read(&self, _buf: &mut [MaybeUninit<u8>]) -> crate::io::Result<usize> {
-		Ok(0)
-	}
-
-	pub fn can_read(&self) -> bool {
-		false
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
 	}
 }

@@ -13,6 +13,7 @@ use core::{future, mem};
 use align_address::Align;
 use async_lock::Mutex;
 use async_trait::async_trait;
+use embedded_io::{ErrorType, Read, Write};
 use fuse_abi::linux::*;
 
 use crate::alloc::string::ToString;
@@ -722,75 +723,6 @@ impl FuseFileHandleInner {
 		.await
 	}
 
-	fn read(&mut self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let mut len = buf.len();
-		if len > MAX_READ_LEN {
-			debug!("Reading longer than max_read_len: {len}");
-			len = MAX_READ_LEN;
-		}
-		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, rsp_payload_len) =
-				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
-			let rsp = get_filesystem_driver()
-				.ok_or(Errno::Nosys)?
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
-			let len: usize =
-				if (rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>() >= len
-				{
-					len
-				} else {
-					(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
-				};
-			self.offset += len;
-
-			buf[..len].write_copy_of_slice(&rsp.payload.unwrap()[..len]);
-
-			Ok(len)
-		} else {
-			debug!("File not open, cannot read!");
-			Err(Errno::Noent)
-		}
-	}
-
-	fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-		debug!("FUSE write!");
-		let mut truncated_len = buf.len();
-		if truncated_len > MAX_WRITE_LEN {
-			debug!(
-				"Writing longer than max_write_len: {} > {}",
-				buf.len(),
-				MAX_WRITE_LEN
-			);
-			truncated_len = MAX_WRITE_LEN;
-		}
-		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let truncated_buf = Box::<[u8]>::from(&buf[..truncated_len]);
-			let (cmd, rsp_payload_len) =
-				ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
-			let rsp = get_filesystem_driver()
-				.ok_or(Errno::Nosys)?
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
-
-			if rsp.headers.out_header.error < 0 {
-				return Err(Errno::Io);
-			}
-
-			let rsp_size = rsp.headers.op_header.size;
-			let rsp_len: usize = if rsp_size > u32::try_from(truncated_len).unwrap() {
-				truncated_len
-			} else {
-				rsp_size.try_into().unwrap()
-			};
-			self.offset += rsp_len;
-			Ok(rsp_len)
-		} else {
-			warn!("File not open, cannot read!");
-			Err(Errno::Noent)
-		}
-	}
-
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		debug!("FUSE lseek");
 
@@ -849,6 +781,87 @@ impl FuseFileHandleInner {
 	}
 }
 
+impl ErrorType for FuseFileHandleInner {
+	type Error = Errno;
+}
+
+impl Read for FuseFileHandleInner {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+		let mut len = buf.len();
+		if len > MAX_READ_LEN {
+			debug!("Reading longer than max_read_len: {len}");
+			len = MAX_READ_LEN;
+		}
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let (cmd, rsp_payload_len) =
+				ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
+			let rsp = get_filesystem_driver()
+				.ok_or(Errno::Nosys)?
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+			let len: usize =
+				if (rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>() >= len
+				{
+					len
+				} else {
+					(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
+				};
+			self.offset += len;
+
+			buf[..len].copy_from_slice(&rsp.payload.unwrap()[..len]);
+
+			Ok(len)
+		} else {
+			debug!("File not open, cannot read!");
+			Err(Errno::Noent)
+		}
+	}
+}
+
+impl Write for FuseFileHandleInner {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+		debug!("FUSE write!");
+		let mut truncated_len = buf.len();
+		if truncated_len > MAX_WRITE_LEN {
+			debug!(
+				"Writing longer than max_write_len: {} > {}",
+				buf.len(),
+				MAX_WRITE_LEN
+			);
+			truncated_len = MAX_WRITE_LEN;
+		}
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let truncated_buf = Box::<[u8]>::from(&buf[..truncated_len]);
+			let (cmd, rsp_payload_len) =
+				ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
+			let rsp = get_filesystem_driver()
+				.ok_or(Errno::Nosys)?
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+
+			if rsp.headers.out_header.error < 0 {
+				return Err(Errno::Io);
+			}
+
+			let rsp_size = rsp.headers.op_header.size;
+			let rsp_len: usize = if rsp_size > u32::try_from(truncated_len).unwrap() {
+				truncated_len
+			} else {
+				rsp_size.try_into().unwrap()
+			};
+			self.offset += rsp_len;
+			Ok(rsp_len)
+		} else {
+			warn!("File not open, cannot read!");
+			Err(Errno::Noent)
+		}
+	}
+
+	fn flush(&mut self) -> Result<(), Self::Error> {
+		Ok(())
+	}
+}
+
 impl Drop for FuseFileHandleInner {
 	fn drop(&mut self) {
 		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
@@ -878,7 +891,7 @@ impl ObjectInterface for FuseFileHandle {
 		self.0.lock().await.poll(event).await
 	}
 
-	async fn read(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
 	}
 
