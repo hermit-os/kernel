@@ -258,11 +258,11 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.poll(event).await
 	}
 
-	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		self.write().await.bind(endpoint).await
 	}
 
-	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		self.write().await.connect(endpoint).await
 	}
 
@@ -290,7 +290,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.status_flags().await
 	}
 
-	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
+	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
 	}
 }

@@ -642,7 +642,7 @@ pub unsafe extern "C" fn sys_ioctl(
 			|e| -i32::from(e),
 			|v| {
 				block_on(
-					async { v.read().await.set_status_flags(status_flags).await },
+					async { v.write().await.set_status_flags(status_flags).await },
 					None,
 				)
 				.map_or_else(|e| -i32::from(e), |()| 0)
@@ -680,7 +680,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 			|v| {
 				block_on(
 					async {
-						v.read()
+						v.write()
 							.await
 							.set_status_flags(fd::StatusFlags::from_bits_retain(arg))
 							.await

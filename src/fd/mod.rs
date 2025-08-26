@@ -233,25 +233,27 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "net", feature = "vsock"))]
-	async fn accept(&self) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
+	async fn accept(
+		&mut self,
+	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		Err(Errno::Inval)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(any(feature = "net", feature = "vsock"))]
-	async fn connect(&self, _endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&mut self, _endpoint: Endpoint) -> io::Result<()> {
 		Err(Errno::Inval)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(any(feature = "net", feature = "vsock"))]
-	async fn bind(&self, _name: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&mut self, _name: ListenEndpoint) -> io::Result<()> {
 		Err(Errno::Inval)
 	}
 
 	/// `listen` for connections on a socket
 	#[cfg(any(feature = "net", feature = "vsock"))]
-	async fn listen(&self, _backlog: i32) -> io::Result<()> {
+	async fn listen(&mut self, _backlog: i32) -> io::Result<()> {
 		Err(Errno::Inval)
 	}
 
@@ -310,7 +312,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	}
 
 	/// Sets the file status flags.
-	async fn set_status_flags(&self, _status_flags: StatusFlags) -> io::Result<()> {
+	async fn set_status_flags(&mut self, _status_flags: StatusFlags) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
