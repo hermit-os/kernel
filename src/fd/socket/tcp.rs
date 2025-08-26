@@ -496,9 +496,12 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.connect(endpoint).await
 	}
 
-	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
+	async fn accept(&self) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		let (socket, endpoint) = self.write().await.accept().await?;
-		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
+		Ok((
+			Arc::new(async_lock::RwLock::new(async_lock::RwLock::new(socket))),
+			endpoint,
+		))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {

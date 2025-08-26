@@ -390,7 +390,11 @@ pub(crate) struct Task {
 	/// Stack of the task
 	pub stacks: TaskStacks,
 	/// Mapping between file descriptor and the referenced IO interface
-	pub object_map: Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+	pub object_map: Arc<
+		RwSpinLock<
+			HashMap<FileDescriptor, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
+		>,
+	>,
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Box<TaskTLS>>,
@@ -411,7 +415,11 @@ impl Task {
 		task_status: TaskStatus,
 		task_prio: Priority,
 		stacks: TaskStacks,
-		object_map: Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+		object_map: Arc<
+			RwSpinLock<
+				HashMap<FileDescriptor, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
+			>,
+		>,
 	) -> Task {
 		debug!("Creating new task {tid} on core {core_id}");
 
@@ -437,14 +445,22 @@ impl Task {
 
 		/// All cores use the same mapping between file descriptor and the referenced object
 		static OBJECT_MAP: OnceCell<
-			Arc<RwSpinLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>>>,
+			Arc<
+				RwSpinLock<
+					HashMap<
+						FileDescriptor,
+						Arc<async_lock::RwLock<dyn ObjectInterface>>,
+						RandomState,
+					>,
+				>,
+			>,
 		> = OnceCell::new();
 
 		if core_id == 0 {
 			OBJECT_MAP
 				.set(Arc::new(RwSpinLock::new(HashMap::<
 					FileDescriptor,
-					Arc<dyn ObjectInterface>,
+					Arc<async_lock::RwLock<dyn ObjectInterface>>,
 					RandomState,
 				>::with_hasher(
 					RandomState::with_seeds(0, 0, 0, 0),
@@ -455,23 +471,41 @@ impl Task {
 				let mut guard = objmap.write();
 				if env::is_uhyve() {
 					guard
-						.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
+						.try_insert(
+							STDIN_FILENO,
+							Arc::new(async_lock::RwLock::new(UhyveStdin::new())),
+						)
 						.map_err(|_| Errno::Io)?;
 					guard
-						.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
+						.try_insert(
+							STDOUT_FILENO,
+							Arc::new(async_lock::RwLock::new(UhyveStdout::new())),
+						)
 						.map_err(|_| Errno::Io)?;
 					guard
-						.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
+						.try_insert(
+							STDERR_FILENO,
+							Arc::new(async_lock::RwLock::new(UhyveStderr::new())),
+						)
 						.map_err(|_| Errno::Io)?;
 				} else {
 					guard
-						.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
+						.try_insert(
+							STDIN_FILENO,
+							Arc::new(async_lock::RwLock::new(GenericStdin::new())),
+						)
 						.map_err(|_| Errno::Io)?;
 					guard
-						.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
+						.try_insert(
+							STDOUT_FILENO,
+							Arc::new(async_lock::RwLock::new(GenericStdout::new())),
+						)
 						.map_err(|_| Errno::Io)?;
 					guard
-						.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
+						.try_insert(
+							STDERR_FILENO,
+							Arc::new(async_lock::RwLock::new(GenericStderr::new())),
+						)
 						.map_err(|_| Errno::Io)?;
 				}
 
