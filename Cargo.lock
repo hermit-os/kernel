@@ -728,6 +728,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "heapless"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1edcd5a338e64688fbdcb7531a846cfd3476a54784dcb918a0844682bc7ada5"
+dependencies = [
+ "hash32",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -774,7 +784,7 @@ dependencies = [
  "free-list",
  "fuse-abi",
  "hashbrown",
- "heapless",
+ "heapless 0.9.1",
  "hermit-dtb",
  "hermit-entry",
  "hermit-macro",
@@ -1730,7 +1740,7 @@ dependencies = [
  "byteorder",
  "cfg-if",
  "defmt",
- "heapless",
+ "heapless 0.8.0",
  "log",
  "managed",
 ]
