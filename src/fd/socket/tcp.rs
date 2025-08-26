@@ -275,7 +275,7 @@ impl Socket {
 		}
 	}
 
-	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let Endpoint::Ip(endpoint) = endpoint {
 			self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
@@ -488,15 +488,17 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.write(buffer).await
 	}
 
-	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
+	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		self.write().await.bind(endpoint).await
 	}
 
-	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
-		self.read().await.connect(endpoint).await
+	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
+		self.write().await.connect(endpoint).await
 	}
 
-	async fn accept(&self) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
+	async fn accept(
+		&mut self,
+	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		let (socket, endpoint) = self.write().await.accept().await?;
 		Ok((
 			Arc::new(async_lock::RwLock::new(async_lock::RwLock::new(socket))),
@@ -512,7 +514,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.getsockname().await
 	}
 
-	async fn listen(&self, backlog: i32) -> io::Result<()> {
+	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
 		self.write().await.listen(backlog).await
 	}
 
@@ -532,7 +534,7 @@ impl ObjectInterface for async_lock::RwLock<Socket> {
 		self.read().await.status_flags().await
 	}
 
-	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
+	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.write().await.set_status_flags(status_flags).await
 	}
 }
