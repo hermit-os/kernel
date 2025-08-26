@@ -298,7 +298,9 @@ impl Socket {
 		}
 	}
 
-	async fn accept(&mut self) -> io::Result<(Socket, Endpoint)> {
+	async fn accept(
+		&mut self,
+	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		if !self.is_listen {
 			self.listen(DEFAULT_BACKLOG).await?;
 		}
@@ -357,7 +359,7 @@ impl Socket {
 			is_listen: false,
 		};
 
-		Ok((socket, endpoint))
+		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
@@ -499,8 +501,7 @@ impl ObjectInterface for Socket {
 	async fn accept(
 		&mut self,
 	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
-		let (socket, endpoint) = self.accept().await?;
-		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
+		self.accept().await
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {

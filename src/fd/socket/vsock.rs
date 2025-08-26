@@ -236,7 +236,9 @@ impl Socket {
 		Ok(())
 	}
 
-	async fn accept(&mut self) -> io::Result<(NullSocket, Endpoint)> {
+	async fn accept(
+		&mut self,
+	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		let port = self.port;
 		let cid = self.cid;
 
@@ -292,7 +294,10 @@ impl Socket {
 		})
 		.await?;
 
-		Ok((NullSocket::new(), Endpoint::Vsock(endpoint)))
+		Ok((
+			Arc::new(async_lock::RwLock::new(NullSocket::new())),
+			Endpoint::Vsock(endpoint),
+		))
 	}
 
 	async fn shutdown(&self, _how: i32) -> io::Result<()> {
@@ -445,8 +450,7 @@ impl ObjectInterface for Socket {
 	async fn accept(
 		&mut self,
 	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
-		let (handle, endpoint) = self.accept().await?;
-		Ok((Arc::new(async_lock::RwLock::new(handle)), endpoint))
+		self.accept().await
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
