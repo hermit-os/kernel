@@ -1,10 +1,8 @@
-use alloc::vec::Vec;
-use core::str;
-
 use arm_gic::{IntId, Trigger};
 use bit_field::BitField;
+use fdt::Fdt;
+use fdt::node::FdtNode;
 use free_list::PageLayout;
-use hermit_dtb::Dtb;
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, InterruptLine, InterruptPin, MAX_BARS, PciAddress,
@@ -61,12 +59,12 @@ impl ConfigRegionAccess for PciConfigRegion {
 
 /// Try to find regions for the device registers
 #[allow(unused_assignments)]
-fn detect_pci_regions(dtb: &Dtb<'_>, parts: &[&str]) -> (u64, u64, u64) {
+fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 	let mut io_start: u64 = 0;
 	let mut mem32_start: u64 = 0;
 	let mut mem64_start: u64 = 0;
 
-	let mut residual_slice = dtb.get_property(parts.first().unwrap(), "ranges").unwrap();
+	let mut residual_slice = pci_node.property("ranges").unwrap().value;
 	let mut value_slice;
 	while !residual_slice.is_empty() {
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
@@ -125,8 +123,8 @@ fn detect_pci_regions(dtb: &Dtb<'_>, parts: &[&str]) -> (u64, u64, u64) {
 fn detect_interrupt(
 	bus: u32,
 	dev: u32,
-	dtb: &Dtb<'_>,
-	parts: &[&str],
+	fdt: Fdt<'_>,
+	pci_node: FdtNode<'_, '_>,
 ) -> Option<(InterruptPin, InterruptLine)> {
 	let addr = (bus << 16) | (dev << 11);
 	if addr == 0 {
@@ -136,18 +134,13 @@ fn detect_interrupt(
 
 	let mut pin: u8 = 0;
 
-	//let slice = dtb.get_property("/", "interrupt-parent").unwrap();
-	//let interrupt_parent = u32::from_be_bytes(slice.try_into().unwrap());
+	// let interrupt_parent = fdt.find_node("/").unwrap().interrupt_parent().unwrap()
 
-	let slice = dtb.get_property("/", "#address-cells").unwrap();
-	let address_cells = u32::from_be_bytes(slice.try_into().unwrap());
+	let cell_sizes = fdt.root().cell_sizes();
 
-	//let slice = dtb.get_property("/intc", "#interrupt-cells").unwrap();
-	//let interrupt_cells = u32::from_be_bytes(slice.try_into().unwrap());
+	// let interrupt_cells = fdt.find_node("/intc").unwrap().interrupt_cells().unwrap();
 
-	let mut residual_slice = dtb
-		.get_property(parts.first().unwrap(), "interrupt-map")
-		.unwrap();
+	let mut residual_slice = pci_node.property("interrupt-map").unwrap().value;
 	let mut value_slice;
 	while !residual_slice.is_empty() {
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
@@ -163,7 +156,7 @@ fn detect_interrupt(
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		//let parent = u32::from_be_bytes(value_slice.try_into().unwrap());
 
-		for _i in 0..address_cells {
+		for _i in 0..cell_sizes.address_cells {
 			(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 			//let parent_address = u32::from_be_bytes(value_slice.try_into().unwrap());
 		}
@@ -224,138 +217,115 @@ fn detect_interrupt(
 }
 
 pub fn init() {
-	let dtb = unsafe {
-		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
-		))
-		.expect(".dtb file has invalid header")
-	};
+	let fdt = env::fdt().unwrap();
 
-	for node in dtb.enum_subnodes("/") {
-		let parts: Vec<_> = node.split('@').collect();
+	if let Some(pci_node) = fdt.find_compatible(&["pci-host-ecam-generic"]) {
+		let reg = pci_node.reg().unwrap().next().unwrap();
+		let addr = PhysAddr::from(reg.starting_address.addr());
+		let size = u64::try_from(reg.size.unwrap()).unwrap();
 
-		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-			if str::from_utf8(compatible)
-				.unwrap()
-				.contains("pci-host-ecam-generic")
-			{
-				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
-				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
-				let addr = PhysAddr::new(u64::from_be_bytes(slice.try_into().unwrap()));
-				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
-				let size = u64::from_be_bytes(slice.try_into().unwrap());
+		let layout = PageLayout::from_size_align(size.try_into().unwrap(), 0x1000_0000).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let pci_address = VirtAddr::from(page_range.start());
+		info!(
+			"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"
+		);
 
-				let layout =
-					PageLayout::from_size_align(size.try_into().unwrap(), 0x1000_0000).unwrap();
-				let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-				let pci_address = VirtAddr::from(page_range.start());
-				info!(
-					"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"
-				);
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(
+			pci_address,
+			addr,
+			(size / BasePageSize::SIZE).try_into().unwrap(),
+			flags,
+		);
 
-				let mut flags = PageTableEntryFlags::empty();
-				flags.device().writable().execute_disable();
-				paging::map::<BasePageSize>(
-					pci_address,
-					addr,
-					(size / BasePageSize::SIZE).try_into().unwrap(),
-					flags,
-				);
+		let (mut io_start, mem32_start, mut mem64_start) = detect_pci_regions(pci_node);
 
-				let (mut io_start, mem32_start, mut mem64_start) = detect_pci_regions(&dtb, &parts);
+		debug!("IO address space starts at{io_start:#X}");
+		debug!("Memory32 address space starts at {mem32_start:#X}");
+		debug!("Memory64 address space starts {mem64_start:#X}");
+		assert!(io_start > 0);
+		assert!(mem32_start > 0);
+		assert!(mem64_start > 0);
 
-				debug!("IO address space starts at{io_start:#X}");
-				debug!("Memory32 address space starts at {mem32_start:#X}");
-				debug!("Memory64 address space starts {mem64_start:#X}");
-				assert!(io_start > 0);
-				assert!(mem32_start > 0);
-				assert!(mem64_start > 0);
+		let max_bus_number = size
+			/ (u64::from(PCI_MAX_DEVICE_NUMBER)
+				* u64::from(PCI_MAX_FUNCTION_NUMBER)
+				* BasePageSize::SIZE);
+		info!("Scanning PCI Busses 0 to {}", max_bus_number - 1);
 
-				let max_bus_number = size
-					/ (u64::from(PCI_MAX_DEVICE_NUMBER)
-						* u64::from(PCI_MAX_FUNCTION_NUMBER)
-						* BasePageSize::SIZE);
-				info!("Scanning PCI Busses 0 to {}", max_bus_number - 1);
+		let pci_config = PciConfigRegion::new(pci_address);
+		for bus in 0..max_bus_number {
+			for device in 0..PCI_MAX_DEVICE_NUMBER {
+				let pci_address = PciAddress::new(0, bus.try_into().unwrap(), device, 0);
+				let header = PciHeader::new(pci_address);
 
-				let pci_config = PciConfigRegion::new(pci_address);
-				for bus in 0..max_bus_number {
-					for device in 0..PCI_MAX_DEVICE_NUMBER {
-						let pci_address = PciAddress::new(0, bus.try_into().unwrap(), device, 0);
-						let header = PciHeader::new(pci_address);
+				let (device_id, vendor_id) = header.id(pci_config);
+				if device_id != u16::MAX && vendor_id != u16::MAX {
+					let dev = PciDevice::new(pci_address, pci_config);
 
-						let (device_id, vendor_id) = header.id(pci_config);
-						if device_id != u16::MAX && vendor_id != u16::MAX {
-							let dev = PciDevice::new(pci_address, pci_config);
-
-							// Initializes BARs
-							let mut cmd = CommandRegister::empty();
-							for i in 0..MAX_BARS {
-								if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
-									match bar {
-										Bar::Io { .. } => {
-											dev.set_bar(
-												i.try_into().unwrap(),
-												Bar::Io {
-													port: io_start.try_into().unwrap(),
-												},
-											);
-											io_start += 0x20;
-											cmd |= CommandRegister::IO_ENABLE
-												| CommandRegister::BUS_MASTER_ENABLE;
-										}
-										Bar::Memory32 { .. } => {
-											// Currently, we ignore 32 bit memory bars
-											// dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
-											// mem32_start += u64::from(size);
-											// cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
-										}
+					// Initializes BARs
+					let mut cmd = CommandRegister::empty();
+					for i in 0..MAX_BARS {
+						if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
+							match bar {
+								Bar::Io { .. } => {
+									dev.set_bar(
+										i.try_into().unwrap(),
+										Bar::Io {
+											port: io_start.try_into().unwrap(),
+										},
+									);
+									io_start += 0x20;
+									cmd |= CommandRegister::IO_ENABLE
+										| CommandRegister::BUS_MASTER_ENABLE;
+								}
+								Bar::Memory32 { .. } => {
+									// Currently, we ignore 32 bit memory bars
+									// dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
+									// mem32_start += u64::from(size);
+									// cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
+								}
+								Bar::Memory64 {
+									address: _,
+									size,
+									prefetchable,
+								} => {
+									dev.set_bar(
+										i.try_into().unwrap(),
 										Bar::Memory64 {
-											address: _,
+											address: mem64_start,
 											size,
 											prefetchable,
-										} => {
-											dev.set_bar(
-												i.try_into().unwrap(),
-												Bar::Memory64 {
-													address: mem64_start,
-													size,
-													prefetchable,
-												},
-											);
-											mem64_start += size;
-											cmd |= CommandRegister::MEMORY_ENABLE
-												| CommandRegister::BUS_MASTER_ENABLE;
-										}
-									}
+										},
+									);
+									mem64_start += size;
+									cmd |= CommandRegister::MEMORY_ENABLE
+										| CommandRegister::BUS_MASTER_ENABLE;
 								}
 							}
-							dev.set_command(cmd);
-
-							if let Some((pin, line)) = detect_interrupt(
-								bus.try_into().unwrap(),
-								device.into(),
-								&dtb,
-								&parts,
-							) {
-								debug!(
-									"Initialize interrupt pin {pin} and line {line} for device {device_id}"
-								);
-								dev.set_irq(pin, line);
-							}
-
-							PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(dev));
 						}
 					}
-				}
+					dev.set_command(cmd);
 
-				return;
-			} else if str::from_utf8(compatible)
-				.unwrap()
-				.contains("pci-host-cam-generic")
-			{
-				warn!("Currently, pci-host-cam-generic isn't supported!");
+					if let Some((pin, line)) =
+						detect_interrupt(bus.try_into().unwrap(), device.into(), fdt, pci_node)
+					{
+						debug!(
+							"Initialize interrupt pin {pin} and line {line} for device {device_id}"
+						);
+						dev.set_irq(pin, line);
+					}
+
+					PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(dev));
+				}
 			}
 		}
+
+		return;
+	} else if let Some(_pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
+		warn!("Currently, pci-host-cam-generic isn't supported!");
 	}
 
 	warn!("Unable to find PCI bus");

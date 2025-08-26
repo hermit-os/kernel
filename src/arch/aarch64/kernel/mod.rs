@@ -67,20 +67,9 @@ pub fn get_limit() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	use hermit_dtb::Dtb;
-
-	let dtb = unsafe {
-		Dtb::from_raw(core::ptr::with_exposed_provenance(
-			env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
-		))
-		.expect(".dtb file has invalid header")
-	};
-
-	dtb.enum_subnodes("/cpus")
-		.filter(|name| name.contains("cpu@"))
-		.count()
-		.try_into()
-		.unwrap()
+	let fdt = env::fdt().unwrap();
+	let cpu_count = fdt.cpus().count();
+	u32::try_from(cpu_count).unwrap()
 }
 
 #[cfg(feature = "smp")]
@@ -148,8 +137,6 @@ pub fn boot_next_processor() {
 		use core::arch::asm;
 		use core::hint::spin_loop;
 
-		use hermit_dtb::Dtb;
-
 		use crate::kernel::start::{TTBR0, smp_start};
 		use crate::mm::virtual_to_physical;
 
@@ -161,24 +148,17 @@ pub fn boot_next_processor() {
 			trace!("Virtual address of smp_start 0x{virt_start:x}");
 			trace!("Physical address of smp_start 0x{phys_start:x}");
 
-			let dtb = unsafe {
-				Dtb::from_raw(core::ptr::with_exposed_provenance(
-					env::boot_info().hardware_info.device_tree.unwrap().get() as usize,
-				))
-				.expect(".dtb file has invalid header")
-			};
+			let fdt = env::fdt().unwrap();
+			let psci_node = fdt.find_node("/psci").unwrap();
 
-			let cpu_on = u32::from_be_bytes(
-				dtb.get_property("/psci", "cpu_on")
-					.unwrap()
-					.try_into()
-					.unwrap(),
-			);
+			let cpu_on = psci_node.property("cpu_on").unwrap().as_usize().unwrap();
+			let cpu_on = u32::try_from(cpu_on).unwrap();
 			trace!("CPU_ON: 0x{cpu_on:x}");
-			let method =
-				core::str::from_utf8(dtb.get_property("/psci", "method").unwrap_or(b"unknown"))
-					.unwrap()
-					.replace('\0', "");
+
+			let method = psci_node
+				.property("method")
+				.map(|node| node.as_str().unwrap())
+				.unwrap_or("unknown");
 
 			let ttbr0: *mut u8;
 			unsafe {

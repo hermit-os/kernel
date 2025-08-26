@@ -801,12 +801,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "hermit-dtb"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89e0de208fa9b99664812350b33072d0d9b3a63caaebb03eeb23316eeedfb8d0"
-
-[[package]]
 name = "hermit-entry"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -844,7 +838,6 @@ dependencies = [
  "fuse-abi",
  "hashbrown",
  "heapless 0.9.1",
- "hermit-dtb",
  "hermit-entry",
  "hermit-macro",
  "hermit-sync",
