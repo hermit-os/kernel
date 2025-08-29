@@ -9,12 +9,13 @@ use hermit_sync::InterruptSpinMutex;
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem::GEMDriver;
-#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::init_cell::InitCell;
 
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
+#[non_exhaustive]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "console")]
 	VirtioConsole(InterruptSpinMutex<VirtioConsoleDriver>),
@@ -23,10 +24,11 @@ pub(crate) enum MmioDriver {
 impl MmioDriver {
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptSpinMutex<VirtioConsoleDriver>> {
-		match self {
-			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => None,
+		#[allow(irrefutable_let_patterns)]
+		if let Self::VirtioConsole(drv) = self {
+			Some(drv)
+		} else {
+			None
 		}
 	}
 }
@@ -38,7 +40,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 #[cfg(feature = "gem-net")]
 pub(crate) type NetworkDevice = GEMDriver;
 
-#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "console")]

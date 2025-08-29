@@ -139,77 +139,73 @@ impl Socket {
 	}
 
 	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
-		match endpoint {
-			ListenEndpoint::Vsock(ep) => {
-				self.port = ep.port;
-				if let Some(cid) = ep.cid {
-					self.cid = cid;
-				} else {
-					self.cid = u32::MAX;
-				}
-				VSOCK_MAP.lock().bind(ep.port)
+		#[allow(irrefutable_let_patterns)]
+		if let ListenEndpoint::Vsock(ep) = endpoint {
+			self.port = ep.port;
+			if let Some(cid) = ep.cid {
+				self.cid = cid;
+			} else {
+				self.cid = u32::MAX;
 			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => Err(Errno::Inval),
+			VSOCK_MAP.lock().bind(ep.port)
+		} else {
+			Err(Errno::Inval)
 		}
 	}
 
 	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
-		match endpoint {
-			Endpoint::Vsock(ep) => {
-				const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
-				let port = VSOCK_MAP.lock().connect(ep.port, ep.cid)?;
-				self.port = port;
-				self.port = ep.cid;
+		#[allow(irrefutable_let_patterns)]
+		if let Endpoint::Vsock(ep) = endpoint {
+			const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
+			let port = VSOCK_MAP.lock().connect(ep.port, ep.cid)?;
+			self.port = port;
+			self.port = ep.cid;
 
-				future::poll_fn(|cx| {
-					if let Some(mut driver_guard) = hardware::get_vsock_driver().unwrap().try_lock()
-					{
-						let local_cid = driver_guard.get_cid();
+			future::poll_fn(|cx| {
+				if let Some(mut driver_guard) = hardware::get_vsock_driver().unwrap().try_lock() {
+					let local_cid = driver_guard.get_cid();
 
-						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
+					driver_guard.send_packet(HEADER_SIZE, |buffer| {
+						let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
-							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(ep.cid.into());
-							response.src_port = le32::from_ne(port);
-							response.dst_port = le32::from_ne(ep.port);
-							response.len = le32::from_ne(0);
-							response.type_ = le16::from_ne(Type::Stream.into());
-							response.op = le16::from_ne(Op::Request.into());
-							response.flags = le32::from_ne(0);
-							response.buf_alloc = le32::from_ne(
-								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
-							);
-							response.fwd_cnt = le32::from_ne(0);
-						});
+						response.src_cid = le64::from_ne(local_cid);
+						response.dst_cid = le64::from_ne(ep.cid.into());
+						response.src_port = le32::from_ne(port);
+						response.dst_port = le32::from_ne(ep.port);
+						response.len = le32::from_ne(0);
+						response.type_ = le16::from_ne(Type::Stream.into());
+						response.op = le16::from_ne(Op::Request.into());
+						response.flags = le32::from_ne(0);
+						response.buf_alloc =
+							le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+						response.fwd_cnt = le32::from_ne(0);
+					});
 
-						Poll::Ready(())
-					} else {
-						// FIXME: only wake when progress can be made
-						cx.waker().wake_by_ref();
+					Poll::Ready(())
+				} else {
+					// FIXME: only wake when progress can be made
+					cx.waker().wake_by_ref();
+					Poll::Pending
+				}
+			})
+			.await;
+
+			future::poll_fn(|cx| {
+				let mut guard = VSOCK_MAP.lock();
+				let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
+
+				match raw.state {
+					VsockState::Connected => Poll::Ready(Ok(())),
+					VsockState::Connecting => {
+						raw.rx_waker.register(cx.waker());
 						Poll::Pending
 					}
-				})
-				.await;
-
-				future::poll_fn(|cx| {
-					let mut guard = VSOCK_MAP.lock();
-					let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
-
-					match raw.state {
-						VsockState::Connected => Poll::Ready(Ok(())),
-						VsockState::Connecting => {
-							raw.rx_waker.register(cx.waker());
-							Poll::Pending
-						}
-						_ => Poll::Ready(Err(Errno::Badf)),
-					}
-				})
-				.await
-			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => Err(Errno::Inval),
+					_ => Poll::Ready(Err(Errno::Badf)),
+				}
+			})
+			.await
+		} else {
+			Err(Errno::Inval)
 		}
 	}
 

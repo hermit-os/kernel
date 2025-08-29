@@ -49,32 +49,32 @@ default = ["kernel-stack", "pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "
 acpi = []
 common-os = []
 console = ["virtio"]
-dhcpv4 = ["smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
-dns = ["smoltcp", "smoltcp/socket-dns"]
+dhcpv4 = ["net", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
+dns = ["net", "smoltcp/socket-dns"]
 fs = ["fuse"]
 fsgsbase = []
 fuse = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
-gem-net = ["tcp", "dep:tock-registers"]
+gem-net = ["net", "dep:tock-registers"]
 idle-poll = []
 kernel-stack = []
 log-target = []
-net = []
+net = ["smoltcp"]
 mman = []
 mmap = ["mman"] # Deprecated in favor of mman
 newlib = []
 nostd = []
 pci = ["virtio?/pci"]
-rtl8139 = ["tcp", "pci"]
+rtl8139 = ["net", "pci"]
 semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
 smp = []
 strace = []
-tcp = ["smoltcp", "smoltcp/socket-tcp"]
+tcp = ["net", "smoltcp/socket-tcp"]
 trace = ["smoltcp?/log", "smoltcp?/verbose"]
-udp = ["smoltcp", "smoltcp/socket-udp"]
+udp = ["net", "smoltcp/socket-udp"]
 vga = []
 virtio = ["dep:virtio"]
-virtio-net = ["virtio"]
+virtio-net = ["net", "virtio"]
 vsock = ["virtio", "pci"]
 
 [lints.rust]
@@ -158,6 +158,7 @@ features = [
 	# Enable IP fragmentation
 	"proto-ipv4-fragmentation",
 	"proto-ipv6-fragmentation",
+	"socket-raw",
 	#
 	# Assume a MTU size of 9000
 	#"fragmentation-buffer-size-8192",
