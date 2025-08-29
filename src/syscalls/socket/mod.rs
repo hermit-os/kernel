@@ -13,11 +13,11 @@ use core::ops::DerefMut;
 
 use cfg_if::cfg_if;
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::errno::Errno;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 use crate::executor::network::{NIC, NetworkState};
 #[cfg(feature = "tcp")]
 use crate::fd::socket::tcp;
@@ -300,7 +300,7 @@ pub struct sockaddr_in {
 	pub sin_zero: [c_char; 8],
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 impl From<sockaddr_in> for IpListenEndpoint {
 	fn from(addr: sockaddr_in) -> IpListenEndpoint {
 		let port = u16::from_be(addr.sin_port);
@@ -316,7 +316,7 @@ impl From<sockaddr_in> for IpListenEndpoint {
 	}
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 impl From<sockaddr_in> for IpEndpoint {
 	fn from(addr: sockaddr_in) -> IpEndpoint {
 		let port = u16::from_be(addr.sin_port);
@@ -327,7 +327,7 @@ impl From<sockaddr_in> for IpEndpoint {
 	}
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 impl From<IpEndpoint> for sockaddr_in {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {
@@ -372,7 +372,7 @@ pub struct sockaddr_in6 {
 	pub sin6_scope_id: u32,
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 impl From<sockaddr_in6> for IpListenEndpoint {
 	fn from(addr: sockaddr_in6) -> IpListenEndpoint {
 		let port = u16::from_be(addr.sin6_port);
@@ -395,7 +395,7 @@ impl From<sockaddr_in6> for IpListenEndpoint {
 	}
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 impl From<sockaddr_in6> for IpEndpoint {
 	fn from(addr: sockaddr_in6) -> IpEndpoint {
 		let port = u16::from_be(addr.sin6_port);
@@ -414,7 +414,7 @@ impl From<sockaddr_in6> for IpEndpoint {
 	}
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 impl From<IpEndpoint> for sockaddr_in6 {
 	fn from(endpoint: IpEndpoint) -> Self {
 		match endpoint.addr {
@@ -599,7 +599,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 		return fd;
 	}
 
-	#[cfg(any(feature = "tcp", feature = "udp"))]
+	#[cfg(feature = "net")]
 	if (domain == Af::Inet || domain == Af::Inet6) && (sock == Sock::Stream || sock == Sock::Dgram)
 	{
 		let mut guard = NIC.lock();
@@ -649,9 +649,9 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 		|v| {
 			block_on((*v).accept(), None).map_or_else(
 				|e| -i32::from(e),
-				#[cfg_attr(not(any(feature = "tcp", feature = "udp")), expect(unused_variables))]
+				#[cfg_attr(not(feature = "net"), expect(unused_variables))]
 				|(obj, endpoint)| match endpoint {
-					#[cfg(any(feature = "tcp", feature = "udp"))]
+					#[cfg(feature = "net")]
 					Endpoint::Ip(endpoint) => {
 						let new_fd = insert_object(obj).unwrap();
 
@@ -727,7 +727,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| match family {
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			Af::Inet => {
 				if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 					return -i32::from(Errno::Inval);
@@ -736,7 +736,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
 					.map_or_else(|e| -i32::from(e), |()| 0)
 			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			Af::Inet6 => {
 				if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return -i32::from(Errno::Inval);
@@ -771,14 +771,14 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 	};
 
 	let endpoint = match sa_family {
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(feature = "net")]
 		Af::Inet => {
 			if namelen < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
 				return -i32::from(Errno::Inval);
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in>() }))
 		}
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(feature = "net")]
 		Af::Inet6 => {
 			if namelen < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 				return -i32::from(Errno::Inval);
@@ -820,7 +820,7 @@ pub unsafe extern "C" fn sys_getsockname(
 					let addrlen = unsafe { &mut *addrlen };
 
 					match endpoint {
-						#[cfg(any(feature = "tcp", feature = "udp"))]
+						#[cfg(feature = "net")]
 						Endpoint::Ip(endpoint) => match endpoint.addr {
 							IpAddress::Ipv4(_) => {
 								if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
@@ -833,7 +833,7 @@ pub unsafe extern "C" fn sys_getsockname(
 									-i32::from(Errno::Inval)
 								}
 							}
-							#[cfg(any(feature = "tcp", feature = "udp"))]
+							#[cfg(feature = "net")]
 							IpAddress::Ipv6(_) => {
 								if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 									let addr = unsafe { &mut *addr.cast() };
@@ -969,7 +969,7 @@ pub unsafe extern "C" fn sys_getpeername(
 					let addrlen = unsafe { &mut *addrlen };
 
 					match endpoint {
-						#[cfg(any(feature = "tcp", feature = "udp"))]
+						#[cfg(feature = "net")]
 						Endpoint::Ip(endpoint) => match endpoint.addr {
 							IpAddress::Ipv4(_) => {
 								if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
@@ -1066,7 +1066,7 @@ pub unsafe extern "C" fn sys_sendto(
 	}
 
 	cfg_if! {
-		if #[cfg(any(feature = "tcp", feature = "udp"))] {
+		if #[cfg(feature = "net")] {
 			let Ok(sa_family) = (unsafe { Af::try_from((*addr).sa_family) }) else {
 				return (-i32::from(Errno::Inval)).try_into().unwrap();
 			};
@@ -1132,7 +1132,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 						let addrlen = unsafe { &mut *addrlen };
 
 						match endpoint {
-							#[cfg(any(feature = "tcp", feature = "udp"))]
+							#[cfg(feature = "net")]
 							Endpoint::Ip(endpoint) => match endpoint.addr {
 								IpAddress::Ipv4(_) => {
 									if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap()

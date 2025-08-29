@@ -15,7 +15,7 @@ use crate::console::IoDevice;
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioUART;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(
@@ -24,7 +24,7 @@ use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver}
 		all(target_arch = "x86_64", feature = "rtl8139"),
 		feature = "virtio-net",
 	),
-	any(feature = "tcp", feature = "udp")
+	feature = "net"
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -42,7 +42,7 @@ impl MmioDriver {
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			_ => None,
 		}
 	}
@@ -52,7 +52,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "net")]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "console")]
@@ -125,7 +125,7 @@ pub fn init_drivers() {
 							let cpu_id: usize = 0;
 
 							match id {
-								#[cfg(any(feature = "tcp", feature = "udp"))]
+								#[cfg(feature = "net")]
 								virtio::Id::Net => {
 									debug!(
 										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
