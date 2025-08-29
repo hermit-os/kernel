@@ -8,22 +8,14 @@ use hashbrown::HashMap;
 pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 #[cfg(any(
 	feature = "console",
-	all(
-		any(
-			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-			feature = "virtio-net",
-		),
-		feature = "net",
-	)
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "virtio-net",
 ))]
 use crate::drivers::Driver;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		feature = "virtio-net",
-	),
-	feature = "net",
+#[cfg(any(
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "virtio-net",
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 
@@ -33,12 +25,9 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
 
-	#[cfg(all(
-		any(
-			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-			feature = "virtio-net",
-		),
-		feature = "net",
+	#[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "virtio-net",
 	))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
 		handlers

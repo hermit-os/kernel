@@ -11,7 +11,6 @@ pub(crate) const USER_STACK_SIZE: usize = 0x0010_0000;
 			all(target_arch = "x86_64", feature = "rtl8139"),
 		)),
 		feature = "virtio-net",
-		feature = "net",
 	),
 	feature = "fuse",
 	feature = "vsock",

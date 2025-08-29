@@ -20,7 +20,7 @@ use crate::drivers::console::VirtioUART;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(feature = "virtio-net", feature = "net"))]
+#[cfg(feature = "virtio-net")]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::PhysAddr;
