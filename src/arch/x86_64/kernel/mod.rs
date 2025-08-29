@@ -109,12 +109,12 @@ pub fn boot_processor_init() {
 	crate::mm::print_information();
 	CoreLocal::get().add_irq_counter();
 	env::init();
-	crate::logging::KERNEL_LOGGER.set_time(true);
 	gdt::add_current_core();
 	interrupts::load_idt();
 	pic::init();
 
 	processor::detect_frequency();
+	crate::logging::KERNEL_LOGGER.set_time(true);
 	processor::print_information();
 	debug!("Cr0 = {:?}", Cr0::read());
 	debug!("Cr4 = {:?}", Cr4::read());
