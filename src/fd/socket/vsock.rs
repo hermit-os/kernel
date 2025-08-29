@@ -149,7 +149,7 @@ impl Socket {
 				}
 				VSOCK_MAP.lock().bind(ep.port)
 			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			_ => Err(Errno::Inval),
 		}
 	}
@@ -208,7 +208,7 @@ impl Socket {
 				})
 				.await
 			}
-			#[cfg(any(feature = "tcp", feature = "udp"))]
+			#[cfg(feature = "net")]
 			_ => Err(Errno::Inval),
 		}
 	}

@@ -13,8 +13,8 @@ pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 			feature = "virtio-net",
 		),
-		any(feature = "tcp", feature = "udp"),
-	),
+		feature = "net",
+	)
 ))]
 use crate::drivers::Driver;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
@@ -23,7 +23,7 @@ use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 		feature = "virtio-net",
 	),
-	any(feature = "tcp", feature = "udp"),
+	feature = "net",
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 
@@ -38,7 +38,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 			feature = "virtio-net",
 		),
-		any(feature = "tcp", feature = "udp"),
+		feature = "net",
 	))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
 		handlers

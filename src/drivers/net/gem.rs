@@ -23,12 +23,12 @@ use tock_registers::{register_bitfields, register_structs};
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::interrupts::*;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "pci")))]
+#[cfg(all(feature = "net", not(feature = "pci")))]
 use crate::arch::kernel::mmio as hardware;
 use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
-#[cfg(all(any(feature = "tcp", feature = "udp"), feature = "pci"))]
+#[cfg(all(feature = "net", feature = "pci"))]
 use crate::drivers::pci as hardware;
 use crate::drivers::{Driver, InterruptLine};
 use crate::mm::device_alloc::DeviceAlloc;

@@ -3,7 +3,7 @@ mod devicetree;
 pub mod interrupts;
 #[cfg(all(
 	any(
-		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
+		all(feature = "net", feature = "virtio-net"),
 		feature = "console",
 		feature = "gem-net",
 	),
