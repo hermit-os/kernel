@@ -30,7 +30,6 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	feature = "virtio-net",
-	feature = "net",
 ))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
@@ -816,7 +815,6 @@ pub(crate) fn init_device(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
 			feature = "virtio-net",
-			feature = "net",
 		))]
 		virtio::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
@@ -900,7 +898,6 @@ pub(crate) enum VirtioDriver {
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 		feature = "virtio-net",
-		feature = "net",
 	))]
 	Network(VirtioNetDriver),
 	#[cfg(feature = "console")]

@@ -15,7 +15,6 @@ pub mod pci;
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(all(target_arch = "x86_64", feature = "rtl8139")),
 		feature = "virtio-net",
-		feature = "net",
 	),
 	feature = "fuse",
 	feature = "vsock",
@@ -47,7 +46,6 @@ pub mod error {
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
 			feature = "virtio-net",
-			feature = "net",
 		),
 		feature = "fuse",
 		feature = "vsock",
@@ -56,14 +54,9 @@ pub mod error {
 	use crate::drivers::virtio::error::VirtioError;
 
 	#[cfg(any(
-		all(
-			any(
-				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-				all(target_arch = "x86_64", feature = "rtl8139"),
-				feature = "virtio-net",
-			),
-			feature = "net",
-		),
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
 		feature = "console"
@@ -75,7 +68,6 @@ pub mod error {
 				not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 				not(all(target_arch = "x86_64", feature = "rtl8139")),
 				feature = "virtio-net",
-				feature = "net",
 			),
 			feature = "fuse",
 			feature = "vsock",
@@ -93,7 +85,6 @@ pub mod error {
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(all(target_arch = "x86_64", feature = "rtl8139")),
 			feature = "virtio-net",
-			feature = "net",
 		),
 		feature = "fuse",
 		feature = "vsock",
@@ -120,14 +111,9 @@ pub mod error {
 	}
 
 	#[cfg(any(
-		all(
-			any(
-				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-				all(target_arch = "x86_64", feature = "rtl8139"),
-				feature = "virtio-net",
-			),
-			feature = "net",
-		),
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
 		feature = "console"
@@ -145,7 +131,6 @@ pub mod error {
 						)),
 						not(all(target_arch = "x86_64", feature = "rtl8139")),
 						feature = "virtio-net",
-						feature = "net",
 					),
 					feature = "fuse",
 					feature = "vsock",
