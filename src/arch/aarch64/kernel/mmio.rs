@@ -18,13 +18,10 @@ use crate::drivers::console::VirtioUART;
 #[cfg(feature = "net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
-		feature = "virtio-net",
-	),
-	feature = "net"
+#[cfg(any(
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "virtio-net",
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;

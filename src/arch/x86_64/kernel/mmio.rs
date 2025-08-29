@@ -24,13 +24,10 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
-		feature = "virtio-net",
-	),
-	feature = "net"
+#[cfg(any(
+	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "virtio-net",
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;

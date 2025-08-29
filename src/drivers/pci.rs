@@ -462,7 +462,6 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 #[cfg(all(
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	feature = "virtio-net",
-	feature = "net"
 ))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
