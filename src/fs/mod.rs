@@ -59,7 +59,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 
 	/// Determine the syscall interface
-	fn get_object(&self) -> io::Result<Arc<dyn ObjectInterface>> {
+	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		Err(Errno::Nosys)
 	}
 
@@ -112,7 +112,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_components: &mut Vec<&str>,
 		_option: OpenOption,
 		_mode: AccessPermission,
-	) -> io::Result<Arc<dyn ObjectInterface>> {
+	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		Err(Errno::Nosys)
 	}
 
@@ -162,7 +162,7 @@ impl Filesystem {
 		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<dyn ObjectInterface>> {
+	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		debug!("Open file {path} with {opt:?}");
 		let mut components: Vec<&str> = path.split('/').collect();
 
@@ -205,9 +205,11 @@ impl Filesystem {
 		self.root.traverse_mkdir(&mut components, mode)
 	}
 
-	pub fn opendir(&self, path: &str) -> io::Result<Arc<dyn ObjectInterface>> {
+	pub fn opendir(&self, path: &str) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		debug!("Open directory {path}");
-		Ok(Arc::new(DirectoryReader::new(self.readdir(path)?)))
+		Ok(Arc::new(async_lock::RwLock::new(DirectoryReader::new(
+			self.readdir(path)?,
+		))))
 	}
 
 	/// List given directory
@@ -447,7 +449,7 @@ pub fn truncate(name: &str, size: usize) -> io::Result<()> {
 	with_relative_filename(name, |name| {
 		let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
 		if let Ok(file) = fs.open(name, OpenOption::O_TRUNC, AccessPermission::empty()) {
-			block_on(file.truncate(size), None)
+			block_on(async { file.read().await.truncate(size).await }, None)
 		} else {
 			Err(Errno::Badf)
 		}
