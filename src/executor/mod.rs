@@ -113,7 +113,7 @@ pub(crate) fn run() {
 )]
 pub(crate) fn spawn<F>(future: F)
 where
-	F: Future<Output = ()> + 'static,
+	F: Future<Output = ()> + 'static + core::marker::Send,
 {
 	core_local::ex().spawn(AsyncTask::new(future)).detach();
 }

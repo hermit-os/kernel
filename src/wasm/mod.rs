@@ -6,6 +6,7 @@ use core::ffi::CStr;
 use core::future;
 use core::hint::black_box;
 use core::mem::MaybeUninit;
+use core::pin::pin;
 use core::task::Poll;
 
 use hermit_sync::{InterruptTicketMutex, Lazy};
@@ -579,28 +580,34 @@ impl WasmManager {
 
 async fn wasm_run() {
 	loop {
-		while let Some((fd, data)) = OUTPUT.lock().data.pop_front() {
-			let obj = match fd {
-				Descriptor::Stdout => crate::core_scheduler()
-					.get_object(fd::STDOUT_FILENO)
-					.unwrap(),
-				Descriptor::Stderr => crate::core_scheduler()
-					.get_object(fd::STDERR_FILENO)
-					.unwrap(),
-				Descriptor::RawFd(raw_fd) => crate::core_scheduler().get_object(raw_fd).unwrap(),
-				_ => panic!("Unsuppted {fd:?}"),
-			};
-
-			obj.write(&data).await.unwrap();
-		}
-
 		future::poll_fn(|cx| {
-			let mut guard = OUTPUT.lock();
-			if guard.data.is_empty() {
-				guard.waker.register(cx.waker());
-				Poll::Pending
+			if let Some(mut guard) = OUTPUT.try_lock() {
+				if let Some((fd, data)) = guard.data.pop_front() {
+					let obj = match fd {
+						Descriptor::Stdout => crate::core_scheduler()
+							.get_object(fd::STDOUT_FILENO)
+							.unwrap(),
+						Descriptor::Stderr => crate::core_scheduler()
+							.get_object(fd::STDERR_FILENO)
+							.unwrap(),
+						Descriptor::RawFd(raw_fd) => {
+							crate::core_scheduler().get_object(raw_fd).unwrap()
+						}
+						_ => panic!("Unsuppted {fd:?}"),
+					};
+
+					drop(guard);
+					while let Poll::Pending = pin!(obj.write(&data)).poll(cx) {}
+
+					cx.waker().wake_by_ref();
+					Poll::<()>::Pending
+				} else {
+					guard.waker.register(cx.waker());
+					Poll::<()>::Pending
+				}
 			} else {
-				Poll::Ready(())
+				cx.waker().wake_by_ref();
+				Poll::<()>::Pending
 			}
 		})
 		.await;
