@@ -169,18 +169,17 @@ where
 			{
 				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
 					let delay = if let Ok(nic) = guard.as_nic_mut() {
+						nic.set_polling_mode(false);
+
 						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
 							.map(|d| d.total_micros())
 					} else {
 						None
 					};
+
 					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
-				}
-
-				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
-					device.set_polling_mode(false);
 				}
 			}
 
