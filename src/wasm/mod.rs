@@ -579,39 +579,37 @@ impl WasmManager {
 }
 
 async fn wasm_run() {
-	loop {
-		future::poll_fn(|cx| {
-			if let Some(mut guard) = OUTPUT.try_lock() {
-				if let Some((fd, data)) = guard.data.pop_front() {
-					let obj = match fd {
-						Descriptor::Stdout => crate::core_scheduler()
-							.get_object(fd::STDOUT_FILENO)
-							.unwrap(),
-						Descriptor::Stderr => crate::core_scheduler()
-							.get_object(fd::STDERR_FILENO)
-							.unwrap(),
-						Descriptor::RawFd(raw_fd) => {
-							crate::core_scheduler().get_object(raw_fd).unwrap()
-						}
-						_ => panic!("Unsuppted {fd:?}"),
-					};
+	future::poll_fn(|cx| {
+		if let Some(mut guard) = OUTPUT.try_lock() {
+			if let Some((fd, data)) = guard.data.pop_front() {
+				let obj = match fd {
+					Descriptor::Stdout => crate::core_scheduler()
+						.get_object(fd::STDOUT_FILENO)
+						.unwrap(),
+					Descriptor::Stderr => crate::core_scheduler()
+						.get_object(fd::STDERR_FILENO)
+						.unwrap(),
+					Descriptor::RawFd(raw_fd) => {
+						crate::core_scheduler().get_object(raw_fd).unwrap()
+					}
+					_ => panic!("Unsuppted {fd:?}"),
+				};
 
-					drop(guard);
-					while let Poll::Pending = pin!(obj.write(&data)).poll(cx) {}
+				drop(guard);
+				while let Poll::Pending = pin!(obj.write(&data)).poll(cx) {}
 
-					cx.waker().wake_by_ref();
-					Poll::<()>::Pending
-				} else {
-					guard.waker.register(cx.waker());
-					Poll::<()>::Pending
-				}
-			} else {
 				cx.waker().wake_by_ref();
 				Poll::<()>::Pending
+			} else {
+				guard.waker.register(cx.waker());
+				Poll::<()>::Pending
 			}
-		})
-		.await;
-	}
+		} else {
+			cx.waker().wake_by_ref();
+			Poll::<()>::Pending
+		}
+	})
+	.await;
 }
 
 #[hermit_macro::system]
