@@ -123,8 +123,9 @@ impl PciCap {
 			return None;
 		}
 
-		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if self.len() < u64::try_from(mem::size_of::<CommonCfg>()).unwrap() {
+		// `CommonCfg::queue_notify_data` and `CommonCfg::queue_reset` are optional.
+		const MIN_SIZE: usize = mem::size_of::<CommonCfg>() - mem::size_of::<[le16; 2]>();
+		if self.len() < u64::try_from(MIN_SIZE).unwrap() {
 			error!(
 				"Common config of with id {}, does not represent actual structure specified by the standard!",
 				self.cap.id
