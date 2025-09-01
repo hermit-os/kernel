@@ -4,7 +4,9 @@ use core::ffi::{c_int, c_void};
 use align_address::Align;
 use free_list::{PageLayout, PageRange, PageRangeSub};
 use hermit_sync::InterruptSpinMutex;
-use memory_addresses::{PhysAddr, VirtAddr};
+#[cfg(not(feature = "common-os"))]
+use memory_addresses::PhysAddr;
+use memory_addresses::VirtAddr;
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
@@ -47,7 +49,7 @@ bitflags! {
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 
-	if *ret == core::ptr::null_mut() {
+	if (*ret).is_null() {
 		let layout = PageLayout::from_size(size).unwrap();
 		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 
@@ -132,6 +134,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 	}
 }
 
+#[cfg(not(feature = "common-os"))]
 pub(crate) fn resolve_page_fault(virtual_address: VirtAddr) -> Result<(), ()> {
 	let virtual_address = virtual_address.align_down(BasePageSize::SIZE);
 	let current_range =
@@ -160,7 +163,7 @@ pub(crate) fn resolve_page_fault(virtual_address: VirtAddr) -> Result<(), ()> {
 
 				let slice = unsafe {
 					alloc::slice::from_raw_parts_mut(
-						virtual_address.as_mut_ptr() as *mut u8,
+						virtual_address.as_mut_ptr(),
 						BasePageSize::SIZE as usize,
 					)
 				};
@@ -185,7 +188,7 @@ pub(crate) fn resolve_page_fault(virtual_address: VirtAddr) -> Result<(), ()> {
 			if region.prot_flags.contains(MemoryProtection::Write) {
 				let slice = unsafe {
 					alloc::slice::from_raw_parts_mut(
-						virtual_address.as_mut_ptr() as *mut u8,
+						virtual_address.as_mut_ptr(),
 						BasePageSize::SIZE as usize,
 					)
 				};
@@ -250,7 +253,7 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 				};
 				memory_regions.push_back(memory_region2);
 			}
-			_ => {}
+			PageRangeSub::None => {}
 		}
 	}
 
@@ -332,7 +335,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 					};
 					memory_regions.push_back(memory_region);
 				}
-				_ => {}
+				PageRangeSub::None => {}
 			}
 
 			break;
