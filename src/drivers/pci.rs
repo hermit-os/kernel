@@ -172,11 +172,31 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	pub fn get_irq(&self) -> Option<InterruptLine> {
 		let header = self.header();
-		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
-			let (_pin, line) = endpoint.interrupt(&self.access);
-			Some(line)
-		} else {
-			None
+		let endpoint = EndpointHeader::from_header(header, &self.access)?;
+		let (pin, line) = endpoint.interrupt(&self.access);
+		// PCIe specification v5 section 7.5.1.1.13 (Interrupt Pin Register)
+		match pin {
+			0 => {
+				warn!("The function uses no legacy interrupt message(s).");
+				None
+			}
+			1..=4 => {
+				// PCI specification v3 footnote 43
+				#[cfg(target_arch = "x86_64")]
+				if matches!(line, 16..254) {
+					error!("Reserved IRQ number");
+					return None;
+				} else if line == 255 {
+					error!("Unknown IRQ line or no connection to the interrupt controller");
+					return None;
+				}
+
+				Some(line)
+			}
+			5.. => {
+				error!("Reserved interrupt pin value returned.");
+				None
+			}
 		}
 	}
 
