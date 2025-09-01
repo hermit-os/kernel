@@ -34,7 +34,7 @@ fn native_foo() {}
 
 pub fn measure_fibonacci(n: u64) {
 	const RUNS: u64 = 100;
-	info!("Measure native_fibonacci({})", n);
+	info!("Measure native_fibonacci({n})");
 
 	let start = now_micros();
 	for _ in 0..RUNS {
@@ -183,7 +183,7 @@ impl WasmManager {
 
 									guard.push(Descriptor::RawFd(raw_fd));
 
-									return ERRNO_SUCCESS.raw() as i32;
+									return i32::from(ERRNO_SUCCESS.raw());
 								}
 							}
 
@@ -195,10 +195,10 @@ impl WasmManager {
 							);
 						}
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_INVAL.raw() as i32
+					i32::from(ERRNO_INVAL.raw())
 				},
 			)
 			.unwrap();
@@ -247,10 +247,10 @@ impl WasmManager {
 							nread_bytes.as_bytes(),
 						);
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_INVAL.raw() as i32
+					i32::from(ERRNO_INVAL.raw())
 				},
 			)
 			.unwrap();
@@ -314,10 +314,10 @@ impl WasmManager {
 							nwritten_bytes.as_bytes(),
 						);
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_INVAL.raw() as i32
+					i32::from(ERRNO_INVAL.raw())
 				},
 			)
 			.unwrap();
@@ -326,7 +326,7 @@ impl WasmManager {
 				"wasi_snapshot_preview1",
 				"environ_get",
 				|mut _caller: Caller<'_, _>, _env_ptr: i32, _env_buffer_ptr: i32| {
-					ERRNO_SUCCESS.raw() as i32
+					i32::from(ERRNO_SUCCESS.raw())
 				},
 			)
 			.unwrap();
@@ -339,12 +339,12 @@ impl WasmManager {
 				 env_buffer_size_ptr: i32| {
 					if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
 						let env_buffer_size: u32 = 0;
-						let nnumber_env_variables: u32 = 0;
+						let number_env_variables: u32 = 0;
 
 						let _ = mem.write(
 							caller.as_context_mut(),
 							number_env_variables_ptr.try_into().unwrap(),
-							nnumber_env_variables.as_bytes(),
+							number_env_variables.as_bytes(),
 						);
 						let _ = mem.write(
 							caller.as_context_mut(),
@@ -352,10 +352,10 @@ impl WasmManager {
 							env_buffer_size.as_bytes(),
 						);
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_INVAL.raw() as i32
+					i32::from(ERRNO_INVAL.raw())
 				},
 			)
 			.unwrap();
@@ -384,7 +384,7 @@ impl WasmManager {
 							pos += element.len() as u32;
 						}
 					}
-					ERRNO_SUCCESS.raw() as i32
+					i32::from(ERRNO_SUCCESS.raw())
 				},
 			)
 			.unwrap();
@@ -413,10 +413,10 @@ impl WasmManager {
 							nargs_size.as_bytes(),
 						);
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_INVAL.raw() as i32
+					i32::from(ERRNO_INVAL.raw())
 				},
 			)
 			.unwrap();
@@ -444,16 +444,16 @@ impl WasmManager {
 							prestat_ptr.try_into().unwrap(),
 							unsafe {
 								core::slice::from_raw_parts(
-									(&stat as *const _) as *const u8,
+									(&raw const stat).cast::<u8>(),
 									size_of::<Prestat>(),
 								)
 							},
 						);
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_BADF.raw() as i32
+					i32::from(ERRNO_BADF.raw())
 				},
 			)
 			.unwrap();
@@ -473,16 +473,16 @@ impl WasmManager {
 									nanos.as_bytes(),
 								);
 
-								return ERRNO_SUCCESS.raw() as i32;
+								return i32::from(ERRNO_SUCCESS.raw());
 							}
 
-							ERRNO_INVAL.raw() as i32
+							i32::from(ERRNO_INVAL.raw())
 						}
 						1 => {
 							warn!("Unsupported clock_id");
-							ERRNO_INVAL.raw() as i32
+							i32::from(ERRNO_INVAL.raw())
 						}
-						_ => ERRNO_INVAL.raw() as i32,
+						_ => i32::from(ERRNO_INVAL.raw()),
 					}
 				},
 			)
@@ -501,7 +501,7 @@ impl WasmManager {
 ",
 						) {
 							if path_len < path.len().try_into().unwrap() {
-								return ERRNO_INVAL.raw() as i32;
+								return i32::from(ERRNO_INVAL.raw());
 							}
 
 							let _ = mem.write(
@@ -511,10 +511,10 @@ impl WasmManager {
 							);
 						}
 
-						return ERRNO_SUCCESS.raw() as i32;
+						return i32::from(ERRNO_SUCCESS.raw());
 					}
 
-					ERRNO_BADF.raw() as i32
+					i32::from(ERRNO_BADF.raw())
 				},
 			)
 			.unwrap();
@@ -528,7 +528,7 @@ impl WasmManager {
 					guard[fd as usize] = Descriptor::None;
 				}
 
-				ERRNO_SUCCESS.raw() as i32
+				i32::from(ERRNO_SUCCESS.raw())
 			})
 			.unwrap();
 		linker
@@ -537,7 +537,7 @@ impl WasmManager {
 				"fd_fdstat_get",
 				|_: i32, _: i32| {
 					warn!("Unsupported function fd_fdstat_get");
-					ERRNO_SUCCESS.raw() as i32
+					i32::from(ERRNO_SUCCESS.raw())
 				},
 			)
 			.unwrap();
@@ -547,13 +547,13 @@ impl WasmManager {
 				"fd_seek",
 				|_: i32, _: i64, _: i32, _: i32| {
 					warn!("Unsupported function fd_seek");
-					ERRNO_SUCCESS.raw() as i32
+					i32::from(ERRNO_SUCCESS.raw())
 				},
 			)
 			.unwrap();
 		linker
 			.func_wrap("wasi_snapshot_preview1", "proc_exit", |_: i32| {
-				error!("Panic in WASM module")
+				error!("Panic in WASM module");
 			})
 			.unwrap();
 
@@ -596,7 +596,7 @@ async fn wasm_run() {
 				};
 
 				drop(guard);
-				while let Poll::Pending = pin!(obj.write(&data)).poll(cx) {}
+				while pin!(obj.write(&data)).poll(cx).is_pending() {}
 
 				cx.waker().wake_by_ref();
 				Poll::<()>::Pending
@@ -658,7 +658,7 @@ pub extern "C" fn sys_dhrystone() -> i32 {
 	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
 		// And finally we can call the wasm function
 		info!("Call function dhrystone");
-		let _result = wasm_manager.call_func::<(), ()>("_start", ()).unwrap();
+		wasm_manager.call_func::<(), ()>("_start", ()).unwrap();
 	}
 
 	0
@@ -670,11 +670,12 @@ pub extern "C" fn sys_foo() -> i32 {
 	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
 		// And finally we can call the wasm function
 		info!("Call function foo");
-		let _result = wasm_manager.call_func::<(), ()>("foo", ()).unwrap();
+		wasm_manager.call_func::<(), ()>("foo", ()).unwrap();
 
-		const RUNS: u64 = 1000000;
+		const RUNS: u64 = 1_000_000;
 		let start = now_micros();
 		for _ in 0..RUNS {
+			#[allow(clippy::unit_arg)]
 			black_box(wasm_manager.call_func::<(), ()>("foo", ()).unwrap());
 		}
 		let end = now_micros();
@@ -685,6 +686,7 @@ pub extern "C" fn sys_foo() -> i32 {
 
 		let start = now_micros();
 		for _ in 0..RUNS {
+			#[allow(clippy::unit_arg)]
 			black_box(native_foo());
 		}
 		let end = now_micros();
@@ -710,9 +712,9 @@ pub extern "C" fn sys_fibonacci() -> i32 {
 		// And finally we can call the wasm function
 		info!("Call function fibonacci");
 		let result = wasm_manager.call_func::<u64, u64>("fibonacci", 30).unwrap();
-		info!("fibonacci(30) = {}", result);
+		info!("fibonacci(30) = {result}");
 		assert!(
-			result == 832040,
+			result == 832_040,
 			"Error in the calculation of fibonacci(30) "
 		);
 

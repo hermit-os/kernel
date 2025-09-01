@@ -31,8 +31,6 @@ use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
 use crate::env;
 
-const SERIAL_PORT_BAUDRATE: u32 = 115_200;
-
 global_asm!(include_str!("setjmp.s"));
 global_asm!(include_str!("longjmp.s"));
 
