@@ -5,9 +5,9 @@ pub mod interrupts;
 	any(
 		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
 		feature = "console",
-		feature = "gem-net"
+		feature = "gem-net",
 	),
-	not(feature = "pci")
+	not(feature = "pci"),
 ))]
 pub mod mmio;
 #[cfg(feature = "pci")]

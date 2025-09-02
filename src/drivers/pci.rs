@@ -28,18 +28,18 @@ use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	feature = "virtio-net",
-	any(feature = "tcp", feature = "udp")
+	any(feature = "tcp", feature = "udp"),
 ))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
 	all(
 		any(feature = "tcp", feature = "udp"),
 		feature = "virtio-net",
-		not(all(target_arch = "x86_64", feature = "rtl8139"))
+		not(all(target_arch = "x86_64", feature = "rtl8139")),
 	),
 	feature = "fuse",
 	feature = "vsock",
-	feature = "console"
+	feature = "console",
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
@@ -50,7 +50,7 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 	),
 	feature = "fuse",
 	feature = "vsock",
-	feature = "console"
+	feature = "console",
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "vsock")]
@@ -62,7 +62,7 @@ use crate::drivers::{Driver, InterruptHandlerQueue};
 	any(
 		all(target_arch = "x86_64", feature = "rtl8139"),
 		feature = "virtio-net",
-	)
+	),
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -456,7 +456,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		any(
 			all(target_arch = "x86_64", feature = "rtl8139"),
 			feature = "virtio-net",
-		)
+		),
 	))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
 		handlers
@@ -471,14 +471,14 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 #[cfg(all(
 	not(all(target_arch = "x86_64", feature = "rtl8139")),
 	feature = "virtio-net",
-	any(feature = "tcp", feature = "udp")
+	any(feature = "tcp", feature = "udp"),
 ))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(all(
 	target_arch = "x86_64",
 	feature = "rtl8139",
-	any(feature = "tcp", feature = "udp")
+	any(feature = "tcp", feature = "udp"),
 ))]
 pub(crate) type NetworkDevice = RTL8139Driver;
 
@@ -522,17 +522,17 @@ pub(crate) fn init() {
 				all(
 					any(feature = "tcp", feature = "udp"),
 					feature = "virtio-net",
-					not(all(target_arch = "x86_64", feature = "rtl8139"))
+					not(all(target_arch = "x86_64", feature = "rtl8139")),
 				),
 				feature = "fuse",
 				feature = "vsock",
-				feature = "console"
+				feature = "console",
 			))]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(
 					not(all(target_arch = "x86_64", feature = "rtl8139")),
 					feature = "virtio-net",
-					any(feature = "tcp", feature = "udp")
+					any(feature = "tcp", feature = "udp"),
 				))]
 				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
 

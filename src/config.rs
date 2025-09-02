@@ -11,11 +11,11 @@ pub(crate) const USER_STACK_SIZE: usize = 0x0010_0000;
 			all(target_arch = "x86_64", feature = "rtl8139"),
 		)),
 		feature = "virtio-net",
-		any(feature = "tcp", feature = "udp")
+		any(feature = "tcp", feature = "udp"),
 	),
 	feature = "fuse",
 	feature = "vsock",
-	feature = "console"
+	feature = "console",
 ))]
 pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = if cfg!(feature = "pci") { 2048 } else { 1024 };
 

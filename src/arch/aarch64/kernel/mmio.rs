@@ -24,7 +24,7 @@ use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver}
 		all(target_arch = "x86_64", feature = "rtl8139"),
 		feature = "virtio-net",
 	),
-	any(feature = "tcp", feature = "udp")
+	any(feature = "tcp", feature = "udp"),
 ))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;

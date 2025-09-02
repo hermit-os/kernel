@@ -3,9 +3,9 @@
 #[cfg(all(
 	any(
 		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console"
+		feature = "console",
 	),
-	not(feature = "pci")
+	not(feature = "pci"),
 ))]
 use core::ptr::NonNull;
 
@@ -14,23 +14,23 @@ use memory_addresses::PhysAddr;
 #[cfg(all(
 	any(feature = "tcp", feature = "udp", feature = "console"),
 	feature = "gem-net",
-	not(feature = "pci")
+	not(feature = "pci"),
 ))]
 use memory_addresses::VirtAddr;
 #[cfg(all(
 	any(
 		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console"
+		feature = "console",
 	),
-	not(feature = "pci")
+	not(feature = "pci"),
 ))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(
 	any(
 		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console"
+		feature = "console",
 	),
-	not(feature = "pci")
+	not(feature = "pci"),
 ))]
 use volatile::VolatileRef;
 
@@ -48,7 +48,7 @@ use crate::drivers::mmio::get_console_driver;
 #[cfg(all(
 	any(feature = "tcp", feature = "udp"),
 	feature = "gem-net",
-	not(feature = "pci")
+	not(feature = "pci"),
 ))]
 use crate::drivers::net::gem;
 #[cfg(all(feature = "console", feature = "pci"))]
@@ -56,10 +56,10 @@ use crate::drivers::pci::get_console_driver;
 #[cfg(all(
 	any(
 		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console"
+		feature = "console",
 	),
 	not(feature = "pci"),
-	not(feature = "gem-net")
+	not(feature = "gem-net"),
 ))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(
@@ -208,9 +208,9 @@ pub fn init_drivers() {
 			#[cfg(all(
 				any(
 					all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-					feature = "console"
+					feature = "console",
 				),
-				not(feature = "pci")
+				not(feature = "pci"),
 			))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
 				debug!("Found virtio mmio device");
@@ -276,7 +276,7 @@ pub fn init_drivers() {
 					#[cfg(all(
 						any(feature = "tcp", feature = "udp"),
 						feature = "virtio-net",
-						not(feature = "gem-net")
+						not(feature = "gem-net"),
 					))]
 					virtio::Id::Net => {
 						debug!("Found virtio network card at {mmio:p}");
@@ -311,9 +311,9 @@ pub fn init_drivers() {
 		any(
 			all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
 			feature = "console",
-			feature = "gem-net"
+			feature = "gem-net",
 		),
-		not(feature = "pci")
+		not(feature = "pci"),
 	))]
 	super::mmio::MMIO_DRIVERS.finalize();
 

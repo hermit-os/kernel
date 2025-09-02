@@ -6,8 +6,8 @@ pub mod kernel_stack;
 	not(feature = "pci"),
 	any(
 		all(any(feature = "tcp", feature = "udp"), feature = "virtio-net"),
-		feature = "console"
-	)
+		feature = "console",
+	),
 ))]
 pub mod mmio;
 #[cfg(feature = "pci")]
