@@ -4,7 +4,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::ffi::CStr;
 use core::future;
-use core::hint::black_box;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 use core::task::Poll;
@@ -19,34 +18,6 @@ use crate::fd::{self, remove_object};
 use crate::kernel::systemtime::now_micros;
 
 mod capi;
-
-#[inline(never)]
-fn native_fibonacci(n: u64) -> u64 {
-	match n {
-		0 => 0,
-		1 => 1,
-		_ => native_fibonacci(n - 1) + native_fibonacci(n - 2),
-	}
-}
-
-#[inline(never)]
-fn native_foo() {}
-
-pub fn measure_fibonacci(n: u64) {
-	const RUNS: u64 = 100;
-	info!("Measure native_fibonacci({n})");
-
-	let start = now_micros();
-	for _ in 0..RUNS {
-		black_box(native_fibonacci(black_box(n)));
-	}
-	let end = now_micros();
-	info!(
-		"Average time to call native_fibonacci({}): {} usec",
-		n,
-		(end - start) / RUNS
-	);
-}
 
 #[derive(Debug, Clone, PartialEq)]
 enum Descriptor {
@@ -106,6 +77,7 @@ impl WasmStdout {
 	}
 }
 
+#[allow(dead_code)]
 pub(crate) struct WasmManager {
 	store: Store<u32>,
 	instance: Instance,
@@ -566,6 +538,7 @@ impl WasmManager {
 		Self { store, instance }
 	}
 
+	#[allow(dead_code)]
 	pub fn call_func<P, R>(&mut self, name: &str, arg: P) -> Result<R>
 	where
 		P: wasmtime::WasmParams,
@@ -652,7 +625,7 @@ pub extern "C" fn sys_unload_binary() -> i32 {
 	0
 }
 
-#[hermit_macro::system]
+/*#[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_dhrystone() -> i32 {
 	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
@@ -667,6 +640,8 @@ pub extern "C" fn sys_dhrystone() -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_foo() -> i32 {
+	use core::hint::black_box;
+
 	if let Some(ref mut wasm_manager) = WASM_MANAGER.lock().as_mut() {
 		// And finally we can call the wasm function
 		info!("Call function foo");
@@ -701,9 +676,41 @@ pub extern "C" fn sys_foo() -> i32 {
 	0
 }
 
+#[inline(never)]
+fn native_fibonacci(n: u64) -> u64 {
+	match n {
+		0 => 0,
+		1 => 1,
+		_ => native_fibonacci(n - 1) + native_fibonacci(n - 2),
+	}
+}
+
+#[inline(never)]
+fn native_foo() {}
+
+#[inline(never)]
+fn measure_fibonacci(n: u64) {
+	use core::hint::black_box;
+	const RUNS: u64 = 100;
+	info!("Measure native_fibonacci({n})");
+
+	let start = now_micros();
+	for _ in 0..RUNS {
+		black_box(native_fibonacci(black_box(n)));
+	}
+	let end = now_micros();
+	info!(
+		"Average time to call native_fibonacci({}): {} usec",
+		n,
+		(end - start) / RUNS
+	);
+}
+
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fibonacci() -> i32 {
+	use core::hint::black_box;
+
 	info!("Try to find function fibonacci");
 
 	measure_fibonacci(30);
@@ -741,4 +748,4 @@ pub extern "C" fn sys_fibonacci() -> i32 {
 	}
 
 	0
-}
+}*/
