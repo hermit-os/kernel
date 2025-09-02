@@ -37,8 +37,6 @@ impl MmioDriver {
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => None,
 		}
 	}
 }

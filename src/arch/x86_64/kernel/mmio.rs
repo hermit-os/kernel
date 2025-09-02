@@ -47,13 +47,10 @@ pub(crate) enum MmioDriver {
 }
 
 impl MmioDriver {
-	#[allow(unreachable_patterns)]
 	#[cfg(feature = "console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			_ => None,
 		}
 	}
 }
