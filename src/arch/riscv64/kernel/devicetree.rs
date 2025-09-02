@@ -11,11 +11,7 @@ use core::ptr::NonNull;
 
 use fdt::Fdt;
 use memory_addresses::PhysAddr;
-#[cfg(all(
-	any(feature = "tcp", feature = "udp", feature = "console"),
-	feature = "gem-net",
-	not(feature = "pci"),
-))]
+#[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
 #[cfg(all(
 	any(
