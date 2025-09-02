@@ -248,6 +248,8 @@ pub(crate) fn init_drivers() {
 				Ok(VirtioDriver::Network(drv)) => {
 					*NETWORK_DEVICE.lock() = Some(drv);
 				}
+				#[cfg(feature = "console")]
+				Ok(VirtioDriver::Console(_)) => unreachable!(),
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}
 		} else {
