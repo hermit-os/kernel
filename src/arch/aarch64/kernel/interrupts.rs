@@ -303,7 +303,7 @@ pub(crate) fn init() {
 	let layout = PageLayout::from_size_align(gicd_size.try_into().unwrap(), 0x10000).unwrap();
 	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 	let gicd_address = VirtAddr::from(page_range.start());
-	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}",);
+	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}");
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.device().writable().execute_disable();
@@ -317,7 +317,7 @@ pub(crate) fn init() {
 	let layout = PageLayout::from_size_align(gicr_size.try_into().unwrap(), 0x10000).unwrap();
 	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 	let gicr_address = VirtAddr::from(page_range.start());
-	debug!("Mapping generic interrupt controller to virtual address {gicr_address:p}",);
+	debug!("Mapping generic interrupt controller to virtual address {gicr_address:p}");
 	paging::map::<BasePageSize>(
 		gicr_address,
 		gicr_start,

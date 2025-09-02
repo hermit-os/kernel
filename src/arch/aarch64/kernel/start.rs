@@ -247,7 +247,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 		);
 
 		// Memory barrier
-		asm!("dsb sy", options(nostack),);
+		asm!("dsb sy", options(nostack));
 	}
 
 	if cpu_id == 0 {

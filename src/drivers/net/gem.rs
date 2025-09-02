@@ -719,7 +719,7 @@ pub fn init_device(
 			// Get the supported Speed and Duplex
 			// TODO - Next Page does not seem to be emulated by QEMU
 
-			//info!("PHY auto-negotiation completed:\n Speed: {}\nDuplex", ,);
+			//info!("PHY auto-negotiation completed:\n Speed: {}\nDuplex");
 			debug!("PHY auto-negotiation completed: Partner Ability {partner_ability:x}");
 		}
 	}

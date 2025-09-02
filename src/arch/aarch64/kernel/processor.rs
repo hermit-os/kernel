@@ -223,7 +223,7 @@ pub fn seed_entropy() -> Option<[u8; 32]> {
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
-		asm!("wfi", options(nostack, nomem),);
+		asm!("wfi", options(nostack, nomem));
 	}
 }
 
