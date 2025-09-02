@@ -169,6 +169,8 @@ where
 			{
 				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
 					let delay = if let Ok(nic) = guard.as_nic_mut() {
+						nic.set_polling_mode(false);
+
 						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
 							.map(|d| d.total_micros())
 					} else {
@@ -177,10 +179,6 @@ where
 					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
-				}
-
-				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
-					device.set_polling_mode(false);
 				}
 			}
 
@@ -195,6 +193,8 @@ where
 			{
 				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
 					let delay = if let Ok(nic) = guard.as_nic_mut() {
+						nic.set_polling_mode(false);
+
 						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
 							.map(|d| d.total_micros())
 					} else {
@@ -203,10 +203,6 @@ where
 					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
-				}
-
-				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
-					device.set_polling_mode(false);
 				}
 			}
 
@@ -217,6 +213,8 @@ where
 		if backoff.is_completed() {
 			let delay = if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
 				if let Ok(nic) = guard.as_nic_mut() {
+					nic.set_polling_mode(false);
+
 					nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
 						.map(|d| d.total_micros())
 				} else {
@@ -233,17 +231,12 @@ where
 				let wakeup_time =
 					timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
 
-				// allow network interrupts
-				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
-					device.set_polling_mode(false);
-				}
-
 				// switch to another task
 				task_notify.wait(wakeup_time);
 
 				// restore default values
-				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
-					device.set_polling_mode(true);
+				if let Ok(nic) = crate::executor::network::NIC.lock().as_nic_mut() {
+					nic.set_polling_mode(true);
 				}
 
 				backoff.reset();
