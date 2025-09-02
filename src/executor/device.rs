@@ -48,6 +48,7 @@ impl<'a> NetworkInterface<'a> {
 					return NetworkState::InitializationFailed;
 				};
 			} else {
+				#[cfg_attr(feature = "trace", expect(unused_mut))]
 				let mut device = LoopbackDriver::new();
 			}
 		}
@@ -107,6 +108,7 @@ impl<'a> NetworkInterface<'a> {
 					return NetworkState::InitializationFailed;
 				};
 			} else {
+				#[cfg_attr(feature = "trace", expect(unused_mut))]
 				let mut device = LoopbackDriver::new();
 			}
 		}
