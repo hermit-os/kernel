@@ -31,6 +31,9 @@ use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
 use crate::env;
 
+global_asm!(include_str!("setjmp.s"));
+global_asm!(include_str!("longjmp.s"));
+
 #[repr(align(8))]
 pub(crate) struct AlignedAtomicU32(AtomicU32);
 

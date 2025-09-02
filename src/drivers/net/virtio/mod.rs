@@ -265,6 +265,12 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 			result
 		};
 
+		#[cfg(feature = "wasm")]
+		if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
+			crate::wasm::INPUT.lock().push_back(packet.to_vec());
+			let _ = wasm_manager.call_func::<(), ()>("pcap_writer", ());
+		}
+
 		let mut header = Box::new_in(<Hdr as Default>::default(), DeviceAlloc);
 
 		// If a checksum calculation by the host is necessary, we have to inform the host within the header
@@ -359,6 +365,14 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 			self.recv_vqs.vqs[0]
 				.dispatch(tkn, false, BufferType::Direct)
 				.unwrap();
+		}
+
+		#[cfg(feature = "wasm")]
+		if let Some(ref mut wasm_manager) = crate::wasm::WASM_MANAGER.lock().as_mut() {
+			crate::wasm::INPUT
+				.lock()
+				.push_back(combined_packets.to_vec());
+			let _ = wasm_manager.call_func::<(), ()>("pcap_writer", ());
 		}
 
 		f(&combined_packets)

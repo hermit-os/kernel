@@ -108,12 +108,18 @@ pub(crate) fn run() {
 
 /// Spawns a future on the executor.
 #[cfg_attr(
-	not(any(feature = "shell", feature = "tcp", feature = "udp", feature = "vsock")),
+	not(any(
+		feature = "shell",
+		feature = "tcp",
+		feature = "udp",
+		feature = "vsock",
+		feature = "wasm"
+	)),
 	expect(dead_code)
 )]
 pub(crate) fn spawn<F>(future: F)
 where
-	F: Future<Output = ()> + Send + 'static,
+	F: Future<Output = ()> + 'static + core::marker::Send,
 {
 	core_local::ex().spawn(AsyncTask::new(future)).detach();
 }
@@ -169,18 +175,17 @@ where
 			{
 				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
 					let delay = if let Ok(nic) = guard.as_nic_mut() {
+						nic.set_polling_mode(false);
+
 						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
 							.map(|d| d.total_micros())
 					} else {
 						None
 					};
+
 					core_local::core_scheduler().add_network_timer(
 						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 					);
-				}
-
-				if let Ok(device) = crate::executor::network::NIC.lock().as_nic_mut() {
-					device.set_polling_mode(false);
 				}
 			}
 

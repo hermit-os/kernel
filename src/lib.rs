@@ -82,6 +82,8 @@ mod shell;
 mod synch;
 pub mod syscalls;
 pub mod time;
+#[cfg(feature = "wasm")]
+pub mod wasm;
 
 mod built_info {
 	include!(concat!(env!("OUT_DIR"), "/built.rs"));

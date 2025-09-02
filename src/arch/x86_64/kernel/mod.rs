@@ -1,5 +1,6 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
+use core::arch::global_asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
@@ -41,6 +42,9 @@ mod syscall;
 pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 pub mod vga;
+
+global_asm!(include_str!("setjmp.s"));
+global_asm!(include_str!("longjmp.s"));
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
