@@ -3,7 +3,9 @@ use core::ptr::NonNull;
 
 use align_address::Align;
 use arm_gic::{IntId, Trigger};
-use hermit_sync::{InterruptTicketMutex, without_interrupts};
+#[cfg(feature = "console")]
+use hermit_sync::InterruptTicketMutex;
+use hermit_sync::without_interrupts;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
