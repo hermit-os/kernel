@@ -26,8 +26,8 @@ jobs:
       - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64gc-unknown-none-elf
       - name: cargo hack check (x86_64)
         run: |
-          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,net,virtio-net
-          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,net,virtio-net --features pci
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,net,rtl8139,virtio-net
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,net,rtl8139,virtio-net --features pci
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,virtio-net --features tcp,rtl8139
@@ -40,8 +40,8 @@ jobs:
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
       - name: cargo hack check (riscv64)
         run: |
-          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features net,rtl8139,virtio-net
-          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features net,rtl8139,virtio-net --features pci
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,net,rtl8139,virtio-net
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,net,rtl8139,virtio-net --features pci
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features rtl8139,virtio-net --features tcp,gem-net
