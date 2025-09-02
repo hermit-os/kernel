@@ -18,14 +18,7 @@ use crate::drivers::console::VirtioUART;
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
-#[cfg(all(
-	any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
-		feature = "virtio-net",
-	),
-	any(feature = "tcp", feature = "udp"),
-))]
+#[cfg(all(feature = "virtio-net", any(feature = "tcp", feature = "udp")))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::PhysAddr;
