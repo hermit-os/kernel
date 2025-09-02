@@ -41,6 +41,7 @@ impl MmioDriver {
 	}
 }
 
+#[cfg(feature = "console")]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
