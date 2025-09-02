@@ -19,7 +19,7 @@ use crate::arch::x86_64::mm::paging::{
 };
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioConsoleDriver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
@@ -224,7 +224,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
 
-#[cfg(any(feature = "tcp", feature = "udp"))]
+#[cfg(feature = "virtio-net")]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "console")]
@@ -238,7 +238,7 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 pub(crate) fn init_drivers() {
 	// virtio: MMIO Device Discovery
 	without_interrupts(|| {
-		#[cfg(any(feature = "tcp", feature = "udp"))]
+		#[cfg(feature = "virtio-net")]
 		if let Ok((mmio, irq)) = detect_network() {
 			warn!("Found MMIO device, but we guess the interrupt number {irq}!");
 			match mmio_virtio::init_device(mmio, irq) {

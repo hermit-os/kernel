@@ -9,7 +9,7 @@ use hermit_sync::InterruptSpinMutex;
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem::GEMDriver;
-#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::init_cell::InitCell;
 
@@ -36,7 +36,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 #[cfg(feature = "gem-net")]
 pub(crate) type NetworkDevice = GEMDriver;
 
-#[cfg(all(not(feature = "gem-net"), any(feature = "tcp", feature = "udp")))]
+#[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "console")]
