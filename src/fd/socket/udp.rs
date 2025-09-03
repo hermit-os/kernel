@@ -74,7 +74,10 @@ impl Socket {
 		})
 		.await
 	}
+}
 
+#[async_trait]
+impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -249,48 +252,5 @@ impl Drop for Socket {
 	fn drop(&mut self) {
 		let _ = block_on(self.close(), None);
 		NIC.lock().as_nic_mut().unwrap().destroy_socket(self.handle);
-	}
-}
-
-#[async_trait]
-impl ObjectInterface for Socket {
-	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		self.poll(event).await
-	}
-
-	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
-		self.bind(endpoint).await
-	}
-
-	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
-		self.connect(endpoint).await
-	}
-
-	async fn sendto(&self, buffer: &[u8], endpoint: Endpoint) -> io::Result<usize> {
-		self.sendto(buffer, endpoint).await
-	}
-
-	async fn recvfrom(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
-		self.recvfrom(buffer).await
-	}
-
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
-		self.read(buffer).await
-	}
-
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		self.write(buf).await
-	}
-
-	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
-		self.getsockname().await
-	}
-
-	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
-		self.status_flags().await
-	}
-
-	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
-		self.set_status_flags(status_flags).await
 	}
 }
