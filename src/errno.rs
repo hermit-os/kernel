@@ -672,7 +672,7 @@ pub enum Errno {
 /// Returns the pointer to `errno`.
 #[cfg(all(
 	not(any(feature = "common-os", feature = "nostd")),
-	not(target_arch = "riscv64")
+	not(target_arch = "riscv64"),
 ))]
 #[unsafe(no_mangle)]
 #[linkage = "weak"]
