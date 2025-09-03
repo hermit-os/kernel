@@ -7,6 +7,6 @@ pub mod mm;
 pub(crate) fn memory_barrier() {
 	use core::arch::asm;
 	unsafe {
-		asm!("dmb ish", options(nostack, nomem, preserves_flags),);
+		asm!("dmb ish", options(nostack, nomem, preserves_flags));
 	}
 }

@@ -91,7 +91,7 @@ impl Drop for UhyveFileHandleInner {
 		uhyve_hypercall(Hypercall::FileClose(&mut close_params));
 		if close_params.ret != 0 {
 			let ret = close_params.ret; // circumvent packed field access
-			panic!("Can't close fd {} - return value {ret}", self.0,);
+			panic!("Can't close fd {} - return value {ret}", self.0);
 		}
 	}
 }

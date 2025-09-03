@@ -29,6 +29,6 @@ pub(crate) fn swapgs(_stack_frame: &ExceptionStackFrame) {}
 pub(crate) fn memory_barrier() {
 	use core::arch::asm;
 	unsafe {
-		asm!("mfence", options(nostack, nomem, preserves_flags),);
+		asm!("mfence", options(nostack, nomem, preserves_flags));
 	}
 }

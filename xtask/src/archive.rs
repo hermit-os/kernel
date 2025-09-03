@@ -63,7 +63,7 @@ impl Archive {
 
 				if let Some(symbol) = symbol.strip_prefix("_ZN") {
 					let prefix_len = prefix.len();
-					let _ = writeln!(output, "_ZN{symbol} _ZN{prefix_len}{prefix}{symbol}",);
+					let _ = writeln!(output, "_ZN{symbol} _ZN{prefix_len}{prefix}{symbol}");
 				} else {
 					let _ = writeln!(output, "{symbol} {prefix}_{symbol}");
 				}

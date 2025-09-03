@@ -321,7 +321,7 @@ fn init_ioapic_address(phys_addr: PhysAddr) {
 		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 		let ioapic_address = VirtAddr::from(page_range.start());
 		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
-		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}",);
+		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}");
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
