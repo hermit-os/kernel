@@ -59,7 +59,6 @@ use crate::drivers::pci::get_console_driver;
 		feature = "console",
 	),
 	not(feature = "pci"),
-	not(feature = "gem-net"),
 ))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
 #[cfg(all(
