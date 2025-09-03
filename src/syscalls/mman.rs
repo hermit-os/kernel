@@ -136,6 +136,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 
 #[cfg(not(feature = "common-os"))]
 pub(crate) fn resolve_page_fault(virtual_address: VirtAddr) -> Result<(), ()> {
+	debug!("Resolve page fault at {virtual_address:X}");
 	let virtual_address = virtual_address.align_down(BasePageSize::SIZE);
 	let current_range =
 		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
@@ -164,19 +165,16 @@ pub(crate) fn resolve_page_fault(virtual_address: VirtAddr) -> Result<(), ()> {
 				let slice = unsafe {
 					alloc::slice::from_raw_parts_mut(
 						virtual_address.as_mut_ptr(),
-						BasePageSize::SIZE as usize,
+						BasePageSize::SIZE as usize / core::mem::size_of::<u64>(),
 					)
 				};
 				for byte in slice.iter_mut() {
-					*byte = 0; // Initialize the page to zero
+					*byte = 0u64; // Initialize the page to zero
 				}
 			}
 
 			let mut flags = PageTableEntryFlags::empty();
 			flags.normal();
-			if region.prot_flags.is_empty() {
-				flags.writable();
-			}
 			if region.prot_flags.contains(MemoryProtection::Write) {
 				flags.writable();
 			}
@@ -189,11 +187,11 @@ pub(crate) fn resolve_page_fault(virtual_address: VirtAddr) -> Result<(), ()> {
 				let slice = unsafe {
 					alloc::slice::from_raw_parts_mut(
 						virtual_address.as_mut_ptr(),
-						BasePageSize::SIZE as usize,
+						BasePageSize::SIZE as usize / core::mem::size_of::<u64>(),
 					)
 				};
 				for byte in slice.iter_mut() {
-					*byte = 0; // Initialize the page to zero
+					*byte = 0u64; // Initialize the page to zero
 				}
 			}
 
