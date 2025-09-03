@@ -82,8 +82,8 @@ pub fn is_uhyve_with_pci() -> bool {
 
 pub fn args() -> Option<&'static str> {
 	match env::boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. } => command_line,
-		PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
+		PlatformInfo::Multiboot { command_line, .. }
+		| PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
 		_ => None,
 	}
 }

@@ -108,8 +108,9 @@ pub fn init_drivers() {
 
 				// TODO: Determine correct context via devicetree and allow more than one context
 				match PLATFORM_MODEL {
-					Model::Virt => init_plic(plic_region.starting_address as usize, 1),
-					Model::Unknown => init_plic(plic_region.starting_address as usize, 1),
+					Model::Virt | Model::Unknown => {
+						init_plic(plic_region.starting_address as usize, 1);
+					}
 					Model::Fux40 => init_plic(plic_region.starting_address as usize, 2),
 				}
 			}

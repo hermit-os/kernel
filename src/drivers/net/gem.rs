@@ -673,8 +673,7 @@ pub fn init_device(
 			warn! {"No PHY address provided. Trying to find PHY ..."}
 			for i in 0..32 {
 				match phy_read(gem, i, PhyReg::Control) {
-					0xffff => (), //Invalid
-					0x0 => (),    //Invalid
+					0xffff | 0x0 => (), //Invalid
 					_ => {
 						phy_addr = i;
 						warn!("PHY found with address {phy_addr}");
