@@ -1,5 +1,4 @@
 use alloc::collections::VecDeque;
-use alloc::vec::Vec;
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
@@ -52,22 +51,13 @@ impl ErrorType for SerialDevice {
 
 impl Read for SerialDevice {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let mut guard = UART_DEVICE.lock();
-		if guard.buffer.is_empty() {
-			Ok(0)
-		} else {
-			let min = core::cmp::min(buf.len(), guard.buffer.len());
-			let drained = guard.buffer.drain(..min).collect::<Vec<_>>();
-			buf[..min].copy_from_slice(drained.as_slice());
-			Ok(min)
-		}
+		Ok(UART_DEVICE.lock().buffer.read(buf)?)
 	}
 }
 
 impl ReadReady for SerialDevice {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
-		let read_ready = !UART_DEVICE.lock().buffer.is_empty();
-		Ok(read_ready)
+		Ok(UART_DEVICE.lock().buffer.read_ready()?)
 	}
 }
 

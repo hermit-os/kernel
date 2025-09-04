@@ -540,8 +540,7 @@ checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 [[package]]
 name = "embedded-io"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
+source = "git+https://github.com/hermit-os/embedded-hal?branch=io-vec_deque#ad6a7d184999b7094039035975c563f2dd9412a2"
 
 [[package]]
 name = "endian-num"
