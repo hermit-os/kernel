@@ -2,8 +2,6 @@
  * https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/blob/master/16_virtual_mem_part4_higher_half_kernel/src/bsp/raspberrypi/link.ld 
 */
 
-OUTPUT_FORMAT("elf64-littleaarch64")
-OUTPUT_ARCH("aarch64")
 ENTRY(_start)
 phys = 0x40200000;
 

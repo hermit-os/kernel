@@ -63,8 +63,8 @@ impl Qemu {
 		}
 
 		let target = self.build.target();
-		let arch = target.arch();
-		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{arch}"));
+		let qemu = target.qemu();
+		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{qemu}"));
 		let program = if self.sudo { "sudo" } else { qemu.as_str() };
 		let arg = self.sudo.then_some(qemu.as_str());
 
@@ -96,7 +96,7 @@ impl Qemu {
 				"-append".to_string(),
 				format!("-freq {frequency}"),
 			]
-		} else if self.build.target() == Target::Aarch64 {
+		} else if matches!(self.build.target(), Target::Aarch64 | Target::Aarch64Be) {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if self.build.target() == Target::Riscv64 {
 			vec![
@@ -174,7 +174,7 @@ impl Qemu {
 				cpu_args
 			}
 			Target::X86_64Fc => panic!("unsupported"),
-			Target::Aarch64 => {
+			Target::Aarch64 | Target::Aarch64Be => {
 				let mut cpu_args = if self.accel {
 					todo!()
 				} else {
@@ -233,7 +233,7 @@ impl Qemu {
 			Target::X86_64Uefi => {
 				memory = memory.max(512);
 			}
-			Target::Aarch64 => {
+			Target::Aarch64 | Target::Aarch64Be => {
 				memory = memory.max(256);
 			}
 			Target::Riscv64 => {
