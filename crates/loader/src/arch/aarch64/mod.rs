@@ -30,6 +30,7 @@ unsafe extern "C" {
 	static mut l2k_pgtable: u64;
 	static mut l3_pgtable: u64;
 	static mut L0mib_pgtable: u64;
+	static mut dtb_addr: u64;
 }
 
 /// start address of the RAM at Qemu's virt emulation
@@ -52,9 +53,13 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	(ptr::addr_of_mut!(loader_end).expose_addr() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
+pub unsafe fn get_dtb_addr() -> u64 {
+	unsafe { if dtb_addr != 0 { dtb_addr } else { DEVICE_TREE } }
+}
+
 pub fn find_kernel() -> &'static [u8] {
 	let dtb = unsafe {
-		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(get_dtb_addr() as usize))
 			.expect(".dtb file has invalid header")
 	};
 	let module_start = dtb
@@ -112,7 +117,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	let dtb = unsafe {
-		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(get_dtb_addr() as usize))
 			.expect(".dtb file has invalid header")
 	};
 	let cpus = dtb.cpus().count();
@@ -217,7 +222,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		hardware_info: HardwareInfo {
 			phys_addr_range: ram_start..ram_start + ram_size,
 			serial_port_base: SerialPortBase::new(0x1000),
-			device_tree: core::num::NonZeroU64::new(DEVICE_TREE),
+			device_tree: unsafe { core::num::NonZeroU64::new(get_dtb_addr()) },
 		},
 		load_info,
 		platform_info: PlatformInfo::LinuxBoot,

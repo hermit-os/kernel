@@ -16,7 +16,7 @@ fn stdout() -> SerialPort {
 	const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 
 	let dtb = unsafe {
-		Fdt::from_ptr(sptr::from_exposed_addr(super::DEVICE_TREE as usize))
+		Fdt::from_ptr(sptr::from_exposed_addr(super::get_dtb_addr() as usize))
 			.expect(".dtb file has invalid header")
 	};
 
