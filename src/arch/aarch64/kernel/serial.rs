@@ -59,25 +59,13 @@ impl ErrorType for SerialDevice {
 
 impl Read for SerialDevice {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let mut guard = UART_DEVICE.lock();
-
-		if guard.buffer.is_empty() {
-			Ok(0)
-		} else {
-			let min = buf.len().min(guard.buffer.len());
-
-			for (dst, src) in buf[..min].iter_mut().zip(guard.buffer.drain(..min)) {
-				*dst = src;
-			}
-
-			Ok(min)
-		}
+		Ok(UART_DEVICE.lock().buffer.read(buf)?)
 	}
 }
 
 impl ReadReady for SerialDevice {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
-		Ok(!UART_DEVICE.lock().buffer.is_empty())
+		Ok(UART_DEVICE.lock().buffer.read_ready()?)
 	}
 }
 
