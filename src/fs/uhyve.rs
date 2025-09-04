@@ -171,7 +171,7 @@ impl VfsNode for UhyveDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<dyn ObjectInterface>> {
+	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		let path = self.traversal_path(components);
 
 		let mut open_params = OpenParams {
@@ -187,7 +187,9 @@ impl VfsNode for UhyveDirectory {
 		uhyve_hypercall(Hypercall::FileOpen(&mut open_params));
 
 		if open_params.ret > 0 {
-			Ok(Arc::new(UhyveFileHandle::new(open_params.ret)))
+			Ok(Arc::new(async_lock::RwLock::new(UhyveFileHandle::new(
+				open_params.ret,
+			))))
 		} else {
 			Err(Errno::Io)
 		}

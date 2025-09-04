@@ -110,7 +110,10 @@ impl Socket {
 		})
 		.await
 	}
+}
 
+#[async_trait]
+impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
@@ -275,7 +278,7 @@ impl Socket {
 		}
 	}
 
-	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
+	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
 		if let Endpoint::Ip(endpoint) = endpoint {
 			self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
@@ -298,7 +301,9 @@ impl Socket {
 		}
 	}
 
-	async fn accept(&mut self) -> io::Result<(Socket, Endpoint)> {
+	async fn accept(
+		&mut self,
+	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
 		if !self.is_listen {
 			self.listen(DEFAULT_BACKLOG).await?;
 		}
@@ -357,7 +362,7 @@ impl Socket {
 			is_listen: false,
 		};
 
-		Ok((socket, endpoint))
+		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
@@ -471,65 +476,5 @@ impl Drop for Socket {
 		for h in self.handle.iter() {
 			guard.as_nic_mut().unwrap().destroy_socket(*h);
 		}
-	}
-}
-
-#[async_trait]
-impl ObjectInterface for async_lock::RwLock<Socket> {
-	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		self.read().await.poll(event).await
-	}
-
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
-		self.read().await.read(buffer).await
-	}
-
-	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
-		self.read().await.write(buffer).await
-	}
-
-	async fn bind(&self, endpoint: ListenEndpoint) -> io::Result<()> {
-		self.write().await.bind(endpoint).await
-	}
-
-	async fn connect(&self, endpoint: Endpoint) -> io::Result<()> {
-		self.read().await.connect(endpoint).await
-	}
-
-	async fn accept(&self) -> io::Result<(Arc<dyn ObjectInterface>, Endpoint)> {
-		let (socket, endpoint) = self.write().await.accept().await?;
-		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
-	}
-
-	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
-		self.read().await.getpeername().await
-	}
-
-	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
-		self.read().await.getsockname().await
-	}
-
-	async fn listen(&self, backlog: i32) -> io::Result<()> {
-		self.write().await.listen(backlog).await
-	}
-
-	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
-		self.read().await.setsockopt(opt, optval).await
-	}
-
-	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		self.read().await.getsockopt(opt).await
-	}
-
-	async fn shutdown(&self, how: i32) -> io::Result<()> {
-		self.read().await.shutdown(how).await
-	}
-
-	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
-		self.read().await.status_flags().await
-	}
-
-	async fn set_status_flags(&self, status_flags: fd::StatusFlags) -> io::Result<()> {
-		self.write().await.set_status_flags(status_flags).await
 	}
 }

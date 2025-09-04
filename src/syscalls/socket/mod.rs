@@ -588,12 +588,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 
 	#[cfg(feature = "vsock")]
 	if domain == Af::Vsock && sock == Sock::Stream {
-		let socket = Arc::new(async_lock::RwLock::new(vsock::Socket::new()));
+		let mut socket = vsock::Socket::new();
 
 		if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 			block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 		}
 
+		let socket = Arc::new(async_lock::RwLock::new(socket));
 		let fd = insert_object(socket).expect("FD is already used");
 
 		return fd;
@@ -609,12 +610,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			if sock == Sock::Dgram {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
-				let socket = Arc::new(async_lock::RwLock::new(udp::Socket::new(handle, domain)));
+				let mut socket = udp::Socket::new(handle, domain);
 
 				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
+				let socket = Arc::new(async_lock::RwLock::new(socket));
 				let fd = insert_object(socket).expect("FD is already used");
 
 				return fd;
@@ -624,12 +626,13 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			if sock == Sock::Stream {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
-				let socket = Arc::new(async_lock::RwLock::new(tcp::Socket::new(handle, domain)));
+				let mut socket = tcp::Socket::new(handle, domain);
 
 				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
 					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 				}
 
+				let socket = Arc::new(async_lock::RwLock::new(socket));
 				let fd = insert_object(socket).expect("FD is already used");
 
 				return fd;
@@ -647,7 +650,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| {
-			block_on((*v).accept(), None).map_or_else(
+			block_on(async { v.write().await.accept().await }, None).map_or_else(
 				|e| -i32::from(e),
 				#[cfg_attr(not(feature = "net"), expect(unused_variables))]
 				|(obj, endpoint)| match endpoint {
@@ -708,7 +711,10 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -i32::from(e),
-		|v| block_on((*v).listen(backlog), None).map_or_else(|e| -i32::from(e), |()| 0),
+		|v| {
+			block_on(async { v.write().await.listen(backlog).await }, None)
+				.map_or_else(|e| -i32::from(e), |()| 0)
+		},
 	)
 }
 
@@ -733,8 +739,11 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -i32::from(Errno::Inval);
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in>() });
-				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -i32::from(e), |()| 0)
+				block_on(
+					async { v.write().await.bind(ListenEndpoint::Ip(endpoint)).await },
+					None,
+				)
+				.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(feature = "net")]
 			Af::Inet6 => {
@@ -742,8 +751,11 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -i32::from(Errno::Inval);
 				}
 				let endpoint = IpListenEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() });
-				block_on((*v).bind(ListenEndpoint::Ip(endpoint)), None)
-					.map_or_else(|e| -i32::from(e), |()| 0)
+				block_on(
+					async { v.write().await.bind(ListenEndpoint::Ip(endpoint)).await },
+					None,
+				)
+				.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			#[cfg(feature = "vsock")]
 			Af::Vsock => {
@@ -751,8 +763,11 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 					return -i32::from(Errno::Inval);
 				}
 				let endpoint = VsockListenEndpoint::from(unsafe { *name.cast::<sockaddr_vm>() });
-				block_on((*v).bind(ListenEndpoint::Vsock(endpoint)), None)
-					.map_or_else(|e| -i32::from(e), |()| 0)
+				block_on(
+					async { v.write().await.bind(ListenEndpoint::Vsock(endpoint)).await },
+					None,
+				)
+				.map_or_else(|e| -i32::from(e), |()| 0)
 			}
 			_ => -i32::from(Errno::Inval),
 		},
@@ -800,7 +815,10 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -i32::from(e),
-		|v| block_on((*v).connect(endpoint), None).map_or_else(|e| -i32::from(e), |()| 0),
+		|v| {
+			block_on(async { v.write().await.connect(endpoint).await }, None)
+				.map_or_else(|e| -i32::from(e), |()| 0)
+		},
 	)
 }
 
@@ -815,7 +833,8 @@ pub unsafe extern "C" fn sys_getsockname(
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| {
-			if let Ok(Some(endpoint)) = block_on((*v).getsockname(), None) {
+			if let Ok(Some(endpoint)) = block_on(async { v.read().await.getsockname().await }, None)
+			{
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
@@ -898,8 +917,16 @@ pub unsafe extern "C" fn sys_setsockopt(
 		obj.map_or_else(
 			|e| -i32::from(e),
 			|v| {
-				block_on((*v).setsockopt(SocketOption::TcpNoDelay, value != 0), None)
-					.map_or_else(|e| -i32::from(e), |()| 0)
+				block_on(
+					async {
+						v.read()
+							.await
+							.setsockopt(SocketOption::TcpNoDelay, value != 0)
+							.await
+					},
+					None,
+				)
+				.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
 	} else {
@@ -933,7 +960,11 @@ pub unsafe extern "C" fn sys_getsockopt(
 		obj.map_or_else(
 			|e| -i32::from(e),
 			|v| {
-				block_on((*v).getsockopt(SocketOption::TcpNoDelay), None).map_or_else(
+				block_on(
+					async { v.read().await.getsockopt(SocketOption::TcpNoDelay).await },
+					None,
+				)
+				.map_or_else(
 					|e| -i32::from(e),
 					|value| {
 						if value {
@@ -964,7 +995,8 @@ pub unsafe extern "C" fn sys_getpeername(
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| {
-			if let Ok(Some(endpoint)) = block_on((*v).getpeername(), None) {
+			if let Ok(Some(endpoint)) = block_on(async { v.read().await.getpeername().await }, None)
+			{
 				if !addr.is_null() && !addrlen.is_null() {
 					let addrlen = unsafe { &mut *addrlen };
 
@@ -1019,7 +1051,10 @@ fn shutdown(sockfd: i32, how: i32) -> i32 {
 	let obj = get_object(sockfd);
 	obj.map_or_else(
 		|e| -i32::from(e),
-		|v| block_on((*v).shutdown(how), None).map_or_else(|e| -i32::from(e), |()| 0),
+		|v| {
+			block_on(async { v.read().await.shutdown(how).await }, None)
+				.map_or_else(|e| -i32::from(e), |()| 0)
+		},
 	)
 }
 
@@ -1098,7 +1133,7 @@ pub unsafe extern "C" fn sys_sendto(
 		obj.map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
 			|v| {
-				block_on((*v).sendto(slice, endpoint), None).map_or_else(
+				block_on(async { v.read().await.sendto(slice, endpoint).await }, None).map_or_else(
 					|e| isize::try_from(-i32::from(e)).unwrap(),
 					|v| v.try_into().unwrap(),
 				)
@@ -1124,7 +1159,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 	obj.map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| {
-			block_on((*v).recvfrom(slice), None).map_or_else(
+			block_on(async { v.read().await.recvfrom(slice).await }, None).map_or_else(
 				|e| isize::try_from(-i32::from(e)).unwrap(),
 				|(len, endpoint)| {
 					if !addr.is_null() && !addrlen.is_null() {

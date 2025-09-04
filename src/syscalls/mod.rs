@@ -641,8 +641,11 @@ pub unsafe extern "C" fn sys_ioctl(
 		obj.map_or_else(
 			|e| -i32::from(e),
 			|v| {
-				block_on((*v).set_status_flags(status_flags), None)
-					.map_or_else(|e| -i32::from(e), |()| 0)
+				block_on(
+					async { v.write().await.set_status_flags(status_flags).await },
+					None,
+				)
+				.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
 	} else {
@@ -666,7 +669,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 		obj.map_or_else(
 			|e| -i32::from(e),
 			|v| {
-				block_on((*v).status_flags(), None)
+				block_on(async { v.read().await.status_flags().await }, None)
 					.map_or_else(|e| -i32::from(e), |status_flags| status_flags.bits())
 			},
 		)
@@ -676,7 +679,12 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 			|e| -i32::from(e),
 			|v| {
 				block_on(
-					(*v).set_status_flags(fd::StatusFlags::from_bits_retain(arg)),
+					async {
+						v.write()
+							.await
+							.set_status_flags(fd::StatusFlags::from_bits_retain(arg))
+							.await
+					},
 					None,
 				)
 				.map_or_else(|e| -i32::from(e), |()| 0)
@@ -787,7 +795,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	obj.map_or_else(
 		|_| (-i32::from(Errno::Inval)).into(),
 		|v| {
-			block_on((*v).getdents(slice), None)
+			block_on(async { v.read().await.getdents(slice).await }, None)
 				.map_or_else(|e| (-i32::from(e)).into(), |cnt| cnt as i64)
 		},
 	)
