@@ -38,7 +38,7 @@ mod entropy;
 mod futex;
 pub(crate) mod interfaces;
 #[cfg(feature = "mman")]
-mod mman;
+pub(crate) mod mman;
 mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
