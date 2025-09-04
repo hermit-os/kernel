@@ -179,7 +179,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 					feature = "kernel-stack",
 					not(any(target_arch = "riscv64", feature = "common-os")),
 				))] {
-					unsafe { crate::arch::kernel::kernel_stack::#kernel_function_ident(#kernel_ident, #(#args),*) }
+					unsafe { crate::arch::kernel::kernel_stack::#kernel_function_ident(#(#args,)* #kernel_ident) }
 				} else {
 					#unsafety { #kernel_ident(#(#args),*) }
 				}
@@ -259,7 +259,7 @@ mod tests {
 						feature = "kernel-stack",
 						not(any(target_arch = "riscv64", feature = "common-os")),
 					))] {
-						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
+						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(a, b, _sys_test) }
 					} else {
 						{ _sys_test(a, b) }
 					}
@@ -327,7 +327,7 @@ mod tests {
 						feature = "kernel-stack",
 						not(any(target_arch = "riscv64", feature = "common-os")),
 					))] {
-						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
+						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(a, b, _sys_test) }
 					} else {
 						unsafe { _sys_test(a, b) }
 					}
@@ -397,7 +397,7 @@ mod tests {
 						feature = "kernel-stack",
 						not(any(target_arch = "riscv64", feature = "common-os")),
 					))] {
-						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(_sys_test, a, b) }
+						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(a, b, _sys_test) }
 					} else {
 						{ _sys_test(a, b) }
 					}
