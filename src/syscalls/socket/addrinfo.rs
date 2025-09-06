@@ -230,6 +230,12 @@ pub unsafe extern "C" fn sys_getaddrinfo(
 		return Eai::Family.into();
 	};
 
+	if ai_family == Af::Unix {
+		warn!("getaddrinfo not implemented for {ai_family:?}");
+		crate::errno::ToErrno::set_errno(-i32::from(crate::errno::Errno::Nosys));
+		return Eai::System.into();
+	}
+
 	let mut sock = None;
 
 	if hints.ai_socktype != 0 {
@@ -415,6 +421,11 @@ fn getaddrinfo_node(
 		Af::Unspec => (true, true),
 		Af::Inet => (true, false),
 		Af::Inet6 => (false, true),
+		Af::Unix => {
+			error!("getaddrinfo_node({ai_family:?}) not implemented");
+			crate::errno::ToErrno::set_errno(-i32::from(crate::errno::Errno::Nosys));
+			return Err(Eai::System);
+		}
 		#[cfg(feature = "vsock")]
 		Af::Vsock => {
 			error!("getaddrinfo_node({ai_family:?}) not implemented");
