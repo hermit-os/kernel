@@ -415,6 +415,11 @@ fn getaddrinfo_node(
 		Af::Unspec => (true, true),
 		Af::Inet => (true, false),
 		Af::Inet6 => (false, true),
+		Af::Unix => {
+			error!("getaddrinfo_node({ai_family:?}) not implemented");
+			crate::errno::ToErrno::set_errno(-i32::from(crate::errno::Errno::Nosys));
+			return Err(Eai::System);
+		}
 		#[cfg(feature = "vsock")]
 		Af::Vsock => {
 			error!("getaddrinfo_node({ai_family:?}) not implemented");

@@ -36,6 +36,7 @@ pub enum Af {
 	Unspec = 0,
 	Inet = 3,
 	Inet6 = 1,
+	Unix = 4,
 	#[cfg(feature = "vsock")]
 	Vsock = 2,
 }
@@ -153,6 +154,7 @@ pub enum sockaddrBox {
 	sockaddr(Box<sockaddr>),
 	sockaddr_in(Box<sockaddr_in>),
 	sockaddr_in6(Box<sockaddr_in6>),
+	sockaddr_un(Box<sockaddr_un>),
 	#[cfg(feature = "vsock")]
 	sockaddr_vm(Box<sockaddr_vm>),
 }
@@ -162,6 +164,7 @@ pub enum sockaddrRef<'a> {
 	sockaddr(&'a sockaddr),
 	sockaddr_in(&'a sockaddr_in),
 	sockaddr_in6(&'a sockaddr_in6),
+	sockaddr_un(&'a sockaddr_un),
 	#[cfg(feature = "vsock")]
 	sockaddr_vm(&'a sockaddr_vm),
 }
@@ -179,6 +182,7 @@ impl sockaddr {
 			Af::Unspec => sockaddrRef::sockaddr(unsafe { &*ptr }),
 			Af::Inet => sockaddrRef::sockaddr_in(unsafe { &*ptr.cast() }),
 			Af::Inet6 => sockaddrRef::sockaddr_in6(unsafe { &*ptr.cast() }),
+			Af::Unix => sockaddrRef::sockaddr_un(unsafe { &*ptr.cast() }),
 			#[cfg(feature = "vsock")]
 			Af::Vsock => sockaddrRef::sockaddr_vm(unsafe { &*ptr.cast() }),
 		};
@@ -191,6 +195,7 @@ impl sockaddr {
 			Af::Unspec => sockaddrBox::sockaddr(unsafe { Box::from_raw(ptr) }),
 			Af::Inet => sockaddrBox::sockaddr_in(unsafe { Box::from_raw(ptr.cast()) }),
 			Af::Inet6 => sockaddrBox::sockaddr_in6(unsafe { Box::from_raw(ptr.cast()) }),
+			Af::Unix => sockaddrBox::sockaddr_un(unsafe { Box::from_raw(ptr.cast()) }),
 			#[cfg(feature = "vsock")]
 			Af::Vsock => sockaddrBox::sockaddr_vm(unsafe { Box::from_raw(ptr.cast()) }),
 		};
@@ -204,6 +209,7 @@ impl sockaddrBox {
 			sockaddrBox::sockaddr(sockaddr) => Box::into_raw(sockaddr),
 			sockaddrBox::sockaddr_in(sockaddr_in) => Box::into_raw(sockaddr_in).cast(),
 			sockaddrBox::sockaddr_in6(sockaddr_in6) => Box::into_raw(sockaddr_in6).cast(),
+			sockaddrBox::sockaddr_un(sockaddr_un) => Box::into_raw(sockaddr_un).cast(),
 			#[cfg(feature = "vsock")]
 			sockaddrBox::sockaddr_vm(sockaddr_vm) => Box::into_raw(sockaddr_vm).cast(),
 		}
@@ -214,6 +220,7 @@ impl sockaddrBox {
 			Self::sockaddr(sockaddr) => sockaddrRef::sockaddr(sockaddr.as_ref()),
 			Self::sockaddr_in(sockaddr_in) => sockaddrRef::sockaddr_in(sockaddr_in.as_ref()),
 			Self::sockaddr_in6(sockaddr_in6) => sockaddrRef::sockaddr_in6(sockaddr_in6.as_ref()),
+			Self::sockaddr_un(sockaddr_un) => sockaddrRef::sockaddr_un(sockaddr_un.as_ref()),
 			#[cfg(feature = "vsock")]
 			Self::sockaddr_vm(sockaddr_vm) => sockaddrRef::sockaddr_vm(sockaddr_vm.as_ref()),
 		}
@@ -235,6 +242,7 @@ impl sockaddrRef<'_> {
 			sockaddrRef::sockaddr(sockaddr) => sockaddr.sa_len,
 			sockaddrRef::sockaddr_in(sockaddr_in) => sockaddr_in.sin_len,
 			sockaddrRef::sockaddr_in6(sockaddr_in6) => sockaddr_in6.sin6_len,
+			sockaddrRef::sockaddr_un(sockaddr_un) => sockaddr_un.sun_len,
 			#[cfg(feature = "vsock")]
 			sockaddrRef::sockaddr_vm(sockaddr_vm) => sockaddr_vm.svm_len,
 		}
@@ -446,6 +454,14 @@ impl From<SocketAddrV6> for sockaddr_in6 {
 			sin6_scope_id: Default::default(),
 		}
 	}
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct sockaddr_un {
+	pub sun_len: u8,
+	pub sun_family: sa_family_t,
+	pub sun_path: [c_char; 104],
 }
 
 #[repr(C)]
