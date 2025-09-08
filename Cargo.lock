@@ -863,7 +863,7 @@ dependencies = [
  "pci-ids",
  "pci_types",
  "rand_chacha",
- "raw-cpuid 11.5.0",
+ "raw-cpuid 11.6.0",
  "riscv",
  "sbi-rt",
  "semihosting",
@@ -1564,9 +1564,9 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "11.5.0"
+version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
+checksum = "498cd0dc59d73224351ee52a95fee0f1a617a2eae0e7d9d720cc622c73a54186"
 dependencies = [
  "bitflags 2.9.3",
 ]
@@ -1985,7 +1985,7 @@ name = "trapframe"
 version = "0.10.0"
 source = "git+https://github.com/hermit-os/trapframe-rs?branch=global_asm#45d62be444cbf86df8f15dee1e5ed4e63bcd2046"
 dependencies = [
- "raw-cpuid 11.5.0",
+ "raw-cpuid 11.6.0",
  "x86_64",
 ]
 
