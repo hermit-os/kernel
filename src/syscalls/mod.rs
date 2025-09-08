@@ -388,6 +388,12 @@ pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_c
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
+pub extern "C" fn sys_fchdir(_fd: FileDescriptor) -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
 	if let Ok(name) = unsafe { CStr::from_ptr(path) }.to_str() {
 		crate::fs::set_cwd(name)
