@@ -152,6 +152,11 @@ extern "C" fn initd(_arg: usize) {
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();
 
+	if cfg!(feature = "warn-prebuilt") {
+		warn!("This is a prebuilt Hermit kernel.");
+		warn!("For non-default device drivers and features, consider building a custom kernel.");
+	}
+
 	info!("Jumping into application");
 
 	#[cfg(not(test))]
