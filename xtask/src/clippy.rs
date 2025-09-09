@@ -38,7 +38,7 @@ impl Clippy {
 				Arch::X86_64 => {
 					clippy().arg("--features=shell").run()?;
 				}
-				Arch::Aarch64 => {}
+				Arch::Aarch64 | Arch::Aarch64Be => {}
 				Arch::Riscv64 => {
 					clippy()
 						.arg("--no-default-features")

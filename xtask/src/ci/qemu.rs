@@ -88,7 +88,7 @@ impl Qemu {
 			sh.create_dir("shared/tracedir")?;
 		}
 
-		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{arch}"));
+		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{}", arch.qemu()));
 		let program = if self.sudo { "sudo" } else { qemu.as_str() };
 		let arg = self.sudo.then_some(qemu.as_str());
 		let memory = self.memory(image_name, arch, small);
@@ -208,7 +208,7 @@ impl Qemu {
 					image_args.push("-initrd".to_string());
 					image_args.push(image.to_str().unwrap().to_string());
 				}
-				Arch::Aarch64 => {
+				Arch::Aarch64 | Arch::Aarch64Be => {
 					image_args.push("-device".to_string());
 					image_args.push(format!(
 						"guest-loader,addr=0x48000000,initrd={}",
@@ -233,7 +233,7 @@ impl Qemu {
 				"-nodefaults".to_string(),
 				"-no-user-config".to_string(),
 			]
-		} else if arch == Arch::Aarch64 {
+		} else if arch == Arch::Aarch64 || arch == Arch::Aarch64Be {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if arch == Arch::Riscv64 {
 			// CadenceGem requires sifive_u
@@ -273,7 +273,7 @@ impl Qemu {
 				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_string());
 				cpu_args
 			}
-			Arch::Aarch64 => {
+			Arch::Aarch64 | Arch::Aarch64Be => {
 				let mut cpu_args = if self.accel {
 					todo!()
 				} else {
@@ -306,7 +306,7 @@ impl Qemu {
 						32
 					}
 				}
-				Arch::Aarch64 => 144,
+				Arch::Aarch64 | Arch::Aarch64Be => 144,
 				Arch::Riscv64 => 40,
 			};
 		}
