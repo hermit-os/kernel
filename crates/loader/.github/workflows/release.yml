@@ -1,0 +1,26 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: dtolnay/rust-toolchain@stable
+    - run: cargo xtask build --release --target aarch64
+    - run: cargo xtask build --release --target riscv64
+    - run: cargo xtask build --release --target x86_64
+    - run: cargo xtask build --release --target x86_64-fc --features fc
+    - run: cargo xtask build --release --target x86_64-uefi
+    - uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rust-src
+    - run: cargo xtask build --release --target aarch64_be
+    - run: gh release create ${GITHUB_REF#refs/tags/} --draft --title ${GITHUB_REF#refs/tags/v} target/release/hermit-loader-*
