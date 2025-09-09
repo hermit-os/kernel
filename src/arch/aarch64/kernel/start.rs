@@ -118,6 +118,49 @@ const fn mair(attr: u64, mt: u64) -> u64 {
 #[cfg(feature = "smp")]
 pub(crate) static TTBR0: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
 
+// Prepare system control register (SCTRL)
+//
+// UCI     [26] Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
+//              DC CVAC and IC IVAU instructions
+// EE      [25] Explicit data accesses at EL1 and Stage 1 translation
+//              table walks at EL1 & EL0 are little-endian
+// EOE     [24] Explicit data accesses at EL0 are little-endian
+// WXN     [19] Regions with write permission are not forced to XN
+// nTWE    [18] WFE instructions are executed as normal
+// nTWI    [16] WFI instructions are executed as normal
+// UCT     [15] Enables EL0 access in AArch64 to the CTR_EL0 register
+// DZE     [14] Execution of the DC ZVA instruction is allowed at EL0
+// I       [12] Instruction caches enabled at EL0 and EL1
+// UMA     [9]  Disable access to the interrupt masks from EL0
+// SED     [8]  The SETEND instruction is available
+// ITD     [7]  The IT instruction functionality is available
+// THEE    [6]  ThumbEE is disabled
+// CP15BEN [5]  CP15 barrier operations disabled
+// SA0     [4]  Stack Alignment check for EL0 enabled
+// SA      [3]  Stack Alignment check enabled
+// C       [2]  Data and unified enabled
+// A       [1]  Alignment fault checking disabled
+// M       [0]  MMU enable
+#[cfg(all(feature = "smp", target_endian = "little"))]
+static SCTLR_EL1: u64 = 0b100_0000_0101_1101_0000_0001_1101;
+// The same, but EE and EOE are set to 1 for big endian.
+#[cfg(all(feature = "smp", target_endian = "big"))]
+static SCTLR_EL1: u64 = 0b111_0000_0101_1101_0000_0001_1101;
+
+#[cfg(all(feature = "smp", target_endian = "little"))]
+macro_rules! configure_endianness {
+	() => {
+		"bic x2, x2, #(1 << 24 | 1 << 25)"
+	};
+}
+
+#[cfg(all(feature = "smp", target_endian = "big"))]
+macro_rules! configure_endianness {
+	() => {
+		"orr x2, x2, #(1 << 24 | 1 << 25)"
+	};
+}
+
 #[cfg(feature = "smp")]
 #[unsafe(naked)]
 pub(crate) unsafe extern "C" fn smp_start() -> ! {
@@ -132,10 +175,12 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		"msr tpidr_el0, xzr",
 		"msr tpidr_el1, xzr",
 
-		// Disable the MMU
+		// Disable the MMU and set the correct endianness
+		// by either clearing or setting bits 25 and 24 (EE and EOE)
 		"dsb sy",
 		"mrs x2, sctlr_el1",
 		"bic x2, x2, #0x1",
+		configure_endianness!(),
 		"msr sctlr_el1, x2",
 		"isb",
 
@@ -189,31 +234,8 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		"ldr x5, [x8, #:lo12:{ttbr0}]",
 		"msr ttbr0_el1, x5",
 
-		// Prepare system control register (SCTRL)
-		//
-		// UCI     [26] Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
-		//				DC CVAC and IC IVAU instructions
-		// EE      [25] Explicit data accesses at EL1 and Stage 1 translation
-		//				table walks at EL1 & EL0 are little-endian
-		// EOE     [24] Explicit data accesses at EL0 are little-endian
-		// WXN     [19] Regions with write permission are not forced to XN
-		// nTWE    [18] WFE instructions are executed as normal
-		// nTWI    [16] WFI instructions are executed as normal
-		// UCT     [15] Enables EL0 access in AArch64 to the CTR_EL0 register
-		// DZE     [14] Execution of the DC ZVA instruction is allowed at EL0
-		// I       [12] Instruction caches enabled at EL0 and EL1
-		// UMA     [9]  Disable access to the interrupt masks from EL0
-		// SED     [8]  The SETEND instruction is available
-		// ITD     [7]  The IT instruction functionality is available
-		// THEE    [6]  ThumbEE is disabled
-		// CP15BEN [5]  CP15 barrier operations disabled
-		// SA0     [4]  Stack Alignment check for EL0 enabled
-		// SA      [3]  Stack Alignment check enabled
-		// C       [2]  Data and unified enabled
-		// A       [1]  Alignment fault checking disabled
-		// M       [0]  MMU enable
-		"ldr x0, =0x405d01d",
-		  "msr sctlr_el1, x0",
+		"ldr x0, ={sctlr_el1}",
+		"msr sctlr_el1, x0",
 
 		// initialize argument for pre_init
 		"mov x0, xzr",
@@ -227,6 +249,7 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		tcr_bits = const tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
 		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 		current_stack_address = sym super::CURRENT_STACK_ADDRESS,
+		sctlr_el1 = const SCTLR_EL1,
 		ttbr0 = sym TTBR0,
 		pre_init = sym pre_init,
 	)
