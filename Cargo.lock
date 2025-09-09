@@ -149,7 +149,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bfdb03424c95b58315a4cb0ff4ca919568a5a28ae5ba960a1ad92c9ccaf49b9"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "safe-mmio",
  "thiserror",
  "zerocopy",
@@ -161,7 +161,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8797e113733a36b5fa906c81aefc126d255b88dd1c10a737749aa22ec7736b6a"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "safe-mmio",
  "thiserror",
  "zerocopy",
@@ -246,9 +246,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.9.3"
+version = "2.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34efbcccd345379ca2868b2b2c9d3782e9cc58ba87bc7d79d5b53d9c9ae6f25d"
+checksum = "2261d10cca569e4643e526d8dc2e62e433cc8aba21ab764233731f8d369bf394"
 
 [[package]]
 name = "block-buffer"
@@ -549,7 +549,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b4a54dfedecb1dc004776a597db0c858cf6c31579296734511309291b8399ce"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "zerocopy",
  "zerocopy-derive",
 ]
@@ -753,7 +753,7 @@ version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2deb07a133b1520dc1a5690e9bd08950108873d7ed5de38dcc74d3b5ebffa110"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "libc",
  "libgit2-sys",
  "log",
@@ -838,7 +838,7 @@ dependencies = [
  "async-lock",
  "async-trait",
  "bit_field",
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "build-time",
  "built",
  "cfg-if",
@@ -1142,7 +1142,7 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0ff37bd590ca25063e35af745c343cb7a0271906fb7b37e4813e8f79f00268d"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "libc",
  "redox_syscall",
 ]
@@ -1247,7 +1247,7 @@ version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab2156c4fce2f8df6c499cc1c763e4394b7482525bf2a9701c9d79d215f519e4"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "cfg-if",
  "cfg_aliases",
  "libc",
@@ -1314,7 +1314,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c10c2894a6fed806ade6027bcd50662746363a9589d3ec9d9bef30a4e4bc166"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
 ]
 
 [[package]]
@@ -1387,7 +1387,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4325c6aa3cca3373503b1527e75756f9fbfe5fd76be4b4c8a143ee47430b8e0"
 dependencies = [
  "bit_field",
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
 ]
 
 [[package]]
@@ -1568,7 +1568,7 @@ version = "11.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "498cd0dc59d73224351ee52a95fee0f1a617a2eae0e7d9d720cc622c73a54186"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
 ]
 
 [[package]]
@@ -1577,7 +1577,7 @@ version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b8c0c260b63a8219631167be35e6a988e9554dbd323f8bd08439c8ed1302bd1"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
 ]
 
 [[package]]
@@ -1630,7 +1630,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e56a18552996ac8d29ecc3b190b4fdbb2d91ca4ec396de7bbffaf43f3d637e96"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "errno",
  "libc",
  "linux-raw-sys",
@@ -2001,7 +2001,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94d293f51425981fdb1b766beae254dbb711a17e8c4b549dc69b9b7ee0d478d5"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "rustversion",
  "x86",
 ]
@@ -2109,7 +2109,7 @@ checksum = "7d48795f97c4b2b552fa2bd4d9549831ce622579088e1f1e7d3ba57eee74f21f"
 dependencies = [
  "allocator-api2",
  "bitfield-struct",
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "endian-num",
  "num_enum",
  "pci_types",
@@ -2453,7 +2453,7 @@ version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
 dependencies = [
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
 ]
 
 [[package]]
@@ -2479,7 +2479,7 @@ version = "0.15.2"
 source = "git+https://github.com/rust-osdev/x86_64.git#72954bba37d591341ee5a982df4e06f23ec9b738"
 dependencies = [
  "bit_field",
- "bitflags 2.9.3",
+ "bitflags 2.9.4",
  "const_fn",
  "rustversion",
  "volatile 0.4.6",
