@@ -151,10 +151,14 @@ impl Qemu {
 
 		if matches!(
 			image_name,
-			"axum-example" | "http_server" | "http_server_poll" | "http_server_select"
-		) || self.devices.contains(&Device::CadenceGem)
-		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to kill the machine ourselves.
-		{
+			"axum-example"
+				| "http_server"
+				| "http_server_poll"
+				| "http_server_select"
+				| "httpd" | "testudp"
+				| "miotcp" | "mioudp"
+				| "poll" | "stdin"
+		) {
 			qemu.0.kill()?;
 		}
 
