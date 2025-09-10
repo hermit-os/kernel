@@ -38,6 +38,12 @@ jobs:
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
+      - name: cargo hack check (aarch64_be)
+        run: |
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,rtl8139 --features tcp,virtio-net
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
       - name: cargo hack check (riscv64)
         run: |
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
@@ -92,6 +98,7 @@ jobs:
         run: |
           cargo xtask build --arch x86_64 --no-default-features
           cargo xtask build --arch aarch64 --no-default-features
+          cargo xtask build --arch aarch64_be --no-default-features
 
   test:
     name: Test
@@ -119,7 +126,7 @@ jobs:
 
   run-hermit:
     name: Run
-    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     env:
       HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
     defaults:
@@ -127,7 +134,7 @@ jobs:
         working-directory: kernel
     strategy:
       matrix:
-        arch: [x86_64, aarch64, riscv64]
+        arch: [x86_64, aarch64, aarch64_be, riscv64]
         profile: [dev, release]
         include:
           - profile: dev
@@ -136,6 +143,8 @@ jobs:
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
             flags: --accel --sudo
           - arch: aarch64
+            packages: qemu-system-aarch64 ipxe-qemu
+          - arch: aarch64_be
             packages: qemu-system-aarch64 ipxe-qemu
           - arch: riscv64
             packages: qemu-system-misc

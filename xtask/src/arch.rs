@@ -11,6 +11,8 @@ pub enum Arch {
 	X86_64,
 	/// AArch64
 	Aarch64,
+	/// AArch64, big-endian
+	Aarch64Be,
 	/// 64-bit RISC-V
 	Riscv64,
 }
@@ -21,6 +23,10 @@ impl Arch {
 	}
 
 	pub fn install(&self) -> Result<()> {
+		if self.tier() > 2 {
+			return Ok(());
+		}
+
 		let mut rustup = crate::rustup();
 		rustup.args(["target", "add", self.triple()]);
 
@@ -42,7 +48,15 @@ impl Arch {
 		match self {
 			Self::X86_64 => "x86_64",
 			Self::Aarch64 => "aarch64",
+			Self::Aarch64Be => "aarch64_be",
 			Self::Riscv64 => "riscv64",
+		}
+	}
+
+	pub fn tier(&self) -> u8 {
+		match self {
+			Self::Aarch64Be => 3,
+			_ => 2,
 		}
 	}
 
@@ -50,6 +64,7 @@ impl Arch {
 		match self {
 			Self::X86_64 => "x86_64-unknown-none",
 			Self::Aarch64 => "aarch64-unknown-none-softfloat",
+			Self::Aarch64Be => "aarch64_be-unknown-none-softfloat",
 			Self::Riscv64 => "riscv64gc-unknown-none-elf",
 		}
 	}
@@ -58,6 +73,7 @@ impl Arch {
 		match self {
 			Self::X86_64 => "x86_64-unknown-hermit",
 			Self::Aarch64 => "aarch64-unknown-hermit",
+			Self::Aarch64Be => "aarch64_be-unknown-hermit",
 			Self::Riscv64 => "riscv64gc-unknown-hermit",
 		}
 	}
@@ -74,6 +90,11 @@ impl Arch {
 				"-Zbuild-std=core",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
+			Self::Aarch64Be => &[
+				"--target=aarch64_be-unknown-hermit",
+				"-Zbuild-std=core",
+				"-Zbuild-std-features=compiler-builtins-mem",
+			],
 			Arch::Riscv64 => &[
 				"--target=riscv64gc-unknown-hermit",
 				"-Zbuild-std=core",
@@ -87,6 +108,13 @@ impl Arch {
 			Self::X86_64 => &["--target=x86_64-unknown-none"],
 			Self::Aarch64 => &[
 				"--target=aarch64-unknown-none-softfloat",
+				// We can't use prebuilt std here because it is built with
+				// relocation-model=static and we need relocation-model=pic
+				"-Zbuild-std=core,alloc",
+				"-Zbuild-std-features=compiler-builtins-mem",
+			],
+			Self::Aarch64Be => &[
+				"--target=aarch64_be-unknown-none-softfloat",
 				// We can't use prebuilt std here because it is built with
 				// relocation-model=static and we need relocation-model=pic
 				"-Zbuild-std=core,alloc",
@@ -112,6 +140,10 @@ impl Arch {
 				"--target=aarch64-unknown-hermit",
 				"-Zbuild-std=std,panic_abort",
 			],
+			Self::Aarch64Be => &[
+				"--target=aarch64_be-unknown-hermit",
+				"-Zbuild-std=std,panic_abort",
+			],
 			Arch::Riscv64 => &[
 				"--target=riscv64gc-unknown-hermit",
 				"-Zbuild-std=std,panic_abort",
@@ -122,8 +154,16 @@ impl Arch {
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &[],
-			Self::Aarch64 => &["-Crelocation-model=pic"],
+			Self::Aarch64 | Self::Aarch64Be => &["-Crelocation-model=pic"],
 			Self::Riscv64 => &["-Cno-redzone", "-Crelocation-model=pic"],
+		}
+	}
+
+	pub fn qemu(&self) -> &'static str {
+		match self {
+			Self::X86_64 => "x86_64",
+			Self::Aarch64 | Self::Aarch64Be => "aarch64",
+			Self::Riscv64 => "riscv64",
 		}
 	}
 }

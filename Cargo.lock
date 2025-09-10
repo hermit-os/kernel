@@ -1705,8 +1705,7 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 [[package]]
 name = "safe-mmio"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db02a82ad13df46afeba34a4e54065fa912308b9101b060e4422898eac0e06f6"
+source = "git+https://github.com/hermit-os/safe-mmio?branch=be#9ba84bf7af075d81769f142f2ea74e4a2b5a621f"
 dependencies = [
  "zerocopy",
 ]
