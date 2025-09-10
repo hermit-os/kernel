@@ -581,9 +581,9 @@ fn test_miotcp(guest_ip: IpAddr) -> Result<()> {
 	let mut stream = TcpStream::connect(socket_addr)?;
 	stream.write_all(buf.as_bytes())?;
 
-	let mut buf = vec![];
-	let received = stream.read_to_end(&mut buf)?;
-	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
+	let mut buf = vec![0; buf.len()];
+	stream.read_exact(&mut buf)?;
+	eprintln!("[CI] receive: {}", from_utf8(&buf)?);
 
 	Ok(())
 }
