@@ -567,7 +567,7 @@ fn test_httpd(guest_ip: IpAddr) -> Result<()> {
 
 fn test_testudp(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let buf = "exit";
+	let buf = "Hermit";
 	let socket_addr = SocketAddr::new(guest_ip, 9975);
 	eprintln!("[CI] send {buf:?} via UDP to {socket_addr}");
 	let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
@@ -579,7 +579,7 @@ fn test_testudp(guest_ip: IpAddr) -> Result<()> {
 
 fn test_miotcp(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let buf = "exit";
+	let buf = "Hermit";
 	let socket_addr = SocketAddr::new(guest_ip, 9975);
 	eprintln!("[CI] send {buf:?} via TCP to {socket_addr}");
 	let mut stream = TcpStream::connect(socket_addr)?;
@@ -594,7 +594,7 @@ fn test_miotcp(guest_ip: IpAddr) -> Result<()> {
 
 fn test_poll(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let buf = "exit";
+	let buf = "Hermit";
 	let socket_addr = SocketAddr::new(guest_ip, 9975);
 	eprintln!("[CI] send {buf:?} via TCP to {socket_addr}");
 	let mut stream = TcpStream::connect(socket_addr)?;
@@ -605,7 +605,7 @@ fn test_poll(guest_ip: IpAddr) -> Result<()> {
 
 fn test_mioudp(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let buf = "exit";
+	let buf = "Hermit";
 	let socket_addr = SocketAddr::new(guest_ip, 9975);
 	eprintln!("[CI] send {buf:?} via UDP to {socket_addr}");
 	let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
