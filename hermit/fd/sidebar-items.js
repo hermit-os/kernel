@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["eventfd","fstat","poll"],"struct":["AccessOption","AccessPermission","EventFlags","OpenOption","PollEvent","PollFd","StatusFlags"]};
