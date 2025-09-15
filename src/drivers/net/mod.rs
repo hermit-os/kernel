@@ -2,15 +2,15 @@
 pub mod gem;
 #[cfg(not(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "rtl8139",
 	feature = "virtio-net",
 )))]
 pub mod loopback;
-#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+#[cfg(feature = "rtl8139")]
 pub mod rtl8139;
 #[cfg(all(
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-	not(all(target_arch = "x86_64", feature = "rtl8139")),
+	not(feature = "rtl8139"),
 	feature = "virtio-net",
 ))]
 pub mod virtio;
@@ -36,7 +36,7 @@ pub(crate) trait NetworkDriver: Driver + smoltcp::phy::Device {
 /// or environment variables.
 #[cfg(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "rtl8139",
 	feature = "virtio-net",
 ))]
 pub(crate) fn mtu() -> u16 {
@@ -69,7 +69,7 @@ cfg_if::cfg_if! {
 	} else if #[cfg(all(
 		feature = "pci",
 		any(
-			all(target_arch = "x86_64", feature = "rtl8139"),
+			feature = "rtl8139",
 			feature = "virtio-net",
 		),
 	))] {

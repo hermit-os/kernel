@@ -22,7 +22,7 @@ use crate::drivers::net::NetworkDriver;
 cfg_if! {
 	if #[cfg(any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "rtl8139",
 		feature = "virtio-net",
 	))] {
 		use hermit_sync::SpinMutex;
@@ -40,7 +40,7 @@ impl<'a> NetworkInterface<'a> {
 		cfg_if! {
 			if #[cfg(any(
 				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-				all(target_arch = "x86_64", feature = "rtl8139"),
+				feature = "rtl8139",
 				feature = "virtio-net",
 			))] {
 				#[cfg_attr(feature = "trace", expect(unused_mut))]
@@ -99,7 +99,7 @@ impl<'a> NetworkInterface<'a> {
 		cfg_if! {
 			if #[cfg(any(
 				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-				all(target_arch = "x86_64", feature = "rtl8139"),
+				feature = "rtl8139",
 				feature = "virtio-net",
 			))] {
 				#[cfg_attr(feature = "trace", expect(unused_mut))]

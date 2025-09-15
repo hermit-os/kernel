@@ -23,28 +23,19 @@ use crate::console::IoDevice;
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
-#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+#[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
-#[cfg(all(
-	not(all(target_arch = "x86_64", feature = "rtl8139")),
-	feature = "virtio-net",
-))]
+#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net",))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
-	all(
-		feature = "virtio-net",
-		not(all(target_arch = "x86_64", feature = "rtl8139")),
-	),
+	all(feature = "virtio-net", not(feature = "rtl8139"),),
 	feature = "fuse",
 	feature = "vsock",
 	feature = "console",
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
-	all(
-		feature = "virtio-net",
-		not(all(target_arch = "x86_64", feature = "rtl8139")),
-	),
+	all(feature = "virtio-net", not(feature = "rtl8139"),),
 	feature = "fuse",
 	feature = "vsock",
 	feature = "console",
@@ -54,10 +45,7 @@ use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
-#[cfg(any(
-	all(target_arch = "x86_64", feature = "rtl8139"),
-	feature = "virtio-net",
-))]
+#[cfg(any(feature = "rtl8139", feature = "virtio-net",))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 
@@ -441,10 +429,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		}
 	}
 
-	#[cfg(any(
-		all(target_arch = "x86_64", feature = "rtl8139"),
-		feature = "virtio-net",
-	))]
+	#[cfg(any(feature = "rtl8139", feature = "virtio-net",))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
 		handlers
 			.entry(device.get_interrupt_number())
@@ -455,13 +440,10 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	handlers
 }
 
-#[cfg(all(
-	not(all(target_arch = "x86_64", feature = "rtl8139")),
-	feature = "virtio-net",
-))]
+#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
-#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+#[cfg(feature = "rtl8139")]
 pub(crate) type NetworkDevice = RTL8139Driver;
 
 #[cfg(feature = "console")]
@@ -501,19 +483,13 @@ pub(crate) fn init() {
 			);
 
 			#[cfg(any(
-				all(
-					feature = "virtio-net",
-					not(all(target_arch = "x86_64", feature = "rtl8139")),
-				),
+				all(feature = "virtio-net", not(feature = "rtl8139"),),
 				feature = "fuse",
 				feature = "vsock",
 				feature = "console",
 			))]
 			match pci_virtio::init_device(adapter) {
-				#[cfg(all(
-					not(all(target_arch = "x86_64", feature = "rtl8139")),
-					feature = "virtio-net",
-				))]
+				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net",))]
 				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
 
 				#[cfg(feature = "console")]
@@ -537,7 +513,7 @@ pub(crate) fn init() {
 		}
 
 		// Searching for Realtek RTL8139, which is supported by Qemu
-		#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+		#[cfg(feature = "rtl8139")]
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
 			let (vendor_id, device_id) = x.id();
 			vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)

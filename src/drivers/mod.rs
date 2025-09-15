@@ -13,7 +13,7 @@ pub mod pci;
 #[cfg(any(
 	all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-		not(all(target_arch = "x86_64", feature = "rtl8139")),
+		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	),
 	feature = "fuse",
@@ -39,12 +39,12 @@ pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
 pub mod error {
 	#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 	use crate::drivers::net::gem::GEMError;
-	#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+	#[cfg(feature = "rtl8139")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	#[cfg(any(
 		all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-			not(all(target_arch = "x86_64", feature = "rtl8139")),
+			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		),
 		feature = "fuse",
@@ -55,7 +55,7 @@ pub mod error {
 
 	#[cfg(any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "rtl8139",
 		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
@@ -66,7 +66,7 @@ pub mod error {
 		#[cfg(any(
 			all(
 				not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-				not(all(target_arch = "x86_64", feature = "rtl8139")),
+				not(feature = "rtl8139"),
 				feature = "virtio-net",
 			),
 			feature = "fuse",
@@ -74,7 +74,7 @@ pub mod error {
 			feature = "console",
 		))]
 		InitVirtioDevFail(VirtioError),
-		#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+		#[cfg(feature = "rtl8139")]
 		InitRTL8139DevFail(RTL8139Error),
 		#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 		InitGEMDevFail(GEMError),
@@ -83,7 +83,7 @@ pub mod error {
 	#[cfg(any(
 		all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-			not(all(target_arch = "x86_64", feature = "rtl8139")),
+			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		),
 		feature = "fuse",
@@ -96,7 +96,7 @@ pub mod error {
 		}
 	}
 
-	#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+	#[cfg(feature = "rtl8139")]
 	impl From<RTL8139Error> for DriverError {
 		fn from(err: RTL8139Error) -> Self {
 			DriverError::InitRTL8139DevFail(err)
@@ -112,7 +112,7 @@ pub mod error {
 
 	#[cfg(any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "rtl8139",
 		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
@@ -129,7 +129,7 @@ pub mod error {
 							feature = "gem-net",
 							not(feature = "pci"),
 						)),
-						not(all(target_arch = "x86_64", feature = "rtl8139")),
+						not(feature = "rtl8139"),
 						feature = "virtio-net",
 					),
 					feature = "fuse",
@@ -139,7 +139,7 @@ pub mod error {
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {err:?}")
 				}
-				#[cfg(all(target_arch = "x86_64", feature = "rtl8139"))]
+				#[cfg(feature = "rtl8139")]
 				DriverError::InitRTL8139DevFail(ref err) => {
 					write!(f, "RTL8139 driver failed: {err:?}")
 				}
