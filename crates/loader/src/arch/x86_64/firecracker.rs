@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use core::ptr::write_bytes;
 use core::{ptr, slice};
 
@@ -217,7 +218,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	info!("Found available RAM: [{start_address:#x} - {end_address:#x}]");
 
 	if let Some(command_line) = command_line {
-		fdt = fdt.bootargs(command_line).unwrap();
+		fdt = fdt.bootargs(command_line.to_owned()).unwrap();
 	}
 
 	let fdt = fdt.finish().unwrap();
