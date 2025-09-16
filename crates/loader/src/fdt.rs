@@ -41,7 +41,6 @@ impl Fdt {
 		self.writer.finish()
 	}
 
-	#[cfg_attr(target_os = "uefi", expect(unused))]
 	pub fn bootargs(mut self, bootargs: String) -> FdtWriterResult<Self> {
 		assert!(self.bootargs.is_none());
 		self.bootargs = Some(bootargs);

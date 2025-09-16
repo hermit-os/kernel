@@ -1,6 +1,7 @@
 mod allocator;
 mod console;
 
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::ffi::c_void;
 use core::mem::MaybeUninit;
@@ -14,7 +15,7 @@ use hermit_entry::elf::{KernelObject, LoadedKernel};
 use log::info;
 use sptr::Strict;
 use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
-use uefi::fs::{FileSystem, Path};
+use uefi::fs::{self, FileSystem, Path};
 use uefi::prelude::*;
 use uefi::table::cfg;
 
@@ -40,10 +41,14 @@ fn main() -> Status {
 
 	drop(kernel_image);
 
-	let fdt = Fdt::new("uefi")
+	let mut fdt = Fdt::new("uefi")
 		.unwrap()
 		.rsdp(u64::try_from(rsdp.expose_addr()).unwrap())
 		.unwrap();
+
+	if let Some(bootargs) = read_bootargs() {
+		fdt = fdt.bootargs(bootargs).unwrap();
+	}
 
 	allocator::exit_boot_services();
 	let mut memory_map = unsafe { boot::exit_boot_services(None) };
@@ -67,6 +72,25 @@ fn read_app() -> Vec<u8> {
 	info!("Read Hermit application from \"{path}\" (size = {len} B)");
 
 	data
+}
+
+fn read_bootargs() -> Option<String> {
+	let image_handle = boot::image_handle();
+	let fs = boot::get_image_file_system(image_handle).expect("should open file system");
+
+	let path = Path::new(cstr16!(r"\efi\boot\hermit-bootargs"));
+
+	match FileSystem::new(fs).read_to_string(path) {
+		Ok(bootargs) => {
+			info!("Read Hermit bootargs from from \"{path}\": {bootargs}");
+			Some(bootargs)
+		}
+		Err(fs::Error::Io(err)) if err.uefi_error.status() == Status::NOT_FOUND => {
+			info!("Hermit bootargs file does not exist: \"{path}\"");
+			None
+		}
+		Err(err) => panic!("{err:?}"),
+	}
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel, fdt: Vec<u8>) -> ! {
