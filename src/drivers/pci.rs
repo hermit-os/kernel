@@ -137,7 +137,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
 	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
 	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(VirtAddr, usize)> {
-		let (address, size, prefetchable, width) = match self.get_bar(index) {
+		let (address, size, prefetchable, _width) = match self.get_bar(index) {
 			Some(Bar::Io { .. }) => {
 				warn!("Cannot map IOBar!");
 				return None;
@@ -168,10 +168,6 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 		debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
 
-		if width != 64 {
-			warn!("Currently only mapping of 64 bit bars is supported!");
-			return None;
-		}
 		if !prefetchable {
 			warn!("Currently only mapping of prefetchable bars is supported!");
 		}
