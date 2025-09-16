@@ -1,16 +1,17 @@
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::Range;
 
 use vm_fdt::{FdtWriter, FdtWriterNode, FdtWriterResult};
 
-pub struct Fdt<'a> {
+pub struct Fdt {
 	writer: FdtWriter,
 	root_node: FdtWriterNode,
-	bootargs: Option<&'a str>,
+	bootargs: Option<String>,
 }
 
-impl<'a> Fdt<'a> {
+impl Fdt {
 	pub fn new(platform: &str) -> FdtWriterResult<Self> {
 		let mut writer = FdtWriter::new()?;
 
@@ -30,7 +31,7 @@ impl<'a> Fdt<'a> {
 
 	pub fn finish(mut self) -> FdtWriterResult<Vec<u8>> {
 		let chosen_node = self.writer.begin_node("chosen")?;
-		if let Some(bootargs) = self.bootargs {
+		if let Some(bootargs) = &self.bootargs {
 			self.writer.property_string("bootargs", bootargs)?;
 		}
 		self.writer.end_node(chosen_node)?;
@@ -41,7 +42,7 @@ impl<'a> Fdt<'a> {
 	}
 
 	#[cfg_attr(target_os = "uefi", expect(unused))]
-	pub fn bootargs(mut self, bootargs: &'a str) -> FdtWriterResult<Self> {
+	pub fn bootargs(mut self, bootargs: String) -> FdtWriterResult<Self> {
 		assert!(self.bootargs.is_none());
 		self.bootargs = Some(bootargs);
 
@@ -75,7 +76,7 @@ mod x86_64 {
 	use multiboot::information::{MemoryMapIter, MemoryType};
 	use vm_fdt::FdtWriterResult;
 
-	impl super::Fdt<'_> {
+	impl super::Fdt {
 		pub fn memory_regions(
 			mut self,
 			memory_regions: MemoryMapIter<'_, '_>,
@@ -105,7 +106,7 @@ mod uefi {
 	use uefi::mem::memory_map::{MemoryMap, MemoryMapMut};
 	use vm_fdt::FdtWriterResult;
 
-	impl super::Fdt<'_> {
+	impl super::Fdt {
 		pub fn memory_map(mut self, memory_map: &mut impl MemoryMapMut) -> FdtWriterResult<Self> {
 			memory_map.sort();
 			info!("Memory map:\n{}", memory_map.display());
