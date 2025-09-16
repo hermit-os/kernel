@@ -1,5 +1,7 @@
 //! System error numbers.
 
+use core::convert::Infallible;
+
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use thiserror::Error;
 
@@ -667,6 +669,12 @@ pub enum Errno {
 	#[doc(alias = "EHWPOISON")]
 	#[error("Memory page has hardware error")]
 	Hwpoison = 133,
+}
+
+impl From<Infallible> for Errno {
+	fn from(value: Infallible) -> Self {
+		match value {}
+	}
 }
 
 /// Returns the pointer to `errno`.

@@ -120,7 +120,7 @@ bitflags = "2"
 build-time = "0.1.3"
 cfg-if = "1"
 crossbeam-utils = { version = "0.8", default-features = false }
-embedded-io = "0.6"
+embedded-io = { version = "0.6", features = ["alloc"] }
 enum_dispatch = "0.3"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
@@ -213,6 +213,7 @@ exclude = [
 ]
 
 [patch.crates-io]
+embedded-io = { git = "https://github.com/hermit-os/embedded-hal", branch = "io-vec_deque" }
 x86_64 = { git = "https://github.com/rust-osdev/x86_64.git" }
 # FIXME: remove once merged: https://github.com/rcore-os/trapframe-rs/pull/16
 trapframe = { git = "https://github.com/hermit-os/trapframe-rs", branch = "global_asm" }
