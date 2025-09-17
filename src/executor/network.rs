@@ -246,8 +246,6 @@ pub(crate) fn wake_network_waker() {
 async fn network_run() {
 	future::poll_fn(|cx| {
 		let Some(mut guard) = NIC.try_lock() else {
-			// FIXME: only wake when progress can be made
-			cx.waker().wake_by_ref();
 			// another task is already using the NIC => don't check
 			return Poll::Pending;
 		};
