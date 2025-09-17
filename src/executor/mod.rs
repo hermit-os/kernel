@@ -126,24 +126,6 @@ pub fn init() {
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn poll_on<F, T>(future: F) -> io::Result<T>
-where
-	F: Future<Output = io::Result<T>>,
-{
-	let mut cx = Context::from_waker(Waker::noop());
-	let mut future = pin!(future);
-
-	loop {
-		// run background tasks
-		run();
-
-		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			return t;
-		}
-	}
-}
-
-/// Blocks the current thread on `f`, running the executor when idling.
 pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result<T>
 where
 	F: Future<Output = io::Result<T>>,
