@@ -6,11 +6,15 @@ use core::alloc::{GlobalAlloc, Layout};
 use hermit_sync::RawInterruptTicketMutex;
 use talc::{ErrOnOom, Span, Talc, Talck};
 
-pub struct LockedAllocator(Talck<RawInterruptTicketMutex, ErrOnOom>);
+use crate::mm::bump_allocator::BumpAllocator;
+
+//pub struct LockedAllocator(Talck<RawInterruptTicketMutex, ErrOnOom>);
+pub struct LockedAllocator(BumpAllocator);
 
 impl LockedAllocator {
 	pub const fn new() -> Self {
-		Self(Talc::new(ErrOnOom).lock())
+		//Self(Talc::new(ErrOnOom).lock())
+		Self(BumpAllocator::new())
 	}
 
 	#[inline]
@@ -22,10 +26,11 @@ impl LockedAllocator {
 	}
 
 	pub unsafe fn init(&self, heap_bottom: *mut u8, heap_size: usize) {
-		let arena = Span::from_base_size(heap_bottom, heap_size);
-		unsafe {
-			self.0.lock().claim(arena).unwrap();
-		}
+		//let arena = Span::from_base_size(heap_bottom, heap_size);
+		//unsafe {
+		//self.0.lock().claim(arena).unwrap();
+		//}
+		self.0.init(heap_bottom, heap_size);
 	}
 }
 
