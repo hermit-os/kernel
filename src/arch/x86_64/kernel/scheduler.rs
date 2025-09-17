@@ -14,6 +14,8 @@ use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use super::interrupts::{IDT, IST_SIZE};
+#[cfg(feature = "preemptive-multithreading")]
+use crate::arch::kernel::apic::set_oneshot_timer_relative;
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
@@ -25,6 +27,10 @@ use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
+
+// Run scheduler at least every xxx micro-seconds
+#[cfg(feature = "preemptive-multithreading")]
+pub const MIN_RESCHEDULE_INTERVAL_US: u64 = 50;
 
 #[repr(C, packed)]
 struct State {
@@ -398,6 +404,8 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
+	#[cfg(feature = "preemptive-multithreading")]
+	set_oneshot_timer_relative(MIN_RESCHEDULE_INTERVAL_US);
 	core_scheduler().reschedule();
 }
 
@@ -409,4 +417,7 @@ pub fn install_timer_handler() {
 			.set_stack_index(0);
 	}
 	interrupts::add_irq_name(apic::TIMER_INTERRUPT_NUMBER - 32, "Timer");
+
+	#[cfg(feature = "preemptive-multithreading")]
+	set_oneshot_timer_relative(1);
 }
