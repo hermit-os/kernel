@@ -3,14 +3,14 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 
-use hermit_sync::RawInterruptTicketMutex;
-use talc::{ErrOnOom, Span, Talc, Talck};
+use good_memory_allocator::Allocator;
+use hermit_sync::InterruptTicketMutex;
 
-pub struct LockedAllocator(Talck<RawInterruptTicketMutex, ErrOnOom>);
+pub struct LockedAllocator(InterruptTicketMutex<Allocator>);
 
 impl LockedAllocator {
 	pub const fn new() -> Self {
-		Self(Talc::new(ErrOnOom).lock())
+		Self(InterruptTicketMutex::new(Allocator::empty()))
 	}
 
 	#[inline]
@@ -22,9 +22,8 @@ impl LockedAllocator {
 	}
 
 	pub unsafe fn init(&self, heap_bottom: *mut u8, heap_size: usize) {
-		let arena = Span::from_base_size(heap_bottom, heap_size);
 		unsafe {
-			self.0.lock().claim(arena).unwrap();
+			self.0.lock().init(heap_bottom as usize, heap_size);
 		}
 	}
 }
@@ -34,22 +33,24 @@ impl LockedAllocator {
 unsafe impl GlobalAlloc for LockedAllocator {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		let layout = Self::align_layout(layout);
-		unsafe { self.0.alloc(layout) }
+		unsafe { self.0.lock().alloc(layout) }
 	}
 
-	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-		let layout = Self::align_layout(layout);
-		unsafe { self.0.dealloc(ptr, layout) }
+	unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+		// TODO: do we need to consider the layout here? galloc docs don't mention this.
+		unsafe { self.0.lock().dealloc(ptr) }
 	}
 
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
 		let layout = Self::align_layout(layout);
-		unsafe { self.0.alloc_zeroed(layout) }
+		let ptr = unsafe { self.0.lock().alloc(layout) };
+		unsafe { core::ptr::write_bytes(ptr, 0, layout.size()) };
+		ptr
 	}
 
 	unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
 		let layout = Self::align_layout(layout);
-		unsafe { self.0.realloc(ptr, layout, new_size) }
+		unsafe { self.0.lock().realloc(ptr, layout, new_size) }
 	}
 }
 

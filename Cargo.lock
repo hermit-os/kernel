@@ -535,6 +535,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "either"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
+
+[[package]]
 name = "embedded-hal"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -781,6 +787,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "good_memory_allocator"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1651659e016ea4259760966432aebcc96c81e26743fb018c59585ddd677127e"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -858,6 +873,7 @@ dependencies = [
  "float-cmp",
  "free-list",
  "fuse-abi",
+ "good_memory_allocator",
  "hashbrown",
  "heapless 0.9.1",
  "hermit-entry",
@@ -881,7 +897,6 @@ dependencies = [
  "smallvec",
  "smoltcp",
  "take-static",
- "talc",
  "thiserror",
  "time",
  "tock-registers 0.10.0",
@@ -1909,15 +1924,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf67eb0a80961fdb5df5e14b75c5b9fc93bdbf88b00d0260b7eec55041c4fe01"
 dependencies = [
  "call-once",
-]
-
-[[package]]
-name = "talc"
-version = "4.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3ae828aa394de34c7de08f522d1b86bd1c182c668d27da69caadda00590f26d"
-dependencies = [
- "lock_api",
 ]
 
 [[package]]

@@ -125,6 +125,7 @@ enum_dispatch = "0.3"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", features = ["linux"], optional = true }
+good_memory_allocator = { version = "0.1.7", default-features = false }
 hashbrown = { version = "0.16", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10", features = ["kernel"] }
@@ -139,7 +140,6 @@ shell-words = { version = "1.1", default-features = false }
 simple-shell = { version = "0.0.1", optional = true }
 smallvec = { version = "1", features = ["const_new"] }
 take-static = "0.1"
-talc = { version = "4" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
