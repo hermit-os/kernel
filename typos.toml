@@ -3,6 +3,7 @@ locale = "en-us"
 extend-ignore-identifiers-re = [
     "IST",
     "ist",
+    "parm",
     "sie",
 ]
 
