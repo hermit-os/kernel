@@ -4,11 +4,15 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::hint::spin_loop;
 use core::mem::{self, ManuallyDrop};
+use core::ptr::NonNull;
 
+use endian_num::{le16, le32, le64};
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use smoltcp::phy::DeviceCapabilities;
-use x86_64::instructions::port::Port;
+use volatile::access::{NoAccess, ReadOnly, ReadWrite};
+use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef, map_field};
 
 use crate::arch::kernel::interrupts::*;
 use crate::arch::pci::PciConfigRegion;
@@ -22,47 +26,6 @@ use crate::mm::device_alloc::DeviceAlloc;
 const RX_BUF_LEN: usize = 8192;
 /// size of the send buffer
 const TX_BUF_LEN: usize = 4096;
-
-/// the ethernet ID (6bytes) => MAC address
-const IDR0: u16 = 0x0;
-/// transmit status of each descriptor (4bytes/descriptor) (C mode)
-const TSD0: u16 = 0x10;
-/// transmit start address of descriptor 0 (4byte, C mode, 4 byte alignment)
-const TSAD0: u16 = 0x20;
-/// transmit start address of descriptor 1 (4byte, C mode, 4 byte alignment)
-const TSAD1: u16 = 0x24;
-/// transmit normal priority descriptors start address (8bytes, C+ mode, 256 byte-align)
-const TNPDS: u16 = 0x20;
-/// transmit start address of descriptor 2 (4byte, C mode, 4 byte alignment)
-const TSAD2: u16 = 0x28;
-/// transmit start address of descriptor 3 (4byte, C mode, 4 byte alignment)
-const TSAD3: u16 = 0x2c;
-/// command register (1byte)
-const CR: u16 = 0x37;
-/// current address of packet read (2byte, C mode, initial value 0xFFF0)
-const CAPR: u16 = 0x38;
-/// interrupt mask register (2byte)
-const IMR: u16 = 0x3c;
-/// interrupt status register (2byte)
-const ISR: u16 = 0x3e;
-/// transmit config register (4byte)
-const TCR: u16 = 0x40;
-/// receive config register (4byte)
-const RCR: u16 = 0x44;
-// command register for 93C46 (93C56) (1byte)
-const CR9346: u16 = 0x50;
-/// config register 0 (1byte)
-const CONFIG0: u16 = 0x51;
-/// config register 1 (1byte)
-const CONFIG1: u16 = 0x52;
-/// media status register (1byte)
-const MSR: u16 = 0x58;
-/// receive buffer start address (C mode, 4 byte alignment)
-const RBSTART: u16 = 0x30;
-/// basic mode control register (2byte)
-const BMCR: u16 = 0x62;
-/// basic mode status register (2byte)
-const BMSR: u16 = 0x64;
 
 /// Reset, set to 1 to invoke S/W reset, held to 1 while resetting
 const CR_RST: u8 = 0x10;
@@ -190,6 +153,258 @@ const INT_MASK_NO_ROK: u16 = ISR_TOK | ISR_RXOVW | ISR_TER | ISR_RER;
 
 const NO_TX_BUFFERS: usize = 4;
 
+/// http://realtek.info/pdf/rtl8139d.pdf
+/// See "5. Register Descriptions"
+#[repr(C)]
+#[derive(VolatileFieldAccess)]
+struct Regs {
+	/// ID register 0.
+	#[access(ReadOnly)] // r/o because writes require 4-byte access
+	idr0: u8,
+	/// ID register 1.
+	#[access(ReadOnly)]
+	idr1: u8,
+	/// ID register 2.
+	#[access(ReadOnly)]
+	idr2: u8,
+	/// ID register 3.
+	#[access(ReadOnly)]
+	idr3: u8,
+	/// ID register 4.
+	#[access(ReadOnly)]
+	idr4: u8,
+	/// ID register 5.
+	#[access(ReadOnly)]
+	idr5: u8,
+	#[access(NoAccess)]
+	__reserved0: [u8; 2],
+	/// Multicast registers.
+	#[access(ReadWrite)]
+	mar: [u8; 8], // r/o because writes require 4-byte access
+	/// Transmit status of descriptor 0.
+	#[access(ReadWrite)]
+	tsd0: le32,
+	/// Transmit status of descriptor 1.
+	#[access(ReadWrite)]
+	tsd1: le32,
+	/// Transmit status of descriptor 2.
+	#[access(ReadWrite)]
+	tsd2: le32,
+	/// Transmit status of descriptor 3.
+	#[access(ReadWrite)]
+	tsd3: le32,
+	/// Transmit start address of descriptor 0.
+	#[access(ReadWrite)]
+	tsad0: le32,
+	/// Transmit start address of descriptor 1.
+	#[access(ReadWrite)]
+	tsad1: le32,
+	/// Transmit start address of descriptor 2.
+	#[access(ReadWrite)]
+	tsad2: le32,
+	/// Transmit start address of descriptor 3.
+	#[access(ReadWrite)]
+	tsad3: le32,
+	/// Receive buffer start address.
+	#[access(ReadWrite)]
+	rbstart: le32,
+	/// Early receive byte count register.
+	#[access(ReadOnly)]
+	erbcr: le16,
+	/// Early rx status register.
+	#[access(ReadOnly)]
+	ersr: u8,
+	/// Command register.
+	#[access(ReadWrite)]
+	cr: u8,
+	/// Current address of packet read.
+	#[access(ReadWrite)]
+	capr: le16,
+	/// Current buffer address.
+	///
+	/// Reflects total received byte count in the rx-buffer.
+	#[access(ReadOnly)]
+	cbr: le16,
+	/// Interrupt mask register.
+	#[access(ReadWrite)]
+	imr: le16,
+	/// Interrupt status register.
+	#[access(ReadWrite)]
+	isr: le16,
+	/// Transmit configuration register.
+	#[access(ReadWrite)]
+	tcr: le32,
+	/// Receive configuration register.
+	#[access(ReadWrite)]
+	rcr: le32,
+	/// Timer count register.
+	#[access(ReadWrite)]
+	tctr: le32,
+	/// Missed packet counter.
+	///
+	/// Indicates number of packets discarded due to rx fifo overflow.
+	#[access(ReadWrite)]
+	mpc: le32,
+	/// 93C46 command register
+	#[access(ReadWrite)]
+	cr_9346: u8,
+	/// Configuration register 0.
+	#[access(ReadWrite)]
+	config0: u8,
+	/// Configuration register 1.
+	#[access(ReadWrite)]
+	config1: u8,
+	#[access(NoAccess)]
+	__reserved1: u8,
+	/// Timer interrupt register.
+	#[access(ReadWrite)]
+	timer_int: le32,
+	/// Media status register.
+	#[access(ReadWrite)]
+	msr: u8,
+	/// Configuration register 3.
+	#[access(ReadWrite)]
+	config3: u8,
+	/// Configuration register 4.
+	#[access(ReadWrite)]
+	config4: u8,
+	#[access(NoAccess)]
+	__reserved2: u8,
+	/// Multiple interrupt select.
+	#[access(ReadWrite)]
+	mulint: le16,
+	/// PCI revision ID.
+	#[access(ReadOnly)]
+	rerid: u8,
+	#[access(NoAccess)]
+	__reserved3: u8,
+	/// Transmit status of all descriptors.
+	#[access(ReadOnly)]
+	tsad: le16,
+	/// Basic mode control register.
+	#[access(ReadWrite)]
+	bmcr: le16,
+	/// Basic mode status register.
+	#[access(ReadOnly)]
+	bmsr: le16,
+	/// Auto-negotiation advertisement register.
+	#[access(ReadWrite)]
+	anar: le16,
+	/// Auto-negotiation link partner register.
+	#[access(ReadOnly)]
+	anlpar: le16,
+	/// Auto-negotiation expansion register.
+	#[access(ReadOnly)]
+	aner: le16,
+	/// Disconnect counter.
+	#[access(ReadOnly)]
+	dis: le16,
+	/// False carrier sense counter.
+	#[access(ReadOnly)]
+	fcsc: le16,
+	/// N-way test register.
+	#[access(ReadWrite)]
+	nwaytr: le16,
+	/// RX_ER counter.
+	#[access(ReadOnly)]
+	rec: le16,
+	/// CS configuration register.
+	#[access(ReadWrite)]
+	cscr: le16,
+	#[access(NoAccess)]
+	__reserved4: u8,
+	/// PHY parameter 1.
+	#[access(ReadWrite)]
+	phy1_parm: le32,
+	/// Twister parameter.
+	#[access(ReadWrite)]
+	tw_parm: le32,
+	/// PHY parameter 2.
+	#[access(ReadWrite)]
+	phy2_parm: u8,
+	#[access(NoAccess)]
+	__reserved5: [u8; 3],
+	/// Power management CRC register0 for wakeup frame0.
+	#[access(ReadWrite)]
+	crc0: u8,
+	/// Power management CRC register1 for wakeup frame1.
+	#[access(ReadWrite)]
+	crc1: u8,
+	/// Power management CRC register2 for wakeup frame2.
+	#[access(ReadWrite)]
+	crc2: u8,
+	/// Power management CRC register3 for wakeup frame3.
+	#[access(ReadWrite)]
+	crc3: u8,
+	/// Power management CRC register4 for wakeup frame4.
+	#[access(ReadWrite)]
+	crc4: u8,
+	/// Power management CRC register5 for wakeup frame5.
+	#[access(ReadWrite)]
+	crc5: u8,
+	/// Power management CRC register6 for wakeup frame6.
+	#[access(ReadWrite)]
+	crc6: u8,
+	/// Power management CRC register7 for wakeup frame7.
+	#[access(ReadWrite)]
+	crc7: u8,
+	/// Power management wakeup frame0 (64-bit).
+	#[access(ReadWrite)]
+	wakeup0: le64,
+	/// Power management wakeup frame1 (64-bit).
+	#[access(ReadWrite)]
+	wakeup1: le64,
+	/// Power management wakeup frame2 (64-bit).
+	#[access(ReadWrite)]
+	wakeup2: le64,
+	/// Power management wakeup frame3 (64-bit).
+	#[access(ReadWrite)]
+	wakeup3: le64,
+	/// Power management wakeup frame4 (64-bit).
+	#[access(ReadWrite)]
+	wakeup4: le64,
+	/// Power management wakeup frame5 (64-bit).
+	#[access(ReadWrite)]
+	wakeup5: le64,
+	/// Power management wakeup frame6 (64-bit).
+	#[access(ReadWrite)]
+	wakeup6: le64,
+	/// Power management wakeup frame7 (64-bit).
+	#[access(ReadWrite)]
+	wakeup7: le64,
+	/// LSB of the mask byte of wakeup frame0 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc0: u8,
+	/// LSB of the mask byte of wakeup frame1 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc1: u8,
+	/// LSB of the mask byte of wakeup frame2 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc2: u8,
+	/// LSB of the mask byte of wakeup frame3 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc3: u8,
+	/// LSB of the mask byte of wakeup frame4 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc4: u8,
+	/// LSB of the mask byte of wakeup frame5 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc5: u8,
+	/// LSB of the mask byte of wakeup frame6 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc6: u8,
+	/// LSB of the mask byte of wakeup frame7 within offset 12 to 75.
+	#[access(ReadWrite)]
+	lsbcrc7: u8,
+	#[access(NoAccess)]
+	__reserved6: [u8; 4],
+	/// Configuration register 5.
+	#[access(ReadWrite)]
+	config5: u8,
+	#[access(NoAccess)]
+	__reserved7: [u8; 39],
+}
+
 #[derive(Debug)]
 pub enum RTL8139Error {
 	InitFailed,
@@ -205,7 +420,7 @@ struct RxFields {
 
 impl RxFields {
 	fn rx_peek_u16(&self) -> u16 {
-		u16::from_ne_bytes(
+		u16::from_le_bytes(
 			self.rxbuffer[self.rxpos..][..mem::size_of::<u16>()]
 				.try_into()
 				.unwrap(),
@@ -227,20 +442,16 @@ impl RxToken<'_> {
 
 		// packets are dword aligned
 		self.rx_fields.rxpos = ((self.rx_fields.rxpos + 3) & !0x3) % RX_BUF_LEN;
-		if self.rx_fields.rxpos >= 0x10 {
-			unsafe {
-				Port::<u16>::new(self.iobase + CAPR)
-					.write((self.rx_fields.rxpos - 0x10).try_into().unwrap());
-			}
+
+		let capr: u16 = if self.rx_fields.rxpos >= 0x10 {
+			(self.rx_fields.rxpos - 0x10).try_into().unwrap()
 		} else {
-			unsafe {
-				Port::<u16>::new(self.iobase + CAPR).write(
-					(RX_BUF_LEN - (0x10 - self.rx_fields.rxpos))
-						.try_into()
-						.unwrap(),
-				);
-			}
-		}
+			(RX_BUF_LEN - (0x10 - self.rx_fields.rxpos))
+				.try_into()
+				.unwrap()
+		};
+
+		self.capr.write(le16::from(capr));
 	}
 }
 
@@ -262,7 +473,7 @@ struct TxFields {
 /// Struct allows to control device queues as also
 /// the device itself.
 pub(crate) struct RTL8139Driver {
-	iobase: u16,
+	regs: VolatileRef<'static, Regs>,
 	mtu: u16,
 	irq: InterruptLine,
 	mac: [u8; 6],
@@ -271,7 +482,7 @@ pub(crate) struct RTL8139Driver {
 }
 
 pub struct RxToken<'a> {
-	iobase: u16,
+	capr: VolatilePtr<'a, le16>,
 	rx_fields: &'a mut RxFields,
 }
 
@@ -309,7 +520,10 @@ impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
 }
 
 pub struct TxToken<'a> {
-	iobase: u16,
+	tsd0: VolatilePtr<'a, le32>,
+	tsd1: VolatilePtr<'a, le32>,
+	tsd2: VolatilePtr<'a, le32>,
+	tsd3: VolatilePtr<'a, le32>,
 	tx_fields: &'a mut TxFields,
 }
 
@@ -340,10 +554,16 @@ impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
 		let buffer = &mut token.tx_fields.txbuffer[id * TX_BUF_LEN..][..len];
 		let result = f(buffer);
 
+		let len = le32::from(u32::try_from(len).unwrap());
+
 		// send the packet
-		unsafe {
-			Port::<u32>::new(token.iobase + TSD0 + (4 * id as u16)).write(len.try_into().unwrap()); //|0x3A0000);
-		}
+		match id {
+			0 => token.tsd0.write(len),
+			1 => token.tsd1.write(len),
+			2 => token.tsd2.write(len),
+			3 => token.tsd3.write(len),
+			_ => unreachable!(),
+		};
 
 		result
 	}
@@ -352,16 +572,22 @@ impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
 impl smoltcp::phy::Device for RTL8139Driver {
 	type RxToken<'a> = RxToken<'a>;
 	type TxToken<'a> = TxToken<'a>;
+
 	fn receive(&mut self, _: smoltcp::time::Instant) -> Option<(RxToken<'_>, TxToken<'_>)> {
 		if !self.rx_fields.rx_in_use && self.has_packet() {
 			self.rx_fields.rx_in_use = true;
+			let regs = self.regs.as_mut_ptr();
+
 			Some((
 				RxToken {
-					iobase: self.iobase,
+					capr: map_field!(regs.capr),
 					rx_fields: &mut self.rx_fields,
 				},
 				TxToken {
-					iobase: self.iobase,
+					tsd0: map_field!(regs.tsd0),
+					tsd1: map_field!(regs.tsd1),
+					tsd2: map_field!(regs.tsd2),
+					tsd3: map_field!(regs.tsd3),
 					tx_fields: &mut self.tx_fields,
 				},
 			))
@@ -369,10 +595,16 @@ impl smoltcp::phy::Device for RTL8139Driver {
 			None
 		}
 	}
+
 	fn transmit(&mut self, _: smoltcp::time::Instant) -> Option<TxToken<'_>> {
 		if self.tx_fields.remaining_bufs > 0 {
+			let regs = self.regs.as_mut_ptr();
+
 			Some(TxToken {
-				iobase: self.iobase,
+				tsd0: map_field!(regs.tsd0),
+				tsd1: map_field!(regs.tsd1),
+				tsd2: map_field!(regs.tsd2),
+				tsd3: map_field!(regs.tsd3),
 				tx_fields: &mut self.tx_fields,
 			})
 		} else {
@@ -399,7 +631,7 @@ impl NetworkDriver for RTL8139Driver {
 	}
 
 	fn has_packet(&self) -> bool {
-		let cmd = unsafe { Port::<u8>::new(self.iobase + CR).read() };
+		let cmd = self.regs.as_ptr().cr().read();
 
 		if (cmd & CR_BUFE) != CR_BUFE {
 			let header = self.rx_fields.rx_peek_u16();
@@ -419,19 +651,18 @@ impl NetworkDriver for RTL8139Driver {
 
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			unsafe {
-				Port::<u16>::new(self.iobase + IMR).write(INT_MASK_NO_ROK);
-			}
+			self.regs
+				.as_mut_ptr()
+				.imr()
+				.write(le16::from(INT_MASK_NO_ROK));
 		} else {
 			// Enable all known interrupts by setting the interrupt mask.
-			unsafe {
-				Port::<u16>::new(self.iobase + IMR).write(INT_MASK);
-			}
+			self.regs.as_mut_ptr().imr().write(le16::from(INT_MASK));
 		}
 	}
 
 	fn handle_interrupt(&mut self) {
-		let isr_contents = unsafe { Port::<u16>::new(self.iobase + ISR).read() };
+		let isr_contents = self.regs.as_ptr().isr().read().to_ne();
 
 		if (isr_contents & ISR_TOK) == ISR_TOK {
 			self.tx_handler();
@@ -449,10 +680,9 @@ impl NetworkDriver for RTL8139Driver {
 			trace!("RTL88139: RX overflow detected!\n");
 		}
 
-		unsafe {
-			Port::<u16>::new(self.iobase + ISR)
-				.write(isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK));
-		}
+		self.regs.as_mut_ptr().isr().write(le16::from(
+			isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
+		));
 	}
 }
 
@@ -470,8 +700,13 @@ impl RTL8139Driver {
 	fn tx_handler(&mut self) {
 		for i in 0..self.tx_fields.tx_in_use.len() {
 			if self.tx_fields.tx_in_use[i] {
-				let txstatus =
-					unsafe { Port::<u32>::new(self.iobase + TSD0 + i as u16 * 4).read() };
+				let txstatus = match i {
+					0 => self.regs.as_ptr().tsd0().read().to_ne(),
+					1 => self.regs.as_ptr().tsd1().read().to_ne(),
+					2 => self.regs.as_ptr().tsd2().read().to_ne(),
+					3 => self.regs.as_ptr().tsd3().read().to_ne(),
+					_ => unreachable!(),
+				};
 
 				if (txstatus & (TSD_TABT | TSD_OWC)) > 0 {
 					error!("RTL8139: major error");
@@ -496,9 +731,7 @@ impl Drop for RTL8139Driver {
 		debug!("Dropping RTL8129Driver!");
 
 		// Software reset
-		unsafe {
-			Port::<u8>::new(self.iobase + CR).write(CR_RST);
-		}
+		self.regs.as_mut_ptr().cr().write(CR_RST);
 	}
 }
 
@@ -506,92 +739,89 @@ pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
 ) -> Result<RTL8139Driver, DriverError> {
 	let irq = device.get_irq().unwrap();
-	let mut iobase: Option<u32> = None;
+	let mut regs = None;
 
 	for i in 0..MAX_BARS {
-		if let Some(Bar::Io { port }) = device.get_bar(i.try_into().unwrap()) {
-			iobase = Some(port);
+		if let Some(Bar::Memory32 { .. }) = device.get_bar(i.try_into().unwrap()) {
+			let (addr, _size) = device.memory_map_bar(i.try_into().unwrap(), true).unwrap();
+
+			regs = Some(unsafe { VolatileRef::new(NonNull::new(addr.as_mut_ptr()).unwrap()) });
 		}
 	}
 
-	let iobase: u16 = iobase
-		.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?
-		.try_into()
-		.unwrap();
+	let mut regs = regs.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?;
 
-	debug!("Found RTL8139 at iobase {iobase:#x} (irq {irq})");
+	debug!("Found RTL8139 at IO {regs:?} (irq {irq})");
 
 	device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
-	let mac: [u8; 6] = unsafe {
-		[
-			Port::<u8>::new(iobase + IDR0).read(),
-			Port::<u8>::new(iobase + IDR0 + 1).read(),
-			Port::<u8>::new(iobase + IDR0 + 2).read(),
-			Port::<u8>::new(iobase + IDR0 + 3).read(),
-			Port::<u8>::new(iobase + IDR0 + 4).read(),
-			Port::<u8>::new(iobase + IDR0 + 5).read(),
-		]
-	};
+	let mac = [
+		regs.as_ptr().idr0().read(),
+		regs.as_ptr().idr1().read(),
+		regs.as_ptr().idr2().read(),
+		regs.as_ptr().idr3().read(),
+		regs.as_ptr().idr4().read(),
+		regs.as_ptr().idr5().read(),
+	];
 
 	debug!(
 		"MAC address {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
 		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
 	);
 
-	unsafe {
-		if Port::<u32>::new(iobase + TCR).read() == 0x00ff_ffffu32 {
-			error!("Unable to initialize RTL8192");
-			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::InitFailed));
-		}
-
-		// Software reset
-		Port::<u8>::new(iobase + CR).write(CR_RST);
-
-		// The RST bit must be checked to make sure that the chip has finished the reset.
-		// If the RST bit is high (1), then the reset is still in operation.
-		crate::arch::kernel::processor::udelay(10000);
-		let mut tmp: u16 = 10000;
-		while (Port::<u8>::new(iobase + CR).read() & CR_RST) == CR_RST && tmp > 0 {
-			tmp -= 1;
-		}
-
-		if tmp == 0 {
-			error!("RTL8139 reset failed");
-			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::ResetFailed));
-		}
-
-		// Enable Receive and Transmitter
-		Port::<u8>::new(iobase + CR).write(CR_TE | CR_RE); // Sets the RE and TE bits high
-
-		// lock config register
-		Port::<u8>::new(iobase + CR9346).write(CR9346_EEM1 | CR9346_EEM0);
-
-		// clear all of CONFIG1
-		Port::<u8>::new(iobase + CONFIG1).write(0);
-
-		// disable driver loaded and lanwake bits, turn driver loaded bit back on
-		Port::<u8>::new(iobase + CONFIG1).write(
-			(Port::<u8>::new(iobase + CONFIG1).read() & !(CONFIG1_DVRLOAD | CONFIG1_LWACT))
-				| CONFIG1_DVRLOAD,
-		);
-
-		// unlock config register
-		Port::<u8>::new(iobase + CR9346).write(0);
-
-		// configure receive buffer
-		// AB - Accept Broadcast: Accept broadcast packets sent to mac ff:ff:ff:ff:ff:ff
-		// AM - Accept Multicast: Accept multicast packets.
-		// APM - Accept Physical Match: Accept packets send to NIC's MAC address.
-		// AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
-		Port::<u32>::new(iobase + RCR)
-			.write(RCR_MXDMA2 | RCR_MXDMA1 | RCR_MXDMA0 | RCR_AB | RCR_AM | RCR_APM | RCR_AAP); // The WRAP bit isn't set!
-
-		// set the transmit config register to
-		// be the normal interframe gap time
-		// set DMA max burst to 64bytes
-		Port::<u32>::new(iobase + TCR).write(TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
+	if regs.as_ptr().tcr().read().to_ne() == 0x00ff_ffffu32 {
+		error!("Unable to initialize RTL8192");
+		return Err(DriverError::InitRTL8139DevFail(RTL8139Error::InitFailed));
 	}
+
+	// Software reset
+	regs.as_mut_ptr().cr().write(CR_RST);
+
+	// The RST bit must be checked to make sure that the chip has finished the reset.
+	// If the RST bit is high (1), then the reset is still in operation.
+	let mut tmp: u16 = 10000;
+	while (regs.as_ptr().cr().read() & CR_RST) == CR_RST && tmp > 0 {
+		spin_loop();
+		tmp -= 1;
+	}
+
+	if tmp == 0 {
+		error!("RTL8139 reset failed");
+		return Err(DriverError::InitRTL8139DevFail(RTL8139Error::ResetFailed));
+	}
+
+	// Enable Receive and Transmitter
+	regs.as_mut_ptr().cr().write(CR_TE | CR_RE); // Sets the RE and TE bits high
+
+	// lock config register
+	regs.as_mut_ptr().cr_9346().write(CR9346_EEM1 | CR9346_EEM0);
+
+	// clear all of CONFIG1
+	regs.as_mut_ptr().config1().write(0);
+
+	// disable driver loaded and lanwake bits, turn driver loaded bit back on
+	regs.as_mut_ptr()
+		.config1()
+		.write(!(CONFIG1_DVRLOAD | CONFIG1_LWACT) | CONFIG1_DVRLOAD);
+
+	// unlock config register
+	regs.as_mut_ptr().cr_9346().write(0);
+
+	// configure receive buffer
+	// AB - Accept Broadcast: Accept broadcast packets sent to mac ff:ff:ff:ff:ff:ff
+	// AM - Accept Multicast: Accept multicast packets.
+	// APM - Accept Physical Match: Accept packets send to NIC's MAC address.
+	// AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
+	regs.as_mut_ptr().rcr().write(le32::from(
+		RCR_MXDMA2 | RCR_MXDMA1 | RCR_MXDMA0 | RCR_AB | RCR_AM | RCR_APM | RCR_AAP,
+	)); // The WRAP bit isn't set!
+
+	// set the transmit config register to
+	// be the normal interframe gap time
+	// set DMA max burst to 64bytes
+	regs.as_mut_ptr()
+		.tcr()
+		.write(le32::from(TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2));
 
 	let rxbuffer = Box::new_zeroed_slice_in(RX_BUF_LEN, DeviceAlloc);
 	let mut rxbuffer = unsafe { rxbuffer.assume_init() };
@@ -600,53 +830,56 @@ pub(crate) fn init_device(
 
 	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 
-	let phys_addr = |p| DeviceAlloc.phys_addr_from(p).as_u64().try_into().unwrap();
+	let phys_addr = |p| le32::from(u32::try_from(DeviceAlloc.phys_addr_from(p).as_u64()).unwrap());
 
-	unsafe {
-		// register the receive buffer
-		Port::<u32>::new(iobase + RBSTART).write(phys_addr(rxbuffer.as_mut_ptr()));
+	// register the receive buffer
+	regs.as_mut_ptr()
+		.rbstart()
+		.write(phys_addr(rxbuffer.as_mut_ptr()));
 
-		// set each of the transmitter start address descriptors
-		Port::<u32>::new(iobase + TSAD0).write(phys_addr(txbuffer[..TX_BUF_LEN].as_mut_ptr()));
-		Port::<u32>::new(iobase + TSAD1)
-			.write(phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr()));
-		Port::<u32>::new(iobase + TSAD2).write(phys_addr(
-			txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
-		));
-		Port::<u32>::new(iobase + TSAD3).write(phys_addr(
-			txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
-		));
+	// set each of the transmitter start address descriptors
+	regs.as_mut_ptr()
+		.tsad0()
+		.write(phys_addr(txbuffer[..TX_BUF_LEN].as_mut_ptr()));
+	regs.as_mut_ptr()
+		.tsad1()
+		.write(phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr()));
+	regs.as_mut_ptr().tsad2().write(phys_addr(
+		txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
+	));
+	regs.as_mut_ptr().tsad3().write(phys_addr(
+		txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
+	));
 
-		// Enable all known interrupts by setting the interrupt mask.
-		Port::<u16>::new(iobase + IMR).write(INT_MASK);
+	// Enable all known interrupts by setting the interrupt mask.
+	regs.as_mut_ptr().imr().write(le16::from(INT_MASK));
 
-		Port::<u16>::new(iobase + BMCR).write(BMCR_ANE);
-		let speed;
-		let tmp = Port::<u16>::new(iobase + BMCR).read();
-		if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
-			speed = 1000;
-		} else if tmp & BMCR_SPD100 == BMCR_SPD100 {
-			speed = 100;
-		} else {
-			speed = 10;
-		}
-
-		// Enable Receive and Transmitter
-		Port::<u8>::new(iobase + CR).write(CR_TE | CR_RE); // Sets the RE and TE bits high
-
-		info!(
-			"RTL8139: CR = {:#x}, ISR = {:#x}, speed = {} mbps",
-			Port::<u8>::new(iobase + CR).read(),
-			Port::<u16>::new(iobase + ISR).read(),
-			speed
-		);
+	regs.as_mut_ptr().bmcr().write(le16::from(BMCR_ANE));
+	let speed;
+	let tmp = regs.as_ptr().bmcr().read().to_ne();
+	if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
+		speed = 1000;
+	} else if tmp & BMCR_SPD100 == BMCR_SPD100 {
+		speed = 100;
+	} else {
+		speed = 10;
 	}
+
+	// Enable Receive and Transmitter
+	regs.as_mut_ptr().cr().write(CR_TE | CR_RE); // Sets the RE and TE bits high
+
+	info!(
+		"RTL8139: CR = {:#x}, ISR = {:#x}, speed = {} mbps",
+		regs.as_ptr().cr().read(),
+		regs.as_ptr().isr().read(),
+		speed
+	);
 
 	info!("RTL8139 use interrupt line {irq}");
 	add_irq_name(irq, "rtl8139");
 
 	Ok(RTL8139Driver {
-		iobase,
+		regs,
 		mtu: mtu(),
 		irq,
 		mac,
