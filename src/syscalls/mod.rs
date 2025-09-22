@@ -483,10 +483,6 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	if access_option.contains(AccessOption::F_OK) && access_option != AccessOption::F_OK {
-		return -i32::from(Errno::Inval);
-	}
-
 	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
 		return -i32::from(Errno::Inval);
 	};
