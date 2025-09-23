@@ -614,15 +614,17 @@ impl VfsNode for MemDirectory {
 		block_on(
 			async {
 				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
-
-				if !rest.is_empty() {
-					let inner = self.inner.read().await;
-					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_lstat(rest);
-				}
-
 				let inner = self.inner.read().await;
 				let node = inner.get(component).ok_or(Errno::Badf)?;
+
+				if !rest.is_empty() {
+					if node.get_kind() == NodeKind::File {
+						Err(Errno::Notdir)?;
+					}
+
+					return node.traverse_lstat(rest);
+				}
+
 				node.get_file_attributes()
 			},
 			None,
@@ -633,15 +635,17 @@ impl VfsNode for MemDirectory {
 		block_on(
 			async {
 				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
-
-				if !rest.is_empty() {
-					let inner = self.inner.read().await;
-					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_stat(rest);
-				}
-
 				let inner = self.inner.read().await;
 				let node = inner.get(component).ok_or(Errno::Badf)?;
+
+				if !rest.is_empty() {
+					if node.get_kind() == NodeKind::File {
+						Err(Errno::Notdir)?;
+					}
+
+					return node.traverse_stat(rest);
+				}
+
 				node.get_file_attributes()
 			},
 			None,
