@@ -82,8 +82,8 @@ newlib = []
 ## Enable stubbing result values for some system calls.
 ##
 ## For some system calls related to system options in which Hermit does not implement all possible options,
-## return 0 (success) instead of an error when the option is unknown.
-syscall-fake-success = []
+## return 0 (success) instead of an error when the option is unknown ; or return a convincing fake value.
+syscall-fake-values = []
 
 #! ### Platform Features
 

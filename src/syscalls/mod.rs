@@ -717,8 +717,8 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 				.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
-	} else if cfg!(feature = "syscall-fake-success") {
-		warn!("[syscall-fake-success] Unknown fcntl flag {cmd} {arg}, returning 0");
+	} else if cfg!(feature = "syscall-fake-values") {
+		warn!("[syscall-fake-values] Unknown fcntl flag {cmd} {arg}, returning 0");
 		0
 	} else {
 		-i32::from(Errno::Inval)
