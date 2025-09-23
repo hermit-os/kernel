@@ -41,7 +41,7 @@ pub(crate) enum NetworkState<'a> {
 
 #[cfg(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-	all(target_arch = "x86_64", feature = "rtl8139"),
+	feature = "rtl8139",
 	feature = "virtio-net",
 ))]
 pub(crate) fn network_handler() {
@@ -339,7 +339,7 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		all(target_arch = "x86_64", feature = "rtl8139"),
+		feature = "rtl8139",
 		feature = "virtio-net",
 	))]
 	fn handle_interrupt(&mut self) {
