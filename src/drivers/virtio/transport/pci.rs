@@ -692,12 +692,13 @@ fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciErro
 		.filter(|cap| cap.cfg_type != CapCfgType::Pci)
 		.map(|cap| {
 			let slot = cap.bar;
-			let (addr, size) = device.memory_map_bar(slot, true).unwrap();
-			PciCap {
-				bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
-				dev_id: device_id,
-				cap,
-			}
+			device
+				.memory_map_bar(slot, true)
+				.flat_map(|(addr, size)| PciCap {
+					bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
+					dev_id: device_id,
+					cap,
+				})
 		})
 		.collect::<Vec<_>>();
 
