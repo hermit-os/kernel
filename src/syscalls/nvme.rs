@@ -1,4 +1,4 @@
-use vroom::{IoQueuePairId, Namespace, NamespaceId, Dma};
+use vroom::{Dma, IoQueuePairId, Namespace, NamespaceId};
 
 use crate::drivers::pci::get_nvme_driver;
 
@@ -7,21 +7,17 @@ use crate::drivers::pci::get_nvme_driver;
 pub(crate) enum SysNvmeError {
 	ZeroPointerParameter = 1,
 	DeviceDoesNotExist = 2,
-	CouldNotIdentifyNamespaces = 3,
-	NamespaceDoesNotExist = 4,
-	MaxNumberOfQueuesReached = 5,
-	CouldNotCreateIoQueuePair = 6,
-	CouldNotDeleteIoQueuePair = 7,
-	CouldNotFindIoQueuePair = 8,
-	BufferIsZero = 9,
-	BufferTooBig = 10,
-	BufferIncorrectlySized = 11,
-	CouldNotAllocateMemory = 12,
-    CouldNotAllocateBuffer = 13,
-    CouldNotDeallocateBuffer = 14,
-	CouldNotReadFromIoQueuePair = 15,
-	CouldNotWriteToIoQueuePair = 16,
-    CouldNotClearNamespace = 17,
+	NamespaceDoesNotExist = 3,
+	MaxNumberOfQueuesReached = 4,
+	CouldNotCreateIoQueuePair = 5,
+	CouldNotDeleteIoQueuePair = 6,
+	CouldNotFindIoQueuePair = 7,
+	BufferIncorrectlySized = 8,
+	CouldNotAllocateBuffer = 9,
+	CouldNotDeallocateBuffer = 10,
+	CouldNotReadFromIoQueuePair = 11,
+	CouldNotWriteToIoQueuePair = 12,
+	CouldNotClearNamespace = 13,
 }
 
 #[hermit_macro::system]
@@ -58,10 +54,10 @@ pub unsafe extern "C" fn sys_nvme_namespace_ids(
 		if namespace_ids.len() != length as usize {
 			return Err(SysNvmeError::BufferIncorrectlySized);
 		}
-		for i in 0..length as usize {
+        for (i, namespace_id) in namespace_ids.iter().enumerate().take(length as usize) {
 			let pointer = unsafe { vec_pointer.add(i) };
-			unsafe { *pointer = namespace_ids[i].clone() };
-		}
+			unsafe { *pointer = namespace_id };
+        }
 		Ok(())
 	}
 	match inner(vec_pointer, length) {
@@ -95,13 +91,11 @@ pub unsafe extern "C" fn sys_nvme_namespace(
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_nvme_clear_namespace(
-	namespace_id: &NamespaceId,
-) -> usize {
+pub unsafe extern "C" fn sys_nvme_clear_namespace(namespace_id: &NamespaceId) -> usize {
 	fn inner(namespace_id: &NamespaceId) -> Result<(), SysNvmeError> {
 		let driver = get_nvme_driver().ok_or(SysNvmeError::DeviceDoesNotExist)?;
 		let lock = driver.lock();
-        lock.clear_namespace(namespace_id)
+		lock.clear_namespace(namespace_id)
 	}
 	match inner(namespace_id) {
 		Ok(()) => 0,
@@ -241,7 +235,7 @@ pub unsafe extern "C" fn sys_nvme_deallocate_buffer(
 	buffer: *mut Dma<u8>,
 ) -> usize {
 	fn inner(io_queue_pair_id: &IoQueuePairId, buffer: *mut Dma<u8>) -> Result<(), SysNvmeError> {
-        core::mem::forget(buffer);
+        let _ = buffer;
 		let buffer: Dma<u8> = unsafe { core::ptr::read(buffer) };
 		let driver = get_nvme_driver().ok_or(SysNvmeError::DeviceDoesNotExist)?;
 		driver.lock().deallocate_buffer(io_queue_pair_id, buffer)
@@ -288,7 +282,7 @@ pub unsafe extern "C" fn sys_nvme_write_to_io_queue_pair(
 		buffer: *const Dma<u8>,
 		logical_block_address: u64,
 	) -> Result<(), SysNvmeError> {
-		let buffer = unsafe { & *buffer };
+		let buffer = unsafe { &*buffer };
 		let driver = get_nvme_driver().ok_or(SysNvmeError::DeviceDoesNotExist)?;
 		driver
 			.lock()
@@ -336,7 +330,7 @@ pub unsafe extern "C" fn sys_nvme_submit_write_to_io_queue_pair(
 		buffer: *const Dma<u8>,
 		logical_block_address: u64,
 	) -> Result<(), SysNvmeError> {
-		let buffer = unsafe { & *buffer };
+		let buffer = unsafe { &*buffer };
 		let driver = get_nvme_driver().ok_or(SysNvmeError::DeviceDoesNotExist)?;
 		driver
 			.lock()
@@ -353,9 +347,7 @@ pub unsafe extern "C" fn sys_nvme_submit_write_to_io_queue_pair(
 pub unsafe extern "C" fn sys_nvme_complete_io_with_io_queue_pair(
 	io_queue_pair_id: &IoQueuePairId,
 ) -> usize {
-	fn inner(
-		io_queue_pair_id: &IoQueuePairId,
-	) -> Result<(), SysNvmeError> {
+	fn inner(io_queue_pair_id: &IoQueuePairId) -> Result<(), SysNvmeError> {
 		let driver = get_nvme_driver().ok_or(SysNvmeError::DeviceDoesNotExist)?;
 		driver
 			.lock()

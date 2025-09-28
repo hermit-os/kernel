@@ -100,7 +100,7 @@ impl NvmeDriver {
 		number_of_entries: u32,
 	) -> Result<IoQueuePairId, SysNvmeError> {
 		let mut device = self.device.lock();
-		if !device.namespace_ids().contains(&namespace_id) {
+		if !device.namespace_ids().contains(namespace_id) {
 			return Err(SysNvmeError::NamespaceDoesNotExist);
 		}
 		let mut io_queue_pairs = self.io_queue_pairs.lock();
@@ -263,23 +263,20 @@ impl vroom::Allocator for NvmeAllocator {
 		layout: core::alloc::Layout,
 	) -> Result<*mut [T], Box<dyn core::error::Error>> {
 		debug!("NVMe driver: allocate size {:#x}", layout.size());
-		let memory = match self.device_allocator.allocate(layout) {
-			Err(_) => {
-				return Err("NVMe driver: Could not allocate memory with device allocator.".into());
-			}
-			Ok(memory) => memory,
+		let Ok(memory) = self.device_allocator.allocate(layout) else {
+            return Err("NVMe driver: Could not allocate memory with device allocator.".into());
 		};
 		self.allocations
 			.lock()
 			.insert(memory.as_ptr().addr(), layout);
 		let slice =
-			unsafe { core::slice::from_raw_parts_mut(memory.as_mut_ptr() as *mut T, memory.len()) };
-		Ok(slice as *mut [T])
+			unsafe { core::slice::from_raw_parts_mut(memory.as_mut_ptr().cast::<T>(), memory.len()) };
+		Ok(core::ptr::from_mut::<[T]>(slice))
 	}
 
 	fn deallocate<T>(&self, slice: *mut [T]) -> Result<(), Box<dyn core::error::Error>> {
 		let address = slice.as_mut_ptr() as usize;
-		debug!("NVMe driver: deallocate address {:#X}", address);
+		debug!("NVMe driver: deallocate address {address:#X}");
 		let layout: Layout = match self.allocations.lock().remove(&address) {
 			None => {
 				return Err(
@@ -300,15 +297,11 @@ impl vroom::Allocator for NvmeAllocator {
 		virtual_address: *const T,
 	) -> Result<*const T, Box<dyn core::error::Error>> {
 		let address = virtual_address as usize;
-		debug!("NVMe driver: translate virtual address {:#x}", address);
+		debug!("NVMe driver: translate virtual address {address:#x}");
 		let virtual_address: VirtAddr = VirtAddr::new(address as u64);
-		let physical_address =
-			match virtual_to_physical(virtual_address) {
-				None => {
-					return Err("NVMe driver: The given virtual address could not be mapped to a physical one.".into());
-				}
-				Some(physical_address) => physical_address,
-			};
+		let Some(physical_address) = virtual_to_physical(virtual_address) else {
+            return Err("NVMe driver: The given virtual address could not be mapped to a physical one.".into());
+        };
 		Ok(physical_address.as_usize() as *mut T)
 	}
 }
