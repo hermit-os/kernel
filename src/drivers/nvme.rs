@@ -284,7 +284,7 @@ impl vroom::Allocator for NvmeAllocator {
 			None => {
 				return Err(
 					"NVMe driver: The given address did not map to an address and a layout.
-                    This mapping should have occured during allocation."
+                    This mapping should have occurred during allocation."
 						.into(),
 				);
 			}

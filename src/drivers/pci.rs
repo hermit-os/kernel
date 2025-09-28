@@ -7,10 +7,16 @@ use core::fmt;
 use ahash::RandomState;
 use hashbrown::HashMap;
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "fuse", feature = "vsock", feature = "console", feature = "nvme"))]
+#[cfg(any(
+	feature = "fuse",
+	feature = "vsock",
+	feature = "console",
+	feature = "nvme"
+))]
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::capability::CapabilityIterator;
+#[cfg(feature = "nvme")]
 use pci_types::device_type::DeviceType;
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
@@ -28,8 +34,6 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net",))]
 use crate::drivers::net::virtio::VirtioNetDriver;
-#[cfg(any(feature = "tcp", feature = "udp"))]
-use crate::drivers::net::NetworkDriver;
 #[cfg(feature = "nvme")]
 use crate::drivers::nvme::NvmeDriver;
 #[cfg(any(
@@ -409,7 +413,6 @@ impl PciDriver {
 				fn nvme_handler() {}
 				(irq_number, nvme_handler)
 			}
-			_ => todo!(),
 		}
 	}
 }

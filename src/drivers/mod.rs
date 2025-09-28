@@ -8,10 +8,10 @@ pub mod fs;
 pub mod mmio;
 #[cfg(feature = "net")]
 pub mod net;
-#[cfg(feature = "pci")]
-pub mod pci;
 #[cfg(feature = "nvme")]
 pub mod nvme;
+#[cfg(feature = "pci")]
+pub mod pci;
 #[cfg(any(
 	all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
