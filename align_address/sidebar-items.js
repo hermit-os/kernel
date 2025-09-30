@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["u128_align_down","u128_align_up","u128_is_aligned_to","u16_align_down","u16_align_up","u16_is_aligned_to","u32_align_down","u32_align_up","u32_is_aligned_to","u64_align_down","u64_align_up","u64_is_aligned_to","u8_align_down","u8_align_up","u8_is_aligned_to","usize_align_down","usize_align_up","usize_is_aligned_to"],"trait":["Align"]};
