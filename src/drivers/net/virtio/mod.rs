@@ -253,10 +253,6 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 		// Thus, we bypass the Drop implementation that would do that prematurely and let the call to poll in the next
 		// call to this function return the capacity.
 		let mut token = ManuallyDrop::new(self);
-		// We need to poll to get the queue to remove elements from the table and make space for
-		// what we are about to add
-		*token.send_capacity += token.send_vqs.poll() * u32::from(BUFF_PER_PACKET);
-
 		assert!(len <= usize::try_from(token.send_vqs.buf_size).unwrap());
 		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
 		let result = unsafe {
@@ -428,9 +424,10 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 		&mut self,
 		_timestamp: smoltcp::time::Instant,
 	) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		if self.inner.recv_vqs.has_packet()
-			&& self.inner.send_capacity >= u32::from(BUFF_PER_PACKET)
-		{
+		if self.inner.recv_vqs.has_packet() && {
+			self.free_up_send_capacity();
+			self.inner.send_capacity >= u32::from(BUFF_PER_PACKET)
+		} {
 			self.inner.send_capacity -= u32::from(BUFF_PER_PACKET);
 			Some((
 				RxToken {
@@ -449,6 +446,7 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 	}
 
 	fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+		self.free_up_send_capacity();
 		if self.inner.send_capacity >= u32::from(BUFF_PER_PACKET) {
 			self.inner.send_capacity -= u32::from(BUFF_PER_PACKET);
 			Some(TxToken {
@@ -608,6 +606,11 @@ impl VirtioNetDriver<Init> {
 		};
 
 		Some((ip_header_len, csum_offset))
+	}
+
+	fn free_up_send_capacity(&mut self) {
+		// We need to poll to get the queue to remove elements from the table and open up capacity if possible.
+		self.inner.send_capacity += self.inner.send_vqs.poll() * u32::from(BUFF_PER_PACKET);
 	}
 }
 
