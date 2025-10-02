@@ -240,7 +240,7 @@ pub fn init() {
 			flags,
 		);
 
-		let (mut io_start, mem32_start, mut mem64_start) = detect_pci_regions(pci_node);
+		let (mut io_start, mut mem32_start, mut mem64_start) = detect_pci_regions(pci_node);
 
 		debug!("IO address space starts at{io_start:#X}");
 		debug!("Memory32 address space starts at {mem32_start:#X}");
@@ -267,7 +267,8 @@ pub fn init() {
 
 					// Initializes BARs
 					let mut cmd = CommandRegister::empty();
-					for i in 0..MAX_BARS {
+					let mut range_iter = 0..MAX_BARS;
+					while let Some(i) = range_iter.next() {
 						if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
 							match bar {
 								Bar::Io { .. } => {
@@ -281,11 +282,22 @@ pub fn init() {
 									cmd |= CommandRegister::IO_ENABLE
 										| CommandRegister::BUS_MASTER_ENABLE;
 								}
-								Bar::Memory32 { .. } => {
-									// Currently, we ignore 32 bit memory bars
-									// dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
-									// mem32_start += u64::from(size);
-									// cmd |= CommandRegister::MEMORY_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
+								Bar::Memory32 {
+									address: _,
+									size,
+									prefetchable,
+								} => {
+									dev.set_bar(
+										i.try_into().unwrap(),
+										Bar::Memory32 {
+											address: mem32_start.try_into().unwrap(),
+											size,
+											prefetchable,
+										},
+									);
+									mem32_start += u64::from(size);
+									cmd |= CommandRegister::MEMORY_ENABLE
+										| CommandRegister::BUS_MASTER_ENABLE;
 								}
 								Bar::Memory64 {
 									address: _,
@@ -303,6 +315,7 @@ pub fn init() {
 									mem64_start += size;
 									cmd |= CommandRegister::MEMORY_ENABLE
 										| CommandRegister::BUS_MASTER_ENABLE;
+									range_iter.next(); // Skip 32-bit bar that is part of the 64-bit bar
 								}
 							}
 						}
