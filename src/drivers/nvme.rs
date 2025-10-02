@@ -10,10 +10,10 @@ use memory_addresses::VirtAddr;
 use pci_types::InterruptLine;
 use vroom::{Dma, IoQueuePair, IoQueuePairId, Namespace, NamespaceId, NvmeDevice};
 
-use crate::arch::mm::paging::{virtual_to_physical, BasePageSize, PageSize};
+use crate::arch::mm::paging::{BasePageSize, PageSize, virtual_to_physical};
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::pci::PciDevice;
 use crate::drivers::Driver;
+use crate::drivers::pci::PciDevice;
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::syscalls::nvme::SysNvmeError;
 
@@ -264,7 +264,7 @@ impl vroom::Allocator for NvmeAllocator {
 	) -> Result<*mut [T], Box<dyn core::error::Error>> {
 		debug!("NVMe driver: allocate size {:#x}", layout.size());
 		let Ok(memory) = self.device_allocator.allocate(layout) else {
-            return Err("NVMe driver: Could not allocate memory with device allocator.".into());
+			return Err("NVMe driver: Could not allocate memory with device allocator.".into());
 		};
 		self.allocations
 			.lock()
@@ -301,10 +301,10 @@ impl vroom::Allocator for NvmeAllocator {
 		debug!("NVMe driver: translate virtual address {address:#x}");
 		let virtual_address: VirtAddr = VirtAddr::new(address as u64);
 		let Some(physical_address) = virtual_to_physical(virtual_address) else {
-            return Err(
-                "NVMe driver: The given virtual address could not be mapped to a physical one."
-                    .into(),
-            );
+			return Err(
+				"NVMe driver: The given virtual address could not be mapped to a physical one."
+					.into(),
+			);
         };
 		Ok(physical_address.as_usize() as *mut T)
 	}

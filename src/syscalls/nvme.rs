@@ -54,10 +54,10 @@ pub unsafe extern "C" fn sys_nvme_namespace_ids(
 		if namespace_ids.len() != length as usize {
 			return Err(SysNvmeError::BufferIncorrectlySized);
 		}
-        for (i, namespace_id) in namespace_ids.iter().enumerate().take(length as usize) {
-            let pointer = unsafe { vec_pointer.add(i) };
-            unsafe { *pointer = *namespace_id };
-        }
+		for (i, namespace_id) in namespace_ids.iter().enumerate().take(length as usize) {
+			let pointer = unsafe { vec_pointer.add(i) };
+			unsafe { *pointer = *namespace_id };
+		}
 		Ok(())
 	}
 	match inner(vec_pointer, length) {
@@ -235,7 +235,7 @@ pub unsafe extern "C" fn sys_nvme_deallocate_buffer(
 	buffer: *mut Dma<u8>,
 ) -> usize {
 	fn inner(io_queue_pair_id: &IoQueuePairId, buffer: *mut Dma<u8>) -> Result<(), SysNvmeError> {
-        let _ = buffer;
+		let _ = buffer;
 		let buffer: Dma<u8> = unsafe { core::ptr::read(buffer) };
 		let driver = get_nvme_driver().ok_or(SysNvmeError::DeviceDoesNotExist)?;
 		driver.lock().deallocate_buffer(io_queue_pair_id, buffer)
