@@ -414,7 +414,8 @@ impl PciDriver {
 				fn nvme_handler() {}
 				(irq_number, nvme_handler)
 			}
-            _ => todo!(),
+			#[allow(unreachable_patterns)]
+			_ => todo!(),
 		}
 	}
 }

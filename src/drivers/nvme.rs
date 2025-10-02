@@ -305,7 +305,7 @@ impl vroom::Allocator for NvmeAllocator {
 				"NVMe driver: The given virtual address could not be mapped to a physical one."
 					.into(),
 			);
-        };
+		};
 		Ok(physical_address.as_usize() as *mut T)
 	}
 }
