@@ -74,7 +74,7 @@ impl WrapCount {
 		WrapCount(true)
 	}
 
-	/// Toogles a given wrap count to respectiver other value.
+	/// Toggles a given wrap count to respectiver other value.
 	///
 	/// If WrapCount(true) returns WrapCount(false),
 	/// if WrapCount(false) returns WrapCount(true).
@@ -470,7 +470,7 @@ impl DrvNotif {
 }
 
 impl DevNotif {
-	/// Enables the notificication capability for a specific buffer.
+	/// Enables the notification capability for a specific buffer.
 	pub fn enable_notif_specific(&mut self) {
 		self.f_notif_idx = true;
 	}
