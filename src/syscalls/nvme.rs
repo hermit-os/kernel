@@ -55,8 +55,8 @@ pub unsafe extern "C" fn sys_nvme_namespace_ids(
 			return Err(SysNvmeError::BufferIncorrectlySized);
 		}
         for (i, namespace_id) in namespace_ids.iter().enumerate().take(length as usize) {
-			let pointer = unsafe { vec_pointer.add(i) };
-			unsafe { *pointer = namespace_id };
+            let pointer = unsafe { vec_pointer.add(i) };
+            unsafe { *pointer = *namespace_id };
         }
 		Ok(())
 	}

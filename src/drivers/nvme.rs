@@ -269,8 +269,9 @@ impl vroom::Allocator for NvmeAllocator {
 		self.allocations
 			.lock()
 			.insert(memory.as_ptr().addr(), layout);
-		let slice =
-			unsafe { core::slice::from_raw_parts_mut(memory.as_mut_ptr().cast::<T>(), memory.len()) };
+		let slice = unsafe {
+			core::slice::from_raw_parts_mut(memory.as_mut_ptr().cast::<T>(), memory.len())
+		};
 		Ok(core::ptr::from_mut::<[T]>(slice))
 	}
 
@@ -300,7 +301,10 @@ impl vroom::Allocator for NvmeAllocator {
 		debug!("NVMe driver: translate virtual address {address:#x}");
 		let virtual_address: VirtAddr = VirtAddr::new(address as u64);
 		let Some(physical_address) = virtual_to_physical(virtual_address) else {
-            return Err("NVMe driver: The given virtual address could not be mapped to a physical one.".into());
+            return Err(
+                "NVMe driver: The given virtual address could not be mapped to a physical one."
+                    .into(),
+            );
         };
 		Ok(physical_address.as_usize() as *mut T)
 	}

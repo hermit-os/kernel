@@ -6,7 +6,6 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::without_interrupts;
 #[cfg(any(
 	feature = "fuse",
 	feature = "vsock",
@@ -14,13 +13,14 @@ use hermit_sync::without_interrupts;
 	feature = "nvme"
 ))]
 use hermit_sync::InterruptTicketMutex;
+use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::capability::CapabilityIterator;
 #[cfg(feature = "nvme")]
 use pci_types::device_type::DeviceType;
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
-	InterruptPin, PciAddress, PciHeader, StatusRegister, VendorId, MAX_BARS,
+	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
 };
 
 use crate::arch::pci::PciConfigRegion;
@@ -241,7 +241,8 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 			};
 
 			#[cfg(not(feature = "pci-ids"))]
-			let (class_name, vendor_name, device_name) = ("Unknown Class", "Unknown Vendor", "Unknown Device");
+			let (class_name, vendor_name, device_name) =
+                ("Unknown Class", "Unknown Vendor", "Unknown Device");
 
 			// Output detailed readable information about this device.
 			write!(

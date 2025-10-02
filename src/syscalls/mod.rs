@@ -39,14 +39,14 @@ mod futex;
 pub(crate) mod interfaces;
 #[cfg(feature = "mman")]
 mod mman;
+#[cfg(feature = "nvme")]
+pub(crate) mod nvme;
 mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
 #[cfg(any(feature = "net", feature = "vsock"))]
 pub mod socket;
-#[cfg(feature = "nvme")]
-pub(crate) mod nvme;
 mod spinlock;
 mod system;
 #[cfg(feature = "common-os")]
