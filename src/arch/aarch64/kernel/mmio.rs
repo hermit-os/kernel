@@ -140,23 +140,27 @@ pub fn init_drivers() {
 											virtio_irqid,
 											Some(cpu_id),
 											0x00,
-										);
+										)
+										.unwrap();
 										if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
 											gic.set_trigger(
 												virtio_irqid,
 												Some(cpu_id),
 												Trigger::Level,
-											);
+											)
+											.unwrap();
 										} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
 											gic.set_trigger(
 												virtio_irqid,
 												Some(cpu_id),
 												Trigger::Edge,
-											);
+											)
+											.unwrap();
 										} else {
 											panic!("Invalid interrupt level!");
 										}
-										gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+										gic.enable_interrupt(virtio_irqid, Some(cpu_id), true)
+											.unwrap();
 
 										*NETWORK_DEVICE.lock() = Some(drv);
 									}
@@ -182,24 +186,28 @@ pub fn init_drivers() {
 												virtio_irqid,
 												Some(cpu_id),
 												0x00,
-											);
+											)
+											.unwrap();
 											if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
 												gic.set_trigger(
 													virtio_irqid,
 													Some(cpu_id),
 													Trigger::Level,
-												);
+												)
+												.unwrap();
 											} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1
 											{
 												gic.set_trigger(
 													virtio_irqid,
 													Some(cpu_id),
 													Trigger::Edge,
-												);
+												)
+												.unwrap();
 											} else {
 												panic!("Invalid interrupt level!");
 											}
-											gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+											gic.enable_interrupt(virtio_irqid, Some(cpu_id), true)
+												.unwrap();
 
 											register_driver(MmioDriver::VirtioConsole(
 												hermit_sync::InterruptTicketMutex::new(*drv),
