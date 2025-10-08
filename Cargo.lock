@@ -151,9 +151,9 @@ dependencies = [
 
 [[package]]
 name = "arm-pl011-uart"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8797e113733a36b5fa906c81aefc126d255b88dd1c10a737749aa22ec7736b6a"
+checksum = "b62040eef329ede76c8b2af149362b0fd42ec9d8c436d9eb9d47db35b71cb300"
 dependencies = [
  "bitflags 2.9.4",
  "safe-mmio",
