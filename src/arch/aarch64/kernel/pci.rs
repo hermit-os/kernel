@@ -198,15 +198,19 @@ fn detect_interrupt(
 				let mut gic = GIC.lock();
 				let gic = gic.as_mut().unwrap();
 				let cpu_id = core_id();
-				gic.set_interrupt_priority(irq_id, Some(cpu_id as usize), 0x10);
+				gic.set_interrupt_priority(irq_id, Some(cpu_id as usize), 0x10)
+					.unwrap();
 				if irq_flags == 4 {
-					gic.set_trigger(irq_id, Some(cpu_id as usize), Trigger::Level);
+					gic.set_trigger(irq_id, Some(cpu_id as usize), Trigger::Level)
+						.unwrap();
 				} else if irq_flags == 2 {
-					gic.set_trigger(irq_id, Some(cpu_id as usize), Trigger::Edge);
+					gic.set_trigger(irq_id, Some(cpu_id as usize), Trigger::Edge)
+						.unwrap();
 				} else {
 					panic!("Invalid interrupt level!");
 				}
-				gic.enable_interrupt(irq_id, Some(cpu_id as usize), true);
+				gic.enable_interrupt(irq_id, Some(cpu_id as usize), true)
+					.unwrap();
 
 				return Some((pin, irq_number.try_into().unwrap()));
 			}

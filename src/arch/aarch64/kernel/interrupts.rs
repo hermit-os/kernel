@@ -1,11 +1,13 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
+use core::ptr::NonNull;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
 use ahash::RandomState;
-use arm_gic::gicv3::{GicV3, InterruptGroup, SgiTarget, SgiTargetGroup};
-use arm_gic::{IntId, Trigger};
+use arm_gic::gicv3::registers::{Gicd, GicrSgi};
+use arm_gic::gicv3::{GicCpuInterface, GicV3, InterruptGroup, SgiTarget, SgiTargetGroup};
+use arm_gic::{IntId, Trigger, UniqueMmioPointer};
 use fdt::standard_nodes::Compatible;
 use free_list::PageLayout;
 use hashbrown::HashMap;
@@ -127,7 +129,7 @@ pub(crate) fn install_handlers() {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
-	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
+	if let Some(irqid) = GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive fiq {vector}");
@@ -143,7 +145,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 		crate::executor::run();
 		core_scheduler().handle_waiting_tasks();
 
-		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
+		GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
 
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
@@ -153,7 +155,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
-	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
+	if let Some(irqid) = GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
 		let vector: u8 = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive interrupt {vector}");
@@ -169,7 +171,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 		crate::executor::run();
 		core_scheduler().handle_waiting_tasks();
 
-		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
+		GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
 
 		trace!("Disabling floating point");
 
@@ -209,8 +211,10 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			error!("Table Base Register {:#x}", TTBR0_EL1.get());
 			error!("Exception Syndrome Register {esr:#x}");
 
-			if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
-				GicV3::end_interrupt(irqid, InterruptGroup::Group1);
+			if let Some(irqid) =
+				GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
+			{
+				GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
 			} else {
 				error!("Unable to acknowledge interrupt!");
 			}
@@ -263,7 +267,7 @@ pub fn wakeup_core(core_id: CoreId) {
 	debug!("Wakeup core {core_id}");
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
 
-	GicV3::send_sgi(
+	GicCpuInterface::send_sgi(
 		reschedid,
 		SgiTarget::List {
 			affinity3: 0,
@@ -272,7 +276,8 @@ pub fn wakeup_core(core_id: CoreId) {
 			target_list: 1 << core_id,
 		},
 		SgiTargetGroup::CurrentGroup1,
-	);
+	)
+	.unwrap();
 }
 
 pub(crate) fn init() {
@@ -337,16 +342,12 @@ pub(crate) fn init() {
 		flags,
 	);
 
-	let mut gic = unsafe {
-		GicV3::new(
-			gicd_address.as_mut_ptr(),
-			gicr_address.as_mut_ptr(),
-			num_cpus,
-			is_gic_v4,
-		)
-	};
+	let gicd = NonNull::new(gicd_address.as_mut_ptr::<Gicd>()).unwrap();
+	let gicd = unsafe { UniqueMmioPointer::new(gicd) };
+	let gicr_base = NonNull::new(gicr_address.as_mut_ptr::<GicrSgi>()).unwrap();
+	let mut gic = unsafe { GicV3::new(gicd, gicr_base, num_cpus, is_gic_v4) };
 	gic.setup(cpu_id);
-	GicV3::set_priority_mask(0xff);
+	GicCpuInterface::set_priority_mask(0xff);
 
 	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
 		let irq_slice = timer_node.property("interrupts").unwrap().value;
@@ -380,15 +381,19 @@ pub(crate) fn init() {
 		} else {
 			panic!("Invalid interrupt type");
 		};
-		gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
+		gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00)
+			.unwrap();
 		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
+			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level)
+				.unwrap();
 		} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
+			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge)
+				.unwrap();
 		} else {
 			panic!("Invalid interrupt level!");
 		}
-		gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
+		gic.enable_interrupt(timer_irqid, Some(cpu_id), true)
+			.unwrap();
 	}
 
 	if let Some(uart_node) = fdt.find_compatible(&["arm,pl011"]) {
@@ -418,20 +423,25 @@ pub(crate) fn init() {
 		} else {
 			panic!("Invalid interrupt type");
 		};
-		gic.set_interrupt_priority(uart_irqid, Some(cpu_id), 0x00);
+		gic.set_interrupt_priority(uart_irqid, Some(cpu_id), 0x00)
+			.unwrap();
 		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-			gic.set_trigger(uart_irqid, Some(cpu_id), Trigger::Level);
+			gic.set_trigger(uart_irqid, Some(cpu_id), Trigger::Level)
+				.unwrap();
 		} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-			gic.set_trigger(uart_irqid, Some(cpu_id), Trigger::Edge);
+			gic.set_trigger(uart_irqid, Some(cpu_id), Trigger::Edge)
+				.unwrap();
 		} else {
 			panic!("Invalid interrupt level!");
 		}
-		gic.enable_interrupt(uart_irqid, Some(cpu_id), true);
+		gic.enable_interrupt(uart_irqid, Some(cpu_id), true)
+			.unwrap();
 	}
 
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
-	gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01);
-	gic.enable_interrupt(reschedid, Some(cpu_id), true);
+	gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01)
+		.unwrap();
+	gic.enable_interrupt(reschedid, Some(cpu_id), true).unwrap();
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
 	*GIC.lock() = Some(gic);
@@ -445,7 +455,7 @@ pub fn init_cpu() {
 		debug!("Mark cpu {cpu_id} as awake");
 
 		gic.setup(cpu_id);
-		GicV3::set_priority_mask(0xff);
+		GicCpuInterface::set_priority_mask(0xff);
 
 		let fdt = env::fdt().unwrap();
 
@@ -471,20 +481,25 @@ pub fn init_cpu() {
 			} else {
 				panic!("Invalid interrupt type");
 			};
-			gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
+			gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00)
+				.unwrap();
 			if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
+				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level)
+					.unwrap();
 			} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
+				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge)
+					.unwrap();
 			} else {
 				panic!("Invalid interrupt level!");
 			}
-			gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
+			gic.enable_interrupt(timer_irqid, Some(cpu_id), true)
+				.unwrap();
 		}
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());
-		gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01);
-		gic.enable_interrupt(reschedid, Some(cpu_id), true);
+		gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01)
+			.unwrap();
+		gic.enable_interrupt(reschedid, Some(cpu_id), true).unwrap();
 	}
 }
 
