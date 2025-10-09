@@ -1,10 +1,9 @@
+use core::ops::Range;
+
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
 use x86_64::instructions::port::Port;
 
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
-
-const PCI_MAX_BUS_NUMBER: u8 = 32;
-const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 
 const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
 
@@ -57,13 +56,20 @@ impl ConfigRegionAccess for PciConfigRegion {
 }
 
 pub(crate) fn init() {
-	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
+	// For Hermit, we currently limit scanning to the first 32 buses.
+	const PCI_MAX_BUS_NUMBER: u8 = 32;
+	scan_bus(0..PCI_MAX_BUS_NUMBER, PciConfigRegion::new());
+	info!("Initialized PCI");
+}
+
+fn scan_bus(bus_range: Range<u8>, pci_config: PciConfigRegion) {
+	debug!("Scanning PCI buses {bus_range:?}");
 
 	// Hermit only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.
-	// We also limit scanning to the first 32 buses.
-	let pci_config = PciConfigRegion::new();
-	for bus in 0..PCI_MAX_BUS_NUMBER {
+	for bus in bus_range {
+		// For Hermit, we currently limit scanning to the first 32 devices.
+		const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 		for device in 0..PCI_MAX_DEVICE_NUMBER {
 			let pci_address = PciAddress::new(0, bus, device, 0);
 			let header = PciHeader::new(pci_address);
