@@ -724,25 +724,44 @@ impl FuseFileHandleInner {
 	}
 
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		debug!("FUSE lseek");
+		debug!("FUSE lseek: offset: {offset}, whence: {whence:?}");
 
-		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
-			let rsp = get_filesystem_driver()
-				.ok_or(Errno::Nosys)?
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
+		// Seek on fuse file systems seems to be a little odd: All reads are referenced from the
+		// beginning of the file, thus we have to track the offset ourself. Also, a read doesn't
+		// move the read pointer on the remote side, so we can't get the current position using
+		// remote lseek when referencing from `Cur` and we have to use the internally tracked
+		// position instead.
+		match whence {
+			SeekWhence::End | SeekWhence::Data | SeekWhence::Hole => {
+				if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+					let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
+					let rsp = get_filesystem_driver()
+						.ok_or(Errno::Nosys)?
+						.lock()
+						.send_command(cmd, rsp_payload_len)?;
 
-			if rsp.headers.out_header.error < 0 {
-				return Err(Errno::Io);
+					if rsp.headers.out_header.error < 0 {
+						return Err(Errno::Io);
+					}
+
+					let rsp_offset = rsp.headers.op_header.offset;
+					self.offset = rsp.headers.op_header.offset.try_into().unwrap();
+
+					Ok(rsp_offset.try_into().unwrap())
+				} else {
+					Err(Errno::Io)
+				}
 			}
-
-			let rsp_offset = rsp.headers.op_header.offset;
-			self.offset = rsp.headers.op_header.offset.try_into().unwrap();
-
-			Ok(rsp_offset.try_into().unwrap())
-		} else {
-			Err(Errno::Io)
+			SeekWhence::Set => {
+				self.offset = offset.try_into().map_err(|_e| Errno::Inval)?;
+				Ok(self.offset as isize)
+			}
+			SeekWhence::Cur => {
+				self.offset = (self.offset as isize + offset)
+					.try_into()
+					.map_err(|_e| Errno::Inval)?;
+				Ok(self.offset as isize)
+			}
 		}
 	}
 
