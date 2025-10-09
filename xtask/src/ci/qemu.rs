@@ -29,6 +29,10 @@ pub struct Qemu {
 	#[arg(long)]
 	microvm: bool,
 
+	/// Enable PCIe support.
+	#[arg(long)]
+	pci_e: bool,
+
 	/// Enable UEFI.
 	#[arg(long)]
 	uefi: bool,
@@ -233,6 +237,8 @@ impl Qemu {
 				"-nodefaults".to_string(),
 				"-no-user-config".to_string(),
 			]
+		} else if self.pci_e {
+			vec!["-machine".to_owned(), "q35".to_owned()]
 		} else if arch == Arch::Aarch64 || arch == Arch::Aarch64Be {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if arch == Arch::Riscv64 {
