@@ -186,6 +186,7 @@ impl Qemu {
 
 		let image_args = if self.uefi {
 			let sh = crate::sh()?;
+			sh.remove_path("target/esp")?;
 			sh.create_dir("target/esp/efi/boot")?;
 			sh.copy_file(loader, "target/esp/efi/boot/bootx64.efi")?;
 			sh.copy_file(image, "target/esp/efi/boot/hermit-app")?;
