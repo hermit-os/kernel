@@ -115,13 +115,13 @@ pub fn boot_processor_init() {
 	interrupts::install();
 	systemtime::init();
 
-	if is_uhyve_with_pci() || !is_uhyve() {
-		#[cfg(feature = "pci")]
-		pci::init();
-	}
 	if !env::is_uhyve() {
 		#[cfg(feature = "acpi")]
 		acpi::init();
+	}
+	if is_uhyve_with_pci() || !is_uhyve() {
+		#[cfg(feature = "pci")]
+		pci::init();
 	}
 
 	apic::init();
