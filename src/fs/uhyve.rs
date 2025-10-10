@@ -14,7 +14,6 @@ use uhyve_interface::parameters::{
 use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
 
 use crate::arch::mm::paging;
-use crate::env::is_uhyve;
 use crate::errno::Errno;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
@@ -230,16 +229,14 @@ impl VfsNode for UhyveDirectory {
 
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
-	if is_uhyve() {
-		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_string();
-		info!("Mounting uhyve filesystem at {mount_point}");
-		fs::FILESYSTEM
-			.get()
-			.unwrap()
-			.mount(
-				&mount_point,
-				Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
-			)
-			.expect("Mount failed. Duplicate mount_point?");
-	}
+	let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_string();
+	info!("Mounting uhyve filesystem at {mount_point}");
+	fs::FILESYSTEM
+		.get()
+		.unwrap()
+		.mount(
+			&mount_point,
+			Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
+		)
+		.expect("Mount failed. Duplicate mount_point?");
 }
