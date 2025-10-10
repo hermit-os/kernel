@@ -365,7 +365,9 @@ pub(crate) fn init() {
 
 	#[cfg(all(feature = "fuse", feature = "pci"))]
 	fuse::init();
-	uhyve::init();
+	if crate::env::is_uhyve() {
+		uhyve::init();
+	}
 }
 
 pub fn create_file(name: &str, data: &'static [u8], mode: AccessPermission) -> io::Result<()> {
