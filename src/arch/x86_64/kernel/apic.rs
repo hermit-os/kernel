@@ -534,9 +534,13 @@ pub fn eoi() {
 
 pub fn init() {
 	// Detect CPUs and APICs.
-	let local_apic_physical_address = detect_from_acpi()
-		.or_else(|()| detect_from_mp())
-		.unwrap_or_else(|()| default_apic());
+	let local_apic_physical_address = if env::is_uhyve() {
+		default_apic()
+	} else {
+		detect_from_acpi()
+			.or_else(|()| detect_from_mp())
+			.unwrap_or_else(|()| default_apic())
+	};
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	if processor::supports_x2apic() {
