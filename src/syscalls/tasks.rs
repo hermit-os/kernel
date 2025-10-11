@@ -68,7 +68,7 @@ pub extern "C" fn sys_abort() -> ! {
 pub(super) fn usleep(usecs: u64) {
 	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
-		debug!("sys_usleep blocking the task for {usecs} microseconds");
+		debug!("sys_usleep: task blocked for {usecs} microseconds");
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
 		core_scheduler.block_current_task(Some(wakeup_time));
@@ -101,11 +101,11 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 pub unsafe extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
 	assert!(
 		!rqtp.is_null(),
-		"sys_nanosleep called with a zero rqtp parameter"
+		"sys_nanosleep: called with a zero rqtp parameter"
 	);
 	let requested_time = unsafe { &*rqtp };
 	if requested_time.tv_sec < 0 || requested_time.tv_nsec > 999_999_999 {
-		debug!("sys_nanosleep called with an invalid requested time, returning -EINVAL");
+		debug!("sys_nanosleep: called with an invalid requested time, returning -EINVAL");
 		return -i32::from(Errno::Inval);
 	}
 
@@ -252,7 +252,7 @@ pub extern "C" fn sys_set_priority(id: Tid, prio: u8) {
 			.set_priority(TaskId::from(id), Priority::from(prio))
 			.expect("Unable to set priority");
 	} else {
-		panic!("Invalid priority {}", prio);
+		panic!("Invalid priority {prio}");
 	}
 }
 
@@ -263,6 +263,6 @@ pub extern "C" fn sys_set_current_task_priority(prio: u8) {
 	if prio > 0 {
 		core_scheduler().set_current_task_priority(Priority::from(prio));
 	} else {
-		panic!("Invalid priority {}", prio);
+		panic!("Invalid priority {prio}");
 	}
 }

@@ -44,7 +44,7 @@ impl VirtioVsockDriver {
 		} = caps_coll;
 
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioVsockDriver::map_cfg) else {
-			error!("No dev config. Aborting!");
+			error!("No dev config present. Aborting!");
 			return Err(error::VirtioVsockError::NoDevCfg(device_id));
 		};
 
@@ -70,12 +70,12 @@ impl VirtioVsockDriver {
 			Ok(caps) => match VirtioVsockDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(vsock_err) => {
-					error!("Initializing new virtio socket device driver failed. Aborting!");
+					error!("vsock: Driver initialization failed. Aborting!");
 					return Err(VirtioError::VsockDriver(vsock_err));
 				}
 			},
 			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
+				error!("vsock: Mapping capabilities failed. Aborting!");
 				return Err(err);
 			}
 		};
@@ -83,7 +83,7 @@ impl VirtioVsockDriver {
 		match drv.init_dev() {
 			Ok(()) => {
 				info!(
-					"Socket device with cid {:x}, has been initialized by driver!",
+					"vsock: Driver initialized socket device with cid {:x}",
 					drv.dev_cfg.raw.guest_cid
 				);
 

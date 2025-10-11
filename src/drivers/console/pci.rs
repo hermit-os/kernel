@@ -38,7 +38,7 @@ impl VirtioConsoleDriver {
 		} = caps_coll;
 
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioConsoleDriver::map_cfg) else {
-			error!("No dev config. Aborting!");
+			error!("virtio-console: No dev config present. Aborting!");
 			return Err(error::VirtioConsoleError::NoDevCfg(device_id));
 		};
 
@@ -66,12 +66,12 @@ impl VirtioConsoleDriver {
 			Ok(caps) => match VirtioConsoleDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(console_err) => {
-					error!("Initializing new virtio console device driver failed. Aborting!");
+					error!("virtio-console: Driver initialization failed. Aborting!");
 					return Err(VirtioError::ConsoleDriver(console_err));
 				}
 			},
 			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
+				error!("virtio-console: Mapping capabilities failed. Aborting!");
 				return Err(err);
 			}
 		};
@@ -79,7 +79,7 @@ impl VirtioConsoleDriver {
 		match drv.init_dev() {
 			Ok(()) => {
 				info!(
-					"Console device with id {:x}, has been initialized by driver!",
+					"Console device with ID {:x}, has been initialized by driver!",
 					drv.dev_cfg.dev_id
 				);
 

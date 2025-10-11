@@ -260,7 +260,7 @@ pub(crate) extern "C" fn do_error(_state: &State) -> ! {
 }
 
 pub fn wakeup_core(core_id: CoreId) {
-	debug!("Wakeup core {core_id}");
+	debug!("CPU {core_id}: Waking up core...");
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
 
 	GicV3::send_sgi(
@@ -276,8 +276,7 @@ pub fn wakeup_core(core_id: CoreId) {
 }
 
 pub(crate) fn init() {
-	info!("Initialize generic interrupt controller");
-
+	info!("GIC: Initializing...");
 	let fdt = env::fdt().unwrap();
 
 	let intc_node = fdt.find_node("/intc").unwrap();
@@ -307,15 +306,13 @@ pub(crate) fn init() {
 		panic!("{compatible} isn't supported")
 	};
 
-	info!("Found GIC Distributor interface at {gicd_start:p} (size {gicd_size:#X})");
-	info!(
-		"Found generic interrupt controller redistributor at {gicr_start:p} (size {gicr_size:#X})"
-	);
+	info!("GIC Distributor: Found interface at {gicd_start:p} (size {gicd_size:#X})");
+	info!("GIC Redistributor: Found interface at {gicr_start:p} (size {gicr_size:#X})");
 
 	let layout = PageLayout::from_size_align(gicd_size.try_into().unwrap(), 0x10000).unwrap();
 	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 	let gicd_address = VirtAddr::from(page_range.start());
-	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}");
+	debug!("GIC: Mapping distributor interface to virtual address {gicd_address:p}");
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.device().writable().execute_disable();
@@ -329,7 +326,7 @@ pub(crate) fn init() {
 	let layout = PageLayout::from_size_align(gicr_size.try_into().unwrap(), 0x10000).unwrap();
 	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 	let gicr_address = VirtAddr::from(page_range.start());
-	debug!("Mapping generic interrupt controller to virtual address {gicr_address:p}");
+	debug!("GIC: Mapping controller to virtual address {gicr_address:p}");
 	paging::map::<BasePageSize>(
 		gicr_address,
 		gicr_start,
@@ -378,7 +375,7 @@ pub(crate) fn init() {
 		} else if irqtype == 0 {
 			IntId::spi(irq)
 		} else {
-			panic!("Invalid interrupt type");
+			panic!("Invalid interrupt type {irqtype}!");
 		};
 		gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
 		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
@@ -416,7 +413,7 @@ pub(crate) fn init() {
 		} else if irqtype == 0 {
 			IntId::spi(irq)
 		} else {
-			panic!("Invalid interrupt type");
+			panic!("Invalid interrupt type {irqtype}!");
 		};
 		gic.set_interrupt_priority(uart_irqid, Some(cpu_id), 0x00);
 		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
@@ -442,7 +439,7 @@ pub fn init_cpu() {
 	let cpu_id: usize = core_id().try_into().unwrap();
 
 	if let Some(ref mut gic) = *GIC.lock() {
-		debug!("Mark cpu {cpu_id} as awake");
+		debug!("CPU {cpu_id}: Marking as awake");
 
 		gic.setup(cpu_id);
 		GicV3::set_priority_mask(0xff);
@@ -469,7 +466,7 @@ pub fn init_cpu() {
 			} else if irqtype == 0 {
 				IntId::spi(irq)
 			} else {
-				panic!("Invalid interrupt type");
+				panic!("Invalid interrupt type {irqtype}!");
 			};
 			gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
 			if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
@@ -493,7 +490,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 #[allow(dead_code)]
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\"  for interrupt {irq_number}");
+	debug!("Assigning register name \"{name}\" for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
 }
 

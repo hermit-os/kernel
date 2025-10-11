@@ -70,9 +70,7 @@ impl VirtioFsDriver {
 		let device_features = virtio::fs::F::from(self.com_cfg.dev_features());
 
 		if device_features.requirements_satisfied() {
-			debug!(
-				"Feature set wanted by filesystem driver are in conformance with specification."
-			);
+			debug!("virtiofs: Feature set requested by driver is spec-conforming.");
 		} else {
 			return Err(VirtioFsError::FeatureRequirementsNotMet(device_features));
 		}
@@ -114,7 +112,7 @@ impl VirtioFsDriver {
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		if self.com_cfg.check_features() {
 			info!(
-				"Features have been negotiated between virtio filesystem device {:x} and driver.",
+				"virtiofs: Features negotiated between filesystem device {:x} and driver.",
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
@@ -132,7 +130,7 @@ impl VirtioFsDriver {
 			.read()
 			.to_ne() + 1;
 		if vqnum == 0 {
-			error!("0 request queues requested from device. Aborting!");
+			error!("virtiofs: 0 request queues requested from device. Aborting!");
 			return Err(VirtioFsError::Unknown);
 		}
 

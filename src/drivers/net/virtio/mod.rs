@@ -392,13 +392,13 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 
 		#[cfg(not(feature = "pci"))]
 		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
+			info!("virtio-net: Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
 
 		#[cfg(feature = "pci")]
 		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
-			info!("Configuration changes are not possible! Aborting");
+			info!("virtio-net: Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
 
@@ -662,14 +662,14 @@ impl VirtioNetDriver<Uninit> {
 		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
 		match self.negotiate_features(features) {
 			Ok(()) => info!(
-				"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
+				"virtio-net: Driver found feature subset for virtio device {:x}. Features are: {features:?}",
 				self.dev_cfg.dev_id
 			),
 			Err(vnet_err) => {
 				match vnet_err {
 					VirtioNetError::FeatureRequirementsNotMet(features) => {
 						error!(
-							"Network drivers feature set {features:?} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!"
+							"virtio-net: Network drivers a feature set {features:?}, which is not spec-compliant (Section 5.1.3.1, v1.1). Aborting!"
 						);
 						return Err(vnet_err);
 					}
@@ -677,7 +677,7 @@ impl VirtioNetDriver<Uninit> {
 						// Create a new matching feature set for device and driver if the minimal set is met!
 						if !dev_feats.contains(minimal_features) {
 							error!(
-								"Device features set, does not satisfy minimal features needed. Aborting!"
+								"virtio-net: Device features set, minimal features not present. Aborting!"
 							);
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 						}
@@ -685,7 +685,7 @@ impl VirtioNetDriver<Uninit> {
 						let common_features = drv_feats & dev_feats;
 						if common_features.is_empty() {
 							error!(
-								"Feature negotiation failed with minimal feature set. Aborting!"
+								"virtio-net: Feature negotiation failed with minimal feature set. Aborting!"
 							);
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 						}
@@ -693,19 +693,19 @@ impl VirtioNetDriver<Uninit> {
 
 						match self.negotiate_features(features) {
 							Ok(()) => info!(
-								"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
+								"virtio-net: Driver found feature subset for virtio device {:x}. Features are: {features:?}",
 								self.dev_cfg.dev_id
 							),
 							Err(vnet_err) => match vnet_err {
 								VirtioNetError::FeatureRequirementsNotMet(features) => {
 									error!(
-										"Network device offers a feature set {features:?} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!"
+										"virtio-net: Network device offers a feature set {features:?}, which is not spec-compliant (Section 5.1.3.1, v1.1) when used completely. Aborting!"
 									);
 									return Err(vnet_err);
 								}
 								_ => {
 									error!(
-										"Feature Set after reduction still not usable. Set: {features:?}. Aborting!"
+										"virtio-net: Feature set still unusable after reduction. Set: {features:?}. Aborting!"
 									);
 									return Err(vnet_err);
 								}
@@ -714,13 +714,13 @@ impl VirtioNetDriver<Uninit> {
 					}
 					VirtioNetError::FailFeatureNeg(_) => {
 						error!(
-							"Wanted set of features is NOT supported by device. Set: {features:?}"
+							"virtio-net: Device does not supported wanted feature set. Set: {features:?}. Aborting!"
 						);
 						return Err(vnet_err);
 					}
 					#[cfg(feature = "pci")]
 					VirtioNetError::NoDevCfg(_) => {
-						error!("No device config found.");
+						error!("virtio-net: No device config found.");
 						return Err(vnet_err);
 					}
 				}
@@ -734,7 +734,7 @@ impl VirtioNetDriver<Uninit> {
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		if self.com_cfg.check_features() {
 			info!(
-				"Features have been negotiated between virtio network device {:x} and driver.",
+				"virtio-net: Driver negotiated features with virtio network device {:x}.",
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
@@ -751,11 +751,14 @@ impl VirtioNetDriver<Uninit> {
 			send_capacity: 0,
 		};
 
-		debug!("Using RX buffer size of {}", inner.recv_vqs.buf_size);
+		debug!(
+			"virtio-net: Using RX buffer size of {}.",
+			inner.recv_vqs.buf_size
+		);
 
 		self.dev_spec_init(&mut inner)?;
 		info!(
-			"Device specific initialization for Virtio network device {:x} finished",
+			"virtio-net: Initialized virtio network device {:x}.",
 			self.dev_cfg.dev_id
 		);
 
@@ -774,7 +777,7 @@ impl VirtioNetDriver<Uninit> {
 			self.checksums.udp = Checksum::Tx;
 			self.checksums.tcp = Checksum::Tx;
 		}
-		debug!("{:?}", self.checksums);
+		debug!("virtio-net: checksums {:?}", self.checksums);
 
 		Ok(VirtioNetDriver {
 			dev_cfg: self.dev_cfg,
@@ -797,7 +800,9 @@ impl VirtioNetDriver<Uninit> {
 		let device_features = virtio::net::F::from(self.com_cfg.dev_features());
 
 		if device_features.requirements_satisfied() {
-			info!("Feature set wanted by network driver are in conformance with specification.");
+			info!(
+				"virtio-net: Feature set wanted by network driver are in conformance with specification."
+			);
 		} else {
 			return Err(VirtioNetError::FeatureRequirementsNotMet(device_features));
 		}
@@ -817,7 +822,7 @@ impl VirtioNetDriver<Uninit> {
 	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
 	fn dev_spec_init(&mut self, inner: &mut Init) -> Result<(), VirtioNetError> {
 		self.virtqueue_init(inner)?;
-		info!("Network driver successfully initialized virtqueues.");
+		info!("virtio-net: Driver successfully initialized virtqueues.");
 
 		// Add a control if feature is negotiated
 		if self.dev_cfg.features.contains(virtio::net::F::CTRL_VQ) {

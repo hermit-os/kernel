@@ -331,7 +331,7 @@ impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
 
 		assert!(
 			!token.tx_fields.tx_in_use[id] && len <= TX_BUF_LEN,
-			"Unable to get TX buffer"
+			"RTL8139: Unable to get TX buffer"
 		);
 
 		token.tx_fields.tx_in_use[id] = true;
@@ -408,7 +408,7 @@ impl NetworkDriver for RTL8139Driver {
 				return true;
 			} else {
 				warn!(
-					"RTL8192: invalid header {:#x}, rx_pos {}\n",
+					"RTL8139: invalid header {:#x}, rx_pos {}\n",
 					header, self.rx_fields.rxpos
 				);
 			}
@@ -438,15 +438,15 @@ impl NetworkDriver for RTL8139Driver {
 		}
 
 		if (isr_contents & ISR_RER) == ISR_RER {
-			error!("RTL88139: RX error detected!\n");
+			error!("RTL8139: RX error detected!\n");
 		}
 
 		if (isr_contents & ISR_TER) == ISR_TER {
-			trace!("RTL88139r: TX error detected!\n");
+			trace!("RTL8139r: TX error detected!\n");
 		}
 
 		if (isr_contents & ISR_RXOVW) == ISR_RXOVW {
-			trace!("RTL88139: RX overflow detected!\n");
+			trace!("RTL8139: RX overflow detected!\n");
 		}
 
 		unsafe {
@@ -493,7 +493,7 @@ impl RTL8139Driver {
 
 impl Drop for RTL8139Driver {
 	fn drop(&mut self) {
-		debug!("Dropping RTL8129Driver!");
+		debug!("RTL8139: Dropping driver!");
 
 		// Software reset
 		unsafe {
@@ -519,7 +519,7 @@ pub(crate) fn init_device(
 		.try_into()
 		.unwrap();
 
-	debug!("Found RTL8139 at iobase {iobase:#x} (irq {irq})");
+	debug!("RTL8139: Found at iobase {iobase:#x} (irq {irq})");
 
 	device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
@@ -541,7 +541,7 @@ pub(crate) fn init_device(
 
 	unsafe {
 		if Port::<u32>::new(iobase + TCR).read() == 0x00ff_ffffu32 {
-			error!("Unable to initialize RTL8192");
+			error!("RTL8139: Initialization failed");
 			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::InitFailed));
 		}
 
@@ -557,7 +557,7 @@ pub(crate) fn init_device(
 		}
 
 		if tmp == 0 {
-			error!("RTL8139 reset failed");
+			error!("RTL8139: Reset failed");
 			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::ResetFailed));
 		}
 
@@ -598,8 +598,7 @@ pub(crate) fn init_device(
 	let txbuffer = Box::new_zeroed_slice_in(NO_TX_BUFFERS * TX_BUF_LEN, DeviceAlloc);
 	let mut txbuffer = unsafe { txbuffer.assume_init() };
 
-	debug!("Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
-
+	debug!("RTL8139: Allocate TxBuffer at {txbuffer:p} and RxBuffer at {rxbuffer:p}");
 	let phys_addr = |p| DeviceAlloc.phys_addr_from(p).as_u64().try_into().unwrap();
 
 	unsafe {
@@ -642,7 +641,7 @@ pub(crate) fn init_device(
 		);
 	}
 
-	info!("RTL8139 use interrupt line {irq}");
+	info!("RTL8139: Using interrupt line {irq}");
 	add_irq_name(irq, "rtl8139");
 
 	Ok(RTL8139Driver {

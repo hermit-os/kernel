@@ -67,7 +67,7 @@ impl VirtioNetDriver<Uninit> {
 				}
 			}
 		} else {
-			error!("Unable to create Driver. Aborting!");
+			error!("virtio-net: Driver initialization failed. Aborting!");
 			Err(VirtioError::Unknown)
 		}
 	}
@@ -77,7 +77,7 @@ impl VirtioNetDriver<Init> {
 	pub fn print_information(&mut self) {
 		self.com_cfg.print_information();
 		if self.dev_status() == virtio::net::S::LINK_UP {
-			info!("The link of the network device is up!");
+			info!("virtio-net: Link is up!");
 		}
 	}
 }

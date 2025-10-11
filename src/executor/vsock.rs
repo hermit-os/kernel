@@ -204,7 +204,7 @@ impl VsockMap {
 }
 
 pub(crate) fn init() {
-	info!("Try to initialize vsock interface!");
+	info!("vsock: Initializing...");
 
 	spawn(vsock_run());
 }

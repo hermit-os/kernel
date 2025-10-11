@@ -311,7 +311,7 @@ impl SplitVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created SplitVq: idx={}, size={}", index.0, size);
+		info!("virtqueue: Created SplitVq: idx={}, size={}", index.0, size);
 
 		Ok(SplitVq {
 			ring: descr_ring,

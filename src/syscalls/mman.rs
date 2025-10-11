@@ -43,7 +43,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
 	let physical_address = PhysAddr::from(frame_range.start());
 
-	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
+	debug!("sys_mmap: {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -73,12 +73,12 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
-		debug!("Unmapping {virtual_address:X} ({size}) -> {physical_address:X}");
+		debug!("sys_munmap: {virtual_address:X} ({size}) -> {physical_address:X}");
 
 		let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
 		if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
 			// FIXME: return EINVAL instead, once wasmtime can handle it
-			error!("Unable to deallocate {range:?}");
+			error!("sys_munmap: Unable to deallocate {range:?}");
 		}
 	}
 
@@ -109,7 +109,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 
 	let virtual_address = VirtAddr::from_ptr(ptr);
 
-	debug!("Mprotect {virtual_address:X} ({size}) -> {prot_flags:?})");
+	debug!("sys_mprotect: {virtual_address:X} ({size}) -> {prot_flags:?})");
 	if let Some(physical_address) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0

@@ -724,49 +724,29 @@ impl FuseFileHandleInner {
 	}
 
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		debug!("FUSE lseek: offset: {offset}, whence: {whence:?}");
+		trace!("FUSE lseek (offset: {offset}, whence: {whence:?})");
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
+			let rsp = get_filesystem_driver()
+				.ok_or(Errno::Nosys)?
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
 
-		// Seek on fuse file systems seems to be a little odd: All reads are referenced from the
-		// beginning of the file, thus we have to track the offset ourself. Also, a read doesn't
-		// move the read pointer on the remote side, so we can't get the current position using
-		// remote lseek when referencing from `Cur` and we have to use the internally tracked
-		// position instead.
-		match whence {
-			SeekWhence::End | SeekWhence::Data | SeekWhence::Hole => {
-				if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-					let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
-					let rsp = get_filesystem_driver()
-						.ok_or(Errno::Nosys)?
-						.lock()
-						.send_command(cmd, rsp_payload_len)?;
-
-					if rsp.headers.out_header.error < 0 {
-						return Err(Errno::Io);
-					}
-
-					let rsp_offset = rsp.headers.op_header.offset;
-					self.offset = rsp.headers.op_header.offset.try_into().unwrap();
-
-					Ok(rsp_offset.try_into().unwrap())
-				} else {
-					Err(Errno::Io)
-				}
+			if rsp.headers.out_header.error < 0 {
+				return Err(Errno::Io);
 			}
-			SeekWhence::Set => {
-				self.offset = offset.try_into().map_err(|_e| Errno::Inval)?;
-				Ok(self.offset as isize)
-			}
-			SeekWhence::Cur => {
-				self.offset = (self.offset as isize + offset)
-					.try_into()
-					.map_err(|_e| Errno::Inval)?;
-				Ok(self.offset as isize)
-			}
+
+			let rsp_offset = rsp.headers.op_header.offset;
+			self.offset = rsp.headers.op_header.offset.try_into().unwrap();
+
+			Ok(rsp_offset.try_into().unwrap())
+		} else {
+			Err(Errno::Io)
 		}
 	}
 
 	fn fstat(&mut self) -> io::Result<FileAttr> {
-		debug!("FUSE getattr");
+		trace!("FUSE getattr");
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 			let (cmd, rsp_payload_len) = ops::Getattr::create(nid, fh, FUSE_GETATTR_FH);
 			let rsp = get_filesystem_driver()
@@ -783,7 +763,7 @@ impl FuseFileHandleInner {
 	}
 
 	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
-		debug!("FUSE setattr");
+		trace!("FUSE setattr");
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
 			let (cmd, rsp_payload_len) = ops::Setattr::create(nid, fh, attr, valid);
 			let rsp = get_filesystem_driver()
@@ -808,7 +788,10 @@ impl Read for FuseFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
-			debug!("Reading longer than max_read_len: {len}");
+			warn!(
+				"Overriding read buffer length (longer than MAX_READ_LEN: {} > {MAX_READ_LEN})",
+				buf.len()
+			);
 			len = MAX_READ_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
@@ -831,7 +814,7 @@ impl Read for FuseFileHandleInner {
 
 			Ok(len)
 		} else {
-			debug!("File not open, cannot read!");
+			error!("fuse: Cannot read file without handle: {self:?}");
 			Err(Errno::Noent)
 		}
 	}
@@ -839,13 +822,12 @@ impl Read for FuseFileHandleInner {
 
 impl Write for FuseFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		debug!("FUSE write!");
+		trace!("FUSE write");
 		let mut truncated_len = buf.len();
 		if truncated_len > MAX_WRITE_LEN {
 			debug!(
-				"Writing longer than max_write_len: {} > {}",
+				"Overriding write buffer length (longer than MAX_WRITE_LEN: {} > {MAX_WRITE_LEN})",
 				buf.len(),
-				MAX_WRITE_LEN
 			);
 			truncated_len = MAX_WRITE_LEN;
 		}
@@ -871,7 +853,7 @@ impl Write for FuseFileHandleInner {
 			self.offset += rsp_len;
 			Ok(rsp_len)
 		} else {
-			warn!("File not open, cannot read!");
+			error!("fuse: Cannot write file without handle: {self:?}");
 			Err(Errno::Noent)
 		}
 	}
@@ -1019,7 +1001,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		);
 
 		if len <= core::mem::size_of::<fuse_dirent>() {
-			debug!("FUSE no new dirs");
+			trace!("FUSE no new dirs");
 			return Err(Errno::Noent);
 		}
 
@@ -1087,7 +1069,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 	/// userspace applications have no way of knowing valid offsets)
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		if whence != SeekWhence::Set && offset != 0 {
-			error!("Invalid offset for directory lseek ({offset})");
+			error!("fuse: Invalid offset for directory lseek ({offset})");
 			return Err(Errno::Inval);
 		}
 		*self.read_position.lock().await = offset as usize;
@@ -1150,7 +1132,6 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		let path = self.traversal_path(components);
-
 		debug!("FUSE opendir: {path:#?}");
 
 		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
@@ -1230,7 +1211,6 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
-
 		debug!("FUSE stat: {path:#?}");
 
 		// Is there a better way to implement this?
@@ -1258,7 +1238,6 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
-
 		debug!("FUSE lstat: {path:#?}");
 
 		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
@@ -1276,7 +1255,6 @@ impl VfsNode for FuseDirectory {
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		let path = self.traversal_path(components);
-
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
 
 		if opt.contains(OpenOption::O_DIRECTORY) {
@@ -1390,12 +1368,12 @@ impl VfsNode for FuseDirectory {
 }
 
 pub(crate) fn init() {
-	debug!("Try to initialize fuse filesystem");
+	debug!("fuse: Initializing...");
 
 	if let Some(driver) = get_filesystem_driver() {
 		let (cmd, rsp_payload_len) = ops::Init::create();
 		let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
-		trace!("fuse init answer: {rsp:?}");
+		trace!("fuse: init answer: {rsp:?}");
 
 		let mount_point = driver.lock().get_mount_point();
 		if mount_point == "/" {
@@ -1435,7 +1413,7 @@ pub(crate) fn init() {
 
 			assert!(
 				len > core::mem::size_of::<fuse_dirent>(),
-				"FUSE no new dirs"
+				"fuse: no new dirs"
 			);
 
 			let mut entries: Vec<String> = Vec::new();
@@ -1478,7 +1456,7 @@ pub(crate) fn init() {
 			entries.retain(|x| x != "tmp");
 			entries.retain(|x| x != "proc");
 			warn!(
-				"Fuse don't mount the host directories 'tmp' and 'proc' into the guest file system!"
+				"The FUSE driver will not mount the host directories 'tmp' and 'proc' into the guest!"
 			);
 
 			for i in entries {
@@ -1492,7 +1470,7 @@ pub(crate) fn init() {
 
 				let attr = FileAttr::from(rsp.headers.op_header.attr);
 				if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-					info!("Fuse mount {i} to /{i}");
+					info!("fuse: Mount {i} to /{i}");
 					fs::FILESYSTEM
 						.get()
 						.unwrap()
@@ -1500,7 +1478,7 @@ pub(crate) fn init() {
 							&("/".to_owned() + i.as_str()),
 							Box::new(FuseDirectory::new(Some(i))),
 						)
-						.expect("Mount failed. Invalid mount_point?");
+						.expect("fuse: Mount failed. Invalid mount_point?");
 				} else {
 					warn!("Fuse don't mount {i}. It isn't a directory!");
 				}
@@ -1512,12 +1490,12 @@ pub(crate) fn init() {
 				"/".to_owned() + &mount_point
 			};
 
-			info!("Mounting virtio-fs at {mount_point}");
+			info!("virtio-fs: Mounting at {mount_point}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
 				.mount(mount_point.as_str(), Box::new(FuseDirectory::new(None)))
-				.expect("Mount failed. Invalid mount_point?");
+				.expect("fuse: Mount failed. Invalid mount_point?");
 		}
 	}
 }

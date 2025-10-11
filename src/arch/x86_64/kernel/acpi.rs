@@ -315,21 +315,21 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 
 		// Verify the basic checksum.
 		if verify_checksum(current_address, RSDP_CHECKSUM_LENGTH).is_err() {
-			debug!("Found an ACPI table at {current_address:#X}, but its RSDP checksum is invalid");
+			debug!("ACPI: Table found at {current_address:#X}, but its RSDP checksum is invalid");
 			continue;
 		}
 
 		// Verify the extended checksum if this is an ACPI 2.0-compliant table.
 		if rsdp.revision >= 2 && verify_checksum(current_address, RSDP_XCHECKSUM_LENGTH).is_err() {
 			debug!(
-				"Found an ACPI table at {current_address:#X}, but its RSDP extended checksum is invalid"
+				"ACPI: Table found at {current_address:#X}, but its RSDP extended checksum is invalid"
 			);
 			continue;
 		}
 
 		// We were successful! Return a pointer to the RSDT (whose 64-bit address is called XSDT in this structure).
 		info!(
-			"Found an ACPI revision {} table at {:#X} with OEM ID \"{}\"",
+			"ACPI: Revision {} table found at {:#X} with OEM ID \"{}\"",
 			rsdp.revision,
 			current_address,
 			rsdp.oem_id()
@@ -501,7 +501,7 @@ pub fn poweroff() {
 	if let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
 	{
 		let bits = (u16::from(slp_typa) << 10) | SLP_EN;
-		debug!("Powering Off through ACPI (port {pm1a_cnt_blk:?}, bitmask {bits:#X})");
+		debug!("Powering off using ACPI (port {pm1a_cnt_blk:?}, bitmask {bits:#X})");
 		unsafe {
 			pm1a_cnt_blk.write(bits);
 		}
@@ -548,7 +548,10 @@ pub fn init() {
 		};
 
 		let table = AcpiTable::map(table_physical_address);
-		debug!("Found ACPI table: {}", table.header.signature());
+		debug!(
+			"ACPI: Found table with signature {}",
+			table.header.signature()
+		);
 
 		if table.header.signature() == "APIC" {
 			// The "Multiple APIC Description Table" (MADT) aka "APIC Table" (APIC)
