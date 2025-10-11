@@ -93,7 +93,7 @@ pub(crate) fn init() {
 pub extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
-		warn!("__sys_alloc called with size {size:#x}, align {align:#x} is an invalid layout!");
+		warn!("__sys_alloc: called with size {size:#x}, align {align:#x} is an invalid layout!");
 		return core::ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
@@ -111,7 +111,7 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!(
-			"__sys_alloc_zeroed called with size {size:#x}, align {align:#x} is an invalid layout!"
+			"__sys_alloc_zeroed: called with size {size:#x}, align {align:#x} is an invalid layout!"
 		);
 		return core::ptr::null_mut();
 	}
@@ -129,7 +129,7 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
-		warn!("__sys_malloc called with size {size:#x}, align {align:#x} is an invalid layout!");
+		warn!("__sys_malloc: called with size {size:#x}, align {align:#x} is an invalid layout!");
 		return core::ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
@@ -172,7 +172,7 @@ pub unsafe extern "C" fn sys_realloc(
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 || new_size == 0 {
 			warn!(
-				"__sys_realloc called with ptr {ptr:p}, size {size:#x}, align {align:#x}, new_size {new_size:#x} is an invalid layout!"
+				"__sys_realloc: called with ptr {ptr:p}, size {size:#x}, align {align:#x}, new_size {new_size:#x} is an invalid layout!"
 			);
 			return core::ptr::null_mut();
 		}
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn sys_realloc(
 
 		if new_ptr.is_null() {
 			debug!(
-				"__sys_realloc failed to resize ptr {ptr:p} with size {size:#x}, align {align:#x}, new_size {new_size:#x} !"
+				"__sys_realloc: failed to resize ptr {ptr:p} with size {size:#x}, align {align:#x}, new_size {new_size:#x} !"
 			);
 		} else {
 			trace!("__sys_realloc: resized memory at {ptr:p}, new address {new_ptr:p}");
@@ -208,7 +208,7 @@ pub unsafe extern "C" fn sys_dealloc(ptr: *mut u8, size: usize, align: usize) {
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 {
 			warn!(
-				"__sys_dealloc called with size {size:#x}, align {align:#x} is an invalid layout!"
+				"__sys_dealloc: called with size {size:#x}, align {align:#x} is an invalid layout!"
 			);
 			debug_assert!(layout_res.is_err(), "__sys_dealloc error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_dealloc error: size cannot be 0");
@@ -227,7 +227,7 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	unsafe {
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 {
-			warn!("__sys_free called with size {size:#x}, align {align:#x} is an invalid layout!");
+			warn!("__sys_free: called with size {size:#x}, align {align:#x} is an invalid layout!");
 			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
 		} else {
@@ -438,7 +438,7 @@ pub unsafe extern "C" fn sys_faccessat(
 			fs::read_lstat(name)
 		}
 	} else {
-		warn!("faccessat with directory relative to fd is not implemented!");
+		error!("sys_faccessat: directory relative to fd is not implemented!");
 		return -i32::from(Errno::Nosys);
 	};
 
@@ -790,7 +790,7 @@ pub unsafe extern "C" fn sys_getdents64(
 	dirp: *mut Dirent64,
 	count: usize,
 ) -> i64 {
-	debug!("getdents for fd {fd:?} - count: {count}");
+	debug!("sys_getdents64: for fd {fd:?} - count: {count}");
 	if dirp.is_null() || count == 0 {
 		return (-i32::from(Errno::Inval)).into();
 	}

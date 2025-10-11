@@ -44,7 +44,7 @@ impl VirtioNetDriver<Uninit> {
 		} = caps_coll;
 
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg) else {
-			error!("No dev config. Aborting!");
+			error!("virtio-net: No dev config present. Aborting!");
 			return Err(error::VirtioNetError::NoDevCfg(device_id));
 		};
 
@@ -78,12 +78,12 @@ impl VirtioNetDriver<Uninit> {
 			Ok(caps) => match VirtioNetDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(vnet_err) => {
-					error!("Initializing new network driver failed. Aborting!");
+					error!("virtio-net: Driver initialization failed. Aborting!");
 					return Err(VirtioError::NetDriver(vnet_err));
 				}
 			},
 			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
+				error!("virtio-net: Capability mapping failed. Aborting!");
 				return Err(err);
 			}
 		};
@@ -91,7 +91,7 @@ impl VirtioNetDriver<Uninit> {
 		let initialized_drv = match drv.init_dev() {
 			Ok(initialized_drv) => {
 				info!(
-					"Network device with id {:x}, has been initialized by driver!",
+					"virtio-net: Initialized network device with ID {:x}",
 					initialized_drv.get_dev_id()
 				);
 				initialized_drv
@@ -102,9 +102,9 @@ impl VirtioNetDriver<Uninit> {
 		};
 
 		if initialized_drv.is_link_up() {
-			info!("Virtio-net link is up after initialization.");
+			info!("virtio-net: Link is up after initialization.");
 		} else {
-			info!("Virtio-net link is down after initialization!");
+			info!("virtio-net: Link is down after initialization!");
 		}
 
 		Ok(initialized_drv)

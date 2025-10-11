@@ -126,11 +126,11 @@ impl TaskStacks {
 		let frame_range = PHYSICAL_FREE_LIST
 			.lock()
 			.allocate(frame_layout)
-			.expect("Failed to allocate Physical Memory for TaskStacks");
+			.expect("Task stacks: Physical memory allocation failed!");
 		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
-			"Create stacks at {:#X} with a size of {} KB",
+			"Task stacks: Create at virtual {:#X} (size: {}KB)",
 			virt_addr,
 			total_size >> 10
 		);
@@ -166,7 +166,7 @@ impl TaskStacks {
 		);
 
 		// clear user stack
-		debug!("Clearing user stack...");
+		debug!("Task stacks: Clearing user stack...");
 		unsafe {
 			ptr::write_bytes(
 				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
@@ -177,7 +177,7 @@ impl TaskStacks {
 			);
 		}
 
-		debug!("Creating stacks finished");
+		debug!("Task stacks: Creation complete.");
 
 		TaskStacks::Common(CommonStack {
 			virt_addr,
@@ -247,7 +247,7 @@ impl Drop for TaskStacks {
 			TaskStacks::Boot(_) => {}
 			TaskStacks::Common(stacks) => {
 				debug!(
-					"Deallocating stacks at {:#X} with a size of {} KB",
+					"Task stacks: Deallocating at {:#X} (size: {}KB)",
 					stacks.virt_addr,
 					stacks.total_size >> 10,
 				);
@@ -447,7 +447,7 @@ pub fn timer_handler() {
 
 #[cfg(feature = "smp")]
 pub fn wakeup_handler() {
-	debug!("Received Wakeup Interrupt");
+	debug!("Wakeup interrupt received");
 	//increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();

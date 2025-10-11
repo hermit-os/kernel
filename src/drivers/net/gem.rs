@@ -247,13 +247,12 @@ impl NetworkDriver for GEMDriver {
 	}
 
 	fn has_packet(&self) -> bool {
-		debug!("has_packet");
-
+		trace!("has_packet");
 		self.next_rx_index().is_some()
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
-		debug!("set_polling_mode");
+		trace!("set_polling_mode");
 		if value {
 			// disable interrupts from the NIC
 			unsafe {
@@ -564,8 +563,7 @@ impl Drop for TxToken<'_> {
 
 impl Drop for GEMDriver {
 	fn drop(&mut self) {
-		debug!("Dropping GEMDriver!");
-
+		trace!("GEM: Dropping GEMDriver!");
 		unsafe {
 			// Software reset
 			// Clear the Network Control register
@@ -586,10 +584,8 @@ pub fn init_device(
 	phy_addr: u32,
 	mac: [u8; 6],
 ) -> Result<GEMDriver, DriverError> {
-	debug!("Init GEM at {gem_base:p}");
-
+	debug!("GEM: Initializing at {gem_base:p}...");
 	let gem = gem_base.as_mut_ptr::<Registers>();
-
 	unsafe {
 		// Initialize the Controller
 
@@ -719,7 +715,7 @@ pub fn init_device(
 			// TODO - Next Page does not seem to be emulated by QEMU
 
 			//info!("PHY auto-negotiation completed:\n Speed: {}\nDuplex");
-			debug!("PHY auto-negotiation completed: Partner Ability {partner_ability:x}");
+			debug!("GEM: PHY auto-negotiation complete. Partner Ability: {partner_ability:x}");
 		}
 	}
 
@@ -804,7 +800,7 @@ pub fn init_device(
 		(*gem).tx_qbar.set(tx_qbar);
 
 		// Configure Interrupts
-		debug!("Install interrupt handler for GEM");
+		debug!("GEM: Install interrupt handler");
 
 		(*gem).int_enable.write(Interrupts::FRAMERX::SET); // + Interrupts::TXCOMPL::SET
 

@@ -59,19 +59,19 @@ pub mod error {
 				VirtioError::FromPci(pci_error) => match pci_error {
 					PciError::General(id) => write!(
 						f,
-						"Driver failed to initialize device with id: {id:#x}. Due to unknown reasosn!"
+						"Driver failed to initialize device with ID: {id:#x}. Reason: Unknown."
 					),
 					PciError::NoBar(id) => write!(
 						f,
-						"Driver failed to initialize device with id: {id:#x}. Reason: No BAR's found."
+						"Driver failed to initialize device with ID: {id:#x}. Reason: No BAR's found."
 					),
 					PciError::NoCapPtr(id) => write!(
 						f,
-						"Driver failed to initialize device with id: {id:#x}. Reason: No Capabilities pointer found."
+						"Driver failed to initialize device with ID: {id:#x}. Reason: No capabilities pointer found."
 					),
 					PciError::NoVirtioCaps(id) => write!(
 						f,
-						"Driver failed to initialize device with id: {id:#x}. Reason: No Virtio capabilities were found."
+						"Driver failed to initialize device with ID: {id:#x}. Reason: No virtio capabilities found."
 					),
 				},
 				#[cfg(feature = "pci")]
@@ -90,7 +90,7 @@ pub mod error {
 					"Virtio driver failed, for device {id:x}, due to a missing or malformed notification config!"
 				),
 				VirtioError::DevNotSupported(id) => {
-					write!(f, "Device with id {id:#x} not supported.")
+					write!(f, "Device with ID {id:#x} not supported.")
 				}
 				#[cfg(all(
 					not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),

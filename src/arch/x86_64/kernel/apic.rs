@@ -259,7 +259,7 @@ impl fmt::Display for IoApicRecord {
 #[cfg(feature = "smp")]
 extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	swapgs(&stack_frame);
-	debug!("Received TLB Flush Interrupt");
+	debug!("TLB Flush Interrupt received");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER);
 	let (frame, val) = Cr3::read_raw();
 	unsafe {
@@ -271,7 +271,7 @@ extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionSt
 
 extern "x86-interrupt" fn error_interrupt_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	swapgs(&stack_frame);
-	error!("APIC LVT Error Interrupt");
+	error!("APIC LVT Error Interrupt received");
 	error!("ESR: {:#X}", local_apic_read(IA32_X2APIC_ESR));
 	error!("{stack_frame:#?}");
 	eoi();
@@ -289,7 +289,7 @@ extern "x86-interrupt" fn wakeup_handler(stack_frame: interrupts::ExceptionStack
 	swapgs(&stack_frame);
 	use crate::scheduler::PerCoreSchedulerExt;
 
-	debug!("Received Wakeup Interrupt");
+	debug!("Wakeup interrupt received");
 	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER);
 	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();
@@ -321,7 +321,7 @@ fn init_ioapic_address(phys_addr: PhysAddr) {
 		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 		let ioapic_address = VirtAddr::from(page_range.start());
 		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
-		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}");
+		debug!("IOAPIC: Mapping {phys_addr:p} to virtual address {ioapic_address:p}");
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
@@ -357,7 +357,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				let processor_local_apic_record = unsafe {
 					&*(ptr::with_exposed_provenance::<ProcessorLocalApicRecord>(current_address))
 				};
-				debug!("Found Processor Local APIC record: {processor_local_apic_record}");
+				debug!("Processor Local APIC record found: {processor_local_apic_record}");
 
 				if processor_local_apic_record.flags & CPU_FLAG_ENABLED > 0 {
 					add_local_apic_id(processor_local_apic_record.apic_id);
@@ -367,7 +367,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				// I/O APIC
 				let ioapic_record =
 					unsafe { &*(ptr::with_exposed_provenance::<IoApicRecord>(current_address)) };
-				debug!("Found I/O APIC record: {ioapic_record}");
+				debug!("IOAPIC record found: {ioapic_record}");
 
 				init_ioapic_address(PhysAddr::new(ioapic_record.address.into()));
 			}
@@ -436,7 +436,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		Err(())
 	}?;
 
-	info!("Found MP config at {:#x}", { mp_float.mp_config });
+	info!("MP config: Found at {:#x}", { mp_float.mp_config });
 	info!(
 		"System uses Multiprocessing Specification 1.{}",
 		mp_float.version
@@ -466,7 +466,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		(virtual_address | (u64::from(mp_float.mp_config) & (BasePageSize::SIZE - 1))) as usize;
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
-		warn!("Invalid MP config table");
+		warn!("MP config table is invalid!");
 		let range =
 			PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize)
 				.unwrap();
@@ -477,7 +477,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	}
 
 	if mp_config.entry_count == 0 {
-		warn!("No MP table entries! Guess IO-APIC!");
+		warn!("No MP table entries found: Guessing IO-APIC as a fallback!");
 		let default_address = PhysAddr::new(0xfec0_0000);
 
 		init_ioapic_address(default_address);
@@ -499,7 +499,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr::new(io_entry.addr.into());
-					info!("Found IOAPIC at 0x{ioapic:p}");
+					info!("IOAPIC: Found at 0x{ioapic:p}");
 
 					init_ioapic_address(ioapic);
 
@@ -516,10 +516,8 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 }
 
 fn default_apic() -> PhysAddr {
-	warn!("Try to use default APIC address");
-
+	warn!("APIC: Trying to use address...");
 	let default_address = PhysAddr::new(0xfee0_0000);
-
 	// currently, uhyve doesn't support an IO-APIC
 	if !env::is_uhyve() {
 		init_ioapic_address(default_address);
@@ -554,7 +552,7 @@ pub fn init() {
 			let local_apic_address = VirtAddr::from(page_range.start());
 			LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
 			debug!(
-				"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
+				"Local APIC: Mapping {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
 			);
 
 			let mut flags = PageTableEntryFlags::empty();
@@ -604,7 +602,7 @@ pub fn init() {
 
 fn init_ioapic() {
 	let max_entry = ioapic_max_redirection_entry() + 1;
-	info!("IOAPIC v{} has {} entries", ioapic_version(), max_entry);
+	info!("IOAPIC: v{} has {} entries", ioapic_version(), max_entry);
 
 	// now lets turn everything else on
 	for i in 0..max_entry {
@@ -622,7 +620,7 @@ fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
 	let ioredirect_upper = u32::from(apicid) << 24;
 	let mut ioredirect_lower = u32::from(0x20 + irq);
 	if !enabled {
-		debug!("Disabling irq {irq}");
+		debug!("IOAPIC: Disabling irq {irq}");
 		ioredirect_lower |= 1 << 16;
 	}
 
@@ -678,9 +676,7 @@ fn calibrate_timer() {
 	CALIBRATED_COUNTER_VALUE
 		.set(calibrated_counter_value)
 		.unwrap();
-	debug!(
-		"Calibrated APIC Timer with a counter value of {calibrated_counter_value} for 1 microsecond",
-	);
+	debug!("APIC: Timer calibrated with counter value of {calibrated_counter_value} for 1us",);
 }
 
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
@@ -769,11 +765,11 @@ pub fn boot_application_processors() {
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
 
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
+	debug!("SMP: Boot code size is {} bytes", smp_boot_code.len());
 	assert!(
 		smp_boot_code.len() < BasePageSize::SIZE as usize,
-		"SMP Boot Code is larger than a page"
+		"SMP: Boot code is larger than a single page"
 	);
-	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 
 	if env::is_uefi() {
 		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
@@ -783,7 +779,7 @@ pub fn boot_application_processors() {
 		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64());
 	} else {
 		// Identity-map the boot code page and copy over the code.
-		debug!("Mapping SMP boot code to physical and virtual address {SMP_BOOT_CODE_ADDRESS:p}");
+		debug!("SMP: Mapping boot code to physical and virtual address {SMP_BOOT_CODE_ADDRESS:p}");
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable();
 		paging::map::<BasePageSize>(
@@ -809,7 +805,7 @@ pub fn boot_application_processors() {
 			value.try_into().unwrap();
 		// Set entry point
 		debug!(
-			"Set entry point for application processor to {:p}",
+			"SMP: Set application processor entry point to {:p}",
 			start::_start as *const ()
 		);
 		ptr::write_unaligned(
@@ -831,7 +827,7 @@ pub fn boot_application_processors() {
 			}
 			let destination = u64::from(apic_id) << 32;
 
-			debug!("Waking up CPU {core_id_to_boot} with Local APIC ID {apic_id}");
+			debug!("CPU {core_id_to_boot}: Waking up with with Local APIC ID {apic_id}");
 			init_next_processor_variables();
 
 			// Save the current number of initialized CPUs.
@@ -860,7 +856,7 @@ pub fn boot_application_processors() {
 					| APIC_ICR_DELIVERY_MODE_STARTUP
 					| ((SMP_BOOT_CODE_ADDRESS.as_u64()) >> 12),
 			);
-			debug!("Waiting for it to respond");
+			debug!("SMP: Waiting for application processor to respond to local APIC write...");
 
 			// Wait until the application processor has finished initializing.
 			// It will indicate this by counting up cpu_online.

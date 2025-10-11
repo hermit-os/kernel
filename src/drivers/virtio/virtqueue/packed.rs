@@ -671,7 +671,7 @@ impl PackedVq {
 		// carry a feature u64 in order to check which features are used currently
 		// and adjust its ReadCtrl accordingly.
 		if features.contains(virtio::F::IN_ORDER) {
-			info!("PackedVq has no support for VIRTIO_F_IN_ORDER. Aborting...");
+			info!("virtqueue: PackedVq has no support for VIRTIO_F_IN_ORDER. Aborting...");
 			return Err(VirtqError::FeatureNotSupported(virtio::F::IN_ORDER));
 		}
 
@@ -731,7 +731,10 @@ impl PackedVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created PackedVq: idx={}, size={}", index.0, vq_size);
+		info!(
+			"virtqueue: Created PackedVq: idx={}, size={}",
+			index.0, vq_size
+		);
 
 		Ok(PackedVq {
 			descr_ring,

@@ -66,7 +66,7 @@ pub fn init_drivers() {
 						if i == "virtio,mmio" {
 							let virtio_region = node
 								.reg()
-								.expect("reg property for virtio mmio not found in FDT")
+								.expect("DT: reg property for virtio-mmio not found in FDT")
 								.next()
 								.unwrap();
 							let mut irq = 0;
@@ -104,15 +104,17 @@ pub fn init_drivers() {
 
 							const MMIO_MAGIC_VALUE: u32 = 0x7472_6976;
 							if magic != MMIO_MAGIC_VALUE {
-								error!("It's not a MMIO-device at {mmio:p}");
+								error!("virtio-mmio: No MMIO device present at {mmio:p}");
 							}
 
 							if version != 2 {
-								warn!("Found a legacy device, which isn't supported");
+								warn!(
+									"virtio-mmio: Found an unsupported legacy device (version: {version})"
+								);
 							}
 
 							// We found a MMIO-device (whose 512-bit address in this structure).
-							trace!("Found a MMIO-device at {mmio:p}");
+							trace!("virtio-mmio: Device found at {mmio:p}");
 
 							// Verify the device-ID to find the network card
 							let id = mmio.as_ptr().device_id().read();
@@ -122,7 +124,7 @@ pub fn init_drivers() {
 								#[cfg(feature = "virtio-net")]
 								virtio::Id::Net => {
 									debug!(
-										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+										"virtio-net: Network card found at {mmio:p} (irq: {irq}, type: {irqtype}, flags: {irqflags})"
 									);
 									if let Ok(VirtioDriver::Network(drv)) =
 										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
@@ -134,7 +136,7 @@ pub fn init_drivers() {
 										} else if irqtype == 0 {
 											IntId::spi(irq)
 										} else {
-											panic!("Invalid interrupt type");
+											panic!("Invalid interrupt type {irqtype}!");
 										};
 										gic.set_interrupt_priority(
 											virtio_irqid,
@@ -164,7 +166,7 @@ pub fn init_drivers() {
 								#[cfg(feature = "console")]
 								virtio::Id::Console => {
 									debug!(
-										"Found console at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+										"virtio-console: Console found at {mmio:p} (irq: {irq}, type: {irqtype}, flags: {irqflags})"
 									);
 									if let Ok(VirtioDriver::Console(drv)) =
 										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
@@ -176,7 +178,7 @@ pub fn init_drivers() {
 											} else if irqtype == 0 {
 												IntId::spi(irq)
 											} else {
-												panic!("Invalid interrupt type");
+												panic!("Invalid interrupt type {irqtype}!");
 											};
 											gic.set_interrupt_priority(
 												virtio_irqid,
@@ -214,7 +216,7 @@ pub fn init_drivers() {
 				}
 			}
 		} else {
-			error!("No device tree found, cannot initialize MMIO drivers");
+			error!("Device tree not found: MMIO drivers cannot be initialized.");
 		}
 	});
 

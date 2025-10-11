@@ -154,37 +154,35 @@ fn finish_processor_init() {
 
 pub fn boot_next_processor() {
 	let new_hart_mask = HART_MASK.load(Ordering::Relaxed);
-	debug!("HART_MASK = {new_hart_mask:#x}");
+	debug!("HART: New mask is equal to {new_hart_mask:#x}");
 
 	let next_hart_index = lsb(new_hart_mask);
 
 	if let Some(next_hart_id) = next_hart_index {
 		{
-			debug!("Allocating stack for hard_id {next_hart_id}");
+			debug!("HART: Allocating stack for ID {next_hart_id}");
 			let frame_layout = PageLayout::from_size(KERNEL_STACK_SIZE).unwrap();
-			let frame_range = PHYSICAL_FREE_LIST
-				.lock()
-				.allocate(frame_layout)
-				.expect("Failed to allocate boot stack for new core");
+			let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).expect(
+				"HART: Unable to allocate boot stack for new core with hart id: {next_hart_id})",
+			);
 			let stack = PhysAddr::from(frame_range.start());
 			CURRENT_STACK_ADDRESS.store(stack.as_usize() as _, Ordering::Relaxed);
 		}
 
-		info!(
-			"Starting CPU {} with hart_id {}",
-			core_id() + 1,
-			next_hart_id
+		debug!(
+			"CPU {}: Start with with hart_id {next_hart_id}",
+			core_id() + 1
 		);
 
 		// TODO: Old: Changing cpu_online will cause uhyve to start the next processor
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
 
-		//When running bare-metal/QEMU we use the firmware to start the next hart
+		// When running bare-metal/QEMU, we use the firmware to start the next hart
 		if !env::is_uhyve() {
 			sbi_rt::hart_start(next_hart_id as usize, start::_start as usize, 0).unwrap();
 		}
 	} else {
-		info!("All processors are initialized");
+		debug!("All processors have been initialized.");
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
 	}
 }

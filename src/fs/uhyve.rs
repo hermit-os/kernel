@@ -229,10 +229,10 @@ impl VfsNode for UhyveDirectory {
 }
 
 pub(crate) fn init() {
-	info!("Try to initialize uhyve filesystem");
+	info!("uhyve hostfs: Initializing...");
 	if is_uhyve() {
 		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_string();
-		info!("Mounting uhyve filesystem at {mount_point}");
+		info!("uhyve hostfs: Mounting uhyve filesystem at {mount_point}");
 		fs::FILESYSTEM
 			.get()
 			.unwrap()

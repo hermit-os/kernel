@@ -421,7 +421,7 @@ impl Task {
 			>,
 		>,
 	) -> Task {
-		debug!("Creating new task {tid} on core {core_id}");
+		debug!("Scheduler: Creating new task {tid} on core {core_id}");
 
 		Task {
 			id: tid,
@@ -441,7 +441,7 @@ impl Task {
 	}
 
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
-		debug!("Creating idle task {tid}");
+		debug!("Scheduler: Creating idle task {tid}");
 
 		/// All cores use the same mapping between file descriptor and the referenced object
 		static OBJECT_MAP: OnceCell<
@@ -533,7 +533,7 @@ impl Task {
 
 /*impl Drop for Task {
 	fn drop(&mut self) {
-		debug!("Drop task {}", self.id);
+		debug!("Scheduler: Drop task {}", self.id);
 	}
 }*/
 
@@ -566,7 +566,7 @@ impl BlockedTaskQueue {
 	fn mark_ready(task: &RefCell<Task>) {
 		let mut borrowed = task.borrow_mut();
 		debug!(
-			"Waking up task {} on core {}",
+			"Scheduler: Waking up task {} on core {}",
 			borrowed.id, borrowed.core_id
 		);
 
@@ -605,7 +605,7 @@ impl BlockedTaskQueue {
 		{
 			// Set the task status to Blocked.
 			let mut borrowed = task.borrow_mut();
-			debug!("Blocking task {}", borrowed.id);
+			debug!("Scheduler: Blocking task {}", borrowed.id);
 
 			assert_eq!(
 				borrowed.status,

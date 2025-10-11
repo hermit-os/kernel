@@ -297,11 +297,11 @@ impl PerCoreScheduler {
 				core_scheduler().ready_queue.push(task);
 				false
 			} else {
-				panic!("Invalid  core_id {}!", core_id)
+				panic!("Invalid core_id {core_id}!")
 			}
 		};
 
-		debug!("Creating task {tid} with priority {prio} on core {core_id}");
+		debug!("CPU {core_id}: Creating task {tid} with priority {prio}.");
 
 		if wakeup {
 			arch::wakeup_core(core_id);
@@ -373,7 +373,7 @@ impl PerCoreScheduler {
 				core_scheduler().ready_queue.push(clone_task);
 				false
 			} else {
-				panic!("Invalid core_id {}!", core_id);
+				panic!("Invalid core_id {core_id}!");
 			}
 		};
 
@@ -634,14 +634,13 @@ impl PerCoreScheduler {
 
 	pub fn set_current_task_priority(&mut self, prio: Priority) {
 		without_interrupts(|| {
-			trace!("Change priority of the current task");
+			trace!("Scheduler: Change priority of current task .");
 			self.current_task.borrow_mut().prio = prio;
 		});
 	}
 
 	pub fn set_priority(&mut self, id: TaskId, prio: Priority) -> Result<(), ()> {
-		trace!("Change priority of task {id} to priority {prio}");
-
+		trace!("Scheduler: Change priority of task {id} to priority {prio}.");
 		without_interrupts(|| {
 			let task = get_task_handle(id).ok_or(())?;
 			#[cfg(feature = "smp")]
@@ -650,13 +649,13 @@ impl PerCoreScheduler {
 			let other_core = false;
 
 			if other_core {
-				warn!("Have to change the priority on another core");
+				warn!("Scheduler: Must change the priority on another core.");
 			} else if self.current_task.borrow().id == task.get_id() {
 				self.current_task.borrow_mut().prio = prio;
 			} else {
 				self.ready_queue
 					.set_priority(task, prio)
-					.expect("Do not find valid task in ready queue");
+					.expect("Scheduler: No valid task found in ready queue.");
 			}
 
 			Ok(())
@@ -680,7 +679,7 @@ impl PerCoreScheduler {
 	pub fn fpu_switch(&mut self) {
 		if !Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
 			debug!(
-				"Switching FPU owner from task {} to {}",
+				"Scheduler: Switching FPU owner from task {} to {}",
 				self.fpu_owner.borrow().id,
 				self.current_task.borrow().id
 			);
@@ -695,7 +694,7 @@ impl PerCoreScheduler {
 	fn cleanup_tasks(&mut self) {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		while let Some(finished_task) = self.finished_tasks.pop_front() {
-			debug!("Cleaning up task {}", finished_task.borrow().id);
+			debug!("Scheduler: Cleaning up task {}", finished_task.borrow().id);
 		}
 	}
 
@@ -794,11 +793,11 @@ impl PerCoreScheduler {
 			// Check if there is any available task and get the one with the highest priority.
 			if let Some(task) = self.ready_queue.pop() {
 				// This available task becomes the new task.
-				debug!("Task is available.");
+				debug!("Scheduler: Task is available.");
 				new_task = Some(task);
 			} else if status != TaskStatus::Idle {
 				// The Idle task becomes the new task.
-				debug!("Only Idle Task is available.");
+				debug!("Scheduler: Only Idle Task is available.");
 				new_task = Some(self.idle_task.clone());
 			}
 		}
@@ -896,7 +895,7 @@ pub(crate) fn add_current_core() {
 		),
 	);
 	// Initialize a scheduler for this core.
-	debug!("Initializing scheduler for core {core_id} with idle task {tid}");
+	debug!("Initializing scheduler for core {core_id} with IDle task {tid}");
 	let boxed_scheduler = Box::new(PerCoreScheduler {
 		#[cfg(feature = "smp")]
 		core_id,

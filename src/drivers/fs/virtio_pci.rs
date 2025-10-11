@@ -39,7 +39,7 @@ impl VirtioFsDriver {
 		} = caps_coll;
 
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioFsDriver::map_cfg) else {
-			error!("No dev config. Aborting!");
+			error!("virtiofs: No dev config present. Aborting!");
 			return Err(error::VirtioFsError::NoDevCfg(device_id));
 		};
 
@@ -59,19 +59,19 @@ impl VirtioFsDriver {
 			Ok(caps) => match VirtioFsDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(fs_err) => {
-					error!("Initializing new network driver failed. Aborting!");
+					error!("virtiofs: Driver initialization failed. Aborting!");
 					return Err(VirtioError::FsDriver(fs_err));
 				}
 			},
 			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
+				error!("virtiofs: Mapping capabilities failed. Aborting!");
 				return Err(err);
 			}
 		};
 
 		match drv.init_dev() {
 			Ok(()) => info!(
-				"Filesystem device with id {:x}, has been initialized by driver!",
+				"virtiofs: Driver initialized filesystem device with ID {:x}!",
 				drv.get_dev_id()
 			),
 			Err(fs_err) => {

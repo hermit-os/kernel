@@ -245,7 +245,7 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 }
 
 pub(crate) fn init() {
-	info!("Try to initialize network!");
+	info!("Network: Initializing...");
 
 	// initialize variable, which contains the next local endpoint
 	LOCAL_ENDPOINT.store(start_endpoint(), Ordering::Relaxed);

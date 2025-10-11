@@ -289,6 +289,6 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 
 pub fn wakeup_core(core_to_wakeup: CoreId) {
 	let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
-	debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
+	debug!("Wakeup core: {core_to_wakeup}, hart_id: {hart_id}");
 	sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
 }

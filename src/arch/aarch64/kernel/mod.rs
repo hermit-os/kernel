@@ -111,8 +111,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	debug!("Initialized processor {}", core_id());
-
+	debug!("CPU {}: Initialized", core_id());
 	// Allocate stack for the CPU and pass the addresses.
 	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
 	let stack = unsafe { alloc(layout) };
@@ -139,8 +138,8 @@ pub fn boot_next_processor() {
 			let phys_start = virtual_to_physical(virt_start).unwrap();
 			assert!(virt_start.as_u64() == phys_start.as_u64());
 
-			trace!("Virtual address of smp_start 0x{virt_start:x}");
-			trace!("Physical address of smp_start 0x{phys_start:x}");
+			trace!("Virtual address of smp_start: 0x{virt_start:x}");
+			trace!("Physical address of smp_start: 0x{phys_start:x}");
 
 			let fdt = env::fdt().unwrap();
 			let psci_node = fdt.find_node("/psci").unwrap();
@@ -164,8 +163,7 @@ pub fn boot_next_processor() {
 			TTBR0.store(ttbr0, Ordering::Relaxed);
 
 			for cpu_id in 1..get_possible_cpus() {
-				debug!("Try to wake-up core {cpu_id}");
-
+				debug!("CPU {cpu_id}: Attempting to wake up...");
 				if method == "hvc" {
 					// call hypervisor to wakeup next core
 					unsafe {
@@ -177,7 +175,7 @@ pub fn boot_next_processor() {
 						asm!("smc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, options(nomem, nostack));
 					}
 				} else {
-					warn!("Method {method} isn't supported!");
+					warn!("CPU {cpu_id}: Wakeup method {method} not supported!");
 					return;
 				}
 

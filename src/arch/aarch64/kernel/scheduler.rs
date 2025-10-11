@@ -142,11 +142,11 @@ impl TaskStacks {
 		let frame_range = PHYSICAL_FREE_LIST
 			.lock()
 			.allocate(frame_layout)
-			.expect("Failed to allocate Physical Memory for TaskStacks");
+			.expect("Task stacks: Physical memory allocation failed!");
 		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
-			"Create stacks at {:p} with a size of {} KB",
+			"Task stacks: Create at virtual {:p} (size: {}KB)",
 			virt_addr,
 			total_size >> 10
 		);
@@ -188,7 +188,7 @@ impl TaskStacks {
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let stack = VirtAddr::new(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) as u64);
-		debug!("Using boot stack {stack:p}");
+		debug!("Task stacks: Deriving from boot stack {stack:p}");
 
 		TaskStacks::Boot(BootStack { stack })
 	}
@@ -231,7 +231,7 @@ impl Drop for TaskStacks {
 			TaskStacks::Boot(_) => {}
 			TaskStacks::Common(stacks) => {
 				debug!(
-					"Deallocating stacks at {:p} with a size of {} KB",
+					"Task stacks: Deallocating at {:p} (size: {}KB)",
 					stacks.virt_addr,
 					stacks.total_size >> 10,
 				);

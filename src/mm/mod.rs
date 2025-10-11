@@ -343,9 +343,6 @@ pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
 			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
 		}
 	} else {
-		panic!(
-			"No page table entry for virtual address {:p}",
-			virtual_address
-		);
+		panic!("No page table entry for virtual address {virtual_address:p}",);
 	}
 }

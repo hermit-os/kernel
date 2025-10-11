@@ -45,7 +45,7 @@ enum Model {
 /// Inits variables based on the device tree
 /// This function should only be called once
 pub fn init() {
-	debug!("Init devicetree");
+	trace!("FDT: Initialize device tree");
 	if !get_dtb_ptr().is_null() {
 		unsafe {
 			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
@@ -54,7 +54,7 @@ pub fn init() {
 				.find_node("/")
 				.unwrap()
 				.property("compatible")
-				.expect("compatible not found in FDT")
+				.expect("DT: compatible property not found in FDT")
 				.as_str()
 				.unwrap();
 
@@ -67,7 +67,7 @@ pub fn init() {
 			{
 				PLATFORM_MODEL = Model::Fux40;
 			} else {
-				warn!("Unknown platform, guessing PLIC context 1");
+				warn!("DT: Unknown platform, guessing PLIC context 1");
 				PLATFORM_MODEL = Model::Unknown;
 			}
 			info!("Model: {model}");
@@ -80,13 +80,13 @@ pub fn init() {
 pub fn init_drivers() {
 	// TODO: Implement devicetree correctly
 	if !get_dtb_ptr().is_null() {
+		trace!("DT: Init drivers using devicetree");
 		unsafe {
-			debug!("Init drivers using devicetree");
 			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
 
 			// Init PLIC first
 			if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
-				debug!("Found interrupt controller");
+				debug!("DT: Found interrupt controller");
 				let plic_region = plic_node
 					.reg()
 					.expect("Reg property for PLIC not found in FDT")
@@ -95,7 +95,7 @@ pub fn init_drivers() {
 
 				let plic_region_start = PhysAddr::new(plic_region.starting_address as u64);
 				debug!(
-					"Init PLIC at {:p}, size: {:x}",
+					"DT: Initialize PLIC at {:p} (size: {:x})",
 					plic_region_start,
 					plic_region.size.unwrap()
 				);
@@ -118,41 +118,40 @@ pub fn init_drivers() {
 			// Init GEM
 			#[cfg(all(feature = "gem-net", not(feature = "pci")))]
 			if let Some(gem_node) = fdt.find_compatible(&["sifive,fu540-c000-gem"]) {
-				debug!("Found Ethernet controller");
-
+				debug!("DT: Found Ethernet controller");
 				let gem_region = gem_node
 					.reg()
-					.expect("reg property for GEM not found in FDT")
+					.expect("DT: reg property for GEM not found in FDT")
 					.next()
 					.unwrap();
 				let irq = gem_node
 					.interrupts()
-					.expect("interrupts property for GEM not found in FDT")
+					.expect("DT: interrupts property for GEM not found in FDT")
 					.next()
 					.unwrap();
 				let mac = gem_node
 					.property("local-mac-address")
-					.expect("local-mac-address property for GEM not found in FDT")
+					.expect("DT: local-mac-address property for GEM not found in FDT")
 					.value;
-				debug!("Local MAC address: {mac:x?}");
+				debug!("DT: Local MAC address: {mac:x?}");
 				let mut phy_addr = u32::MAX;
 
 				let phy_node = gem_node
 					.children()
 					.next()
-					.expect("GEM node has no child node (i. e. ethernet-phy)");
+					.expect("DT: GEM node has no child node (i. e. ethernet-phy)");
 				if phy_node.name.contains("ethernet-phy") {
 					phy_addr = phy_node
 						.property("reg")
-						.expect("reg property for ethernet-phy not found in FDT")
+						.expect("DT: reg property for ethernet-phy not found in FDT")
 						.as_usize()
 						.unwrap() as u32;
 				} else {
-					warn!("Expected ethernet-phy node, found something else");
+					warn!("DT: Expected ethernet-phy node, found something else");
 				}
 
 				let gem_region_start = PhysAddr::new(gem_region.starting_address as u64);
-				debug!("Init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
+				debug!("DT: init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
 				assert!(
 					gem_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
 				);
@@ -171,21 +170,21 @@ pub fn init_drivers() {
 			// Init virtio-mmio
 			#[cfg(all(any(feature = "virtio-net", feature = "console"), not(feature = "pci")))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
-				debug!("Found virtio mmio device");
+				debug!("virtio-mmio: Device found");
 				let virtio_region = virtio_node
 					.reg()
-					.expect("reg property for virtio mmio not found in FDT")
+					.expect("virtio-mmio: reg property not found in FDT")
 					.next()
 					.unwrap();
 				let irq = virtio_node
 					.interrupts()
-					.expect("interrupts property for virtio mmio not found in FDT")
+					.expect("virtio-mmio: interrupts property not found in FDT")
 					.next()
 					.unwrap();
 
 				let virtio_region_start = PhysAddr::new(virtio_region.starting_address as u64);
 
-				debug!("Init virtio_mmio at {virtio_region_start:p}, irq: {irq}");
+				debug!("virtio-mmio: Init at {virtio_region_start:p}, irq: {irq}");
 				assert!(
 					virtio_region.size.unwrap()
 						< usize::try_from(paging::HugePageSize::SIZE).unwrap()
@@ -201,16 +200,16 @@ pub fn init_drivers() {
 
 				const MMIO_MAGIC_VALUE: u32 = 0x7472_6976;
 				if magic != MMIO_MAGIC_VALUE {
-					error!("It's not a MMIO-device at {mmio:p}");
+					error!("virtio-mmio: No MMIO device present at {mmio:p}");
 				}
 
 				if version != 2 {
-					warn!("Found a legacy device, which isn't supported");
+					warn!("virtio-mmio: Found an unsupported legacy device (version: {version})");
 					return;
 				}
 
 				// We found a MMIO-device (whose 512-bit address in this structure).
-				trace!("Found a MMIO-device at {mmio:p}");
+				trace!("virtio-mmio: Device found at {mmio:p}");
 
 				// Verify the device-ID to find the network card
 				let id = mmio.as_ptr().device_id().read();
@@ -233,8 +232,7 @@ pub fn init_drivers() {
 				match id {
 					#[cfg(all(feature = "virtio-net", not(feature = "gem-net")))]
 					virtio::Id::Net => {
-						debug!("Found virtio network card at {mmio:p}");
-
+						debug!("virtio-net: Network card found at {mmio:p} (irq: {irq})");
 						if let Ok(VirtioDriver::Network(drv)) =
 							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 						{
@@ -243,8 +241,7 @@ pub fn init_drivers() {
 					}
 					#[cfg(feature = "console")]
 					virtio::Id::Console => {
-						debug!("Found virtio console at {mmio:p}");
-
+						debug!("virtio-console: Console found at {mmio:p} (irq: {irq})");
 						if let Ok(VirtioDriver::Console(drv)) =
 							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 						{
@@ -254,7 +251,7 @@ pub fn init_drivers() {
 						}
 					}
 					_ => {
-						warn!("Found unknown virtio device with ID {id:?} at {mmio:p}");
+						warn!("virtio: Found unknown device with ID {id:?} at {mmio:p}");
 					}
 				}
 			}
@@ -270,7 +267,7 @@ pub fn init_drivers() {
 	#[cfg(feature = "console")]
 	{
 		if get_console_driver().is_some() {
-			info!("Switch to virtio console");
+			info!("virtio-console: Switch to virtio console");
 			crate::console::CONSOLE
 				.lock()
 				.replace_device(IoDevice::Virtio(VirtioUART::new()));

@@ -40,8 +40,7 @@ fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
-				error!("Setup of network queue failed, which should not happen!");
-				panic!("setup of network queue failed!");
+				panic!("vsock: Setup of network queue failed, which should not happen!");
 			}
 		};
 
@@ -72,7 +71,7 @@ impl RxQueue {
 	pub fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
-		info!("num_packets {num_packets}");
+		info!("vsock: num_packets {num_packets}");
 		fill_queue(&mut vq, num_packets, self.packet_size);
 
 		self.vq = Some(vq);
@@ -112,7 +111,7 @@ impl RxQueue {
 
 				fill_queue(vq, 1, self.packet_size);
 			} else {
-				panic!("Invalid length of receive queue");
+				panic!("vsock: Invalid length of receive queue");
 			}
 		}
 	}
@@ -188,7 +187,7 @@ impl TxQueue {
 
 			result
 		} else {
-			panic!("Unable to get send queue");
+			panic!("vsock: Unable to get send queue");
 		}
 	}
 }
@@ -293,13 +292,13 @@ impl VirtioVsockDriver {
 
 		#[cfg(not(feature = "pci"))]
 		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
+			info!("vsock: Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
 
 		#[cfg(feature = "pci")]
 		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
-			info!("Configuration changes are not possible! Aborting");
+			info!("vsock: Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
 
@@ -315,7 +314,7 @@ impl VirtioVsockDriver {
 		let device_features = virtio::vsock::F::from(self.com_cfg.dev_features());
 
 		if device_features.requirements_satisfied() {
-			info!("Feature set wanted by vsock driver are in conformance with specification.");
+			info!("vsock: Feature set requested by driver is spec-conforming.");
 		} else {
 			return Err(VirtioVsockError::FeatureRequirementsNotMet(device_features));
 		}
@@ -357,7 +356,7 @@ impl VirtioVsockDriver {
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		if self.com_cfg.check_features() {
 			info!(
-				"Features have been negotiated between virtio socket device {:x} and driver.",
+				"vsock: Features negotiated between virtio socket device {:x} and driver.",
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
