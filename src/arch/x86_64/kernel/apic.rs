@@ -338,7 +338,9 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 #[cfg(feature = "acpi")]
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
-	let madt = acpi::get_madt().ok_or(())?;
+	let madt = acpi::get_madt().ok_or_else(|| {
+		warn!("Could not get MADT from ACPI");
+	})?;
 	let madt_header =
 		unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtHeader>(madt.table_start_address())) };
 
@@ -433,6 +435,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	) {
 		Ok(mpf)
 	} else {
+		warn!("Could not find APIC using the Multiprocessor Specification");
 		Err(())
 	}?;
 
@@ -499,7 +502,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr::new(io_entry.addr.into());
-					info!("Found IOAPIC at 0x{ioapic:p}");
+					info!("Found IOAPIC at {ioapic:p}");
 
 					init_ioapic_address(ioapic);
 
@@ -516,11 +519,11 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 }
 
 fn default_apic() -> PhysAddr {
-	warn!("Try to use default APIC address");
-
 	let default_address = PhysAddr::new(0xfee0_0000);
 
-	// currently, uhyve doesn't support an IO-APIC
+	info!("Using the default APIC address at {default_address:p}");
+
+	// Currently, uhyve doesn't support an IO-APIC
 	if !env::is_uhyve() {
 		init_ioapic_address(default_address);
 	}
@@ -534,13 +537,18 @@ pub fn eoi() {
 
 pub fn init() {
 	// Detect CPUs and APICs.
-	let local_apic_physical_address = detect_from_acpi()
-		.or_else(|()| detect_from_mp())
-		.unwrap_or_else(|()| default_apic());
+	let local_apic_physical_address = if env::is_uhyve() {
+		default_apic()
+	} else {
+		detect_from_acpi()
+			.or_else(|()| detect_from_mp())
+			.unwrap_or_else(|()| default_apic())
+	};
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
-	init_x2apic();
-	if !processor::supports_x2apic() {
+	if processor::supports_x2apic() {
+		init_x2apic();
+	} else {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
 		if env::is_uefi() {
@@ -732,16 +740,14 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn init_x2apic() {
-	if processor::supports_x2apic() {
-		debug!("Enable x2APIC support");
-		// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
-		// Enable it.
-		let mut msr = IA32_APIC_BASE;
-		let mut apic_base = unsafe { msr.read() };
-		apic_base |= X2APIC_ENABLE;
-		unsafe {
-			msr.write(apic_base);
-		}
+	debug!("Enable x2APIC support");
+	// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
+	// Enable it.
+	let mut msr = IA32_APIC_BASE;
+	let mut apic_base = unsafe { msr.read() };
+	apic_base |= X2APIC_ENABLE;
+	unsafe {
+		msr.write(apic_base);
 	}
 }
 
