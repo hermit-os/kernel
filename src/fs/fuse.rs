@@ -883,9 +883,10 @@ impl Write for FuseFileHandleInner {
 
 impl Drop for FuseFileHandleInner {
 	fn drop(&mut self) {
-		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
-			let (cmd, rsp_payload_len) =
-				ops::Release::create(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
+		if let Some(fuse_nid) = self.fuse_nid
+			&& let Some(fuse_fh) = self.fuse_fh
+		{
+			let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
