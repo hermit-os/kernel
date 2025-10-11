@@ -26,7 +26,8 @@ use crate::fd::socket::udp;
 #[cfg(feature = "vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	self, Endpoint, ListenEndpoint, ObjectInterface, SocketOption, get_object, insert_object,
+	self, Endpoint, ListenEndpoint, ObjectInterface, SocketOption, SocketOptionSocket,
+	SocketOptionValue, SocketOptionValueWriter, get_object, insert_object,
 };
 use crate::syscalls::block_on;
 
@@ -910,44 +911,34 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	if level == SOL_SOCKET && optname == SO_REUSEADDR {
+	let option = SocketOption::from_level_optname(level, optname);
+	let Some(option) = option else {
+		warn!(
+			"setsockopt: unsupported option level={level:x} optname={optname:x}, faking success."
+		);
+		return 0;
+	};
+
+	if option == SocketOption::SocketOption(SocketOptionSocket::ReuseAddr) {
 		return 0;
 	}
 
-	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
-		return -i32::from(Errno::Inval);
-	};
-
-	debug!("sys_setsockopt: {fd}, level {level:?}, optname {optname}");
-
-	if level == Ipproto::Tcp
-		&& optname == TCP_NODELAY
-		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
-	{
-		if optval.is_null() {
-			return -i32::from(Errno::Inval);
-		}
-
-		let value = unsafe { *optval.cast::<i32>() };
-		let obj = get_object(fd);
-		obj.map_or_else(
-			|e| -i32::from(e),
-			|v| {
-				block_on(
-					async {
-						v.read()
-							.await
-							.setsockopt(SocketOption::TcpNoDelay, value != 0)
-							.await
-					},
-					None,
-				)
-				.map_or_else(|e| -i32::from(e), |()| 0)
-			},
-		)
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	let obj = get_object(fd);
+	obj.map_or_else(
+		|e| -i32::from(e),
+		|v| {
+			block_on(
+				async {
+					v.read()
+						.await
+						.setsockopt(option, SocketOptionValue::new(optval, optlen))
+						.await
+				},
+				None,
+			)
+			.map_or_else(|e| -i32::from(e), |()| 0)
+		},
+	)
 }
 
 #[hermit_macro::system(errno)]
@@ -959,45 +950,32 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
-		return -i32::from(Errno::Inval);
+	let option = SocketOption::from_level_optname(level, optname);
+	let mut value = SocketOptionValueWriter::new(optval, optlen);
+
+	let Some(option) = option else {
+		warn!(
+			"getsockopt: unsupported option level={level:x} optname={optname:x}, faking success."
+		);
+		value.nullify_untouched();
+		return 0;
 	};
 
 	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname}");
+	let obj = get_object(fd);
+	let result = obj.map_or_else(
+		|e| -i32::from(e),
+		|v| {
+			block_on(
+				async { v.read().await.getsockopt(option, &mut value).await },
+				None,
+			)
+			.map_or_else(|e| -i32::from(e), |()| 0)
+		},
+	);
 
-	if level == Ipproto::Tcp && optname == TCP_NODELAY {
-		if optval.is_null() || optlen.is_null() {
-			return -i32::from(Errno::Inval);
-		}
-
-		let optval = unsafe { &mut *optval.cast::<i32>() };
-		let optlen = unsafe { &mut *optlen };
-		let obj = get_object(fd);
-		obj.map_or_else(
-			|e| -i32::from(e),
-			|v| {
-				block_on(
-					async { v.read().await.getsockopt(SocketOption::TcpNoDelay).await },
-					None,
-				)
-				.map_or_else(
-					|e| -i32::from(e),
-					|value| {
-						if value {
-							*optval = 1;
-						} else {
-							*optval = 0;
-						}
-						*optlen = core::mem::size_of::<i32>().try_into().unwrap();
-
-						0
-					},
-				)
-			},
-		)
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	value.nullify_untouched();
+	result
 }
 
 #[hermit_macro::system(errno)]
