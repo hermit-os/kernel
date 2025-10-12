@@ -466,7 +466,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		(virtual_address | (u64::from(mp_float.mp_config) & (BasePageSize::SIZE - 1))) as usize;
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
-		warn!("Invalid MP config table");
+		warn!("MP config table invalid!");
 		let range =
 			PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize)
 				.unwrap();
@@ -477,7 +477,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	}
 
 	if mp_config.entry_count == 0 {
-		warn!("No MP table entries! Guess IO-APIC!");
+		warn!("No MP table entries, guessing IOAPIC...");
 		let default_address = PhysAddr::new(0xfec0_0000);
 
 		init_ioapic_address(default_address);
@@ -499,7 +499,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr::new(io_entry.addr.into());
-					info!("Found IOAPIC at 0x{ioapic:p}");
+					info!("IOAPIC found at {ioapic:p}");
 
 					init_ioapic_address(ioapic);
 
@@ -516,9 +516,9 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 }
 
 fn default_apic() -> PhysAddr {
-	warn!("Try to use default APIC address");
-
 	let default_address = PhysAddr::new(0xfee0_0000);
+
+	warn!("Using default APIC address: {default_address:p}");
 
 	// currently, uhyve doesn't support an IO-APIC
 	if !env::is_uhyve() {
