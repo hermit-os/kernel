@@ -276,4 +276,17 @@ pub(crate) fn init() {
 			)
 			.expect("Mount failed. Duplicate mount_point?");
 	}
+
+	#[cfg(feature = "uhyve-tmp")]
+	{
+		info!("Mounting /tmp as uhyve filesystem");
+		fs::FILESYSTEM
+			.get()
+			.unwrap()
+			.mount(
+				"/tmp",
+				Box::new(UhyveDirectory::new(Some("/tmp".to_string()))),
+			)
+			.unwrap();
+	}
 }
