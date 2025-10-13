@@ -596,10 +596,6 @@ fn test_poll(guest_ip: IpAddr) -> Result<()> {
 	let mut stream = TcpStream::connect(socket_addr)?;
 	stream.write_all(buf.as_bytes())?;
 
-	let mut buf = vec![];
-	let received = stream.read_to_end(&mut buf)?;
-	eprintln!("[CI] receive: {}", from_utf8(&buf[..received])?);
-
 	Ok(())
 }
 
