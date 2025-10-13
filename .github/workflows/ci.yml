@@ -50,7 +50,7 @@ jobs:
         run: gh release download --repo hermit-os/loader --pattern 'hermit-loader-${{ matrix.arch }}*'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
       - run: netstat -lnp
-      - run: fuser 9975/udp
+      - run: fuser 9975/tcp
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
