@@ -11,7 +11,6 @@ use core::{mem, ptr, slice};
 use align_address::Align;
 use dirent_display::Dirent64Display;
 
-pub use self::condvar::*;
 pub use self::entropy::*;
 pub use self::futex::*;
 pub use self::processor::*;
@@ -32,7 +31,6 @@ use crate::fs::{self, FileAttr, SeekWhence};
 use crate::mm::ALLOCATOR;
 use crate::{env, init_buf};
 
-mod condvar;
 mod entropy;
 mod futex;
 #[cfg(feature = "mman")]
