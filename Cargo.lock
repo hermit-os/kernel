@@ -1358,9 +1358,9 @@ dependencies = [
 
 [[package]]
 name = "ovmf-prebuilt"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190088f8c186fed557e7ac7ea795cb72f281a6600ccc743898db7871ad8f68b8"
+checksum = "4962ad113b529120175fc669c075fa27762f91296940a94adce269b49f6fcc3b"
 dependencies = [
  "log",
  "lzma-rs",
