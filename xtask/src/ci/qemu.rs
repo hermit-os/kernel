@@ -159,6 +159,7 @@ impl Qemu {
 				| "miotcp" | "mioudp"
 				| "poll" | "stdin"
 		) {
+			thread::sleep(Duration::from_secs(5));
 			qemu.0.kill()?;
 		}
 
