@@ -41,6 +41,7 @@
 //! ```
 
 pub(crate) mod allocator;
+pub(crate) mod bump_allocator;
 pub(crate) mod device_alloc;
 pub(crate) mod physicalmem;
 pub(crate) mod virtualmem;
