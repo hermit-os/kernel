@@ -284,7 +284,7 @@ union Dtv {
 #[cfg(not(feature = "common-os"))]
 #[repr(C)]
 pub struct TaskTLS {
-	dtv: mem::MaybeUninit<Box<[Dtv; 2]>>,
+	dtv: Box<[Dtv; 2]>,
 	_private: usize,
 	block: [u8],
 }
@@ -314,7 +314,7 @@ impl TaskTLS {
 			let raw = ptr::slice_from_raw_parts_mut(data, block_len) as *mut TaskTLS;
 
 			let addr = (*raw).block.as_ptr().add(off).cast::<()>();
-			(*raw).dtv.as_mut_ptr().write(Box::new([
+			(&raw mut (*raw).dtv).write(Box::new([
 				Dtv { counter: 1 },
 				Dtv {
 					pointer: DtvPointer {
@@ -333,7 +333,7 @@ impl TaskTLS {
 	}
 
 	fn thread_ptr(&self) -> *const Box<[Dtv; 2]> {
-		self.dtv.as_ptr()
+		&raw const self.dtv
 	}
 }
 
