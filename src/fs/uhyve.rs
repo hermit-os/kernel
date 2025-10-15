@@ -234,10 +234,9 @@ pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 	if is_uhyve() {
 		let mount_str = env::fdt().and_then(|fdt| {
-			fdt.find_node("/uhyve,mounts").and_then(|node| {
-				node.property("mounts")
-					.and_then(|property| str::from_utf8(property.value).ok())
-			})
+			fdt.find_node("/uhyve,mounts")
+				.and_then(|node| node.property("mounts"))
+				.and_then(|property| property.as_str())
 		});
 		if let Some(mount_str) = mount_str {
 			assert_ne!(mount_str.len(), 0, "Invalid /uhyve,mounts node in FDT");
