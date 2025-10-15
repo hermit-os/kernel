@@ -250,7 +250,7 @@ pub(crate) fn init() {
 					debug!(
 						"Mounting of {mount_point} failed with {errno:?}. Creating missing parent folders"
 					);
-					let parent_path = &mount_point[0..mount_point.rfind('/').unwrap()];
+					let (parent, _file_name) = path.rsplit_once('/').unwrap();
 					create_dir_recursive(parent_path, AccessPermission::S_IRWXU).unwrap();
 
 					fs::FILESYSTEM
