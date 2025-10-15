@@ -409,7 +409,7 @@ fn create_dir_recursive(path: &str, mode: AccessPermission) -> io::Result<()> {
 		if errno != Errno::Badf {
 			return Err(errno);
 		}
-		let parent_path = &path[0..path.rfind('/').unwrap()];
+		let (parent, _file_name) = path.rsplit_once('/').unwrap();
 		create_dir_recursive(parent_path, mode)?;
 		create_dir(path, mode)
 	})
