@@ -1,12 +1,6 @@
 //! Architecture dependent interface to initialize a task
 
-#[cfg(not(feature = "common-os"))]
-use alloc::alloc::{Layout, alloc_zeroed};
-#[cfg(not(feature = "common-os"))]
-use alloc::boxed::Box;
 use core::arch::naked_asm;
-#[cfg(not(feature = "common-os"))]
-use core::slice;
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
@@ -17,8 +11,6 @@ use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-#[cfg(not(feature = "common-os"))]
-use crate::env;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 use crate::mm::virtualmem::KERNEL_FREE_LIST;
 #[cfg(target_os = "none")]
@@ -266,77 +258,6 @@ impl Drop for TaskStacks {
  * of the TLS implementations.
  */
 
-#[cfg(not(feature = "common-os"))]
-#[derive(Copy, Clone)]
-#[repr(C)]
-struct DtvPointer {
-	val: *const (),
-	to_free: *const (),
-}
-
-#[cfg(not(feature = "common-os"))]
-#[repr(C)]
-union Dtv {
-	counter: usize,
-	pointer: DtvPointer,
-}
-
-#[cfg(not(feature = "common-os"))]
-#[repr(C)]
-pub struct TaskTLS {
-	dtv: Box<[Dtv; 2]>,
-	_private: usize,
-	block: [u8],
-}
-
-#[cfg(not(feature = "common-os"))]
-impl TaskTLS {
-	fn from_environment() -> Option<Box<Self>> {
-		let tls_info = env::boot_info().load_info.tls_info?;
-		assert_ne!(tls_info.memsz, 0);
-
-		// Get TLS initialization image
-		let tls_init_image = {
-			let tls_init_data = ptr::with_exposed_provenance(tls_info.start.try_into().unwrap());
-			let tls_init_len = tls_info.filesz.try_into().unwrap();
-
-			// SAFETY: We will have to trust the environment here.
-			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
-		};
-
-		let off = core::cmp::max(16, usize::try_from(tls_info.align).unwrap()) - 16;
-		let block_len = usize::try_from(tls_info.memsz).unwrap() + off;
-		let len = mem::size_of::<Box<[Dtv; 2]>>() + mem::size_of::<usize>() + block_len;
-
-		let layout = Layout::from_size_align(len, 16).unwrap();
-		let mut this = unsafe {
-			let data = alloc_zeroed(layout);
-			let raw = ptr::slice_from_raw_parts_mut(data, block_len) as *mut TaskTLS;
-
-			let addr = (*raw).block.as_ptr().add(off).cast::<()>();
-			(&raw mut (*raw).dtv).write(Box::new([
-				Dtv { counter: 1 },
-				Dtv {
-					pointer: DtvPointer {
-						val: addr,
-						to_free: ptr::null(),
-					},
-				},
-			]));
-
-			Box::from_raw(raw)
-		};
-
-		this.block[off..off + tls_init_image.len()].copy_from_slice(tls_init_image);
-
-		Some(this)
-	}
-
-	fn thread_ptr(&self) -> *const Box<[Dtv; 2]> {
-		&raw const self.dtv
-	}
-}
-
 #[cfg(not(target_os = "none"))]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	unimplemented!()
@@ -373,7 +294,9 @@ impl TaskFrame for Task {
 		// Check if TLS is allocated already and if the task uses thread-local storage.
 		#[cfg(not(feature = "common-os"))]
 		if self.tls.is_none() {
-			self.tls = TaskTLS::from_environment();
+			use crate::scheduler::task::tls::Tls;
+
+			self.tls = Tls::from_env();
 		}
 
 		unsafe {

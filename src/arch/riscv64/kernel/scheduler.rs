@@ -1,9 +1,3 @@
-#[cfg(not(feature = "common-os"))]
-use alloc::alloc::{Layout, alloc, dealloc};
-#[cfg(not(feature = "common-os"))]
-use alloc::boxed::Box;
-#[cfg(not(feature = "common-os"))]
-use core::convert::TryInto;
 use core::{mem, ptr};
 
 use align_address::Align;
@@ -13,8 +7,6 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-#[cfg(not(feature = "common-os"))]
-use crate::env;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
 use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::task::{Task, TaskFrame};
@@ -277,84 +269,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-#[cfg(not(feature = "common-os"))]
-pub struct TaskTLS {
-	address: VirtAddr,
-	tp: VirtAddr,
-	layout: Layout,
-}
-
-#[cfg(not(feature = "common-os"))]
-impl TaskTLS {
-	pub fn from_environment() -> Option<Box<Self>> {
-		let tls_info = env::boot_info().load_info.tls_info?;
-		assert_ne!(tls_info.memsz, 0);
-
-		let tls_size = tls_info.memsz as usize;
-		// determine the size of tdata (tls without tbss)
-		let tdata_size = tls_info.filesz as usize;
-		let tls_start = VirtAddr::new(tls_info.start);
-		// Yes, it does, so we have to allocate TLS memory.
-		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
-		let tls_allocation_size = tls_size.align_up(32usize); // + mem::size_of::<usize>();
-		// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
-		let memory_size = tls_allocation_size.align_up(128usize);
-		let layout =
-			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
-		let ptr = VirtAddr::new(unsafe { alloc(layout) as u64 });
-
-		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = ptr; // + tls_size.align_up(32);
-
-		unsafe {
-			// Copy over TLS variables with their initial values.
-			ptr::copy_nonoverlapping(tls_start.as_ptr::<u8>(), ptr.as_mut_ptr::<u8>(), tdata_size);
-
-			ptr::write_bytes(
-				ptr.as_mut_ptr::<u8>()
-					.offset(tdata_size.try_into().unwrap()),
-				0,
-				tls_size.align_up(32usize) - tdata_size,
-			);
-
-			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
-			// This allows TLS variable values to be accessed by "mov rax, fs:0" and a later "lea rdx, [rax+VARIABLE_OFFSET]".
-			// See "ELF Handling For Thread-Local Storage", version 0.20 by Ulrich Drepper, page 12 for details.
-			//
-			// fs:0 is where tls_pointer points to and we have reserved space for a usize value above.
-			//*(tls_pointer.as_mut_ptr::<u64>()) = tls_pointer.as_u64();
-		}
-
-		debug!(
-			"Set up TLS at {tls_pointer:#x}, tdata_size {tdata_size:#x}, tls_size {tls_size:#x}"
-		);
-
-		Some(Box::new(Self {
-			address: ptr,
-			tp: tls_pointer,
-			layout,
-		}))
-	}
-
-	pub fn tp(&self) -> VirtAddr {
-		self.tp
-	}
-}
-
-#[cfg(not(feature = "common-os"))]
-impl Drop for TaskTLS {
-	fn drop(&mut self) {
-		debug!(
-			"Deallocate TLS at 0x{:x} (layout {:?})",
-			self.address, self.layout,
-		);
-
-		unsafe {
-			dealloc(self.address.as_mut_ptr::<u8>(), self.layout);
-		}
-	}
-}
-
 #[unsafe(no_mangle)]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	use crate::scheduler::PerCoreSchedulerExt;
@@ -401,7 +315,9 @@ impl TaskFrame for Task {
 		// check is TLS is already allocated
 		#[cfg(not(feature = "common-os"))]
 		if self.tls.is_none() {
-			self.tls = TaskTLS::from_environment();
+			use crate::scheduler::task::tls::Tls;
+
+			self.tls = Tls::from_env();
 		}
 
 		unsafe {
@@ -416,7 +332,7 @@ impl TaskFrame for Task {
 			let state = stack.as_mut_ptr::<State>();
 			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
-				(*state).tp = tls.tp().as_usize();
+				(*state).tp = tls.thread_ptr() as usize;
 			}
 			(*state).ra = task_start as usize;
 			(*state).a0 = func as usize;
