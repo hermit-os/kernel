@@ -1,1 +1,4 @@
 /target
+
+# Our CI script wants this in our project directory, but this is a compiled binary file
+hermit-loader*
