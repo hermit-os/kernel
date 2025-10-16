@@ -1,4 +1,4 @@
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, btree_map};
 use alloc::vec::Vec;
 use core::future;
 use core::task::Poll;
@@ -170,10 +170,15 @@ impl VsockMap {
 	}
 
 	pub fn bind(&mut self, port: u32) -> io::Result<()> {
-		self.port_map
-			.try_insert(port, RawSocket::new(VsockState::Listen))
-			.map_err(|_| Errno::Addrinuse)?;
-		Ok(())
+		let entry = self.port_map.entry(port);
+
+		match entry {
+			btree_map::Entry::Vacant(vacant_entry) => {
+				vacant_entry.insert(RawSocket::new(VsockState::Listen));
+				Ok(())
+			}
+			btree_map::Entry::Occupied(_occupied_entry) => Err(Errno::Addrinuse),
+		}
 	}
 
 	pub fn connect(&mut self, port: u32, cid: u32) -> io::Result<u32> {
@@ -182,7 +187,8 @@ impl VsockMap {
 			raw.remote_cid = cid;
 			raw.remote_port = port;
 
-			if self.port_map.try_insert(i, raw).is_ok() {
+			if let btree_map::Entry::Vacant(vacant_entry) = self.port_map.entry(i) {
+				vacant_entry.insert(raw);
 				return Ok(i);
 			}
 		}
