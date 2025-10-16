@@ -93,17 +93,14 @@ fn detect_from_fdt() -> Result<(), ()> {
 			let size = m.size.unwrap() as u64;
 			let end_address = start_address + size;
 
-			if end_address <= super::kernel_end_address().as_u64() {
+			// For historical reasons, any memory before the kernel is not used.
+			// This restriction may no longer be necessary.
+			let start_address = VirtAddr::new(start_address).max(super::kernel_end_address());
+			if start_address.as_u64() >= end_address {
 				continue;
 			}
 
 			found_ram = true;
-
-			let start_address = if start_address <= super::kernel_start_address().as_u64() {
-				super::kernel_end_address()
-			} else {
-				VirtAddr::new(start_address)
-			};
 
 			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 			unsafe {
