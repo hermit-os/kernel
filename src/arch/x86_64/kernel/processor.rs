@@ -1089,6 +1089,8 @@ fn triple_fault() -> ! {
 }
 
 fn qemu_exit(success: bool) {
+	// Write exit code into isa-debug-exit port.
+	// For a value `e` written into the port, QEMU will exit with `(e << 1) | 1`.
 	let code = if success { 3 >> 1 } else { 0 };
 	unsafe {
 		Port::<u32>::new(0xf4).write(code);
