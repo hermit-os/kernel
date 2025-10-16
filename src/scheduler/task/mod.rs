@@ -468,43 +468,19 @@ impl Task {
 			let objmap = OBJECT_MAP.get().unwrap().clone();
 			let mut guard = objmap.write();
 			if env::is_uhyve() {
-				guard
-					.try_insert(
-						STDIN_FILENO,
-						Arc::new(async_lock::RwLock::new(UhyveStdin::new())),
-					)
-					.expect("cannot insert stdin");
-				guard
-					.try_insert(
-						STDOUT_FILENO,
-						Arc::new(async_lock::RwLock::new(UhyveStdout::new())),
-					)
-					.expect("cannot insert stdout");
-				guard
-					.try_insert(
-						STDERR_FILENO,
-						Arc::new(async_lock::RwLock::new(UhyveStderr::new())),
-					)
-					.expect("cannot insert stderr");
+				let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new()));
+				let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new()));
+				let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new()));
+				guard.insert(STDIN_FILENO, stdin);
+				guard.insert(STDOUT_FILENO, stdout);
+				guard.insert(STDERR_FILENO, stderr);
 			} else {
-				guard
-					.try_insert(
-						STDIN_FILENO,
-						Arc::new(async_lock::RwLock::new(GenericStdin::new())),
-					)
-					.expect("cannot insert stdin");
-				guard
-					.try_insert(
-						STDOUT_FILENO,
-						Arc::new(async_lock::RwLock::new(GenericStdout::new())),
-					)
-					.expect("cannot insert stdout");
-				guard
-					.try_insert(
-						STDERR_FILENO,
-						Arc::new(async_lock::RwLock::new(GenericStderr::new())),
-					)
-					.expect("cannot insert stderr");
+				let stdin = Arc::new(async_lock::RwLock::new(GenericStdin::new()));
+				let stdout = Arc::new(async_lock::RwLock::new(GenericStdout::new()));
+				let stderr = Arc::new(async_lock::RwLock::new(GenericStderr::new()));
+				guard.insert(STDIN_FILENO, stdin);
+				guard.insert(STDOUT_FILENO, stdout);
+				guard.insert(STDERR_FILENO, stderr);
 			}
 		}
 

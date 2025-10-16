@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use ahash::RandomState;
 use crossbeam_utils::Backoff;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
@@ -564,10 +564,12 @@ impl PerCoreScheduler {
 			};
 
 			let fd = new_fd()?;
-			if object_map.try_insert(fd, obj).is_err() {
-				Err(Errno::Mfile)
-			} else {
-				Ok(fd)
+			match object_map.entry(fd) {
+				hash_map::Entry::Occupied(_occupied_entry) => Err(Errno::Mfile),
+				hash_map::Entry::Vacant(vacant_entry) => {
+					vacant_entry.insert(obj);
+					Ok(fd)
+				}
 			}
 		})
 	}
@@ -583,10 +585,12 @@ impl PerCoreScheduler {
 
 			let obj = object_map.get(&fd1).cloned().ok_or(Errno::Badf)?;
 
-			if object_map.try_insert(fd2, obj).is_err() {
-				Err(Errno::Mfile)
-			} else {
-				Ok(fd2)
+			match object_map.entry(fd2) {
+				hash_map::Entry::Occupied(_occupied_entry) => Err(Errno::Mfile),
+				hash_map::Entry::Vacant(vacant_entry) => {
+					vacant_entry.insert(obj);
+					Ok(fd2)
+				}
 			}
 		})
 	}
