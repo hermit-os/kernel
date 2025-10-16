@@ -4,6 +4,7 @@ use align_address::Align;
 use free_list::{FreeList, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
+use smallvec::SmallVec;
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
@@ -30,6 +31,8 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 		}
 	}
 
+	// FIXME: rounding outwards adds physical memory that is not actually available.
+	// This seems wrong.
 	let start = frame_range
 		.start()
 		.align_down(IdentityPageSize::SIZE.try_into().unwrap());
@@ -68,43 +71,61 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
 
-	let all_regions = fdt
+	let mut reserved_regions: SmallVec<[PageRange; 16]> = fdt
+		.memory_reservations()
+		.map(|reserved| {
+			let start = reserved.address() as usize;
+			let end = start + reserved.size();
+			PageRange::new(start, end).unwrap()
+		})
+		.collect();
+
+	/// FIXME: things break if we touch memory before the kernel.
+	/// Possibly because the fdt resides there, see below.
+	reserved_regions.push(PageRange::new(0, super::kernel_end_address().as_usize()).unwrap());
+
+	// FIXME: We should also reserve the space occupied by the fdt itself.
+	// This region is not required to be listed as a reserved region, but must not be overwritten.
+	// However, the fdt crate does not expose this range currently.
+
+	reserved_regions.sort_unstable_by_key(|r| r.start());
+
+	let all_memories = fdt
 		.find_all_nodes("/memory")
 		.map(|m| m.reg().unwrap().next().unwrap());
 
 	let mut found_ram = false;
-
-	if env::is_uefi() {
-		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
-		found_ram = true;
-
-		let range = PageRange::from_start_len(
-			biggest_region.starting_address.addr(),
-			biggest_region.size.unwrap(),
-		)
-		.unwrap();
-
-		unsafe {
-			init_frame_range(range);
-		}
-	} else {
-		for m in all_regions {
-			let start_address = m.starting_address as u64;
-			let size = m.size.unwrap() as u64;
-			let end_address = start_address + size;
-
-			// For historical reasons, any memory before the kernel is not used.
-			// This restriction may no longer be necessary.
-			let start_address = VirtAddr::new(start_address).max(super::kernel_end_address());
-			if start_address.as_u64() >= end_address {
-				continue;
-			}
-
+	let mut init_range = |start: usize, end: usize| {
+		let start = start.align_up(free_list::PAGE_SIZE);
+		let end = end.align_down(free_list::PAGE_SIZE);
+		if start < end {
 			found_ram = true;
-
-			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 			unsafe {
-				init_frame_range(range);
+				dbg!(start, end);
+				init_frame_range(PageRange::new(start, end).unwrap());
+			}
+		}
+	};
+	for memory in all_memories {
+		let mut start = memory.starting_address as usize;
+		let end = start + memory.size.unwrap();
+		let mut reservations = reserved_regions.iter();
+		while start < end {
+			match reservations.next() {
+				Some(reserved) => {
+					if start < reserved.start() {
+						// reservations are ordered by start,
+						// so no reservation further down the iterator will overlap this.
+						dbg!(start, end, reserved);
+						init_range(start, end.min(reserved.start()));
+					}
+					start = start.max(reserved.end());
+				}
+				None => {
+					dbg!(start, end, 0);
+					init_range(start, end);
+					break;
+				}
 			}
 		}
 	}
