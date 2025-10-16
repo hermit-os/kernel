@@ -19,8 +19,6 @@ use crate::arch::core_local::*;
 use crate::arch::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
 use crate::arch::scheduler::TaskTLS;
-use crate::errno::Errno;
-use crate::executor::poll_on;
 use crate::fd::stdio::*;
 use crate::fd::{FileDescriptor, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
@@ -467,50 +465,46 @@ impl Task {
 				))))
 				.unwrap();
 			let objmap = OBJECT_MAP.get().unwrap().clone();
-			let _ = poll_on(async {
-				let mut guard = objmap.write();
-				if env::is_uhyve() {
-					guard
-						.try_insert(
-							STDIN_FILENO,
-							Arc::new(async_lock::RwLock::new(UhyveStdin::new())),
-						)
-						.map_err(|_| Errno::Io)?;
-					guard
-						.try_insert(
-							STDOUT_FILENO,
-							Arc::new(async_lock::RwLock::new(UhyveStdout::new())),
-						)
-						.map_err(|_| Errno::Io)?;
-					guard
-						.try_insert(
-							STDERR_FILENO,
-							Arc::new(async_lock::RwLock::new(UhyveStderr::new())),
-						)
-						.map_err(|_| Errno::Io)?;
-				} else {
-					guard
-						.try_insert(
-							STDIN_FILENO,
-							Arc::new(async_lock::RwLock::new(GenericStdin::new())),
-						)
-						.map_err(|_| Errno::Io)?;
-					guard
-						.try_insert(
-							STDOUT_FILENO,
-							Arc::new(async_lock::RwLock::new(GenericStdout::new())),
-						)
-						.map_err(|_| Errno::Io)?;
-					guard
-						.try_insert(
-							STDERR_FILENO,
-							Arc::new(async_lock::RwLock::new(GenericStderr::new())),
-						)
-						.map_err(|_| Errno::Io)?;
-				}
-
-				Ok(())
-			});
+			let mut guard = objmap.write();
+			if env::is_uhyve() {
+				guard
+					.try_insert(
+						STDIN_FILENO,
+						Arc::new(async_lock::RwLock::new(UhyveStdin::new())),
+					)
+					.expect("cannot insert stdin");
+				guard
+					.try_insert(
+						STDOUT_FILENO,
+						Arc::new(async_lock::RwLock::new(UhyveStdout::new())),
+					)
+					.expect("cannot insert stdout");
+				guard
+					.try_insert(
+						STDERR_FILENO,
+						Arc::new(async_lock::RwLock::new(UhyveStderr::new())),
+					)
+					.expect("cannot insert stderr");
+			} else {
+				guard
+					.try_insert(
+						STDIN_FILENO,
+						Arc::new(async_lock::RwLock::new(GenericStdin::new())),
+					)
+					.expect("cannot insert stdin");
+				guard
+					.try_insert(
+						STDOUT_FILENO,
+						Arc::new(async_lock::RwLock::new(GenericStdout::new())),
+					)
+					.expect("cannot insert stdout");
+				guard
+					.try_insert(
+						STDERR_FILENO,
+						Arc::new(async_lock::RwLock::new(GenericStderr::new())),
+					)
+					.expect("cannot insert stderr");
+			}
 		}
 
 		Task {
