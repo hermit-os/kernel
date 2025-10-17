@@ -12,7 +12,9 @@ use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags}
 use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
 
-pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+const FREE_LIST_INLINE_SIZE: usize = 16;
+
+pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<FREE_LIST_INLINE_SIZE>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -71,7 +73,7 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
 
-	let mut reserved_regions: SmallVec<[PageRange; 16]> = fdt
+	let mut reserved_regions: SmallVec<[PageRange; FREE_LIST_INLINE_SIZE]> = fdt
 		.memory_reservations()
 		.map(|reserved| {
 			let start = reserved.address() as usize;
