@@ -80,13 +80,11 @@ fn detect_from_fdt() -> Result<(), ()> {
 		})
 		.collect();
 
-	/// FIXME: things break if we touch memory before the kernel.
-	/// Possibly because the fdt resides there, see below.
-	reserved_regions.push(PageRange::new(0, super::kernel_end_address().as_usize()).unwrap());
-
-	// FIXME: We should also reserve the space occupied by the fdt itself.
+	// FIXME: things break if we touch memory below the kernel.
+	// In addition to the kernel range, we should also reserve the space occupied by the fdt itself.
 	// This region is not required to be listed as a reserved region, but must not be overwritten.
 	// However, the fdt crate does not expose this range currently.
+	reserved_regions.push(PageRange::new(0, super::kernel_end_address().as_usize()).unwrap());
 
 	reserved_regions.sort_unstable_by_key(|r| r.start());
 
@@ -101,7 +99,6 @@ fn detect_from_fdt() -> Result<(), ()> {
 		if start < end {
 			found_ram = true;
 			unsafe {
-				dbg!(start, end);
 				init_frame_range(PageRange::new(start, end).unwrap());
 			}
 		}
@@ -116,13 +113,11 @@ fn detect_from_fdt() -> Result<(), ()> {
 					if start < reserved.start() {
 						// reservations are ordered by start,
 						// so no reservation further down the iterator will overlap this.
-						dbg!(start, end, reserved);
 						init_range(start, end.min(reserved.start()));
 					}
 					start = start.max(reserved.end());
 				}
 				None => {
-					dbg!(start, end, 0);
 					init_range(start, end);
 					break;
 				}
