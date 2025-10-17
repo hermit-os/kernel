@@ -63,13 +63,13 @@ pub fn init() {
 				let addr = PhysAddr::from(reg.starting_address.addr());
 				let size = u64::try_from(reg.size.unwrap()).unwrap();
 
-				debug!("Found RTC at {addr:p} (size {size:#X})");
+				debug!("RTC: Found at {addr:p} (size {size:#X})");
 
 				let layout = PageLayout::from_size(size.try_into().unwrap()).unwrap();
 				let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 				let pl031_address = VirtAddr::from(page_range.start());
 				PL031_ADDRESS.set(pl031_address).unwrap();
-				debug!("Mapping RTC to virtual address {pl031_address:p}");
+				debug!("RTC: Mapping to virtual address {pl031_address:p}");
 
 				let mut flags = PageTableEntryFlags::empty();
 				flags.device().writable().execute_disable();

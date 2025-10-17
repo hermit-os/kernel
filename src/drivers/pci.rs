@@ -519,7 +519,7 @@ pub(crate) fn init() {
 				#[cfg(feature = "console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					register_driver(PciDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
-					info!("Switch to virtio console");
+					info!("virtio-console: Switch to console");
 					crate::console::CONSOLE
 						.lock()
 						.replace_device(IoDevice::Virtio(VirtioUART::new()));

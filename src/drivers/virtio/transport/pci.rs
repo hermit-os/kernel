@@ -43,13 +43,13 @@ use crate::drivers::vsock::VirtioVsockDriver;
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	if cap.cap.cfg_type != CapCfgType::Device {
-		error!("Capability of device config has wrong id. Mapping not possible...");
+		error!("virtio: Capability of device config has wrong id. Mapping not possible...");
 		return None;
 	};
 
 	if cap.bar_len() < cap.len() + cap.offset() {
 		error!(
-			"Device config of device {:x}, does not fit into memory specified by bar!",
+			"virtio: Device config of device {:x}, does not fit into memory specified by bar!",
 			cap.dev_id(),
 		);
 		return None;
@@ -58,7 +58,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
 	if cap.len() < u64::try_from(mem::size_of::<T>()).unwrap() {
 		error!(
-			"Device specific config from device {:x}, does not represent actual structure specified by the standard!",
+			"virtio: Device specific config from device {:x}, does not represent structure specified by the standard!",
 			cap.dev_id()
 		);
 		return None;
@@ -117,7 +117,7 @@ impl PciCap {
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
 		if self.bar.length < self.len() + self.offset() {
 			error!(
-				"Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!",
+				"virtio: Common config of the capability with ID {} of device {:x} does not fit into memory specified by bar {:x}!",
 				self.cap.id, self.dev_id, self.bar.index
 			);
 			return None;
@@ -126,7 +126,7 @@ impl PciCap {
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
 		if self.len() < u64::try_from(mem::size_of::<CommonCfg>()).unwrap() {
 			error!(
-				"Common config of with id {}, does not represent actual structure specified by the standard!",
+				"virtio: Common config of with ID {}, does not represent actual structure specified by the standard!",
 				self.cap.id
 			);
 			return None;
@@ -147,7 +147,7 @@ impl PciCap {
 	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
 		if self.bar.length < self.len() + self.offset() {
 			error!(
-				"ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
+				"virtio: ISR status config with ID {} of device {:x}, does not fit into memory specified by bar {:x}!",
 				self.cap.id, self.dev_id, self.bar.index
 			);
 			return None;
@@ -443,7 +443,7 @@ impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < cap.len() + cap.offset() {
 			error!(
-				"Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
+				"virtio: Notification config with ID {} of device {:x}, does not fit into memory specified by bar {:x}!",
 				cap.cap.id, cap.dev_id, cap.bar.index
 			);
 			return None;
@@ -582,7 +582,7 @@ impl ShMemCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < cap.len() + cap.offset() {
 			error!(
-				"Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
+				"virtio: Shared memory config of with ID {} of device {:x}, does not fit into memory specified by bar {:x}!",
 				cap.cap.id, cap.dev_id, cap.bar.index
 			);
 			return None;
@@ -703,7 +703,7 @@ fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciErro
 		.collect::<Vec<_>>();
 
 	if capabilities.is_empty() {
-		error!("No virtio capability found for device {device_id:x}");
+		error!("virtio: No virtio capability found for device {device_id:x}");
 		Err(PciError::NoVirtioCaps(device_id))
 	} else {
 		Ok(capabilities)
@@ -715,7 +715,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 
 	// In case caplist pointer is not used, abort as it is essential
 	if !device.status().has_capability_list() {
-		error!("Found virtio device without capability list. Aborting!");
+		error!("virtio: Found virtio device without capability list. Aborting!");
 		return Err(VirtioError::FromPci(PciError::NoCapPtr(device_id)));
 	}
 
@@ -738,7 +738,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					match pci_cap.map_common_cfg() {
 						Some(cap) => com_cfg = Some(ComCfg::new(cap, pci_cap.cap.id)),
 						None => error!(
-							"Common config capability with id {}, of device {:x}, could not be mapped!",
+							"virtio: Common config capability with ID {}, of device {:x}, could not be mapped!",
 							pci_cap.cap.id, device_id
 						),
 					}
@@ -749,7 +749,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					match NotifCfg::new(&pci_cap) {
 						Some(notif) => notif_cfg = Some(notif),
 						None => error!(
-							"Notification config capability with id {}, of device {device_id:x} could not be used!",
+							"virtio: Notification config capability with ID {}, of device {device_id:x} could not be used!",
 							pci_cap.cap.id
 						),
 					}
@@ -760,7 +760,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					match pci_cap.map_isr_status() {
 						Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat, pci_cap.cap.id)),
 						None => error!(
-							"ISR status config capability with id {}, of device {device_id:x} could not be used!",
+							"virtio: ISR status config capability with ID {}, of device {device_id:x} could not be used!",
 							pci_cap.cap.id
 						),
 					}
@@ -769,7 +769,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
 				Some(sh_mem) => sh_mem_cfg_list.push(sh_mem),
 				None => error!(
-					"Shared Memory config capability with id {}, of device {device_id:x} could not be used!",
+					"virtio: Shared Memory config capability with ID {}, of device {device_id:x} could not be used!",
 					pci_cap.cap.id,
 				),
 			},
@@ -799,9 +799,7 @@ pub(crate) fn init_device(
 	let device_id = device.device_id();
 
 	if device_id < 0x1040 {
-		warn!(
-			"Legacy/transitional Virtio device, with id: {device_id:#x} is NOT supported, skipping!"
-		);
+		warn!("virtio: Legacy virtio device with ID: {device_id:#x} is not supported, skipping!");
 
 		// Return Driver error inidacting device is not supported
 		return Err(DriverError::InitVirtioDevFail(
@@ -819,17 +817,17 @@ pub(crate) fn init_device(
 		))]
 		virtio::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
-				info!("Virtio network driver initialized.");
+				info!("virtio: virtio-net driver initialized.");
 
 				let irq = device.get_irq().unwrap();
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
+				info!("virtio: virtio-net interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}
 			Err(virtio_error) => {
 				error!(
-					"Virtio networkd driver could not be initialized with device: {device_id:x}"
+					"virtio: virtio-net driver could not be initialized with device: {device_id:x}"
 				);
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
@@ -837,32 +835,36 @@ pub(crate) fn init_device(
 		#[cfg(feature = "console")]
 		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
 			Ok(virt_console_drv) => {
-				info!("Virtio console driver initialized.");
+				info!("virtio: virtio-console driver initialized.");
 
 				let irq = device.get_irq().unwrap();
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
+				info!("virtio: virtio-console interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio console driver could not be initialized with device: {device_id:x}");
+				error!(
+					"virtio: virtio-console driver could not be initialized with device: {device_id:x}"
+				);
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		#[cfg(feature = "vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
 			Ok(virt_sock_drv) => {
-				info!("Virtio sock driver initialized.");
+				info!("virtio: virtio-sock driver initialized.");
 
 				let irq = device.get_irq().unwrap();
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
+				info!("virtio: virtio-sock interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Vsock(Box::new(virt_sock_drv)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio sock driver could not be initialized with device: {device_id:x}");
+				error!(
+					"virtio: virtio-sock driver could not be initialized with device: {device_id:x}"
+				);
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
@@ -872,19 +874,19 @@ pub(crate) fn init_device(
 			// TODO: proper error handling on driver creation fail
 			match VirtioFsDriver::init(device) {
 				Ok(virt_fs_drv) => {
-					info!("Virtio filesystem driver initialized.");
+					info!("virtio: virtiofs driver initialized.");
 					Ok(VirtioDriver::FileSystem(virt_fs_drv))
 				}
 				Err(virtio_error) => {
 					error!(
-						"Virtio filesystem driver could not be initialized with device: {device_id:x}"
+						"virtio: virtiofs driver could not be initialized with device: {device_id:x}"
 					);
 					Err(DriverError::InitVirtioDevFail(virtio_error))
 				}
 			}
 		}
 		id => {
-			warn!("Virtio device {id:?} is not supported, skipping!");
+			warn!("virtio: Device {id:?} is not supported, skipping!");
 
 			// Return Driver error inidacting device is not supported
 			Err(DriverError::InitVirtioDevFail(

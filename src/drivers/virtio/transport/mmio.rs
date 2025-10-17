@@ -378,7 +378,7 @@ pub(crate) fn init_device(
 	let dev_id: u16 = 0;
 
 	if registers.as_ptr().version().read().to_ne() == 0x1 {
-		error!("Legacy interface isn't supported!");
+		error!("virtio: Legacy interface is not supported!");
 		return Err(DriverError::InitVirtioDevFail(
 			VirtioError::DevNotSupported(dev_id),
 		));
@@ -389,50 +389,50 @@ pub(crate) fn init_device(
 		#[cfg(feature = "virtio-net")]
 		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
-				info!("Virtio network driver initialized.");
+				info!("virtio: virtio-net driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {irq_no}");
+				info!("virtio: virtio-net interrupt handler at line {irq_no}");
 
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}
 			Err(virtio_error) => {
-				error!("Virtio network driver could not be initialized with device");
+				error!("virtio: virtio-net driver could not be initialized with device.");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		#[cfg(feature = "console")]
 		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_console_drv) => {
-				info!("Virtio console driver initialized.");
+				info!("virtio: virtio-console driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {}", irq_no);
+				info!("virtio: virtio-console interrupt handler at line {irq_no}");
 
 				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio console driver could not be initialized with device");
+				error!("virtio: virtio-console driver could not be initialized with device.");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		#[cfg(feature = "vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
-				info!("Virtio sock driver initialized.");
+				info!("virtio: vsock driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {}", irq_no);
+				info!("virtio: vsock interrupt handler at line {}", irq_no);
 
 				Ok(VirtioDriver::Vsock(virt_vsock_drv))
 			}
 			Err(virtio_error) => {
-				error!("Virtio sock driver could not be initialized with device");
+				error!("virtio: vsock driver could not be initialized with device.");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		device_id => {
-			error!("Device with id {device_id:?} is currently not supported!");
+			error!("virtio: Device with ID {device_id:?} is not supported!");
 			// Return Driver error inidacting device is not supported
 			Err(DriverError::InitVirtioDevFail(
 				VirtioError::DevNotSupported(dev_id),
