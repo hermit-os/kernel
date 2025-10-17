@@ -101,11 +101,12 @@ fn detect_from_fdt() -> Result<(), ()> {
 		.unwrap(),
 	);
 	{
-		let fdt_range = fdt.fdt_address_range();
+		let fdt_start = env::boot_info().hardware_info.device_tree.unwrap().get() as usize;
+		let fdt_end = fdt_start + fdt.total_size();
 		reserved_regions.push(
 			PageRange::new(
-				fdt_range.start.align_down(free_list::PAGE_SIZE),
-				fdt_range.end.align_up(free_list::PAGE_SIZE),
+				fdt_start.align_down(free_list::PAGE_SIZE),
+				fdt_end.align_up(free_list::PAGE_SIZE),
 			)
 			.unwrap(),
 		);
