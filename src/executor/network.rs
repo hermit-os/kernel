@@ -130,7 +130,7 @@ async fn dhcpv4_run() {
 			None => {}
 			Some(dhcpv4::Event::Configured(config)) => {
 				info!("DHCP config acquired!");
-				info!("IP address:      {}", config.address);
+				info!("IP address:   {}", config.address);
 				nic.iface.update_ip_addrs(|addrs| {
 					if let Some(dest) = addrs.iter_mut().next() {
 						*dest = IpCidr::Ipv4(config.address);
@@ -139,20 +139,20 @@ async fn dhcpv4_run() {
 					}
 				});
 				if let Some(router) = config.router {
-					info!("Default gateway: {router}");
+					info!("Gateway:      {router}");
 					nic.iface
 						.routes_mut()
 						.add_default_ipv4_route(router)
 						.unwrap();
 				} else {
-					info!("Default gateway: None");
+					info!("Gateway:      None");
 					nic.iface.routes_mut().remove_default_ipv4_route();
 				}
 
 				#[cfg(feature = "dns")]
 				let mut dns_servers: Vec<IpAddress> = Vec::new();
 				for (i, s) in config.dns_servers.iter().enumerate() {
-					info!("DNS server {i}:    {s}");
+					info!("DNS server {i}: {s}");
 					#[cfg(feature = "dns")]
 					dns_servers.push(IpAddress::Ipv4(*s));
 				}
