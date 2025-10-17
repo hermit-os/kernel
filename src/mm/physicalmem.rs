@@ -67,6 +67,7 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 			});
 	}
 
+	debug!("claimed physical memory: {:x?},", frame_range);
 	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }
 
@@ -82,13 +83,29 @@ fn detect_from_fdt() -> Result<(), ()> {
 		})
 		.collect();
 
-	// FIXME: things break if we touch memory below the kernel.
-	// In addition to the kernel range, we should also reserve the space occupied by the fdt itself.
-	// This region is not required to be listed as a reserved region, but must not be overwritten.
-	// However, the fdt crate does not expose this range currently.
-	reserved_regions.push(PageRange::new(0, super::kernel_end_address().as_usize()).unwrap());
+	reserved_regions.push(
+		PageRange::new(
+			super::kernel_start_address().as_usize(),
+			super::kernel_end_address().as_usize(),
+		)
+		.unwrap(),
+	);
+	{
+		let fdt_range = fdt.fdt_address_range();
+		reserved_regions.push(
+			PageRange::new(
+				fdt_range.start.align_down(free_list::PAGE_SIZE),
+				fdt_range.end.align_up(free_list::PAGE_SIZE),
+			)
+			.unwrap(),
+		);
+	}
+
+	// TODO: this region causes problems when used, even though it is not reported as reserved.
+	reserved_regions.push(PageRange::new(0, 0x100000).unwrap());
 
 	reserved_regions.sort_unstable_by_key(|r| r.start());
+	debug!("reserved memory regions: {:x?},", reserved_regions);
 
 	let all_memories = fdt
 		.find_all_nodes("/memory")
