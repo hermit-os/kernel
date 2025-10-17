@@ -67,7 +67,11 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 			});
 	}
 
-	debug!("claimed physical memory: {:x?},", frame_range);
+	debug!(
+		"claimed physical memory: 0x{:x}..0x{:x},",
+		frame_range.start(),
+		frame_range.end()
+	);
 	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }
 
@@ -108,7 +112,15 @@ fn detect_from_fdt() -> Result<(), ()> {
 	}
 
 	reserved_regions.sort_unstable_by_key(|r| r.start());
-	debug!("reserved memory regions: {:x?},", reserved_regions);
+	if log_enabled!(log::Level::Debug) {
+		for reserved in &reserved_regions {
+			debug!(
+				"reserved physical memory region: 0x{:x}..0x{:x}",
+				reserved.start(),
+				reserved.end()
+			);
+		}
+	}
 
 	let all_memories = fdt
 		.find_all_nodes("/memory")
