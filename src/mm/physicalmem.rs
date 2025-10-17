@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
+use crate::env::{self, is_uefi};
 use crate::mm::device_alloc::DeviceAlloc;
 
 const FREE_LIST_INLINE_SIZE: usize = 16;
@@ -85,7 +85,13 @@ fn detect_from_fdt() -> Result<(), ()> {
 
 	reserved_regions.push(
 		PageRange::new(
-			super::kernel_start_address().as_usize(),
+			// FIXME: memory before the kernel causes trouble on non-uefi systems.
+			// It is unclear, which exact regions cause problems
+			if is_uefi() {
+				super::kernel_start_address().as_usize()
+			} else {
+				0
+			},
 			super::kernel_end_address().as_usize(),
 		)
 		.unwrap(),
@@ -100,9 +106,6 @@ fn detect_from_fdt() -> Result<(), ()> {
 			.unwrap(),
 		);
 	}
-
-	// TODO: this region causes problems when used, even though it is not reported as reserved.
-	reserved_regions.push(PageRange::new(0, 0x100000).unwrap());
 
 	reserved_regions.sort_unstable_by_key(|r| r.start());
 	debug!("reserved memory regions: {:x?},", reserved_regions);
