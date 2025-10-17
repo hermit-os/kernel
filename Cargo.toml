@@ -122,7 +122,7 @@ cfg-if = "1"
 crossbeam-utils = { version = "0.8", default-features = false }
 embedded-io = { version = "0.7", features = ["alloc"] }
 enum_dispatch = "0.3"
-fdt = { git="https://github.com/m-mueller678/fdt.git", features = ["pretty-printing"] }
+fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", features = ["linux"], optional = true }
 hashbrown = { version = "0.16", default-features = false }
