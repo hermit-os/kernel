@@ -361,7 +361,7 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 		"blr x25",
 		"mov x0, xzr",
 		"adrp x4, {exit}",
-		"add  x4, x4, #:lo12:{exit}",
+		"add x4, x4, #:lo12:{exit}",
 		"br x4",
 		l0 = const 0,
 		exit = sym thread_exit,

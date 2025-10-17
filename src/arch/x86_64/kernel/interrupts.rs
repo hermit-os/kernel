@@ -333,7 +333,7 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 }
 
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\"  for interrupt {irq_number}");
+	debug!("Register name \"{name}\" for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(32 + irq_number, name);
 }
 
