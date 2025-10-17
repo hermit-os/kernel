@@ -262,7 +262,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	unsafe {
 		asm!(
 			"adrp x4, {vector_table}",
-			"add  x4, x4, #:lo12:{vector_table}",
+			"add x4, x4, #:lo12:{vector_table}",
 			"msr vbar_el1, x4",
 			vector_table = sym vector_table,
 			out("x4") _,

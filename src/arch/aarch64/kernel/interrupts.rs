@@ -493,7 +493,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 #[allow(dead_code)]
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\"  for interrupt {irq_number}");
+	debug!("Register name \"{name}\" for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
 }
 
