@@ -1,5 +1,10 @@
 #![cfg_attr(
-	not(any(feature = "vsock", feature = "fuse", feature = "console")),
+	not(any(
+		feature = "vsock",
+		feature = "fuse",
+		feature = "console",
+		feature = "nvme"
+	)),
 	expect(dead_code)
 )]
 
