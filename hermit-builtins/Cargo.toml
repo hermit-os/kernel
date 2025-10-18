@@ -10,3 +10,6 @@ libm = "0.2"
 crate-type = ["staticlib"]
 
 [workspace]
+
+[profile.release]
+debug = true

@@ -204,3 +204,6 @@ members = [
 exclude = [
 	"hermit-builtins",
 ]
+
+[profile.release]
+debug = true
