@@ -340,11 +340,13 @@ pub(crate) fn init() {
 	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
 	FILESYSTEM.set(Filesystem::new()).unwrap();
-	FILESYSTEM
-		.get()
-		.unwrap()
-		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
-		.expect("Unable to create /tmp");
+	if !(crate::env::is_uhyve() && cfg!(feature = "uhyve-tmp")) {
+		FILESYSTEM
+			.get()
+			.unwrap()
+			.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
+			.expect("Unable to create /tmp");
+	}
 	FILESYSTEM
 		.get()
 		.unwrap()
@@ -399,6 +401,19 @@ pub fn create_dir(path: &str, mode: AccessPermission) -> io::Result<()> {
 			.get()
 			.ok_or(Errno::Inval)?
 			.mkdir(path, mode.bitand(mask))
+	})
+}
+
+/// Creates a directory and creates all missing parent directories as well.
+fn create_dir_recursive(path: &str, mode: AccessPermission) -> io::Result<()> {
+	trace!("create_dir_recursive: {path}");
+	create_dir(path, mode).or_else(|errno| {
+		if errno != Errno::Badf {
+			return Err(errno);
+		}
+		let parent_path = &path[0..path.rfind('/').unwrap()];
+		create_dir_recursive(parent_path, mode)?;
+		create_dir(path, mode)
 	})
 }
 

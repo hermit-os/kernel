@@ -1,3 +1,4 @@
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::{String, ToString};
@@ -14,10 +15,11 @@ use uhyve_interface::parameters::{
 use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
 
 use crate::arch::mm::paging;
-use crate::env::is_uhyve;
+use crate::env::{self, is_uhyve};
 use crate::errno::Errno;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
+	create_dir_recursive,
 };
 use crate::io;
 use crate::syscalls::interfaces::uhyve::uhyve_hypercall;
@@ -231,15 +233,61 @@ impl VfsNode for UhyveDirectory {
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 	if is_uhyve() {
-		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_string();
-		info!("Mounting uhyve filesystem at {mount_point}");
-		fs::FILESYSTEM
-			.get()
-			.unwrap()
-			.mount(
-				&mount_point,
-				Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
-			)
-			.expect("Mount failed. Duplicate mount_point?");
+		let mount_str = env::fdt().and_then(|fdt| {
+			fdt.find_node("/uhyve,mounts").and_then(|node| {
+				node.property("mounts")
+					.and_then(|property| str::from_utf8(property.value).ok())
+			})
+		});
+		if let Some(mount_str) = mount_str {
+			for mount_point in mount_str.trim_end_matches('\0').split('\0') {
+				info!("Mounting uhyve filesystem at {mount_point}");
+
+				if let Err(errno) = fs::FILESYSTEM.get().unwrap().mount(
+					mount_point,
+					Box::new(UhyveDirectory::new(Some(mount_point.to_owned()))),
+				) {
+					debug!(
+						"Mounting of {mount_point} failed with {errno:?}. Creating missing parent folders"
+					);
+					let parent_path = &mount_point[0..mount_point.rfind('/').unwrap()];
+					create_dir_recursive(parent_path, AccessPermission::S_IRWXU).unwrap();
+
+					fs::FILESYSTEM
+						.get()
+						.unwrap()
+						.mount(
+							mount_point,
+							Box::new(UhyveDirectory::new(Some(mount_point.to_owned()))),
+						)
+						.unwrap();
+				}
+			}
+		} else {
+			// No FDT -> Uhyve legacy mounting (to /root)
+			let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_string();
+			info!("Mounting uhyve filesystem at {mount_point}");
+			fs::FILESYSTEM
+				.get()
+				.unwrap()
+				.mount(
+					&mount_point,
+					Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
+				)
+				.expect("Mount failed. Duplicate mount_point?");
+		}
+
+		#[cfg(feature = "uhyve-tmp")]
+		{
+			info!("Mounting /tmp as uhyve filesystem");
+			fs::FILESYSTEM
+				.get()
+				.unwrap()
+				.mount(
+					"/tmp",
+					Box::new(UhyveDirectory::new(Some("/tmp".to_string()))),
+				)
+				.unwrap();
+		}
 	}
 }
