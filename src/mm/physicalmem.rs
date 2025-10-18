@@ -4,14 +4,17 @@ use align_address::Align;
 use free_list::{FreeList, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
+use smallvec::SmallVec;
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
+use crate::env::{self, is_uefi};
 use crate::mm::device_alloc::DeviceAlloc;
 
-pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+const FREE_LIST_INLINE_SIZE: usize = 16;
+
+pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<FREE_LIST_INLINE_SIZE>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -30,6 +33,8 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 		}
 	}
 
+	// FIXME: rounding outwards adds physical memory that is not actually available.
+	// This seems wrong.
 	let start = frame_range
 		.start()
 		.align_down(IdentityPageSize::SIZE.try_into().unwrap());
@@ -62,52 +67,95 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 			});
 	}
 
+	debug!(
+		"claimed physical memory: 0x{:x}..0x{:x},",
+		frame_range.start(),
+		frame_range.end()
+	);
 	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }
 
 fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
 
-	let all_regions = fdt
+	let mut reserved_regions: SmallVec<[PageRange; FREE_LIST_INLINE_SIZE]> = fdt
+		.memory_reservations()
+		.map(|reserved| {
+			let start = reserved.address() as usize;
+			let end = start + reserved.size();
+			PageRange::new(start, end).unwrap()
+		})
+		.collect();
+
+	reserved_regions.push(
+		PageRange::new(
+			// FIXME: memory before the kernel causes trouble on non-uefi systems.
+			// It is unclear, which exact regions cause problems
+			if is_uefi() {
+				super::kernel_start_address().as_usize()
+			} else {
+				0
+			},
+			super::kernel_end_address().as_usize(),
+		)
+		.unwrap(),
+	);
+	{
+		let fdt_start = env::boot_info().hardware_info.device_tree.unwrap().get() as usize;
+		let fdt_end = fdt_start + fdt.total_size();
+		reserved_regions.push(
+			PageRange::new(
+				fdt_start.align_down(free_list::PAGE_SIZE),
+				fdt_end.align_up(free_list::PAGE_SIZE),
+			)
+			.unwrap(),
+		);
+	}
+
+	reserved_regions.sort_unstable_by_key(|r| r.start());
+	if log_enabled!(log::Level::Debug) {
+		for reserved in &reserved_regions {
+			debug!(
+				"reserved physical memory region: 0x{:x}..0x{:x}",
+				reserved.start(),
+				reserved.end()
+			);
+		}
+	}
+
+	let all_memories = fdt
 		.find_all_nodes("/memory")
 		.map(|m| m.reg().unwrap().next().unwrap());
 
 	let mut found_ram = false;
-
-	if env::is_uefi() {
-		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
-		found_ram = true;
-
-		let range = PageRange::from_start_len(
-			biggest_region.starting_address.addr(),
-			biggest_region.size.unwrap(),
-		)
-		.unwrap();
-
-		unsafe {
-			init_frame_range(range);
-		}
-	} else {
-		for m in all_regions {
-			let start_address = m.starting_address as u64;
-			let size = m.size.unwrap() as u64;
-			let end_address = start_address + size;
-
-			if end_address <= super::kernel_end_address().as_u64() {
-				continue;
-			}
-
+	let mut init_range = |start: usize, end: usize| {
+		let start = start.align_up(free_list::PAGE_SIZE);
+		let end = end.align_down(free_list::PAGE_SIZE);
+		if start < end {
 			found_ram = true;
-
-			let start_address = if start_address <= super::kernel_start_address().as_u64() {
-				super::kernel_end_address()
-			} else {
-				VirtAddr::new(start_address)
-			};
-
-			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 			unsafe {
-				init_frame_range(range);
+				init_frame_range(PageRange::new(start, end).unwrap());
+			}
+		}
+	};
+	for memory in all_memories {
+		let mut start = memory.starting_address as usize;
+		let end = start + memory.size.unwrap();
+		let mut reservations = reserved_regions.iter();
+		while start < end {
+			match reservations.next() {
+				Some(reserved) => {
+					if start < reserved.start() {
+						// reservations are ordered by start,
+						// so no reservation further down the iterator will overlap this.
+						init_range(start, end.min(reserved.start()));
+					}
+					start = start.max(reserved.end());
+				}
+				None => {
+					init_range(start, end);
+					break;
+				}
 			}
 		}
 	}
