@@ -124,7 +124,8 @@ impl PciCap {
 		}
 
 		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if self.len() < u64::try_from(mem::size_of::<CommonCfg>()).unwrap() {
+		// The CommonCfg declaration includes 2 16-bit fields that are optional, totaling 4 bytes.
+		if self.len() < u64::try_from(mem::size_of::<CommonCfg>() - 4).unwrap() {
 			error!(
 				"Common config of with id {}, does not represent actual structure specified by the standard!",
 				self.cap.id
