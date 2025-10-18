@@ -21,6 +21,8 @@ use x86_64::registers::control::Cr3;
 use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
+#[cfg(feature = "preemptive-multithreading")]
+use crate::arch::scheduler::MIN_RESCHEDULE_INTERVAL_US;
 use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
@@ -683,8 +685,26 @@ fn calibrate_timer() {
 	);
 }
 
-fn __set_oneshot_timer(wakeup_time: Option<u64>) {
-	if let Some(wt) = wakeup_time {
+fn __set_oneshot_timer_relative(ticks: u64) {
+	#[cfg(feature = "preemptive-multithreading")]
+	let ticks = cmp::min(ticks, MIN_RESCHEDULE_INTERVAL_US);
+
+	let ticks = cmp::min(
+		CALIBRATED_COUNTER_VALUE.get().unwrap() * ticks,
+		u64::from(u32::MAX),
+	);
+
+	__set_oneshot_timer_ticks(ticks);
+}
+
+fn __set_oneshot_timer_ticks(ticks: u64) {
+	// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
+	local_apic_write(IA32_X2APIC_LVT_TIMER, u64::from(TIMER_INTERRUPT_NUMBER));
+	local_apic_write(IA32_X2APIC_INIT_COUNT, ticks);
+}
+
+fn __set_oneshot_timer(wakeup_time_us: Option<u64>) {
+	if let Some(wt) = wakeup_time_us {
 		if processor::supports_tsc_deadline() {
 			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
 			// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
@@ -710,24 +730,28 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 			} else {
 				1
 			};
-			let init_count = cmp::min(
-				CALIBRATED_COUNTER_VALUE.get().unwrap() * ticks,
-				u64::from(u32::MAX),
-			);
 
-			// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
-			local_apic_write(IA32_X2APIC_LVT_TIMER, u64::from(TIMER_INTERRUPT_NUMBER));
-			local_apic_write(IA32_X2APIC_INIT_COUNT, init_count);
+			__set_oneshot_timer_relative(ticks);
 		}
 	} else {
 		// Disable the APIC Timer.
+		#[cfg(not(feature = "preemptive-multithreading"))]
 		local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_MASK);
 	}
 }
 
-pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+/// Sets a timer at precisely abs_wakeup_time_us after boot
+pub fn set_oneshot_timer(abs_wakeup_time_us: Option<u64>) {
 	without_interrupts(|| {
-		__set_oneshot_timer(wakeup_time);
+		__set_oneshot_timer(abs_wakeup_time_us);
+	});
+}
+
+/// Sets a timer in precisely rel_wakeup_time_us microseconds$
+#[cfg(feature = "preemptive-multithreading")]
+pub fn set_oneshot_timer_relative(rel_wakeup_time_us: u64) {
+	without_interrupts(|| {
+		__set_oneshot_timer_relative(rel_wakeup_time_us);
 	});
 }
 
