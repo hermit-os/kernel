@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALLOWED_OPEN_FLAGS","EINVAL","ENOENT","O_APPEND","O_CREAT","O_DIRECT","O_DIRECTORY","O_EXCL","O_RDONLY","O_RDWR","O_TRUNC","O_WRONLY"],"struct":["CloseParams","CmdsizeParams","CmdvalParams","ExitParams","LseekParams","OpenParams","ReadParams","SerialWriteBufferParams","UnlinkParams","WriteParams"]};
