@@ -1,7 +1,8 @@
 #![allow(clippy::type_complexity)]
 
 #[cfg(not(feature = "common-os"))]
-use alloc::boxed::Box;
+pub(crate) mod tls;
+
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
@@ -15,10 +16,10 @@ use hashbrown::HashMap;
 use hermit_sync::{OnceCell, RwSpinLock};
 use memory_addresses::VirtAddr;
 
+#[cfg(not(feature = "common-os"))]
+use self::tls::Tls;
 use crate::arch::core_local::*;
 use crate::arch::scheduler::TaskStacks;
-#[cfg(not(feature = "common-os"))]
-use crate::arch::scheduler::TaskTLS;
 use crate::fd::stdio::*;
 use crate::fd::{FileDescriptor, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
@@ -395,7 +396,7 @@ pub(crate) struct Task {
 	>,
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
-	pub tls: Option<Box<TaskTLS>>,
+	pub tls: Option<Tls>,
 	// Physical address of the 1st level page table
 	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 	pub root_page_table: usize,
