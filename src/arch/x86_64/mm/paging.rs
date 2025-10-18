@@ -1,7 +1,6 @@
 use core::fmt::Debug;
 use core::ptr;
 
-use free_list::PageLayout;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -12,14 +11,23 @@ use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
-	Mapper, OffsetPageTable, Page, PageTable, PhysFrame, RecursivePageTable, Size4KiB, Translate,
+	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, RecursivePageTable,
+	Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::mm::physicalmem;
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::physicalmem::allocate_physical;
 use crate::{env, scheduler};
+
+struct FreeListFrameAllocator;
+
+unsafe impl FrameAllocator<Size4KiB> for FreeListFrameAllocator {
+	fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+		let addr = allocate_physical(Size4KiB::SIZE as usize, Size4KiB::SIZE as usize).ok()?;
+		Some(PhysFrame::from_start_address(addr.into()).unwrap())
+	}
+}
 
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
@@ -165,7 +173,6 @@ pub fn map<S>(
 		M: Mapper<S>,
 		S: PageSize + Debug,
 	{
-		let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
 		let mut unmapped = false;
 		for (page, frame) in pages.zip(frames) {
 			// TODO: Require explicit unmaps
@@ -175,7 +182,7 @@ pub fn map<S>(
 				flush.flush();
 				debug!("Had to unmap page {page:?} before mapping.");
 			}
-			let map = unsafe { mapper.map_to(page, frame, flags, &mut *frame_allocator) };
+			let map = unsafe { mapper.map_to(page, frame, flags, &mut FreeListFrameAllocator) };
 			match map {
 				Ok(mapper_flush) => mapper_flush.flush(),
 				Err(err) => panic!("Could not map {page:?} to {frame:?}: {err:?}"),
@@ -209,12 +216,8 @@ where
 	let virt_addrs = (0..count).map(|n| virt_addr + n as u64 * S::SIZE);
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
-		let layout = PageLayout::from_size_align(S::SIZE as usize, S::SIZE as usize).unwrap();
-		let frame_range = PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(layout)
-			.map_err(|_| map_counter)?;
-		let phys_addr = PhysAddr::from(frame_range.start());
+		let phys_addr =
+			allocate_physical(S::SIZE as usize, S::SIZE as usize).map_err(|_| map_counter)?;
 		map::<S>(virt_addr, phys_addr, 1, flags);
 	}
 
@@ -231,9 +234,9 @@ where
 	let flags = PageTableEntryFlags::PRESENT
 		| PageTableEntryFlags::WRITABLE
 		| PageTableEntryFlags::NO_EXECUTE;
-	let mut frame_allocator = physicalmem::PHYSICAL_FREE_LIST.lock();
-	let mapper_result =
-		unsafe { identity_mapped_page_table().identity_map(frame, flags, &mut *frame_allocator) };
+	let mapper_result = unsafe {
+		identity_mapped_page_table().identity_map(frame, flags, &mut FreeListFrameAllocator)
+	};
 
 	match mapper_result {
 		Ok(mapper_flush) => mapper_flush.flush(),

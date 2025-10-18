@@ -1,7 +1,8 @@
+use alloc::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
-use free_list::{FreeList, PageRange};
+use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 use smallvec::SmallVec;
@@ -14,12 +15,35 @@ use crate::mm::device_alloc::DeviceAlloc;
 
 const FREE_LIST_INLINE_SIZE: usize = 16;
 
-pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<FREE_LIST_INLINE_SIZE>> =
+static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<FREE_LIST_INLINE_SIZE>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
+}
+
+/// Allocate physical memory.
+pub fn allocate_physical(size: usize, align: usize) -> Result<PhysAddr, AllocError> {
+	let page_range = PHYSICAL_FREE_LIST
+		.lock()
+		.allocate(PageLayout::from_size_align(size, align).unwrap())
+		.map_err(|_| AllocError)?;
+	Ok(PhysAddr::new(page_range.start() as u64))
+}
+
+/// Deallocate memory previously allocated with [allocate_physical].
+pub unsafe fn deallocate_physical(addr: PhysAddr, size: usize) {
+	unsafe {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
+			.unwrap();
+	};
+}
+
+pub fn print_physical_free_list() {
+	info!("Physical memory free list:\n{}", PHYSICAL_FREE_LIST.lock());
 }
 
 pub unsafe fn init_frame_range(frame_range: PageRange) {

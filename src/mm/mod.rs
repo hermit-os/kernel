@@ -57,7 +57,7 @@ use talc::{ErrOnOom, Span, Talc, Talck};
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::physicalmem::print_physical_free_list;
 use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::{arch, env};
 
@@ -284,7 +284,7 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn print_information() {
-	info!("Physical memory free list:\n{}", PHYSICAL_FREE_LIST.lock());
+	print_physical_free_list();
 	info!("Virtual memory free list:\n{}", KERNEL_FREE_LIST.lock());
 }
 

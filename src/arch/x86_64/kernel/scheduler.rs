@@ -15,7 +15,7 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::config::*;
 use crate::env;
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::physicalmem::{allocate_physical, deallocate_physical};
 use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
@@ -101,12 +101,8 @@ impl TaskStacks {
 		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
 		let virt_addr = VirtAddr::from(page_range.start());
 
-		let frame_layout = PageLayout::from_size(total_size).unwrap();
-		let frame_range = PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(frame_layout)
+		let phys_addr = allocate_physical(total_size, BasePageSize::SIZE as usize)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
-		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
 			"Create stacks at {:p} with a size of {} KB",
@@ -246,7 +242,7 @@ impl Drop for TaskStacks {
 					PageRange::from_start_len(stacks.phys_addr.as_usize(), stacks.total_size)
 						.unwrap();
 				unsafe {
-					PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+					deallocate_physical(PhysAddr::new(range.start() as u64), stacks.total_size);
 				}
 			}
 		}

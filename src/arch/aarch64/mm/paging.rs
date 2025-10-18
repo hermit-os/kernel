@@ -4,14 +4,14 @@ use core::arch::asm;
 use core::marker::PhantomData;
 use core::{fmt, mem, ptr};
 
+use aarch64::paging::BASE_PAGE_SIZE;
 use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
 use crate::env::is_uhyve;
-use crate::mm::physicalmem;
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::physicalmem::{self, allocate_physical};
 use crate::{KERNEL_STACK_SIZE, mm, scheduler};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
@@ -496,12 +496,10 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-				let frame_range = PHYSICAL_FREE_LIST
-					.lock()
-					.allocate(frame_layout)
-					.expect("Unable to allocate physical memory");
-				let physical_address = PhysAddr::from(frame_range.start());
+				let physical_address =
+					allocate_physical(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize)
+						.expect("Unable to allocate physical memory");
+
 				self.entries[index].set(
 					physical_address,
 					PageTableEntryFlags::NORMAL | PageTableEntryFlags::TABLE_OR_4KIB_PAGE,
@@ -668,11 +666,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 	while map_counter < nr_pages {
 		let size = (nr_pages - map_counter) * S::SIZE as usize;
 		for i in (S::SIZE as usize..=size).rev().step_by(S::SIZE as usize) {
-			let layout = PageLayout::from_size_align(i, S::SIZE as usize).unwrap();
-			let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout);
-
-			if let Ok(frame_range) = frame_range {
-				let phys_addr = PhysAddr::from(frame_range.start());
+			if let Ok(phys_addr) = allocate_physical(i, S::SIZE as usize) {
 				map::<S>(
 					virt_addr + map_counter * S::SIZE as usize,
 					phys_addr,

@@ -2,11 +2,11 @@ use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::{self, NonNull};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
+use free_list::PageRange;
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::physicalmem::{allocate_physical, deallocate_physical};
 use crate::mm::virtualmem;
 
 /// An [`Allocator`] for memory that is used to communicate with devices.
@@ -18,14 +18,7 @@ unsafe impl Allocator for DeviceAlloc {
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 		assert!(layout.align() <= BasePageSize::SIZE as usize);
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
-		let frame_layout = PageLayout::from_size(size).unwrap();
-
-		let frame_range = PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(frame_layout)
-			.map_err(|_| AllocError)?;
-
-		let phys_addr = PhysAddr::from(frame_range.start());
+		let phys_addr = allocate_physical(size, free_list::PAGE_SIZE).map_err(|_| AllocError)?;
 		let ptr = self.ptr_from(phys_addr);
 		let slice = ptr::slice_from_raw_parts_mut(ptr, size);
 		Ok(NonNull::new(slice).unwrap())
@@ -39,7 +32,7 @@ unsafe impl Allocator for DeviceAlloc {
 		let range = PageRange::from_start_len(phys_addr.as_usize(), size).unwrap();
 
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			deallocate_physical(PhysAddr::new(range.start() as u64), range.len().get());
 		}
 	}
 }
