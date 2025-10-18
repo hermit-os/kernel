@@ -1609,9 +1609,8 @@ dependencies = [
 
 [[package]]
 name = "talc"
-version = "4.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fcad3be1cfe36eb7d716a04791eba36a197da9d9b6ea1e28e64ac569da3701d"
+version = "4.4.3"
+source = "git+https://github.com/hcsch/talc.git?branch=try-without-oom-handler#be81838265fb2319aaaba01f5c01dd46457255f4"
 dependencies = [
  "lock_api",
 ]
