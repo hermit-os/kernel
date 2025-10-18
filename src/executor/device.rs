@@ -58,16 +58,15 @@ impl<'a> NetworkInterface<'a> {
 		#[cfg(feature = "trace")]
 		let mut device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
 
-		if hermit_var!("HERMIT_IP").is_some() {
-			warn!(
-				"A static IP address is specified with the environment variable HERMIT_IP, but the device is configured to use DHCPv4!"
-			);
+		if let Some(hermit_ip) = hermit_var!("HERMIT_IP") {
+			warn!("HERMIT_IP was set to {hermit_ip}, but Hermit was built with DHCPv4.");
+			warn!("Ignoring HERMIT_IP.");
 		}
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 
-		info!("MAC address {hardware_addr}");
+		info!("MAC address: {hardware_addr}");
 		let capabilities = device.capabilities();
 		info!("{:?}", capabilities.checksum);
 		info!("MTU: {} bytes", capabilities.max_transmission_unit);
@@ -132,12 +131,12 @@ impl<'a> NetworkInterface<'a> {
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 		let ip_addr = IpCidr::from(Ipv4Cidr::from_netmask(myip, mymask).unwrap());
 
-		info!("MAC address {hardware_addr}");
-		info!("Configure network interface with address {ip_addr}");
-		info!("Configure gateway with address {mygw}");
+		info!("MAC address: {hardware_addr}");
 		let capabilities = device.capabilities();
 		info!("{:?}", capabilities.checksum);
 		info!("MTU: {} bytes", capabilities.max_transmission_unit);
+		info!("IP address: {ip_addr}");
+		info!("Gateway:    {mygw}");
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
