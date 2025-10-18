@@ -158,7 +158,10 @@ pub(crate) fn install() {
 			.set_stack_index(0);
 	}
 
-	IRQ_NAMES.lock().insert(7, "FPU");
+	let mut guard = IRQ_NAMES.lock();
+	#[cfg(feature = "mman")]
+	guard.insert(14, "Page Fault");
+	guard.insert(7, "FPU");
 }
 
 pub(crate) fn install_handlers() {
