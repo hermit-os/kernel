@@ -126,11 +126,8 @@ impl TaskStacks {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE;
-		let virt_addr = allocate_virtual(
-			total_size + 3 * BasePageSize::SIZE as usize,
-			free_list::PAGE_SIZE,
-		)
-		.unwrap();
+		let size_with_guards = total_size + 3 * BasePageSize::SIZE as usize;
+		let virt_addr = allocate_virtual(size_with_guards, free_list::PAGE_SIZE).unwrap();
 		let phys_addr = allocate_physical(total_size, free_list::PAGE_SIZE)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
 
