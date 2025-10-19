@@ -13,16 +13,24 @@ pub fn allocate_virtual(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 		.lock()
 		.allocate(PageLayout::from_size_align(size, align).unwrap())
 		.map_err(|_| AllocError)?;
+	trace!(
+		"allocate virtual: 0x{:x}..0x{:x}",
+		page_range.start(),
+		page_range.end()
+	);
 	Ok(VirtAddr::new(page_range.start() as u64))
 }
 
 /// Deallocate memory previously allocated with [allocate_virtual].
 pub unsafe fn deallocate_virtual(addr: VirtAddr, size: usize) {
+	let page_range = PageRange::new(addr.as_u64() as usize, size).unwrap();
+	trace!(
+		"deallocate virtual: 0x{:x}..0x{:x}",
+		page_range.start(),
+		page_range.end()
+	);
 	unsafe {
-		KERNEL_FREE_LIST
-			.lock()
-			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
-			.unwrap();
+		KERNEL_FREE_LIST.lock().deallocate(page_range).unwrap();
 	}
 }
 

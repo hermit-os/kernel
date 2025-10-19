@@ -29,16 +29,24 @@ pub fn allocate_physical(size: usize, align: usize) -> Result<PhysAddr, AllocErr
 		.lock()
 		.allocate(PageLayout::from_size_align(size, align).unwrap())
 		.map_err(|_| AllocError)?;
+	trace!(
+		"allocate physical: 0x{:x}..0x{:x}",
+		page_range.start(),
+		page_range.end()
+	);
 	Ok(PhysAddr::new(page_range.start() as u64))
 }
 
 /// Deallocate memory previously allocated with [allocate_physical].
 pub unsafe fn deallocate_physical(addr: PhysAddr, size: usize) {
+	let page_range = PageRange::new(addr.as_u64() as usize, size).unwrap();
+	trace!(
+		"deallocate physical: 0x{:x}..0x{:x}",
+		page_range.start(),
+		page_range.end()
+	);
 	unsafe {
-		PHYSICAL_FREE_LIST
-			.lock()
-			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
-			.unwrap();
+		PHYSICAL_FREE_LIST.lock().deallocate(page_range).unwrap();
 	}
 }
 
