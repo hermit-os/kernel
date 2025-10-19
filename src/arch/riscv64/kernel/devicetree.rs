@@ -216,18 +216,10 @@ pub fn init_drivers() {
 				let id = mmio.as_ptr().device_id().read();
 
 				if cfg!(debug_assertions) {
-					use free_list::PageRange;
-
-					use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-
-					let start = virtio_region.starting_address.addr();
-					let len = virtio_region.size.unwrap();
-					let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-					PHYSICAL_FREE_LIST
-						.lock()
-						.allocate_at(frame_range)
-						.unwrap_err();
+					crate::mm::physicalmem::assert_physical_unavailable(
+						PhysAddr::new(virtio_region.starting_address.addr() as u64),
+						virtio_region.size.unwrap(),
+					);
 				}
 
 				match id {

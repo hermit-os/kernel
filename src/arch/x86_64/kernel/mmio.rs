@@ -27,7 +27,7 @@ use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::physicalmem::assert_physical_unavailable;
 use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
@@ -119,13 +119,8 @@ fn check_linux_args(
 
 				if cfg!(debug_assertions) {
 					let len = usize::try_from(BasePageSize::SIZE).unwrap();
-					let start = current_address.align_down(len);
-					let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-					PHYSICAL_FREE_LIST
-						.lock()
-						.allocate_at(frame_range)
-						.unwrap_err();
+					let start = PhysAddr::new(current_address.align_down(len) as u64);
+					assert_physical_unavailable(start, len);
 				}
 
 				return Ok((mmio, irq));
@@ -179,13 +174,8 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 
 		if cfg!(debug_assertions) {
 			let len = usize::try_from(BasePageSize::SIZE).unwrap();
-			let start = current_address.align_down(len);
-			let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-			PHYSICAL_FREE_LIST
-				.lock()
-				.allocate_at(frame_range)
-				.unwrap_err();
+			let start = PhysAddr::new(current_address.align_down(len) as u64);
+			assert_physical_unavailable(start, len);
 		}
 
 		return Ok((mmio, IRQ_NUMBER));
