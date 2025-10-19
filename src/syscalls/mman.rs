@@ -1,6 +1,7 @@
 use core::ffi::{c_int, c_void};
 
 use align_address::Align;
+use free_list::PageRange;
 use memory_addresses::VirtAddr;
 
 use crate::arch;
@@ -31,12 +32,12 @@ bitflags! {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
-	let virtual_address = allocate_virtual(size, free_list::PAGE_SIZE);
+	let virtual_address = allocate_virtual(size, free_list::PAGE_SIZE).unwrap();
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
 		return 0;
 	}
-	let physical_address = allocate_physical(size, free_list::PAGE_SIZE);
+	let physical_address = allocate_physical(size, free_list::PAGE_SIZE).unwrap();
 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
@@ -74,6 +75,8 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 		// If not, then we should use [deallocate_physical] instead.
 		if let Err(_err) = unsafe { try_deallocate_physical(physical_address, size) } {
 			// FIXME: return EINVAL instead, once wasmtime can handle it
+			let range =
+				PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
 			error!("Unable to deallocate {range:?}");
 		}
 	}

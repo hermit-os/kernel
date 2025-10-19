@@ -42,6 +42,7 @@ pub unsafe fn deallocate_physical(addr: PhysAddr, size: usize) {
 	}
 }
 
+#[cfg(feature = "mman")]
 pub unsafe fn try_deallocate_physical(
 	addr: PhysAddr,
 	size: usize,
