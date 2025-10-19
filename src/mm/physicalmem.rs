@@ -39,7 +39,18 @@ pub unsafe fn deallocate_physical(addr: PhysAddr, size: usize) {
 			.lock()
 			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
 			.unwrap();
-	};
+	}
+}
+
+pub unsafe fn try_deallocate_physical(
+	addr: PhysAddr,
+	size: usize,
+) -> Result<(), free_list::AllocError> {
+	unsafe {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
+	}
 }
 
 pub fn print_physical_free_list() {

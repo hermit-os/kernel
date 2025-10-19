@@ -193,7 +193,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 
 	// frees obsolete virtual memory region for MMIO devices
 	unsafe {
-		deallocate_virtual(virtual_addres, BasePageSize::SIZE as usize);
+		deallocate_virtual(virtual_address, BasePageSize::SIZE as usize);
 	}
 
 	Err("Network card not found!")

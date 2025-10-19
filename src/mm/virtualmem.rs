@@ -23,7 +23,7 @@ pub unsafe fn deallocate_virtual(addr: VirtAddr, size: usize) {
 			.lock()
 			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
 			.unwrap();
-	};
+	}
 }
 
 pub fn print_virtual_free_list() {

@@ -232,12 +232,10 @@ where
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
-	use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+	use crate::mm::physicalmem::allocate_physical;
 
 	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
-	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
-	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout).unwrap();
-	let physaddr = PhysAddr::from(frame_range.start());
+	let physaddr = allocate_physical(code_size, BasePageSize::SIZE as usize).unwrap();
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
@@ -259,9 +257,7 @@ where
 		let tls_offset = tls_size as usize;
 
 		let tls_memsz = (tls_offset + tcb_size).align_up(BasePageSize::SIZE as usize);
-		let layout = PageLayout::from_size(tls_memsz).unwrap();
-		let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout).unwrap();
-		let physaddr = PhysAddr::from(frame_range.start());
+		let physaddr = allocate_physical(tls_memsz, BasePageSize::SIZE as usize).unwrap();
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();

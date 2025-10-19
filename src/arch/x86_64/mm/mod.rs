@@ -13,13 +13,11 @@ pub fn create_new_root_page_table() -> usize {
 	use free_list::{PageLayout, PageRange};
 	use x86_64::registers::control::Cr3;
 
-	use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+	use crate::mm::physicalmem::allocate_physical;
 	use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout).unwrap();
-	let physaddr = PhysAddr::from(frame_range.start());
-
+	let physaddr =
+		allocate_physical(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 	let virtaddr =
 		allocate_virtual(2 * BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 	let mut flags = PageTableEntryFlags::empty();
