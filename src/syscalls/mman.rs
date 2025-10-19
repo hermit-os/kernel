@@ -1,14 +1,13 @@
 use core::ffi::{c_int, c_void};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
-use memory_addresses::{PhysAddr, VirtAddr};
+use memory_addresses::VirtAddr;
 
 use crate::arch;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::mm::physicalmem::{allocate_physical, deallocate_physical, try_deallocate_physical};
+use crate::mm::physicalmem::{allocate_physical, try_deallocate_physical};
 use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 
 bitflags! {

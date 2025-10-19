@@ -228,7 +228,6 @@ where
 	use core::ptr::slice_from_raw_parts_mut;
 
 	use align_address::Align;
-	use free_list::PageLayout;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};

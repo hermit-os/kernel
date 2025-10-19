@@ -10,7 +10,6 @@ use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
-	use free_list::{PageLayout, PageRange};
 	use x86_64::registers::control::Cr3;
 
 	use crate::mm::physicalmem::allocate_physical;
