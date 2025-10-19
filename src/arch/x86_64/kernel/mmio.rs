@@ -28,7 +28,7 @@ use crate::env;
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -86,9 +86,8 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 fn check_linux_args(
 	linux_mmio: &'static [String],
 ) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
+	let virtual_address =
+		allocate_virtual(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 
 	for arg in linux_mmio {
 		trace!("check linux parameter: {arg}");
@@ -138,10 +137,8 @@ fn check_linux_args(
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	let range =
-		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		deallocate_virtual(virtual_address, BasePageSize::SIZE as usize);
 	}
 
 	Err("Network card not found!")
@@ -150,9 +147,8 @@ fn check_linux_args(
 fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
+	let virtual_address =
+		allocate_virtual(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
@@ -196,10 +192,8 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	let range =
-		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		deallocate_virtual(virtual_addres, BasePageSize::SIZE as usize);
 	}
 
 	Err("Network card not found!")

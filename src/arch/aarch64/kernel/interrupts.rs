@@ -7,10 +7,8 @@ use ahash::RandomState;
 use arm_gic::gicv3::{GicV3, InterruptGroup, SgiTarget, SgiTargetGroup};
 use arm_gic::{IntId, Trigger};
 use fdt::standard_nodes::Compatible;
-use free_list::PageLayout;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
-use memory_addresses::VirtAddr;
 use memory_addresses::arch::aarch64::PhysAddr;
 
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
@@ -22,7 +20,7 @@ use crate::drivers::mmio::get_interrupt_handlers;
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::kernel::serial::handle_uart_interrupt;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::virtualmem::allocate_virtual;
 use crate::scheduler::{self, CoreId};
 use crate::{core_id, core_scheduler, env};
 
@@ -312,9 +310,7 @@ pub(crate) fn init() {
 		"Found generic interrupt controller redistributor at {gicr_start:p} (size {gicr_size:#X})"
 	);
 
-	let layout = PageLayout::from_size_align(gicd_size.try_into().unwrap(), 0x10000).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-	let gicd_address = VirtAddr::from(page_range.start());
+	let gicd_address = allocate_virtual(gicd_size.try_into().unwrap(), 0x10000).unwrap();
 	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}");
 
 	let mut flags = PageTableEntryFlags::empty();
@@ -326,9 +322,7 @@ pub(crate) fn init() {
 		flags,
 	);
 
-	let layout = PageLayout::from_size_align(gicr_size.try_into().unwrap(), 0x10000).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-	let gicr_address = VirtAddr::from(page_range.start());
+	let gicr_address = allocate_virtual(gicr_size.try_into().unwrap(), 0x10000).unwrap();
 	debug!("Mapping generic interrupt controller to virtual address {gicr_address:p}");
 	paging::map::<BasePageSize>(
 		gicr_address,

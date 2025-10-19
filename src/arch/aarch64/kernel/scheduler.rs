@@ -5,14 +5,13 @@ use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::physicalmem::{allocate_physical, deallocate_physical};
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 #[cfg(target_os = "none")]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
@@ -127,9 +126,11 @@ impl TaskStacks {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE;
-		let layout = PageLayout::from_size(total_size + 3 * BasePageSize::SIZE as usize).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-		let virt_addr = VirtAddr::from(page_range.start());
+		let virt_addr = allocate_virtual(
+			total_size + 3 * BasePageSize::SIZE as usize,
+			free_list::PAGE_SIZE,
+		)
+		.unwrap();
 		let phys_addr = allocate_physical(total_size, free_list::PAGE_SIZE)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
 
@@ -228,13 +229,9 @@ impl Drop for TaskStacks {
 					stacks.virt_addr,
 					stacks.total_size / BasePageSize::SIZE as usize + 3,
 				);
-				let range = PageRange::from_start_len(
-					stacks.virt_addr.as_usize(),
-					stacks.total_size + 3 * BasePageSize::SIZE as usize,
-				)
-				.unwrap();
+				let size_with_guards = stacks.total_size + 3 * BasePageSize::SIZE as usize;
 				unsafe {
-					KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+					deallocate_virtual(stacks.virt_addr, size_with_guards);
 					deallocate_physical(stacks.phys_addr, stacks.total_size);
 				}
 			}

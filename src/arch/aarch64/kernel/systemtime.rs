@@ -12,8 +12,7 @@ use time::OffsetDateTime;
 
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
-use crate::mm::virtualmem;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::virtualmem::{self, allocate_virtual};
 
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
@@ -65,9 +64,8 @@ pub fn init() {
 
 				debug!("Found RTC at {addr:p} (size {size:#X})");
 
-				let layout = PageLayout::from_size(size.try_into().unwrap()).unwrap();
-				let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-				let pl031_address = VirtAddr::from(page_range.start());
+				let pl031_address =
+					allocate_virtual(size.try_into().unwrap(), free_list::PAGE_SIZE).unwrap();
 				PL031_ADDRESS.set(pl031_address).unwrap();
 				debug!("Mapping RTC to virtual address {pl031_address:p}");
 

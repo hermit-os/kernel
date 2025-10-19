@@ -1,7 +1,6 @@
 use core::{mem, ptr, slice, str};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
 use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
@@ -12,7 +11,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::env;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);
@@ -136,9 +135,8 @@ impl AcpiTable<'_> {
 
 		let physical_map_address = physical_address.align_down(BasePageSize::SIZE);
 		let offset = (physical_address - physical_map_address) as usize;
-		let layout = PageLayout::from_size(allocated_length).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-		let mut virtual_address = VirtAddr::from(page_range.start());
+		let mut virtual_address =
+			allocate_virtual(allocated_length, BasePageSize::SIZE as usize).unwrap();
 		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 		// Get a pointer to the header and query the table length.
@@ -147,18 +145,15 @@ impl AcpiTable<'_> {
 
 		// Remap if the length exceeds what we've allocated.
 		if table_length > allocated_length - offset {
-			let range =
-				PageRange::from_start_len(virtual_address.as_usize(), allocated_length).unwrap();
 			unsafe {
-				KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				deallocate_virtual(virtual_address, allocated_length);
 			}
 
 			allocated_length = (table_length + offset).align_up(BasePageSize::SIZE as usize);
 			count = allocated_length / BasePageSize::SIZE as usize;
 
-			let layout = PageLayout::from_size(allocated_length).unwrap();
-			let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-			virtual_address = VirtAddr::from(page_range.start());
+			virtual_address =
+				allocate_virtual(allocated_length, BasePageSize::SIZE as usize).unwrap();
 			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 			header_ptr = (virtual_address + offset).as_ptr();
@@ -188,13 +183,8 @@ impl AcpiTable<'_> {
 impl Drop for AcpiTable<'_> {
 	fn drop(&mut self) {
 		if !env::is_uefi() {
-			let range = PageRange::from_start_len(
-				self.allocated_virtual_address.as_usize(),
-				self.allocated_length,
-			)
-			.unwrap();
 			unsafe {
-				KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				deallocate_virtual(self.allocated_virtual_address, self.allocated_length);
 			}
 		}
 	}

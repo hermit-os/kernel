@@ -13,7 +13,6 @@ use align_address::Align;
 #[cfg(feature = "smp")]
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
-use free_list::{PageLayout, PageRange};
 use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
@@ -30,7 +29,7 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::arch::x86_64::swapgs;
 use crate::config::*;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::virtualmem::{allocate_virtual, deallocate_virtual};
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
 
@@ -317,9 +316,8 @@ fn init_ioapic_address(phys_addr: PhysAddr) {
 			.set(VirtAddr::new(phys_addr.as_u64()))
 			.unwrap();
 	} else {
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-		let ioapic_address = VirtAddr::from(page_range.start());
+		let ioapic_address =
+			allocate_virtual(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
 		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}");
 
@@ -386,9 +384,8 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 
 /// Helper function to search Floating Pointer Structure of the Multiprocessing Specification
 fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static ApicMP, ()> {
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
+	let virtual_address =
+		allocate_virtual(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 
 	for current_address in memory_range.iter().step_by(BasePageSize::SIZE as usize) {
 		let mut flags = PageTableEntryFlags::empty();
@@ -413,10 +410,8 @@ fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static Apic
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	let range =
-		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		deallocate_virtual(virtual_address, BasePageSize::SIZE as usize);
 	}
 
 	Err(())
@@ -449,9 +444,8 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		info!("Virtual-Wire mode implemented");
 	}
 
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
+	let virtual_address =
+		allocate_virtual(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -467,11 +461,8 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("MP config table invalid!");
-		let range =
-			PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize)
-				.unwrap();
 		unsafe {
-			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+			deallocate_virtual(virtual_address, BasePageSize::SIZE as usize);
 		}
 		return Err(());
 	}
@@ -553,13 +544,8 @@ pub fn init() {
 	} else {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-		let local_apic_address = VirtAddr::from(page_range.start());
-		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
-		debug!(
-			"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
-		);
+		let local_apic_address =
+			allocate_virtual(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
