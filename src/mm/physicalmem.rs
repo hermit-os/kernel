@@ -42,6 +42,17 @@ pub unsafe fn deallocate_physical(addr: PhysAddr, size: usize) {
 	}
 }
 
+pub unsafe fn try_deallocate_physical(
+	addr: PhysAddr,
+	size: usize,
+) -> Result<(), free_list::AllocError> {
+	unsafe {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
+	}
+}
+
 // FIXME: This function is used ensure that some special regions of physical memory can not be allocated.
 // Currently, it checks that at least one of the contained frames is unavailable.
 // Instead, it should check that none of the contained frames are available.
