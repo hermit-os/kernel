@@ -252,13 +252,7 @@ impl Drop for TaskStacks {
 				.unwrap();
 				unsafe {
 					KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
-				}
-
-				let range =
-					PageRange::from_start_len(stacks.phys_addr.as_usize(), stacks.total_size)
-						.unwrap();
-				unsafe {
-					deallocate_physical(PhysAddr::new(range.start() as u64), range.len().get());
+					deallocate_physical(stacks.phys_addr, stacks.total_size);
 				}
 			}
 		}
