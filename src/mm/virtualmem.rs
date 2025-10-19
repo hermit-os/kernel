@@ -23,7 +23,7 @@ pub fn allocate_virtual(size: usize, align: usize) -> Result<VirtAddr, AllocErro
 
 /// Deallocate memory previously allocated with [allocate_virtual].
 pub unsafe fn deallocate_virtual(addr: VirtAddr, size: usize) {
-	let page_range = PageRange::new(addr.as_u64() as usize, size).unwrap();
+	let page_range = PageRange::from_start_len(addr.as_u64() as usize, size).unwrap();
 	trace!(
 		"deallocate virtual: 0x{:x}..0x{:x}",
 		page_range.start(),

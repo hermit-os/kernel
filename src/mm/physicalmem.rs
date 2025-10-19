@@ -39,7 +39,7 @@ pub fn allocate_physical(size: usize, align: usize) -> Result<PhysAddr, AllocErr
 
 /// Deallocate memory previously allocated with [allocate_physical].
 pub unsafe fn deallocate_physical(addr: PhysAddr, size: usize) {
-	let page_range = PageRange::new(addr.as_u64() as usize, size).unwrap();
+	let page_range = PageRange::from_start_len(addr.as_u64() as usize, size).unwrap();
 	trace!(
 		"deallocate physical: 0x{:x}..0x{:x}",
 		page_range.start(),
@@ -58,7 +58,7 @@ pub unsafe fn try_deallocate_physical(
 	unsafe {
 		PHYSICAL_FREE_LIST
 			.lock()
-			.deallocate(PageRange::new(addr.as_u64() as usize, size).unwrap())
+			.deallocate(PageRange::from_start_len(addr.as_u64() as usize, size).unwrap())
 	}
 }
 
@@ -73,7 +73,7 @@ pub unsafe fn try_deallocate_physical(
 pub fn assert_physical_unavailable(addr: PhysAddr, size: usize) {
 	PHYSICAL_FREE_LIST
 		.lock()
-		.allocate_at(PageRange::new(addr.as_usize(), addr.as_usize() + size).unwrap())
+		.allocate_at(PageRange::from_start_len(addr.as_usize(), size).unwrap())
 		.unwrap_err();
 }
 
