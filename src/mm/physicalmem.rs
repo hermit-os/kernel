@@ -73,19 +73,15 @@ fn detect_from_fdt() -> Result<(), ()> {
 		.map(|m| m.reg().unwrap().next().unwrap());
 
 	if env::is_uefi() {
-		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
-
-		let range = PageRange::from_start_len(
-			biggest_region.starting_address.addr(),
-			biggest_region.size.unwrap(),
-		)
-		.unwrap();
-
-		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
-			map_frame_range(range);
+		for m in all_regions {
+			let range =
+				PageRange::from_start_len(m.starting_address.addr(), m.size.unwrap()).unwrap();
+			unsafe {
+				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				map_frame_range(range);
+			}
+			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		}
-		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 	} else {
 		for m in all_regions {
 			let start_address = m.starting_address as u64;
