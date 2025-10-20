@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
-use free_list::{FreeList, PageRange};
+use free_list::{FreeList, PageRange, PageRangeError};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
@@ -97,7 +97,64 @@ fn detect_from_fdt() -> Result<(), ()> {
 		debug!("Claimed physical memory: {range:#x?}");
 	}
 
+	let reserve = |reservation: PageRange| {
+		debug!("Memory reservation: {reservation:#x?}");
+		// While there are still overlaps between this reservation and any available ranges,
+		// allocate that overlap to mark it as not available.
+		while let Ok(reserved) = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate_with(|range| reservation.and(range))
+		{
+			debug!("Reserved {reserved:#x?}");
+		}
+	};
+
+	for reservation in fdt.memory_reservations() {
+		let start = reservation.address().addr();
+		let end = start + reservation.size();
+		let reservation = PageRange::new(start, end).unwrap();
+		reserve(reservation);
+	}
+
+	let kernel_start = if env::is_uefi() {
+		super::kernel_start_address().as_usize()
+	} else {
+		// FIXME: Memory before the kernel causes trouble on non-uefi systems.
+		// It is unclear, which exact regions cause problems.
+		0
+	};
+	let kernel_end = super::kernel_end_address().as_usize();
+	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
+	reserve(kernel_region);
+
+	let fdt_start = env::boot_info().hardware_info.device_tree.unwrap().get();
+	let fdt_start = usize::try_from(fdt_start).unwrap();
+	let fdt_end = fdt_start + fdt.total_size();
+	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
+	reserve(fdt_region);
+
 	Ok(())
+}
+
+// FIXME: upstream these
+trait PageRangeExt: Sized {
+	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError>;
+
+	fn and(self, rhs: Self) -> Option<Self>;
+}
+
+impl PageRangeExt for PageRange {
+	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError> {
+		let start = start.align_down(free_list::PAGE_SIZE);
+		let end = end.align_up(free_list::PAGE_SIZE);
+		Self::new(start, end)
+	}
+
+	fn and(self, rhs: Self) -> Option<Self> {
+		let start = self.start().max(rhs.start());
+		let end = self.end().min(rhs.end());
+		Self::new(start, end).ok()
+	}
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
