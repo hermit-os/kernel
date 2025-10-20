@@ -367,12 +367,12 @@ pub unsafe fn log_page_tables() {
 
 	use self::mapped_page_range_display::OffsetPageTableExt;
 
-	if !log_enabled!(Level::Debug) {
+	if !log_enabled!(Level::Trace) {
 		return;
 	}
 
 	let page_table = unsafe { identity_mapped_page_table() };
-	debug!("Page tables:\n{}", page_table.display());
+	trace!("Page tables:\n{}", page_table.display());
 }
 
 pub mod mapped_page_range_display {
