@@ -72,39 +72,28 @@ fn detect_from_fdt() -> Result<(), ()> {
 		.find_all_nodes("/memory")
 		.map(|m| m.reg().unwrap().next().unwrap());
 
-	if env::is_uefi() {
-		for m in all_regions {
-			let range =
-				PageRange::from_start_len(m.starting_address.addr(), m.size.unwrap()).unwrap();
-			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
-				map_frame_range(range);
-			}
-			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
+	for m in all_regions {
+		let start_address = m.starting_address as u64;
+		let size = m.size.unwrap() as u64;
+		let end_address = start_address + size;
+
+		if end_address <= super::kernel_end_address().as_u64() && !env::is_uefi() {
+			continue;
 		}
-	} else {
-		for m in all_regions {
-			let start_address = m.starting_address as u64;
-			let size = m.size.unwrap() as u64;
-			let end_address = start_address + size;
 
-			if end_address <= super::kernel_end_address().as_u64() {
-				continue;
-			}
-
-			let start_address = if start_address <= super::kernel_start_address().as_u64() {
+		let start_address =
+			if start_address <= super::kernel_start_address().as_u64() && !env::is_uefi() {
 				super::kernel_end_address()
 			} else {
 				VirtAddr::new(start_address)
 			};
 
-			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
-			unsafe {
-				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
-				map_frame_range(range);
-			}
-			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
+		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			map_frame_range(range);
 		}
+		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 	}
 
 	Ok(())
