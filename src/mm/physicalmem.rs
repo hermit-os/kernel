@@ -94,6 +94,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 			map_frame_range(range);
 		}
 		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
+		debug!("Claimed physical memory: {range:#x?}");
 	}
 
 	Ok(())
