@@ -466,7 +466,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		(virtual_address | (u64::from(mp_float.mp_config) & (BasePageSize::SIZE - 1))) as usize;
 	let mp_config: &ApicConfigTable = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
-		warn!("Invalid MP config table");
+		warn!("MP config table invalid!");
 		let range =
 			PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize)
 				.unwrap();
@@ -477,7 +477,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	}
 
 	if mp_config.entry_count == 0 {
-		warn!("No MP table entries! Guess IO-APIC!");
+		warn!("No MP table entries, guessing IOAPIC...");
 		let default_address = PhysAddr::new(0xfec0_0000);
 
 		init_ioapic_address(default_address);
@@ -499,7 +499,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr::new(io_entry.addr.into());
-					info!("Found IOAPIC at 0x{ioapic:p}");
+					info!("IOAPIC found at {ioapic:p}");
 
 					init_ioapic_address(ioapic);
 
@@ -516,9 +516,9 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 }
 
 fn default_apic() -> PhysAddr {
-	warn!("Try to use default APIC address");
-
 	let default_address = PhysAddr::new(0xfee0_0000);
+
+	warn!("Using default APIC address: {default_address:p}");
 
 	// currently, uhyve doesn't support an IO-APIC
 	if !env::is_uhyve() {
@@ -534,33 +534,36 @@ pub fn eoi() {
 
 pub fn init() {
 	// Detect CPUs and APICs.
-	let local_apic_physical_address = detect_from_acpi()
-		.or_else(|()| detect_from_mp())
-		.unwrap_or_else(|()| default_apic());
+	let local_apic_physical_address = if env::is_uhyve() {
+		default_apic()
+	} else {
+		detect_from_acpi()
+			.or_else(|()| detect_from_mp())
+			.unwrap_or_else(|()| default_apic())
+	};
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
-	init_x2apic();
-	if !processor::supports_x2apic() {
+	if processor::supports_x2apic() {
+		init_x2apic();
+	} else if env::is_uefi() {
+		// already id mapped in UEFI systems, just use the physical address as virtual one
+		LOCAL_APIC_ADDRESS
+			.set(VirtAddr::new(local_apic_physical_address.as_u64()))
+			.unwrap();
+	} else {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
-		if env::is_uefi() {
-			//already id mapped in UEFI systems, just use the physical address as virtual one
-			LOCAL_APIC_ADDRESS
-				.set(VirtAddr::new(local_apic_physical_address.as_u64()))
-				.unwrap();
-		} else {
-			let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-			let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-			let local_apic_address = VirtAddr::from(page_range.start());
-			LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
-			debug!(
-				"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
-			);
+		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let local_apic_address = VirtAddr::from(page_range.start());
+		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
+		debug!(
+			"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
+		);
 
-			let mut flags = PageTableEntryFlags::empty();
-			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
-		}
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
@@ -732,16 +735,14 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn init_x2apic() {
-	if processor::supports_x2apic() {
-		debug!("Enable x2APIC support");
-		// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
-		// Enable it.
-		let mut msr = IA32_APIC_BASE;
-		let mut apic_base = unsafe { msr.read() };
-		apic_base |= X2APIC_ENABLE;
-		unsafe {
-			msr.write(apic_base);
-		}
+	debug!("Enable x2APIC support");
+	// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
+	// Enable it.
+	let mut msr = IA32_APIC_BASE;
+	let mut apic_base = unsafe { msr.read() };
+	apic_base |= X2APIC_ENABLE;
+	unsafe {
+		msr.write(apic_base);
 	}
 }
 
