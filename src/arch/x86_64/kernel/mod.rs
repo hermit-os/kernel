@@ -136,7 +136,9 @@ pub fn application_processor_init() {
 	processor::configure();
 	gdt::add_current_core();
 	interrupts::load_idt();
-	apic::init_x2apic();
+	if processor::supports_x2apic() {
+		apic::init_x2apic();
+	}
 	apic::init_local_apic();
 	debug!("Cr0 = {:?}", Cr0::read());
 	debug!("Cr4 = {:?}", Cr4::read());
