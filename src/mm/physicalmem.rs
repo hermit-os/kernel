@@ -19,7 +19,7 @@ pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
-pub unsafe fn init_frame_range(frame_range: PageRange) {
+pub unsafe fn map_frame_range(frame_range: PageRange) {
 	cfg_if::cfg_if! {
 		if #[cfg(target_arch = "aarch64")] {
 			type IdentityPageSize = crate::arch::mm::paging::BasePageSize;
@@ -36,10 +36,6 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 	let end = frame_range
 		.end()
 		.align_up(IdentityPageSize::SIZE.try_into().unwrap());
-
-	unsafe {
-		PHYSICAL_FREE_LIST.lock().deallocate(frame_range).unwrap();
-	}
 
 	(start..end)
 		.step_by(IdentityPageSize::SIZE.try_into().unwrap())
@@ -61,8 +57,6 @@ pub unsafe fn init_frame_range(frame_range: PageRange) {
 				paging::map::<IdentityPageSize>(virt_addr, phys_addr, 1, flags);
 			});
 	}
-
-	TOTAL_MEMORY.fetch_add(frame_range.len().get(), Ordering::Relaxed);
 }
 
 fn detect_from_fdt() -> Result<(), ()> {
@@ -85,8 +79,10 @@ fn detect_from_fdt() -> Result<(), ()> {
 		.unwrap();
 
 		unsafe {
-			init_frame_range(range);
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			map_frame_range(range);
 		}
+		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 	} else {
 		for m in all_regions {
 			let start_address = m.starting_address as u64;
@@ -107,8 +103,10 @@ fn detect_from_fdt() -> Result<(), ()> {
 
 			let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 			unsafe {
-				init_frame_range(range);
+				PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+				map_frame_range(range);
 			}
+			TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 		}
 	}
 
@@ -130,8 +128,10 @@ fn detect_from_limits() -> Result<(), ()> {
 	let range =
 		PageRange::new(super::kernel_end_address().as_usize(), ram_address + limit).unwrap();
 	unsafe {
-		init_frame_range(range);
+		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		map_frame_range(range);
 	}
+	TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
 
 	Ok(())
 }
