@@ -48,7 +48,6 @@ use core::mem;
 use core::ops::Range;
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
 use hermit_sync::{Lazy, RawInterruptTicketMutex};
 pub use memory_addresses::{PhysAddr, VirtAddr};
 use talc::{ErrOnOom, Span, Talc, Talck};
