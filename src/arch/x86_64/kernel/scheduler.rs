@@ -1,12 +1,6 @@
 //! Architecture dependent interface to initialize a task
 
-#[cfg(not(feature = "common-os"))]
-use alloc::boxed::Box;
 use core::arch::naked_asm;
-#[cfg(not(feature = "common-os"))]
-use core::mem::MaybeUninit;
-#[cfg(not(feature = "common-os"))]
-use core::slice;
 use core::{mem, ptr};
 
 use align_address::Align;
@@ -259,71 +253,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-#[cfg(not(feature = "common-os"))]
-pub struct TaskTLS {
-	_block: Box<[MaybeUninit<u8>]>,
-	thread_ptr: *mut (),
-}
-
-#[cfg(not(feature = "common-os"))]
-impl TaskTLS {
-	// For details on thread-local storage data structures see
-	//
-	// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
-	// https://akkadia.org/drepper/tls.pdf
-	fn from_environment() -> Option<Box<Self>> {
-		let tls_info = env::boot_info().load_info.tls_info?;
-		assert_ne!(tls_info.memsz, 0);
-
-		// Get TLS initialization image
-		let tls_init_image = {
-			let tls_init_data = ptr::with_exposed_provenance(tls_info.start.try_into().unwrap());
-			let tls_init_len = tls_info.filesz.try_into().unwrap();
-
-			// SAFETY: We will have to trust the environment here.
-			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
-		};
-
-		// As described in “ELF Handling For Thread-Local Storage”
-		let tls_offset = usize::try_from(tls_info.memsz)
-			.unwrap()
-			.align_up(usize::try_from(tls_info.align).unwrap());
-
-		// Allocate TLS block
-		let mut block = {
-			// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
-			// So the thread pointer needs to be `block_ptr + tls_offset`.
-			// GNU style TLS requires `fs:0` to represent the same address as the thread pointer.
-			// Since the thread pointer points to the end of the TLS blocks, we need to store it there.
-			let tcb_size = mem::size_of::<*mut ()>();
-
-			vec![MaybeUninit::<u8>::uninit(); tls_offset + tcb_size].into_boxed_slice()
-		};
-
-		// Initialize beginning of the TLS block with TLS initialization image
-		block[..tls_init_image.len()].copy_from_slice(tls_init_image);
-
-		// Fill the rest of the block with zeros
-		block[tls_init_image.len()..tls_offset].fill(MaybeUninit::new(0));
-
-		// thread_ptr = block_ptr + tls_offset
-		let thread_ptr = block[tls_offset..].as_mut_ptr().cast::<()>();
-		unsafe {
-			thread_ptr.cast::<*mut ()>().write_unaligned(thread_ptr);
-		}
-
-		let this = Self {
-			_block: block,
-			thread_ptr,
-		};
-		Some(Box::new(this))
-	}
-
-	fn thread_ptr(&self) -> *mut () {
-		self.thread_ptr
-	}
-}
-
 #[cfg(not(target_os = "none"))]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	unimplemented!()
@@ -358,7 +287,9 @@ impl TaskFrame for Task {
 		// Check if TLS is allocated already and if the task uses thread-local storage.
 		#[cfg(not(feature = "common-os"))]
 		if self.tls.is_none() {
-			self.tls = TaskTLS::from_environment();
+			use crate::scheduler::task::tls::Tls;
+
+			self.tls = Tls::from_env();
 		}
 
 		unsafe {

@@ -215,6 +215,7 @@ jobs:
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/console --no-default-features qemu --devices virtio-console-mmio
         if: matrix.arch != 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package thread_test --smp 4 qemu ${{ matrix.flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs qemu ${{ matrix.flags }} --devices virtio-fs-pci
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs --smp 4 qemu ${{ matrix.flags }} --devices virtio-fs-pci
@@ -287,6 +288,4 @@ jobs:
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo uhyve --sudo
         if: matrix.arch == 'x86_64'
       - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
-        if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package thread_test --smp 4 qemu ${{ matrix.flags }}
         if: matrix.arch == 'x86_64'
