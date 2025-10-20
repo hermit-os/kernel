@@ -165,6 +165,8 @@ where
 pub mod error {
 	use thiserror::Error;
 
+	#[cfg(feature = "virtio-balloon")]
+	pub use crate::drivers::balloon::VirtioBalloonError;
 	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
 	#[cfg(feature = "virtio-fs")]
@@ -226,5 +228,9 @@ pub mod error {
 		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
 		ConsoleDriver(VirtioConsoleError),
+
+		#[cfg(feature = "virtio-balloon")]
+		#[error(transparent)]
+		BalloonDriver(VirtioBalloonError),
 	}
 }

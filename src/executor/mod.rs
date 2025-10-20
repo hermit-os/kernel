@@ -1,5 +1,7 @@
 #[cfg(feature = "alloc-stats")]
 mod alloc_stats;
+#[cfg(feature = "virtio-balloon")]
+mod balloon;
 #[cfg(feature = "net")]
 pub(crate) mod device;
 #[cfg(feature = "net")]
@@ -130,6 +132,8 @@ pub fn init() {
 	crate::executor::vsock::init();
 	#[cfg(feature = "alloc-stats")]
 	crate::executor::alloc_stats::init();
+	#[cfg(feature = "virtio-balloon")]
+	crate::executor::balloon::init();
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
