@@ -7,7 +7,8 @@ pub(crate) const USER_STACK_SIZE: usize = 0x0010_0000;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
 	feature = "fuse",
-	feature = "vsock"
+	feature = "vsock",
+	feature = "balloon"
 ))]
 pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = if cfg!(feature = "pci") { 2048 } else { 1024 };
 

@@ -69,6 +69,7 @@ trace = []
 udp = ["smoltcp", "smoltcp/socket-udp"]
 vga = []
 vsock = ["pci"]
+balloon = ["pci"]
 allocation-stats = ["talc/counters"]
 
 [lints.rust]

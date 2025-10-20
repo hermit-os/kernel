@@ -6,7 +6,13 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse", feature = "vsock"))]
+#[cfg(any(
+	feature = "tcp",
+	feature = "udp",
+	feature = "fuse",
+	feature = "vsock",
+	feature = "balloon"
+))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -17,6 +23,8 @@ use pci_types::{
 };
 
 use crate::arch::pci::PciConfigRegion;
+#[cfg(feature = "balloon")]
+use crate::drivers::balloon::VirtioBalloonDriver;
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(any(feature = "tcp", feature = "udp"))]
@@ -34,7 +42,8 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 		not(all(target_arch = "x86_64", feature = "rtl8139"))
 	),
 	feature = "fuse",
-	feature = "vsock"
+	feature = "vsock",
+	feature = "balloon"
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
@@ -43,7 +52,8 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 		not(all(target_arch = "x86_64", feature = "rtl8139"))
 	),
 	feature = "fuse",
-	feature = "vsock"
+	feature = "vsock",
+	feature = "balloon"
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "vsock")]
@@ -344,6 +354,8 @@ pub(crate) enum PciDriver {
 		any(feature = "tcp", feature = "udp")
 	))]
 	RTL8139Net(InterruptTicketMutex<RTL8139Driver>),
+	#[cfg(feature = "balloon")]
+	VirtioBalloon(InterruptTicketMutex<VirtioBalloonDriver>),
 }
 
 impl PciDriver {
@@ -386,6 +398,15 @@ impl PciDriver {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
 			#[allow(unreachable_patterns)]
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "balloon")]
+	fn get_balloon_driver(&self) -> Option<&InterruptTicketMutex<VirtioBalloonDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioBalloon(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -443,6 +464,18 @@ impl PciDriver {
 				let irq_number = drv.lock().get_interrupt_number();
 
 				(irq_number, fuse_handler)
+			}
+			#[cfg(feature = "balloon")]
+			Self::VirtioBalloon(drv) => {
+				fn balloon_handler() {
+					if let Some(driver) = get_balloon_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				let irq_number = drv.lock().get_interrupt_number();
+
+				(irq_number, balloon_handler)
 			}
 			_ => todo!(),
 		}
@@ -512,6 +545,14 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.find_map(|drv| drv.get_filesystem_driver())
 }
 
+#[cfg(feature = "balloon")]
+pub(crate) fn get_balloon_driver() -> Option<&'static InterruptTicketMutex<VirtioBalloonDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_balloon_driver())
+}
+
 pub(crate) fn init() {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
@@ -530,7 +571,8 @@ pub(crate) fn init() {
 					not(all(target_arch = "x86_64", feature = "rtl8139"))
 				),
 				feature = "fuse",
-				feature = "vsock"
+				feature = "vsock",
+				feature = "balloon"
 			))]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(
@@ -547,6 +589,10 @@ pub(crate) fn init() {
 				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)));
+				}
+				#[cfg(feature = "balloon")]
+				Ok(VirtioDriver::Balloon(drv)) => {
+					register_driver(PciDriver::VirtioBalloon(InterruptTicketMutex::new(drv)));
 				}
 				_ => {}
 			}

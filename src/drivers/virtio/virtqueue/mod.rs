@@ -148,6 +148,9 @@ pub trait Virtq: Send {
 	/// Disables interrupts for this virtqueue upon receiving a transfer
 	fn disable_notifs(&mut self);
 
+	/// Check if there are no more descriptors left in the queue.
+	fn is_empty(&self) -> bool;
+
 	/// Checks if new used descriptors have been written by the device.
 	/// This activates the queue and polls the descriptor ring of the queue.
 	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError>;
@@ -568,6 +571,14 @@ impl MemPool {
 			pool: (0..size).map(MemDescrId).collect(),
 			limit: size,
 		}
+	}
+
+	fn all_used(&self) -> bool {
+		self.pool.len() == 0
+	}
+
+	fn all_available(&self) -> bool {
+		self.pool.len() == self.limit as usize
 	}
 }
 

@@ -7,6 +7,8 @@ pub mod virtqueue;
 pub mod error {
 	use core::fmt;
 
+	#[cfg(feature = "balloon")]
+	use crate::drivers::balloon::VirtioBalloonError;
 	#[cfg(feature = "fuse")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(
@@ -40,6 +42,8 @@ pub mod error {
 		FsDriver(VirtioFsError),
 		#[cfg(feature = "vsock")]
 		VsockDriver(VirtioVsockError),
+		#[cfg(feature = "balloon")]
+		BalloonDriver(VirtioBalloonError),
 		#[cfg(not(feature = "pci"))]
 		Unknown,
 	}
@@ -168,6 +172,31 @@ pub mod error {
 						"Virtio socket driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"
 					),
 					VirtioVsockError::IncompatibleFeatureSets(driver_features, device_features) => {
+						write!(
+							f,
+							"Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"
+						)
+					}
+				},
+				#[cfg(feature = "balloon")]
+				VirtioError::BalloonDriver(balloon_error) => match balloon_error {
+					#[cfg(feature = "pci")]
+					VirtioBalloonError::NoDevCfg { device_id } => write!(
+						f,
+						"Virtio traditional memory balloon device driver failed, for device {device_id:x}, due to a missing or malformed device config!"
+					),
+					VirtioBalloonError::FeatureNegotiationFailed { device_id } => write!(
+						f,
+						"Virtio traditional memory balloon device driver failed, for device {device_id:x}, device did not acknowledge negotiated feature set!"
+					),
+					VirtioBalloonError::FeatureRequirementsNotMet { driver_features } => write!(
+						f,
+						"Virtio traditional memory balloon device driver tried to set feature bit without setting dependency feature. Feat set: {driver_features:?}"
+					),
+					VirtioBalloonError::IncompatibleFeatureSets {
+						driver_features,
+						device_features,
+					} => {
 						write!(
 							f,
 							"Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"

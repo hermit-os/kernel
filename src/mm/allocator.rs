@@ -4,13 +4,34 @@
 use core::alloc::{GlobalAlloc, Layout};
 
 use hermit_sync::RawInterruptTicketMutex;
-use talc::{ErrOnOom, Span, Talc, Talck};
+#[cfg(not(feature = "balloon"))]
+use talc::ErrOnOom;
+use talc::{Span, Talc, Talck};
 
-pub struct LockedAllocator(Talck<RawInterruptTicketMutex, ErrOnOom>);
+#[cfg(feature = "balloon")]
+use crate::drivers::balloon::oom::DeflateBalloonOnOom;
+
+#[cfg(not(feature = "balloon"))]
+pub(crate) type HermitOomHandler = ErrOnOom;
+#[cfg(feature = "balloon")]
+pub(crate) type HermitOomHandler = DeflateBalloonOnOom;
+
+pub struct LockedAllocator(Talck<RawInterruptTicketMutex, HermitOomHandler>);
 
 impl LockedAllocator {
+	#[cfg(not(feature = "balloon"))]
 	pub const fn new() -> Self {
 		Self(Talc::new(ErrOnOom).lock())
+	}
+
+	/// # Safety
+	/// May only be used to construct the allocator that will be used as the
+	/// global allocator.
+	#[cfg(feature = "balloon")]
+	pub const unsafe fn new() -> Self {
+		// SAFETY: We pass on the requirement of usage being restricted to only
+		//         the one global allocator to our caller.
+		Self(Talc::new(unsafe { DeflateBalloonOnOom::new() }).lock())
 	}
 
 	#[inline]
@@ -26,6 +47,10 @@ impl LockedAllocator {
 		unsafe {
 			self.0.lock().claim(arena).unwrap();
 		}
+	}
+
+	pub(crate) fn inner(&self) -> &Talck<RawInterruptTicketMutex, HermitOomHandler> {
+		&self.0
 	}
 }
 

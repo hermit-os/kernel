@@ -17,9 +17,17 @@ pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
 use crate::{arch, env};
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "balloon")))]
 #[global_allocator]
 pub(crate) static ALLOCATOR: LockedAllocator = LockedAllocator::new();
+
+#[cfg(all(target_os = "none", feature = "balloon"))]
+#[global_allocator]
+pub(crate) static ALLOCATOR: LockedAllocator = {
+	// SAFETY: We are constructing this `LockedAllocator` to be Hermit's global
+	//         allocator.
+	unsafe { LockedAllocator::new() }
+};
 
 /// Physical and virtual address range of the 2 MiB pages that map the kernel.
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {

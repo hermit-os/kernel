@@ -56,6 +56,10 @@ impl DescrRing {
 		unsafe { &*self.used_ring_cell.get() }
 	}
 
+	fn is_empty(&self) -> bool {
+		self.mem_pool.all_available()
+	}
+
 	fn push(&mut self, tkn: TransferToken<virtq::Desc>) -> Result<u16, VirtqError> {
 		let mut index;
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
@@ -190,6 +194,10 @@ impl Virtq for SplitVq {
 
 	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
 		self.ring.try_recv()
+	}
+
+	fn is_empty(&self) -> bool {
+		self.ring.is_empty()
 	}
 
 	fn dispatch_batch(

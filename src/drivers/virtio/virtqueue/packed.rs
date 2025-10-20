@@ -532,6 +532,10 @@ impl Virtq for PackedVq {
 		self.drv_event.disable_notif();
 	}
 
+	fn is_empty(&self) -> bool {
+		todo!()
+	}
+
 	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
 		self.descr_ring.try_recv()
 	}
