@@ -65,12 +65,15 @@ fn detect_from_fdt() -> Result<(), ()> {
 	let all_regions = fdt
 		.find_all_nodes("/memory")
 		.map(|m| m.reg().unwrap().next().unwrap());
-
-	let mut found_ram = false;
+	if all_regions.count() == 0 {
+		return Err(());
+	}
+	let all_regions = fdt
+		.find_all_nodes("/memory")
+		.map(|m| m.reg().unwrap().next().unwrap());
 
 	if env::is_uefi() {
 		let biggest_region = all_regions.max_by_key(|m| m.size.unwrap()).unwrap();
-		found_ram = true;
 
 		let range = PageRange::from_start_len(
 			biggest_region.starting_address.addr(),
@@ -93,8 +96,6 @@ fn detect_from_fdt() -> Result<(), ()> {
 				continue;
 			}
 
-			found_ram = true;
-
 			let start_address = if start_address <= super::kernel_start_address().as_u64() {
 				super::kernel_end_address()
 			} else {
@@ -110,7 +111,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 		}
 	}
 
-	if found_ram { Ok(()) } else { Err(()) }
+	Ok(())
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
