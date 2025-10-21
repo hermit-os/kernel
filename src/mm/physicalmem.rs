@@ -1,7 +1,9 @@
+use core::alloc::AllocError;
+use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
-use free_list::{FreeList, PageRange, PageRangeError};
+use free_list::{FreeList, PageLayout, PageRange, PageRangeError};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
@@ -9,11 +11,47 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
+use crate::mm::PageRangeAllocator;
 use crate::mm::device_alloc::DeviceAlloc;
 
 pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+pub struct FrameAlloc;
+
+impl PageRangeAllocator for FrameAlloc {
+	unsafe fn init() {
+		init();
+	}
+
+	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(layout)
+			.map_err(|_| AllocError)
+	}
+
+	fn allocate_at(range: PageRange) -> Result<(), AllocError> {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate_at(range)
+			.map_err(|_| AllocError)
+	}
+
+	unsafe fn deallocate(range: PageRange) {
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
+	}
+}
+
+impl fmt::Display for FrameAlloc {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let free_list = PHYSICAL_FREE_LIST.lock();
+		write!(f, "FrameAlloc free list:\n{free_list}")
+	}
+}
 
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
