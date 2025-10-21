@@ -11,17 +11,17 @@ use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
-	use free_list::{PageLayout, PageRange};
+	use free_list::PageLayout;
 	use x86_64::registers::control::Cr3;
 
-	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+	use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
 
 	let layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageAlloc::allocate(layout).unwrap();
+	let page_range = PageBox::new(layout).unwrap();
 	let virtaddr = VirtAddr::from(page_range.start());
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -52,11 +52,6 @@ pub fn create_new_root_page_table() -> usize {
 	};
 
 	paging::unmap::<BasePageSize>(virtaddr, 2);
-	let range =
-		PageRange::from_start_len(virtaddr.as_usize(), 2 * BasePageSize::SIZE as usize).unwrap();
-	unsafe {
-		PageAlloc::deallocate(range);
-	}
 
 	physaddr.as_usize()
 }
