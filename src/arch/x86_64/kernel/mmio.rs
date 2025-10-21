@@ -27,8 +27,7 @@ use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -87,7 +86,7 @@ fn check_linux_args(
 	linux_mmio: &'static [String],
 ) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
 
 	for arg in linux_mmio {
@@ -123,10 +122,7 @@ fn check_linux_args(
 					let start = current_address.align_down(len);
 					let frame_range = PageRange::from_start_len(start, len).unwrap();
 
-					PHYSICAL_FREE_LIST
-						.lock()
-						.allocate_at(frame_range)
-						.unwrap_err();
+					FrameAlloc::allocate_at(frame_range).unwrap_err();
 				}
 
 				return Ok((mmio, irq));
@@ -141,7 +137,7 @@ fn check_linux_args(
 	let range =
 		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		PageAlloc::deallocate(range);
 	}
 
 	Err("Network card not found!")
@@ -151,7 +147,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
@@ -186,10 +182,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 			let start = current_address.align_down(len);
 			let frame_range = PageRange::from_start_len(start, len).unwrap();
 
-			PHYSICAL_FREE_LIST
-				.lock()
-				.allocate_at(frame_range)
-				.unwrap_err();
+			FrameAlloc::allocate_at(frame_range).unwrap_err();
 		}
 
 		return Ok((mmio, IRQ_NUMBER));
@@ -199,7 +192,7 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 	let range =
 		PageRange::from_start_len(virtual_address.as_usize(), BasePageSize::SIZE as usize).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		PageAlloc::deallocate(range);
 	}
 
 	Err("Network card not found!")

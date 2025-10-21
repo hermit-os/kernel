@@ -16,7 +16,7 @@
 //!                        ...         │   │
 //!    00000000 ◄──┬───┐...         ...├───┼──► mem_size
 //!                │   │   ...   ...   │   │
-//! PHYS_FREE_LIST │MEM│      ...      │   │ Unused
+//!     FrameAlloc │MEM│      ...      │   │ Unused
 //!                │   │   ...   ...   │   │
 //!    mem_size ◄──┼───┤...         ...├───┼──► DeviceAlloc.phys_offset
 //!                │   │   ...         │   │
@@ -30,7 +30,7 @@
 //!                │   │               │   │
 //!            PCI │   │               ├───┼──► kernel_virt_start
 //!                │   │               │   │
-//!     Unknown ◄──┼───┤               │   │ KERNEL_FREE_LIST
+//!     Unknown ◄──┼───┤               │   │ PageAlloc
 //!                │   │               │   │
 //!                │   │               ├───┼──► kernel_virt_end
 //!                │   │               │   │
@@ -42,8 +42,8 @@
 
 pub(crate) mod device_alloc;
 mod page_range_alloc;
-pub(crate) mod physicalmem;
-pub(crate) mod virtualmem;
+mod physicalmem;
+mod virtualmem;
 
 use core::mem;
 use core::ops::Range;
@@ -61,8 +61,6 @@ pub use self::virtualmem::PageAlloc;
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -148,7 +146,7 @@ pub(crate) fn init() {
 
 		let virt_size: usize = reserve.align_down(LargePageSize::SIZE as usize);
 		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let page_range = PageAlloc::allocate(layout).unwrap();
 		let virt_addr = VirtAddr::from(page_range.start());
 		heap_start_addr = virt_addr;
 
@@ -198,7 +196,7 @@ pub(crate) fn init() {
 		let virt_size: usize = ((avail_mem * 75) / 100).align_down(LargePageSize::SIZE as usize);
 
 		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let page_range = PageAlloc::allocate(layout).unwrap();
 		let virt_addr = VirtAddr::from(page_range.start());
 		heap_start_addr = virt_addr;
 
@@ -288,8 +286,8 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn print_information() {
-	info!("Physical memory free list:\n{}", PHYSICAL_FREE_LIST.lock());
-	info!("Virtual memory free list:\n{}", KERNEL_FREE_LIST.lock());
+	info!("{FrameAlloc}");
+	info!("{PageAlloc}");
 }
 
 /// Maps a given physical address and size in virtual space and returns address.
@@ -321,7 +319,7 @@ pub(crate) fn map(
 	}
 
 	let layout = PageLayout::from_size(size).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
 	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
@@ -341,7 +339,7 @@ pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
 
 		let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
 		unsafe {
-			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+			PageAlloc::deallocate(range);
 		}
 	} else {
 		panic!(

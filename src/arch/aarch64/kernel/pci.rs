@@ -12,7 +12,7 @@ use pci_types::{
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::{core_id, env};
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -225,7 +225,7 @@ pub fn init() {
 		let size = u64::try_from(reg.size.unwrap()).unwrap();
 
 		let layout = PageLayout::from_size_align(size.try_into().unwrap(), 0x1000_0000).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let page_range = PageAlloc::allocate(layout).unwrap();
 		let pci_address = VirtAddr::from(page_range.start());
 		info!(
 			"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"

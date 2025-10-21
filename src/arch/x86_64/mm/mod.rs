@@ -7,21 +7,21 @@ use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 pub use self::paging::init_page_tables;
 #[cfg(feature = "common-os")]
 use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
 	use free_list::{PageLayout, PageRange};
 	use x86_64::registers::control::Cr3;
 
-	use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-	use crate::mm::virtualmem::KERNEL_FREE_LIST;
+	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
 
 	let layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let virtaddr = VirtAddr::from(page_range.start());
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -55,7 +55,7 @@ pub fn create_new_root_page_table() -> usize {
 	let range =
 		PageRange::from_start_len(virtaddr.as_usize(), 2 * BasePageSize::SIZE as usize).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		PageAlloc::deallocate(range);
 	}
 
 	physaddr.as_usize()
@@ -63,11 +63,15 @@ pub fn create_new_root_page_table() -> usize {
 
 pub fn init() {
 	paging::init();
-	crate::mm::physicalmem::init();
+	unsafe {
+		FrameAlloc::init();
+	}
 	unsafe {
 		paging::log_page_tables();
 	}
-	crate::mm::virtualmem::init();
+	unsafe {
+		PageAlloc::init();
+	}
 
 	#[cfg(feature = "common-os")]
 	{

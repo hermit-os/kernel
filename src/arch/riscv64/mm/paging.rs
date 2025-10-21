@@ -9,7 +9,7 @@ use riscv::asm::sfence_vma;
 use riscv::register::satp;
 use riscv::register::satp::Satp;
 
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
 
@@ -435,7 +435,7 @@ where
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
 				let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-				let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+				let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
 				let new_entry = PhysAddr::from(frame_range.start());
 				self.entries[index].set(new_entry, PageTableEntryFlags::BLANK);
 
@@ -614,10 +614,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 
 	for (map_counter, virt_addr) in virt_addrs.enumerate() {
 		let layout = PageLayout::from_size_align(S::SIZE as usize, S::SIZE as usize).unwrap();
-		let frame_range = PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(layout)
-			.map_err(|_| map_counter)?;
+		let frame_range = FrameAlloc::allocate(layout).map_err(|_| map_counter)?;
 		let phys_addr = PhysAddr::from(frame_range.start());
 		map::<S>(virt_addr, phys_addr, 1, flags);
 	}

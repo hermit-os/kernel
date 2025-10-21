@@ -6,8 +6,7 @@ use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-use crate::mm::virtualmem;
+use crate::mm::{FrameAlloc, PageRangeAllocator, virtualmem};
 
 /// An [`Allocator`] for memory that is used to communicate with devices.
 ///
@@ -20,10 +19,7 @@ unsafe impl Allocator for DeviceAlloc {
 		let size = layout.size().align_up(BasePageSize::SIZE as usize);
 		let frame_layout = PageLayout::from_size(size).unwrap();
 
-		let frame_range = PHYSICAL_FREE_LIST
-			.lock()
-			.allocate(frame_layout)
-			.map_err(|_| AllocError)?;
+		let frame_range = FrameAlloc::allocate(frame_layout).map_err(|_| AllocError)?;
 
 		let phys_addr = PhysAddr::from(frame_range.start());
 		let ptr = self.ptr_from(phys_addr);
@@ -39,7 +35,7 @@ unsafe impl Allocator for DeviceAlloc {
 		let range = PageRange::from_start_len(phys_addr.as_usize(), size).unwrap();
 
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			FrameAlloc::deallocate(range);
 		}
 	}
 }

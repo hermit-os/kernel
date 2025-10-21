@@ -9,8 +9,7 @@ use crate::arch;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 bitflags! {
 	#[repr(transparent)]
@@ -36,7 +35,7 @@ static PROT_NONE_FREE_LIST: SpinMutex<FreeList<16>> = SpinMutex::new(FreeList::n
 pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut *mut u8) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 	let layout = PageLayout::from_size(size).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
@@ -46,7 +45,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 		return 0;
 	}
 	let frame_layout = PageLayout::from_size(size).unwrap();
-	let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
 	let physical_address = PhysAddr::from(frame_range.start());
 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
@@ -89,12 +88,12 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 		let frame_range =
 			PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(frame_range).unwrap();
+			FrameAlloc::deallocate(frame_range);
 		}
 	}
 
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(page_range).unwrap();
+		PageAlloc::deallocate(page_range);
 	}
 
 	0
@@ -125,7 +124,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		0
 	} else {
 		let frame_layout = PageLayout::from_size(size).unwrap();
-		let frame_range = PHYSICAL_FREE_LIST.lock().allocate(frame_layout).unwrap();
+		let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
 		let physical_address = PhysAddr::from(frame_range.start());
 		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0

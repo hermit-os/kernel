@@ -14,7 +14,7 @@ use crate::env;
 use crate::mm::PageRangeAllocator;
 use crate::mm::device_alloc::DeviceAlloc;
 
-pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -128,7 +128,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			FrameAlloc::deallocate(range);
 			map_frame_range(range);
 		}
 		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
@@ -218,7 +218,7 @@ fn detect_from_limits() -> Result<(), ()> {
 	Ok(())
 }
 
-pub fn init() {
+fn init() {
 	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
 		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;

@@ -7,7 +7,7 @@ use memory_addresses::VirtAddr;
 
 use crate::mm::PageRangeAllocator;
 
-pub static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 
 pub struct PageAlloc;
@@ -45,7 +45,7 @@ impl fmt::Display for PageAlloc {
 	}
 }
 
-pub fn init() {
+fn init() {
 	let range = PageRange::new(
 		kernel_heap_end().as_usize().div_ceil(2),
 		kernel_heap_end().as_usize() + 1,
@@ -53,7 +53,7 @@ pub fn init() {
 	.unwrap();
 
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		PageAlloc::deallocate(range);
 	}
 }
 

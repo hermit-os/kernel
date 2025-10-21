@@ -12,7 +12,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::env;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::{PageAlloc, PageRangeAllocator};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);
@@ -137,7 +137,7 @@ impl AcpiTable<'_> {
 		let physical_map_address = physical_address.align_down(BasePageSize::SIZE);
 		let offset = (physical_address - physical_map_address) as usize;
 		let layout = PageLayout::from_size(allocated_length).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+		let page_range = PageAlloc::allocate(layout).unwrap();
 		let mut virtual_address = VirtAddr::from(page_range.start());
 		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
@@ -150,14 +150,14 @@ impl AcpiTable<'_> {
 			let range =
 				PageRange::from_start_len(virtual_address.as_usize(), allocated_length).unwrap();
 			unsafe {
-				KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				PageAlloc::deallocate(range);
 			}
 
 			allocated_length = (table_length + offset).align_up(BasePageSize::SIZE as usize);
 			count = allocated_length / BasePageSize::SIZE as usize;
 
 			let layout = PageLayout::from_size(allocated_length).unwrap();
-			let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+			let page_range = PageAlloc::allocate(layout).unwrap();
 			virtual_address = VirtAddr::from(page_range.start());
 			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
@@ -194,7 +194,7 @@ impl Drop for AcpiTable<'_> {
 			)
 			.unwrap();
 			unsafe {
-				KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+				PageAlloc::deallocate(range);
 			}
 		}
 	}
