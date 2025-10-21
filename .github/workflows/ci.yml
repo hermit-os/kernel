@@ -199,6 +199,16 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
+      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo uhyve --sudo
+        if: matrix.arch == 'x86_64'
+      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
+        if: matrix.arch == 'x86_64'
+      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features firecracker --sudo
+        if: matrix.arch == 'x86_64'
+      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features --smp 4 firecracker --sudo
+        if: matrix.arch == 'x86_64'
+      - run: cargo clean
+        working-directory: .
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world qemu ${{ matrix.flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world qemu ${{ matrix.flags }} --uefi
         if: matrix.arch == 'x86_64'
@@ -279,13 +289,3 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package loopback qemu ${{ matrix.flags }}
         env:
           HERMIT_IP: 127.0.0.1
-      - run: cargo clean
-        working-directory: .
-      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features firecracker --sudo
-        if: matrix.arch == 'x86_64'
-      - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features --smp 4 firecracker --sudo
-        if: matrix.arch == 'x86_64'
-      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo uhyve --sudo
-        if: matrix.arch == 'x86_64'
-      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
-        if: matrix.arch == 'x86_64'
