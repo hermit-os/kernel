@@ -54,9 +54,9 @@ use hermit_sync::{Lazy, RawInterruptTicketMutex};
 pub use memory_addresses::{PhysAddr, VirtAddr};
 use talc::{ErrOnOom, Span, Talc, Talck};
 
-pub use self::page_range_alloc::PageRangeAllocator;
-pub use self::physicalmem::FrameAlloc;
-pub use self::virtualmem::PageAlloc;
+pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
+pub use self::physicalmem::{FrameAlloc, FrameBox};
+pub use self::virtualmem::{PageAlloc, PageBox};
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;

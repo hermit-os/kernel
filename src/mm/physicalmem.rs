@@ -11,8 +11,8 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
-use crate::mm::PageRangeAllocator;
 use crate::mm::device_alloc::DeviceAlloc;
+use crate::mm::{PageRangeAllocator, PageRangeBox};
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -52,6 +52,8 @@ impl fmt::Display for FrameAlloc {
 		write!(f, "FrameAlloc free list:\n{free_list}")
 	}
 }
+
+pub type FrameBox = PageRangeBox<FrameAlloc>;
 
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)

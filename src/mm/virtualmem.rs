@@ -5,7 +5,7 @@ use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
 
-use crate::mm::PageRangeAllocator;
+use crate::mm::{PageRangeAllocator, PageRangeBox};
 
 static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -44,6 +44,8 @@ impl fmt::Display for PageAlloc {
 		write!(f, "PageAlloc free list:\n{free_list}")
 	}
 }
+
+pub type PageBox = PageRangeBox<PageAlloc>;
 
 fn init() {
 	let range = PageRange::new(
