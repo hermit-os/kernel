@@ -19,7 +19,7 @@
 //! [\[RFC-TLSDESC-x86\]]: https://www.fsfla.org/~lxoliva/writeups/TLS/RFC-TLSDESC-x86.txt
 
 use core::alloc::Layout;
-use core::mem::{self, MaybeUninit};
+use core::mem::MaybeUninit;
 use core::{ptr, slice};
 
 use hermit_entry::boot_info::TlsInfo;
@@ -68,35 +68,39 @@ impl Tls {
 			.unwrap()
 			.pad_to_align();
 
-		let (layout, tls_offset, tcb_offset) =
-			if cfg!(any(target_arch = "aarch64", target_arch = "riscv64")) {
-				// AArch64 and 64-bit RISC-V use TLS data structures variant I.
+		let (layout, tls_offset, thread_ptr_offset) = if cfg!(target_arch = "riscv64") {
+			// 64-bit RISC-V uses TLS data structures variant I.
+			// On RISC-V, `tp` points to the address one past the end of the TCB.
 
-				// Variant I does not guarantee more than 16 bytes of space for the TCB.
-				assert_eq!(tcb_layout.size(), 16);
+			// In variant I, the TLS data comes after the TCB.
+			let (tls_layout, data_offset) = tcb_layout.extend(data_layout).unwrap();
+			(tls_layout.pad_to_align(), data_offset, data_offset)
+		} else if cfg!(target_arch = "aarch64") {
+			// AArch64 uses TLS data structures variant I.
+			// For variant I, `tp` points to the start of the 16-byte gap.
 
-				// Variant I requires the dtv pointer to be at the start of the TCB.
-				assert_eq!(mem::offset_of!(Tcb, dtv), 0);
+			// In variant I, the TLS data comes after the TCB.
+			let gap_layout = Layout::from_size_align(16, align).unwrap();
+			let (tls_layout, thread_ptr_offset) = tcb_layout.extend(gap_layout).unwrap();
+			let (tls_layout, data_offset) = tls_layout.extend(data_layout).unwrap();
+			(tls_layout.pad_to_align(), data_offset, thread_ptr_offset)
+		} else if cfg!(target_arch = "x86_64") {
+			// x86-64 uses TLS data structures variant II.
 
-				// In variant I, the TLS data comes after the TCB.
-				let (tls_layout, data_offset) = tcb_layout.extend(data_layout).unwrap();
-				(tls_layout.pad_to_align(), data_offset, 0)
-			} else if cfg!(target_arch = "x86_64") {
-				// x86-64 uses TLS data structures variant II.
+			// Variant II (on GNU systems) requires the thread pointer to be at the start of the TCB:
+			// > For the implementation on GNU systems we can add one more requirement. The
+			// > address %gs:0 represents is actually the same as the thread pointer. I.e., the content of
+			// > the word addressed via %gs:0 is the address of the very same location.
+			#[cfg(target_arch = "x86_64")]
+			assert_eq!(core::mem::offset_of!(Tcb, thread_ptr), 0);
 
-				// Variant II (on GNU systems) requires the thread pointer to be at the start of the TCB:
-				// > For the implementation on GNU systems we can add one more requirement. The
-				// > address %gs:0 represents is actually the same as the thread pointer. I.e., the content of
-				// > the word addressed via %gs:0 is the address of the very same location.
-				#[cfg(target_arch = "x86_64")]
-				assert_eq!(mem::offset_of!(Tcb, thread_ptr), 0);
-
-				// In Variant II, the TCB comes after the TLS data.
-				let (tls_layout, tcb_offset) = data_layout.extend(tcb_layout).unwrap();
-				(tls_layout.pad_to_align(), 0, tcb_offset)
-			} else {
-				unimplemented!()
-			};
+			// In Variant II, the TCB comes after the TLS data.
+			let (tls_layout, tcb_offset) = data_layout.extend(tcb_layout).unwrap();
+			// For variant II, `tp` points to the TCB after the TLS data.
+			(tls_layout.pad_to_align(), 0, tcb_offset)
+		} else {
+			unimplemented!()
+		};
 
 		let mut block = Allocation::new(layout).unwrap();
 
@@ -107,20 +111,8 @@ impl Tls {
 		block.as_mut_slice()[tls_offset..][tls_init_image.len()..data_layout.size()]
 			.fill(MaybeUninit::new(0));
 
-		let thread_ptr = if cfg!(target_arch = "riscv64") {
-			// On RISC-V, `tp` points to the address one past the end of the TCB.
-			unsafe { block.as_mut_ptr().add(tls_offset).cast() }
-		} else if cfg!(target_arch = "aarch64") {
-			// For variant I, `tp` points to the start of the block.
-			block.as_mut_ptr().cast()
-		} else if cfg!(target_arch = "x86_64") {
-			// For variant II, `tp` points to the TCB after the TLS data.
-			unsafe { block.as_mut_ptr().add(tcb_offset).cast() }
-		} else {
-			unimplemented!()
-		};
+		let thread_ptr = unsafe { block.as_mut_ptr().add(thread_ptr_offset).cast() };
 
-		let tcb_ptr = unsafe { block.as_mut_ptr().add(tcb_offset).cast::<Tcb>() };
 		let tcb = Tcb {
 			#[cfg(target_arch = "x86_64")]
 			thread_ptr,
@@ -128,12 +120,23 @@ impl Tls {
 			tcb_data: ptr::null_mut(),
 		};
 		unsafe {
-			tcb_ptr.write(tcb);
+			Self::tcb_ptr(thread_ptr).write(tcb);
 		}
 
 		Self {
 			_block: block,
 			thread_ptr,
+		}
+	}
+
+	unsafe fn tcb_ptr(thread_ptr: *mut ()) -> *mut Tcb {
+		if cfg!(any(target_arch = "riscv64", target_arch = "aarch64")) {
+			// On RISC-V, `tp` points to the address one past the end of the TCB.
+			unsafe { thread_ptr.cast::<Tcb>().sub(1) }
+		} else if cfg!(target_arch = "x86_64") {
+			thread_ptr.cast()
+		} else {
+			unimplemented!()
 		}
 	}
 
