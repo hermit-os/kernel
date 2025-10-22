@@ -75,16 +75,17 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 		);
 		debug!("Unmapping {virtual_address:X} ({size}) -> {physical_address:X}");
 
-		let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
-		if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
+		let frame_range =
+			PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
+		if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(frame_range) } {
 			// FIXME: return EINVAL instead, once wasmtime can handle it
-			error!("Unable to deallocate {range:?}");
+			error!("Unable to deallocate {frame_range:?}");
 		}
 	}
 
-	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+	let page_range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		KERNEL_FREE_LIST.lock().deallocate(page_range).unwrap();
 	}
 
 	0
