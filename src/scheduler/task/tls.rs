@@ -151,6 +151,14 @@ impl Tls {
 	}
 }
 
+impl Drop for Tls {
+	fn drop(&mut self) {
+		unsafe {
+			Self::tcb_ptr(self.thread_ptr()).drop_in_place();
+		}
+	}
+}
+
 mod allocation {
 	use core::alloc::Layout;
 	use core::mem::MaybeUninit;
