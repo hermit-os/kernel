@@ -1,18 +1,14 @@
 use core::{mem, ptr, slice, str};
 
-use align_address::Align;
-use free_list::{PageLayout, PageRange};
 use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
 use x86_64::structures::paging::PhysFrame;
 
 use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::paging::{
-	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
-};
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::env;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::device_alloc::DeviceAlloc;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);
@@ -97,79 +93,19 @@ impl AcpiSdtHeader {
 }
 
 /// A convenience structure to work with an ACPI table.
-/// Maps a single table to memory and frees the memory when a variable of this structure goes out of scope.
 #[derive(Debug)]
 pub struct AcpiTable<'a> {
 	header: &'a AcpiSdtHeader,
-	allocated_virtual_address: VirtAddr,
-	allocated_length: usize,
 }
 
 impl AcpiTable<'_> {
-	fn map(physical_address: PhysAddr) -> Self {
-		if env::is_uefi() {
-			// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
-			let allocated_virtual_address = VirtAddr::new(physical_address.as_u64());
-			let header = unsafe {
-				allocated_virtual_address
-					.as_ptr::<AcpiSdtHeader>()
-					.as_ref()
-					.unwrap()
-			};
-			let allocated_length = usize::try_from(header.length).unwrap();
+	fn map(phys_addr: PhysAddr) -> Self {
+		// We expect physical devices to be already mapped according to `DeviceAlloc`.
+		let ptr = DeviceAlloc.ptr_from::<AcpiSdtHeader>(phys_addr);
 
-			return Self {
-				header,
-				allocated_virtual_address,
-				allocated_length,
-			};
-		}
+		let header = unsafe { ptr.as_ref().unwrap() };
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().read_only().execute_disable();
-
-		// Allocate two 4 KiB pages for the table and map it.
-		// This guarantees that we can access at least the "length" field of the table header when its physical address
-		// crosses a page boundary.
-		let mut allocated_length = 2 * BasePageSize::SIZE as usize;
-		let mut count = allocated_length / BasePageSize::SIZE as usize;
-
-		let physical_map_address = physical_address.align_down(BasePageSize::SIZE);
-		let offset = (physical_address - physical_map_address) as usize;
-		let layout = PageLayout::from_size(allocated_length).unwrap();
-		let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-		let mut virtual_address = VirtAddr::from(page_range.start());
-		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
-
-		// Get a pointer to the header and query the table length.
-		let mut header_ptr: *const AcpiSdtHeader = (virtual_address + offset).as_ptr();
-		let table_length = unsafe { (*header_ptr).length } as usize;
-
-		// Remap if the length exceeds what we've allocated.
-		if table_length > allocated_length - offset {
-			let range =
-				PageRange::from_start_len(virtual_address.as_usize(), allocated_length).unwrap();
-			unsafe {
-				KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
-			}
-
-			allocated_length = (table_length + offset).align_up(BasePageSize::SIZE as usize);
-			count = allocated_length / BasePageSize::SIZE as usize;
-
-			let layout = PageLayout::from_size(allocated_length).unwrap();
-			let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
-			virtual_address = VirtAddr::from(page_range.start());
-			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
-
-			header_ptr = (virtual_address + offset).as_ptr();
-		}
-
-		// Return the table.
-		Self {
-			header: unsafe { &*header_ptr },
-			allocated_virtual_address: virtual_address,
-			allocated_length,
-		}
+		Self { header }
 	}
 
 	pub fn header_start_address(&self) -> usize {
@@ -182,21 +118,6 @@ impl AcpiTable<'_> {
 
 	pub fn table_end_address(&self) -> usize {
 		self.header_start_address() + self.header.length as usize
-	}
-}
-
-impl Drop for AcpiTable<'_> {
-	fn drop(&mut self) {
-		if !env::is_uefi() {
-			let range = PageRange::from_start_len(
-				self.allocated_virtual_address.as_usize(),
-				self.allocated_length,
-			)
-			.unwrap();
-			unsafe {
-				KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
-			}
-		}
 	}
 }
 
