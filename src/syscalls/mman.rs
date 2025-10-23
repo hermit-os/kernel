@@ -1,7 +1,8 @@
 use core::ffi::{c_int, c_void};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
+use free_list::{FreeList, PageLayout, PageRange};
+use hermit_sync::SpinMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch;
@@ -26,6 +27,8 @@ bitflags! {
 	}
 }
 
+static PROT_NONE_FREE_LIST: SpinMutex<FreeList<16>> = SpinMutex::new(FreeList::new());
+
 /// Creates a new virtual memory mapping of the `size` specified with
 /// protection bits specified in `prot_flags`.
 #[hermit_macro::system(errno)]
@@ -37,6 +40,9 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 	let virtual_address = VirtAddr::from(page_range.start());
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
+		unsafe {
+			PROT_NONE_FREE_LIST.lock().deallocate(page_range).unwrap();
+		}
 		return 0;
 	}
 	let frame_layout = PageLayout::from_size(size).unwrap();
@@ -67,6 +73,11 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 	let virtual_address = VirtAddr::from_ptr(ptr);
 	let size = size.align_up(BasePageSize::SIZE as usize);
+	let page_range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
+
+	if PROT_NONE_FREE_LIST.lock().allocate_at(page_range).is_ok() {
+		return 0;
+	}
 
 	if let Some(physical_address) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::unmap::<BasePageSize>(
@@ -75,16 +86,15 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 		);
 		debug!("Unmapping {virtual_address:X} ({size}) -> {physical_address:X}");
 
-		let range = PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
-		if let Err(_err) = unsafe { PHYSICAL_FREE_LIST.lock().deallocate(range) } {
-			// FIXME: return EINVAL instead, once wasmtime can handle it
-			error!("Unable to deallocate {range:?}");
+		let frame_range =
+			PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(frame_range).unwrap();
 		}
 	}
 
-	let range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		KERNEL_FREE_LIST.lock().deallocate(page_range).unwrap();
 	}
 
 	0
