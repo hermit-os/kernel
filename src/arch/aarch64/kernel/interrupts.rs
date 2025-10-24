@@ -22,7 +22,7 @@ use crate::drivers::mmio::get_interrupt_handlers;
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::kernel::serial::handle_uart_interrupt;
-use crate::mm::virtualmem::KERNEL_FREE_LIST;
+use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId};
 use crate::{core_id, core_scheduler, env};
 
@@ -313,7 +313,7 @@ pub(crate) fn init() {
 	);
 
 	let layout = PageLayout::from_size_align(gicd_size.try_into().unwrap(), 0x10000).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let gicd_address = VirtAddr::from(page_range.start());
 	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}");
 
@@ -327,7 +327,7 @@ pub(crate) fn init() {
 	);
 
 	let layout = PageLayout::from_size_align(gicr_size.try_into().unwrap(), 0x10000).unwrap();
-	let page_range = KERNEL_FREE_LIST.lock().allocate(layout).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
 	let gicr_address = VirtAddr::from(page_range.start());
 	debug!("Mapping generic interrupt controller to virtual address {gicr_address:p}");
 	paging::map::<BasePageSize>(
