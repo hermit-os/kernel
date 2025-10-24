@@ -10,7 +10,6 @@ use core::ptr::null;
 use dirent_display::Dirent64Display;
 use hermit_sync::Lazy;
 
-pub use self::condvar::*;
 pub use self::entropy::*;
 pub use self::futex::*;
 pub use self::processor::*;
@@ -33,7 +32,6 @@ use crate::fs::{self, FileAttr, SeekWhence};
 use crate::mm::ALLOCATOR;
 use crate::syscalls::interfaces::SyscallInterface;
 
-mod condvar;
 mod entropy;
 mod futex;
 pub(crate) mod interfaces;
