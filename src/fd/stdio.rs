@@ -4,8 +4,9 @@ use core::task::Poll;
 
 use async_trait::async_trait;
 use embedded_io::{Read, ReadReady, Write};
-use uhyve_interface::parameters::WriteParams;
-use uhyve_interface::{GuestVirtAddr, Hypercall};
+use uhyve_interface::GuestVirtAddr;
+use uhyve_interface::v2::Hypercall;
+use uhyve_interface::v2::parameters::WriteParams;
 
 use crate::console::{CONSOLE, CONSOLE_WAKER};
 use crate::fd::{
