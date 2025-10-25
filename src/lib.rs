@@ -91,6 +91,9 @@ hermit_entry::define_abi_tag!();
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
 
+#[cfg(target_os = "none")]
+uhyve_interface::define_uhyve_interface_version!();
+
 #[cfg(test)]
 #[cfg(target_os = "none")]
 #[unsafe(no_mangle)]
