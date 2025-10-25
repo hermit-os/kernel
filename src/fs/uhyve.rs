@@ -8,10 +8,11 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
-use uhyve_interface::parameters::{
+use uhyve_interface::v2::Hypercall;
+use uhyve_interface::v2::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
 };
-use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
+use uhyve_interface::{GuestPhysAddr, GuestVirtAddr};
 
 use crate::arch::mm::paging;
 use crate::errno::Errno;
