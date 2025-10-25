@@ -38,12 +38,16 @@ jobs:
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features tcp,rtl8139
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
       - name: cargo hack check (aarch64_be)
         run: |
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,rtl8139 --features tcp,virtio-net
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,virtio-net --features tcp,rtl8139
+          cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
       - name: cargo hack check (riscv64)
         run: |
           cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
@@ -271,7 +275,7 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-mmio
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
       - run: cargo clean
@@ -279,23 +283,23 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package testudp --no-default-features --features hermit/udp,hermit/dhcpv4,hermit/gem-net qemu ${{ matrix.flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --features hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package miotcp --no-default-features --features hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package poll --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.flags }} --devices rtl8139
-        if: matrix.arch == 'x86_64'
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package loopback qemu ${{ matrix.flags }}
         env:
           HERMIT_IP: 127.0.0.1

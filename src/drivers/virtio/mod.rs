@@ -13,7 +13,7 @@ pub mod error {
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-		not(all(target_arch = "x86_64", feature = "rtl8139")),
+		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
@@ -36,7 +36,7 @@ pub mod error {
 		DevNotSupported(u16),
 		#[cfg(all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-			not(all(target_arch = "x86_64", feature = "rtl8139")),
+			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
 		NetDriver(VirtioNetError),
@@ -94,7 +94,7 @@ pub mod error {
 				}
 				#[cfg(all(
 					not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-					not(all(target_arch = "x86_64", feature = "rtl8139")),
+					not(feature = "rtl8139"),
 					feature = "virtio-net",
 				))]
 				VirtioError::NetDriver(net_error) => match net_error {
