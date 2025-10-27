@@ -36,15 +36,26 @@ impl Firecracker {
 		};
 		let arg = self.sudo.then_some(firecracker.as_str());
 
-		let log_path = Path::new("firecracker.log");
-		sh.write_file(log_path, "")?;
-		let res = cmd!(sh, "{program} {arg...} --no-api --config-file {config_path} --log-path {log_path} --level Info --show-level --show-log-origin").run();
-		let log = sh.read_file(log_path)?;
+		for run in 1.. {
+			let log_path = Path::new("firecracker.log");
+			sh.write_file(log_path, "")?;
+			let res = cmd!(sh, "{program} {arg...} --no-api --config-file {config_path} --log-path {log_path} --level Info --show-level --show-log-origin").run();
+			let log = sh.read_file(log_path)?;
 
-		eprintln!("firecracker log");
-		eprintln!("{log}");
+			eprintln!("firecracker log");
+			eprintln!("{log}");
 
-		res?;
+			match res {
+				Ok(()) => break,
+				Err(err) => {
+					eprintln!("::error::Firecracker attempt number {run} failed: {err}");
+
+					if run == 5 {
+						return Err(err.into());
+					}
+				}
+			}
+		}
 
 		Ok(())
 	}
