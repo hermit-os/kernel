@@ -309,7 +309,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	scheduler::abort();
 }
 
-pub fn init() {
+pub unsafe fn init() {
 	unsafe {
 		log_page_tables();
 	}
