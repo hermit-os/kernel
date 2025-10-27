@@ -314,6 +314,16 @@ pub fn init() {
 		log_page_tables();
 	}
 	make_p4_writable();
+
+	#[cfg(feature = "common-os")]
+	{
+		use x86_64::registers::control::Cr3;
+
+		let (frame, _flags) = Cr3::read();
+		crate::scheduler::BOOT_ROOT_PAGE_TABLE
+			.set(frame.start_address().as_u64().try_into().unwrap())
+			.unwrap();
+	}
 }
 
 fn make_p4_writable() {
