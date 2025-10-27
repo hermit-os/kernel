@@ -14,7 +14,9 @@ pub struct PageAlloc;
 
 impl PageRangeAllocator for PageAlloc {
 	unsafe fn init() {
-		init();
+		unsafe {
+			init();
+		}
 	}
 
 	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
@@ -47,7 +49,7 @@ impl fmt::Display for PageAlloc {
 
 pub type PageBox = PageRangeBox<PageAlloc>;
 
-fn init() {
+unsafe fn init() {
 	let range = PageRange::new(
 		kernel_heap_end().as_usize().div_ceil(2),
 		kernel_heap_end().as_usize() + 1,
