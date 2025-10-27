@@ -4,7 +4,6 @@ use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 #[cfg(feature = "common-os")]
 use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
-pub use self::paging::init_page_tables;
 #[cfg(feature = "common-os")]
 use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};

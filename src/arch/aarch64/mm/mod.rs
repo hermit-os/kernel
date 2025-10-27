@@ -13,5 +13,3 @@ pub fn init() {
 		PageAlloc::init();
 	}
 }
-
-pub fn init_page_tables() {}

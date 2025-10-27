@@ -1,6 +1,5 @@
 pub mod paging;
 
-pub use self::paging::init_page_tables;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 pub fn init() {
@@ -10,4 +9,5 @@ pub fn init() {
 	unsafe {
 		PageAlloc::init();
 	}
+	self::paging::init_page_tables();
 }

@@ -367,8 +367,6 @@ fn make_p4_writable() {
 	unsafe { without_protect(make_writable) }
 }
 
-pub fn init_page_tables() {}
-
 pub unsafe fn log_page_tables() {
 	use log::Level;
 
