@@ -93,7 +93,17 @@ pub(crate) fn init() {
 	Lazy::force(&KERNEL_ADDR_RANGE);
 
 	unsafe {
-		arch::mm::init();
+		arch::mm::paging::init();
+	}
+	unsafe {
+		FrameAlloc::init();
+	}
+	#[cfg(target_arch = "x86_64")]
+	unsafe {
+		arch::mm::paging::log_page_tables();
+	}
+	unsafe {
+		PageAlloc::init();
 	}
 
 	let total_mem = physicalmem::total_memory_size();
