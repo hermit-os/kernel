@@ -1,6 +1,7 @@
 use core::{fmt, ptr};
 
 use free_list::PageLayout;
+use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -15,7 +16,6 @@ use x86_64::structures::paging::{
 };
 
 use crate::arch::kernel::processor;
-use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 use crate::scheduler;
 
