@@ -648,7 +648,7 @@ pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 		.map_pages(range, PhysAddr::new(first_page.address().as_u64()), flags);
 }
 
-pub fn init_page_tables() {
+pub unsafe fn init_page_tables() {
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
 	unsafe {
 		satp::write(Satp::from_bits(

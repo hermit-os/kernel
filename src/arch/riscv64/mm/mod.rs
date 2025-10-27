@@ -9,5 +9,7 @@ pub fn init() {
 	unsafe {
 		PageAlloc::init();
 	}
-	self::paging::init_page_tables();
+	unsafe {
+		self::paging::init_page_tables();
+	}
 }
