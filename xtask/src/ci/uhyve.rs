@@ -22,9 +22,23 @@ impl Uhyve {
 		let arg = self.sudo.then_some(uhyve.as_str());
 		let smp_arg = format!("--cpu-count={smp}");
 
-		cmd!(sh, "{program} {arg...} {smp_arg} {image}")
-			.env("RUST_LOG", "debug")
-			.run()?;
+		for i in 0..3 {
+			eprintln!("Uhyve attempt number {}", i + 1);
+
+			let res = cmd!(sh, "{program} {arg...} {smp_arg} {image}")
+				.env("RUST_LOG", "debug")
+				.run();
+
+			match res {
+				Ok(()) => break,
+				Err(err) => {
+					eprintln!("{err}");
+					if i == 2 {
+						return Err(err.into());
+					}
+				}
+			}
+		}
 
 		Ok(())
 	}
