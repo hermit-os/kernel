@@ -55,7 +55,7 @@ pub fn create_new_root_page_table() -> usize {
 	physaddr.as_usize()
 }
 
-pub fn init() {
+pub unsafe fn init() {
 	paging::init();
 	unsafe {
 		FrameAlloc::init();

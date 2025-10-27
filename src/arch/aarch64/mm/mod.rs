@@ -2,7 +2,7 @@ pub mod paging;
 
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
-pub fn init() {
+pub unsafe fn init() {
 	unsafe {
 		paging::init();
 	}

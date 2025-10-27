@@ -92,7 +92,9 @@ pub(crate) fn init() {
 
 	Lazy::force(&KERNEL_ADDR_RANGE);
 
-	arch::mm::init();
+	unsafe {
+		arch::mm::init();
+	}
 
 	let total_mem = physicalmem::total_memory_size();
 	let kernel_addr_range = KERNEL_ADDR_RANGE.clone();
