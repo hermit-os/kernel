@@ -58,8 +58,7 @@ impl VirtioConsoleDriver {
 		irq: InterruptLine,
 	) -> Result<VirtioConsoleDriver, VirtioError> {
 		let mut drv = VirtioConsoleDriver::new(dev_id, registers, irq)?;
-		drv.init_dev()
-			.map_err(|error_code| VirtioError::ConsoleDriver(error_code))?;
+		drv.init_dev().map_err(VirtioError::ConsoleDriver)?;
 		Ok(drv)
 	}
 }
