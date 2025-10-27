@@ -1,18 +1,16 @@
 pub(crate) mod paging;
 
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
-#[cfg(feature = "common-os")]
-use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
-#[cfg(feature = "common-os")]
-use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
 	use free_list::PageLayout;
 	use x86_64::registers::control::Cr3;
+	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
+	use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 	use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
