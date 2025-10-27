@@ -362,6 +362,54 @@ fn make_p4_writable() {
 	unsafe { without_protect(make_writable) }
 }
 
+#[cfg(feature = "common-os")]
+pub fn create_new_root_page_table() -> usize {
+	use free_list::PageLayout;
+	use x86_64::registers::control::Cr3;
+	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+
+	use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
+
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let physaddr = PhysAddr::from(frame_range.start());
+
+	let layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
+	let page_range = PageBox::new(layout).unwrap();
+	let virtaddr = VirtAddr::from(page_range.start());
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+
+	let entry: u64 = unsafe {
+		let (frame, _flags) = Cr3::read();
+		map::<BasePageSize>(virtaddr, frame.start_address().into(), 1, flags);
+		let entry: &u64 = &*virtaddr.as_ptr();
+
+		*entry
+	};
+
+	let slice_addr = virtaddr + BasePageSize::SIZE;
+	map::<BasePageSize>(slice_addr, physaddr, 1, flags);
+
+	unsafe {
+		let pml4 = core::slice::from_raw_parts_mut(slice_addr.as_mut_ptr(), 512);
+
+		// clear PML4
+		for elem in pml4.iter_mut() {
+			*elem = 0;
+		}
+
+		// copy first element and the self reference
+		pml4[0] = entry;
+		// create self reference
+		pml4[511] = physaddr.as_u64() + 0x3; // PG_PRESENT | PG_RW
+	};
+
+	unmap::<BasePageSize>(virtaddr, 2);
+
+	physaddr.as_usize()
+}
+
 pub unsafe fn log_page_tables() {
 	use log::Level;
 
