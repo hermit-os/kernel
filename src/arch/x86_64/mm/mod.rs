@@ -5,7 +5,9 @@ use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 pub unsafe fn init() {
-	paging::init();
+	unsafe {
+		paging::init();
+	}
 	unsafe {
 		FrameAlloc::init();
 	}
