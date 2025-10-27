@@ -332,6 +332,14 @@ pub fn init() {
 	}
 
 	ensure_p4_writable();
+
+	#[cfg(feature = "common-os")]
+	{
+		let (frame, _flags) = Cr3::read();
+		scheduler::BOOT_ROOT_PAGE_TABLE
+			.set(frame.start_address().as_u64().try_into().unwrap())
+			.unwrap();
+	}
 }
 
 /// Makes the level 4 page table writable.
