@@ -10,8 +10,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
 use crate::env::is_uhyve;
-use crate::mm::physicalmem;
-use crate::mm::physicalmem::PHYSICAL_FREE_LIST;
+use crate::mm::{FrameAlloc, PageRangeAllocator};
 use crate::{KERNEL_STACK_SIZE, mm, scheduler};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
@@ -497,10 +496,8 @@ where
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
 				let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-				let frame_range = PHYSICAL_FREE_LIST
-					.lock()
-					.allocate(frame_layout)
-					.expect("Unable to allocate physical memory");
+				let frame_range =
+					FrameAlloc::allocate(frame_layout).expect("Unable to allocate physical memory");
 				let physical_address = PhysAddr::from(frame_range.start());
 				self.entries[index].set(
 					physical_address,
@@ -669,7 +666,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 		let size = (nr_pages - map_counter) * S::SIZE as usize;
 		for i in (S::SIZE as usize..=size).rev().step_by(S::SIZE as usize) {
 			let layout = PageLayout::from_size_align(i, S::SIZE as usize).unwrap();
-			let frame_range = PHYSICAL_FREE_LIST.lock().allocate(layout);
+			let frame_range = FrameAlloc::allocate(layout);
 
 			if let Ok(frame_range) = frame_range {
 				let phys_addr = PhysAddr::from(frame_range.start());

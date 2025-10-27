@@ -1,7 +1,9 @@
+use core::alloc::AllocError;
+use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
-use free_list::{FreeList, PageRange, PageRangeError};
+use free_list::{FreeList, PageLayout, PageRange, PageRangeError};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
@@ -10,10 +12,50 @@ use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
+use crate::mm::{PageRangeAllocator, PageRangeBox};
 
-pub static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+pub struct FrameAlloc;
+
+impl PageRangeAllocator for FrameAlloc {
+	unsafe fn init() {
+		unsafe {
+			init();
+		}
+	}
+
+	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(layout)
+			.map_err(|_| AllocError)
+	}
+
+	fn allocate_at(range: PageRange) -> Result<(), AllocError> {
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate_at(range)
+			.map_err(|_| AllocError)
+	}
+
+	unsafe fn deallocate(range: PageRange) {
+		unsafe {
+			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
+	}
+}
+
+impl fmt::Display for FrameAlloc {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let free_list = PHYSICAL_FREE_LIST.lock();
+		write!(f, "FrameAlloc free list:\n{free_list}")
+	}
+}
+
+pub type FrameBox = PageRangeBox<FrameAlloc>;
 
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
@@ -59,7 +101,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 	}
 }
 
-fn detect_from_fdt() -> Result<(), ()> {
+unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
 
 	let all_regions = fdt
@@ -90,7 +132,7 @@ fn detect_from_fdt() -> Result<(), ()> {
 
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		unsafe {
-			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
+			FrameAlloc::deallocate(range);
 			map_frame_range(range);
 		}
 		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
@@ -158,7 +200,7 @@ impl PageRangeExt for PageRange {
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
-fn detect_from_limits() -> Result<(), ()> {
+unsafe fn detect_from_limits() -> Result<(), ()> {
 	let limit = crate::arch::kernel::get_limit();
 	if limit == 0 {
 		return Err(());
@@ -180,7 +222,7 @@ fn detect_from_limits() -> Result<(), ()> {
 	Ok(())
 }
 
-pub fn init() {
+unsafe fn init() {
 	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
 		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
@@ -188,11 +230,11 @@ pub fn init() {
 		paging::unmap::<HugePageSize>(start, count);
 	}
 
-	if let Err(_err) = detect_from_fdt() {
+	if let Err(_err) = unsafe { detect_from_fdt() } {
 		cfg_if::cfg_if! {
 			if #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))] {
 				error!("Could not detect physical memory from FDT");
-				detect_from_limits().unwrap();
+				unsafe { detect_from_limits().unwrap(); }
 			} else {
 				panic!("Could not detect physical memory from FDT");
 			}

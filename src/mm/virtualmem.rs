@@ -1,11 +1,55 @@
-use free_list::{FreeList, PageRange};
+use core::alloc::AllocError;
+use core::fmt;
+
+use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
 
-pub static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
+use crate::mm::{PageRangeAllocator, PageRangeBox};
+
+static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 
-pub fn init() {
+pub struct PageAlloc;
+
+impl PageRangeAllocator for PageAlloc {
+	unsafe fn init() {
+		unsafe {
+			init();
+		}
+	}
+
+	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate(layout)
+			.map_err(|_| AllocError)
+	}
+
+	fn allocate_at(range: PageRange) -> Result<(), AllocError> {
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate_at(range)
+			.map_err(|_| AllocError)
+	}
+
+	unsafe fn deallocate(range: PageRange) {
+		unsafe {
+			KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		}
+	}
+}
+
+impl fmt::Display for PageAlloc {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let free_list = KERNEL_FREE_LIST.lock();
+		write!(f, "PageAlloc free list:\n{free_list}")
+	}
+}
+
+pub type PageBox = PageRangeBox<PageAlloc>;
+
+unsafe fn init() {
 	let range = PageRange::new(
 		kernel_heap_end().as_usize().div_ceil(2),
 		kernel_heap_end().as_usize() + 1,
@@ -13,7 +57,7 @@ pub fn init() {
 	.unwrap();
 
 	unsafe {
-		KERNEL_FREE_LIST.lock().deallocate(range).unwrap();
+		PageAlloc::deallocate(range);
 	}
 }
 

@@ -1,11 +1,15 @@
 pub mod paging;
 
-pub fn init() {
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+
+pub unsafe fn init() {
 	unsafe {
 		paging::init();
 	}
-	crate::mm::physicalmem::init();
-	crate::mm::virtualmem::init();
+	unsafe {
+		FrameAlloc::init();
+	}
+	unsafe {
+		PageAlloc::init();
+	}
 }
-
-pub fn init_page_tables() {}
