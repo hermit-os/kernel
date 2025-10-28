@@ -127,7 +127,9 @@ pub fn boot_processor_init() {
 /// Application Processor initialization
 #[cfg(feature = "smp")]
 pub fn application_processor_init() {
-	super::mm::paging::init_application_processor();
+	unsafe {
+		super::mm::paging::enable_page_table();
+	}
 	crate::CoreLocal::install();
 	interrupts::install();
 	finish_processor_init();

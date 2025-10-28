@@ -648,18 +648,7 @@ pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 		.map_pages(range, PhysAddr::new(first_page.address().as_u64()), flags);
 }
 
-pub unsafe fn init_page_tables() {
-	// FIXME: This is not sound, since we are ignoring races with the hardware.
-	unsafe {
-		satp::write(Satp::from_bits(
-			(0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12),
-		));
-	}
-}
-
-#[cfg(feature = "smp")]
-pub fn init_application_processor() {
-	trace!("Identity map the physical memory using HugePages");
+pub unsafe fn enable_page_table() {
 	// FIXME: This is not sound, since we are ignoring races with the hardware.
 	unsafe {
 		satp::write(Satp::from_bits(
