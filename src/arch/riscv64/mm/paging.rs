@@ -7,7 +7,6 @@ use hermit_sync::SpinMutex;
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 use riscv::asm::sfence_vma;
 use riscv::register::satp;
-use riscv::register::satp::Satp;
 
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
@@ -649,10 +648,16 @@ pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 }
 
 pub unsafe fn enable_page_table() {
-	// FIXME: This is not sound, since we are ignoring races with the hardware.
+	// Physical page number.
+	let ppn = ROOT_PAGETABLE.data_ptr().expose_provenance() >> 12;
+
+	// Address space identifier.
+	let asid = 0;
+
+	// Address-translation scheme.
+	let mode = satp::Mode::Sv39;
 	unsafe {
-		satp::write(Satp::from_bits(
-			(0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12),
-		));
+		// FIXME: This is not sound, since we are ignoring races with the hardware.
+		satp::set(mode, asid, ppn);
 	}
 }
