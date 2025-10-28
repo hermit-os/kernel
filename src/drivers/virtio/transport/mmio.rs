@@ -407,7 +407,7 @@ pub(crate) fn init_device(
 				info!("Virtio console driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {}", irq_no);
+				info!("Virtio interrupt handler at line {irq_no}");
 
 				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
 			}
@@ -422,7 +422,7 @@ pub(crate) fn init_device(
 				info!("Virtio sock driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {}", irq_no);
+				info!("Virtio interrupt handler at line {irq_no}");
 
 				Ok(VirtioDriver::Vsock(virt_vsock_drv))
 			}
