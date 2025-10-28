@@ -5,7 +5,7 @@ use align_address::Align;
 use free_list::PageLayout;
 use hermit_sync::SpinMutex;
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
-use riscv::asm::sfence_vma;
+use riscv::asm;
 use riscv::register::satp;
 
 use crate::mm::{FrameAlloc, PageRangeAllocator};
@@ -218,7 +218,7 @@ impl<S: PageSize> Page<S> {
 
 	/// Flushes this page from the TLB of this CPU.
 	fn flush_from_tlb(&self) {
-		sfence_vma(0, self.virtual_address.as_usize());
+		asm::sfence_vma(0, self.virtual_address.as_usize());
 	}
 
 	/// Returns whether the given virtual address is a valid one in SV39
