@@ -657,7 +657,7 @@ pub unsafe fn enable_page_table() {
 	// Address-translation scheme.
 	let mode = satp::Mode::Sv39;
 	unsafe {
-		// FIXME: This is not sound, since we are ignoring races with the hardware.
 		satp::set(mode, asid, ppn);
+		asm::sfence_vma_all();
 	}
 }
