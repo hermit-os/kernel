@@ -80,7 +80,7 @@ impl fmt::Display for ColorLevel {
 		let level = self.0;
 
 		if no_color() {
-			write!(f, "{level}")
+			write!(f, "{level:<5}")
 		} else {
 			let color = match level {
 				Level::Trace => AnsiColor::Magenta,
@@ -91,7 +91,7 @@ impl fmt::Display for ColorLevel {
 			};
 
 			let style = anstyle::Style::new().fg_color(Some(color.into()));
-			write!(f, "{style}{level}{style:#}")
+			write!(f, "{style}{level:<5}{style:#}")
 		}
 	}
 }
