@@ -1,8 +1,21 @@
 //! A module containing virtios core infrastructure for hermit-rs.
 //!
 //! The module contains virtios transport mechanisms, virtqueues and virtio specific errors
+
+use mem_barrier::{BarrierClass, BarrierType};
 pub mod transport;
 pub mod virtqueue;
+
+#[inline]
+pub fn memory_barrier(ty: BarrierType, order_platform: bool) {
+	let class = if order_platform {
+		BarrierClass::Smp
+	} else {
+		BarrierClass::Dma
+	};
+
+	mem_barrier::mem_barrier(class, ty);
+}
 
 pub mod error {
 	use core::fmt;

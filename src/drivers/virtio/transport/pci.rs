@@ -19,7 +19,6 @@ use virtio::{DeviceStatus, le16, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
-use crate::arch::memory_barrier;
 use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "console")]
 use crate::drivers::console::VirtioConsoleDriver;
@@ -298,7 +297,6 @@ impl ComCfg {
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
-		memory_barrier();
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -309,7 +307,6 @@ impl ComCfg {
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
-		memory_barrier();
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -319,7 +316,6 @@ impl ComCfg {
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
-		memory_barrier();
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -329,7 +325,6 @@ impl ComCfg {
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
-		memory_barrier();
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -340,7 +335,6 @@ impl ComCfg {
 	///
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
-		memory_barrier();
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -354,7 +348,6 @@ impl ComCfg {
 	/// Re-reads device status to ensure the FEATURES_OK bit is still set:
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
-		memory_barrier();
 		self.com_cfg
 			.as_ptr()
 			.device_status()
@@ -366,7 +359,6 @@ impl ComCfg {
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
-		memory_barrier();
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -381,9 +373,7 @@ impl ComCfg {
 
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
-		memory_barrier();
 		device_feature_select.write(1.into());
-		memory_barrier();
 
 		// read high 32 bits of device features
 		let mut device_features = u64::from(device_feature.read().to_ne()) << 32;
@@ -391,7 +381,6 @@ impl ComCfg {
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
 		device_feature_select.write(0.into());
-		memory_barrier();
 
 		// read low 32 bits of device features
 		device_features |= u64::from(device_feature.read().to_ne());
@@ -411,9 +400,7 @@ impl ComCfg {
 
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
-		memory_barrier();
 		driver_feature_select.write(0.into());
-		memory_barrier();
 
 		// write low 32 bits of device features
 		driver_feature.write(low.into());
@@ -421,7 +408,6 @@ impl ComCfg {
 		// Indicate to device that driver_features field shows high 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
 		driver_feature_select.write(1.into());
-		memory_barrier();
 
 		// write high 32 bits of device features
 		driver_feature.write(high.into());

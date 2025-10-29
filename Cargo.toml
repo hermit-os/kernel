@@ -63,7 +63,7 @@ mman = []
 mmap = ["mman"] # Deprecated in favor of mman
 newlib = []
 nostd = []
-pci = ["virtio?/pci"]
+pci = ["virtio?/pci", "dep:mem-barrier"]
 rtl8139 = ["net", "pci", "volatile/derive", "endian-num"]
 semihosting = ["dep:semihosting"]
 shell = ["simple-shell"]
@@ -132,6 +132,7 @@ hermit-entry = { version = "0.10", features = ["kernel"] }
 hermit-sync = "0.1"
 lock_api = "0.4"
 log = { version = "0.4", default-features = false }
+mem-barrier = { path = "../../mem-barrier", optional = true }
 num_enum = { version = "0.7", default-features = false }
 pci-ids = { version = "0.2", optional = true }
 pci_types = { version = "0.10" }

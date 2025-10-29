@@ -21,7 +21,6 @@ use super::{
 	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
 	VqIndex, VqSize,
 };
-use crate::arch::memory_barrier;
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
@@ -89,7 +88,6 @@ impl DescrRing {
 		let idx = self.avail_ring_mut().idx.to_ne();
 		self.avail_ring_mut().ring_mut(true)[idx as usize % len] = index.into();
 
-		memory_barrier();
 		let next_idx = idx.wrapping_add(1);
 		self.avail_ring_mut().idx = next_idx.into();
 
@@ -122,7 +120,6 @@ impl DescrRing {
 			}
 		}
 
-		memory_barrier();
 		self.read_idx = self.read_idx.wrapping_add(1);
 		Ok(UsedBufferToken::from_avail_buffer_token(
 			tkn.buff_tkn,
