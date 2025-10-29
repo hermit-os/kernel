@@ -53,8 +53,15 @@ impl log::Log for KernelLogger {
 		let level = ColorLevel(record.level());
 		// FIXME: Use `super let` once stable
 		let target = record.target();
+		let (crate_, modules) = target.split_once("::").unwrap_or((target, ""));
+		let (_modules, module) = modules.rsplit_once("::").unwrap_or(("", modules));
+		let target = if !module.is_empty() && crate_ == "hermit" {
+			module
+		} else {
+			crate_
+		};
 		let format_target = if cfg!(feature = "log-target") {
-			format_args!(" {target}")
+			format_args!(" {target:<10}")
 		} else {
 			format_args!("")
 		};
@@ -80,7 +87,7 @@ impl fmt::Display for ColorLevel {
 		let level = self.0;
 
 		if no_color() {
-			write!(f, "{level}")
+			write!(f, "{level:<5}")
 		} else {
 			let color = match level {
 				Level::Trace => AnsiColor::Magenta,
@@ -91,7 +98,7 @@ impl fmt::Display for ColorLevel {
 			};
 
 			let style = anstyle::Style::new().fg_color(Some(color.into()));
-			write!(f, "{style}{level}{style:#}")
+			write!(f, "{style}{level:<5}{style:#}")
 		}
 	}
 }
