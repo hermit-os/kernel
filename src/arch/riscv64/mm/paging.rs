@@ -5,9 +5,8 @@ use align_address::Align;
 use free_list::PageLayout;
 use hermit_sync::SpinMutex;
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
-use riscv::asm::sfence_vma;
+use riscv::asm;
 use riscv::register::satp;
-use riscv::register::satp::Satp;
 
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
@@ -219,7 +218,7 @@ impl<S: PageSize> Page<S> {
 
 	/// Flushes this page from the TLB of this CPU.
 	fn flush_from_tlb(&self) {
-		sfence_vma(0, self.virtual_address.as_usize());
+		asm::sfence_vma(0, self.virtual_address.as_usize());
 	}
 
 	/// Returns whether the given virtual address is a valid one in SV39
@@ -648,22 +647,17 @@ pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 		.map_pages(range, PhysAddr::new(first_page.address().as_u64()), flags);
 }
 
-pub unsafe fn init_page_tables() {
-	// FIXME: This is not sound, since we are ignoring races with the hardware.
-	unsafe {
-		satp::write(Satp::from_bits(
-			(0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12),
-		));
-	}
-}
+pub unsafe fn enable_page_table() {
+	// Physical page number.
+	let ppn = ROOT_PAGETABLE.data_ptr().expose_provenance() >> 12;
 
-#[cfg(feature = "smp")]
-pub fn init_application_processor() {
-	trace!("Identity map the physical memory using HugePages");
-	// FIXME: This is not sound, since we are ignoring races with the hardware.
+	// Address space identifier.
+	let asid = 0;
+
+	// Address-translation scheme.
+	let mode = satp::Mode::Sv39;
 	unsafe {
-		satp::write(Satp::from_bits(
-			(0x8 << 60) | (ROOT_PAGETABLE.data_ptr().addr() >> 12),
-		));
+		satp::set(mode, asid, ppn);
+		asm::sfence_vma_all();
 	}
 }
