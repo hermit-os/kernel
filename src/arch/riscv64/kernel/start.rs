@@ -70,7 +70,11 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 	} else {
 		#[cfg(not(feature = "smp"))]
 		{
-			error!("SMP support deactivated");
+			let style = anstyle::Style::new().fg_color(Some(anstyle::AnsiColor::Red.into()));
+			let preamble = format_args!("[            ][{hart_id}][{style}ERROR{style:#}]");
+			println!(
+				"{preamble} Secondary core booted, but Hermit was not built with SMP support!"
+			);
 			loop {
 				processor::halt();
 			}
