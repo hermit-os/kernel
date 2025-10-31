@@ -47,6 +47,7 @@ harness = false
 [features]
 default = ["kernel-stack", "pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "virtio-net", "vsock"]
 acpi = []
+alloc-stats = ["talc/counters"]
 common-os = []
 console = ["virtio"]
 dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
