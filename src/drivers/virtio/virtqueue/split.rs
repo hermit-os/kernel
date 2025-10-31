@@ -29,12 +29,6 @@ struct DescrRing {
 	token_ring: Box<[Option<Box<TransferToken<virtq::Desc>>>]>,
 	mem_pool: MemPool,
 
-	/// Descriptor Tables
-	///
-	/// # Safety
-	///
-	/// These tables may only be accessed via volatile operations.
-	/// See the corresponding method for a safe wrapper.
 	descr_table_cell: Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 	avail_ring_cell: Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
 	used_ring_cell: Box<UnsafeCell<virtq::Used>, DeviceAlloc>,
