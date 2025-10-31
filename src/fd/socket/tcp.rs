@@ -14,7 +14,10 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
-use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::fd::{
+	self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption, SocketOptionSocket,
+	SocketOptionTcp, SocketOptionValue, SocketOptionValueWriter,
+};
 use crate::syscalls::socket::Af;
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
@@ -415,31 +418,61 @@ impl ObjectInterface for Socket {
 		Ok(())
 	}
 
-	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
-		if opt == SocketOption::TcpNoDelay {
-			let mut guard = NIC.lock();
-			let nic = guard.as_nic_mut().unwrap();
+	async fn setsockopt(&self, opt: SocketOption, optval: SocketOptionValue) -> io::Result<()> {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
 
-			for i in self.handle.iter() {
-				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
-				socket.set_nagle_enabled(optval);
+		match opt {
+			SocketOption::TcpOption(SocketOptionTcp::TcpNoDelay) => {
+				let is_enabled = (&optval).try_into()?;
+				for i in self.handle.iter() {
+					let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
+					socket.set_nagle_enabled(is_enabled);
+				}
+				Ok(())
 			}
+			SocketOption::SocketOption(SocketOptionSocket::KeepAlive) => {
+				let keepalive: bool = (&optval).try_into()?;
+				let keepalive = if keepalive {
+					Some(Duration::from_secs(120))
+				} else {
+					None
+				};
 
-			Ok(())
-		} else {
-			Err(Errno::Inval)
+				for i in self.handle.iter() {
+					let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*i);
+					socket.set_keep_alive(keepalive);
+				}
+
+				Ok(())
+			}
+			other => {
+				warn!("TCP: unsupported option {other:?}");
+				Err(Errno::Inval)
+			}
 		}
 	}
 
-	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		if opt == SocketOption::TcpNoDelay {
-			let mut guard = NIC.lock();
-			let nic = guard.as_nic_mut().unwrap();
-			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+	async fn getsockopt(
+		&self,
+		opt: SocketOption,
+		optval: &mut SocketOptionValueWriter,
+	) -> io::Result<()> {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 
-			Ok(socket.nagle_enabled())
-		} else {
-			Err(Errno::Inval)
+		match opt {
+			SocketOption::TcpOption(SocketOptionTcp::TcpNoDelay) => {
+				optval.write_bool(socket.nagle_enabled())
+			}
+			SocketOption::SocketOption(SocketOptionSocket::KeepAlive) => {
+				optval.write_bool(socket.keep_alive().is_some())
+			}
+			other => {
+				warn!("TCP: unsupported option {other:?}");
+				Err(Errno::Inval)
+			}
 		}
 	}
 
