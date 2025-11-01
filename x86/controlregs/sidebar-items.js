@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cr0","cr0_write","cr2","cr2_write","cr3","cr3_write","cr4","cr4_write","xcr0","xcr0_write"],"struct":["Cr0","Cr4","Xcr0"]};
