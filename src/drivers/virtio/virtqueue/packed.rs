@@ -249,7 +249,7 @@ impl DescriptorRing {
 		// provide reference, in order to let TransferToken know upon finish.
 		self.tkn_ref_ring[usize::from(buff_id.0)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-		// See Virtio specfification v1.1. - 2.7.21
+		// See Virtio specification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
 		self.ring[usize::from(start)].flags = first_flags;
 	}
@@ -501,7 +501,7 @@ impl DevNotif {
 /// virtio specification v1.1. - 2.7
 pub struct PackedVq {
 	/// Ring which allows easy access to the raw ring structure of the
-	/// specfification
+	/// specification
 	descr_ring: DescriptorRing,
 	/// Allows to tell the device if notifications are wanted
 	drv_event: DrvNotif,
