@@ -758,7 +758,7 @@ pub fn boot_application_processors() {
 
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
-		smp_boot_code.len() < BasePageSize::SIZE as usize,
+		smp_boot_code.len() <= BasePageSize::SIZE as usize,
 		"SMP Boot Code is larger than a page"
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
