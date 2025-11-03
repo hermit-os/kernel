@@ -30,7 +30,7 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
 use crate::drivers::{Driver, InterruptLine};
 use crate::errno::Errno;
@@ -349,7 +349,7 @@ impl VirtioConsoleDriver {
 				&mut self.com_cfg,
 				&self.notif_cfg,
 				VIRTIO_MAX_QUEUE_SIZE,
-				VqIndex::from(0u16),
+				0,
 				self.dev_cfg.features.into(),
 			)
 			.unwrap(),
@@ -362,7 +362,7 @@ impl VirtioConsoleDriver {
 				&mut self.com_cfg,
 				&self.notif_cfg,
 				VIRTIO_MAX_QUEUE_SIZE,
-				VqIndex::from(1u16),
+				1,
 				self.dev_cfg.features.into(),
 			)
 			.unwrap(),

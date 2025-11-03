@@ -27,35 +27,6 @@ use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
 
-/// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
-/// smaller-equal to `min(u16::MAX , T::MAX)`.
-///
-/// Currently implements `From<u16>` and `From<u32>`.
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
-pub struct VqIndex(u16);
-
-impl From<u16> for VqIndex {
-	fn from(val: u16) -> Self {
-		VqIndex(val)
-	}
-}
-
-impl From<VqIndex> for u16 {
-	fn from(i: VqIndex) -> Self {
-		i.0
-	}
-}
-
-impl From<u32> for VqIndex {
-	fn from(val: u32) -> Self {
-		if val > u32::from(u16::MAX) {
-			VqIndex(u16::MAX)
-		} else {
-			VqIndex(val as u16)
-		}
-	}
-}
-
 // Public interface of Virtq
 
 /// The Virtq trait unifies access to the two different Virtqueue types
@@ -159,7 +130,7 @@ pub trait Virtq: Send {
 	fn size(&self) -> u16;
 
 	// Returns the index (ID) of a Virtqueue.
-	fn index(&self) -> VqIndex;
+	fn index(&self) -> u16;
 
 	fn has_used_buffers(&self) -> bool;
 }

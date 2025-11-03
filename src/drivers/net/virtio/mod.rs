@@ -35,7 +35,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
 use crate::drivers::{Driver, InterruptLine};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -837,7 +837,7 @@ impl VirtioNetDriver<Uninit> {
 						&mut self.com_cfg,
 						&self.notif_cfg,
 						VIRTIO_MAX_QUEUE_SIZE,
-						VqIndex::from(self.num_vqs),
+						self.num_vqs,
 						self.dev_cfg.features.into(),
 					)
 					.unwrap(),
@@ -848,7 +848,7 @@ impl VirtioNetDriver<Uninit> {
 						&mut self.com_cfg,
 						&self.notif_cfg,
 						VIRTIO_MAX_QUEUE_SIZE,
-						VqIndex::from(self.num_vqs),
+						self.num_vqs,
 						self.dev_cfg.features.into(),
 					)
 					.unwrap(),
@@ -896,7 +896,7 @@ impl VirtioNetDriver<Uninit> {
 			self.num_vqs = 2;
 		}
 
-		// The loop is running from 0 to num_vqs and the indexes are provided to the VqIndex::from function in this way
+		// The loop is running from 0 to num_vqs and the indexes are provided in this way
 		// in order to allow the indexes of the queues to be in a form of:
 		//
 		// index i for receive queue
@@ -913,7 +913,7 @@ impl VirtioNetDriver<Uninit> {
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
-					VqIndex::from(2 * i),
+					2 * i,
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
@@ -926,7 +926,7 @@ impl VirtioNetDriver<Uninit> {
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
-					VqIndex::from(2 * i + 1),
+					2 * i + 1,
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
@@ -940,7 +940,7 @@ impl VirtioNetDriver<Uninit> {
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
-					VqIndex::from(2 * i),
+					2 * i,
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
@@ -953,7 +953,7 @@ impl VirtioNetDriver<Uninit> {
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
-					VqIndex::from(2 * i + 1),
+					2 * i + 1,
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();

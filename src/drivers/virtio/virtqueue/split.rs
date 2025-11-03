@@ -19,7 +19,6 @@ use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
 	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
-	VqIndex,
 };
 use crate::arch::memory_barrier;
 use crate::mm::device_alloc::DeviceAlloc;
@@ -151,7 +150,7 @@ impl DescrRing {
 pub struct SplitVq {
 	ring: DescrRing,
 	size: u16,
-	index: VqIndex,
+	index: u16,
 
 	notif_ctrl: NotifCtrl,
 }
@@ -202,14 +201,14 @@ impl Virtq for SplitVq {
 
 		if self.ring.dev_is_notif() {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
 		Ok(())
 	}
 
-	fn index(&self) -> VqIndex {
+	fn index(&self) -> u16 {
 		self.index
 	}
 
@@ -243,12 +242,12 @@ impl SplitVq {
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: u16,
-		index: VqIndex,
+		index: u16,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
-		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
-			return Err(VirtqError::QueueNotExisting(index.into()));
+		let Some(mut vq_handler) = com_cfg.select_vq(index) else {
+			return Err(VirtqError::QueueNotExisting(index));
 		};
 
 		let size = vq_handler.set_vq_size(size);
@@ -311,7 +310,7 @@ impl SplitVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created SplitVq: idx={}, size={size}", index.0);
+		info!("Created SplitVq: idx={index}, size={size}");
 
 		Ok(SplitVq {
 			ring: descr_ring,

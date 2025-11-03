@@ -24,7 +24,7 @@ use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
 	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
-	VirtqPrivate, VqIndex,
+	VirtqPrivate,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -514,7 +514,7 @@ pub struct PackedVq {
 	size: u16,
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
-	index: VqIndex,
+	index: u16,
 	last_next: Cell<RingIdx>,
 }
 
@@ -559,7 +559,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -594,7 +594,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() | notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -620,7 +620,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -629,7 +629,7 @@ impl Virtq for PackedVq {
 		Ok(())
 	}
 
-	fn index(&self) -> VqIndex {
+	fn index(&self) -> u16 {
 		self.index
 	}
 
@@ -660,7 +660,7 @@ impl PackedVq {
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
 		size: u16,
-		index: VqIndex,
+		index: u16,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
 		// Currently we do not have support for in order use.
@@ -676,8 +676,8 @@ impl PackedVq {
 		}
 
 		// Get a handler to the queues configuration area.
-		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
-			return Err(VirtqError::QueueNotExisting(index.into()));
+		let Some(mut vq_handler) = com_cfg.select_vq(index) else {
+			return Err(VirtqError::QueueNotExisting(index));
 		};
 
 		// Must catch zero size as it is not allowed for packed queues.
@@ -731,7 +731,7 @@ impl PackedVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created PackedVq: idx={}, size={vq_size}", index.0);
+		info!("Created PackedVq: idx={index}, size={vq_size}");
 
 		Ok(PackedVq {
 			descr_ring,

@@ -23,7 +23,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq, VqIndex,
+	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
 };
 use crate::errno::Errno;
 use crate::fs::fuse::{self, FuseError, FuseInterface, Rsp, RspHeader};
@@ -143,7 +143,7 @@ impl VirtioFsDriver {
 					&mut self.com_cfg,
 					&self.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
-					VqIndex::from(i),
+					i,
 					self.dev_cfg.features.into(),
 				)
 				.unwrap(),
