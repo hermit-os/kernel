@@ -1,5 +1,7 @@
 use core::arch::naked_asm;
 
+use x86_64::registers::control::Cr0Flags;
+
 use crate::set_current_kernel_stack;
 
 #[cfg(not(feature = "common-os"))]
@@ -178,11 +180,12 @@ pub(crate) unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stac
 		"mov rsp, rsi",
 		// Set task switched flag
 		"mov rax, cr0",
-		"or rax, 8",
+		"or rax, {task_switched}",
 		"mov cr0, rax",
 		// Set stack pointer in TSS
 		"call {set_current_kernel_stack}",
 		restore_context!(),
+		task_switched = const Cr0Flags::TASK_SWITCHED.bits(),
 		set_current_kernel_stack = sym set_current_kernel_stack,
 	);
 }
