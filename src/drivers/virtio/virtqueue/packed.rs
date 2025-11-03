@@ -62,11 +62,6 @@ impl RingIndexRange for ops::Range<RingIdx> {
 struct WrapCount(bool);
 
 impl WrapCount {
-	/// Masks all other bits, besides the wrap count specific ones.
-	fn flag_mask() -> virtq::DescF {
-		virtq::DescF::AVAIL | virtq::DescF::USED
-	}
-
 	/// Returns a new WrapCount struct initialized to true or 1.
 	///
 	/// See virtio specification v1.1. - 2.7.1
