@@ -144,7 +144,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		use crate::interrupts::SGI_RESCHED;
 
 		unsafe {
-			asm!("dsb nsh", "isb", options(nostack, nomem, preserves_flags));
+			asm!("dsb nsh", "isb", options(nostack, preserves_flags));
 		}
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());
