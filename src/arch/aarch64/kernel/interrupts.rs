@@ -171,12 +171,6 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
 
-		trace!("Disabling floating point");
-
-		// Disable floating point support to trigger a trap instead so we can lazily
-		// restore FPU state
-		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapEl0El1);
-
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
 
@@ -227,12 +221,13 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 	} else if ec == ESR_EL1::EC::Value::TrappedFP {
 		trace!("Floating point trap");
 
-		// We disabled floating point support to lazily save the FPU state
+		// We disabled FPU traps to lazily save the FPU state
 		// This synchronous exception is triggered when floating point is used
 		// So now save and restore the FPU state
-
-		// Re-enable floating point
 		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapNothing);
+		unsafe {
+			asm!("isb", options(nostack, preserves_flags));
+		}
 
 		// Let the scheduler set up the FPU for the current task
 		core_scheduler().fpu_switch();

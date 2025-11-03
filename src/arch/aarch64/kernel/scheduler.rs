@@ -1,9 +1,10 @@
 //! Architecture dependent interface to initialize a task
 
-use core::arch::naked_asm;
+use core::arch::{asm, naked_asm};
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
+use aarch64::regs::*;
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
@@ -338,5 +339,11 @@ impl TaskFrame for Task {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
+	// Trap next FPU instruction so we can lazily restore FPU state
+	CPACR_EL1.modify(CPACR_EL1::FPEN::TrapEl0El1);
+	unsafe {
+		asm!("isb", options(nostack, preserves_flags));
+	}
+
 	core_scheduler().get_last_stack_pointer().as_u64()
 }
