@@ -176,6 +176,9 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 		// Disable floating point support to trigger a trap instead so we can lazily
 		// restore FPU state
 		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapEl0El1);
+		unsafe {
+			asm!("isb", options(nostack, preserves_flags));
+		}
 
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
@@ -233,6 +236,9 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 
 		// Re-enable floating point
 		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapNothing);
+		unsafe {
+			asm!("isb", options(nostack, preserves_flags));
+		}
 
 		// Let the scheduler set up the FPU for the current task
 		core_scheduler().fpu_switch();
