@@ -3,12 +3,32 @@
 version = 4
 
 [[package]]
+name = "aarch64"
+version = "0.0.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dfa8287e400aa9af0c4e0c93967882634f7972b94b74fd5110507b486a1ced4"
+dependencies = [
+ "aarch64-cpu 9.4.0",
+ "memory_addresses",
+ "tock-registers 0.8.1",
+]
+
+[[package]]
+name = "aarch64-cpu"
+version = "9.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac42a04a61c19fc8196dd728022a784baecc5d63d7e256c01ad1b3fbfab26287"
+dependencies = [
+ "tock-registers 0.8.1",
+]
+
+[[package]]
 name = "aarch64-cpu"
 version = "11.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2902b1d87157187000598c0dfc24f438b01792bc10d257c671bd65e24f4b5878"
 dependencies = [
- "tock-registers",
+ "tock-registers 0.10.0",
 ]
 
 [[package]]
@@ -401,9 +421,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-entry"
-version = "0.10.4"
+version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffd845a872f190642dcc1996f799377020403f70c3b92b8735005a658223cfdd"
+checksum = "8646a7eb3029cb587f5d1d8742dd4790d4cb128c78817be42b7b375e7c36f366"
 dependencies = [
  "align-address",
  "const_parse",
@@ -411,13 +431,14 @@ dependencies = [
  "log",
  "plain",
  "time",
+ "uhyve-interface",
 ]
 
 [[package]]
 name = "hermit-loader"
 version = "0.5.6"
 dependencies = [
- "aarch64-cpu",
+ "aarch64-cpu 11.1.0",
  "align-address",
  "allocator-api2 0.3.1",
  "anstyle",
@@ -531,6 +552,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
 
 [[package]]
+name = "memory_addresses"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01af0509edc73791972185a4ed1e3e8b2d0f21c3c527f96078586446b61750c4"
+dependencies = [
+ "align-address",
+ "cfg-if",
+ "x86_64",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -583,6 +615,27 @@ name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
+
+[[package]]
+name = "num_enum"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1207a7e20ad57b847bbddc6776b968420d38292bbfe2089accff5e19e82454c"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "objc2-core-foundation"
@@ -927,6 +980,12 @@ checksum = "40868e7c1d2f0b8d73e4a8c7f0ff63af4f6d19be117e90bd73eb1d62cf831c6b"
 
 [[package]]
 name = "tock-registers"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "696941a0aee7e276a165a978b37918fd5d22c55c3d6bda197813070ca9c0f21c"
+
+[[package]]
+name = "tock-registers"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b0293f99756f16ff352cc78c99673766a305bdb5ed7652e78df649e9967c885a"
@@ -1000,6 +1059,18 @@ name = "uguid"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab14ea9660d240e7865ce9d54ecdbd1cd9fa5802ae6f4512f093c7907e921533"
+
+[[package]]
+name = "uhyve-interface"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7390116b0481b52dbc7d979f858dcc426494714a3ba03e9534d26c8ea41b899e"
+dependencies = [
+ "aarch64",
+ "memory_addresses",
+ "num_enum",
+ "x86_64",
+]
 
 [[package]]
 name = "unicode-ident"
