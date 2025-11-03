@@ -34,27 +34,26 @@ use super::{AvailBufferToken, BufferType, TransferToken, UsedBufferToken, Virtq,
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
 
-#[derive(Default, PartialEq, Eq, Clone, Copy, Debug)]
-struct RingIdx {
-	off: u16,
-	wrap: u8,
-}
-
 trait RingIndexRange {
-	fn wrapping_contains(&self, item: &RingIdx) -> bool;
+	fn wrapping_contains(&self, item: &EventSuppressDesc) -> bool;
 }
 
-impl RingIndexRange for ops::Range<RingIdx> {
-	fn wrapping_contains(&self, item: &RingIdx) -> bool {
-		let ops::Range { start, end } = self;
+impl RingIndexRange for ops::Range<EventSuppressDesc> {
+	fn wrapping_contains(&self, item: &EventSuppressDesc) -> bool {
+		let start_off = self.start.desc_event_off();
+		let start_wrap = self.start.desc_event_wrap();
+		let end_off = self.end.desc_event_off();
+		let end_wrap = self.end.desc_event_wrap();
+		let item_off = item.desc_event_off();
+		let item_wrap = item.desc_event_wrap();
 
-		if start.wrap == end.wrap {
-			item.wrap == start.wrap && start.off <= item.off && item.off < end.off
-		} else if item.wrap == start.wrap {
-			start.off <= item.off
+		if start_wrap == end_wrap {
+			item_wrap == start_wrap && start_off <= item_off && item_off < end_off
+		} else if item_wrap == start_wrap {
+			start_off <= item_off
 		} else {
-			debug_assert!(item.wrap == end.wrap);
-			item.off < end.off
+			debug_assert!(item_wrap == end_wrap);
+			item_off < end_off
 		}
 	}
 }
@@ -115,7 +114,7 @@ impl DescriptorRing {
 	fn push_batch(
 		&mut self,
 		tkn_lst: impl IntoIterator<Item = TransferToken<pvirtq::Desc>>,
-	) -> Result<RingIdx, VirtqError> {
+	) -> Result<EventSuppressDesc, VirtqError> {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 
@@ -146,13 +145,13 @@ impl DescriptorRing {
 			first_ctrl_settings.1,
 			first_ctrl_settings.2,
 		);
-		Ok(RingIdx {
-			off: self.write_index,
-			wrap: self.drv_wc.into(),
-		})
+
+		Ok(EventSuppressDesc::new()
+			.with_desc_event_off(self.write_index)
+			.with_desc_event_wrap(self.drv_wc.into()))
 	}
 
-	fn push(&mut self, tkn: TransferToken<pvirtq::Desc>) -> Result<RingIdx, VirtqError> {
+	fn push(&mut self, tkn: TransferToken<pvirtq::Desc>) -> Result<EventSuppressDesc, VirtqError> {
 		self.push_batch([tkn])
 	}
 
@@ -435,13 +434,11 @@ impl DrvNotif {
 	}
 
 	/// Enables a notification by the device for a specific descriptor.
-	fn enable_specific(&mut self, idx: RingIdx) {
+	fn enable_specific(&mut self, desc: EventSuppressDesc) {
 		// Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
 		if self.f_notif_idx {
 			self.raw.flags = EventSuppressFlags::new().with_desc_event_flags(RingEventFlags::Desc);
-			self.raw.desc = EventSuppressDesc::new()
-				.with_desc_event_off(idx.off)
-				.with_desc_event_wrap(idx.wrap);
+			self.raw.desc = desc;
 		}
 	}
 }
@@ -458,7 +455,7 @@ impl DevNotif {
 		self.raw.flags.desc_event_flags() == RingEventFlags::Enable
 	}
 
-	fn notif_specific(&self) -> Option<RingIdx> {
+	fn notif_specific(&self) -> Option<EventSuppressDesc> {
 		if !self.f_notif_idx {
 			return None;
 		}
@@ -467,10 +464,7 @@ impl DevNotif {
 			return None;
 		}
 
-		let off = self.raw.desc.desc_event_off();
-		let wrap = self.raw.desc.desc_event_wrap();
-
-		Some(RingIdx { off, wrap })
+		Some(self.raw.desc)
 	}
 }
 
@@ -492,7 +486,7 @@ pub struct PackedVq {
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
 	index: u16,
-	last_next: Cell<RingIdx>,
+	last_next: Cell<EventSuppressDesc>,
 }
 
 // Public interface of PackedVq
@@ -537,8 +531,8 @@ impl Virtq for PackedVq {
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index)
-				.with_next_off(next_idx.off)
-				.with_next_wrap(next_idx.wrap);
+				.with_next_off(next_idx.desc_event_off())
+				.with_next_wrap(next_idx.desc_event_wrap());
 			self.notif_ctrl.notify_dev(notification_data);
 			self.last_next.set(next_idx);
 		}
@@ -572,8 +566,8 @@ impl Virtq for PackedVq {
 		if self.dev_event.is_notif() | notif_specific {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index)
-				.with_next_off(next_idx.off)
-				.with_next_wrap(next_idx.wrap);
+				.with_next_off(next_idx.desc_event_off())
+				.with_next_wrap(next_idx.desc_event_wrap());
 			self.notif_ctrl.notify_dev(notification_data);
 			self.last_next.set(next_idx);
 		}
@@ -593,13 +587,18 @@ impl Virtq for PackedVq {
 			self.drv_event.enable_specific(next_idx);
 		}
 
-		let notif_specific = self.dev_event.notif_specific() == Some(self.last_next.get());
+		// FIXME: impl PartialEq for EventSuppressDesc in virtio-spec instead of converting into bits.
+		let notif_specific = self
+			.dev_event
+			.notif_specific()
+			.map(EventSuppressDesc::into_bits)
+			== Some(self.last_next.get().into_bits());
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
 				.with_vqn(self.index)
-				.with_next_off(next_idx.off)
-				.with_next_wrap(next_idx.wrap);
+				.with_next_off(next_idx.desc_event_off())
+				.with_next_wrap(next_idx.desc_event_wrap());
 			self.notif_ctrl.notify_dev(notification_data);
 			self.last_next.set(next_idx);
 		}
