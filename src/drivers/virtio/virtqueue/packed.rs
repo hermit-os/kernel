@@ -422,7 +422,7 @@ impl WriteCtrl<'_> {
 	}
 }
 
-/// A newtype in order to implement the correct functionality upon
+/// A type in order to implement the correct functionality upon
 /// the `EventSuppr` structure for driver notifications settings.
 /// The Driver Event Suppression structure is read-only by the device
 /// and controls the used buffer notifications sent by the device to the driver.
@@ -433,7 +433,7 @@ struct DrvNotif {
 	raw: &'static mut pvirtq::EventSuppress,
 }
 
-/// A newtype in order to implement the correct functionality upon
+/// A type in order to implement the correct functionality upon
 /// the `EventSuppr` structure for device notifications settings.
 /// The Device Event Suppression structure is read-only by the driver
 /// and controls the available buffer notifica- tions sent by the driver to the device.
