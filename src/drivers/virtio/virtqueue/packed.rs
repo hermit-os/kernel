@@ -66,13 +66,13 @@ struct DescriptorRing {
 	// Controlling variables for the ring
 	//
 	/// where to insert available descriptors next
-	write_index: u16,
+	/// See Virtio specification v1.1. - 2.7.1
+	write_index: EventSuppressDesc,
 	/// How much descriptors can be inserted
 	capacity: u16,
 	/// Where to expect the next used descriptor by the device
 	poll_index: u16,
 	/// See Virtio specification v1.1. - 2.7.1
-	drv_wc: bool,
 	dev_wc: bool,
 	/// This allocates available descriptors.
 	indexes: IndexAlloc,
@@ -88,13 +88,16 @@ impl DescriptorRing {
 			.collect::<Vec<_>>()
 			.into_boxed_slice();
 
+		let write_index = EventSuppressDesc::new()
+			.with_desc_event_off(0)
+			.with_desc_event_wrap(1);
+
 		DescriptorRing {
 			ring,
 			tkn_ref_ring,
-			write_index: 0,
+			write_index,
 			capacity: size,
 			poll_index: 0,
-			drv_wc: true,
 			dev_wc: true,
 			indexes: IndexAlloc::new(size.into()),
 		}
@@ -146,9 +149,7 @@ impl DescriptorRing {
 			first_ctrl_settings.2,
 		);
 
-		Ok(EventSuppressDesc::new()
-			.with_desc_event_off(self.write_index)
-			.with_desc_event_wrap(self.drv_wc.into()))
+		Ok(self.write_index)
 	}
 
 	fn push(&mut self, tkn: TransferToken<pvirtq::Desc>) -> Result<EventSuppressDesc, VirtqError> {
@@ -192,8 +193,8 @@ impl DescriptorRing {
 	fn get_write_ctrler(&mut self) -> Result<WriteCtrl<'_>, VirtqError> {
 		let desc_id = self.indexes.allocate().ok_or(VirtqError::NoDescrAvail)?;
 		Ok(WriteCtrl {
-			start: self.write_index,
-			position: self.write_index,
+			start: self.write_index.desc_event_off(),
+			position: self.write_index.desc_event_off(),
 			modulo: u16::try_from(self.ring.len()).unwrap(),
 			first_flags: DescF::empty(),
 			buff_id: u16::try_from(desc_id).unwrap(),
@@ -240,8 +241,9 @@ impl DescriptorRing {
 	/// for the cases in which the modification of the flag needs to be
 	/// deferred (e.g. patched dispatches, chained buffers).
 	fn to_marked_avail(&self, mut flags: DescF) -> DescF {
-		flags.set(virtq::DescF::AVAIL, self.drv_wc);
-		flags.set(virtq::DescF::USED, !self.drv_wc);
+		let avail = self.write_index.desc_event_wrap() != 0;
+		flags.set(virtq::DescF::AVAIL, avail);
+		flags.set(virtq::DescF::USED, !avail);
 		flags
 	}
 
@@ -363,13 +365,21 @@ impl WriteCtrl<'_> {
 		// Firstly check if we are at all allowed to write a descriptor
 		assert!(self.desc_ring.capacity != 0);
 		self.desc_ring.capacity -= 1;
+
+		let mut desc = self.desc_ring.write_index;
+
 		// check if increment wrapped around end of ring
 		// then also wrap the wrap counter.
 		if self.position + 1 == self.modulo {
-			self.desc_ring.drv_wc ^= true;
+			let wrap = desc.desc_event_wrap() ^ 1;
+			desc.set_desc_event_wrap(wrap);
 		}
+
 		// Also update the write_index
-		self.desc_ring.write_index = (self.desc_ring.write_index + 1) % self.modulo;
+		let off = (desc.desc_event_off() + 1) % self.modulo;
+		desc.set_desc_event_off(off);
+
+		self.desc_ring.write_index = desc;
 
 		self.position = (self.position + 1) % self.modulo;
 	}
