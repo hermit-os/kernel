@@ -54,30 +54,6 @@ impl RingIndexRange for ops::Range<RingIdx> {
 	}
 }
 
-/// A newtype of bool used for convenience in context with
-/// packed queues wrap counter.
-///
-/// For more details see Virtio specification v1.1. - 2.7.1
-#[derive(Copy, Clone, Debug)]
-struct WrapCount(bool);
-
-impl WrapCount {
-	/// Returns a new WrapCount struct initialized to true or 1.
-	///
-	/// See virtio specification v1.1. - 2.7.1
-	fn new() -> Self {
-		WrapCount(true)
-	}
-
-	/// Toggles a given wrap count to respectiver other value.
-	///
-	/// If WrapCount(true) returns WrapCount(false),
-	/// if WrapCount(false) returns WrapCount(true).
-	fn wrap(&mut self) {
-		self.0 = !self.0;
-	}
-}
-
 /// Structure which allows to control raw ring and operate easily on it
 struct DescriptorRing {
 	ring: Box<[pvirtq::Desc], DeviceAlloc>,
@@ -92,8 +68,8 @@ struct DescriptorRing {
 	/// Where to expect the next used descriptor by the device
 	poll_index: u16,
 	/// See Virtio specification v1.1. - 2.7.1
-	drv_wc: WrapCount,
-	dev_wc: WrapCount,
+	drv_wc: bool,
+	dev_wc: bool,
 	/// Memory pool controls the amount of "free floating" descriptors
 	/// See [MemPool] docs for detail.
 	mem_pool: MemPool,
@@ -115,8 +91,8 @@ impl DescriptorRing {
 			write_index: 0,
 			capacity: size,
 			poll_index: 0,
-			drv_wc: WrapCount::new(),
-			dev_wc: WrapCount::new(),
+			drv_wc: true,
+			dev_wc: true,
 			mem_pool: MemPool::new(size),
 		}
 	}
@@ -168,7 +144,7 @@ impl DescriptorRing {
 		);
 		Ok(RingIdx {
 			off: self.write_index,
-			wrap: self.drv_wc.0.into(),
+			wrap: self.drv_wc.into(),
 		})
 	}
 
@@ -251,7 +227,7 @@ impl DescriptorRing {
 
 	/// Returns the [DescF] with the avail and used flags set in accordance
 	/// with the VIRTIO specification v1.2 - 2.8.1 (i.e. avail flag set to match
-	/// the driver WrapCount and the used flag set to NOT match the WrapCount).
+	/// the driver wrap counter and the used flag set to NOT match the wrap counter).
 	///
 	/// This function is defined on the whole ring rather than only the
 	/// wrap counter to ensure that it is not called on the incorrect
@@ -261,20 +237,20 @@ impl DescriptorRing {
 	/// for the cases in which the modification of the flag needs to be
 	/// deferred (e.g. patched dispatches, chained buffers).
 	fn to_marked_avail(&self, mut flags: DescF) -> DescF {
-		flags.set(virtq::DescF::AVAIL, self.drv_wc.0);
-		flags.set(virtq::DescF::USED, !self.drv_wc.0);
+		flags.set(virtq::DescF::AVAIL, self.drv_wc);
+		flags.set(virtq::DescF::USED, !self.drv_wc);
 		flags
 	}
 
 	/// Checks the avail and used flags to see if the descriptor is marked
 	/// as used by the device in accordance with the
-	/// VIRTIO specification v1.2 - 2.8.1 (i.e. they match the device WrapCount)
+	/// VIRTIO specification v1.2 - 2.8.1 (i.e. they match the device wrap counter)
 	///
 	/// This function is defined on the whole ring rather than only the
 	/// wrap counter to ensure that it is not called on the incorrect
 	/// wrap counter (i.e. driver wrap counter) by accident.
 	fn is_marked_used(&self, flags: DescF) -> bool {
-		if self.dev_wc.0 {
+		if self.dev_wc {
 			flags.contains(virtq::DescF::AVAIL | virtq::DescF::USED)
 		} else {
 			!flags.intersects(virtq::DescF::AVAIL | virtq::DescF::USED)
@@ -338,7 +314,7 @@ impl ReadCtrl<'_> {
 
 	fn incrmt(&mut self) {
 		if self.desc_ring.poll_index + 1 == self.modulo {
-			self.desc_ring.dev_wc.wrap();
+			self.desc_ring.dev_wc ^= true;
 		}
 
 		// Increment capacity as we have one more free now!
@@ -376,7 +352,7 @@ impl WriteCtrl<'_> {
 	/// Incrementing index by one. The index wrappes around to zero when
 	/// reaching (modulo -1).
 	///
-	/// Also takes care of wrapping the WrapCount of the associated
+	/// Also takes care of wrapping the wrap counter of the associated
 	/// DescriptorRing.
 	fn incrmt(&mut self) {
 		// Firstly check if we are at all allowed to write a descriptor
@@ -385,7 +361,7 @@ impl WriteCtrl<'_> {
 		// check if increment wrapped around end of ring
 		// then also wrap the wrap counter.
 		if self.position + 1 == self.modulo {
-			self.desc_ring.drv_wc.wrap();
+			self.desc_ring.drv_wc ^= true;
 		}
 		// Also update the write_index
 		self.desc_ring.write_index = (self.desc_ring.write_index + 1) % self.modulo;
@@ -402,7 +378,7 @@ impl WriteCtrl<'_> {
 			// the device does not see an incomplete chain).
 			self.first_flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		} else {
-			// Set avail and used according to the current WrapCount.
+			// Set avail and used according to the current wrap counter.
 			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		}
 		self.desc_ring.ring[usize::from(self.position)] = incomplete_desc;
