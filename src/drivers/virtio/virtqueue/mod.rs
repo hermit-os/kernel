@@ -512,30 +512,26 @@ pub enum BufferType {
 	Indirect,
 }
 
-/// A newtype for descriptor ids, for better readability.
-#[derive(Clone, Copy)]
-struct MemDescrId(pub u16);
-
 /// MemPool allows to easily control, request and provide memory for Virtqueues.
 ///
 /// The struct is initialized with a limit of free running "tracked"
 /// memory descriptor ids. As Virtqueus do only allow a limited amount of descriptors in their queue,
 /// the independent queues, can control the number of descriptors by this.
 struct MemPool {
-	pool: Vec<MemDescrId>,
+	pool: Vec<u16>,
 	limit: u16,
 }
 
 impl MemPool {
 	/// Returns a given id to the id pool
-	fn ret_id(&mut self, id: MemDescrId) {
+	fn ret_id(&mut self, id: u16) {
 		self.pool.push(id);
 	}
 
 	/// Returns a new instance, with a pool of the specified size.
 	fn new(size: u16) -> MemPool {
 		MemPool {
-			pool: (0..size).map(MemDescrId).collect(),
+			pool: (0..size).collect(),
 			limit: size,
 		}
 	}

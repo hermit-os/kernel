@@ -23,8 +23,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
-	VirtqPrivate,
+	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -214,11 +213,11 @@ impl DescriptorRing {
 		&mut self,
 		raw_tkn: TransferToken<pvirtq::Desc>,
 		start: u16,
-		buff_id: MemDescrId,
+		buff_id: u16,
 		first_flags: DescF,
 	) {
 		// provide reference, in order to let TransferToken know upon finish.
-		self.tkn_ref_ring[usize::from(buff_id.0)] = Some(raw_tkn);
+		self.tkn_ref_ring[usize::from(buff_id)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -304,7 +303,7 @@ impl ReadCtrl<'_> {
 			for _ in 0..tkn.num_consuming_descr() {
 				self.incrmt();
 			}
-			self.desc_ring.mem_pool.ret_id(MemDescrId(buff_id));
+			self.desc_ring.mem_pool.ret_id(buff_id);
 
 			Some((tkn, write_len))
 		} else {
@@ -341,7 +340,7 @@ struct WriteCtrl<'a> {
 	/// The [pvirtq::Desc::flags] value for the first descriptor, the write of which is deferred.
 	first_flags: DescF,
 	/// Buff ID of this write
-	buff_id: MemDescrId,
+	buff_id: u16,
 
 	desc_ring: &'a mut DescriptorRing,
 }
@@ -371,7 +370,7 @@ impl WriteCtrl<'_> {
 
 	/// Completes the descriptor flags and id, and writes into the queue at the correct position.
 	fn write_desc(&mut self, mut incomplete_desc: pvirtq::Desc) {
-		incomplete_desc.id = self.buff_id.0.into();
+		incomplete_desc.id = self.buff_id.into();
 		if self.start == self.position {
 			// We save what the flags value for the first descriptor will be to be able
 			// to write it later when all the other descriptors are written (so that
