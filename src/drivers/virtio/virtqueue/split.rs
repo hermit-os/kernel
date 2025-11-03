@@ -19,7 +19,7 @@ use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
 	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
-	VqIndex, VqSize,
+	VqIndex,
 };
 use crate::arch::memory_barrier;
 use crate::mm::device_alloc::DeviceAlloc;
@@ -150,7 +150,7 @@ impl DescrRing {
 /// Virtio's split virtqueue structure
 pub struct SplitVq {
 	ring: DescrRing,
-	size: VqSize,
+	size: u16,
 	index: VqIndex,
 
 	notif_ctrl: NotifCtrl,
@@ -213,7 +213,7 @@ impl Virtq for SplitVq {
 		self.index
 	}
 
-	fn size(&self) -> VqSize {
+	fn size(&self) -> u16 {
 		self.size
 	}
 
@@ -242,7 +242,7 @@ impl SplitVq {
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
-		size: VqSize,
+		size: u16,
 		index: VqIndex,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
@@ -251,7 +251,7 @@ impl SplitVq {
 			return Err(VirtqError::QueueNotExisting(index.into()));
 		};
 
-		let size = vq_handler.set_vq_size(size.0);
+		let size = vq_handler.set_vq_size(size);
 
 		let mut descr_table_cell = unsafe {
 			core::mem::transmute::<
@@ -311,12 +311,12 @@ impl SplitVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created SplitVq: idx={}, size={}", index.0, size);
+		info!("Created SplitVq: idx={}, size={size}", index.0);
 
 		Ok(SplitVq {
 			ring: descr_ring,
 			notif_ctrl,
-			size: VqSize(size),
+			size,
 			index,
 		})
 	}

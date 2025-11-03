@@ -35,7 +35,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex,
 };
 use crate::drivers::{Driver, InterruptLine};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -110,7 +110,7 @@ impl RxQueues {
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
-		let num_bufs: u16 = u16::from(vq.size()) / constants::BUFF_PER_PACKET;
+		let num_bufs = vq.size() / constants::BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
 	}
@@ -836,7 +836,7 @@ impl VirtioNetDriver<Uninit> {
 					PackedVq::new(
 						&mut self.com_cfg,
 						&self.notif_cfg,
-						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+						VIRTIO_MAX_QUEUE_SIZE,
 						VqIndex::from(self.num_vqs),
 						self.dev_cfg.features.into(),
 					)
@@ -847,7 +847,7 @@ impl VirtioNetDriver<Uninit> {
 					SplitVq::new(
 						&mut self.com_cfg,
 						&self.notif_cfg,
-						VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+						VIRTIO_MAX_QUEUE_SIZE,
 						VqIndex::from(self.num_vqs),
 						self.dev_cfg.features.into(),
 					)
@@ -912,7 +912,7 @@ impl VirtioNetDriver<Uninit> {
 				let mut vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					VIRTIO_MAX_QUEUE_SIZE,
 					VqIndex::from(2 * i),
 					self.dev_cfg.features.into(),
 				)
@@ -925,7 +925,7 @@ impl VirtioNetDriver<Uninit> {
 				let mut vq = PackedVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					VIRTIO_MAX_QUEUE_SIZE,
 					VqIndex::from(2 * i + 1),
 					self.dev_cfg.features.into(),
 				)
@@ -933,13 +933,13 @@ impl VirtioNetDriver<Uninit> {
 				// Interrupt for communicating that a sent packet left, is not needed
 				vq.disable_notifs();
 
-				inner.send_capacity += u32::from(u16::from(vq.size()));
+				inner.send_capacity += u32::from(vq.size());
 				inner.send_vqs.add(VirtQueue::Packed(vq));
 			} else {
 				let mut vq = SplitVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					VIRTIO_MAX_QUEUE_SIZE,
 					VqIndex::from(2 * i),
 					self.dev_cfg.features.into(),
 				)
@@ -952,14 +952,14 @@ impl VirtioNetDriver<Uninit> {
 				let mut vq = SplitVq::new(
 					&mut self.com_cfg,
 					&self.notif_cfg,
-					VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+					VIRTIO_MAX_QUEUE_SIZE,
 					VqIndex::from(2 * i + 1),
 					self.dev_cfg.features.into(),
 				)
 				.unwrap();
 				// Interrupt for communicating that a sent packet left, is not needed
 				vq.disable_notifs();
-				inner.send_capacity += u32::from(u16::from(vq.size()));
+				inner.send_capacity += u32::from(vq.size());
 				inner.send_vqs.add(VirtQueue::Split(vq));
 			}
 		}

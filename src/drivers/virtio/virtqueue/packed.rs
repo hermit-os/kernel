@@ -24,7 +24,7 @@ use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
 	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
-	VirtqPrivate, VqIndex, VqSize,
+	VirtqPrivate, VqIndex,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -511,7 +511,7 @@ pub struct PackedVq {
 	notif_ctrl: NotifCtrl,
 	/// The size of the queue, equals the number of descriptors which can
 	/// be used
-	size: VqSize,
+	size: u16,
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
 	index: VqIndex,
@@ -633,7 +633,7 @@ impl Virtq for PackedVq {
 		self.index
 	}
 
-	fn size(&self) -> VqSize {
+	fn size(&self) -> u16 {
 		self.size
 	}
 
@@ -659,7 +659,7 @@ impl PackedVq {
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
-		size: VqSize,
+		size: u16,
 		index: VqIndex,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
@@ -684,10 +684,10 @@ impl PackedVq {
 		// Must catch size larger 0x8000 (2^15) as it is not allowed for packed queues.
 		//
 		// See Virtio specification v1.1. - 4.1.4.3.2
-		let vq_size = if (size.0 == 0) | (size.0 > 0x8000) {
-			return Err(VirtqError::QueueSizeNotAllowed(size.0));
+		let vq_size = if (size == 0) | (size > 0x8000) {
+			return Err(VirtqError::QueueSizeNotAllowed(size));
 		} else {
-			vq_handler.set_vq_size(size.0)
+			vq_handler.set_vq_size(size)
 		};
 
 		let mut descr_ring = DescriptorRing::new(vq_size);
@@ -731,14 +731,14 @@ impl PackedVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created PackedVq: idx={}, size={}", index.0, vq_size);
+		info!("Created PackedVq: idx={}, size={vq_size}", index.0);
 
 		Ok(PackedVq {
 			descr_ring,
 			drv_event,
 			dev_event,
 			notif_ctrl,
-			size: VqSize::from(vq_size),
+			size: vq_size,
 			index,
 			last_next: Cell::default(),
 		})

@@ -30,7 +30,7 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq, VqIndex,
 };
 use crate::drivers::{Driver, InterruptLine};
 use crate::errno::Errno;
@@ -124,7 +124,7 @@ impl RxQueue {
 
 	pub fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
-		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		let num_packets = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_packets, self.packet_size);
 
 		self.vq = Some(vq);
@@ -348,7 +348,7 @@ impl VirtioConsoleDriver {
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
-				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+				VIRTIO_MAX_QUEUE_SIZE,
 				VqIndex::from(0u16),
 				self.dev_cfg.features.into(),
 			)
@@ -361,7 +361,7 @@ impl VirtioConsoleDriver {
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
-				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+				VIRTIO_MAX_QUEUE_SIZE,
 				VqIndex::from(1u16),
 				self.dev_cfg.features.into(),
 			)
