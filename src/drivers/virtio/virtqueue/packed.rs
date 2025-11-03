@@ -71,9 +71,9 @@ struct DescriptorRing {
 	/// How much descriptors can be inserted
 	capacity: u16,
 	/// Where to expect the next used descriptor by the device
-	poll_index: u16,
+	///
 	/// See Virtio specification v1.1. - 2.7.1
-	dev_wc: bool,
+	poll_index: EventSuppressDesc,
 	/// This allocates available descriptors.
 	indexes: IndexAlloc,
 }
@@ -92,13 +92,14 @@ impl DescriptorRing {
 			.with_desc_event_off(0)
 			.with_desc_event_wrap(1);
 
+		let poll_index = write_index;
+
 		DescriptorRing {
 			ring,
 			tkn_ref_ring,
 			write_index,
 			capacity: size,
-			poll_index: 0,
-			dev_wc: true,
+			poll_index,
 			indexes: IndexAlloc::new(size.into()),
 		}
 	}
@@ -207,7 +208,7 @@ impl DescriptorRing {
 	/// to read the queue correctly.
 	fn get_read_ctrler(&mut self) -> ReadCtrl<'_> {
 		ReadCtrl {
-			position: self.poll_index,
+			position: self.poll_index.desc_event_off(),
 			modulo: u16::try_from(self.ring.len()).unwrap(),
 
 			desc_ring: self,
@@ -255,7 +256,7 @@ impl DescriptorRing {
 	/// wrap counter to ensure that it is not called on the incorrect
 	/// wrap counter (i.e. driver wrap counter) by accident.
 	fn is_marked_used(&self, flags: DescF) -> bool {
-		if self.dev_wc {
+		if self.poll_index.desc_event_wrap() != 0 {
 			flags.contains(virtq::DescF::AVAIL | virtq::DescF::USED)
 		} else {
 			!flags.intersects(virtq::DescF::AVAIL | virtq::DescF::USED)
@@ -320,16 +321,23 @@ impl ReadCtrl<'_> {
 	}
 
 	fn incrmt(&mut self) {
-		if self.desc_ring.poll_index + 1 == self.modulo {
-			self.desc_ring.dev_wc ^= true;
+		let mut desc = self.desc_ring.poll_index;
+
+		if desc.desc_event_off() + 1 == self.modulo {
+			let wrap = desc.desc_event_wrap() ^ 1;
+			desc.set_desc_event_wrap(wrap);
 		}
+
+		let off = (desc.desc_event_off() + 1) % self.modulo;
+		desc.set_desc_event_off(off);
+
+		self.desc_ring.poll_index = desc;
+
+		self.position = desc.desc_event_off();
 
 		// Increment capacity as we have one more free now!
 		assert!(self.desc_ring.capacity <= u16::try_from(self.desc_ring.ring.len()).unwrap());
 		self.desc_ring.capacity += 1;
-
-		self.desc_ring.poll_index = (self.desc_ring.poll_index + 1) % self.modulo;
-		self.position = self.desc_ring.poll_index;
 	}
 }
 
@@ -624,7 +632,7 @@ impl Virtq for PackedVq {
 	}
 
 	fn has_used_buffers(&self) -> bool {
-		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index)];
+		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index.desc_event_off())];
 		self.descr_ring.is_marked_used(desc.flags)
 	}
 }
