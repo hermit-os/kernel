@@ -136,17 +136,13 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	/// Trigger an interrupt to reschedule the system
 	#[cfg(target_arch = "aarch64")]
 	fn reschedule(self) {
-		use core::arch::asm;
-
-		use aarch64_cpu::asm::barrier::{SY, isb};
+		use aarch64_cpu::asm::barrier::{NSH, SY, dsb, isb};
 		use arm_gic::IntId;
 		use arm_gic::gicv3::{GicV3, SgiTarget, SgiTargetGroup};
 
 		use crate::interrupts::SGI_RESCHED;
 
-		unsafe {
-			asm!("dsb nsh", options(nostack, preserves_flags));
-		}
+		dsb(NSH);
 		isb(SY);
 
 		let reschedid = IntId::sgi(SGI_RESCHED.into());

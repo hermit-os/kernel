@@ -4,7 +4,7 @@ use core::arch::asm;
 use core::marker::PhantomData;
 use core::{fmt, mem, ptr};
 
-use aarch64_cpu::asm::barrier::{SY, isb};
+use aarch64_cpu::asm::barrier::{ISH, ISHST, SY, dsb, isb};
 use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -238,15 +238,15 @@ impl<S: PageSize> Page<S> {
 		//
 		// We use "vale1is" instead of "vae1is" to always flush the last table level only (performance optimization).
 		// The "is" attribute broadcasts the TLB flush to all cores, so we don't need an IPI (unlike x86_64).
+		dsb(ISHST);
 		unsafe {
 			asm!(
-				"dsb ishst",
 				"tlbi vale1is, {addr}",
-				"dsb ish",
 				addr = in(reg) self.virtual_address.as_u64() >> 12,
 				options(nostack),
 			);
 		}
+		dsb(ISH);
 		isb(SY);
 	}
 

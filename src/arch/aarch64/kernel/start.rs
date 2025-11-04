@@ -4,6 +4,7 @@ use core::arch::{asm, naked_asm};
 #[cfg(feature = "smp")]
 use core::sync::atomic::AtomicPtr;
 
+use aarch64_cpu::asm::barrier::{SY, dsb};
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
@@ -268,10 +269,10 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 			out("x4") _,
 			options(nostack),
 		);
-
-		// Memory barrier
-		asm!("dsb sy", options(nostack));
 	}
+
+	// Memory barrier
+	dsb(SY);
 
 	if cpu_id == 0 {
 		env::set_boot_info(*boot_info.unwrap());
