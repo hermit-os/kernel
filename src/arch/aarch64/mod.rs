@@ -1,3 +1,5 @@
+use aarch64_cpu::asm::barrier::{ISH, dmb};
+
 pub mod kernel;
 pub mod mm;
 
@@ -5,8 +7,5 @@ pub mod mm;
 #[allow(dead_code)]
 #[inline(always)]
 pub(crate) fn memory_barrier() {
-	use core::arch::asm;
-	unsafe {
-		asm!("dmb ish", options(nostack, nomem, preserves_flags));
-	}
+	dmb(ISH);
 }
