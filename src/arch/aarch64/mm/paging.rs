@@ -5,6 +5,7 @@ use core::marker::PhantomData;
 use core::{fmt, mem, ptr};
 
 use aarch64_cpu::asm::barrier::{ISH, ISHST, SY, dsb, isb};
+use aarch64_cpu::registers::{ID_AA64MMFR0_EL1, Readable};
 use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -715,41 +716,36 @@ pub fn get_application_page_size() -> usize {
 }
 
 pub unsafe fn init() {
-	let aa64mmfr0: u64;
-
 	let ram_start = get_ram_address();
 	info!("RAM starts at physical address {ram_start:p}");
 
 	// determine physical address size
-	unsafe {
-		asm!(
-			"mrs {}, id_aa64mmfr0_el1",
-			out(reg) aa64mmfr0,
-			options(nostack),
-		);
-	}
+	let id_aa64mmfr0_el1 = ID_AA64MMFR0_EL1.extract();
 
-	let pa_range: u64 = match aa64mmfr0 & 0b1111 {
-		0b0000 => 32,
-		0b0001 => 36,
-		0b0010 => 40,
-		0b0011 => 42,
-		0b0100 => 44,
-		0b0101 => 48,
-		0b0110 => 52,
-		_ => panic!("Invalid physical address range"),
+	let pa_range = match id_aa64mmfr0_el1
+		.read_as_enum(ID_AA64MMFR0_EL1::PARange)
+		.unwrap()
+	{
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_32 => 32,
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_36 => 36,
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_40 => 40,
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_42 => 42,
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_44 => 44,
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_48 => 48,
+		ID_AA64MMFR0_EL1::PARange::Value::Bits_52 => 52,
 	};
+
 	info!("Physical address range: {}GB", 1 << (pa_range - 30));
 
-	let tgran16: u64 = (aa64mmfr0 >> 20) & 0b1111;
-	let tgran64: u64 = (aa64mmfr0 >> 24) & 0b1111;
-	let tgran4: u64 = (aa64mmfr0 >> 28) & 0b1111;
+	let t_gran4 = id_aa64mmfr0_el1.matches_all(ID_AA64MMFR0_EL1::TGran4::Supported);
+	let t_gran64 = id_aa64mmfr0_el1.matches_all(ID_AA64MMFR0_EL1::TGran64::Supported);
+	let t_gran16 = id_aa64mmfr0_el1.matches_all(ID_AA64MMFR0_EL1::TGran16::Supported);
 
-	info!("Support of 4KB pages: {}", tgran4 == 0);
-	info!("Support of 16KB pages: {}", tgran16 == 0b0001);
-	info!("Support of 64KB pages: {}", tgran64 == 0);
+	info!("Support of 4KB pages: {t_gran4}");
+	info!("Support of 16KB pages: {t_gran16}");
+	info!("Support of 64KB pages: {t_gran64}");
 
-	assert!(tgran4 == 0);
+	assert!(t_gran4);
 
 	// page tables are already initialized, we have just to remove obsolete entries
 }
