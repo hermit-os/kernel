@@ -56,24 +56,7 @@ pub mod error {
 				#[cfg(not(feature = "pci"))]
 				VirtioError::Unknown => write!(f, "Driver failure"),
 				#[cfg(feature = "pci")]
-				VirtioError::FromPci(pci_error) => match pci_error {
-					PciError::General(id) => write!(
-						f,
-						"Driver failed to initialize device with id: {id:#x}. Due to unknown reasosn!"
-					),
-					PciError::NoBar(id) => write!(
-						f,
-						"Driver failed to initialize device with id: {id:#x}. Reason: No BAR's found."
-					),
-					PciError::NoCapPtr(id) => write!(
-						f,
-						"Driver failed to initialize device with id: {id:#x}. Reason: No Capabilities pointer found."
-					),
-					PciError::NoVirtioCaps(id) => write!(
-						f,
-						"Driver failed to initialize device with id: {id:#x}. Reason: No Virtio capabilities were found."
-					),
-				},
+				VirtioError::FromPci(pci_error) => pci_error.fmt(f),
 				#[cfg(feature = "pci")]
 				VirtioError::NoComCfg(id) => write!(
 					f,

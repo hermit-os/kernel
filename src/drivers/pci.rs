@@ -534,13 +534,23 @@ pub(crate) fn init() {
 ///
 /// Errors include...
 pub(crate) mod error {
+	use thiserror::Error;
+
 	/// An enum of PciErrors
 	/// typically carrying the device's id as an u16.
-	#[derive(Debug)]
+	#[derive(Error, Debug)]
 	pub enum PciError {
+		#[error("Driver failed to initialize device with id: {0:#x}. Due to unknown reasosn!")]
 		General(u16),
+		#[error("Driver failed to initialize device with id: {0:#x}. Reason: No BAR's found.")]
 		NoBar(u16),
+		#[error(
+			"Driver failed to initialize device with id: {0:#x}. Reason: No Capabilities pointer found."
+		)]
 		NoCapPtr(u16),
+		#[error(
+			"Driver failed to initialize device with id: {0:#x}. Reason: No Virtio capabilities were found."
+		)]
 		NoVirtioCaps(u16),
 	}
 }
