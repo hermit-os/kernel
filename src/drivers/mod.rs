@@ -37,6 +37,16 @@ pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
 /// [DriverError](error::DriverError) values will be
 /// passed on to higher layers.
 pub mod error {
+	#[cfg(any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "rtl8139",
+		feature = "virtio-net",
+		feature = "fuse",
+		feature = "vsock",
+		feature = "console",
+	))]
+	use thiserror::Error;
+
 	#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 	use crate::drivers::net::gem::GEMError;
 	#[cfg(feature = "rtl8139")]
@@ -61,7 +71,7 @@ pub mod error {
 		feature = "vsock",
 		feature = "console",
 	))]
-	#[derive(Debug)]
+	#[derive(Error, Debug)]
 	pub enum DriverError {
 		#[cfg(any(
 			all(
@@ -73,82 +83,16 @@ pub mod error {
 			feature = "vsock",
 			feature = "console",
 		))]
-		InitVirtioDevFail(VirtioError),
+		#[error("Virtio driver failed: {0:?}")]
+		InitVirtioDevFail(#[from] VirtioError),
+
 		#[cfg(feature = "rtl8139")]
-		InitRTL8139DevFail(RTL8139Error),
+		#[error("RTL8139 driver failed: {0:?}")]
+		InitRTL8139DevFail(#[from] RTL8139Error),
+
 		#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
-		InitGEMDevFail(GEMError),
-	}
-
-	#[cfg(any(
-		all(
-			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-			not(feature = "rtl8139"),
-			feature = "virtio-net",
-		),
-		feature = "fuse",
-		feature = "vsock",
-		feature = "console",
-	))]
-	impl From<VirtioError> for DriverError {
-		fn from(err: VirtioError) -> Self {
-			DriverError::InitVirtioDevFail(err)
-		}
-	}
-
-	#[cfg(feature = "rtl8139")]
-	impl From<RTL8139Error> for DriverError {
-		fn from(err: RTL8139Error) -> Self {
-			DriverError::InitRTL8139DevFail(err)
-		}
-	}
-
-	#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
-	impl From<GEMError> for DriverError {
-		fn from(err: GEMError) -> Self {
-			DriverError::InitGEMDevFail(err)
-		}
-	}
-
-	#[cfg(any(
-		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-		feature = "rtl8139",
-		feature = "virtio-net",
-		feature = "fuse",
-		feature = "vsock",
-		feature = "console",
-	))]
-	impl core::fmt::Display for DriverError {
-		#[allow(unused_variables)]
-		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-			match *self {
-				#[cfg(any(
-					all(
-						not(all(
-							target_arch = "riscv64",
-							feature = "gem-net",
-							not(feature = "pci"),
-						)),
-						not(feature = "rtl8139"),
-						feature = "virtio-net",
-					),
-					feature = "fuse",
-					feature = "vsock",
-					feature = "console",
-				))]
-				DriverError::InitVirtioDevFail(ref err) => {
-					write!(f, "Virtio driver failed: {err:?}")
-				}
-				#[cfg(feature = "rtl8139")]
-				DriverError::InitRTL8139DevFail(ref err) => {
-					write!(f, "RTL8139 driver failed: {err:?}")
-				}
-				#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
-				DriverError::InitGEMDevFail(ref err) => {
-					write!(f, "GEM driver failed: {err:?}")
-				}
-			}
-		}
+		#[error("GEM driver failed: {0:?}")]
+		InitGEMDevFail(#[from] GEMError),
 	}
 }
 
