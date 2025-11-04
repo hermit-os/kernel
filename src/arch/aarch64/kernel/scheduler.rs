@@ -4,7 +4,7 @@ use core::arch::{asm, naked_asm};
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
-use aarch64::regs::*;
+use aarch64_cpu::registers::*;
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};

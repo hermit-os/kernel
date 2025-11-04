@@ -177,7 +177,7 @@ memory_addresses = { version = "0.2.3", default-features = false, features = [
 ] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
-aarch64 = { version = "0.0.14", default-features = false }
+aarch64-cpu = "11"
 arm-gic = { version = "0.6" }
 arm-pl011-uart = { version = "0.4", default-features = false }
 semihosting = { version = "0.1", optional = true }
