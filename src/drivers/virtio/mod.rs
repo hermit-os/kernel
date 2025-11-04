@@ -84,30 +84,7 @@ pub mod error {
 				#[cfg(feature = "fuse")]
 				VirtioError::FsDriver(fs_error) => fs_error.fmt(f),
 				#[cfg(feature = "console")]
-				VirtioError::ConsoleDriver(console_error) => match console_error {
-					#[cfg(feature = "pci")]
-					VirtioConsoleError::NoDevCfg(id) => write!(
-						f,
-						"Virtio console device driver failed, for device {id:x}, due to a missing or malformed device config!"
-					),
-					VirtioConsoleError::FailFeatureNeg(id) => write!(
-						f,
-						"Virtio console device driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"
-					),
-					VirtioConsoleError::FeatureRequirementsNotMet(features) => write!(
-						f,
-						"Virtio console driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"
-					),
-					VirtioConsoleError::IncompatibleFeatureSets(
-						driver_features,
-						device_features,
-					) => {
-						write!(
-							f,
-							"Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"
-						)
-					}
-				},
+				VirtioError::ConsoleDriver(console_error) => console_error.fmt(f),
 				#[cfg(feature = "vsock")]
 				VirtioError::VsockDriver(vsock_error) => match vsock_error {
 					#[cfg(feature = "pci")]
