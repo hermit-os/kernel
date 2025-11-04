@@ -2,7 +2,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use aarch64::regs::*;
+use aarch64_cpu::registers::*;
 use ahash::RandomState;
 use arm_gic::gicv3::{GicV3, InterruptGroup, SgiTarget, SgiTargetGroup};
 use arm_gic::{IntId, Trigger};

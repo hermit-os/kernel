@@ -2,7 +2,7 @@ use core::arch::asm;
 use core::fmt;
 use core::mem::offset_of;
 
-use aarch64::regs::*;
+use aarch64_cpu::registers::*;
 use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
 use crate::env;
