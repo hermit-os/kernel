@@ -222,9 +222,7 @@ pub fn seed_entropy() -> Option<[u8; 32]> {
 
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
-	unsafe {
-		asm!("wfi", options(nostack, nomem));
-	}
+	aarch64_cpu::asm::wfi();
 }
 
 /// Shutdown the system
@@ -243,7 +241,7 @@ pub fn shutdown(error_code: i32) -> ! {
 
 				// we should never reach this point
 				loop {
-					asm!("wfe", options(nomem, nostack));
+					aarch64_cpu::asm::wfe();
 				}
 			}
 		}
