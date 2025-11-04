@@ -86,42 +86,7 @@ pub mod error {
 				#[cfg(feature = "console")]
 				VirtioError::ConsoleDriver(console_error) => console_error.fmt(f),
 				#[cfg(feature = "vsock")]
-				VirtioError::VsockDriver(vsock_error) => match vsock_error {
-					#[cfg(feature = "pci")]
-					VirtioVsockError::NoDevCfg(id) => write!(
-						f,
-						"Virtio socket device driver failed, for device {id:x}, due to a missing or malformed device config!"
-					),
-					#[cfg(feature = "pci")]
-					VirtioVsockError::NoComCfg(id) => write!(
-						f,
-						"Virtio socket device driver failed, for device {id:x}, due to a missing or malformed common config!"
-					),
-					#[cfg(feature = "pci")]
-					VirtioVsockError::NoIsrCfg(id) => write!(
-						f,
-						"Virtio socket device driver failed, for device {id:x}, due to a missing or malformed ISR status config!"
-					),
-					#[cfg(feature = "pci")]
-					VirtioVsockError::NoNotifCfg(id) => write!(
-						f,
-						"Virtio socket device driver failed, for device {id:x}, due to a missing or malformed notification config!"
-					),
-					VirtioVsockError::FailFeatureNeg(id) => write!(
-						f,
-						"Virtio socket device driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"
-					),
-					VirtioVsockError::FeatureRequirementsNotMet(features) => write!(
-						f,
-						"Virtio socket driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"
-					),
-					VirtioVsockError::IncompatibleFeatureSets(driver_features, device_features) => {
-						write!(
-							f,
-							"Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"
-						)
-					}
-				},
+				VirtioError::VsockDriver(vsock_error) => vsock_error.fmt(f),
 			}
 		}
 	}
