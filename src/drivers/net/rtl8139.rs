@@ -11,6 +11,7 @@ use core::ptr::NonNull;
 use endian_num::{le16, le32, le64};
 use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
 use smoltcp::phy::DeviceCapabilities;
+use thiserror::Error;
 use volatile::access::{NoAccess, ReadOnly, ReadWrite};
 use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef, map_field};
 
@@ -405,10 +406,13 @@ struct Regs {
 	__reserved7: [u8; 39],
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum RTL8139Error {
+	#[error("initialization failed")]
 	InitFailed,
+	#[error("reset failed")]
 	ResetFailed,
+	#[error("unknown RTL8139 error")]
 	Unknown,
 }
 
