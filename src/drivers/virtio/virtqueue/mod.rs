@@ -606,13 +606,6 @@ impl MemPool {
 pub mod error {
 	use crate::errno::Errno;
 
-	#[derive(Debug)]
-	// Internal Error Handling for Buffers
-	pub enum BufferError {
-		WriteToLarge,
-		ToManyWrites,
-	}
-
 	// External Error Handling for users of the virtqueue.
 	pub enum VirtqError {
 		General,
