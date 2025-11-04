@@ -82,31 +82,7 @@ pub mod error {
 				))]
 				VirtioError::NetDriver(net_error) => net_error.fmt(f),
 				#[cfg(feature = "fuse")]
-				VirtioError::FsDriver(fs_error) => match fs_error {
-					#[cfg(feature = "pci")]
-					VirtioFsError::NoDevCfg(id) => write!(
-						f,
-						"Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed device config!"
-					),
-					VirtioFsError::FailFeatureNeg(id) => write!(
-						f,
-						"Virtio filesystem driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"
-					),
-					VirtioFsError::FeatureRequirementsNotMet(features) => write!(
-						f,
-						"Virtio filesystem driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"
-					),
-					VirtioFsError::IncompatibleFeatureSets(driver_features, device_features) => {
-						write!(
-							f,
-							"Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}",
-						)
-					}
-					VirtioFsError::Unknown => write!(
-						f,
-						"Virtio filesystem failed, driver failed due unknown reason!"
-					),
-				},
+				VirtioError::FsDriver(fs_error) => fs_error.fmt(f),
 				#[cfg(feature = "console")]
 				VirtioError::ConsoleDriver(console_error) => match console_error {
 					#[cfg(feature = "pci")]
