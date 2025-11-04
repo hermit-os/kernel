@@ -17,16 +17,15 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 #[cfg(feature = "pci")]
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
-use super::{
-	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
-};
+use super::index_alloc::IndexAlloc;
+use super::{AvailBufferToken, BufferType, TransferToken, UsedBufferToken, Virtq, VirtqPrivate};
 use crate::arch::memory_barrier;
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
 	read_idx: u16,
 	token_ring: Box<[Option<Box<TransferToken<virtq::Desc>>>]>,
-	mem_pool: MemPool,
+	indexes: IndexAlloc,
 
 	descr_table_cell: Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 	avail_ring_cell: Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
@@ -52,8 +51,8 @@ impl DescrRing {
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
 			let descriptor = SplitVq::indirect_desc(ctrl_desc.as_ref());
 
-			index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
-			self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
+			index = self.indexes.allocate().ok_or(VirtqError::NoDescrAvail)?;
+			self.descr_table_mut()[index] = MaybeUninit::new(descriptor);
 		} else {
 			let mut rev_all_desc_iter = SplitVq::descriptor_iter(&tkn.buff_tkn)?.rev();
 
@@ -62,25 +61,26 @@ impl DescrRing {
 				// If the [AvailBufferToken] is empty, we panic
 				let descriptor = rev_all_desc_iter.next().unwrap();
 
-				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
-				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
+				index = self.indexes.allocate().ok_or(VirtqError::NoDescrAvail)?;
+				self.descr_table_mut()[index] = MaybeUninit::new(descriptor);
 			}
 			for mut descriptor in rev_all_desc_iter {
 				// We have not updated `index` yet, so it is at this point the index of the previous descriptor that had been written.
-				descriptor.next = le16::from(index);
+				descriptor.next = le16::from_ne(index.try_into().unwrap());
 
-				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
-				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
+				index = self.indexes.allocate().ok_or(VirtqError::NoDescrAvail)?;
+				self.descr_table_mut()[index] = MaybeUninit::new(descriptor);
 			}
 			// At this point, `index` is the index of the last element of the reversed iterator,
 			// thus the head of the descriptor chain.
 		}
 
-		self.token_ring[usize::from(index)] = Some(Box::new(tkn));
+		self.token_ring[index] = Some(Box::new(tkn));
 
 		let len = self.token_ring.len();
 		let idx = self.avail_ring_mut().idx.to_ne();
-		self.avail_ring_mut().ring_mut(true)[idx as usize % len] = index.into();
+		self.avail_ring_mut().ring_mut(true)[idx as usize % len] =
+			le16::from_ne(index.try_into().unwrap());
 
 		memory_barrier();
 		let next_idx = idx.wrapping_add(1);
@@ -105,7 +105,9 @@ impl DescrRing {
 		// We return the indices of the now freed ring slots back to `mem_pool.`
 		let mut id_ret_idx = u16::try_from(used_elem.id.to_ne()).unwrap();
 		loop {
-			self.mem_pool.ret_id(id_ret_idx);
+			unsafe {
+				self.indexes.deallocate(id_ret_idx.into());
+			}
 			let cur_chain_elem =
 				unsafe { self.descr_table_mut()[usize::from(id_ret_idx)].assume_init() };
 			if cur_chain_elem.flags.contains(virtq::DescF::NEXT) {
@@ -289,7 +291,7 @@ impl SplitVq {
 				.take(size.into())
 				.collect::<Vec<_>>()
 				.into_boxed_slice(),
-			mem_pool: MemPool::new(size),
+			indexes: IndexAlloc::new(size.into()),
 
 			descr_table_cell,
 			avail_ring_cell,
