@@ -2,7 +2,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use aarch64_cpu::asm::barrier::{ISH, dmb};
+use aarch64_cpu::asm::barrier::{ISH, SY, dmb, isb};
 use aarch64_cpu::registers::*;
 use ahash::RandomState;
 use arm_gic::gicv3::{GicV3, InterruptGroup, SgiTarget, SgiTargetGroup};
@@ -226,9 +226,7 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 		// This synchronous exception is triggered when floating point is used
 		// So now save and restore the FPU state
 		CPACR_EL1.modify(CPACR_EL1::FPEN::TrapNothing);
-		unsafe {
-			asm!("isb", options(nostack, preserves_flags));
-		}
+		isb(SY);
 
 		// Let the scheduler set up the FPU for the current task
 		core_scheduler().fpu_switch();

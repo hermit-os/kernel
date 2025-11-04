@@ -4,6 +4,7 @@ use core::arch::asm;
 use core::marker::PhantomData;
 use core::{fmt, mem, ptr};
 
+use aarch64_cpu::asm::barrier::{SY, isb};
 use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -242,11 +243,11 @@ impl<S: PageSize> Page<S> {
 				"dsb ishst",
 				"tlbi vale1is, {addr}",
 				"dsb ish",
-				"isb",
 				addr = in(reg) self.virtual_address.as_u64() >> 12,
 				options(nostack),
 			);
 		}
+		isb(SY);
 	}
 
 	/// Returns whether the given virtual address is a valid one in the AArch64 memory model.
