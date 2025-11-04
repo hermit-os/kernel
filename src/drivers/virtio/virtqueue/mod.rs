@@ -513,13 +513,8 @@ pub enum BufferType {
 }
 
 /// MemPool allows to easily control, request and provide memory for Virtqueues.
-///
-/// The struct is initialized with a limit of free running "tracked"
-/// memory descriptor ids. As Virtqueus do only allow a limited amount of descriptors in their queue,
-/// the independent queues, can control the number of descriptors by this.
 struct MemPool {
 	pool: Vec<u16>,
-	limit: u16,
 }
 
 impl MemPool {
@@ -532,7 +527,6 @@ impl MemPool {
 	fn new(size: u16) -> MemPool {
 		MemPool {
 			pool: (0..size).collect(),
-			limit: size,
 		}
 	}
 }
