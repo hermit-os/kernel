@@ -135,6 +135,8 @@ pub fn boot_next_processor() {
 		use crate::mm::virtual_to_physical;
 
 		if cpu_online == 0 {
+			use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+
 			let virt_start = VirtAddr::from(smp_start as usize);
 			let phys_start = virtual_to_physical(virt_start).unwrap();
 			assert!(virt_start.as_u64() == phys_start.as_u64());
@@ -154,14 +156,9 @@ pub fn boot_next_processor() {
 				.map(|node| node.as_str().unwrap())
 				.unwrap_or("unknown");
 
-			let ttbr0: *mut u8;
-			unsafe {
-				asm!(
-					"mrs {}, ttbr0_el1",
-					out(reg) ttbr0,
-				);
-			}
-			TTBR0.store(ttbr0, Ordering::Relaxed);
+			let ttbr0_addr = TTBR0_EL1.get();
+			let ttbr0_ptr = ptr::with_exposed_provenance_mut(ttbr0_addr.try_into().unwrap());
+			TTBR0.store(ttbr0_ptr, Ordering::Relaxed);
 
 			for cpu_id in 1..get_possible_cpus() {
 				debug!("Try to wake-up core {cpu_id}");
