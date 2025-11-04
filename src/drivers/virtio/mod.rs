@@ -80,27 +80,7 @@ pub mod error {
 					not(feature = "rtl8139"),
 					feature = "virtio-net",
 				))]
-				VirtioError::NetDriver(net_error) => match net_error {
-					#[cfg(feature = "pci")]
-					VirtioNetError::NoDevCfg(id) => write!(
-						f,
-						"Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"
-					),
-					VirtioNetError::FailFeatureNeg(id) => write!(
-						f,
-						"Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"
-					),
-					VirtioNetError::FeatureRequirementsNotMet(features) => write!(
-						f,
-						"Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {features:?}"
-					),
-					VirtioNetError::IncompatibleFeatureSets(driver_features, device_features) => {
-						write!(
-							f,
-							"Feature set: {driver_features:?} , is incompatible with the device features: {device_features:?}"
-						)
-					}
-				},
+				VirtioError::NetDriver(net_error) => net_error.fmt(f),
 				#[cfg(feature = "fuse")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
 					#[cfg(feature = "pci")]
