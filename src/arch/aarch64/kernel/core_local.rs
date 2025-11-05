@@ -1,9 +1,9 @@
 use alloc::boxed::Box;
-use core::arch::asm;
 use core::cell::Cell;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
+use aarch64_cpu::registers::{Readable, TPIDR_EL1, Writeable};
 use async_executor::StaticExecutor;
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
@@ -61,18 +61,15 @@ impl CoreLocal {
 		};
 		this.this = ptr::from_ref(this);
 
-		unsafe {
-			asm!("msr tpidr_el1, {}", in(reg) this, options(nostack, preserves_flags));
-		}
+		let addr = (&raw mut *this).expose_provenance();
+		TPIDR_EL1.set(addr.try_into().unwrap());
 	}
 
 	#[inline]
 	pub fn get() -> &'static Self {
-		unsafe {
-			let raw: *const Self;
-			asm!("mrs {}, tpidr_el1", out(reg) raw, options(nomem, nostack, preserves_flags));
-			&*raw
-		}
+		let addr = TPIDR_EL1.get().try_into().unwrap();
+		let ptr = ptr::with_exposed_provenance(addr);
+		unsafe { &*ptr }
 	}
 
 	pub fn add_irq_counter(&self) {
