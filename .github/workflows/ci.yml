@@ -254,7 +254,7 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       # FIXME: this is broken on QEMU 8.2.2
-      # Enable this once CI reaches QEMU 8.2.3 or QEMU 9.0.0 
+      # Enable this once CI reaches QEMU 8.2.3 or QEMU 9.0.0
       # - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
       #   if: matrix.arch != 'riscv64'
       #   env:
