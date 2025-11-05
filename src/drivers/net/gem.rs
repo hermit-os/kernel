@@ -17,6 +17,7 @@ use align_address::Align;
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::*;
 use smoltcp::phy::{ChecksumCapabilities, DeviceCapabilities};
+use thiserror::Error;
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 use tock_registers::{register_bitfields, register_structs};
@@ -201,11 +202,15 @@ const TX_DESC_WRAP: u32 = 1 << 30;
 /// Marks tx buffer as used
 const TX_DESC_USED: u32 = 1 << 31;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum GEMError {
+	#[error("initialization failed")]
 	InitFailed,
+	#[error("reset failed")]
 	ResetFailed,
+	#[error("PHY not found")]
 	NoPhyFound,
+	#[error("unknown GEM error")]
 	Unknown,
 }
 

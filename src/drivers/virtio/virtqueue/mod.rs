@@ -604,67 +604,55 @@ impl MemPool {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
+	use thiserror::Error;
+
 	use crate::errno::Errno;
 
 	// External Error Handling for users of the virtqueue.
+	#[derive(Error, Debug)]
 	pub enum VirtqError {
+		#[error("Virtq failure due to unknown reasons!")]
 		General,
+
 		/// Call to create a BufferToken or TransferToken without
 		/// any buffers to be inserted
+		#[error("Virtq detected creation of Token, without a BuffSpec")]
 		BufferNotSpecified,
+
 		/// Selected queue does not exist or
 		/// is not known to the device and hence can not be used
+		#[error("Virtq does not exist and can not be used!")]
 		QueueNotExisting(u16),
+
 		/// Signals, that the queue does not have any free descriptors
 		/// left.
 		/// Typically this means, that the driver either has to provide
 		/// "unsend" `TransferToken` to the queue (see Docs for details)
 		/// or the device needs to process available descriptors in the queue.
+		#[error("Virtqs memory pool is exhausted!")]
 		NoDescrAvail,
+
 		/// Indicates that a Bytes::new() call failed or generally that a buffer is to large to
 		/// be transferred as one. The Maximum size is u32::MAX. This also is the maximum for indirect
 		/// descriptors (both the one placed in the queue, as also the ones the indirect descriptor is
 		/// referring to).
+		#[error("Buffer to large for queue! u32::MAX exceeded.")]
 		BufferToLarge,
-		QueueSizeNotAllowed(u16),
-		FeatureNotSupported(virtio::F),
-		AllocationError,
-		IncompleteWrite,
-		NoNewUsed,
-	}
 
-	impl core::fmt::Debug for VirtqError {
-		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-			match self {
-				VirtqError::General => write!(f, "Virtq failure due to unknown reasons!"),
-				VirtqError::BufferNotSpecified => {
-					write!(f, "Virtq detected creation of Token, without a BuffSpec")
-				}
-				VirtqError::QueueNotExisting(_) => {
-					write!(f, "Virtq does not exist and can not be used!")
-				}
-				VirtqError::NoDescrAvail => write!(f, "Virtqs memory pool is exhausted!"),
-				VirtqError::BufferToLarge => {
-					write!(f, "Buffer to large for queue! u32::MAX exceeded.")
-				}
-				VirtqError::QueueSizeNotAllowed(_) => {
-					write!(f, "The requested queue size is not valid.")
-				}
-				VirtqError::FeatureNotSupported(_) => {
-					write!(f, "An unsupported feature was requested from the queue.")
-				}
-				VirtqError::AllocationError => write!(
-					f,
-					"An error was encountered during the allocation of the queue structures."
-				),
-				VirtqError::IncompleteWrite => {
-					write!(f, "A sized object was partially initialized.")
-				}
-				VirtqError::NoNewUsed => {
-					write!(f, "The queue does not contain any new used buffers.")
-				}
-			}
-		}
+		#[error("The requested queue size is not valid.")]
+		QueueSizeNotAllowed(u16),
+
+		#[error("An unsupported feature was requested from the queue.")]
+		FeatureNotSupported(virtio::F),
+
+		#[error("An error was encountered during the allocation of the queue structures.")]
+		AllocationError,
+
+		#[error("A sized object was partially initialized.")]
+		IncompleteWrite,
+
+		#[error("The queue does not contain any new used buffers.")]
+		NoNewUsed,
 	}
 
 	impl core::convert::From<VirtqError> for Errno {
