@@ -12,8 +12,7 @@ use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
-	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, RecursivePageTable,
-	Size4KiB, Translate,
+	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, Size4KiB, Translate,
 };
 
 use crate::arch::x86_64::kernel::processor;
@@ -148,7 +147,6 @@ pub fn map<S>(
 	flags: PageTableEntryFlags,
 ) where
 	S: PageSize + Debug,
-	for<'a> RecursivePageTable<'a>: Mapper<S>,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let pages = {
@@ -208,7 +206,6 @@ pub fn map<S>(
 pub fn map_heap<S>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
 	S: PageSize + Debug,
-	for<'a> RecursivePageTable<'a>: Mapper<S>,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let flags = {
@@ -232,7 +229,6 @@ where
 pub fn identity_map<S>(phys_addr: PhysAddr)
 where
 	S: PageSize + Debug,
-	for<'a> RecursivePageTable<'a>: Mapper<S>,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let frame = PhysFrame::<S>::from_start_address(phys_addr.into()).unwrap();
@@ -258,7 +254,6 @@ where
 pub fn unmap<S>(virtual_address: VirtAddr, count: usize)
 where
 	S: PageSize + Debug,
-	for<'a> RecursivePageTable<'a>: Mapper<S>,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	trace!("Unmapping virtual address {virtual_address:p} ({count} pages)");
