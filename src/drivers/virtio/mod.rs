@@ -1,6 +1,7 @@
-//! A module containing virtios core infrastructure for hermit-rs.
+//! Virtio infrastructure.
 //!
-//! The module contains virtios transport mechanisms, virtqueues and virtio specific errors
+//! This module provides [`transport`] infrastructure as well as [`virtqueue`] infrastructure.
+
 pub mod transport;
 pub mod virtqueue;
 

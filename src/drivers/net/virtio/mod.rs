@@ -1,6 +1,9 @@
-//! A module containing a virtio network driver.
+//! A virtio-net driver.
 //!
-//! The module contains ...
+//! For details on the device, see [Network Device].
+//! For details on the Rust definitions, see [`virtio::net`].
+//!
+//! [Network Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-2170001
 
 cfg_if::cfg_if! {
 	if #[cfg(feature = "pci")] {

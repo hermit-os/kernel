@@ -1,7 +1,3 @@
-//! A module containing a virtio console driver.
-//!
-//! The module contains ...
-
 use virtio::console::Config;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;

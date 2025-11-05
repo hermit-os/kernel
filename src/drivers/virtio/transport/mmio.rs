@@ -1,6 +1,10 @@
-//! A module containing all virtio specific pci functionality
+//! virtio-mmio infrastructure.
 //!
-//! The module contains ...
+//! For details on the device, see [Virtio Over MMIO].
+//! For details on the Rust definitions, see [`virtio::mmio`].
+//!
+//! [Virtio Over MMIO]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1650002
+
 #![allow(dead_code)]
 
 #[cfg(feature = "console")]

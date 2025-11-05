@@ -1,7 +1,3 @@
-//! A module containing a virtio network driver.
-//!
-//! The module contains ...
-
 use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 use volatile::VolatileRef;
