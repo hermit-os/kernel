@@ -452,7 +452,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	PM1A_CNT_BLK.set(Port::new(pm1a_cnt_blk)).unwrap();
 
 	// Map the "Differentiated System Description Table" (DSDT).
-	let x_dsdt_field_address = ptr::addr_of!(fadt_table.x_dsdt) as usize;
+	let x_dsdt_field_address = (&raw const fadt_table.x_dsdt).addr();
 	let dsdt_address = if x_dsdt_field_address < fadt.table_end_address() && fadt_table.x_dsdt > 0 {
 		PhysAddr::new(fadt_table.x_dsdt)
 	} else {
