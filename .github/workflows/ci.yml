@@ -203,13 +203,13 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
-      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo uhyve --sudo
-        if: matrix.arch == 'x86_64'
-      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
-        if: matrix.arch == 'x86_64'
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features firecracker --sudo
         if: matrix.arch == 'x86_64'
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features --smp 4 firecracker --sudo
+        if: matrix.arch == 'x86_64'
+      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo uhyve --sudo
+        if: matrix.arch == 'x86_64'
+      - run: UHYVE=$CARGO_HOME/bin/uhyve cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --smp 4 uhyve --sudo
         if: matrix.arch == 'x86_64'
       - run: cargo clean
         working-directory: .
@@ -254,7 +254,7 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       # FIXME: this is broken on QEMU 8.2.2
-      # Enable this once CI reaches QEMU 8.2.3 or QEMU 9.0.0 
+      # Enable this once CI reaches QEMU 8.2.3 or QEMU 9.0.0
       # - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci
       #   if: matrix.arch != 'riscv64'
       #   env:
