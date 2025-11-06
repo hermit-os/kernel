@@ -1,6 +1,5 @@
 //! This module contains Virtio's packed virtqueue.
 //! See Virito specification v1.1. - 2.7
-#![allow(dead_code)]
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
