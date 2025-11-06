@@ -10,32 +10,17 @@ use crate::env;
 /// Current FPU state. Saved at context switch when changed.
 ///
 /// AArch64 mandates 32 NEON SIMD registers, which are named v0-v32.
-/// Only the lower 64 bits of v8-v15 must be saved (the d parts).
 ///
-/// See the ABI documentation for aarch64 on this topic:
-/// <https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst#612simd-and-floating-point-registers>
+/// See the Arm documentation for more information:
+/// <https://developer.arm.com/documentation/102374/0103/Registers-in-AArch64---general-purpose-registers>
 ///
 /// FPCR is the floating point control register and controls things like NaN
 /// propagation, FPSR contains info like carry condition and over overflow
 /// condition. These are callee-saved bits.
 #[derive(Clone, Copy, Debug)]
 pub struct FPUState {
-	/// d8 register
-	d8: u64,
-	/// d9 register
-	d9: u64,
-	/// d10 register
-	d10: u64,
-	/// d11 register
-	d11: u64,
-	/// d12 register
-	d12: u64,
-	/// d13 register
-	d13: u64,
-	/// d14 register
-	d14: u64,
-	/// d15 register
-	d15: u64,
+	/// Advanced SIMD 128-bit vector registers.
+	q: [u128; 32],
 	/// fpcr register.
 	fpcr: u64,
 	/// fpsr register.
@@ -45,14 +30,7 @@ pub struct FPUState {
 impl FPUState {
 	pub fn new() -> Self {
 		Self {
-			d8: 0,
-			d9: 0,
-			d10: 0,
-			d11: 0,
-			d12: 0,
-			d13: 0,
-			d14: 0,
-			d15: 0,
+			q: [0; 32],
 			fpcr: 0,
 			fpsr: 0,
 		}
@@ -64,28 +42,29 @@ impl FPUState {
 		unsafe {
 			asm!(
 				".arch_extension fp",
-				"ldr d8, [{fpu_state}, {off_d8}]",
-				"ldr d9, [{fpu_state}, {off_d9}]",
-				"ldr d10, [{fpu_state}, {off_d10}]",
-				"ldr d11, [{fpu_state}, {off_d11}]",
-				"ldr d12, [{fpu_state}, {off_d12}]",
-				"ldr d13, [{fpu_state}, {off_d13}]",
-				"ldr d14, [{fpu_state}, {off_d14}]",
-				"ldr d15, [{fpu_state}, {off_d15}]",
+				"ldp  q0,  q1, [{fpu_state}, {off_q} + 16 *  0]",
+				"ldp  q2,  q3, [{fpu_state}, {off_q} + 16 *  2]",
+				"ldp  q4,  q5, [{fpu_state}, {off_q} + 16 *  4]",
+				"ldp  q6,  q7, [{fpu_state}, {off_q} + 16 *  6]",
+				"ldp  q8,  q9, [{fpu_state}, {off_q} + 16 *  8]",
+				"ldp q10, q11, [{fpu_state}, {off_q} + 16 * 10]",
+				"ldp q12, q13, [{fpu_state}, {off_q} + 16 * 12]",
+				"ldp q14, q15, [{fpu_state}, {off_q} + 16 * 14]",
+				"ldp q16, q17, [{fpu_state}, {off_q} + 16 * 16]",
+				"ldp q18, q19, [{fpu_state}, {off_q} + 16 * 18]",
+				"ldp q20, q21, [{fpu_state}, {off_q} + 16 * 20]",
+				"ldp q22, q23, [{fpu_state}, {off_q} + 16 * 22]",
+				"ldp q24, q25, [{fpu_state}, {off_q} + 16 * 24]",
+				"ldp q26, q27, [{fpu_state}, {off_q} + 16 * 26]",
+				"ldp q28, q29, [{fpu_state}, {off_q} + 16 * 28]",
+				"ldp q30, q31, [{fpu_state}, {off_q} + 16 * 30]",
 				"ldr {intermediate}, [{fpu_state}, {off_fpcr}]",
 				"msr fpcr, {intermediate}",
 				"ldr {intermediate}, [{fpu_state}, {off_fpsr}]",
 				"msr fpsr, {intermediate}",
 				".arch_extension nofp",
 				fpu_state = in(reg) self,
-				off_d8 = const offset_of!(FPUState, d8),
-				off_d9 = const offset_of!(FPUState, d9),
-				off_d10 = const offset_of!(FPUState, d10),
-				off_d11 = const offset_of!(FPUState, d11),
-				off_d12 = const offset_of!(FPUState, d12),
-				off_d13 = const offset_of!(FPUState, d13),
-				off_d14 = const offset_of!(FPUState, d14),
-				off_d15 = const offset_of!(FPUState, d15),
+				off_q = const offset_of!(FPUState, q),
 				off_fpcr = const offset_of!(FPUState, fpcr),
 				off_fpsr = const offset_of!(FPUState, fpsr),
 				intermediate = out(reg) _,
@@ -99,28 +78,29 @@ impl FPUState {
 		unsafe {
 			asm!(
 				".arch_extension fp",
-				"str d8, [{fpu_state}, {off_d8}]",
-				"str d9, [{fpu_state}, {off_d9}]",
-				"str d10, [{fpu_state}, {off_d10}]",
-				"str d11, [{fpu_state}, {off_d11}]",
-				"str d12, [{fpu_state}, {off_d12}]",
-				"str d13, [{fpu_state}, {off_d13}]",
-				"str d14, [{fpu_state}, {off_d14}]",
-				"str d15, [{fpu_state}, {off_d15}]",
+				"stp  q0,  q1, [{fpu_state}, {off_q} + 16 *  0]",
+				"stp  q2,  q3, [{fpu_state}, {off_q} + 16 *  2]",
+				"stp  q4,  q5, [{fpu_state}, {off_q} + 16 *  4]",
+				"stp  q6,  q7, [{fpu_state}, {off_q} + 16 *  6]",
+				"stp  q8,  q9, [{fpu_state}, {off_q} + 16 *  8]",
+				"stp q10, q11, [{fpu_state}, {off_q} + 16 * 10]",
+				"stp q12, q13, [{fpu_state}, {off_q} + 16 * 12]",
+				"stp q14, q15, [{fpu_state}, {off_q} + 16 * 14]",
+				"stp q16, q17, [{fpu_state}, {off_q} + 16 * 16]",
+				"stp q18, q19, [{fpu_state}, {off_q} + 16 * 18]",
+				"stp q20, q21, [{fpu_state}, {off_q} + 16 * 20]",
+				"stp q22, q23, [{fpu_state}, {off_q} + 16 * 22]",
+				"stp q24, q25, [{fpu_state}, {off_q} + 16 * 24]",
+				"stp q26, q27, [{fpu_state}, {off_q} + 16 * 26]",
+				"stp q28, q29, [{fpu_state}, {off_q} + 16 * 28]",
+				"stp q30, q31, [{fpu_state}, {off_q} + 16 * 30]",
 				"mrs {intermediate}, fpcr",
 				"str {intermediate}, [{fpu_state}, {off_fpcr}]",
 				"mrs {intermediate}, fpsr",
 				"str {intermediate}, [{fpu_state}, {off_fpsr}]",
 				".arch_extension nofp",
 				fpu_state = in(reg) self,
-				off_d8 = const offset_of!(FPUState, d8),
-				off_d9 = const offset_of!(FPUState, d9),
-				off_d10 = const offset_of!(FPUState, d10),
-				off_d11 = const offset_of!(FPUState, d11),
-				off_d12 = const offset_of!(FPUState, d12),
-				off_d13 = const offset_of!(FPUState, d13),
-				off_d14 = const offset_of!(FPUState, d14),
-				off_d15 = const offset_of!(FPUState, d15),
+				off_q = const offset_of!(FPUState, q),
 				off_fpcr = const offset_of!(FPUState, fpcr),
 				off_fpsr = const offset_of!(FPUState, fpsr),
 				intermediate = out(reg) _,
