@@ -23,8 +23,7 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AvailBufferToken, BufferType, MemDescrId, MemPool, TransferToken, UsedBufferToken, Virtq,
-	VirtqPrivate, VqIndex, VqSize,
+	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -54,35 +53,6 @@ impl RingIndexRange for ops::Range<RingIdx> {
 	}
 }
 
-/// A newtype of bool used for convenience in context with
-/// packed queues wrap counter.
-///
-/// For more details see Virtio specification v1.1. - 2.7.1
-#[derive(Copy, Clone, Debug)]
-struct WrapCount(bool);
-
-impl WrapCount {
-	/// Masks all other bits, besides the wrap count specific ones.
-	fn flag_mask() -> virtq::DescF {
-		virtq::DescF::AVAIL | virtq::DescF::USED
-	}
-
-	/// Returns a new WrapCount struct initialized to true or 1.
-	///
-	/// See virtio specification v1.1. - 2.7.1
-	fn new() -> Self {
-		WrapCount(true)
-	}
-
-	/// Toggles a given wrap count to respectiver other value.
-	///
-	/// If WrapCount(true) returns WrapCount(false),
-	/// if WrapCount(false) returns WrapCount(true).
-	fn wrap(&mut self) {
-		self.0 = !self.0;
-	}
-}
-
 /// Structure which allows to control raw ring and operate easily on it
 struct DescriptorRing {
 	ring: Box<[pvirtq::Desc], DeviceAlloc>,
@@ -97,8 +67,8 @@ struct DescriptorRing {
 	/// Where to expect the next used descriptor by the device
 	poll_index: u16,
 	/// See Virtio specification v1.1. - 2.7.1
-	drv_wc: WrapCount,
-	dev_wc: WrapCount,
+	drv_wc: bool,
+	dev_wc: bool,
 	/// Memory pool controls the amount of "free floating" descriptors
 	/// See [MemPool] docs for detail.
 	mem_pool: MemPool,
@@ -120,8 +90,8 @@ impl DescriptorRing {
 			write_index: 0,
 			capacity: size,
 			poll_index: 0,
-			drv_wc: WrapCount::new(),
-			dev_wc: WrapCount::new(),
+			drv_wc: true,
+			dev_wc: true,
 			mem_pool: MemPool::new(size),
 		}
 	}
@@ -173,7 +143,7 @@ impl DescriptorRing {
 		);
 		Ok(RingIdx {
 			off: self.write_index,
-			wrap: self.drv_wc.0.into(),
+			wrap: self.drv_wc.into(),
 		})
 	}
 
@@ -243,11 +213,11 @@ impl DescriptorRing {
 		&mut self,
 		raw_tkn: TransferToken<pvirtq::Desc>,
 		start: u16,
-		buff_id: MemDescrId,
+		buff_id: u16,
 		first_flags: DescF,
 	) {
 		// provide reference, in order to let TransferToken know upon finish.
-		self.tkn_ref_ring[usize::from(buff_id.0)] = Some(raw_tkn);
+		self.tkn_ref_ring[usize::from(buff_id)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -256,7 +226,7 @@ impl DescriptorRing {
 
 	/// Returns the [DescF] with the avail and used flags set in accordance
 	/// with the VIRTIO specification v1.2 - 2.8.1 (i.e. avail flag set to match
-	/// the driver WrapCount and the used flag set to NOT match the WrapCount).
+	/// the driver wrap counter and the used flag set to NOT match the wrap counter).
 	///
 	/// This function is defined on the whole ring rather than only the
 	/// wrap counter to ensure that it is not called on the incorrect
@@ -266,20 +236,20 @@ impl DescriptorRing {
 	/// for the cases in which the modification of the flag needs to be
 	/// deferred (e.g. patched dispatches, chained buffers).
 	fn to_marked_avail(&self, mut flags: DescF) -> DescF {
-		flags.set(virtq::DescF::AVAIL, self.drv_wc.0);
-		flags.set(virtq::DescF::USED, !self.drv_wc.0);
+		flags.set(virtq::DescF::AVAIL, self.drv_wc);
+		flags.set(virtq::DescF::USED, !self.drv_wc);
 		flags
 	}
 
 	/// Checks the avail and used flags to see if the descriptor is marked
 	/// as used by the device in accordance with the
-	/// VIRTIO specification v1.2 - 2.8.1 (i.e. they match the device WrapCount)
+	/// VIRTIO specification v1.2 - 2.8.1 (i.e. they match the device wrap counter)
 	///
 	/// This function is defined on the whole ring rather than only the
 	/// wrap counter to ensure that it is not called on the incorrect
 	/// wrap counter (i.e. driver wrap counter) by accident.
 	fn is_marked_used(&self, flags: DescF) -> bool {
-		if self.dev_wc.0 {
+		if self.dev_wc {
 			flags.contains(virtq::DescF::AVAIL | virtq::DescF::USED)
 		} else {
 			!flags.intersects(virtq::DescF::AVAIL | virtq::DescF::USED)
@@ -333,7 +303,7 @@ impl ReadCtrl<'_> {
 			for _ in 0..tkn.num_consuming_descr() {
 				self.incrmt();
 			}
-			self.desc_ring.mem_pool.ret_id(MemDescrId(buff_id));
+			self.desc_ring.mem_pool.ret_id(buff_id);
 
 			Some((tkn, write_len))
 		} else {
@@ -343,7 +313,7 @@ impl ReadCtrl<'_> {
 
 	fn incrmt(&mut self) {
 		if self.desc_ring.poll_index + 1 == self.modulo {
-			self.desc_ring.dev_wc.wrap();
+			self.desc_ring.dev_wc ^= true;
 		}
 
 		// Increment capacity as we have one more free now!
@@ -370,7 +340,7 @@ struct WriteCtrl<'a> {
 	/// The [pvirtq::Desc::flags] value for the first descriptor, the write of which is deferred.
 	first_flags: DescF,
 	/// Buff ID of this write
-	buff_id: MemDescrId,
+	buff_id: u16,
 
 	desc_ring: &'a mut DescriptorRing,
 }
@@ -381,7 +351,7 @@ impl WriteCtrl<'_> {
 	/// Incrementing index by one. The index wrappes around to zero when
 	/// reaching (modulo -1).
 	///
-	/// Also takes care of wrapping the WrapCount of the associated
+	/// Also takes care of wrapping the wrap counter of the associated
 	/// DescriptorRing.
 	fn incrmt(&mut self) {
 		// Firstly check if we are at all allowed to write a descriptor
@@ -390,7 +360,7 @@ impl WriteCtrl<'_> {
 		// check if increment wrapped around end of ring
 		// then also wrap the wrap counter.
 		if self.position + 1 == self.modulo {
-			self.desc_ring.drv_wc.wrap();
+			self.desc_ring.drv_wc ^= true;
 		}
 		// Also update the write_index
 		self.desc_ring.write_index = (self.desc_ring.write_index + 1) % self.modulo;
@@ -400,14 +370,14 @@ impl WriteCtrl<'_> {
 
 	/// Completes the descriptor flags and id, and writes into the queue at the correct position.
 	fn write_desc(&mut self, mut incomplete_desc: pvirtq::Desc) {
-		incomplete_desc.id = self.buff_id.0.into();
+		incomplete_desc.id = self.buff_id.into();
 		if self.start == self.position {
 			// We save what the flags value for the first descriptor will be to be able
 			// to write it later when all the other descriptors are written (so that
 			// the device does not see an incomplete chain).
 			self.first_flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		} else {
-			// Set avail and used according to the current WrapCount.
+			// Set avail and used according to the current wrap counter.
 			incomplete_desc.flags = self.desc_ring.to_marked_avail(incomplete_desc.flags);
 		}
 		self.desc_ring.ring[usize::from(self.position)] = incomplete_desc;
@@ -422,7 +392,7 @@ impl WriteCtrl<'_> {
 	}
 }
 
-/// A newtype in order to implement the correct functionality upon
+/// A type in order to implement the correct functionality upon
 /// the `EventSuppr` structure for driver notifications settings.
 /// The Driver Event Suppression structure is read-only by the device
 /// and controls the used buffer notifications sent by the device to the driver.
@@ -433,7 +403,7 @@ struct DrvNotif {
 	raw: &'static mut pvirtq::EventSuppress,
 }
 
-/// A newtype in order to implement the correct functionality upon
+/// A type in order to implement the correct functionality upon
 /// the `EventSuppr` structure for device notifications settings.
 /// The Device Event Suppression structure is read-only by the driver
 /// and controls the available buffer notifica- tions sent by the driver to the device.
@@ -511,10 +481,10 @@ pub struct PackedVq {
 	notif_ctrl: NotifCtrl,
 	/// The size of the queue, equals the number of descriptors which can
 	/// be used
-	size: VqSize,
+	size: u16,
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
-	index: VqIndex,
+	index: u16,
 	last_next: Cell<RingIdx>,
 }
 
@@ -559,7 +529,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -594,7 +564,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() | notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -620,7 +590,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_off(next_idx.off)
 				.with_next_wrap(next_idx.wrap);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -629,11 +599,11 @@ impl Virtq for PackedVq {
 		Ok(())
 	}
 
-	fn index(&self) -> VqIndex {
+	fn index(&self) -> u16 {
 		self.index
 	}
 
-	fn size(&self) -> VqSize {
+	fn size(&self) -> u16 {
 		self.size
 	}
 
@@ -659,8 +629,8 @@ impl PackedVq {
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
-		size: VqSize,
-		index: VqIndex,
+		size: u16,
+		index: u16,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
 		// Currently we do not have support for in order use.
@@ -676,18 +646,18 @@ impl PackedVq {
 		}
 
 		// Get a handler to the queues configuration area.
-		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
-			return Err(VirtqError::QueueNotExisting(index.into()));
+		let Some(mut vq_handler) = com_cfg.select_vq(index) else {
+			return Err(VirtqError::QueueNotExisting(index));
 		};
 
 		// Must catch zero size as it is not allowed for packed queues.
 		// Must catch size larger 0x8000 (2^15) as it is not allowed for packed queues.
 		//
 		// See Virtio specification v1.1. - 4.1.4.3.2
-		let vq_size = if (size.0 == 0) | (size.0 > 0x8000) {
-			return Err(VirtqError::QueueSizeNotAllowed(size.0));
+		let vq_size = if (size == 0) | (size > 0x8000) {
+			return Err(VirtqError::QueueSizeNotAllowed(size));
 		} else {
-			vq_handler.set_vq_size(size.0)
+			vq_handler.set_vq_size(size)
 		};
 
 		let mut descr_ring = DescriptorRing::new(vq_size);
@@ -731,14 +701,14 @@ impl PackedVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created PackedVq: idx={}, size={}", index.0, vq_size);
+		info!("Created PackedVq: idx={index}, size={vq_size}");
 
 		Ok(PackedVq {
 			descr_ring,
 			drv_event,
 			dev_event,
 			notif_ctrl,
-			size: VqSize::from(vq_size),
+			size: vq_size,
 			index,
 			last_next: Cell::default(),
 		})

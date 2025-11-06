@@ -27,64 +27,6 @@ use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
 
-/// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
-/// smaller-equal to `min(u16::MAX , T::MAX)`.
-///
-/// Currently implements `From<u16>` and `From<u32>`.
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
-pub struct VqIndex(u16);
-
-impl From<u16> for VqIndex {
-	fn from(val: u16) -> Self {
-		VqIndex(val)
-	}
-}
-
-impl From<VqIndex> for u16 {
-	fn from(i: VqIndex) -> Self {
-		i.0
-	}
-}
-
-impl From<u32> for VqIndex {
-	fn from(val: u32) -> Self {
-		if val > u32::from(u16::MAX) {
-			VqIndex(u16::MAX)
-		} else {
-			VqIndex(val as u16)
-		}
-	}
-}
-
-/// A u16 newtype. If instantiated via ``VqSize::from(T)``, the newtype is ensured to be
-/// smaller-equal to `min(u16::MAX , T::MAX)`.
-///
-/// Currently implements `From<u16>` and `From<u32>`.
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
-pub struct VqSize(u16);
-
-impl From<u16> for VqSize {
-	fn from(val: u16) -> Self {
-		VqSize(val)
-	}
-}
-
-impl From<u32> for VqSize {
-	fn from(val: u32) -> Self {
-		if val > u32::from(u16::MAX) {
-			VqSize(u16::MAX)
-		} else {
-			VqSize(val as u16)
-		}
-	}
-}
-
-impl From<VqSize> for u16 {
-	fn from(val: VqSize) -> Self {
-		val.0
-	}
-}
-
 // Public interface of Virtq
 
 /// The Virtq trait unifies access to the two different Virtqueue types
@@ -185,10 +127,10 @@ pub trait Virtq: Send {
 
 	/// Returns the size of a Virtqueue. This represents the overall size and not the capacity the
 	/// queue currently has for new descriptors.
-	fn size(&self) -> VqSize;
+	fn size(&self) -> u16;
 
 	// Returns the index (ID) of a Virtqueue.
-	fn index(&self) -> VqIndex;
+	fn index(&self) -> u16;
 
 	fn has_used_buffers(&self) -> bool;
 }
@@ -570,30 +512,26 @@ pub enum BufferType {
 	Indirect,
 }
 
-/// A newtype for descriptor ids, for better readability.
-#[derive(Clone, Copy)]
-struct MemDescrId(pub u16);
-
 /// MemPool allows to easily control, request and provide memory for Virtqueues.
 ///
 /// The struct is initialized with a limit of free running "tracked"
 /// memory descriptor ids. As Virtqueus do only allow a limited amount of descriptors in their queue,
 /// the independent queues, can control the number of descriptors by this.
 struct MemPool {
-	pool: Vec<MemDescrId>,
+	pool: Vec<u16>,
 	limit: u16,
 }
 
 impl MemPool {
 	/// Returns a given id to the id pool
-	fn ret_id(&mut self, id: MemDescrId) {
+	fn ret_id(&mut self, id: u16) {
 		self.pool.push(id);
 	}
 
 	/// Returns a new instance, with a pool of the specified size.
 	fn new(size: u16) -> MemPool {
 		MemPool {
-			pool: (0..size).map(MemDescrId).collect(),
+			pool: (0..size).collect(),
 			limit: size,
 		}
 	}

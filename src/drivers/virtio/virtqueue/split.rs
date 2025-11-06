@@ -19,7 +19,6 @@ use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
 	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
-	VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::mm::device_alloc::DeviceAlloc;
@@ -53,7 +52,7 @@ impl DescrRing {
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
 			let descriptor = SplitVq::indirect_desc(ctrl_desc.as_ref());
 
-			index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
+			index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
 			self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 		} else {
 			let mut rev_all_desc_iter = SplitVq::descriptor_iter(&tkn.buff_tkn)?.rev();
@@ -63,14 +62,14 @@ impl DescrRing {
 				// If the [AvailBufferToken] is empty, we panic
 				let descriptor = rev_all_desc_iter.next().unwrap();
 
-				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
+				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
 				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			for mut descriptor in rev_all_desc_iter {
 				// We have not updated `index` yet, so it is at this point the index of the previous descriptor that had been written.
 				descriptor.next = le16::from(index);
 
-				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?.0;
+				index = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
 				self.descr_table_mut()[usize::from(index)] = MaybeUninit::new(descriptor);
 			}
 			// At this point, `index` is the index of the last element of the reversed iterator,
@@ -106,7 +105,7 @@ impl DescrRing {
 		// We return the indices of the now freed ring slots back to `mem_pool.`
 		let mut id_ret_idx = u16::try_from(used_elem.id.to_ne()).unwrap();
 		loop {
-			self.mem_pool.ret_id(super::MemDescrId(id_ret_idx));
+			self.mem_pool.ret_id(id_ret_idx);
 			let cur_chain_elem =
 				unsafe { self.descr_table_mut()[usize::from(id_ret_idx)].assume_init() };
 			if cur_chain_elem.flags.contains(virtq::DescF::NEXT) {
@@ -144,8 +143,8 @@ impl DescrRing {
 /// Virtio's split virtqueue structure
 pub struct SplitVq {
 	ring: DescrRing,
-	size: VqSize,
-	index: VqIndex,
+	size: u16,
+	index: u16,
 
 	notif_ctrl: NotifCtrl,
 }
@@ -196,18 +195,18 @@ impl Virtq for SplitVq {
 
 		if self.ring.dev_is_notif() {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index.0)
+				.with_vqn(self.index)
 				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
 		}
 		Ok(())
 	}
 
-	fn index(&self) -> VqIndex {
+	fn index(&self) -> u16 {
 		self.index
 	}
 
-	fn size(&self) -> VqSize {
+	fn size(&self) -> u16 {
 		self.size
 	}
 
@@ -236,16 +235,16 @@ impl SplitVq {
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
-		size: VqSize,
-		index: VqIndex,
+		size: u16,
+		index: u16,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
 		// Get a handler to the queues configuration area.
-		let Some(mut vq_handler) = com_cfg.select_vq(index.into()) else {
-			return Err(VirtqError::QueueNotExisting(index.into()));
+		let Some(mut vq_handler) = com_cfg.select_vq(index) else {
+			return Err(VirtqError::QueueNotExisting(index));
 		};
 
-		let size = vq_handler.set_vq_size(size.0);
+		let size = vq_handler.set_vq_size(size);
 
 		let mut descr_table_cell = unsafe {
 			core::mem::transmute::<
@@ -305,12 +304,12 @@ impl SplitVq {
 
 		vq_handler.enable_queue();
 
-		info!("Created SplitVq: idx={}, size={}", index.0, size);
+		info!("Created SplitVq: idx={index}, size={size}");
 
 		Ok(SplitVq {
 			ring: descr_ring,
 			notif_ctrl,
-			size: VqSize(size),
+			size,
 			index,
 		})
 	}

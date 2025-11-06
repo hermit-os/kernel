@@ -20,7 +20,7 @@ use crate::drivers::virtio::error::VirtioVsockError;
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq, VqIndex, VqSize,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq,
 };
 #[cfg(feature = "pci")]
 use crate::drivers::vsock::pci::VsockDevCfgRaw;
@@ -71,7 +71,7 @@ impl RxQueue {
 
 	pub fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
-		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		let num_packets = vq.size() / BUFF_PER_PACKET;
 		info!("num_packets {num_packets}");
 		fill_queue(&mut vq, num_packets, self.packet_size);
 
@@ -211,7 +211,7 @@ impl EventQueue {
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
-		let num_packets: u16 = u16::from(vq.size()) / BUFF_PER_PACKET;
+		let num_packets = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_packets, self.packet_size);
 		self.vq = Some(vq);
 	}
@@ -371,8 +371,8 @@ impl VirtioVsockDriver {
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
-				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-				VqIndex::from(0u16),
+				VIRTIO_MAX_QUEUE_SIZE,
+				0,
 				self.dev_cfg.features.into(),
 			)
 			.unwrap(),
@@ -384,8 +384,8 @@ impl VirtioVsockDriver {
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
-				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-				VqIndex::from(1u16),
+				VIRTIO_MAX_QUEUE_SIZE,
+				1,
 				self.dev_cfg.features.into(),
 			)
 			.unwrap(),
@@ -398,8 +398,8 @@ impl VirtioVsockDriver {
 			SplitVq::new(
 				&mut self.com_cfg,
 				&self.notif_cfg,
-				VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-				VqIndex::from(2u16),
+				VIRTIO_MAX_QUEUE_SIZE,
+				2,
 				self.dev_cfg.features.into(),
 			)
 			.unwrap(),
