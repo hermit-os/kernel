@@ -1,3 +1,5 @@
+#[cfg(feature = "alloc-stats")]
+mod alloc_stats;
 #[cfg(feature = "net")]
 pub(crate) mod device;
 #[cfg(feature = "net")]
@@ -108,7 +110,12 @@ pub(crate) fn run() {
 
 /// Spawns a future on the executor.
 #[cfg_attr(
-	not(any(feature = "shell", feature = "net", feature = "vsock")),
+	not(any(
+		feature = "alloc-stats",
+		feature = "shell",
+		feature = "net",
+		feature = "vsock"
+	)),
 	expect(dead_code)
 )]
 pub(crate) fn spawn<F>(future: F)
@@ -123,6 +130,8 @@ pub fn init() {
 	crate::executor::network::init();
 	#[cfg(feature = "vsock")]
 	crate::executor::vsock::init();
+	#[cfg(feature = "alloc-stats")]
+	crate::executor::alloc_stats::init();
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
