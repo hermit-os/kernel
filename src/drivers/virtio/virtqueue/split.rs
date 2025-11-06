@@ -1,5 +1,11 @@
-//! This module contains Virtio's split virtqueue.
-//! See Virito specification v1.1. - 2.6
+//! `virtq` infrastructure.
+//!
+//! The main type of this module is [`SplitVq`].
+//!
+//! For details, see [Split Virtqueues].
+//! For details on the Rust definitions, see [`virtio::virtq`].
+//!
+//! [Split Virtqueues]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-350007
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;

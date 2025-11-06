@@ -1,6 +1,10 @@
-//! A module containing all virtio specific pci functionality
+//! virtio-pci infrastructure.
 //!
-//! The module contains ...
+//! For details on the device, see [Virtio Over PCI Bus].
+//! For details on the Rust definitions, see [`virtio::pci`].
+//!
+//! [Virtio Over PCI Bus]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1150001
+
 #![allow(dead_code)]
 
 #[cfg(any(feature = "vsock", feature = "console"))]

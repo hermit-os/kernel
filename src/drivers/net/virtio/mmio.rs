@@ -1,7 +1,3 @@
-//! A module containing a virtio network driver.
-//!
-//! The module contains ...
-
 use smoltcp::phy::ChecksumCapabilities;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;

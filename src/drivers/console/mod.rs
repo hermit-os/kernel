@@ -1,3 +1,10 @@
+//! A virtio-console driver.
+//!
+//! For details on the device, see [Console Device].
+//! For details on the Rust definitions, see [`virtio::console`].
+//!
+//! [Console Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-2900003
+
 #![allow(dead_code)]
 
 cfg_if::cfg_if! {

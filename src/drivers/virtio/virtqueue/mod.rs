@@ -1,12 +1,12 @@
-//! This module contains Virtio's virtqueue.
+//! Virtqueue infrastructure.
 //!
-//! The virtqueue is available in two forms.
-//! [split::SplitVq] and [packed::PackedVq].
-//! Both queues are wrapped inside an enum [Virtq] in
-//! order to provide an unified interface.
+//! [`Virtq`] provides a unified interface for handling either
+//! split virtqueues ([`split`]) or packed virtqueues ([`packed`]) transparently.
 //!
-//! Drivers who need a more fine grained access to the specific queues must
-//! use the respective virtqueue structs directly.
+//! For details on virtqueues, see [Virtqueues].
+//!
+//! [Virtqueues]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-270006
+
 #![allow(dead_code)]
 
 pub mod packed;
