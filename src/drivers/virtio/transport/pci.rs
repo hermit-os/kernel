@@ -116,9 +116,10 @@ impl PciCap {
 	/// Returns a reference to the actual structure inside the PCI devices memory space.
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
 		if self.bar.length < self.len() + self.offset() {
+			let dev_id = self.dev_id;
+			let index = self.bar.index;
 			error!(
-				"Common config of the capability with id {} of device {:x} does not fit into memory specified by bar {:x}!",
-				self.cap.id, self.dev_id, self.bar.index
+				"Common config of the capability of device {dev_id:x} does not fit into memory specified by bar {index:x}!"
 			);
 			return None;
 		}
@@ -126,10 +127,7 @@ impl PciCap {
 		// `CommonCfg::queue_notify_data` and `CommonCfg::queue_reset` are optional.
 		const MIN_SIZE: usize = mem::size_of::<CommonCfg>() - mem::size_of::<[le16; 2]>();
 		if self.len() < u64::try_from(MIN_SIZE).unwrap() {
-			error!(
-				"Common config of with id {}, does not represent actual structure specified by the standard!",
-				self.cap.id
-			);
+			error!("Common config does not represent actual structure specified by the standard!");
 			return None;
 		}
 
@@ -147,9 +145,10 @@ impl PciCap {
 
 	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
 		if self.bar.length < self.len() + self.offset() {
+			let dev_id = self.dev_id;
+			let index = self.bar.index;
 			error!(
-				"ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
-				self.cap.id, self.dev_id, self.bar.index
+				"ISR status config of device {dev_id:x}, does not fit into memory specified by bar {index:x}!"
 			);
 			return None;
 		}
@@ -193,14 +192,12 @@ pub struct ComCfg {
 	/// References the raw structure in PCI memory space. Is static as
 	/// long as the device is present, which is mandatory in order to let this code work.
 	com_cfg: VolatileRef<'static, CommonCfg>,
-	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
-	rank: u8,
 }
 
 // Private interface of ComCfg
 impl ComCfg {
-	fn new(raw: VolatileRef<'static, CommonCfg>, rank: u8) -> Self {
-		ComCfg { com_cfg: raw, rank }
+	fn new(raw: VolatileRef<'static, CommonCfg>) -> Self {
+		ComCfg { com_cfg: raw }
 	}
 }
 
@@ -434,8 +431,6 @@ pub struct NotifCfg {
 	/// Start addr, from where the notification addresses for the virtqueues are computed
 	base_addr: u64,
 	notify_off_multiplier: u32,
-	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
-	rank: u8,
 	/// defines the maximum size of the notification space, starting from base_addr.
 	length: u64,
 }
@@ -443,9 +438,10 @@ pub struct NotifCfg {
 impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < cap.len() + cap.offset() {
+			let dev_id = cap.dev_id;
+			let index = cap.bar.index;
 			error!(
-				"Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
-				cap.cap.id, cap.dev_id, cap.bar.index
+				"Notification config of device {dev_id:x}, does not fit into memory specified by bar {index:x}!"
 			);
 			return None;
 		}
@@ -464,7 +460,6 @@ impl NotifCfg {
 		Some(NotifCfg {
 			base_addr,
 			notify_off_multiplier,
-			rank: cap.cap.id,
 			length: cap.len(),
 		})
 	}
@@ -532,16 +527,11 @@ pub struct IsrStatus {
 	/// References the raw structure in PCI memory space. Is static as
 	/// long as the device is present, which is mandatory in order to let this code work.
 	isr_stat: VolatileRef<'static, IsrStatusRaw>,
-	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
-	rank: u8,
 }
 
 impl IsrStatus {
-	fn new(raw: VolatileRef<'static, IsrStatusRaw>, rank: u8) -> Self {
-		IsrStatus {
-			isr_stat: raw,
-			rank,
-		}
+	fn new(raw: VolatileRef<'static, IsrStatusRaw>) -> Self {
+		IsrStatus { isr_stat: raw }
 	}
 
 	pub fn is_queue_interrupt(&self) -> IsrStatusRaw {
@@ -737,10 +727,9 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 			CapCfgType::Common => {
 				if com_cfg.is_none() {
 					match pci_cap.map_common_cfg() {
-						Some(cap) => com_cfg = Some(ComCfg::new(cap, pci_cap.cap.id)),
+						Some(cap) => com_cfg = Some(ComCfg::new(cap)),
 						None => error!(
-							"Common config capability with id {}, of device {:x}, could not be mapped!",
-							pci_cap.cap.id, device_id
+							"Common config capability of device {device_id:x} could not be mapped!"
 						),
 					}
 				}
@@ -750,8 +739,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					match NotifCfg::new(&pci_cap) {
 						Some(notif) => notif_cfg = Some(notif),
 						None => error!(
-							"Notification config capability with id {}, of device {device_id:x} could not be used!",
-							pci_cap.cap.id
+							"Notification config capability of device {device_id:x} could not be used!"
 						),
 					}
 				}
@@ -759,20 +747,21 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 			CapCfgType::Isr => {
 				if isr_cfg.is_none() {
 					match pci_cap.map_isr_status() {
-						Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat, pci_cap.cap.id)),
+						Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat)),
 						None => error!(
-							"ISR status config capability with id {}, of device {device_id:x} could not be used!",
-							pci_cap.cap.id
+							"ISR status config capability of device {device_id:x} could not be used!"
 						),
 					}
 				}
 			}
 			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
 				Some(sh_mem) => sh_mem_cfg_list.push(sh_mem),
-				None => error!(
-					"Shared Memory config capability with id {}, of device {device_id:x} could not be used!",
-					pci_cap.cap.id,
-				),
+				None => {
+					let cap_id = pci_cap.cap.id;
+					error!(
+						"Shared Memory config capability with id {cap_id} of device {device_id:x} could not be used!"
+					);
+				}
 			},
 			CapCfgType::Device => dev_cfg_list.push(pci_cap),
 

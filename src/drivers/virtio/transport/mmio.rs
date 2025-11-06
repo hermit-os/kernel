@@ -94,15 +94,12 @@ impl VqCfgHandler<'_> {
 pub struct ComCfg {
 	// FIXME: remove 'static lifetime
 	com_cfg: VolatileRef<'static, DeviceRegisters>,
-
-	/// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
-	rank: u8,
 }
 
 // Public Interface of ComCfg
 impl ComCfg {
-	pub fn new(raw: VolatileRef<'static, DeviceRegisters>, rank: u8) -> Self {
-		ComCfg { com_cfg: raw, rank }
+	pub fn new(raw: VolatileRef<'static, DeviceRegisters>) -> Self {
+		ComCfg { com_cfg: raw }
 	}
 
 	pub fn device_config_space(&self) -> VolatilePtr<'_, DeviceRegisters, ReadOnly> {

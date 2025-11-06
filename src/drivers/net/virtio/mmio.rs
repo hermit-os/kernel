@@ -38,7 +38,7 @@ impl VirtioNetDriver<Uninit> {
 
 		Ok(VirtioNetDriver {
 			dev_cfg,
-			com_cfg: ComCfg::new(registers, 1),
+			com_cfg: ComCfg::new(registers),
 			isr_stat,
 			notif_cfg,
 			inner: Uninit,
