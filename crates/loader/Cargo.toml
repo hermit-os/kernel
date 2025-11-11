@@ -37,7 +37,7 @@ goblin = { version = "0.10", default-features = false, features = ["elf64"] }
 volatile =  { version = "0.6", features = ["derive"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = { version = "0.35", features = ["alloc", "panic_handler", "qemu"] }
+uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 fdt = "0.1"
