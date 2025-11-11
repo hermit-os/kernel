@@ -17,7 +17,7 @@ use sptr::Strict;
 use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::fs::{self, FileSystem, Path};
 use uefi::prelude::*;
-use uefi::table::cfg;
+use uefi::table::cfg::ConfigTableEntry;
 
 pub use self::console::CONSOLE;
 use crate::fdt::Fdt;
@@ -140,13 +140,13 @@ fn rsdp() -> *const c_void {
 	system::with_config_table(|config_table| {
 		let (rsdp, version) = if let Some(entry) = config_table
 			.iter()
-			.find(|entry| entry.guid == cfg::ACPI2_GUID)
+			.find(|entry| entry.guid == ConfigTableEntry::ACPI2_GUID)
 		{
 			(entry.address, 2)
 		} else {
 			let entry = config_table
 				.iter()
-				.find(|entry| entry.guid == cfg::ACPI_GUID)
+				.find(|entry| entry.guid == ConfigTableEntry::ACPI_GUID)
 				.unwrap();
 			(entry.address, 1)
 		};
