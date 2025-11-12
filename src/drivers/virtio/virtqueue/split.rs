@@ -31,7 +31,7 @@ use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
 	read_idx: u16,
-	token_ring: Box<[Option<Box<TransferToken<virtq::Desc>>>]>,
+	token_ring: Box<[Option<TransferToken<virtq::Desc>>]>,
 	mem_pool: MemPool,
 
 	descr_table_cell: Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
@@ -82,7 +82,7 @@ impl DescrRing {
 			// thus the head of the descriptor chain.
 		}
 
-		self.token_ring[usize::from(index)] = Some(Box::new(tkn));
+		self.token_ring[usize::from(index)] = Some(tkn);
 
 		let len = self.token_ring.len();
 		let idx = self.avail_ring_mut().idx.to_ne();
