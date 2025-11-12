@@ -58,7 +58,6 @@ fuse = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 gem-net = ["net", "dep:tock-registers"]
 idle-poll = []
 kernel-stack = []
-log-target = []
 net = []
 mman = []
 mmap = ["mman"] # Deprecated in favor of mman

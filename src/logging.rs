@@ -51,7 +51,7 @@ impl log::Log for KernelLogger {
 		};
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
-		// FIXME: Use `super let` once stable
+
 		let target = record.target();
 		let (crate_, modules) = target.split_once("::").unwrap_or((target, ""));
 		let (_modules, module) = modules.rsplit_once("::").unwrap_or(("", modules));
@@ -60,11 +60,8 @@ impl log::Log for KernelLogger {
 		} else {
 			crate_
 		};
-		let format_target = if cfg!(feature = "log-target") {
-			format_args!(" {target:<10}")
-		} else {
-			format_args!("")
-		};
+		let format_target = format_args!(" {target:<10}");
+
 		let args = record.args();
 		println!("{format_time}[{core_id}][{level}{format_target}] {args}");
 	}
