@@ -29,9 +29,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 #[cfg(feature = "pci")]
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
-use super::{
-	AvailBufferToken, BufferType, MemPool, TransferToken, UsedBufferToken, Virtq, VirtqPrivate,
-};
+use super::index_alloc::IndexAlloc;
+use super::{AvailBufferToken, BufferType, TransferToken, UsedBufferToken, Virtq, VirtqPrivate};
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -76,9 +75,8 @@ struct DescriptorRing {
 	/// See Virtio specification v1.1. - 2.7.1
 	drv_wc: bool,
 	dev_wc: bool,
-	/// Memory pool controls the amount of "free floating" descriptors
-	/// See [MemPool] docs for detail.
-	mem_pool: MemPool,
+	/// This allocates available descriptors.
+	indexes: IndexAlloc,
 }
 
 impl DescriptorRing {
@@ -99,7 +97,7 @@ impl DescriptorRing {
 			poll_index: 0,
 			drv_wc: true,
 			dev_wc: true,
-			mem_pool: MemPool::new(size),
+			indexes: IndexAlloc::new(size.into()),
 		}
 	}
 
@@ -193,13 +191,13 @@ impl DescriptorRing {
 	/// Returns an initialized write controller in order
 	/// to write the queue correctly.
 	fn get_write_ctrler(&mut self) -> Result<WriteCtrl<'_>, VirtqError> {
-		let desc_id = self.mem_pool.pool.pop().ok_or(VirtqError::NoDescrAvail)?;
+		let desc_id = self.indexes.allocate().ok_or(VirtqError::NoDescrAvail)?;
 		Ok(WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
 			modulo: u16::try_from(self.ring.len()).unwrap(),
 			first_flags: DescF::empty(),
-			buff_id: desc_id,
+			buff_id: u16::try_from(desc_id).unwrap(),
 
 			desc_ring: self,
 		})
@@ -310,7 +308,9 @@ impl ReadCtrl<'_> {
 			for _ in 0..tkn.num_consuming_descr() {
 				self.incrmt();
 			}
-			self.desc_ring.mem_pool.ret_id(buff_id);
+			unsafe {
+				self.desc_ring.indexes.deallocate(buff_id.into());
+			}
 
 			Some((tkn, write_len))
 		} else {
