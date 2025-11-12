@@ -21,7 +21,10 @@
 	any(target_arch = "aarch64", target_arch = "riscv64"),
 	feature(specialization)
 )]
+#![feature(strict_provenance_lints)]
 #![feature(thread_local)]
+#![warn(fuzzy_provenance_casts)]
+#![warn(lossy_provenance_casts)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
 #![cfg_attr(all(target_os = "none", test), test_runner(crate::test_runner))]
