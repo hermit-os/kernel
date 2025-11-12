@@ -39,6 +39,8 @@ mod futex;
 pub(crate) mod interfaces;
 #[cfg(feature = "mman")]
 mod mman;
+#[cfg(feature = "nvme")]
+pub(crate) mod nvme;
 mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;

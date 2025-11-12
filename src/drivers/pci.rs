@@ -6,11 +6,18 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-#[cfg(any(feature = "fuse", feature = "vsock", feature = "console"))]
+#[cfg(any(
+	feature = "fuse",
+	feature = "vsock",
+	feature = "console",
+	feature = "nvme"
+))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::capability::CapabilityIterator;
+#[cfg(feature = "nvme")]
+use pci_types::device_type::DeviceType;
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine,
 	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
@@ -27,6 +34,8 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net",))]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "nvme")]
+use crate::drivers::nvme::NvmeDriver;
 #[cfg(any(
 	all(feature = "virtio-net", not(feature = "rtl8139"),),
 	feature = "fuse",
@@ -345,6 +354,8 @@ pub(crate) enum PciDriver {
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 	#[cfg(feature = "vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
+	#[cfg(feature = "nvme")]
+	Nvme(InterruptTicketMutex<NvmeDriver>),
 }
 
 impl PciDriver {
@@ -353,6 +364,15 @@ impl PciDriver {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "nvme")]
+	fn get_nvme_driver(&self) -> Option<&InterruptTicketMutex<NvmeDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::Nvme(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -376,7 +396,6 @@ impl PciDriver {
 	}
 
 	fn get_interrupt_handler(&self) -> (InterruptLine, fn()) {
-		#[allow(unreachable_patterns)]
 		match self {
 			#[cfg(feature = "vsock")]
 			Self::VirtioVsock(drv) => {
@@ -409,6 +428,13 @@ impl PciDriver {
 				let irq_number = drv.lock().get_interrupt_number();
 				(irq_number, console_handler)
 			}
+			#[cfg(feature = "nvme")]
+			Self::Nvme(drv) => {
+				let irq_number = drv.lock().get_interrupt_number();
+				fn nvme_handler() {}
+				(irq_number, nvme_handler)
+			}
+			#[allow(unreachable_patterns)]
 			_ => todo!(),
 		}
 	}
@@ -474,6 +500,14 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.find_map(|drv| drv.get_console_driver())
 }
 
+#[cfg(feature = "nvme")]
+pub(crate) fn get_nvme_driver() -> Option<&'static InterruptTicketMutex<NvmeDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_nvme_driver())
+}
+
 #[cfg(feature = "vsock")]
 pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
 	PCI_DRIVERS
@@ -529,6 +563,32 @@ pub(crate) fn init() {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)));
 				}
 				_ => {}
+			}
+		}
+
+		#[cfg(feature = "nvme")]
+		for adapter in PCI_DEVICES.finalize().iter().filter(|adapter| {
+			let (_, class_id, subclass_id, _) =
+				adapter.header().revision_and_class(adapter.access());
+			let device_type = DeviceType::from((class_id, subclass_id));
+			device_type == DeviceType::NvmeController
+		}) {
+			info!(
+				"Found NVMe device with device id {:#x}",
+				adapter.device_id()
+			);
+
+			match NvmeDriver::init(adapter) {
+				Ok(nvme_driver) => {
+					info!("NVMe driver initialized.");
+					register_driver(PciDriver::Nvme(InterruptTicketMutex::new(nvme_driver)));
+				}
+				Err(()) => {
+					error!(
+						"NVMe driver could not be initialized for device: {:#x}",
+						adapter.device_id()
+					);
+				}
 			}
 		}
 
