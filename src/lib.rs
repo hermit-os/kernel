@@ -92,7 +92,7 @@ hermit_entry::define_abi_tag!();
 hermit_entry::define_entry_version!();
 
 #[cfg(target_os = "none")]
-uhyve_interface::define_uhyve_interface_version!();
+hermit_entry::define_uhyve_interface_version!();
 
 #[cfg(test)]
 #[cfg(target_os = "none")]
