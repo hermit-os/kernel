@@ -812,14 +812,13 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hermit-entry"
-version = "0.10.5"
+version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8646a7eb3029cb587f5d1d8742dd4790d4cb128c78817be42b7b375e7c36f366"
+checksum = "920f9bfe21a23408aade84f1cd2f550c0490be1ec90ae5151b919614808e2e85"
 dependencies = [
  "align-address",
  "const_parse",
  "time",
- "uhyve-interface",
 ]
 
 [[package]]
