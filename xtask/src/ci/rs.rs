@@ -64,8 +64,14 @@ impl Rs {
 			);
 		};
 
+		let cargo_config = match std::env::var_os("HERMIT_KERNEL_CARGO_CONFIG") {
+			Some(val) if !val.is_empty() => &[std::ffi::OsString::from("--config"), val][..],
+			_ => &[],
+		};
+
 		cargo
 			.current_dir(super::parent_root())
+			.args(cargo_config)
 			.arg("build")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.args(self.cargo_build.cargo_build_args())

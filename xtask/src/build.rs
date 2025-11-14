@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::env::{self, VarError};
+use std::ffi::OsString;
 
 use anyhow::Result;
 use clap::Args;
@@ -28,7 +29,12 @@ impl Build {
 		self.cargo_build.artifact.arch.install_for_build()?;
 
 		let careful = match env::var_os("HERMIT_CAREFUL") {
-			Some(val) if val == "1" => &["careful"][..],
+			Some(val) if val == "1" => Some("careful"),
+			_ => None,
+		};
+
+		let cargo_config = match env::var_os("HERMIT_KERNEL_CARGO_CONFIG") {
+			Some(val) if !val.is_empty() => &[OsString::from("--config"), val][..],
 			_ => &[],
 		};
 
@@ -36,6 +42,7 @@ impl Build {
 		let mut cargo = crate::cargo();
 		cargo
 			.args(careful)
+			.args(cargo_config)
 			.arg("build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.arch.cargo_args())
@@ -61,6 +68,7 @@ impl Build {
 		eprintln!("Building hermit-builtins");
 		let mut cargo = crate::cargo();
 		cargo
+			.args(cargo_config)
 			.args(["build", "--release"])
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
