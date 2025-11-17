@@ -64,6 +64,7 @@ mman = []
 mmap = ["mman"] # Deprecated in favor of mman
 newlib = []
 nostd = []
+nvme = ["pci", "vroom"]
 pci = ["virtio?/pci"]
 rtl8139 = ["net", "pci", "volatile/derive", "endian-num"]
 semihosting = ["dep:semihosting"]
@@ -145,6 +146,7 @@ talc = { version = "4" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
+vroom = { git = "https://github.com/valopok/vroom", branch = "main", default-features = false, optional = true }
 zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.3"
 

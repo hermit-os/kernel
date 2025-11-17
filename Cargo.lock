@@ -780,6 +780,12 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
+version = "0.15.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+
+[[package]]
+name = "hashbrown"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5419bdc4f6a9207fbeba6d11b604d481addf78ecd10c11ad51e76c2f6482748d"
@@ -849,7 +855,7 @@ dependencies = [
  "float-cmp",
  "free-list",
  "fuse-abi",
- "hashbrown",
+ "hashbrown 0.16.0",
  "heapless 0.9.1",
  "hermit-entry",
  "hermit-macro",
@@ -881,6 +887,7 @@ dependencies = [
  "uhyve-interface",
  "virtio-spec",
  "volatile 0.6.1",
+ "vroom",
  "x86_64",
  "zerocopy",
 ]
@@ -2147,6 +2154,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "vroom"
+version = "0.1.0"
+source = "git+https://github.com/valopok/vroom?branch=main#b5e9c7f9debccc0b803a489a8177822abd183d9d"
+dependencies = [
+ "ahash",
+ "hashbrown 0.15.5",
+ "log",
 ]
 
 [[package]]
