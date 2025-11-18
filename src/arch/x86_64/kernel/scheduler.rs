@@ -303,7 +303,7 @@ impl TaskFrame for Task {
 			if let Some(tls) = &self.tls {
 				(*state).fs = tls.thread_ptr().addr() as u64;
 			}
-			(*state).rip = task_start as usize as u64;
+			(*state).rip = task_start as *const () as usize as u64;
 			(*state).rdi = func as usize as u64;
 			(*state).rsi = arg as u64;
 
