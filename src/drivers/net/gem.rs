@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::convert::TryInto;
 use core::ptr::NonNull;
-use core::{mem, slice};
+use core::{mem, ptr, slice};
 
 use align_address::Align;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -477,13 +477,10 @@ impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
 
 		// SAFETY: This is a blatant lie and very unsound.
 		// The API must be fixed or the buffer may never touched again.
-		let buffer = unsafe {
-			core::slice::from_raw_parts_mut(
-				(self.rx_fields.rxbuffer.as_usize() + (self.buffer_index * RX_BUF_LEN) as usize)
-					as *mut u8,
-				length as usize,
-			)
-		};
+		let buffer_addr =
+			self.rx_fields.rxbuffer.as_usize() + (self.buffer_index * RX_BUF_LEN) as usize;
+		let buffer_ptr = ptr::with_exposed_provenance_mut::<u8>(buffer_addr);
+		let buffer = unsafe { core::slice::from_raw_parts_mut(buffer_ptr, length as usize) };
 		trace!("BUFFER: {buffer:x?}");
 		let res = f(buffer);
 		self.rx_buffer_consumed();

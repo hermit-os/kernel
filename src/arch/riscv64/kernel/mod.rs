@@ -156,8 +156,8 @@ pub fn boot_next_processor() {
 			let frame_layout = PageLayout::from_size(KERNEL_STACK_SIZE).unwrap();
 			let frame_range = FrameAlloc::allocate(frame_layout)
 				.expect("Failed to allocate boot stack for new core");
-			let stack = PhysAddr::from(frame_range.start());
-			CURRENT_STACK_ADDRESS.store(stack.as_usize() as _, Ordering::Relaxed);
+			let stack = ptr::with_exposed_provenance_mut(frame_range.start());
+			CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
 		}
 
 		info!(
