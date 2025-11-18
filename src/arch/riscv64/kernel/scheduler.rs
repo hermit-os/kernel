@@ -328,7 +328,7 @@ impl TaskFrame for Task {
 			let state = stack.as_mut_ptr::<State>();
 			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
-				(*state).tp = tls.thread_ptr() as usize;
+				(*state).tp = tls.thread_ptr().expose_provenance();
 			}
 			(*state).ra = task_start;
 			(*state).a0 = func as usize;

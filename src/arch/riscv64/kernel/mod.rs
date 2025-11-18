@@ -171,7 +171,7 @@ pub fn boot_next_processor() {
 
 		//When running bare-metal/QEMU we use the firmware to start the next hart
 		if !env::is_uhyve() {
-			let start_addr = start::_start as *const () as usize;
+			let start_addr = (start::_start as *const ()).expose_provenance();
 			sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
 		}
 	} else {
