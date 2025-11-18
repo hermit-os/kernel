@@ -46,29 +46,30 @@ enum Model {
 pub fn init() {
 	debug!("Init devicetree");
 	if let Some(fdt) = env::fdt() {
-		unsafe {
-			let model = fdt
-				.find_node("/")
-				.unwrap()
-				.property("compatible")
-				.expect("compatible not found in FDT")
-				.as_str()
-				.unwrap();
+		let model = fdt
+			.find_node("/")
+			.unwrap()
+			.property("compatible")
+			.expect("compatible not found in FDT")
+			.as_str()
+			.unwrap();
 
-			if model.contains("riscv-virtio") {
-				PLATFORM_MODEL = Model::Virt;
-			} else if model.contains("sifive,hifive-unmatched-a00")
-				|| model.contains("sifive,hifive-unleashed-a00")
-				|| model.contains("sifive,fu740")
-				|| model.contains("sifive,fu540")
-			{
-				PLATFORM_MODEL = Model::Fux40;
-			} else {
-				warn!("Unknown platform, guessing PLIC context 1");
-				PLATFORM_MODEL = Model::Unknown;
-			}
-			info!("Model: {model}");
+		let platform_model = if model.contains("riscv-virtio") {
+			Model::Virt
+		} else if model.contains("sifive,hifive-unmatched-a00")
+			|| model.contains("sifive,hifive-unleashed-a00")
+			|| model.contains("sifive,fu740")
+			|| model.contains("sifive,fu540")
+		{
+			Model::Fux40
+		} else {
+			warn!("Unknown platform, guessing PLIC context 1");
+			Model::Unknown
+		};
+		unsafe {
+			PLATFORM_MODEL = platform_model;
 		}
+		info!("Model: {model}");
 	}
 }
 
@@ -77,9 +78,9 @@ pub fn init() {
 pub fn init_drivers() {
 	// TODO: Implement devicetree correctly
 	if let Some(fdt) = env::fdt() {
-		unsafe {
-			debug!("Init drivers using devicetree");
+		debug!("Init drivers using devicetree");
 
+		unsafe {
 			// Init PLIC first
 			if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
 				debug!("Found interrupt controller");
