@@ -56,7 +56,7 @@ impl Read for UhyveFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut read_params = ReadParams {
 			fd: self.0,
-			buf: GuestVirtAddr::new(buf.as_mut_ptr() as u64),
+			buf: GuestVirtAddr::from_ptr(buf.as_mut_ptr()),
 			len: buf.len(),
 			ret: 0,
 		};
@@ -74,7 +74,7 @@ impl Write for UhyveFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let write_params = WriteParams {
 			fd: self.0,
-			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
+			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
 			len: buf.len(),
 		};
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));

@@ -288,7 +288,7 @@ where
 		unsafe {
 			thread_ptr.cast::<*mut ()>().write(thread_ptr);
 		}
-		crate::arch::x86_64::kernel::processor::writefs(thread_ptr as usize);
+		crate::arch::x86_64::kernel::processor::writefs(thread_ptr.expose_provenance());
 
 		func(code_slice, Some(block))
 	} else {
