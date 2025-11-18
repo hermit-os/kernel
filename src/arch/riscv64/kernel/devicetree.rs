@@ -3,7 +3,6 @@
 #[cfg(all(any(feature = "virtio-net", feature = "console"), not(feature = "pci")))]
 use core::ptr::NonNull;
 
-use fdt::Fdt;
 use memory_addresses::PhysAddr;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
@@ -12,7 +11,6 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(any(feature = "virtio-net", feature = "console"), not(feature = "pci")))]
 use volatile::VolatileRef;
 
-use crate::arch::riscv64::kernel::get_dtb_ptr;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(feature = "console", not(feature = "pci")))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
@@ -29,6 +27,7 @@ use crate::drivers::net::gem;
 use crate::drivers::pci::get_console_driver;
 #[cfg(all(any(feature = "virtio-net", feature = "console"), not(feature = "pci")))]
 use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
+use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
 #[cfg(all(feature = "console", not(feature = "pci")))]
@@ -46,10 +45,8 @@ enum Model {
 /// This function should only be called once
 pub fn init() {
 	debug!("Init devicetree");
-	if !get_dtb_ptr().is_null() {
+	if let Some(fdt) = env::fdt() {
 		unsafe {
-			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
-
 			let model = fdt
 				.find_node("/")
 				.unwrap()
@@ -79,10 +76,9 @@ pub fn init() {
 /// This function should only be called once
 pub fn init_drivers() {
 	// TODO: Implement devicetree correctly
-	if !get_dtb_ptr().is_null() {
+	if let Some(fdt) = env::fdt() {
 		unsafe {
 			debug!("Init drivers using devicetree");
-			let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
 
 			// Init PLIC first
 			if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
