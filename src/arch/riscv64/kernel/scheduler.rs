@@ -331,7 +331,7 @@ impl TaskFrame for Task {
 			if let Some(tls) = &self.tls {
 				(*state).tp = tls.thread_ptr() as usize;
 			}
-			(*state).ra = task_start as usize;
+			(*state).ra = task_start as *const () as usize;
 			(*state).a0 = func as usize;
 			(*state).a1 = arg;
 

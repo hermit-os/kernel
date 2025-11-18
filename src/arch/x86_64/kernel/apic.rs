@@ -802,7 +802,7 @@ pub fn boot_application_processors() {
 		);
 		ptr::write_unaligned(
 			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr(),
-			start::_start as usize,
+			start::_start as *const () as usize,
 		);
 	}
 
