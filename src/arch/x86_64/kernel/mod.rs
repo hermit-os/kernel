@@ -229,7 +229,7 @@ pub fn load_application<F, T>(code_size: u64, tls_size: u64, func: F) -> T
 where
 	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> T,
 {
-	use core::ptr::slice_from_raw_parts_mut;
+	use core::slice;
 
 	use align_address::Align;
 	use free_list::PageLayout;
@@ -252,7 +252,7 @@ where
 		flags,
 	);
 
-	let code_slice = unsafe { &mut *slice_from_raw_parts_mut(LOADER_START as *mut u8, code_size) };
+	let code_slice = unsafe { slice::from_raw_parts_mut(LOADER_START as *mut u8, code_size) };
 
 	if tls_size > 0 {
 		// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
@@ -277,7 +277,7 @@ where
 			flags,
 		);
 		let block =
-			unsafe { &mut *slice_from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
+			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
 		for elem in block.iter_mut() {
 			*elem = 0;
 		}
