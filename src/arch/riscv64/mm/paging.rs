@@ -473,8 +473,9 @@ where
 		let index = page.table_index::<L>();
 		// trace!("Index: {:#X}", index);
 		let subtable_address = self.entries[index].address().as_usize();
+		let subtable_ptr = ptr::with_exposed_provenance_mut(subtable_address);
 		// trace!("subtable_address: {:#X}", subtable_address);
-		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }
+		unsafe { &mut *subtable_ptr }
 	}
 
 	/// Maps a continuous range of pages.
@@ -577,7 +578,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 		} else {
 			//PTE is a pointer to the next level of the page table
 			assert!(i != 0); //pte should be a leaf if i=0
-			page_table_addr = pte.address().as_usize() as *mut PageTable<L2Table>;
+			page_table_addr = ptr::with_exposed_provenance_mut(pte.address().as_usize());
 			// trace!("PTE is pointer: {:?}", page_table_addr);
 		}
 	}
