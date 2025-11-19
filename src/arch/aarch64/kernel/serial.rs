@@ -1,4 +1,5 @@
 use alloc::collections::vec_deque::VecDeque;
+use core::num::NonZero;
 use core::ptr::NonNull;
 
 use arm_pl011_uart::{DataBits, Interrupts, LineConfig, Parity, StopBits, Uart, UniqueMmioPointer};
@@ -20,11 +21,11 @@ impl UartDevice {
 		let base = crate::env::boot_info()
 			.hardware_info
 			.serial_port_base
-			.map(|uartport| uartport.get())
 			.unwrap();
+		let base = NonZero::try_from(base).unwrap();
+		let base = NonNull::with_exposed_provenance(base);
 
-		let uart_pointer =
-			unsafe { UniqueMmioPointer::new(NonNull::new_unchecked(base as *mut _)) };
+		let uart_pointer = unsafe { UniqueMmioPointer::new(base) };
 
 		let mut uart = Uart::new(uart_pointer);
 

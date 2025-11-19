@@ -18,7 +18,6 @@ use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
-use fdt::Fdt;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::sstatus;
@@ -85,28 +84,22 @@ pub fn args() -> Option<&'static str> {
 	None
 }
 
-pub fn get_dtb_ptr() -> *const u8 {
-	env::boot_info().hardware_info.device_tree.unwrap().get() as _
-}
-
 pub fn get_hart_mask() -> u64 {
 	HART_MASK.load(Ordering::Relaxed)
 }
 
 pub fn get_timebase_freq() -> u64 {
-	unsafe {
-		let fdt = Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid");
+	let fdt = env::fdt().unwrap();
 
-		// Get timebase-freq
-		let cpus_node = fdt
-			.find_node("/cpus")
-			.expect("cpus node missing or invalid");
-		cpus_node
-			.property("timebase-frequency")
-			.expect("timebase-frequency node not found in /cpus")
-			.as_usize()
-			.unwrap() as u64
-	}
+	// Get timebase-freq
+	let cpus_node = fdt
+		.find_node("/cpus")
+		.expect("cpus node missing or invalid");
+	cpus_node
+		.property("timebase-frequency")
+		.expect("timebase-frequency node not found in /cpus")
+		.as_usize()
+		.unwrap() as u64
 }
 
 pub fn get_current_boot_id() -> u32 {

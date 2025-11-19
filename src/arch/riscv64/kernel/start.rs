@@ -1,11 +1,10 @@
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 
-use fdt::Fdt;
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
-use super::{CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS, get_dtb_ptr};
+use super::{CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
@@ -53,7 +52,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 		crate::logging::KERNEL_LOGGER.set_time(true);
 
 		env::set_boot_info(*boot_info.unwrap());
-		let fdt = unsafe { Fdt::from_ptr(get_dtb_ptr()).expect("FDT is invalid") };
+		let fdt = env::fdt().unwrap();
 		// Init HART_MASK
 		let mut hart_mask = 0;
 		for cpu in fdt.cpus() {
