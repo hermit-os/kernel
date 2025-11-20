@@ -13,7 +13,7 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::executor::network::{Handle, NIC};
+use crate::executor::network::{Handle, NETWORK_WAKER, NIC};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::syscalls::socket::Af;
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
@@ -65,14 +65,20 @@ impl Socket {
 	fn with<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		f(nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap()))
+		let r = f(nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap()));
+		// FIXME: Ideally this would be our send/recv waker, but we can only have one
+		NETWORK_WAKER.lock().wake();
+		r
 	}
 
 	fn with_context<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>, &mut iface::Context) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
 		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(*self.handle.first().unwrap());
-		f(s, cx)
+		let r = f(s, cx);
+		// FIXME: Ideally this would be our send/recv waker, but we can only have one
+		NETWORK_WAKER.lock().wake();
+		r
 	}
 
 	async fn close(&self) -> io::Result<()> {
