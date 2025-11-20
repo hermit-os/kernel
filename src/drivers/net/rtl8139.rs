@@ -21,6 +21,7 @@ use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::pci::PciDevice;
+use crate::executor::network::NETWORK_WAKER;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// size of the receive buffer
@@ -687,6 +688,9 @@ impl NetworkDriver for RTL8139Driver {
 		self.regs.as_mut_ptr().isr().write(le16::from(
 			isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
 		));
+
+		trace!("Waking network waker");
+		NETWORK_WAKER.lock().wake();
 	}
 }
 
