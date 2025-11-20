@@ -1,17 +1,7 @@
 [package]
 name = "hermit-kernel"
 version = "0.12.0"
-authors = [
-	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
-	"Colin Finck <colin.finck@rwth-aachen.de>",
-	"Martin Kröning <mkroening@posteo.net>",
-	"Frederik Schulz",
-	"Thomas Lambertz",
-	"Jonathan Klimt <jonathan.klimt@eonerc.rwth-aachen.de>",
-	"Jonathan Schwender",
-	"Daniel Krebs",
-	"Yu Duan",
-]
+authors = ["The Hermit Project Developers"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
