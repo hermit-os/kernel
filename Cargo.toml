@@ -66,6 +66,7 @@ vga = []
 virtio = ["dep:virtio"]
 virtio-net = ["net", "virtio"]
 vsock = ["virtio", "pci"]
+preemptive-multithreading = []
 
 [lints.rust]
 rust_2018_idioms = "warn"
