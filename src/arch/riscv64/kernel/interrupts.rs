@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::ptr;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -128,18 +129,21 @@ pub(crate) fn install_handlers() {
 
 			// Set priority to 7 (highest on FU740)
 			let prio_address = *base_ptr + *irq_number as usize * 4;
-			core::ptr::write_volatile(prio_address as *mut u32, 1);
+			let prio_ptr = ptr::with_exposed_provenance_mut::<u32>(prio_address);
+			prio_ptr.write_volatile(1);
 			// Set Threshold to 0 (lowest)
 			let thresh_address = *base_ptr + 0x20_0000 + 0x1000 * (*context as usize);
-			core::ptr::write_volatile(thresh_address as *mut u32, 0);
+			let thresh_ptr = ptr::with_exposed_provenance_mut::<u32>(thresh_address);
+			thresh_ptr.write_volatile(0);
 			// Enable irq for context
 			const PLIC_ENABLE_OFFSET: usize = 0x0000_2000;
 			let enable_address = *base_ptr
 				+ PLIC_ENABLE_OFFSET
 				+ 0x80 * (*context as usize)
 				+ ((*irq_number / 32) * 4) as usize;
-			debug!("enable_address {enable_address:x}");
-			core::ptr::write_volatile(enable_address as *mut u32, 1 << (irq_number % 32));
+			let enable_ptr = ptr::with_exposed_provenance_mut::<u32>(enable_address);
+			debug!("enable_address {enable_ptr:p}");
+			enable_ptr.write_volatile(1 << (irq_number % 32));
 		}
 	}
 
@@ -193,7 +197,8 @@ fn external_handler() {
 	let base_ptr = PLIC_BASE.lock();
 	let context = PLIC_CONTEXT.lock();
 	let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
-	let irq = unsafe { core::ptr::read_volatile(claim_address as *mut u32) };
+	let claim_ptr = ptr::with_exposed_provenance_mut::<u32>(claim_address);
+	let irq = unsafe { claim_ptr.read_volatile() };
 
 	if irq != 0 {
 		debug!("External INT: {irq}");
@@ -219,7 +224,7 @@ fn external_handler() {
 
 		// Complete interrupt after handling
 		unsafe {
-			core::ptr::write_volatile(claim_address as *mut u32, irq);
+			claim_ptr.write_volatile(irq);
 		}
 
 		// Remove from active interrupts
