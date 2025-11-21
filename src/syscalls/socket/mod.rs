@@ -591,6 +591,12 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 		return -i32::from(Errno::Socktnosupport);
 	};
 
+	// We do not support the exec syscall, so SOCK_CLOEXEC does not need an implementation.
+	let supported_flags = SockFlags::SOCK_NONBLOCK | SockFlags::SOCK_CLOEXEC;
+	if !(sock_flags - supported_flags).is_empty() {
+		return -i32::from(Errno::Inval);
+	}
+
 	let Ok(Ok(proto)) = u8::try_from(protocol).map(Ipproto::try_from) else {
 		return -i32::from(Errno::Protonosupport);
 	};
