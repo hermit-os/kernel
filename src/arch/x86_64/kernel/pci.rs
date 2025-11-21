@@ -1,4 +1,5 @@
-use core::ops::Range;
+use alloc::fmt::Debug;
+use core::iter::IntoIterator;
 
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
 use x86_64::instructions::port::Port;
@@ -100,7 +101,7 @@ pub(crate) fn init() {
 	info!("Initialized PCI");
 }
 
-fn scan_bus(bus_range: Range<u8>, pci_config: PciConfigRegion) {
+fn scan_bus(bus_range: impl IntoIterator<Item = u8> + Debug, pci_config: PciConfigRegion) {
 	debug!("Scanning PCI buses {bus_range:?}");
 
 	// Hermit only uses PCI for network devices.
@@ -224,13 +225,13 @@ mod pcie {
 			paging::map::<LargePageSize>(
 				virt_addr,
 				phys_addr,
-				bus_entry.bus_number_end.into(),
+				usize::from(bus_entry.bus_number_end) + 1,
 				flags,
 			);
 		}
 
 		super::scan_bus(
-			bus_entry.bus_number_start..bus_entry.bus_number_end,
+			bus_entry.bus_number_start..=bus_entry.bus_number_end,
 			PciConfigRegion::PciE(*bus_entry),
 		);
 	}
