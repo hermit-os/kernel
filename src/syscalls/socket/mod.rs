@@ -591,6 +591,17 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 		return -i32::from(Errno::Socktnosupport);
 	};
 
+	// Check for unsupported flag-protocol combinations
+	#[cfg(feature = "vsock")]
+	let is_sockflag_valid = sock_flags.is_empty()
+		|| (sock_flags ^ SockFlags::SOCK_NONBLOCK).is_empty() && domain == Af::Vsock;
+	#[cfg(not(feature = "vsock"))]
+	let is_sockflag_valid = sock_flags.is_empty();
+
+	if !is_sockflag_valid {
+		return -i32::from(Errno::Inval);
+	}
+
 	let Ok(Ok(proto)) = u8::try_from(protocol).map(Ipproto::try_from) else {
 		return -i32::from(Errno::Protonosupport);
 	};
