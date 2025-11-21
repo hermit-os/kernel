@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["SystemTime","itimerval","timespec","timeval"],"type":["suseconds_t","time_t","useconds_t"]};
