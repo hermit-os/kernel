@@ -20,6 +20,7 @@ use core::mem::{MaybeUninit, offset_of};
 use align_address::Align;
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
+use hermit_entry::ThinTree;
 
 use crate::errno::Errno;
 use crate::executor::block_on;
@@ -325,6 +326,10 @@ impl RomFile {
 	pub fn new(data: &'static [u8], mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
+		Self::new_with_timestamp(data, mode, &t)
+	}
+
+	pub fn new_with_timestamp(data: &'static [u8], mode: AccessPermission, t: timespec) -> Self {
 		let attr = FileAttr {
 			st_size: data.len().try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
@@ -484,6 +489,32 @@ pub(crate) struct MemDirectory {
 	attr: FileAttr,
 }
 
+fn thin_tree_to_vfs_node(thin_tree: ThinTree<'static>, t: timespec) -> io::Result<Box<dyn VfsNode + Send + Sync>> {
+	Ok(match thin_tree {
+		ThinTree::File { content, metadata } => {
+			let mut st_mode = AccessPermission::S_IRUSR;
+			if metadata.is_exec {
+				st_mode |= AccessPermission::S_IXUSR;
+			}
+			Box::new(RomFile::new_with_timestamp(content, st_mode, t)) as Box<<dyn VfsNode + Send + Sync>
+		}
+		ThinTree::Directory(d) => {
+			Box::new(MemDirectory {
+				inner: Arc::new(RwLock::new(d.into_iter()
+					.map(|(key, value)| Ok((key.to_string(), thin_tree_to_vfs_node(value, t)?)))
+					.collect::<io::Result<_>>()?)),
+				attr: FileAttr {
+					st_mode: AccessPermission::S_IRUSR | AccessPermission::S_IFDIR,
+					st_atim: t,
+					st_mtim: t,
+					st_ctim: t,
+					..Default::default()
+				},
+			}) as Box<<dyn VfsNode + Send + Sync>
+		}
+	})
+}
+
 impl MemDirectory {
 	pub fn new(mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
@@ -493,6 +524,46 @@ impl MemDirectory {
 			inner: Arc::new(RwLock::new(BTreeMap::new())),
 			attr: FileAttr {
 				st_mode: mode | AccessPermission::S_IFDIR,
+				st_atim: t,
+				st_mtim: t,
+				st_ctim: t,
+				..Default::default()
+			},
+		}
+	}
+
+	/// Create a read-only memory tree from a tar image
+	///
+	/// This ignores top-level files in the image
+	pub fn try_from_image(image: &'static hermit_entry::tar_parser::Bytes) -> io::Result<Self> {
+		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
+
+		// This is not perfectly memory-efficient, but we expect this
+		// to be invoked usually once per kernel boot, so this cost should
+		// be acceptable, given that it reduces code duplication and
+		// makes implementation way easier.
+		let thin_tree = ThinTree::try_from_image(image).map_err(|e| {
+			error!("unable to parse tar image: {}", e);
+			Errno::Inval
+		})?;
+
+		let mut tree = match thin_tee {
+			ThinTree::Directory(d) => {
+				d.into_iter()
+					.map(|(key, value)| Ok((key.to_string(), thin_tree_to_vfs_node(value, t)?)))
+					.collect::<io::Result<_>>()?
+			}
+			_ => {
+				error!("root of image isn't a directory");
+				return Err(Errno::Inval);
+			}
+		};
+
+		Self {
+			inner: Arc::new(RwLock::new(tree)),
+			attr: FileAttr {
+				st_mode: AccessPermission::S_IRUSR | AccessPermission::S_IFDIR,
 				st_atim: t,
 				st_mtim: t,
 				st_ctim: t,
