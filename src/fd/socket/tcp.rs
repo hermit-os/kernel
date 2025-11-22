@@ -33,7 +33,6 @@ fn get_ephemeral_port() -> u16 {
 	LOCAL_ENDPOINT.fetch_add(1, Ordering::SeqCst)
 }
 
-#[derive(Debug)]
 pub struct Socket {
 	handle: BTreeSet<Handle>,
 	endpoint: IpEndpoint,

@@ -14,6 +14,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::cmp;
 use core::marker::PhantomData;
 use core::mem::{MaybeUninit, offset_of};
 
@@ -32,27 +33,26 @@ use crate::{arch, io};
 #[derive(Debug)]
 pub(crate) struct RomFileInner {
 	pub data: &'static [u8],
-	pub attr: FileAttr,
+	pub attr: RwLock<FileAttr>,
 }
 
 impl RomFileInner {
-	pub fn new(data: &'static [u8], attr: FileAttr) -> Self {
+	pub fn new(data: &'static [u8], attr: RwLock<FileAttr>) -> Self {
 		Self { data, attr }
 	}
 }
 
-#[derive(Debug, Clone)]
 struct RomFileInterface {
 	/// Position within the file
-	pos: Arc<Mutex<usize>>,
+	pos: Mutex<usize>,
 	/// File content
-	inner: Arc<RwLock<RomFileInner>>,
+	inner: Arc<RomFileInner>,
 }
 
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let len = self.inner.read().await.data.len();
+		let len = self.inner.data.len();
 		let pos = *self.pos.lock().await;
 
 		let ret = if pos < len {
@@ -68,11 +68,10 @@ impl ObjectInterface for RomFileInterface {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
-			let mut guard = self.inner.write().await;
-			guard.attr.st_atim = t;
+			self.inner.attr.write().await.st_atim = t;
 		}
 
-		let vec = self.inner.read().await.data;
+		let vec = self.inner.data;
 		let mut pos_guard = self.pos.lock().await;
 		let pos = *pos_guard;
 
@@ -80,12 +79,7 @@ impl ObjectInterface for RomFileInterface {
 			return Ok(0);
 		}
 
-		let len = if vec.len() - pos < buf.len() {
-			vec.len() - pos
-		} else {
-			buf.len()
-		};
-
+		let len = cmp::min(vec.len() - pos, buf.len());
 		buf[..len].copy_from_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
@@ -93,47 +87,44 @@ impl ObjectInterface for RomFileInterface {
 	}
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		let guard = self.inner.read().await;
+		let data_len = self.inner.data.len();
 		let mut pos_guard = self.pos.lock().await;
 
-		let new_pos: isize = if whence == SeekWhence::Set {
-			if offset < 0 {
-				return Err(Errno::Inval);
-			}
+		// NOTE: slices in rust can be at most usize::MAX/2 in length.
+		let data_len_isize = data_len as isize;
 
-			offset
-		} else if whence == SeekWhence::End {
-			guard.data.len() as isize + offset
-		} else if whence == SeekWhence::Cur {
-			(*pos_guard as isize) + offset
-		} else {
-			return Err(Errno::Inval);
+		let new_pos: isize = match whence {
+			SeekWhence::Set => offset,
+			SeekWhence::End => (data_len_isize)
+				.checked_add(offset)
+				.ok_or(Errno::Overflow)?,
+			SeekWhence::Cur => (*pos_guard as isize) + offset,
+			_ => return Err(Errno::Inval),
 		};
 
-		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
-			*pos_guard = new_pos.try_into().unwrap();
+		if 0 <= new_pos && new_pos <= data_len_isize {
+			*pos_guard = new_pos as usize;
 			Ok(new_pos)
 		} else {
-			Err(Errno::Badf)
+			Err(Errno::Inval)
 		}
 	}
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
-		let guard = self.inner.read().await;
-		Ok(guard.attr)
+		Ok(*self.inner.attr.read().await)
 	}
 }
 
 impl RomFileInterface {
-	pub fn new(inner: Arc<RwLock<RomFileInner>>) -> Self {
+	pub fn new(inner: Arc<RomFileInner>) -> Self {
 		Self {
-			pos: Arc::new(Mutex::new(0)),
+			pos: Mutex::new(0),
 			inner,
 		}
 	}
 
 	pub fn len(&self) -> usize {
-		block_on(async { Ok(self.inner.read().await.data.len()) }, None).unwrap()
+		self.inner.data.len()
 	}
 }
 
@@ -152,10 +143,9 @@ impl RamFileInner {
 	}
 }
 
-#[derive(Debug, Clone)]
 pub struct RamFileInterface {
 	/// Position within the file
-	pos: Arc<Mutex<usize>>,
+	pos: Mutex<usize>,
 	/// File content
 	inner: Arc<RwLock<RamFileInner>>,
 }
@@ -274,7 +264,7 @@ impl ObjectInterface for RamFileInterface {
 impl RamFileInterface {
 	pub fn new(inner: Arc<RwLock<RamFileInner>>) -> Self {
 		Self {
-			pos: Arc::new(Mutex::new(0)),
+			pos: Mutex::new(0),
 			inner,
 		}
 	}
@@ -286,7 +276,7 @@ impl RamFileInterface {
 
 #[derive(Debug)]
 pub(crate) struct RomFile {
-	data: Arc<RwLock<RomFileInner>>,
+	data: Arc<RomFileInner>,
 }
 
 impl VfsNode for RomFile {
@@ -294,14 +284,14 @@ impl VfsNode for RomFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(RomFileInterface::new(
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(RomFileInterface::new(
 			self.data.clone(),
 		))))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
-		block_on(async { Ok(self.data.read().await.attr) }, None)
+		block_on(async { Ok(*self.data.attr.read().await) }, None)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
@@ -325,17 +315,17 @@ impl RomFile {
 	pub fn new(data: &'static [u8], mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
-		let attr = FileAttr {
+		let attr = RwLock::new(FileAttr {
 			st_size: data.len().try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
 			st_atim: t,
 			st_mtim: t,
 			st_ctim: t,
 			..Default::default()
-		};
+		});
 
 		Self {
-			data: Arc::new(RwLock::new(RomFileInner::new(data, attr))),
+			data: Arc::new(RomFileInner::new(data, attr)),
 		}
 	}
 }
@@ -350,8 +340,8 @@ impl VfsNode for RamFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(RamFileInterface::new(
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(RamFileInterface::new(
 			self.data.clone(),
 		))))
 	}
@@ -506,7 +496,7 @@ impl MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
@@ -527,7 +517,7 @@ impl MemDirectory {
 				} else if opt.contains(OpenOption::O_CREAT) {
 					let file = Box::new(RamFile::new(mode));
 					guard.insert(node_name, file.clone());
-					return Ok(Arc::new(async_lock::RwLock::new(RamFileInterface::new(
+					return Ok(Arc::new(RwLock::new(RamFileInterface::new(
 						file.data.clone(),
 					))));
 				} else {
@@ -549,10 +539,10 @@ impl VfsNode for MemDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(
-			MemDirectoryInterface::new(self.inner.clone()),
-		)))
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(MemDirectoryInterface::new(
+			self.inner.clone(),
+		))))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
@@ -743,7 +733,7 @@ impl VfsNode for MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
 		block_on(self.async_traverse_open(components, opt, mode), None)
 	}
 

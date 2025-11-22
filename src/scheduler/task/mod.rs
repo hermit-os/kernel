@@ -464,7 +464,9 @@ impl Task {
 				>::with_hasher(
 					RandomState::with_seeds(0, 0, 0, 0),
 				))))
-				.unwrap();
+				.unwrap_or_else(|_| {
+					panic!("unable to initialite OBJECT_MAP (already initialized)")
+				});
 			let objmap = OBJECT_MAP.get().unwrap().clone();
 			let mut guard = objmap.write();
 			if env::is_uhyve() {
