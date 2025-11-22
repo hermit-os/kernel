@@ -32,11 +32,11 @@ use crate::{arch, io};
 #[derive(Debug)]
 pub(crate) struct RomFileInner {
 	pub data: &'static [u8],
-	pub attr: FileAttr,
+	pub attr: RwLock<FileAttr>,
 }
 
 impl RomFileInner {
-	pub fn new(data: &'static [u8], attr: FileAttr) -> Self {
+	pub fn new(data: &'static [u8], attr: RwLock<FileAttr>) -> Self {
 		Self { data, attr }
 	}
 }
@@ -46,13 +46,13 @@ struct RomFileInterface {
 	/// Position within the file
 	pos: Arc<Mutex<usize>>,
 	/// File content
-	inner: Arc<RwLock<RomFileInner>>,
+	inner: Arc<RomFileInner>,
 }
 
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let len = self.inner.read().await.data.len();
+		let len = self.inner.data.len();
 		let pos = *self.pos.lock().await;
 
 		let ret = if pos < len {
@@ -68,11 +68,10 @@ impl ObjectInterface for RomFileInterface {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
-			let mut guard = self.inner.write().await;
-			guard.attr.st_atim = t;
+			self.inner.attr.write().await.st_atim = t;
 		}
 
-		let vec = self.inner.read().await.data;
+		let vec = self.inner.data;
 		let mut pos_guard = self.pos.lock().await;
 		let pos = *pos_guard;
 
@@ -93,7 +92,7 @@ impl ObjectInterface for RomFileInterface {
 	}
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		let guard = self.inner.read().await;
+		let data_len = self.inner.data.len();
 		let mut pos_guard = self.pos.lock().await;
 
 		let new_pos: isize = if whence == SeekWhence::Set {
@@ -103,14 +102,14 @@ impl ObjectInterface for RomFileInterface {
 
 			offset
 		} else if whence == SeekWhence::End {
-			guard.data.len() as isize + offset
+			data_len as isize + offset
 		} else if whence == SeekWhence::Cur {
 			(*pos_guard as isize) + offset
 		} else {
 			return Err(Errno::Inval);
 		};
 
-		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
+		if new_pos <= isize::try_from(data_len).unwrap() {
 			*pos_guard = new_pos.try_into().unwrap();
 			Ok(new_pos)
 		} else {
@@ -119,13 +118,12 @@ impl ObjectInterface for RomFileInterface {
 	}
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
-		let guard = self.inner.read().await;
-		Ok(guard.attr)
+		Ok(*self.inner.attr.read().await)
 	}
 }
 
 impl RomFileInterface {
-	pub fn new(inner: Arc<RwLock<RomFileInner>>) -> Self {
+	pub fn new(inner: Arc<RomFileInner>) -> Self {
 		Self {
 			pos: Arc::new(Mutex::new(0)),
 			inner,
@@ -133,7 +131,7 @@ impl RomFileInterface {
 	}
 
 	pub fn len(&self) -> usize {
-		block_on(async { Ok(self.inner.read().await.data.len()) }, None).unwrap()
+		self.inner.data.len()
 	}
 }
 
@@ -286,7 +284,7 @@ impl RamFileInterface {
 
 #[derive(Debug)]
 pub(crate) struct RomFile {
-	data: Arc<RwLock<RomFileInner>>,
+	data: Arc<RomFileInner>,
 }
 
 impl VfsNode for RomFile {
@@ -294,14 +292,14 @@ impl VfsNode for RomFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(RomFileInterface::new(
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(RomFileInterface::new(
 			self.data.clone(),
 		))))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
-		block_on(async { Ok(self.data.read().await.attr) }, None)
+		block_on(async { Ok(*self.data.attr.read().await) }, None)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
@@ -325,17 +323,17 @@ impl RomFile {
 	pub fn new(data: &'static [u8], mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
-		let attr = FileAttr {
+		let attr = RwLock::new(FileAttr {
 			st_size: data.len().try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
 			st_atim: t,
 			st_mtim: t,
 			st_ctim: t,
 			..Default::default()
-		};
+		});
 
 		Self {
-			data: Arc::new(RwLock::new(RomFileInner::new(data, attr))),
+			data: Arc::new(RomFileInner::new(data, attr)),
 		}
 	}
 }
