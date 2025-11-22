@@ -14,6 +14,7 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::cmp;
 use core::marker::PhantomData;
 use core::mem::{MaybeUninit, offset_of};
 
@@ -79,12 +80,7 @@ impl ObjectInterface for RomFileInterface {
 			return Ok(0);
 		}
 
-		let len = if vec.len() - pos < buf.len() {
-			vec.len() - pos
-		} else {
-			buf.len()
-		};
-
+		let len = cmp::min(vec.len() - pos, buf.len());
 		buf[..len].copy_from_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
@@ -95,25 +91,23 @@ impl ObjectInterface for RomFileInterface {
 		let data_len = self.inner.data.len();
 		let mut pos_guard = self.pos.lock().await;
 
-		let new_pos: isize = if whence == SeekWhence::Set {
-			if offset < 0 {
-				return Err(Errno::Inval);
-			}
+		// NOTE: slices in rust can be at most usize::MAX/2 in length.
+		let data_len_isize = data_len as isize;
 
-			offset
-		} else if whence == SeekWhence::End {
-			data_len as isize + offset
-		} else if whence == SeekWhence::Cur {
-			(*pos_guard as isize) + offset
-		} else {
-			return Err(Errno::Inval);
+		let new_pos: isize = match whence {
+			SeekWhence::Set => offset,
+			SeekWhence::End => (data_len_isize)
+				.checked_add(offset)
+				.ok_or(Errno::Overflow)?,
+			SeekWhence::Cur => (*pos_guard as isize) + offset,
+			_ => return Err(Errno::Inval),
 		};
 
-		if new_pos <= isize::try_from(data_len).unwrap() {
-			*pos_guard = new_pos.try_into().unwrap();
+		if 0 <= new_pos && new_pos <= data_len_isize {
+			*pos_guard = new_pos as usize;
 			Ok(new_pos)
 		} else {
-			Err(Errno::Badf)
+			Err(Errno::Inval)
 		}
 	}
 
