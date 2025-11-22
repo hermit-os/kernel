@@ -16,6 +16,7 @@ use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::env::fdt;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
@@ -340,17 +341,50 @@ pub(crate) fn init() {
 	const VERSION: &str = env!("CARGO_PKG_VERSION");
 	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
-	FILESYSTEM.set(Filesystem::new()).unwrap();
-	FILESYSTEM
-		.get()
-		.unwrap()
+	let mut root_filesystem = Filesystem::new();
+
+	// Handle optional Hermit Image specified in FDT.
+	let mut tar_image: Option<&'static [u8]> = None;
+	if let Some(fdt) = fdt() {
+		// per FDT specification, /chosen always exists.
+		let chosen = fdt.find_node("/chosen").unwrap();
+		if let Some(fdt::node::NodeProperty {
+			value: image_reg, ..
+		}) = chosen.property("image_reg")
+		{
+			let cell_sizes = fdt.root().cell_sizes();
+			let split_point = cell_sizes.address_cells * 4;
+			let end_point = split_point + cell_sizes.size_cells * 4;
+			if image_reg.len() == end_point {
+				let (addr, len) = image_reg.split_at(split_point);
+				if addr.len() == core::mem::size_of::<*const u8>()
+					&& len.len() == core::mem::size_of::<usize>()
+				{
+					// TODO: endian-ness?
+					let addr = usize::from_ne_bytes(addr.try_into().unwrap());
+					let len = usize::from_ne_bytes(len.try_into().unwrap());
+					// technically, the following is UB, because the kernel might be contained within...
+					tar_image =
+						Some(unsafe { core::slice::from_raw_parts(addr as *const u8, len) });
+				}
+			}
+		}
+	}
+	if let Some(tar_image) = tar_image {
+		root_filesystem.root =
+			MemDirectory::try_from_image(hermit_entry::tar_parser::Bytes::new(tar_image))
+				.expect("Unable to parse Hermit Image");
+	}
+
+	root_filesystem
 		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /tmp");
-	FILESYSTEM
-		.get()
-		.unwrap()
+
+	root_filesystem
 		.mkdir("/proc", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /proc");
+
+	FILESYSTEM.set(root_filesystem).unwrap();
 
 	if let Ok(mut file) = File::create("/proc/version") {
 		if write!(file, "HermitOS version {VERSION} # UTC {UTC_BUILT_TIME}").is_err() {

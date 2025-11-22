@@ -860,6 +860,7 @@ dependencies = [
  "smoltcp",
  "take-static",
  "talc",
+ "tar-no-std",
  "thiserror",
  "time",
  "tock-registers 0.10.1",
@@ -1913,6 +1914,17 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "tar-no-std"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "715f9a4586706a61c571cb5ee1c3ac2bbb2cf63e15bce772307b95befef5f5ee"
+dependencies = [
+ "bitflags 2.10.0",
+ "log",
+ "num-traits",
 ]
 
 [[package]]
