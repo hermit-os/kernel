@@ -24,7 +24,7 @@ jobs:
     # Prevent sudden announcement of a new advisory from failing ci:
     continue-on-error: ${{ matrix.checks == 'advisories' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check ${{ matrix.checks }}
@@ -33,7 +33,7 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
@@ -76,7 +76,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add clippy
       - run: cargo xtask clippy
@@ -85,7 +85,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add rustfmt
       - run: |
@@ -96,14 +96,14 @@ jobs:
     name: Typos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: crate-ci/typos@master
 
   doc:
     name: Doc
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
       - run: cargo xtask doc
 
@@ -111,7 +111,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
       - name: Build minimal kernel
         run: |
@@ -123,7 +123,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install QEMU
         run: |
           sudo apt-get update
@@ -170,11 +170,11 @@ jobs:
 
     steps:
       - name: Checkout hermit-rs
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: hermit-os/hermit-rs
       - name: Checkout hermit-kernel
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: kernel
       - name: Install QEMU

@@ -25,11 +25,11 @@ jobs:
 
     steps:
       - name: Checkout hermit-rs
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: hermit-os/hermit-rs
       - name: Checkout hermit-kernel
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: kernel
       - name: Install packages
