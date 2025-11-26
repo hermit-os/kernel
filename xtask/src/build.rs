@@ -86,22 +86,25 @@ impl Build {
 	}
 
 	fn cargo_encoded_rustflags(&self) -> Result<String> {
-		assert_eq!(
-			env::var("CARGO_ENCODED_RUSTFLAGS"),
-			Err(VarError::NotPresent)
-		);
-		let mut rustflags = Vec::new();
+		let mut rustflags = hermit_rustflags_from_env().unwrap_or_default();
 
 		if self.instrument_mcount {
-			rustflags.push("-Zinstrument-mcount");
-			rustflags.push("-Cpasses=ee-instrument<post-inline>");
+			rustflags.push("-Zinstrument-mcount".to_owned());
+			rustflags.push("-Cpasses=ee-instrument<post-inline>".to_owned());
 		}
 
 		if self.randomize_layout {
-			rustflags.push("-Zrandomize-layout")
+			rustflags.push("-Zrandomize-layout".to_owned())
 		}
 
-		rustflags.extend(self.cargo_build.artifact.arch.rustflags());
+		rustflags.extend(
+			self.cargo_build
+				.artifact
+				.arch
+				.rustflags()
+				.iter()
+				.map(|&s| s.to_owned()),
+		);
 
 		Ok(rustflags.join("\x1f"))
 	}
@@ -118,4 +121,39 @@ impl Build {
 
 		Ok(())
 	}
+}
+
+/// Gets Hermit-specific compiler flags from environment variables.
+///
+/// Adapted from Cargo's [`rustflags_from_env`](https://github.com/rust-lang/cargo/blob/2a7c4960677971f88458b0f8b461a866836dff59/src/cargo/core/compiler/build_context/target_info.rs#L815-L839).
+fn hermit_rustflags_from_env() -> Option<Vec<String>> {
+	match env::var("HERMIT_ENCODED_RUSTFLAGS") {
+		Ok(a) => {
+			if a.is_empty() {
+				return Some(Vec::new());
+			}
+			return Some(a.split('\x1f').map(str::to_string).collect());
+		}
+		Err(VarError::NotPresent) => {}
+		Err(VarError::NotUnicode(a)) => {
+			panic!("HERMIT_ENCODED_RUSTFLAGS did not contain valid unicode data: {a:?}");
+		}
+	}
+
+	match env::var("HERMIT_RUSTFLAGS") {
+		Ok(a) => {
+			let args = a
+				.split(' ')
+				.map(str::trim)
+				.filter(|s| !s.is_empty())
+				.map(str::to_string);
+			return Some(args.collect());
+		}
+		Err(VarError::NotPresent) => {}
+		Err(VarError::NotUnicode(a)) => {
+			panic!("HERMIT_RUSTFLAGS did not contain valid unicode data: {a:?}");
+		}
+	}
+
+	None
 }
