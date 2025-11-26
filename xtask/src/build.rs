@@ -86,15 +86,11 @@ impl Build {
 	}
 
 	fn cargo_encoded_rustflags(&self) -> Result<String> {
-		let outer_rustflags = match env::var("CARGO_ENCODED_RUSTFLAGS") {
-			Ok(s) => Some(s),
-			Err(VarError::NotPresent) => None,
-			Err(err) => return Err(err.into()),
-		};
-		let mut rustflags = outer_rustflags
-			.as_deref()
-			.map(|s| vec![s])
-			.unwrap_or_default();
+		assert_eq!(
+			env::var("CARGO_ENCODED_RUSTFLAGS"),
+			Err(VarError::NotPresent)
+		);
+		let mut rustflags = Vec::new();
 
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
