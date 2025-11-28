@@ -1,5 +1,6 @@
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::str;
@@ -242,7 +243,7 @@ impl FuseInterface for VirtioFsDriver {
 		let tag = self.dev_cfg.raw.as_ptr().tag().read();
 		let tag = str::from_utf8(&tag).unwrap();
 		let tag = tag.split('\0').next().unwrap();
-		tag.to_string()
+		tag.to_owned()
 	}
 }
 

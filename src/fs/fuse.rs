@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -979,9 +979,9 @@ impl FuseDirectoryHandle {
 impl ObjectInterface for FuseDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let path: CString = if let Some(name) = &self.name {
-			CString::new("/".to_string() + name).unwrap()
+			CString::new("/".to_owned() + name).unwrap()
 		} else {
-			CString::new("/".to_string()).unwrap()
+			CString::new("/".to_owned()).unwrap()
 		};
 
 		debug!("FUSE opendir: {path:#?}");
@@ -1215,7 +1215,7 @@ impl VfsNode for FuseDirectory {
 				)
 			};
 			entries.push(DirectoryEntry::new(unsafe {
-				core::str::from_utf8_unchecked(name).to_string()
+				core::str::from_utf8_unchecked(name).to_owned()
 			}));
 		}
 
@@ -1462,7 +1462,7 @@ pub(crate) fn init() {
 						dirent.namelen.try_into().unwrap(),
 					)
 				};
-				entries.push(unsafe { core::str::from_utf8_unchecked(name).to_string() });
+				entries.push(unsafe { core::str::from_utf8_unchecked(name).to_owned() });
 			}
 
 			let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);

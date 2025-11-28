@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -265,7 +265,7 @@ pub(crate) fn init() {
 		}
 	} else {
 		// No FDT -> Uhyve legacy mounting (to /root)
-		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_string();
+		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_owned();
 		info!("Mounting uhyve filesystem at {mount_point}");
 		fs::FILESYSTEM
 			.get()

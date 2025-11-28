@@ -28,7 +28,7 @@ impl Firecracker {
 		let config_path = Path::new("firecracker_vm_config.json");
 		sh.write_file(config_path, config)?;
 
-		let firecracker = env::var("FIRECRACKER").unwrap_or_else(|_| "firecracker".to_string());
+		let firecracker = env::var("FIRECRACKER").unwrap_or_else(|_| "firecracker".to_owned());
 		let program = if self.sudo {
 			"sudo"
 		} else {

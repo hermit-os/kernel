@@ -52,7 +52,7 @@ impl Rs {
 		}
 
 		if self.smp > 1 {
-			self.cargo_build.features.push("hermit/smp".to_string());
+			self.cargo_build.features.push("hermit/smp".to_owned());
 		}
 
 		let mut cargo = crate::cargo();

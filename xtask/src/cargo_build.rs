@@ -25,13 +25,13 @@ impl CargoBuild {
 		args.extend(
 			self.no_default_features_args()
 				.iter()
-				.map(|s| s.to_string()),
+				.map(|&s| s.to_owned()),
 		);
-		args.extend(self.features_args().map(|s| s.to_string()));
-		args.extend(self.release_args().iter().map(|s| s.to_string()));
+		args.extend(self.features_args().map(|s| s.to_owned()));
+		args.extend(self.release_args().iter().map(|&s| s.to_owned()));
 		if let Some(profile) = &self.artifact.profile {
-			args.push("--profile".to_string());
-			args.push(profile.to_string());
+			args.push("--profile".to_owned());
+			args.push(profile.to_owned());
 		}
 		args
 	}
@@ -39,7 +39,7 @@ impl CargoBuild {
 	pub fn target_dir_args(&self) -> Vec<String> {
 		if self.artifact.target_dir.is_some() {
 			vec![
-				"--target-dir".to_string(),
+				"--target-dir".to_owned(),
 				self.artifact
 					.target_dir()
 					.into_os_string()

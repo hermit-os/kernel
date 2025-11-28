@@ -3,8 +3,9 @@ pub(crate) mod fuse;
 mod mem;
 mod uhyve;
 
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::BitAnd;
@@ -360,7 +361,7 @@ pub(crate) fn init() {
 	}
 
 	let mut cwd = WORKING_DIRECTORY.lock();
-	*cwd = Some("/tmp".to_string());
+	*cwd = Some("/tmp".to_owned());
 	drop(cwd);
 
 	#[cfg(all(feature = "fuse", feature = "pci"))]
@@ -501,7 +502,7 @@ pub fn set_cwd(cwd: &str) -> io::Result<()> {
 
 	let mut working_dir = WORKING_DIRECTORY.lock();
 	if cwd.starts_with("/") {
-		*working_dir = Some(cwd.to_string());
+		*working_dir = Some(cwd.to_owned());
 	} else {
 		let Some(working_dir) = working_dir.as_mut() else {
 			return Err(Errno::Badf);
@@ -589,7 +590,7 @@ impl File {
 
 		Ok(File {
 			fd,
-			path: path.to_string(),
+			path: path.to_owned(),
 		})
 	}
 
@@ -603,7 +604,7 @@ impl File {
 
 		Ok(File {
 			fd,
-			path: path.to_string(),
+			path: path.to_owned(),
 		})
 	}
 
