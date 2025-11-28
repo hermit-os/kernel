@@ -79,12 +79,7 @@ impl ObjectInterface for RomFileInterface {
 			return Ok(0);
 		}
 
-		let len = if vec.len() - pos < buf.len() {
-			vec.len() - pos
-		} else {
-			buf.len()
-		};
-
+		let len = (vec.len() - pos).min(buf.len());
 		buf[..len].copy_from_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
