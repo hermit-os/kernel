@@ -118,7 +118,7 @@ impl ObjectInterface for RomFileInterface {
 			*pos_guard = new_pos.try_into().unwrap();
 			Ok(new_pos)
 		} else {
-			Err(Errno::Badf)
+			Err(Errno::Inval)
 		}
 	}
 
