@@ -37,6 +37,7 @@ impl Build {
 		cargo
 			.args(careful)
 			.arg("rustc")
+			.arg("--crate-type=staticlib")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.arch.cargo_args())
 			.args(self.cargo_build.cargo_build_args());
