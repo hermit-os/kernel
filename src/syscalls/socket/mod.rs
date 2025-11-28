@@ -584,26 +584,36 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	debug!("sys_socket: domain {domain}, type {type_:?}, protocol {protocol}");
 
 	let Ok(Ok(domain)) = u8::try_from(domain).map(Af::try_from) else {
-		return -i32::from(Errno::Inval);
+		return -i32::from(Errno::Afnosupport);
 	};
 
 	let Some((sock, sock_flags)) = Sock::from_bits(type_) else {
-		return -i32::from(Errno::Inval);
+		return -i32::from(Errno::Socktnosupport);
 	};
 
-	let Ok(Ok(proto)) = u8::try_from(protocol).map(Ipproto::try_from) else {
+	// We do not support the exec syscall, so SOCK_CLOEXEC does not need an implementation.
+	let supported_flags = SockFlags::SOCK_NONBLOCK | SockFlags::SOCK_CLOEXEC;
+	if !(sock_flags - supported_flags).is_empty() {
 		return -i32::from(Errno::Inval);
+	}
+
+	let Ok(Ok(proto)) = u8::try_from(protocol).map(Ipproto::try_from) else {
+		return -i32::from(Errno::Protonosupport);
 	};
 
 	match (sock, proto) {
 		(_, Ipproto::Ip | Ipproto::Ipv6)
 		| (Sock::Stream, Ipproto::Tcp)
 		| (Sock::Dgram, Ipproto::Udp) => {}
-		(_, _) => return -i32::from(Errno::Inval),
+		(_, _) => return -i32::from(Errno::Prototype),
 	}
 
 	#[cfg(feature = "vsock")]
-	if domain == Af::Vsock && sock == Sock::Stream {
+	if domain == Af::Vsock {
+		if sock != Sock::Stream {
+			return -i32::from(Errno::Socktnosupport);
+		}
+
 		let mut socket = vsock::Socket::new();
 
 		if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
@@ -621,42 +631,48 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	{
 		let mut guard = NIC.lock();
 
-		if let NetworkState::Initialized(nic) = &mut *guard {
-			#[cfg(feature = "udp")]
-			if sock == Sock::Dgram {
-				let handle = nic.create_udp_handle().unwrap();
-				drop(guard);
-				let mut socket = udp::Socket::new(handle, domain);
+		let NetworkState::Initialized(nic) = &mut *guard else {
+			return -i32::from(Errno::Netdown);
+		};
 
-				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
-					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
-				}
+		#[cfg(feature = "udp")]
+		if sock == Sock::Dgram {
+			let handle = nic.create_udp_handle().unwrap();
+			drop(guard);
+			let mut socket = udp::Socket::new(handle, domain);
 
-				let socket = Arc::new(async_lock::RwLock::new(socket));
-				let fd = insert_object(socket).expect("FD is already used");
-
-				return fd;
+			if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
+				block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 			}
 
-			#[cfg(feature = "tcp")]
-			if sock == Sock::Stream {
-				let handle = nic.create_tcp_handle().unwrap();
-				drop(guard);
-				let mut socket = tcp::Socket::new(handle, domain);
+			let socket = Arc::new(async_lock::RwLock::new(socket));
+			let fd = insert_object(socket).expect("FD is already used");
 
-				if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
-					block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
-				}
-
-				let socket = Arc::new(async_lock::RwLock::new(socket));
-				let fd = insert_object(socket).expect("FD is already used");
-
-				return fd;
-			}
+			return fd;
 		}
+
+		#[cfg(feature = "tcp")]
+		if sock == Sock::Stream {
+			let handle = nic.create_tcp_handle().unwrap();
+			drop(guard);
+			let mut socket = tcp::Socket::new(handle, domain);
+
+			if sock_flags.contains(SockFlags::SOCK_NONBLOCK) {
+				block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
+			}
+
+			let socket = Arc::new(async_lock::RwLock::new(socket));
+			let fd = insert_object(socket).expect("FD is already used");
+
+			return fd;
+		}
+
+		// The branch for any supported socket should have been entered and should have returned by now.
+		return -i32::from(Errno::Socktnosupport);
 	}
 
-	-i32::from(Errno::Inval)
+	// If we still haven't returned, it means that the domain is not supported.
+	-i32::from(Errno::Afnosupport)
 }
 
 #[hermit_macro::system(errno)]
