@@ -36,7 +36,7 @@ impl Build {
 		let mut cargo = crate::cargo();
 		cargo
 			.args(careful)
-			.arg("build")
+			.arg("rustc")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.arch.cargo_args())
 			.args(self.cargo_build.cargo_build_args());
