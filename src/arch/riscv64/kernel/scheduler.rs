@@ -15,7 +15,7 @@ use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 #[derive(Clone, Copy, Debug)]
 pub struct State {
 	/// return address register
-	ra: usize,
+	ra: unsafe extern "C" fn(extern "C" fn(usize), usize, u64),
 	/// stack pointer register
 	sp: usize,
 	/// global pointer register
@@ -331,7 +331,7 @@ impl TaskFrame for Task {
 			if let Some(tls) = &self.tls {
 				(*state).tp = tls.thread_ptr() as usize;
 			}
-			(*state).ra = task_start as *const () as usize;
+			(*state).ra = task_start;
 			(*state).a0 = func as usize;
 			(*state).a1 = arg;
 
