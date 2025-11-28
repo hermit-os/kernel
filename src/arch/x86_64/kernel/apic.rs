@@ -750,6 +750,7 @@ pub fn init_next_processor_variables() {
 pub fn boot_application_processors() {
 	use core::hint;
 
+	use hermit_entry::boot_info::RawBootInfo;
 	use x86_64::structures::paging::Translate;
 
 	use super::start;
@@ -800,10 +801,9 @@ pub fn boot_application_processors() {
 			"Set entry point for application processor to {:p}",
 			start::_start as *const ()
 		);
-		ptr::write_unaligned(
-			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr(),
-			start::_start as *const () as usize,
-		);
+		(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY)
+			.as_mut_ptr::<unsafe extern "C" fn(Option<&'static RawBootInfo>, cpu_id: u32) -> !>()
+			.write_unaligned(start::_start);
 	}
 
 	// Now wake up each application processor.
