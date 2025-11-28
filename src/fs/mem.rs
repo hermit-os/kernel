@@ -294,8 +294,8 @@ impl VfsNode for RomFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(RomFileInterface::new(
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(RomFileInterface::new(
 			self.data.clone(),
 		))))
 	}
@@ -350,8 +350,8 @@ impl VfsNode for RamFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(RamFileInterface::new(
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(RamFileInterface::new(
 			self.data.clone(),
 		))))
 	}
@@ -506,7 +506,7 @@ impl MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
@@ -527,7 +527,7 @@ impl MemDirectory {
 				} else if opt.contains(OpenOption::O_CREAT) {
 					let file = Box::new(RamFile::new(mode));
 					guard.insert(node_name, file.clone());
-					return Ok(Arc::new(async_lock::RwLock::new(RamFileInterface::new(
+					return Ok(Arc::new(RwLock::new(RamFileInterface::new(
 						file.data.clone(),
 					))));
 				} else {
@@ -549,10 +549,10 @@ impl VfsNode for MemDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(
-			MemDirectoryInterface::new(self.inner.clone()),
-		)))
+	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		Ok(Arc::new(RwLock::new(MemDirectoryInterface::new(
+			self.inner.clone(),
+		))))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
@@ -743,7 +743,7 @@ impl VfsNode for MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
 		block_on(self.async_traverse_open(components, opt, mode), None)
 	}
 
