@@ -96,6 +96,9 @@ impl ObjectInterface for RomFileInterface {
 		let guard = self.inner.read().await;
 		let mut pos_guard = self.pos.lock().await;
 
+		// NOTE: Allocations can never be larger than `isize::MAX` bytes.
+		let data_len = guard.data.len() as isize;
+
 		let new_pos = match whence {
 			SeekWhence::Set => {
 				if offset < 0 {
@@ -105,11 +108,11 @@ impl ObjectInterface for RomFileInterface {
 				offset
 			}
 			SeekWhence::Cur => (*pos_guard as isize) + offset,
-			SeekWhence::End => guard.data.len() as isize + offset,
+			SeekWhence::End => data_len + offset,
 			_ => return Err(Errno::Inval),
 		};
 
-		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
+		if new_pos <= data_len {
 			*pos_guard = new_pos.try_into().unwrap();
 			Ok(new_pos)
 		} else {
@@ -228,6 +231,9 @@ impl ObjectInterface for RamFileInterface {
 		let mut guard = self.inner.write().await;
 		let mut pos_guard = self.pos.lock().await;
 
+		// NOTE: Allocations can never be larger than `isize::MAX` bytes.
+		let data_len = guard.data.len() as isize;
+
 		let new_pos = match whence {
 			SeekWhence::Set => {
 				if offset < 0 {
@@ -237,11 +243,11 @@ impl ObjectInterface for RamFileInterface {
 				offset
 			}
 			SeekWhence::Cur => (*pos_guard as isize) + offset,
-			SeekWhence::End => guard.data.len() as isize + offset,
+			SeekWhence::End => data_len + offset,
 			_ => return Err(Errno::Inval),
 		};
 
-		if new_pos > isize::try_from(guard.data.len()).unwrap() {
+		if new_pos > data_len {
 			guard.data.resize(new_pos.try_into().unwrap(), 0);
 			guard.attr.st_size = guard.data.len().try_into().unwrap();
 		}
