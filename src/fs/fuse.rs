@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -16,7 +16,6 @@ use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use fuse_abi::linux::*;
 
-use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
