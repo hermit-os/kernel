@@ -464,7 +464,9 @@ impl Task {
 				>::with_hasher(
 					RandomState::with_seeds(0, 0, 0, 0),
 				))))
-				.unwrap();
+				// This function is called once per core and thus only once on core 0.
+				// Thus, this is the only place where we set OBJECT_MAP.
+				.unwrap_or_else(|_| unreachable!());
 			let objmap = OBJECT_MAP.get().unwrap().clone();
 			let mut guard = objmap.write();
 			if env::is_uhyve() {

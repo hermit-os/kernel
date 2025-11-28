@@ -896,7 +896,6 @@ impl Drop for FuseFileHandleInner {
 	}
 }
 
-#[derive(Debug)]
 struct FuseFileHandle(pub Arc<Mutex<FuseFileHandleInner>>);
 
 impl FuseFileHandle {
@@ -961,7 +960,6 @@ impl Clone for FuseFileHandle {
 	}
 }
 
-#[derive(Debug)]
 pub struct FuseDirectoryHandle {
 	name: Option<String>,
 	read_position: Mutex<usize>,

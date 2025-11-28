@@ -127,7 +127,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct DirectoryReader(Vec<DirectoryEntry>);
 
 impl DirectoryReader {

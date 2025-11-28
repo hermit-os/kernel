@@ -98,7 +98,6 @@ impl Drop for UhyveFileHandleInner {
 	}
 }
 
-#[derive(Debug)]
 struct UhyveFileHandle(pub Arc<Mutex<UhyveFileHandleInner>>);
 
 impl UhyveFileHandle {
