@@ -96,18 +96,17 @@ impl ObjectInterface for RomFileInterface {
 		let guard = self.inner.read().await;
 		let mut pos_guard = self.pos.lock().await;
 
-		let new_pos: isize = if whence == SeekWhence::Set {
-			if offset < 0 {
-				return Err(Errno::Inval);
-			}
+		let new_pos = match whence {
+			SeekWhence::Set => {
+				if offset < 0 {
+					return Err(Errno::Inval);
+				}
 
-			offset
-		} else if whence == SeekWhence::End {
-			guard.data.len() as isize + offset
-		} else if whence == SeekWhence::Cur {
-			(*pos_guard as isize) + offset
-		} else {
-			return Err(Errno::Inval);
+				offset
+			}
+			SeekWhence::Cur => (*pos_guard as isize) + offset,
+			SeekWhence::End => guard.data.len() as isize + offset,
+			_ => return Err(Errno::Inval),
 		};
 
 		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
@@ -229,18 +228,17 @@ impl ObjectInterface for RamFileInterface {
 		let mut guard = self.inner.write().await;
 		let mut pos_guard = self.pos.lock().await;
 
-		let new_pos: isize = if whence == SeekWhence::Set {
-			if offset < 0 {
-				return Err(Errno::Inval);
-			}
+		let new_pos = match whence {
+			SeekWhence::Set => {
+				if offset < 0 {
+					return Err(Errno::Inval);
+				}
 
-			offset
-		} else if whence == SeekWhence::End {
-			guard.data.len() as isize + offset
-		} else if whence == SeekWhence::Cur {
-			(*pos_guard as isize) + offset
-		} else {
-			return Err(Errno::Inval);
+				offset
+			}
+			SeekWhence::Cur => (*pos_guard as isize) + offset,
+			SeekWhence::End => guard.data.len() as isize + offset,
+			_ => return Err(Errno::Inval),
 		};
 
 		if new_pos > isize::try_from(guard.data.len()).unwrap() {
