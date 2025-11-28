@@ -107,8 +107,10 @@ impl ObjectInterface for RomFileInterface {
 
 				offset
 			}
-			SeekWhence::Cur => (*pos_guard as isize) + offset,
-			SeekWhence::End => data_len + offset,
+			SeekWhence::Cur => (*pos_guard as isize)
+				.checked_add(offset)
+				.ok_or(Errno::Overflow)?,
+			SeekWhence::End => data_len.checked_add(offset).ok_or(Errno::Overflow)?,
 			_ => return Err(Errno::Inval),
 		};
 
@@ -242,8 +244,10 @@ impl ObjectInterface for RamFileInterface {
 
 				offset
 			}
-			SeekWhence::Cur => (*pos_guard as isize) + offset,
-			SeekWhence::End => data_len + offset,
+			SeekWhence::Cur => (*pos_guard as isize)
+				.checked_add(offset)
+				.ok_or(Errno::Overflow)?,
+			SeekWhence::End => data_len.checked_add(offset).ok_or(Errno::Overflow)?,
 			_ => return Err(Errno::Inval),
 		};
 
