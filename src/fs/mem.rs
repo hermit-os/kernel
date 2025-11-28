@@ -41,10 +41,10 @@ impl RomFileInner {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct RomFileInterface {
 	/// Position within the file
-	pos: Arc<Mutex<usize>>,
+	pos: Mutex<usize>,
 	/// File content
 	inner: Arc<RwLock<RomFileInner>>,
 }
@@ -127,7 +127,7 @@ impl ObjectInterface for RomFileInterface {
 impl RomFileInterface {
 	pub fn new(inner: Arc<RwLock<RomFileInner>>) -> Self {
 		Self {
-			pos: Arc::new(Mutex::new(0)),
+			pos: Mutex::new(0),
 			inner,
 		}
 	}
@@ -152,10 +152,10 @@ impl RamFileInner {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RamFileInterface {
 	/// Position within the file
-	pos: Arc<Mutex<usize>>,
+	pos: Mutex<usize>,
 	/// File content
 	inner: Arc<RwLock<RamFileInner>>,
 }
@@ -274,7 +274,7 @@ impl ObjectInterface for RamFileInterface {
 impl RamFileInterface {
 	pub fn new(inner: Arc<RwLock<RamFileInner>>) -> Self {
 		Self {
-			pos: Arc::new(Mutex::new(0)),
+			pos: Mutex::new(0),
 			inner,
 		}
 	}
