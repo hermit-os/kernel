@@ -15,7 +15,6 @@ use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 use crate::syscalls::socket::Af;
 
-#[derive(Debug)]
 pub struct Socket {
 	handle: Handle,
 	nonblocking: bool,

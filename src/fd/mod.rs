@@ -196,7 +196,7 @@ impl Default for AccessPermission {
 }
 
 #[async_trait]
-pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug {
+pub(crate) trait ObjectInterface: Sync + Send {
 	/// check if an IO event is possible
 	async fn poll(&self, _event: PollEvent) -> io::Result<PollEvent> {
 		Ok(PollEvent::empty())

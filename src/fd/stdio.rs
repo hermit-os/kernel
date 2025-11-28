@@ -14,7 +14,6 @@ use crate::fd::{
 use crate::io;
 use crate::syscalls::interfaces::uhyve_hypercall;
 
-#[derive(Debug)]
 pub struct GenericStdin;
 
 #[async_trait]
@@ -63,7 +62,6 @@ impl GenericStdin {
 	}
 }
 
-#[derive(Debug)]
 pub struct GenericStdout;
 
 #[async_trait]
@@ -96,7 +94,6 @@ impl GenericStdout {
 	}
 }
 
-#[derive(Debug)]
 pub struct GenericStderr;
 
 #[async_trait]
@@ -129,7 +126,6 @@ impl GenericStderr {
 	}
 }
 
-#[derive(Debug)]
 pub struct UhyveStdin;
 
 #[async_trait]
@@ -153,7 +149,6 @@ impl UhyveStdin {
 	}
 }
 
-#[derive(Debug)]
 pub struct UhyveStdout;
 
 #[async_trait]
@@ -193,7 +188,6 @@ impl UhyveStdout {
 	}
 }
 
-#[derive(Debug)]
 pub struct UhyveStderr;
 
 #[async_trait]

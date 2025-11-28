@@ -41,7 +41,6 @@ impl VsockEndpoint {
 	}
 }
 
-#[derive(Debug)]
 pub struct NullSocket;
 
 impl NullSocket {
@@ -53,7 +52,6 @@ impl NullSocket {
 #[async_trait]
 impl ObjectInterface for NullSocket {}
 
-#[derive(Debug)]
 pub struct Socket {
 	port: u32,
 	cid: u32,

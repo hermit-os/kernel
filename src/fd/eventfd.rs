@@ -28,7 +28,6 @@ impl EventState {
 	}
 }
 
-#[derive(Debug)]
 pub(crate) struct EventFd {
 	state: Mutex<EventState>,
 	flags: EventFlags,

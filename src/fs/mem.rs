@@ -41,7 +41,6 @@ impl RomFileInner {
 	}
 }
 
-#[derive(Debug)]
 struct RomFileInterface {
 	/// Position within the file
 	pos: Mutex<usize>,
@@ -152,7 +151,6 @@ impl RamFileInner {
 	}
 }
 
-#[derive(Debug)]
 pub struct RamFileInterface {
 	/// Position within the file
 	pos: Mutex<usize>,
@@ -395,7 +393,6 @@ impl RamFile {
 	}
 }
 
-#[derive(Debug)]
 pub struct MemDirectoryInterface {
 	/// Directory entries
 	inner:
