@@ -98,7 +98,7 @@ impl Drop for UhyveFileHandleInner {
 	}
 }
 
-struct UhyveFileHandle(pub Arc<Mutex<UhyveFileHandleInner>>);
+struct UhyveFileHandle(Arc<Mutex<UhyveFileHandleInner>>);
 
 impl UhyveFileHandle {
 	pub fn new(fd: i32) -> Self {

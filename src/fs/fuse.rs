@@ -895,7 +895,7 @@ impl Drop for FuseFileHandleInner {
 	}
 }
 
-struct FuseFileHandle(pub Arc<Mutex<FuseFileHandleInner>>);
+struct FuseFileHandle(Arc<Mutex<FuseFileHandleInner>>);
 
 impl FuseFileHandle {
 	pub fn new() -> Self {
