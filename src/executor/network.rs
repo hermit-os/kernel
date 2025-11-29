@@ -26,7 +26,7 @@ use crate::arch;
 use crate::drivers::net::{NetworkDevice, NetworkDriver};
 #[cfg(feature = "dns")]
 use crate::errno::Errno;
-use crate::executor::spawn;
+use crate::executor::{WakerRegistration, spawn};
 #[cfg(feature = "dns")]
 use crate::io;
 use crate::scheduler::PerCoreSchedulerExt;
@@ -189,14 +189,36 @@ async fn dhcpv4_run() {
 	.await;
 }
 
+pub(crate) static NETWORK_WAKER: InterruptTicketMutex<WakerRegistration> =
+	InterruptTicketMutex::new(WakerRegistration::new());
+
 async fn network_run() {
 	future::poll_fn(|cx| {
 		if let Some(mut guard) = NIC.try_lock() {
 			match &mut *guard {
 				NetworkState::Initialized(nic) => {
-					nic.poll_common(now());
-					// FIXME: only wake when progress can be made
-					cx.waker().wake_by_ref();
+					let now = now();
+
+					// TODO: smoltcp is probably not exposing enough information here
+					// Well, how could it! Impossible :)
+					match nic.poll_common(now) {
+						PollResult::SocketStateChanged => {
+							// Progress was made
+							cx.waker().wake_by_ref();
+						}
+						PollResult::None => {
+							// Very likely no progress can be made, so set up a timer interrupt to wake the waker
+							NETWORK_WAKER.lock().register(cx.waker());
+							nic.set_polling_mode(false);
+							let wakeup_time = nic.poll_delay(now).map(|d| {
+								crate::arch::processor::get_timer_ticks() + d.total_micros()
+							});
+							crate::core_scheduler().add_network_timer(wakeup_time);
+							info!("Configured an interrupt for {wakeup_time:?}");
+							//cx.waker().wake_by_ref();
+						}
+					}
+
 					Poll::Pending
 				}
 				_ => Poll::Ready(()),
