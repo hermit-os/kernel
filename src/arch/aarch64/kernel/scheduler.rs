@@ -258,7 +258,7 @@ impl Drop for TaskStacks {
  */
 
 #[cfg(not(target_os = "none"))]
-extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
+extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	unimplemented!()
 }
 
