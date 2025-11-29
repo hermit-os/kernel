@@ -111,7 +111,7 @@ impl Qemu {
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
 			.args(&["-smp", &effective_smp.to_string()])
-			.args(&["-m".to_string(), format!("{memory}M")])
+			.args(&["-m".to_owned(), format!("{memory}M")])
 			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.device_args(memory))
 			.args(self.cmdline_args(image_name));
@@ -199,22 +199,22 @@ impl Qemu {
 			let vars = prebuilt.get_file(Arch::X64, FileType::Vars);
 
 			vec![
-				"-drive".to_string(),
+				"-drive".to_owned(),
 				format!("if=pflash,format=raw,readonly=on,file={}", code.display()),
-				"-drive".to_string(),
+				"-drive".to_owned(),
 				format!("if=pflash,format=raw,readonly=on,file={}", vars.display()),
-				"-drive".to_string(),
-				"format=raw,file=fat:rw:target/esp".to_string(),
+				"-drive".to_owned(),
+				"format=raw,file=fat:rw:target/esp".to_owned(),
 			]
 		} else {
-			let mut image_args = vec!["-kernel".to_string(), loader];
+			let mut image_args = vec!["-kernel".to_owned(), loader];
 			match arch {
 				Arch::X86_64 | Arch::Riscv64 => {
-					image_args.push("-initrd".to_string());
-					image_args.push(image.to_str().unwrap().to_string());
+					image_args.push("-initrd".to_owned());
+					image_args.push(image.to_str().unwrap().to_owned());
 				}
 				Arch::Aarch64 | Arch::Aarch64Be => {
-					image_args.push("-device".to_string());
+					image_args.push("-device".to_owned());
 					image_args.push(format!(
 						"guest-loader,addr=0x48000000,initrd={}",
 						image.display()
@@ -230,18 +230,18 @@ impl Qemu {
 	fn machine_args(&self, arch: Arch) -> Vec<String> {
 		if self.microvm {
 			vec![
-				"-M".to_string(),
+				"-M".to_owned(),
 				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off"
-					.to_string(),
-				"-global".to_string(),
-				"virtio-mmio.force-legacy=off".to_string(),
-				"-nodefaults".to_string(),
-				"-no-user-config".to_string(),
+					.to_owned(),
+				"-global".to_owned(),
+				"virtio-mmio.force-legacy=off".to_owned(),
+				"-nodefaults".to_owned(),
+				"-no-user-config".to_owned(),
 			]
 		} else if self.pci_e {
 			vec!["-machine".to_owned(), "q35".to_owned()]
 		} else if arch == Arch::Aarch64 || arch == Arch::Aarch64Be {
-			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
+			vec!["-machine".to_owned(), "virt,gic-version=3".to_owned()]
 		} else if arch == Arch::Riscv64 {
 			// CadenceGem requires sifive_u
 			let machine = if self.devices.contains(&Device::CadenceGem) {
@@ -250,10 +250,10 @@ impl Qemu {
 				"virt"
 			};
 			vec![
-				"-machine".to_string(),
-				machine.to_string(),
-				"-bios".to_string(),
-				"opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_string(),
+				"-machine".to_owned(),
+				machine.to_owned(),
+				"-bios".to_owned(),
+				"opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_owned(),
 			]
 		} else {
 			vec![]
@@ -266,27 +266,27 @@ impl Qemu {
 				let mut cpu_args = if self.accel {
 					if cfg!(target_os = "linux") {
 						vec![
-							"-enable-kvm".to_string(),
-							"-cpu".to_string(),
-							"host".to_string(),
+							"-enable-kvm".to_owned(),
+							"-cpu".to_owned(),
+							"host".to_owned(),
 						]
 					} else {
 						todo!()
 					}
 				} else {
-					vec!["-cpu".to_string(), "Skylake-Client".to_string()]
+					vec!["-cpu".to_owned(), "Skylake-Client".to_owned()]
 				};
-				cpu_args.push("-device".to_string());
-				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_string());
+				cpu_args.push("-device".to_owned());
+				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_owned());
 				cpu_args
 			}
 			Arch::Aarch64 | Arch::Aarch64Be => {
 				let mut cpu_args = if self.accel {
 					todo!()
 				} else {
-					vec!["-cpu".to_string(), "cortex-a72".to_string()]
+					vec!["-cpu".to_owned(), "cortex-a72".to_owned()]
 				};
-				cpu_args.push("-semihosting".to_string());
+				cpu_args.push("-semihosting".to_owned());
 				cpu_args
 			}
 			Arch::Riscv64 => {
@@ -297,7 +297,7 @@ impl Qemu {
 					// possibly because it requires sifive_u as the machine.
 					vec![]
 				} else {
-					vec!["-cpu".to_string(), "rv64".to_string()]
+					vec!["-cpu".to_owned(), "rv64".to_owned()]
 				}
 			}
 		}
@@ -346,15 +346,15 @@ impl Qemu {
 			.flat_map(|device| match device {
 				Device::CadenceGem => {
 					vec![
-						"-nic".to_string(),
+						"-nic".to_owned(),
 						format!("{netdev_options},model=cadence_gem"),
 					]
 				}
 				device @ (Device::Rtl8139 | Device::VirtioNetMmio | Device::VirtioNetPci) => {
 					let mut netdev_args = vec![
-						"-netdev".to_string(),
-						netdev_options.to_string(),
-						"-device".to_string(),
+						"-netdev".to_owned(),
+						netdev_options.to_owned(),
+						"-device".to_owned(),
 					];
 
 					let mut device_arg = match device {
@@ -363,7 +363,7 @@ impl Qemu {
 						Device::Rtl8139 => "rtl8139,netdev=net0",
 						_ => unreachable!(),
 					}
-					.to_string();
+					.to_owned();
 
 					if !self.no_default_virtio_features
 						&& (device == Device::VirtioNetPci || device == Device::VirtioNetMmio)
@@ -382,18 +382,18 @@ impl Qemu {
 						""
 					};
 					vec![
-						"-chardev".to_string(),
-						"socket,id=char0,path=./vhostqemu".to_string(),
-						"-device".to_string(),
+						"-chardev".to_owned(),
+						"socket,id=char0,path=./vhostqemu".to_owned(),
+						"-device".to_owned(),
 						format!(
 							"vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"
 						),
-						"-object".to_string(),
+						"-object".to_owned(),
 						format!(
 							"memory-backend-file,id=mem,size={memory}M,mem-path=/dev/shm,share=on"
 						),
-						"-numa".to_string(),
-						"node,memdev=mem".to_string(),
+						"-numa".to_owned(),
+						"node,memdev=mem".to_owned(),
 					]
 				}
 				device @ (Device::VirtioConsoleMmio | Device::VirtioConsolePci) => {

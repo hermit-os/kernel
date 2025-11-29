@@ -1,6 +1,7 @@
 //! Central parsing of the command-line parameters.
 
-use alloc::string::{String, ToString};
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::{ptr, str};
 
@@ -99,7 +100,7 @@ impl Default for Cli {
 		while let Some(word) = words.next() {
 			if word.as_str().starts_with("virtio_mmio.device=") {
 				let v: Vec<&str> = word.as_str().split('=').collect();
-				mmio.push(v[1].to_string());
+				mmio.push(v[1].to_owned());
 				continue;
 			}
 
@@ -135,7 +136,7 @@ impl Default for Cli {
 								error!("could not parse bootarg: {word}");
 								continue;
 							};
-							env_vars.insert(key.to_string(), value.to_string());
+							env_vars.insert(key.to_owned(), value.to_owned());
 						}
 						_ => error!("could not parse bootarg: {word}"),
 					}
