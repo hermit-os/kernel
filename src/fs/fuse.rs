@@ -981,7 +981,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		let path: CString = if let Some(name) = &self.name {
 			CString::new("/".to_owned() + name).unwrap()
 		} else {
-			CString::new("/".to_owned()).unwrap()
+			CString::new("/").unwrap()
 		};
 
 		debug!("FUSE opendir: {path:#?}");
@@ -1482,7 +1482,7 @@ pub(crate) fn init() {
 			);
 
 			for i in entries {
-				let i_cstr = CString::new(i.clone()).unwrap();
+				let i_cstr = CString::new(i.as_str()).unwrap();
 				let (cmd, rsp_payload_len) = ops::Lookup::create(i_cstr);
 				let rsp = get_filesystem_driver()
 					.unwrap()
