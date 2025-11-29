@@ -19,7 +19,6 @@ exclude = [
 ]
 
 [lib]
-crate-type = ["staticlib", "lib"] # "lib" required for integration tests
 name = "hermit"
 
 [[test]]

@@ -216,7 +216,7 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
         if: matrix.arch == 'x86_64'
-      - run: cargo +stable install cargo-careful
+      - run: cargo +stable install --git https://github.com/mkroening/cargo-careful.git --branch rustc cargo-careful
         if: matrix.profile == 'dev'
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features firecracker --sudo
         if: matrix.arch == 'x86_64'
