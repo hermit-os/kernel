@@ -90,25 +90,23 @@ impl ObjectInterface for RomFileInterface {
 		let guard = self.inner.read().await;
 		let mut pos_guard = self.pos.lock().await;
 
-		let new_pos: isize = if whence == SeekWhence::Set {
-			if offset < 0 {
-				return Err(Errno::Inval);
-			}
+		// NOTE: Allocations can never be larger than `isize::MAX` bytes.
+		let data_len = guard.data.len() as isize;
 
-			offset
-		} else if whence == SeekWhence::End {
-			guard.data.len() as isize + offset
-		} else if whence == SeekWhence::Cur {
-			(*pos_guard as isize) + offset
-		} else {
-			return Err(Errno::Inval);
+		let new_pos = match whence {
+			SeekWhence::Set => offset,
+			SeekWhence::Cur => (*pos_guard as isize)
+				.checked_add(offset)
+				.ok_or(Errno::Overflow)?,
+			SeekWhence::End => data_len.checked_add(offset).ok_or(Errno::Overflow)?,
+			_ => return Err(Errno::Inval),
 		};
 
-		if new_pos <= isize::try_from(guard.data.len()).unwrap() {
-			*pos_guard = new_pos.try_into().unwrap();
+		if (0..=data_len).contains(&new_pos) {
+			*pos_guard = new_pos as usize;
 			Ok(new_pos)
 		} else {
-			Err(Errno::Badf)
+			Err(Errno::Inval)
 		}
 	}
 
@@ -222,25 +220,27 @@ impl ObjectInterface for RamFileInterface {
 		let mut guard = self.inner.write().await;
 		let mut pos_guard = self.pos.lock().await;
 
-		let new_pos: isize = if whence == SeekWhence::Set {
-			if offset < 0 {
-				return Err(Errno::Inval);
-			}
+		// NOTE: Allocations can never be larger than `isize::MAX` bytes.
+		let data_len = guard.data.len() as isize;
 
-			offset
-		} else if whence == SeekWhence::End {
-			guard.data.len() as isize + offset
-		} else if whence == SeekWhence::Cur {
-			(*pos_guard as isize) + offset
-		} else {
-			return Err(Errno::Inval);
+		let new_pos = match whence {
+			SeekWhence::Set => offset,
+			SeekWhence::Cur => (*pos_guard as isize)
+				.checked_add(offset)
+				.ok_or(Errno::Overflow)?,
+			SeekWhence::End => data_len.checked_add(offset).ok_or(Errno::Overflow)?,
+			_ => return Err(Errno::Inval),
 		};
 
-		if new_pos > isize::try_from(guard.data.len()).unwrap() {
+		if new_pos < 0 {
+			return Err(Errno::Inval);
+		}
+
+		if new_pos > data_len {
 			guard.data.resize(new_pos.try_into().unwrap(), 0);
 			guard.attr.st_size = guard.data.len().try_into().unwrap();
 		}
-		*pos_guard = new_pos.try_into().unwrap();
+		*pos_guard = new_pos as usize;
 
 		Ok(new_pos)
 	}
