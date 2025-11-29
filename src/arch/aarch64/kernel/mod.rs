@@ -137,7 +137,7 @@ pub fn boot_next_processor() {
 		if cpu_online == 0 {
 			use aarch64_cpu::registers::{Readable, TTBR0_EL1};
 
-			let virt_start = VirtAddr::from(smp_start as *const () as usize);
+			let virt_start = VirtAddr::from_ptr(smp_start as *const ());
 			let phys_start = virtual_to_physical(virt_start).unwrap();
 			assert!(virt_start.as_u64() == phys_start.as_u64());
 
