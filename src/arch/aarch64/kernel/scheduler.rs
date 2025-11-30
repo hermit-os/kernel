@@ -14,7 +14,6 @@ use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
-#[cfg(target_os = "none")]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
@@ -257,18 +256,11 @@ impl Drop for TaskStacks {
  * of the TLS implementations.
  */
 
-#[cfg(not(target_os = "none"))]
-extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
-	unimplemented!()
-}
-
-#[cfg(target_os = "none")]
 extern "C" fn thread_exit(status: i32) -> ! {
 	debug!("Exit thread with error code {status}!");
 	core_scheduler().exit(status)
 }
 
-#[cfg(target_os = "none")]
 #[unsafe(naked)]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	// `f` is in the `x0` register
