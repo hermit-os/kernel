@@ -250,12 +250,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-#[cfg(not(target_os = "none"))]
-extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
-	unimplemented!()
-}
-
-#[cfg(target_os = "none")]
 #[unsafe(naked)]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	// `f` is in the `rdi` register
