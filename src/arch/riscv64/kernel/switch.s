@@ -1,7 +1,5 @@
 .section .text
 .global switch_to_task
-.global task_start
-.extern task_entry
 // .extern set_current_kernel_stack
 
 
@@ -161,8 +159,3 @@ switch_to_task:
 	addi sp, sp, (31*8)
 
 	ret
-
-.align 16
-task_start:
-	mv sp, a2
-	j task_entry

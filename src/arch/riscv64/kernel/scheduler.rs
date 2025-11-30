@@ -266,7 +266,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-#[unsafe(no_mangle)]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	use crate::scheduler::PerCoreSchedulerExt;
 
@@ -347,8 +346,17 @@ impl TaskFrame for Task {
 	}
 }
 
-unsafe extern "C" {
-	fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64);
+#[unsafe(naked)]
+unsafe extern "C" fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64) {
+	// `func` is in the `a0` register
+	// `arg` is in the `a1` register
+	// `user_stack` is in the `a2` register
+
+	core::arch::naked_asm!(
+		"mv sp, a2",
+		"j {task_entry}",
+		task_entry = sym task_entry,
+	)
 }
 
 pub fn timer_handler() {
