@@ -394,19 +394,16 @@ impl RamFile {
 	}
 }
 
+type MemDirectoryMap = BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>;
+
 pub struct MemDirectoryInterface {
 	/// Directory entries
-	inner:
-		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
+	inner: Arc<RwLock<MemDirectoryMap>>,
 	read_idx: Mutex<usize>,
 }
 
 impl MemDirectoryInterface {
-	pub fn new(
-		inner: Arc<
-			RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
-		>,
-	) -> Self {
+	pub fn new(inner: Arc<RwLock<MemDirectoryMap>>) -> Self {
 		Self {
 			inner,
 			read_idx: Mutex::new(0),
@@ -477,8 +474,7 @@ impl ObjectInterface for MemDirectoryInterface {
 
 #[derive(Debug)]
 pub(crate) struct MemDirectory {
-	inner:
-		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
+	inner: Arc<RwLock<MemDirectoryMap>>,
 	attr: FileAttr,
 }
 
