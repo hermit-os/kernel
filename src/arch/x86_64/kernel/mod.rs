@@ -252,7 +252,8 @@ where
 		flags,
 	);
 
-	let code_slice = unsafe { slice::from_raw_parts_mut(LOADER_START as *mut u8, code_size) };
+	let loader_start_ptr = ptr::with_exposed_provenance_mut(LOADER_START);
+	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
 
 	if tls_size > 0 {
 		// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
@@ -287,7 +288,7 @@ where
 		unsafe {
 			thread_ptr.cast::<*mut ()>().write(thread_ptr);
 		}
-		crate::arch::x86_64::kernel::processor::writefs(thread_ptr as usize);
+		crate::arch::x86_64::kernel::processor::writefs(thread_ptr.expose_provenance());
 
 		func(code_slice, Some(block))
 	} else {
@@ -314,7 +315,8 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 
 	let stack_pointer =
 		stack_pointer - 128 /* red zone */ - arg.len() * core::mem::size_of::<*mut u8>();
-	let argv = unsafe { core::slice::from_raw_parts_mut(stack_pointer as *mut *mut u8, arg.len()) };
+	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
+	let argv = unsafe { core::slice::from_raw_parts_mut(stack_ptr, arg.len()) };
 	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
 	// align stack pointer to fulfill the requirements of the x86_64 ABI
 	let stack_pointer = (stack_pointer - len).align_down(16) - core::mem::size_of::<usize>();
@@ -323,7 +325,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 	for (i, s) in arg.iter().enumerate() {
 		if let Ok(s) = CString::new(*s) {
 			let bytes = s.as_bytes_with_nul();
-			argv[i] = (stack_pointer + pos) as *mut u8;
+			argv[i] = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
 			pos += bytes.len();
 
 			unsafe {
