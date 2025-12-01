@@ -733,15 +733,16 @@ impl VfsNode for MemDirectory {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
-					let name = String::from(component);
-
 					if components.is_empty() {
 						let file = RomFile::new(data, mode);
-						self.inner.write().await.insert(name, Box::new(file));
+						self.inner
+							.write()
+							.await
+							.insert(component.to_owned(), Box::new(file));
 						return Ok(());
 					}
 
-					if let Some(directory) = self.inner.read().await.get(&name) {
+					if let Some(directory) = self.inner.read().await.get(component) {
 						return directory.traverse_create_file(components, data, mode);
 					}
 				}
