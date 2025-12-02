@@ -24,9 +24,9 @@ dependencies = [
 
 [[package]]
 name = "aarch64-cpu"
-version = "11.1.0"
+version = "11.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2902b1d87157187000598c0dfc24f438b01792bc10d257c671bd65e24f4b5878"
+checksum = "44171e22925ec72b63d86747bc3655c7849a5b8d865c980222128839f45ac034"
 dependencies = [
  "tock-registers 0.10.1",
 ]
@@ -825,7 +825,7 @@ dependencies = [
 name = "hermit-kernel"
 version = "0.12.0"
 dependencies = [
- "aarch64-cpu 11.1.0",
+ "aarch64-cpu 11.2.0",
  "ahash",
  "align-address",
  "anstyle",
