@@ -19,6 +19,7 @@ use core::mem::MaybeUninit;
 use core::{mem, ptr};
 
 use enum_dispatch::enum_dispatch;
+use mem_barrier::{BarrierKind, BarrierType};
 use smallvec::SmallVec;
 use virtio::{le32, le64, pvirtq, virtq};
 
@@ -26,6 +27,17 @@ use self::error::VirtqError;
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
+
+#[inline]
+pub fn virtio_mem_barrier(ty: BarrierType, order_platform: bool) {
+	let class = if order_platform {
+		BarrierKind::Smp
+	} else {
+		BarrierKind::Dma
+	};
+
+	mem_barrier::mem_barrier(class, ty);
+}
 
 // Public interface of Virtq
 

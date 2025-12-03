@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 
+use mem_barrier::BarrierType;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -25,7 +26,6 @@ use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::index_alloc::IndexAlloc;
 use super::{AvailBufferToken, BufferType, TransferToken, UsedBufferToken, Virtq, VirtqPrivate};
-use crate::arch::memory_barrier;
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
@@ -36,6 +36,7 @@ struct DescrRing {
 	descr_table_cell: Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 	avail_ring_cell: Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
 	used_ring_cell: Box<UnsafeCell<virtq::Used>, DeviceAlloc>,
+	order_platform: bool,
 }
 
 impl DescrRing {
@@ -88,7 +89,7 @@ impl DescrRing {
 		self.avail_ring_mut().ring_mut(true)[idx as usize % len] =
 			le16::from_ne(index.try_into().unwrap());
 
-		memory_barrier();
+		super::virtio_mem_barrier(BarrierType::Write, self.order_platform);
 		let next_idx = idx.wrapping_add(1);
 		self.avail_ring_mut().idx = next_idx.into();
 
@@ -96,6 +97,7 @@ impl DescrRing {
 	}
 
 	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
+		super::virtio_mem_barrier(BarrierType::Read, self.order_platform);
 		if self.read_idx == self.used_ring().idx.to_ne() {
 			return Err(VirtqError::NoNewUsed);
 		}
@@ -123,7 +125,6 @@ impl DescrRing {
 			}
 		}
 
-		memory_barrier();
 		self.read_idx = self.read_idx.wrapping_add(1);
 		Ok(UsedBufferToken::from_avail_buffer_token(
 			tkn.buff_tkn,
@@ -291,6 +292,8 @@ impl SplitVq {
 		vq_handler.set_drv_ctrl_addr(DeviceAlloc.phys_addr_from(avail_ring_cell.as_mut()));
 		vq_handler.set_dev_ctrl_addr(DeviceAlloc.phys_addr_from(used_ring_cell.as_mut()));
 
+		let order_platform = features.contains(virtio::F::ORDER_PLATFORM);
+
 		let descr_ring = DescrRing {
 			read_idx: 0,
 			token_ring: core::iter::repeat_with(|| None)
@@ -302,6 +305,7 @@ impl SplitVq {
 			descr_table_cell,
 			avail_ring_cell,
 			used_ring_cell,
+			order_platform,
 		};
 
 		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
