@@ -25,17 +25,17 @@ use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
-#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net",))]
+#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
-	all(feature = "virtio-net", not(feature = "rtl8139"),),
+	all(feature = "virtio-net", not(feature = "rtl8139")),
 	feature = "fuse",
 	feature = "vsock",
 	feature = "console",
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
-	all(feature = "virtio-net", not(feature = "rtl8139"),),
+	all(feature = "virtio-net", not(feature = "rtl8139")),
 	feature = "fuse",
 	feature = "vsock",
 	feature = "console",
@@ -45,7 +45,7 @@ use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
-#[cfg(any(feature = "rtl8139", feature = "virtio-net",))]
+#[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 
@@ -449,7 +449,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		}
 	}
 
-	#[cfg(any(feature = "rtl8139", feature = "virtio-net",))]
+	#[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
 		handlers
 			.entry(device.get_interrupt_number())
@@ -503,13 +503,13 @@ pub(crate) fn init() {
 			);
 
 			#[cfg(any(
-				all(feature = "virtio-net", not(feature = "rtl8139"),),
+				all(feature = "virtio-net", not(feature = "rtl8139")),
 				feature = "fuse",
 				feature = "vsock",
 				feature = "console",
 			))]
 			match pci_virtio::init_device(adapter) {
-				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net",))]
+				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
 
 				#[cfg(feature = "console")]
