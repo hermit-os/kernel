@@ -472,7 +472,7 @@ pub fn truncate(name: &str, size: usize) -> io::Result<()> {
 	})
 }
 
-pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result<FileDescriptor> {
+pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result<RawFd> {
 	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
 	// flags is bitmask of O_DEC_* defined above.
 	// (taken from rust stdlib/sys hermit target )
@@ -522,12 +522,12 @@ pub fn umask(new_mask: AccessPermission) -> AccessPermission {
 }
 
 /// Open a directory to read the directory entries
-pub(crate) fn opendir(name: &str) -> io::Result<FileDescriptor> {
+pub(crate) fn opendir(name: &str) -> io::Result<RawFd> {
 	let obj = FILESYSTEM.get().ok_or(Errno::Inval)?.opendir(name)?;
 	insert_object(obj)
 }
 
-use crate::fd::{self, FileDescriptor};
+use crate::fd::{self, RawFd};
 
 pub fn file_attributes(path: &str) -> io::Result<FileAttr> {
 	FILESYSTEM.get().ok_or(Errno::Inval)?.lstat(path)
@@ -571,7 +571,7 @@ pub fn metadata(path: &str) -> io::Result<Metadata> {
 
 #[derive(Debug)]
 pub struct File {
-	fd: FileDescriptor,
+	fd: RawFd,
 	path: String,
 }
 
