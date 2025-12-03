@@ -483,6 +483,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "780eb241654bf097afb00fc5f054a09b687dad862e485fdcf8399bb056565370"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -829,6 +840,7 @@ dependencies = [
  "built",
  "cfg-if",
  "crossbeam-utils",
+ "delegate",
  "embedded-io",
  "endian-num",
  "enum_dispatch",

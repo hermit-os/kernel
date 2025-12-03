@@ -4,6 +4,7 @@ use core::mem::MaybeUninit;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
+use delegate::delegate;
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
@@ -413,86 +414,34 @@ fd_from! {
 	UhyveFileHandle(UhyveFileHandle),
 }
 
-macro_rules! forward {
-	() => {};
-	(
-		$(#[$meta:meta])*
-		$vis:vis async fn $name:ident(&$self:ident $(, $arg_name:ident: $arg_ty:ty )* $(,)?) $(-> $ret_ty:ty)?;
-		$($rest:tt)*
-	) => {
-		$(#[$meta])*
-		$vis async fn $name(&$self $(, $arg_name: $arg_ty)*) $(-> $ret_ty)? {
-			match $self {
-				Self::GenericStdin(fd) => fd.$name($($arg_name),*).await,
-				Self::GenericStdout(fd) => fd.$name($($arg_name),*).await,
-				Self::GenericStderr(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveStdin(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveStdout(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveStderr(fd) => fd.$name($($arg_name),*).await,
-				Self::EventFd(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "tcp")]
-				Self::TcpSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "udp")]
-				Self::UdpSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "vsock")]
-				Self::VsockNullSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "vsock")]
-				Self::VsockSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "fuse")]
-				Self::FuseFileHandle(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "fuse")]
-				Self::FuseDirectoryHandle(fd) => fd.$name($($arg_name),*).await,
-				Self::RomFileInterface(fd) => fd.$name($($arg_name),*).await,
-				Self::RamFileInterface(fd) => fd.$name($($arg_name),*).await,
-				Self::MemDirectoryInterface(fd) => fd.$name($($arg_name),*).await,
-				Self::DirectoryReader(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveFileHandle(fd) => fd.$name($($arg_name),*).await,
-			}
-		}
-
-		forward!($($rest)*);
-	};
-	(
-		$(#[$meta:meta])*
-		$vis:vis async fn $name:ident(&mut $self:ident $(, $arg_name:ident: $arg_ty:ty )* $(,)?) $(-> $ret_ty:ty)?;
-		$($rest:tt)*
-	) => {
-		$(#[$meta])*
-		$vis async fn $name(&mut $self $(, $arg_name: $arg_ty)*) $(-> $ret_ty)? {
-			match $self {
-				Self::GenericStdin(fd) => fd.$name($($arg_name),*).await,
-				Self::GenericStdout(fd) => fd.$name($($arg_name),*).await,
-				Self::GenericStderr(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveStdin(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveStdout(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveStderr(fd) => fd.$name($($arg_name),*).await,
-				Self::EventFd(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "tcp")]
-				Self::TcpSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "udp")]
-				Self::UdpSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "vsock")]
-				Self::VsockNullSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "vsock")]
-				Self::VsockSocket(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "fuse")]
-				Self::FuseFileHandle(fd) => fd.$name($($arg_name),*).await,
-				#[cfg(feature = "fuse")]
-				Self::FuseDirectoryHandle(fd) => fd.$name($($arg_name),*).await,
-				Self::RomFileInterface(fd) => fd.$name($($arg_name),*).await,
-				Self::RamFileInterface(fd) => fd.$name($($arg_name),*).await,
-				Self::MemDirectoryInterface(fd) => fd.$name($($arg_name),*).await,
-				Self::DirectoryReader(fd) => fd.$name($($arg_name),*).await,
-				Self::UhyveFileHandle(fd) => fd.$name($($arg_name),*).await,
-			}
-		}
-
-		forward!($($rest)*);
-	};
-}
-
 impl ObjectInterface for Fd {
-	forward! {
+	delegate! {
+		to match self {
+			Self::GenericStdin(fd) => fd,
+			Self::GenericStdout(fd) => fd,
+			Self::GenericStderr(fd) => fd,
+			Self::UhyveStdin(fd) => fd,
+			Self::UhyveStdout(fd) => fd,
+			Self::UhyveStderr(fd) => fd,
+			Self::EventFd(fd) => fd,
+			#[cfg(feature = "tcp")]
+			Self::TcpSocket(fd) => fd,
+			#[cfg(feature = "udp")]
+			Self::UdpSocket(fd) => fd,
+			#[cfg(feature = "vsock")]
+			Self::VsockNullSocket(fd) => fd,
+			#[cfg(feature = "vsock")]
+			Self::VsockSocket(fd) => fd,
+			#[cfg(feature = "fuse")]
+			Self::FuseFileHandle(fd) => fd,
+			#[cfg(feature = "fuse")]
+			Self::FuseDirectoryHandle(fd) => fd,
+			Self::RomFileInterface(fd) => fd,
+			Self::RamFileInterface(fd) => fd,
+			Self::MemDirectoryInterface(fd) => fd,
+			Self::DirectoryReader(fd) => fd,
+			Self::UhyveFileHandle(fd) => fd,
+		} {
 		async fn poll(&self, event: PollEvent) -> io::Result<PollEvent>;
 		async fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
 		async fn write(&self, buf: &[u8]) -> io::Result<usize>;
@@ -527,6 +476,7 @@ impl ObjectInterface for Fd {
 		async fn truncate(&self, _size: usize) -> io::Result<()>;
 		async fn chmod(&self, _access_permission: AccessPermission) -> io::Result<()>;
 		async fn isatty(&self) -> io::Result<bool>;
+		}
 	}
 }
 
