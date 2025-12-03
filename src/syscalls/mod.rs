@@ -25,8 +25,8 @@ use crate::env;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
-	self, AccessOption, AccessPermission, EventFlags, FileDescriptor, OpenOption, PollFd,
-	dup_object, dup_object2, get_object, isatty, remove_object,
+	self, AccessOption, AccessPermission, EventFlags, OpenOption, PollFd, RawFd, dup_object,
+	dup_object2, get_object, isatty, remove_object,
 };
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
@@ -306,7 +306,7 @@ pub unsafe extern "C" fn sys_lstat(name: *const c_char, stat: *mut FileAttr) -> 
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
+pub unsafe extern "C" fn sys_fstat(fd: RawFd, stat: *mut FileAttr) -> i32 {
 	if stat.is_null() {
 		return -i32::from(Errno::Inval);
 	}
@@ -322,7 +322,7 @@ pub unsafe extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
+pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> RawFd {
 	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
 		crate::fs::opendir(name).unwrap_or_else(|e| -i32::from(e))
 	} else {
@@ -332,7 +332,7 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> FileDescriptor {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) -> FileDescriptor {
+pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) -> RawFd {
 	let Some(flags) = OpenOption::from_bits(flags) else {
 		return -i32::from(Errno::Inval);
 	};
@@ -388,7 +388,7 @@ pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_c
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_fchdir(_fd: FileDescriptor) -> i32 {
+pub extern "C" fn sys_fchdir(_fd: RawFd) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
@@ -413,7 +413,7 @@ pub unsafe extern "C" fn sys_umask(umask: u32) -> u32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_faccessat(
-	dirfd: FileDescriptor,
+	dirfd: RawFd,
 	name: *const c_char,
 	_mode: i32,
 	flags: i32,
@@ -473,7 +473,7 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_fchmod(fd: FileDescriptor, mode: u32) -> i32 {
+pub unsafe extern "C" fn sys_fchmod(fd: RawFd, mode: u32) -> i32 {
 	let Some(access_permission) = AccessPermission::from_bits(mode) else {
 		return -i32::from(Errno::Inval);
 	};
@@ -485,14 +485,14 @@ pub unsafe extern "C" fn sys_fchmod(fd: FileDescriptor, mode: u32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
+pub extern "C" fn sys_close(fd: RawFd) -> i32 {
 	let obj = remove_object(fd);
 	obj.map_or_else(|e| -i32::from(e), |_| 0)
 }
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
+pub unsafe extern "C" fn sys_read(fd: RawFd, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
 	crate::fd::read(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
@@ -549,7 +549,7 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 	read_bytes
 }
 
-unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+unsafe fn write(fd: RawFd, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	crate::fd::write(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
@@ -559,13 +559,13 @@ unsafe fn write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+pub unsafe extern "C" fn sys_write(fd: RawFd, buf: *const u8, len: usize) -> isize {
 	unsafe { write(fd, buf, len) }
 }
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_ftruncate(fd: FileDescriptor, size: usize) -> i32 {
+pub unsafe extern "C" fn sys_ftruncate(fd: RawFd, size: usize) -> i32 {
 	fd::truncate(fd, size).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
@@ -596,7 +596,7 @@ pub unsafe extern "C" fn sys_truncate(path: *const c_char, size: usize) -> i32 {
 /// complete area before proceeding to the next.
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcnt: usize) -> isize {
+pub unsafe extern "C" fn sys_writev(fd: RawFd, iov: *const iovec, iovcnt: usize) -> isize {
 	if !(0..=IOV_MAX).contains(&iovcnt) {
 		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
@@ -628,11 +628,7 @@ pub unsafe extern "C" fn sys_writev(fd: FileDescriptor, iov: *const iovec, iovcn
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_ioctl(
-	fd: FileDescriptor,
-	cmd: i32,
-	argp: *mut core::ffi::c_void,
-) -> i32 {
+pub unsafe extern "C" fn sys_ioctl(fd: RawFd, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
 	const FIONBIO: i32 = 0x8008_667eu32 as i32;
 
 	if cmd == FIONBIO {
@@ -703,7 +699,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
+pub extern "C" fn sys_lseek(fd: RawFd, offset: isize, whence: i32) -> isize {
 	let whence = u8::try_from(whence).unwrap();
 	let whence = SeekWhence::try_from(whence).unwrap();
 	crate::fd::lseek(fd, offset, whence).unwrap_or_else(|e| isize::try_from(-i32::from(e)).unwrap())
@@ -785,11 +781,7 @@ mod dirent_display {
 /// Negative numbers encode errors.
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_getdents64(
-	fd: FileDescriptor,
-	dirp: *mut Dirent64,
-	count: usize,
-) -> i64 {
+pub unsafe extern "C" fn sys_getdents64(fd: RawFd, dirp: *mut Dirent64, count: usize) -> i64 {
 	debug!("getdents for fd {fd:?} - count: {count}");
 	if dirp.is_null() || count == 0 {
 		return (-i32::from(Errno::Inval)).into();
