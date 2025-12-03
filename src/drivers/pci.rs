@@ -27,19 +27,10 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
-#[cfg(any(
-	all(feature = "virtio-net", not(feature = "rtl8139")),
-	feature = "fuse",
-	feature = "vsock",
-	feature = "console",
-))]
+#[cfg(feature = "virtio")]
 use crate::drivers::virtio::transport::pci as pci_virtio;
-#[cfg(any(
-	all(feature = "virtio-net", not(feature = "rtl8139")),
-	feature = "fuse",
-	feature = "vsock",
-	feature = "console",
-))]
+#[cfg(feature = "virtio")]
+#[allow(unused_imports)]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
@@ -502,12 +493,7 @@ pub(crate) fn init() {
 				adapter.device_id()
 			);
 
-			#[cfg(any(
-				all(feature = "virtio-net", not(feature = "rtl8139")),
-				feature = "fuse",
-				feature = "vsock",
-				feature = "console",
-			))]
+			#[cfg(feature = "virtio")]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
