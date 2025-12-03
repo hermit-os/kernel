@@ -63,7 +63,7 @@ tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
 trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 vga = []
-virtio = ["dep:virtio"]
+virtio = ["dep:virtio", "dep:mem-barrier"]
 virtio-net = ["net", "virtio"]
 vsock = ["virtio", "pci"]
 warn-prebuilt = []
@@ -123,6 +123,7 @@ hermit-entry = { version = "0.10.6", features = ["kernel"] }
 hermit-sync = "0.1"
 lock_api = "0.4"
 log = { version = "0.4", default-features = false }
+mem-barrier = { version = "0.1.0", features = ["nightly"], optional = true }
 num_enum = { version = "0.7", default-features = false }
 pci-ids = { version = "0.2", optional = true }
 pci_types = { version = "0.10" }
