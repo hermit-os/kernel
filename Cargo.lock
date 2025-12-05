@@ -813,12 +813,13 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "hermit-entry"
 version = "0.10.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "920f9bfe21a23408aade84f1cd2f550c0490be1ec90ae5151b919614808e2e85"
+source = "git+https://github.com/fogti/hermit-entry.git?branch=image-reader#6edc5c9e95116fed31c8fbcf8c9b263c2c50e694"
 dependencies = [
  "align-address",
  "const_parse",
+ "num-traits",
  "time",
+ "yoke",
 ]
 
 [[package]]
