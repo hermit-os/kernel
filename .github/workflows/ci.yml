@@ -212,7 +212,7 @@ jobs:
 
           $HOME/.local/bin/firecracker --version
         if: matrix.arch == 'x86_64'
-      - run: cargo +stable install --locked uhyve --git https://github.com/hermit-os/uhyve.git --rev 155482e3c8c1c6dd3c066379aed70f61ae27352c
+      - run: cargo +stable install --locked uhyve
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
         if: matrix.arch == 'x86_64'
