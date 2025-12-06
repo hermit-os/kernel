@@ -1,3 +1,5 @@
+use core::ptr;
+
 use hermit_sync::SpinMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
@@ -47,7 +49,7 @@ unsafe impl Send for VgaScreen {}
 impl VgaScreen {
 	const fn new() -> Self {
 		Self {
-			buffer: VGA_BUFFER_ADDRESS.as_u64() as *mut _,
+			buffer: ptr::with_exposed_provenance_mut(VGA_BUFFER_ADDRESS.as_usize()),
 			current_col: 0,
 			current_row: 0,
 			is_initialized: false,
