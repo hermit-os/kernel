@@ -22,6 +22,8 @@ use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
+#[cfg(feature = "net")]
+use crate::executor::network::NETWORK_WAKER;
 use crate::kernel::serial::handle_uart_interrupt;
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId};
@@ -93,6 +95,11 @@ pub(crate) fn install_handlers() {
 
 	fn timer_handler() {
 		debug!("Handle timer interrupt");
+
+		// FIXME this is ugly as hell
+		debug!("Waking network waker");
+		#[cfg(feature = "net")]
+		NETWORK_WAKER.lock().wake();
 
 		// disable timer
 		CNTP_CVAL_EL0.set(0);
