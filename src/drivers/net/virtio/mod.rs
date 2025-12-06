@@ -18,6 +18,7 @@ use alloc::vec::Vec;
 use core::mem::{ManuallyDrop, MaybeUninit, transmute};
 use core::str::FromStr;
 
+use bit_field::BitField;
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
@@ -237,6 +238,8 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
+	#[cfg(feature = "pci")]
+	pub(super) msix_table: Option<VolatileRef<'static, [[u32; 4]]>>,
 
 	pub(super) inner: T,
 
@@ -789,11 +792,31 @@ impl VirtioNetDriver<Uninit> {
 		}
 		debug!("{:?}", self.checksums);
 
+		#[cfg(feature = "pci")]
+		if let Some(msix_table) = self.msix_table.as_mut() {
+			unsafe {
+				msix_table
+					.as_mut_ptr()
+					.map(|table| table.get_unchecked_mut(0))
+					.update(|[mut addr_low, addr_high, mut data, mut control]| {
+						[
+							*addr_low.set_bits(20..32, 0xfee),
+							addr_high,
+							*data.set_bits(0..8, u32::from(constants::MSIX_VECTOR) + 32),
+							*control.set_bit(0, false),
+						]
+					});
+			}
+			self.com_cfg.select_vq(0).unwrap().set_msix_table_index(0);
+		};
+
 		Ok(VirtioNetDriver {
 			dev_cfg: self.dev_cfg,
 			com_cfg: self.com_cfg,
 			isr_stat: self.isr_stat,
 			notif_cfg: self.notif_cfg,
+			#[cfg(feature = "pci")]
+			msix_table: self.msix_table,
 			inner,
 			num_vqs: self.num_vqs,
 			irq: self.irq,
@@ -975,6 +998,7 @@ pub mod constants {
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
 	pub(super) const BUFF_PER_PACKET: u16 = 2;
+	pub(crate) const MSIX_VECTOR: u8 = 112;
 }
 
 /// Error module of virtios network driver. Containing the (VirtioNetError)[VirtioNetError]

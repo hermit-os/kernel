@@ -4,7 +4,7 @@ use volatile::VolatileRef;
 
 use super::{Init, Uninit};
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver};
+use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver, constants};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
@@ -36,6 +36,7 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			isr_cfg,
 			dev_cfg_list,
+			msix_table,
 			..
 		} = caps_coll;
 
@@ -49,9 +50,10 @@ impl VirtioNetDriver<Uninit> {
 			com_cfg,
 			isr_stat: isr_cfg,
 			notif_cfg,
+			msix_table,
 			inner: Uninit,
 			num_vqs: 0,
-			irq: device.get_irq().unwrap(),
+			irq: constants::MSIX_VECTOR,
 			checksums: ChecksumCapabilities::default(),
 		})
 	}
