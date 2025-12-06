@@ -104,7 +104,6 @@ align-address = "0.3"
 anstyle = { version = "1", default-features = false }
 async-executor = { git = "https://github.com/hermit-os/async-executor.git", branch = "no_std", default-features = false, features = ["static"] }
 async-lock = { version = "3.4.1", default-features = false }
-async-trait = "0.1.89"
 bit_field = "0.10"
 bitflags = "2"
 build-time = "0.1.3"
@@ -136,6 +135,7 @@ time = { version = "0.3", default-features = false }
 volatile = "0.6"
 zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.3"
+delegate = "0.13.5"
 
 [dependencies.smoltcp]
 version = "0.12"

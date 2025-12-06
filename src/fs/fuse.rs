@@ -12,7 +12,6 @@ use core::{future, mem};
 
 use align_address::Align;
 use async_lock::Mutex;
-use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use fuse_abi::linux::*;
 
@@ -23,7 +22,7 @@ use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::fd::PollEvent;
+use crate::fd::{Fd, PollEvent};
 use crate::fs::fuse::ops::SetAttrValidFields;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
@@ -895,7 +894,7 @@ impl Drop for FuseFileHandleInner {
 	}
 }
 
-struct FuseFileHandle(Arc<Mutex<FuseFileHandleInner>>);
+pub struct FuseFileHandle(Arc<Mutex<FuseFileHandleInner>>);
 
 impl FuseFileHandle {
 	pub fn new() -> Self {
@@ -903,7 +902,6 @@ impl FuseFileHandle {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for FuseFileHandle {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		self.0.lock().await.poll(event).await
@@ -973,7 +971,6 @@ impl FuseDirectoryHandle {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for FuseDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let path: CString = if let Some(name) = &self.name {
@@ -1140,10 +1137,10 @@ impl VfsNode for FuseDirectory {
 		Ok(self.attr)
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-			self.prefix.clone(),
-		))))
+	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
+		Ok(Arc::new(async_lock::RwLock::new(
+			FuseDirectoryHandle::new(self.prefix.clone()).into(),
+		)))
 	}
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
@@ -1272,7 +1269,7 @@ impl VfsNode for FuseDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		let path = self.traversal_path(components);
 
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
@@ -1294,9 +1291,9 @@ impl VfsNode for FuseDirectory {
 			if attr.st_mode.contains(AccessPermission::S_IFDIR) {
 				let mut path = path.into_string().unwrap();
 				path.remove(0);
-				Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-					Some(path),
-				))))
+				Ok(Arc::new(async_lock::RwLock::new(
+					FuseDirectoryHandle::new(Some(path)).into(),
+				)))
 			} else {
 				Err(Errno::Notdir)
 			}
@@ -1341,7 +1338,7 @@ impl VfsNode for FuseDirectory {
 
 			drop(file_guard);
 
-			Ok(Arc::new(async_lock::RwLock::new(file)))
+			Ok(Arc::new(async_lock::RwLock::new(file.into())))
 		}
 	}
 
