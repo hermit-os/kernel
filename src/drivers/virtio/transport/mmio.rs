@@ -26,6 +26,7 @@ use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
+use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
 
 pub struct VqCfgHandler<'a> {
@@ -433,12 +434,9 @@ pub(crate) fn init_device(
 			}
 		},
 		id => {
-			use virtio::Id;
-			if matches!(id, Id::Net | Id::Console | Id::Vsock | Id::Fs) {
+			if let Some(feature) = id.as_feature() {
 				error!("Virtio driver {id:?} is currently not active.");
-				error!(
-					"To use the device, recompile the kernel with the corresponding feature flags."
-				);
+				error!("To use the device, recompile the kernel with the {feature} feature.");
 			} else {
 				error!("Virtio device {id:?} is not supported!");
 			}

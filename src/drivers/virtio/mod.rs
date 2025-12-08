@@ -5,6 +5,23 @@
 pub mod transport;
 pub mod virtqueue;
 
+trait VirtioIdExt {
+	fn as_feature(&self) -> Option<&str>;
+}
+
+impl VirtioIdExt for virtio::Id {
+	fn as_feature(&self) -> Option<&str> {
+		let feature = match self {
+			Self::Net => "virtio-net",
+			Self::Console => "virtio-console",
+			Self::Fs => "virtio-fuse",
+			Self::Vsock => "virtio-vsock",
+			_ => return None,
+		};
+
+		Some(feature)
+	}
+}
 pub mod error {
 	use thiserror::Error;
 
