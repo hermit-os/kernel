@@ -117,10 +117,6 @@ impl RomFileInterface {
 			inner,
 		}
 	}
-
-	pub fn len(&self) -> usize {
-		self.inner.data.len()
-	}
 }
 
 #[derive(Debug)]
@@ -264,10 +260,6 @@ impl RamFileInterface {
 			pos: Mutex::new(0),
 			inner,
 		}
-	}
-
-	pub fn len(&self) -> usize {
-		block_on(async { Ok(self.inner.read().await.data.len()) }, None).unwrap()
 	}
 }
 
