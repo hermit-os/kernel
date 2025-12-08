@@ -17,11 +17,11 @@ pub mod pci;
 		feature = "virtio-net",
 	),
 	feature = "virtio-fs",
-	feature = "vsock",
+	feature = "virtio-vsock",
 	feature = "virtio-console",
 ))]
 pub mod virtio;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub mod vsock;
 
 use alloc::collections::VecDeque;
@@ -42,7 +42,7 @@ pub mod error {
 		feature = "rtl8139",
 		feature = "virtio-net",
 		feature = "virtio-fs",
-		feature = "vsock",
+		feature = "virtio-vsock",
 		feature = "virtio-console",
 	))]
 	use thiserror::Error;
@@ -58,7 +58,7 @@ pub mod error {
 			feature = "virtio-net",
 		),
 		feature = "virtio-fs",
-		feature = "vsock",
+		feature = "virtio-vsock",
 		feature = "virtio-console",
 	))]
 	use crate::drivers::virtio::error::VirtioError;
@@ -68,7 +68,7 @@ pub mod error {
 		feature = "rtl8139",
 		feature = "virtio-net",
 		feature = "virtio-fs",
-		feature = "vsock",
+		feature = "virtio-vsock",
 		feature = "virtio-console",
 	))]
 	#[derive(Error, Debug)]
@@ -80,7 +80,7 @@ pub mod error {
 				feature = "virtio-net",
 			),
 			feature = "virtio-fs",
-			feature = "vsock",
+			feature = "virtio-vsock",
 			feature = "virtio-console",
 		))]
 		#[error("Virtio driver failed: {0:?}")]

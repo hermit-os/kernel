@@ -6,7 +6,11 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-#[cfg(any(feature = "virtio-fs", feature = "vsock", feature = "virtio-console"))]
+#[cfg(any(
+	feature = "virtio-fs",
+	feature = "virtio-vsock",
+	feature = "virtio-console"
+))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -30,18 +34,18 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(any(
 	all(feature = "virtio-net", not(feature = "rtl8139")),
 	feature = "virtio-fs",
-	feature = "vsock",
+	feature = "virtio-vsock",
 	feature = "virtio-console",
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
 	all(feature = "virtio-net", not(feature = "rtl8139")),
 	feature = "virtio-fs",
-	feature = "vsock",
+	feature = "virtio-vsock",
 	feature = "virtio-console",
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 #[allow(unused_imports)]
 use crate::drivers::{Driver, InterruptHandlerQueue};
@@ -343,7 +347,7 @@ pub(crate) enum PciDriver {
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 }
 
@@ -357,7 +361,7 @@ impl PciDriver {
 		}
 	}
 
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
 		#[allow(unreachable_patterns)]
 		match self {
@@ -378,7 +382,7 @@ impl PciDriver {
 	fn get_interrupt_handler(&self) -> (InterruptLine, fn()) {
 		#[allow(unreachable_patterns)]
 		match self {
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			Self::VirtioVsock(drv) => {
 				fn vsock_handler() {
 					if let Some(driver) = get_vsock_driver() {
@@ -474,7 +478,7 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.find_map(|drv| drv.get_console_driver())
 }
 
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
 	PCI_DRIVERS
 		.get()?
@@ -505,7 +509,7 @@ pub(crate) fn init() {
 			#[cfg(any(
 				all(feature = "virtio-net", not(feature = "rtl8139")),
 				feature = "virtio-fs",
-				feature = "vsock",
+				feature = "virtio-vsock",
 				feature = "virtio-console",
 			))]
 			match pci_virtio::init_device(adapter) {
@@ -520,7 +524,7 @@ pub(crate) fn init() {
 						.lock()
 						.replace_device(IoDevice::Virtio(VirtioUART::new()));
 				}
-				#[cfg(feature = "vsock")]
+				#[cfg(feature = "virtio-vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
 				}

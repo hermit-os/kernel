@@ -420,7 +420,7 @@ fn getaddrinfo_node(
 			crate::errno::ToErrno::set_errno(-i32::from(crate::errno::Errno::Nosys));
 			return Err(Eai::System);
 		}
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		Af::Vsock => {
 			error!("getaddrinfo_node({ai_family:?}) not implemented");
 			crate::errno::ToErrno::set_errno(-i32::from(crate::errno::Errno::Nosys));
