@@ -38,6 +38,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::pci::error::PciError;
+use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
 #[cfg(feature = "vsock")]
@@ -878,7 +879,12 @@ pub(crate) fn init_device(
 			}
 		}
 		id => {
-			error!("Virtio device {id:?} is not supported!");
+			if let Some(feature) = id.as_feature() {
+				error!("Virtio driver {id:?} is currently not active.");
+				error!("To use the device, recompile the kernel with the {feature} feature.");
+			} else {
+				error!("Virtio device {id:?} is not supported!");
+			}
 
 			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
