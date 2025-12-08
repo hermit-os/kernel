@@ -28,7 +28,7 @@ use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
@@ -860,7 +860,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "fuse")]
+		#[cfg(feature = "virtio-fs")]
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
@@ -904,6 +904,6 @@ pub(crate) enum VirtioDriver {
 	Console(Box<VirtioConsoleDriver>),
 	#[cfg(feature = "vsock")]
 	Vsock(Box<VirtioVsockDriver>),
-	#[cfg(feature = "fuse")]
+	#[cfg(feature = "virtio-fs")]
 	FileSystem(VirtioFsDriver),
 }

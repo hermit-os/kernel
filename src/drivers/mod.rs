@@ -2,7 +2,7 @@
 
 #[cfg(feature = "virtio-console")]
 pub mod console;
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;

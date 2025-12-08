@@ -1,5 +1,5 @@
 #![cfg_attr(
-	not(any(feature = "vsock", feature = "fuse", feature = "virtio-console")),
+	not(any(feature = "vsock", feature = "virtio-fs", feature = "virtio-console")),
 	expect(dead_code)
 )]
 

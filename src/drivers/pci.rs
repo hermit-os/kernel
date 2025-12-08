@@ -6,7 +6,7 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-#[cfg(any(feature = "fuse", feature = "vsock", feature = "virtio-console"))]
+#[cfg(any(feature = "virtio-fs", feature = "vsock", feature = "virtio-console"))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -21,7 +21,7 @@ use crate::arch::pci::PciConfigRegion;
 use crate::console::IoDevice;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
@@ -330,7 +330,7 @@ pub(crate) fn print_information() {
 #[allow(clippy::enum_variant_names)]
 #[non_exhaustive]
 pub(crate) enum PciDriver {
-	#[cfg(feature = "fuse")]
+	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
@@ -357,7 +357,7 @@ impl PciDriver {
 		}
 	}
 
-	#[cfg(feature = "fuse")]
+	#[cfg(feature = "virtio-fs")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
@@ -381,7 +381,7 @@ impl PciDriver {
 
 				(irq_number, vsock_handler)
 			}
-			#[cfg(feature = "fuse")]
+			#[cfg(feature = "virtio-fs")]
 			Self::VirtioFs(drv) => {
 				fn fuse_handler() {}
 
@@ -473,7 +473,7 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
 	PCI_DRIVERS
 		.get()?
@@ -510,7 +510,7 @@ pub(crate) fn init() {
 				Ok(VirtioDriver::Vsock(drv)) => {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
 				}
-				#[cfg(feature = "fuse")]
+				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)));
 				}
