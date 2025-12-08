@@ -12,7 +12,7 @@ pub(crate) const USER_STACK_SIZE: usize = 0x0010_0000;
 		)),
 		feature = "virtio-net",
 	),
-	feature = "fuse",
+	feature = "virtio-fs",
 	feature = "vsock",
 	feature = "virtio-console",
 ))]

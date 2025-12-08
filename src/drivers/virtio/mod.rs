@@ -10,7 +10,7 @@ pub mod error {
 
 	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
-	#[cfg(feature = "fuse")]
+	#[cfg(feature = "virtio-fs")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
@@ -59,7 +59,7 @@ pub mod error {
 		#[error(transparent)]
 		NetDriver(VirtioNetError),
 
-		#[cfg(feature = "fuse")]
+		#[cfg(feature = "virtio-fs")]
 		#[error(transparent)]
 		FsDriver(VirtioFsError),
 

@@ -2,7 +2,7 @@
 
 #[cfg(feature = "virtio-console")]
 pub mod console;
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
@@ -16,7 +16,7 @@ pub mod pci;
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	),
-	feature = "fuse",
+	feature = "virtio-fs",
 	feature = "vsock",
 	feature = "virtio-console",
 ))]
@@ -41,7 +41,7 @@ pub mod error {
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 		feature = "rtl8139",
 		feature = "virtio-net",
-		feature = "fuse",
+		feature = "virtio-fs",
 		feature = "vsock",
 		feature = "virtio-console",
 	))]
@@ -57,7 +57,7 @@ pub mod error {
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		),
-		feature = "fuse",
+		feature = "virtio-fs",
 		feature = "vsock",
 		feature = "virtio-console",
 	))]
@@ -67,7 +67,7 @@ pub mod error {
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 		feature = "rtl8139",
 		feature = "virtio-net",
-		feature = "fuse",
+		feature = "virtio-fs",
 		feature = "vsock",
 		feature = "virtio-console",
 	))]
@@ -79,7 +79,7 @@ pub mod error {
 				not(feature = "rtl8139"),
 				feature = "virtio-net",
 			),
-			feature = "fuse",
+			feature = "virtio-fs",
 			feature = "vsock",
 			feature = "virtio-console",
 		))]
