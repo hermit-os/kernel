@@ -878,9 +878,9 @@ pub(crate) fn init_device(
 			}
 		}
 		id => {
-			warn!("Virtio device {id:?} is not supported, skipping!");
+			error!("Virtio device {id:?} is not supported!");
 
-			// Return Driver error inidacting device is not supported
+			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
 				VirtioError::DevNotSupported(device_id),
 			))
