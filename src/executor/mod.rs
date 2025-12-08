@@ -5,7 +5,7 @@ pub(crate) mod device;
 #[cfg(feature = "net")]
 pub(crate) mod network;
 pub(crate) mod task;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub(crate) mod vsock;
 
 use alloc::sync::Arc;
@@ -114,7 +114,7 @@ pub(crate) fn run() {
 		feature = "alloc-stats",
 		feature = "shell",
 		feature = "net",
-		feature = "vsock"
+		feature = "virtio-vsock"
 	)),
 	expect(dead_code)
 )]
@@ -128,7 +128,7 @@ where
 pub fn init() {
 	#[cfg(feature = "net")]
 	crate::executor::network::init();
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	crate::executor::vsock::init();
 	#[cfg(feature = "alloc-stats")]
 	crate::executor::alloc_stats::init();

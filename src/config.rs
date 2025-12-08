@@ -12,7 +12,7 @@ pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = if cfg!(feature = "pci") { 2048 } 
 #[cfg(feature = "tcp")]
 pub(crate) const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 75000;
 
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub(crate) const VSOCK_PACKET_SIZE: u32 = 8192;
 
 #[cfg(feature = "virtio-console")]

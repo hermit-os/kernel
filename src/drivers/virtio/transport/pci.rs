@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-#[cfg(any(feature = "vsock", feature = "virtio-console"))]
+#[cfg(any(feature = "virtio-vsock", feature = "virtio-console"))]
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -41,7 +41,7 @@ use crate::drivers::pci::error::PciError;
 use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
 /// Maps a given device specific pci configuration structure and
@@ -844,7 +844,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
 			Ok(virt_sock_drv) => {
 				info!("Virtio sock driver initialized.");
@@ -902,7 +902,7 @@ pub(crate) enum VirtioDriver {
 	Network(VirtioNetDriver),
 	#[cfg(feature = "virtio-console")]
 	Console(Box<VirtioConsoleDriver>),
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	Vsock(Box<VirtioVsockDriver>),
 	#[cfg(feature = "virtio-fs")]
 	FileSystem(VirtioFsDriver),

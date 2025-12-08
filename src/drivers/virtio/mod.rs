@@ -37,7 +37,7 @@ pub mod error {
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	pub use crate::drivers::vsock::error::VirtioVsockError;
 
 	#[allow(dead_code)]
@@ -80,7 +80,7 @@ pub mod error {
 		#[error(transparent)]
 		FsDriver(VirtioFsError),
 
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		#[error(transparent)]
 		VsockDriver(VirtioVsockError),
 

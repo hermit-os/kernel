@@ -12,7 +12,7 @@ pub mod net;
 pub mod pci;
 #[cfg(feature = "virtio")]
 pub mod virtio;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub mod vsock;
 
 use alloc::collections::VecDeque;

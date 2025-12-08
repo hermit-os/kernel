@@ -418,7 +418,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
 				info!("Virtio sock driver initialized.");
