@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use alloc::boxed::Box;
 use core::mem;
 
@@ -21,7 +21,7 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::drivers::InterruptLine;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "virtio-net")]
@@ -368,7 +368,7 @@ impl IsrStatus {
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-net")]
 	Network(VirtioNetDriver),
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	Console(Box<VirtioConsoleDriver>),
 }
 
@@ -403,7 +403,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "console")]
+		#[cfg(feature = "virtio-console")]
 		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");

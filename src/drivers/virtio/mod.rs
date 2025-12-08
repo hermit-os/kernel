@@ -25,7 +25,7 @@ impl VirtioIdExt for virtio::Id {
 pub mod error {
 	use thiserror::Error;
 
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
 	#[cfg(feature = "fuse")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
@@ -84,7 +84,7 @@ pub mod error {
 		#[error(transparent)]
 		VsockDriver(VirtioVsockError),
 
-		#[cfg(feature = "console")]
+		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
 		ConsoleDriver(VirtioConsoleError),
 

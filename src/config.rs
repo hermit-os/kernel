@@ -15,5 +15,5 @@ pub(crate) const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 75000;
 #[cfg(feature = "vsock")]
 pub(crate) const VSOCK_PACKET_SIZE: u32 = 8192;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) const CONSOLE_PACKET_SIZE: u32 = 8192;

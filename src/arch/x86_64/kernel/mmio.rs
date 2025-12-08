@@ -17,7 +17,7 @@ use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
@@ -38,12 +38,12 @@ const IRQ_NUMBER: u8 = 44 - 32;
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
@@ -203,7 +203,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 #[cfg(feature = "virtio-net")]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
 	MMIO_DRIVERS
 		.get()?
@@ -221,7 +221,7 @@ pub(crate) fn init_drivers() {
 				Ok(VirtioDriver::Network(drv)) => {
 					*NETWORK_DEVICE.lock() = Some(drv);
 				}
-				#[cfg(feature = "console")]
+				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(_)) => unreachable!(),
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}

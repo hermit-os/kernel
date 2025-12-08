@@ -1,6 +1,6 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub mod console;
 #[cfg(feature = "fuse")]
 pub mod fs;
@@ -82,7 +82,7 @@ pub(crate) fn init() {
 	#[cfg(all(
 		not(feature = "pci"),
 		target_arch = "aarch64",
-		any(feature = "console", feature = "virtio-net"),
+		any(feature = "virtio-console", feature = "virtio-net"),
 	))]
 	crate::arch::aarch64::kernel::mmio::init_drivers();
 

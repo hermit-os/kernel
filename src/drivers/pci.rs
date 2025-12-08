@@ -6,7 +6,7 @@ use core::fmt;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-#[cfg(any(feature = "fuse", feature = "vsock", feature = "console"))]
+#[cfg(any(feature = "fuse", feature = "vsock", feature = "virtio-console"))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -17,9 +17,9 @@ use pci_types::{
 };
 
 use crate::arch::pci::PciConfigRegion;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
@@ -332,14 +332,14 @@ pub(crate) fn print_information() {
 pub(crate) enum PciDriver {
 	#[cfg(feature = "fuse")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 	#[cfg(feature = "vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 }
 
 impl PciDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		#[allow(unreachable_patterns)]
 		match self {
@@ -389,7 +389,7 @@ impl PciDriver {
 
 				(irq_number, fuse_handler)
 			}
-			#[cfg(feature = "console")]
+			#[cfg(feature = "virtio-console")]
 			Self::VirtioConsole(drv) => {
 				fn console_handler() {
 					if let Some(driver) = get_console_driver() {
@@ -457,7 +457,7 @@ pub(crate) type NetworkDevice = VirtioNetDriver;
 #[cfg(feature = "rtl8139")]
 pub(crate) type NetworkDevice = RTL8139Driver;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
 	PCI_DRIVERS
 		.get()?
@@ -498,7 +498,7 @@ pub(crate) fn init() {
 				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
 
-				#[cfg(feature = "console")]
+				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					register_driver(PciDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
 					info!("Switch to virtio console");

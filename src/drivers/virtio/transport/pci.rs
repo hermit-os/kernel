@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-#[cfg(any(feature = "vsock", feature = "console"))]
+#[cfg(any(feature = "vsock", feature = "virtio-console"))]
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -25,7 +25,7 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::pci::PciConfigRegion;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "fuse")]
@@ -828,7 +828,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "console")]
+		#[cfg(feature = "virtio-console")]
 		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
@@ -900,7 +900,7 @@ pub(crate) enum VirtioDriver {
 		feature = "virtio-net",
 	))]
 	Network(VirtioNetDriver),
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	Console(Box<VirtioConsoleDriver>),
 	#[cfg(feature = "vsock")]
 	Vsock(Box<VirtioVsockDriver>),
