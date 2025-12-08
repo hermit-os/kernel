@@ -1,7 +1,5 @@
 //! Implements basic functions to realize a simple in-memory file system
 
-#![allow(dead_code)]
-
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
