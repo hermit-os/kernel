@@ -13,9 +13,9 @@ impl VirtioIdExt for virtio::Id {
 	fn as_feature(&self) -> Option<&str> {
 		let feature = match self {
 			Self::Net => "virtio-net",
-			Self::Console => "console",
-			Self::Fs => "fuse",
-			Self::Vsock => "vsock",
+			Self::Console => "virtio-console",
+			Self::Fs => "virtio-fs",
+			Self::Vsock => "virtio-vsock",
 			_ => return None,
 		};
 
