@@ -1,6 +1,6 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub mod console;
 #[cfg(feature = "fuse")]
 pub mod fs;
@@ -18,7 +18,7 @@ pub mod pci;
 	),
 	feature = "fuse",
 	feature = "vsock",
-	feature = "console",
+	feature = "virtio-console",
 ))]
 pub mod virtio;
 #[cfg(feature = "vsock")]
@@ -43,7 +43,7 @@ pub mod error {
 		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
-		feature = "console",
+		feature = "virtio-console",
 	))]
 	use thiserror::Error;
 
@@ -59,7 +59,7 @@ pub mod error {
 		),
 		feature = "fuse",
 		feature = "vsock",
-		feature = "console",
+		feature = "virtio-console",
 	))]
 	use crate::drivers::virtio::error::VirtioError;
 
@@ -69,7 +69,7 @@ pub mod error {
 		feature = "virtio-net",
 		feature = "fuse",
 		feature = "vsock",
-		feature = "console",
+		feature = "virtio-console",
 	))]
 	#[derive(Error, Debug)]
 	pub enum DriverError {
@@ -81,7 +81,7 @@ pub mod error {
 			),
 			feature = "fuse",
 			feature = "vsock",
-			feature = "console",
+			feature = "virtio-console",
 		))]
 		#[error("Virtio driver failed: {0:?}")]
 		InitVirtioDevFail(#[from] VirtioError),
@@ -115,7 +115,7 @@ pub(crate) fn init() {
 	#[cfg(all(
 		not(feature = "pci"),
 		target_arch = "aarch64",
-		any(feature = "console", feature = "virtio-net"),
+		any(feature = "virtio-console", feature = "virtio-net"),
 	))]
 	crate::arch::aarch64::kernel::mmio::init_drivers();
 

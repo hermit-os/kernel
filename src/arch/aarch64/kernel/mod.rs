@@ -2,7 +2,10 @@ pub mod core_local;
 pub mod interrupts;
 #[cfg(feature = "kernel-stack")]
 pub mod kernel_stack;
-#[cfg(all(not(feature = "pci"), any(feature = "virtio-net", feature = "console")))]
+#[cfg(all(
+	not(feature = "pci"),
+	any(feature = "virtio-net", feature = "virtio-console")
+))]
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
