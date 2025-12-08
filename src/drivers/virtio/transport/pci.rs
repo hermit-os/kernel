@@ -878,7 +878,15 @@ pub(crate) fn init_device(
 			}
 		}
 		id => {
-			error!("Virtio device {id:?} is not supported!");
+			use virtio::Id;
+			if matches!(id, Id::Net | Id::Console | Id::Vsock | Id::Fs) {
+				error!("Virtio driver {id:?} is currently not active.");
+				error!(
+					"To use the device, recompile the kernel with the corresponding feature flags."
+				);
+			} else {
+				error!("Virtio device {id:?} is not supported!");
+			}
 
 			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
