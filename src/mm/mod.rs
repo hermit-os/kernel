@@ -52,7 +52,7 @@ use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use hermit_sync::{Lazy, RawInterruptTicketMutex};
 pub use memory_addresses::{PhysAddr, VirtAddr};
-use talc::{ErrOnOom, Span, Talc, Talck};
+use talc::{OomHandler, Span, Talc, Talck};
 
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
 pub use self::physicalmem::{FrameAlloc, FrameBox};
@@ -63,9 +63,20 @@ pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
 use crate::{arch, env};
 
+pub struct DebugOom;
+
+use core::alloc::Layout;
+
+impl OomHandler for DebugOom {
+	fn handle_oom(talc: &mut Talc<Self>, layout: Layout) -> Result<(), ()> {
+		error!("memory allocation of {layout:?} failed. Talck: {talc:?}");
+		Err(())
+	}
+}
+
 #[cfg(target_os = "none")]
 #[global_allocator]
-pub(crate) static ALLOCATOR: Talck<RawInterruptTicketMutex, ErrOnOom> = Talc::new(ErrOnOom).lock();
+pub(crate) static ALLOCATOR: Talck<RawInterruptTicketMutex, DebugOom> = Talc::new(DebugOom).lock();
 
 /// Physical and virtual address range of the 2 MiB pages that map the kernel.
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
