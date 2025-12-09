@@ -43,10 +43,11 @@ jobs:
       - name: Download loader
         run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
       - name: Run benchmarks
-        uses: hermit-os/hermit-bench@main
+        uses: hermit-os/hermit-bench@log-output
         id: run-bench
         with:
           benchmark-file: ${{ matrix.benchmark-file }}
+          path-to-action: '../../_actions/hermit-os/hermit-bench/log-output'
       - name: Upload benchmark results
         uses: actions/upload-artifact@v5
         with:
