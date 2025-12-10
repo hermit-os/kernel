@@ -23,7 +23,7 @@
       -enable-kvm \
       -cpu host,migratable=no,+invtsc \
       -smp 1 \
-      -m 5G \
+      -m 6G \
       -display none \
       -serial stdio \
       -kernel hermit-loader-x86_64 \
