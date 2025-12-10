@@ -653,7 +653,7 @@ impl PackedVq {
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
-		size: u16,
+		max_size: u16,
 		index: u16,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
@@ -678,10 +678,10 @@ impl PackedVq {
 		// Must catch size larger 0x8000 (2^15) as it is not allowed for packed queues.
 		//
 		// See Virtio specification v1.1. - 4.1.4.3.2
-		let vq_size = if (size == 0) | (size > 0x8000) {
-			return Err(VirtqError::QueueSizeNotAllowed(size));
+		let vq_size = if (max_size == 0) | (max_size > 0x8000) {
+			return Err(VirtqError::QueueSizeNotAllowed(max_size));
 		} else {
-			vq_handler.set_vq_size(size)
+			vq_handler.set_vq_size(max_size)
 		};
 
 		let mut descr_ring = DescriptorRing::new(vq_size);
