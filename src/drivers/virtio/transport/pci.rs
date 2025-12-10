@@ -227,11 +227,14 @@ impl VqCfgHandler<'_> {
 		self.select_queue();
 		let queue_size = self.raw.as_mut_ptr().queue_size();
 
-		if queue_size.read().to_ne() >= size {
+		let dev_queue_size = queue_size.read().to_ne();
+		if dev_queue_size >= size {
 			queue_size.write(size.into());
+			debug_assert_eq!(queue_size.read().to_ne(), size);
+			size
+		} else {
+			dev_queue_size
 		}
-
-		queue_size.read().to_ne()
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
