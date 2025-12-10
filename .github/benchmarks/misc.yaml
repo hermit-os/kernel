@@ -10,6 +10,7 @@
       -m 512M \
       -display none \
       -serial stdio \
+      -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
       -kernel hermit-loader-x86_64 \
       -initrd target/x86_64-unknown-hermit/release/micro_benchmarks
   iterations: 25
@@ -26,6 +27,7 @@
       -m 6G \
       -display none \
       -serial stdio \
+      -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
       -kernel hermit-loader-x86_64 \
       -initrd target/x86_64-unknown-hermit/release/alloc_benchmarks
   iterations: 50
@@ -42,6 +44,7 @@
       -m 512M \
       -display none \
       -serial stdio \
+      -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
       -kernel hermit-loader-x86_64 \
       -initrd target/x86_64-unknown-hermit/release/mutex_benchmark
   iterations: 50
