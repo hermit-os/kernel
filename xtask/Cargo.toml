@@ -10,6 +10,6 @@ goblin = { version = "0.10", default-features = false, features = ["archive", "e
 home = "0.5"
 ovmf-prebuilt = "0.2"
 sysinfo = "0.37"
-ureq = "3"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 wait-timeout = "0.2"
 xshell = "0.2"
