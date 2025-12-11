@@ -524,6 +524,7 @@ mod index_alloc {
 	}
 
 	const USIZE_BITS: usize = usize::BITS as usize;
+	const LEADING_ONE: usize = 1 << (usize::BITS - 1);
 
 	impl IndexAlloc {
 		pub fn new(len: usize) -> Self {
@@ -542,15 +543,15 @@ mod index_alloc {
 		#[inline]
 		pub fn allocate(&mut self) -> Option<usize> {
 			for (word_index, word) in self.bits.iter_mut().enumerate() {
-				let trailing_ones = word.trailing_ones();
+				let bit = word.leading_ones();
 
-				if trailing_ones >= usize::BITS {
+				if bit >= usize::BITS {
 					continue;
 				}
 
-				let mask = 1 << trailing_ones;
+				let mask = LEADING_ONE >> bit;
 				*word |= mask;
-				let index = word_index * USIZE_BITS + usize::try_from(trailing_ones).unwrap();
+				let index = word_index * USIZE_BITS + usize::try_from(bit).unwrap();
 				return Some(index);
 			}
 
@@ -561,7 +562,7 @@ mod index_alloc {
 		pub unsafe fn deallocate(&mut self, index: usize) {
 			let word_index = index / USIZE_BITS;
 			let bit = index % USIZE_BITS;
-			let mask = 1 << bit;
+			let mask = LEADING_ONE >> bit;
 
 			debug_assert!(self.bits[word_index] & mask == mask);
 			unsafe {
