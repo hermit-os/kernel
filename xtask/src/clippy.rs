@@ -1,6 +1,5 @@
 use anyhow::Result;
 use clap::Args;
-use xshell::cmd;
 
 use crate::arch::Arch;
 
@@ -10,55 +9,60 @@ pub struct Clippy;
 
 impl Clippy {
 	pub fn run(self) -> Result<()> {
-		let sh = crate::sh()?;
-
 		for arch in Arch::all() {
 			arch.install()?;
 
 			let triple = arch.triple();
-			let clippy = || cmd!(sh, "cargo clippy --target={triple} --all-targets");
+			let clippy = |args: &[&str]| {
+				let mut cmd = crate::cargo();
+				cmd.arg("clippy")
+					.arg(format!("--target={triple}"))
+					.arg("--all-targets")
+					.args(args);
+				eprintln!("$ {cmd:?}");
+				cmd.spawn()?.wait()
+			};
 
-			clippy().run()?;
-			clippy().arg("--features=common-os").run()?;
-			clippy()
-				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga")
-				.run()?;
-			clippy().arg("--no-default-features").run()?;
-			clippy().arg("--all-features").run()?;
-			clippy()
-				.arg("--no-default-features")
-				.arg("--features=tcp")
-				.run()?;
-			clippy()
-				.arg("--no-default-features")
-				.arg("--features=acpi,fsgsbase,pci,smp,vga")
-				.run()?;
+			clippy(&[])?;
+			clippy(&["--features=common-os"])?;
+			clippy(&["--features=acpi,dns,fsgsbase,pci,smp,vga"])?;
+			clippy(&["--no-default-features"])?;
+			clippy(&["--all-features"])?;
+			clippy(&["--no-default-features", "--features=tcp"])?;
+			clippy(&[
+				"--no-default-features",
+				"--features=acpi,fsgsbase,pci,smp,vga",
+			])?;
 
 			match *arch {
 				Arch::X86_64 => {
-					clippy().arg("--features=shell").run()?;
+					clippy(&["--features=shell"])?;
 				}
 				Arch::Aarch64 | Arch::Aarch64Be => {}
 				Arch::Riscv64 => {
-					clippy()
-						.arg("--no-default-features")
-						.arg("--features=gem-net,tcp")
-						.run()?;
+					clippy(&["--no-default-features", "--features=gem-net,tcp"])?;
 				}
 			}
 
-			clippy()
-				.arg("--no-default-features")
-				.arg("--features=acpi,fsgsbase,newlib,smp,vga")
-				.run()?;
+			clippy(&[
+				"--no-default-features",
+				"--features=acpi,fsgsbase,newlib,smp,vga",
+			])?;
 		}
 
-		cmd!(sh, "cargo clippy")
-			.arg("--manifest-path=hermit-builtins/Cargo.toml")
-			.arg("--target=x86_64-unknown-none")
-			.run()?;
+		let mut cmd = crate::cargo();
+		cmd.args([
+			"clippy",
+			"--manifest-path=hermit-builtins/Cargo.toml",
+			"--target=x86_64-unknown-none",
+		]);
+		eprintln!("$ {cmd:?}");
+		cmd.spawn()?.wait()?;
 
-		cmd!(sh, "cargo clippy --package xtask").run()?;
+		let mut cmd = crate::cargo();
+		cmd.args(["clippy", "--package", "xtask"]);
+		eprintln!("$ {cmd:?}");
+		cmd.spawn()?.wait()?;
 
 		Ok(())
 	}
