@@ -2,10 +2,10 @@
 
 use alloc::vec::Vec;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use hermit_sync::InterruptSpinMutex;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "gem-net")]
 use crate::drivers::net::gem::GEMDriver;
@@ -16,12 +16,12 @@ use crate::init_cell::InitCell;
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptSpinMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	fn get_console_driver(&self) -> Option<&InterruptSpinMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
@@ -39,7 +39,7 @@ pub(crate) type NetworkDevice = GEMDriver;
 #[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) fn get_console_driver() -> Option<&'static InterruptSpinMutex<VirtioConsoleDriver>> {
 	MMIO_DRIVERS
 		.get()?

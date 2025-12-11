@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use alloc::boxed::Box;
 use core::mem;
 
@@ -21,11 +21,12 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::drivers::InterruptLine;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
+use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
 
 pub struct VqCfgHandler<'a> {
@@ -367,7 +368,7 @@ impl IsrStatus {
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-net")]
 	Network(VirtioNetDriver),
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	Console(Box<VirtioConsoleDriver>),
 }
 
@@ -402,7 +403,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "console")]
+		#[cfg(feature = "virtio-console")]
 		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
@@ -417,7 +418,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {
 				info!("Virtio sock driver initialized.");
@@ -432,11 +433,17 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		device_id => {
-			error!("Device with id {device_id:?} is currently not supported!");
-			// Return Driver error inidacting device is not supported
+		id => {
+			if let Some(feature) = id.as_feature() {
+				error!("Virtio driver {id:?} is currently not active.");
+				error!("To use the device, recompile the kernel with the {feature} feature.");
+			} else {
+				error!("Virtio device {id:?} is not supported!");
+			}
+
+			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(dev_id),
+				VirtioError::DevNotSupported(id),
 			))
 		}
 	}

@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-#[cfg(any(feature = "vsock", feature = "console"))]
+#[cfg(any(feature = "virtio-vsock", feature = "virtio-console"))]
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -25,10 +25,10 @@ use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::memory_barrier;
 use crate::arch::pci::PciConfigRegion;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
@@ -38,9 +38,10 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::pci::error::PciError;
+use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
 /// Maps a given device specific pci configuration structure and
@@ -831,7 +832,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "console")]
+		#[cfg(feature = "virtio-console")]
 		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
@@ -847,7 +848,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
 			Ok(virt_sock_drv) => {
 				info!("Virtio sock driver initialized.");
@@ -863,7 +864,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "fuse")]
+		#[cfg(feature = "virtio-fs")]
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
@@ -881,9 +882,14 @@ pub(crate) fn init_device(
 			}
 		}
 		id => {
-			warn!("Virtio device {id:?} is not supported, skipping!");
+			if let Some(feature) = id.as_feature() {
+				error!("Virtio driver {id:?} is currently not active.");
+				error!("To use the device, recompile the kernel with the {feature} feature.");
+			} else {
+				error!("Virtio device {id:?} is not supported!");
+			}
 
-			// Return Driver error inidacting device is not supported
+			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
 				VirtioError::DevNotSupported(device_id),
 			))
@@ -898,10 +904,10 @@ pub(crate) enum VirtioDriver {
 		feature = "virtio-net",
 	))]
 	Network(VirtioNetDriver),
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	Console(Box<VirtioConsoleDriver>),
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	Vsock(Box<VirtioVsockDriver>),
-	#[cfg(feature = "fuse")]
+	#[cfg(feature = "virtio-fs")]
 	FileSystem(VirtioFsDriver),
 }

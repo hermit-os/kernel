@@ -1,13 +1,13 @@
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use alloc::collections::VecDeque;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 #[cfg(any(
-	feature = "console",
+	feature = "virtio-console",
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 	feature = "virtio-net",
 ))]
@@ -36,7 +36,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 			.push_back(crate::executor::network::network_handler);
 	}
 
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	if let Some(drv) = get_console_driver() {
 		fn console_handler() {
 			if let Some(driver) = get_console_driver() {
