@@ -524,6 +524,7 @@ mod index_alloc {
 	}
 
 	const USIZE_BITS: usize = usize::BITS as usize;
+	const LEADING_ONE: usize = 1 << (usize::BITS - 1);
 
 	impl IndexAlloc {
 		pub fn new(len: usize) -> Self {
@@ -542,13 +543,16 @@ mod index_alloc {
 		#[inline]
 		pub fn allocate(&mut self) -> Option<usize> {
 			for (word_index, word) in self.bits.iter_mut().enumerate() {
-				let trailing_ones = word.trailing_ones();
-				if trailing_ones < usize::BITS {
-					let mask = 1 << trailing_ones;
-					*word |= mask;
-					let index = word_index * USIZE_BITS + usize::try_from(trailing_ones).unwrap();
-					return Some(index);
+				let bit = word.leading_ones();
+
+				if bit >= usize::BITS {
+					continue;
 				}
+
+				let mask = LEADING_ONE >> bit;
+				*word |= mask;
+				let index = word_index * USIZE_BITS + usize::try_from(bit).unwrap();
+				return Some(index);
 			}
 
 			None
@@ -558,11 +562,67 @@ mod index_alloc {
 		pub unsafe fn deallocate(&mut self, index: usize) {
 			let word_index = index / USIZE_BITS;
 			let bit = index % USIZE_BITS;
-			let mask = 1 << bit;
+			let mask = LEADING_ONE >> bit;
 
 			debug_assert!(self.bits[word_index] & mask == mask);
 			unsafe {
 				*self.bits.get_unchecked_mut(word_index) &= !mask;
+			}
+		}
+	}
+
+	#[cfg(all(test, not(target_os = "none")))]
+	mod tests {
+		use std::collections::HashSet;
+
+		use super::*;
+
+		#[test]
+		fn test_index_alloc() {
+			fn test(len: usize) {
+				let mut index_alloc = IndexAlloc::new(len);
+
+				let indexes = (0..len)
+					.map(|_| index_alloc.allocate().unwrap())
+					.collect::<HashSet<_>>();
+
+				assert_eq!(indexes.len(), len);
+				for index in indexes.iter().copied() {
+					assert!(index < len);
+				}
+
+				assert_eq!(index_alloc.allocate(), None);
+				assert_eq!(index_alloc.allocate(), None);
+
+				let mut deallocated_indexes = indexes
+					.iter()
+					.copied()
+					.take(len / 2)
+					.collect::<HashSet<_>>();
+				for index in deallocated_indexes.iter().copied() {
+					unsafe {
+						index_alloc.deallocate(index);
+					}
+				}
+
+				let reallocated_indexes = (0..deallocated_indexes.len())
+					.map(|_| index_alloc.allocate().unwrap())
+					.collect::<HashSet<_>>();
+
+				assert_eq!(reallocated_indexes, deallocated_indexes);
+
+				assert_eq!(index_alloc.allocate(), None);
+				assert_eq!(index_alloc.allocate(), None);
+
+				for index in indexes {
+					unsafe {
+						index_alloc.deallocate(index);
+					}
+				}
+			}
+
+			for len in [0, 1, 2, 7, 8, 9, 63, 64, 65, 255, 256, 257] {
+				test(len);
 			}
 		}
 	}
