@@ -46,12 +46,12 @@ impl VqCfgHandler<'_> {
 	/// size, the size is set to this maximum instead. Else size is set to the provided value.
 	///
 	/// Returns the set size in form of a `u16`.
-	pub fn set_vq_size(&mut self, size: u16) -> u16 {
+	pub fn set_vq_size(&mut self, max_size: u16) -> u16 {
 		self.select_queue();
 		let ptr = self.raw.as_mut_ptr();
 
 		let num_max = ptr.queue_num_max().read().to_ne();
-		let size = size.min(num_max);
+		let size = max_size.min(num_max);
 		ptr.queue_num().write(size.into());
 		size
 	}

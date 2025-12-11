@@ -243,7 +243,7 @@ impl SplitVq {
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,
-		size: u16,
+		max_size: u16,
 		index: u16,
 		features: virtio::F,
 	) -> Result<Self, VirtqError> {
@@ -252,7 +252,7 @@ impl SplitVq {
 			return Err(VirtqError::QueueNotExisting(index));
 		};
 
-		let size = vq_handler.set_vq_size(size);
+		let size = vq_handler.set_vq_size(max_size);
 
 		let mut descr_table_cell = unsafe {
 			core::mem::transmute::<

@@ -223,15 +223,18 @@ impl VqCfgHandler<'_> {
 	/// size, the size is set to this maximum instead. Else size is set to the provided value.
 	///
 	/// Returns the set size in form of a `u16`.
-	pub fn set_vq_size(&mut self, size: u16) -> u16 {
+	pub fn set_vq_size(&mut self, max_size: u16) -> u16 {
 		self.select_queue();
 		let queue_size = self.raw.as_mut_ptr().queue_size();
 
-		if queue_size.read().to_ne() >= size {
-			queue_size.write(size.into());
+		let dev_queue_size = queue_size.read().to_ne();
+		if dev_queue_size >= max_size {
+			queue_size.write(max_size.into());
+			debug_assert_eq!(queue_size.read().to_ne(), max_size);
+			max_size
+		} else {
+			dev_queue_size
 		}
-
-		queue_size.read().to_ne()
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
