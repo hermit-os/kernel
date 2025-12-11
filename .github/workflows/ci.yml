@@ -199,15 +199,11 @@ jobs:
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - name: Install Firecracker
         run: |
-          # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
-          ARCH="$(uname -m)"
-          release_url="https://github.com/firecracker-microvm/firecracker/releases"
-          latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
-          curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
-          | tar -xz
+          gh release download --repo firecracker-microvm/firecracker --pattern "firecracker-*-${{ matrix.arch }}.tgz"
+          tar -xvf firecracker-*-${{ matrix.arch }}.tgz
 
           mkdir -p $HOME/.local/bin
-          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
+          mv release*/firecracker-*-${{ matrix.arch }} $HOME/.local/bin/firecracker
           echo $HOME/.local/bin >> $GITHUB_PATH
 
           $HOME/.local/bin/firecracker --version
