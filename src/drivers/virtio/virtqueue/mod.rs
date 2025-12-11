@@ -543,12 +543,15 @@ mod index_alloc {
 		pub fn allocate(&mut self) -> Option<usize> {
 			for (word_index, word) in self.bits.iter_mut().enumerate() {
 				let trailing_ones = word.trailing_ones();
-				if trailing_ones < usize::BITS {
-					let mask = 1 << trailing_ones;
-					*word |= mask;
-					let index = word_index * USIZE_BITS + usize::try_from(trailing_ones).unwrap();
-					return Some(index);
+
+				if trailing_ones >= usize::BITS {
+					continue;
 				}
+
+				let mask = 1 << trailing_ones;
+				*word |= mask;
+				let index = word_index * USIZE_BITS + usize::try_from(trailing_ones).unwrap();
+				return Some(index);
 			}
 
 			None
