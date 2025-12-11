@@ -1,7 +1,5 @@
 //! Implements basic functions to realize a simple in-memory file system
 
-#![allow(dead_code)]
-
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -116,10 +114,6 @@ impl RomFileInterface {
 			pos: Mutex::new(0),
 			inner,
 		}
-	}
-
-	pub fn len(&self) -> usize {
-		self.inner.data.len()
 	}
 }
 
@@ -264,10 +258,6 @@ impl RamFileInterface {
 			pos: Mutex::new(0),
 			inner,
 		}
-	}
-
-	pub fn len(&self) -> usize {
-		block_on(async { Ok(self.inner.read().await.data.len()) }, None).unwrap()
 	}
 }
 
