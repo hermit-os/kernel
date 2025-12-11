@@ -6,9 +6,11 @@ mod artifact;
 mod binutil;
 mod build;
 mod cargo_build;
-mod ci;
 mod clippy;
 mod doc;
+
+#[cfg(feature = "ci")]
+mod ci;
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -22,8 +24,11 @@ use xshell::Shell;
 #[derive(Parser)]
 enum Cli {
 	Build(build::Build),
+
+	#[cfg(feature = "ci")]
 	#[command(subcommand)]
 	Ci(ci::Ci),
+
 	Clippy(clippy::Clippy),
 	Doc(doc::Doc),
 }
@@ -32,6 +37,7 @@ impl Cli {
 	fn run(self) -> Result<()> {
 		match self {
 			Self::Build(build) => build.run(),
+			#[cfg(feature = "ci")]
 			Self::Ci(ci) => ci.run(),
 			Self::Clippy(clippy) => clippy.run(),
 			Self::Doc(doc) => doc.run(),
