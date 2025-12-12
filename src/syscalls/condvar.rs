@@ -93,7 +93,7 @@ pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 		if *id == 0 {
 			debug!("Create condition variable queue");
 			let queue = Box::new(CondQueue::new());
-			*id = Box::into_raw(queue) as usize;
+			*id = Box::into_raw(queue).expose_provenance();
 		}
 
 		0
@@ -113,7 +113,7 @@ pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 		if *id == 0 {
 			debug!("Create condition variable queue");
 			let queue = Box::new(CondQueue::new());
-			*id = Box::into_raw(queue) as usize;
+			*id = Box::into_raw(queue).expose_provenance();
 		}
 
 		if timeout_ns <= 0 {

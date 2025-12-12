@@ -161,7 +161,7 @@ impl ObjectInterface for UhyveStdout {
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let write_params = WriteParams {
 			fd: STDOUT_FILENO,
-			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
+			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
 			len: buf.len(),
 		};
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
@@ -200,7 +200,7 @@ impl ObjectInterface for UhyveStderr {
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let write_params = WriteParams {
 			fd: STDERR_FILENO,
-			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
+			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
 			len: buf.len(),
 		};
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
