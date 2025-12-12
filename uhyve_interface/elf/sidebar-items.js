@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["NT_UHYVE_INTERFACE_VERSION"],"struct":["Note"]};
