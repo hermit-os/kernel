@@ -451,8 +451,11 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 
 	#[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
+		let irq = device.get_interrupt_number();
+		crate::arch::interrupts::add_irq_name(irq, "virtio");
+		info!("Virtio interrupt handler at line {irq}");
 		handlers
-			.entry(device.get_interrupt_number())
+			.entry(irq)
 			.or_default()
 			.push_back(crate::executor::network::network_handler);
 	}
