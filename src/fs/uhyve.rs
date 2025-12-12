@@ -9,10 +9,11 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
-use uhyve_interface::parameters::{
+use uhyve_interface::GuestPhysAddr;
+use uhyve_interface::v2::Hypercall;
+use uhyve_interface::v2::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
 };
-use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
 
 use crate::arch::mm::paging;
 use crate::env::fdt;
@@ -56,8 +57,12 @@ impl Read for UhyveFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut read_params = ReadParams {
 			fd: self.0,
-			buf: GuestVirtAddr::new(buf.as_mut_ptr() as u64),
-			len: buf.len(),
+			buf: GuestPhysAddr::new(
+				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
 			ret: 0,
 		};
 		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
@@ -74,12 +79,16 @@ impl Write for UhyveFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let write_params = WriteParams {
 			fd: self.0,
-			buf: GuestVirtAddr::new(buf.as_ptr() as u64),
-			len: buf.len(),
+			buf: GuestPhysAddr::new(
+				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
 		};
 		uhyve_hypercall(Hypercall::FileWrite(&write_params));
 
-		Ok(write_params.len)
+		Ok(write_params.len.try_into().unwrap())
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {
