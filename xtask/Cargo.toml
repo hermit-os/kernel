@@ -3,13 +3,17 @@ name = "xtask"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["ci"]
+ci = ["dep:ovmf-prebuilt", "dep:sysinfo", "dep:ureq", "dep:wait-timeout"]
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 goblin = { version = "0.10", default-features = false, features = ["archive", "elf32", "elf64", "std"] }
 home = "0.5"
-ovmf-prebuilt = "0.2"
-sysinfo = "0.37"
-ureq = "3"
-wait-timeout = "0.2"
+ovmf-prebuilt = { version = "0.2", optional = true }
+sysinfo = { version = "0.37", optional = true }
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
+wait-timeout = { version = "0.2", optional = true }
 xshell = "0.2"
