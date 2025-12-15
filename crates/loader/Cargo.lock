@@ -43,9 +43,9 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
 name = "allocator-api2"
-version = "0.3.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c583acf993cf4245c4acb0a2cc2ab1f9cc097de73411bb6d3647ff6af2b1013d"
+checksum = "c880a97d28a3681c0267bd29cff89621202715b065127cd445fa0f0fe0aa2880"
 
 [[package]]
 name = "anstream"
@@ -425,7 +425,7 @@ version = "0.5.6"
 dependencies = [
  "aarch64-cpu",
  "align-address",
- "allocator-api2 0.3.1",
+ "allocator-api2 0.4.0",
  "anstyle",
  "cfg-if",
  "enum_dispatch",
