@@ -194,9 +194,10 @@ async fn network_run() {
 		if let Some(mut guard) = NIC.try_lock() {
 			match &mut *guard {
 				NetworkState::Initialized(nic) => {
-					nic.poll_common(now());
-					// FIXME: only wake when progress can be made
-					cx.waker().wake_by_ref();
+					let r = nic.poll_common(now());
+					if r == PollResult::SocketStateChanged {
+						cx.waker().wake_by_ref();
+					}
 					Poll::Pending
 				}
 				_ => Poll::Ready(()),
