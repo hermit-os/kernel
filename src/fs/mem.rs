@@ -11,11 +11,10 @@ use core::mem::{MaybeUninit, offset_of};
 
 use align_address::Align;
 use async_lock::{Mutex, RwLock};
-use async_trait::async_trait;
 
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::fd::{AccessPermission, ObjectInterface, OpenOption, PollEvent};
+use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, FileType, NodeKind, SeekWhence, VfsNode};
 use crate::syscalls::Dirent64;
 use crate::time::timespec;
@@ -36,14 +35,13 @@ impl RomFileInner {
 	}
 }
 
-struct RomFileInterface {
+pub struct RomFileInterface {
 	/// Position within the file
 	pos: Mutex<usize>,
 	/// File content
 	inner: Arc<RomFileInner>,
 }
 
-#[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let len = self.inner.data.len();
@@ -139,7 +137,6 @@ pub struct RamFileInterface {
 	inner: Arc<RwLock<RamFileInner>>,
 }
 
-#[async_trait]
 impl ObjectInterface for RamFileInterface {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let len = self.inner.read().await.data.len();
@@ -271,10 +268,10 @@ impl VfsNode for RomFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(RwLock::new(RomFileInterface::new(
-			self.data.clone(),
-		))))
+	fn get_object(&self) -> io::Result<Arc<RwLock<Fd>>> {
+		Ok(Arc::new(RwLock::new(
+			RomFileInterface::new(self.data.clone()).into(),
+		)))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
@@ -327,10 +324,10 @@ impl VfsNode for RamFile {
 		NodeKind::File
 	}
 
-	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(RwLock::new(RamFileInterface::new(
-			self.data.clone(),
-		))))
+	fn get_object(&self) -> io::Result<Arc<RwLock<Fd>>> {
+		Ok(Arc::new(RwLock::new(
+			RamFileInterface::new(self.data.clone()).into(),
+		)))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
@@ -392,7 +389,6 @@ impl MemDirectoryInterface {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for MemDirectoryInterface {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let mut buf_offset: usize = 0;
@@ -482,7 +478,7 @@ impl MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<RwLock<Fd>>> {
 		if let Some(component) = components.pop() {
 			if components.is_empty() {
 				let mut guard = self.inner.write().await;
@@ -501,9 +497,9 @@ impl MemDirectory {
 				} else if opt.contains(OpenOption::O_CREAT) {
 					let file = Box::new(RamFile::new(mode));
 					guard.insert(component.to_owned(), file.clone());
-					return Ok(Arc::new(RwLock::new(RamFileInterface::new(
-						file.data.clone(),
-					))));
+					return Ok(Arc::new(RwLock::new(
+						RamFileInterface::new(file.data.clone()).into(),
+					)));
 				} else {
 					return Err(Errno::Noent);
 				}
@@ -523,10 +519,10 @@ impl VfsNode for MemDirectory {
 		NodeKind::Directory
 	}
 
-	fn get_object(&self) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(RwLock::new(MemDirectoryInterface::new(
-			self.inner.clone(),
-		))))
+	fn get_object(&self) -> io::Result<Arc<RwLock<Fd>>> {
+		Ok(Arc::new(RwLock::new(
+			MemDirectoryInterface::new(self.inner.clone()).into(),
+		)))
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
@@ -703,7 +699,7 @@ impl VfsNode for MemDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<RwLock<Fd>>> {
 		block_on(self.async_traverse_open(components, opt, mode), None)
 	}
 

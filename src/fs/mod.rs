@@ -1,7 +1,7 @@
 #[cfg(all(feature = "fuse", feature = "pci"))]
 pub(crate) mod fuse;
-mod mem;
-mod uhyve;
+pub(crate) mod mem;
+pub(crate) mod uhyve;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -10,7 +10,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::BitAnd;
 
-use async_trait::async_trait;
 use embedded_io::{Read, Write};
 use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
@@ -18,7 +17,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::fd::{AccessPermission, ObjectInterface, OpenOption, insert_object, remove_object};
+use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
 use crate::time::{SystemTime, timespec};
 
@@ -60,7 +59,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 
 	/// Determine the syscall interface
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		Err(Errno::Nosys)
 	}
 
@@ -113,7 +112,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_components: &mut Vec<&str>,
 		_option: OpenOption,
 		_mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		Err(Errno::Nosys)
 	}
 
@@ -129,7 +128,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 }
 
 #[derive(Clone)]
-struct DirectoryReader(Vec<DirectoryEntry>);
+pub struct DirectoryReader(Vec<DirectoryEntry>);
 
 impl DirectoryReader {
 	pub fn new(data: Vec<DirectoryEntry>) -> Self {
@@ -137,7 +136,6 @@ impl DirectoryReader {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for DirectoryReader {
 	async fn getdents(&self, _buf: &mut [core::mem::MaybeUninit<u8>]) -> io::Result<usize> {
 		let _ = &self.0; // Dummy statement to avoid warning for the moment
@@ -163,7 +161,7 @@ impl Filesystem {
 		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		debug!("Open file {path} with {opt:?}");
 		let mut components: Vec<&str> = path.split('/').collect();
 
@@ -206,11 +204,11 @@ impl Filesystem {
 		self.root.traverse_mkdir(&mut components, mode)
 	}
 
-	pub fn opendir(&self, path: &str) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	pub fn opendir(&self, path: &str) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		debug!("Open directory {path}");
-		Ok(Arc::new(async_lock::RwLock::new(DirectoryReader::new(
-			self.readdir(path)?,
-		))))
+		Ok(Arc::new(async_lock::RwLock::new(
+			DirectoryReader::new(self.readdir(path)?).into(),
+		)))
 	}
 
 	/// List given directory
