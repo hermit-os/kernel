@@ -48,7 +48,7 @@ jobs:
         with:
           benchmark-file: ${{ matrix.benchmark-file }}
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.benchmark-matrix-name }}-benchmark-results
           path: ${{ steps.run-bench.outputs.result-file }}
