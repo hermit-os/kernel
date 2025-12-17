@@ -66,9 +66,6 @@ keywords:
   - operating system
   - high-performance computing
   - cloud computing
-license:
-  - MIT
-  - Apache-2.0
 commit: 791b9328b3a6b93944692c6dfa3e2f42c59672cb
 version: 0.10.0
 date-released: '2025-01-18'
