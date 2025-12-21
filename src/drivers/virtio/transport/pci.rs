@@ -209,15 +209,19 @@ impl ComCfg {
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
 	raw: VolatileRef<'a, CommonCfg>,
+	selected: bool,
 }
 
 impl VqCfgHandler<'_> {
 	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
 	fn select_queue(&mut self) {
-		self.raw
-			.as_mut_ptr()
-			.queue_select()
-			.write(self.vq_index.into());
+		if !self.selected {
+			self.raw
+				.as_mut_ptr()
+				.queue_select()
+				.write(self.vq_index.into());
+			self.selected = true;
+		}
 	}
 
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed
@@ -288,6 +292,7 @@ impl ComCfg {
 			Some(VqCfgHandler {
 				vq_index: index,
 				raw: self.com_cfg.borrow_mut(),
+				selected: true,
 			})
 		}
 	}

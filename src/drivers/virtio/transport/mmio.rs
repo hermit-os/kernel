@@ -32,15 +32,19 @@ use crate::drivers::virtio::error::VirtioError;
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
 	raw: VolatileRef<'a, DeviceRegisters>,
+	selected: bool,
 }
 
 impl VqCfgHandler<'_> {
 	// TODO: Create type for queue selected invariant to get rid of `self.select_queue()` everywhere.
 	fn select_queue(&mut self) {
-		self.raw
-			.as_mut_ptr()
-			.queue_sel()
-			.write(self.vq_index.into());
+		if !self.selected {
+			self.raw
+				.as_mut_ptr()
+				.queue_sel()
+				.write(self.vq_index.into());
+			self.selected = true;
+		}
 	}
 
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed
@@ -122,6 +126,7 @@ impl ComCfg {
 			Some(VqCfgHandler {
 				vq_index: index,
 				raw: self.com_cfg.borrow_mut(),
+				selected: true,
 			})
 		}
 	}
@@ -266,6 +271,7 @@ impl ComCfg {
 		infoentry!("Device ID", "{:?}", ptr.device_id().read());
 		infoentry!("Vendor ID", "{:#X}", ptr.vendor_id().read());
 		infoentry!("Device Features", "{:#X}", self.dev_features());
+
 		let ptr = self.com_cfg.as_ptr();
 		infoentry!("Interrupt status", "{:#X}", ptr.interrupt_status().read());
 		infoentry!("Device status", "{:#X}", ptr.status().read());
@@ -380,7 +386,7 @@ pub(crate) fn init_device(
 	let dev_id: u16 = 0;
 
 	if registers.as_ptr().version().read().to_ne() == 0x1 {
-		error!("Legacy interface isn't supported!");
+		error!("Legacy Virtio interface (v1.0) is not supported!");
 		return Err(DriverError::InitVirtioDevFail(
 			VirtioError::DevNotSupported(dev_id),
 		));
