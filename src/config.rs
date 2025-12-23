@@ -4,18 +4,8 @@ pub const DEFAULT_STACK_SIZE: usize = 0x0001_0000;
 
 pub(crate) const USER_STACK_SIZE: usize = 0x0010_0000;
 
-#[cfg(any(
-	all(
-		not(any(
-			all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
-			feature = "rtl8139",
-		)),
-		feature = "virtio-net",
-	),
-	feature = "fuse",
-	feature = "vsock",
-	feature = "console",
-))]
+#[cfg(feature = "virtio")]
+#[allow(dead_code)]
 pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = if cfg!(feature = "pci") { 2048 } else { 1024 };
 
 /// Default keep alive interval in milliseconds

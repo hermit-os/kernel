@@ -10,16 +10,7 @@ pub mod mmio;
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
-#[cfg(any(
-	all(
-		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-		not(feature = "rtl8139"),
-		feature = "virtio-net",
-	),
-	feature = "fuse",
-	feature = "vsock",
-	feature = "console",
-))]
+#[cfg(feature = "virtio")]
 pub mod virtio;
 #[cfg(feature = "vsock")]
 pub mod vsock;
@@ -38,12 +29,9 @@ pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
 /// passed on to higher layers.
 pub mod error {
 	#[cfg(any(
+		feature = "virtio",
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 		feature = "rtl8139",
-		feature = "virtio-net",
-		feature = "fuse",
-		feature = "vsock",
-		feature = "console",
 	))]
 	use thiserror::Error;
 
@@ -51,38 +39,17 @@ pub mod error {
 	use crate::drivers::net::gem::GEMError;
 	#[cfg(feature = "rtl8139")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
-	#[cfg(any(
-		all(
-			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-			not(feature = "rtl8139"),
-			feature = "virtio-net",
-		),
-		feature = "fuse",
-		feature = "vsock",
-		feature = "console",
-	))]
+	#[cfg(feature = "virtio")]
 	use crate::drivers::virtio::error::VirtioError;
 
 	#[cfg(any(
+		feature = "virtio",
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 		feature = "rtl8139",
-		feature = "virtio-net",
-		feature = "fuse",
-		feature = "vsock",
-		feature = "console",
 	))]
 	#[derive(Error, Debug)]
 	pub enum DriverError {
-		#[cfg(any(
-			all(
-				not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
-				not(feature = "rtl8139"),
-				feature = "virtio-net",
-			),
-			feature = "fuse",
-			feature = "vsock",
-			feature = "console",
-		))]
+		#[cfg(feature = "virtio")]
 		#[error("Virtio driver failed: {0:?}")]
 		InitVirtioDevFail(#[from] VirtioError),
 
