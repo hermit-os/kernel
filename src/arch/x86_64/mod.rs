@@ -22,13 +22,3 @@ pub(crate) fn swapgs(stack_frame: &ExceptionStackFrame) {
 #[cfg(not(feature = "common-os"))]
 #[inline(always)]
 pub(crate) fn swapgs(_stack_frame: &ExceptionStackFrame) {}
-
-/// Force strict CPU ordering, serializes load and store operations.
-#[allow(dead_code)]
-#[inline(always)]
-pub(crate) fn memory_barrier() {
-	use core::arch::asm;
-	unsafe {
-		asm!("mfence", options(nostack, nomem, preserves_flags));
-	}
-}
