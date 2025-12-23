@@ -104,13 +104,15 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::fdt().ok_or(())?;
 
-	let all_regions: alloc::vec::Vec<_> = fdt
+	let all_regions = fdt
 		.find_all_nodes("/memory")
-		.map(|m| m.reg().unwrap().next().unwrap())
-		.collect();
-	if all_regions.is_empty() {
+		.map(|m| m.reg().unwrap().next().unwrap());
+	if all_regions.count() == 0 {
 		return Err(());
 	}
+	let all_regions = fdt
+		.find_all_nodes("/memory")
+		.map(|m| m.reg().unwrap().next().unwrap());
 
 	for m in all_regions {
 		let start_address = m.starting_address as u64;
