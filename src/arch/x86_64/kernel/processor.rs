@@ -345,7 +345,8 @@ impl CpuFrequency {
 					ten_char.to_digit(10),
 				) {
 					let mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
-					return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo);
+					return self
+						.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdBrandString);
 				}
 			}
 		}
