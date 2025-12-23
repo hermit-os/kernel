@@ -75,9 +75,8 @@ pub(crate) fn futex_wait(
 
 			if wakeup {
 				return 0;
-			} else {
-				return -i32::from(Errno::Timedout);
 			}
+			return -i32::from(Errno::Timedout);
 		} else {
 			// If we are not in the waking queue, this must have been a wakeup.
 			let wakeup = !matches!(parking_lot
@@ -144,9 +143,8 @@ pub(crate) fn futex_wait_and_set(
 
 			if wakeup {
 				return 0;
-			} else {
-				return -i32::from(Errno::Timedout);
 			}
+			return -i32::from(Errno::Timedout);
 		} else {
 			// If we are not in the waking queue, this must have been a wakeup.
 			let wakeup = !matches!(parking_lot
