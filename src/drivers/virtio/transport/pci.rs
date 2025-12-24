@@ -5,8 +5,6 @@
 //!
 //! [Virtio Over PCI Bus]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1150001
 
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -288,6 +286,7 @@ impl ComCfg {
 		}
 	}
 
+	#[allow(dead_code)]
 	pub fn device_config_space(&self) -> VolatilePtr<'_, CommonCfg, ReadOnly> {
 		self.com_cfg.as_ptr()
 	}
