@@ -130,12 +130,6 @@ impl ComCfg {
 		ptr.queue_num_max().read().to_ne()
 	}
 
-	pub fn get_queue_ready(&mut self, sel: u16) -> bool {
-		let ptr = self.com_cfg.as_mut_ptr();
-		ptr.queue_sel().write(sel.into());
-		ptr.queue_ready().read()
-	}
-
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		self.com_cfg
