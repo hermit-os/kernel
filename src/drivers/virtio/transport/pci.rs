@@ -292,11 +292,6 @@ impl ComCfg {
 		self.com_cfg.as_ptr()
 	}
 
-	/// Returns the device status field.
-	pub fn dev_status(&self) -> u8 {
-		self.com_cfg.as_ptr().device_status().read().bits()
-	}
-
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		self.com_cfg
