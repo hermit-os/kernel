@@ -415,6 +415,7 @@ pub struct NotifCfg {
 	base_addr: u64,
 	notify_off_multiplier: u32,
 	/// defines the maximum size of the notification space, starting from base_addr.
+	#[cfg(debug_assertions)]
 	length: u64,
 }
 
@@ -443,12 +444,21 @@ impl NotifCfg {
 		Some(NotifCfg {
 			base_addr,
 			notify_off_multiplier,
+			#[cfg(debug_assertions)]
 			length: cap.len(),
 		})
 	}
 
 	pub fn notification_location(&self, vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
 		let addend = u32::from(vq_cfg_handler.notif_off()) * self.notify_off_multiplier;
+
+		// TODO: This should be
+		// cap.length >= queue_notify_off * notify_off_multiplier + 4
+		// if VIRTIO_F_NOTIFICATION_DATA has been negotiated.
+		// Knowing this here requires a larger refactoring.
+		#[cfg(debug_assertions)]
+		assert!(self.length >= u64::from(addend + 2));
+
 		let addr = self.base_addr + u64::from(addend);
 		ptr::with_exposed_provenance_mut(addr.try_into().unwrap())
 	}
