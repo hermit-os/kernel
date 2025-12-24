@@ -38,7 +38,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::pci::error::PciError;
-use crate::drivers::virtio::VirtioIdExt;
+use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
 #[cfg(feature = "vsock")]
@@ -275,6 +275,10 @@ impl VqCfgHandler<'_> {
 
 // Public Interface of ComCfg
 impl ComCfg {
+	pub fn control_registers(&mut self) -> impl ControlRegisters<'_> {
+		self.com_cfg.as_mut_ptr()
+	}
+
 	/// Select a queue via an index. If queue does NOT exist returns `None`, else
 	/// returns `Some(VqCfgHandler)`.
 	///
