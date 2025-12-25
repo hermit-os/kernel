@@ -61,10 +61,10 @@ trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 vga = []
 virtio = ["dep:virtio", "dep:mem-barrier"]
-virtio-console = ["virtio", "console"]
-virtio-fs = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum", "fuse"]
+virtio-console = ["virtio"]
+virtio-fs = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 virtio-net = ["net", "virtio"]
-virtio-vsock = ["virtio", "pci", "vsock"]
+virtio-vsock = ["virtio", "pci"]
 warn-prebuilt = []
 
 # Deprecated
