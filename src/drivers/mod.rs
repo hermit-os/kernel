@@ -1,8 +1,8 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub mod console;
-#[cfg(feature = "fuse")]
+#[cfg(feature = "virtio-fs")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
@@ -12,7 +12,7 @@ pub mod net;
 pub mod pci;
 #[cfg(feature = "virtio")]
 pub mod virtio;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub mod vsock;
 
 use alloc::collections::VecDeque;
@@ -82,7 +82,7 @@ pub(crate) fn init() {
 	#[cfg(all(
 		not(feature = "pci"),
 		target_arch = "aarch64",
-		any(feature = "console", feature = "virtio-net"),
+		any(feature = "virtio-console", feature = "virtio-net"),
 	))]
 	crate::arch::aarch64::kernel::mmio::init_drivers();
 

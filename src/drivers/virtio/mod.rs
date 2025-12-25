@@ -13,9 +13,9 @@ impl VirtioIdExt for virtio::Id {
 	fn as_feature(&self) -> Option<&str> {
 		let feature = match self {
 			Self::Net => "virtio-net",
-			Self::Console => "console",
-			Self::Fs => "fuse",
-			Self::Vsock => "vsock",
+			Self::Console => "virtio-console",
+			Self::Fs => "virtio-fs",
+			Self::Vsock => "virtio-vsock",
 			_ => return None,
 		};
 
@@ -25,9 +25,9 @@ impl VirtioIdExt for virtio::Id {
 pub mod error {
 	use thiserror::Error;
 
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
-	#[cfg(feature = "fuse")]
+	#[cfg(feature = "virtio-fs")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
@@ -37,7 +37,7 @@ pub mod error {
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	pub use crate::drivers::vsock::error::VirtioVsockError;
 
 	#[allow(dead_code)]
@@ -76,15 +76,15 @@ pub mod error {
 		#[error(transparent)]
 		NetDriver(VirtioNetError),
 
-		#[cfg(feature = "fuse")]
+		#[cfg(feature = "virtio-fs")]
 		#[error(transparent)]
 		FsDriver(VirtioFsError),
 
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		#[error(transparent)]
 		VsockDriver(VirtioVsockError),
 
-		#[cfg(feature = "console")]
+		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
 		ConsoleDriver(VirtioConsoleError),
 

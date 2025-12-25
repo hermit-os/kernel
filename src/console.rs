@@ -7,7 +7,7 @@ use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch::SerialDevice;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioUART;
 use crate::errno::Errno;
 use crate::executor::WakerRegistration;
@@ -20,7 +20,7 @@ pub(crate) enum IoDevice {
 	#[cfg(not(target_arch = "riscv64"))]
 	Uhyve(UhyveSerial),
 	Uart(SerialDevice),
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	Virtio(VirtioUART),
 }
 
@@ -34,7 +34,7 @@ impl Read for IoDevice {
 			#[cfg(not(target_arch = "riscv64"))]
 			IoDevice::Uhyve(s) => s.read(buf),
 			IoDevice::Uart(s) => s.read(buf),
-			#[cfg(feature = "console")]
+			#[cfg(feature = "virtio-console")]
 			IoDevice::Virtio(s) => s.read(buf),
 		}
 	}
@@ -46,7 +46,7 @@ impl ReadReady for IoDevice {
 			#[cfg(not(target_arch = "riscv64"))]
 			IoDevice::Uhyve(s) => s.read_ready(),
 			IoDevice::Uart(s) => s.read_ready(),
-			#[cfg(feature = "console")]
+			#[cfg(feature = "virtio-console")]
 			IoDevice::Virtio(s) => s.read_ready(),
 		}
 	}
@@ -58,7 +58,7 @@ impl Write for IoDevice {
 			#[cfg(not(target_arch = "riscv64"))]
 			IoDevice::Uhyve(s) => s.write_all(buf)?,
 			IoDevice::Uart(s) => s.write_all(buf)?,
-			#[cfg(feature = "console")]
+			#[cfg(feature = "virtio-console")]
 			IoDevice::Virtio(s) => s.write_all(buf)?,
 		};
 
@@ -132,7 +132,7 @@ impl Console {
 		}
 	}
 
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	pub fn replace_device(&mut self, device: IoDevice) {
 		self.device = device;
 	}

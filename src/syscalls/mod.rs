@@ -43,7 +43,7 @@ mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
-#[cfg(any(feature = "net", feature = "vsock"))]
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 pub mod socket;
 mod spinlock;
 mod system;

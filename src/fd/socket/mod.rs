@@ -2,5 +2,5 @@
 pub(crate) mod tcp;
 #[cfg(feature = "udp")]
 pub(crate) mod udp;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 pub(crate) mod vsock;

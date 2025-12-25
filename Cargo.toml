@@ -34,16 +34,14 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["kernel-stack", "pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse", "virtio-net", "vsock"]
+default = ["kernel-stack", "pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "virtio-fs", "virtio-net", "virtio-vsock"]
 acpi = []
 alloc-stats = ["talc/counters"]
 common-os = []
-console = ["virtio"]
 dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
-fs = ["fuse"]
+fs = ["virtio-fs"]
 fsgsbase = []
-fuse = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 gem-net = ["net", "dep:tock-registers"]
 idle-poll = []
 kernel-stack = []
@@ -63,9 +61,16 @@ trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 vga = []
 virtio = ["dep:virtio", "dep:mem-barrier"]
+virtio-console = ["virtio"]
+virtio-fs = ["virtio", "pci", "dep:fuse-abi", "fuse-abi/num_enum"]
 virtio-net = ["net", "virtio"]
-vsock = ["virtio", "pci"]
+virtio-vsock = ["virtio", "pci"]
 warn-prebuilt = []
+
+# Deprecated
+console = ["virtio-console"]
+fuse = ["virtio-fs"]
+vsock = ["virtio-vsock"]
 
 [lints.rust]
 rust_2018_idioms = "warn"

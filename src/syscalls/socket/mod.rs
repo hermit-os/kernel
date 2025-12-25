@@ -23,7 +23,7 @@ use crate::executor::network::{NIC, NetworkState};
 use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
 use crate::fd::socket::udp;
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
 	self, Endpoint, ListenEndpoint, ObjectInterface, SocketOption, get_object, insert_object,
@@ -37,7 +37,7 @@ pub enum Af {
 	Inet = 3,
 	Inet6 = 1,
 	Unix = 4,
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	Vsock = 2,
 }
 
@@ -155,7 +155,7 @@ pub enum sockaddrBox {
 	sockaddr_in(Box<sockaddr_in>),
 	sockaddr_in6(Box<sockaddr_in6>),
 	sockaddr_un(Box<sockaddr_un>),
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	sockaddr_vm(Box<sockaddr_vm>),
 }
 
@@ -165,7 +165,7 @@ pub enum sockaddrRef<'a> {
 	sockaddr_in(&'a sockaddr_in),
 	sockaddr_in6(&'a sockaddr_in6),
 	sockaddr_un(&'a sockaddr_un),
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	sockaddr_vm(&'a sockaddr_vm),
 }
 
@@ -183,7 +183,7 @@ impl sockaddr {
 			Af::Inet => sockaddrRef::sockaddr_in(unsafe { &*ptr.cast() }),
 			Af::Inet6 => sockaddrRef::sockaddr_in6(unsafe { &*ptr.cast() }),
 			Af::Unix => sockaddrRef::sockaddr_un(unsafe { &*ptr.cast() }),
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			Af::Vsock => sockaddrRef::sockaddr_vm(unsafe { &*ptr.cast() }),
 		};
 		Ok(ret)
@@ -196,7 +196,7 @@ impl sockaddr {
 			Af::Inet => sockaddrBox::sockaddr_in(unsafe { Box::from_raw(ptr.cast()) }),
 			Af::Inet6 => sockaddrBox::sockaddr_in6(unsafe { Box::from_raw(ptr.cast()) }),
 			Af::Unix => sockaddrBox::sockaddr_un(unsafe { Box::from_raw(ptr.cast()) }),
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			Af::Vsock => sockaddrBox::sockaddr_vm(unsafe { Box::from_raw(ptr.cast()) }),
 		};
 		Ok(ret)
@@ -210,7 +210,7 @@ impl sockaddrBox {
 			sockaddrBox::sockaddr_in(sockaddr_in) => Box::into_raw(sockaddr_in).cast(),
 			sockaddrBox::sockaddr_in6(sockaddr_in6) => Box::into_raw(sockaddr_in6).cast(),
 			sockaddrBox::sockaddr_un(sockaddr_un) => Box::into_raw(sockaddr_un).cast(),
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			sockaddrBox::sockaddr_vm(sockaddr_vm) => Box::into_raw(sockaddr_vm).cast(),
 		}
 	}
@@ -221,7 +221,7 @@ impl sockaddrBox {
 			Self::sockaddr_in(sockaddr_in) => sockaddrRef::sockaddr_in(sockaddr_in.as_ref()),
 			Self::sockaddr_in6(sockaddr_in6) => sockaddrRef::sockaddr_in6(sockaddr_in6.as_ref()),
 			Self::sockaddr_un(sockaddr_un) => sockaddrRef::sockaddr_un(sockaddr_un.as_ref()),
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			Self::sockaddr_vm(sockaddr_vm) => sockaddrRef::sockaddr_vm(sockaddr_vm.as_ref()),
 		}
 	}
@@ -243,13 +243,13 @@ impl sockaddrRef<'_> {
 			sockaddrRef::sockaddr_in(sockaddr_in) => sockaddr_in.sin_len,
 			sockaddrRef::sockaddr_in6(sockaddr_in6) => sockaddr_in6.sin6_len,
 			sockaddrRef::sockaddr_un(sockaddr_un) => sockaddr_un.sun_len,
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			sockaddrRef::sockaddr_vm(sockaddr_vm) => sockaddr_vm.svm_len,
 		}
 	}
 }
 
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct sockaddr_vm {
@@ -261,7 +261,7 @@ pub struct sockaddr_vm {
 	pub svm_zero: [u8; 4],
 }
 
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 impl From<sockaddr_vm> for VsockListenEndpoint {
 	fn from(addr: sockaddr_vm) -> VsockListenEndpoint {
 		let port = addr.svm_port;
@@ -275,7 +275,7 @@ impl From<sockaddr_vm> for VsockListenEndpoint {
 	}
 }
 
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 impl From<sockaddr_vm> for VsockEndpoint {
 	fn from(addr: sockaddr_vm) -> VsockEndpoint {
 		let port = addr.svm_port;
@@ -285,7 +285,7 @@ impl From<sockaddr_vm> for VsockEndpoint {
 	}
 }
 
-#[cfg(feature = "vsock")]
+#[cfg(feature = "virtio-vsock")]
 impl From<VsockEndpoint> for sockaddr_vm {
 	fn from(endpoint: VsockEndpoint) -> Self {
 		Self {
@@ -608,7 +608,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 		(_, _) => return -i32::from(Errno::Prototype),
 	}
 
-	#[cfg(feature = "vsock")]
+	#[cfg(feature = "virtio-vsock")]
 	if domain == Af::Vsock {
 		if sock != Sock::Stream {
 			return -i32::from(Errno::Socktnosupport);
@@ -715,7 +715,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 
 						new_fd
 					}
-					#[cfg(feature = "vsock")]
+					#[cfg(feature = "virtio-vsock")]
 					Endpoint::Vsock(endpoint) => {
 						let new_fd = insert_object(v.clone()).unwrap();
 
@@ -789,7 +789,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 				)
 				.map_or_else(|e| -i32::from(e), |()| 0)
 			}
-			#[cfg(feature = "vsock")]
+			#[cfg(feature = "virtio-vsock")]
 			Af::Vsock => {
 				if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 					return -i32::from(Errno::Inval);
@@ -832,7 +832,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 			}
 			Endpoint::Ip(IpEndpoint::from(unsafe { *name.cast::<sockaddr_in6>() }))
 		}
-		#[cfg(feature = "vsock")]
+		#[cfg(feature = "virtio-vsock")]
 		Af::Vsock => {
 			if namelen < u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 				return -i32::from(Errno::Inval);
@@ -897,7 +897,7 @@ pub unsafe extern "C" fn sys_getsockname(
 								}
 							}
 						},
-						#[cfg(feature = "vsock")]
+						#[cfg(feature = "virtio-vsock")]
 						Endpoint::Vsock(_) => {
 							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								warn!("unsupported device");
@@ -1054,7 +1054,7 @@ pub unsafe extern "C" fn sys_getpeername(
 								}
 							}
 						},
-						#[cfg(feature = "vsock")]
+						#[cfg(feature = "virtio-vsock")]
 						Endpoint::Vsock(_) => {
 							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
 								warn!("unsupported device");
@@ -1222,7 +1222,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 									}
 								}
 							},
-							#[cfg(feature = "vsock")]
+							#[cfg(feature = "virtio-vsock")]
 							_ => {
 								return (-i32::from(Errno::Inval)).try_into().unwrap();
 							}

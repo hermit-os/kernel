@@ -3,7 +3,7 @@ use core::ptr::NonNull;
 
 use align_address::Align;
 use arm_gic::{IntId, Trigger};
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
@@ -11,11 +11,11 @@ use volatile::VolatileRef;
 
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, PageSize};
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioUART;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
@@ -28,12 +28,12 @@ use crate::mm::PhysAddr;
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 pub(crate) enum MmioDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 }
 
 impl MmioDriver {
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
@@ -41,7 +41,7 @@ impl MmioDriver {
 	}
 }
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
@@ -49,7 +49,7 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 #[cfg(feature = "virtio-net")]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
-#[cfg(feature = "console")]
+#[cfg(feature = "virtio-console")]
 pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
 	MMIO_DRIVERS
 		.get()?
@@ -161,7 +161,7 @@ pub fn init_drivers() {
 										*NETWORK_DEVICE.lock() = Some(drv);
 									}
 								}
-								#[cfg(feature = "console")]
+								#[cfg(feature = "virtio-console")]
 								virtio::Id::Console => {
 									debug!(
 										"Found console at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
@@ -220,7 +220,7 @@ pub fn init_drivers() {
 
 	MMIO_DRIVERS.finalize();
 
-	#[cfg(feature = "console")]
+	#[cfg(feature = "virtio-console")]
 	{
 		if get_console_driver().is_some() {
 			info!("Switch to virtio console");
