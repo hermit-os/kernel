@@ -4,7 +4,6 @@ use clap::Args;
 
 use crate::arch::Arch;
 use crate::archive::Archive;
-use crate::ci;
 
 #[derive(Args)]
 pub struct Artifact {
@@ -97,9 +96,10 @@ impl Artifact {
 		self.artifact_dir().join("libhermit.a").into()
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn ci_image(&self, package: &str) -> PathBuf {
 		[
-			ci::parent_root(),
+			crate::ci::parent_root(),
 			"target".as_ref(),
 			self.arch.hermit_triple().as_ref(),
 			self.profile_path_component().as_ref(),

@@ -130,6 +130,7 @@ impl Arch {
 		}
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn ci_cargo_args(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &[
@@ -159,6 +160,7 @@ impl Arch {
 		}
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn qemu(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64",

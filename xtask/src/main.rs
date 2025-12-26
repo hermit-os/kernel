@@ -6,6 +6,7 @@ mod artifact;
 mod binutil;
 mod build;
 mod cargo_build;
+#[cfg(feature = "ci")]
 mod ci;
 mod clippy;
 mod doc;
@@ -22,9 +23,13 @@ use xshell::Shell;
 #[derive(Parser)]
 enum Cli {
 	Build(build::Build),
+
+	#[cfg(feature = "ci")]
 	#[command(subcommand)]
 	Ci(ci::Ci),
+
 	Clippy(clippy::Clippy),
+
 	Doc(doc::Doc),
 }
 
@@ -32,6 +37,7 @@ impl Cli {
 	fn run(self) -> Result<()> {
 		match self {
 			Self::Build(build) => build.run(),
+			#[cfg(feature = "ci")]
 			Self::Ci(ci) => ci.run(),
 			Self::Clippy(clippy) => clippy.run(),
 			Self::Doc(doc) => doc.run(),
