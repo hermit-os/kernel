@@ -1,6 +1,5 @@
-use std::fmt;
+use std::{fmt, io};
 
-use anyhow::Result;
 use clap::ValueEnum;
 
 /// Target architecture.
@@ -22,7 +21,7 @@ impl Arch {
 		&[Self::X86_64, Self::Aarch64, Self::Riscv64]
 	}
 
-	pub fn install(&self) -> Result<()> {
+	pub fn install(&self) -> io::Result<()> {
 		if self.tier() > 2 {
 			return Ok(());
 		}
@@ -37,7 +36,7 @@ impl Arch {
 		Ok(())
 	}
 
-	pub fn install_for_build(&self) -> Result<()> {
+	pub fn install_for_build(&self) -> io::Result<()> {
 		if self == &Self::X86_64 {
 			self.install()?;
 		}
