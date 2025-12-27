@@ -12,7 +12,6 @@
 #![feature(linkage)]
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_as_bytes)]
-#![feature(maybe_uninit_slice)]
 #![feature(never_type)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
