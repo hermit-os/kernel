@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_ARGC_ENVC","UHYVE_INTERFACE_VERSION","UHYVE_PORT_NETWRITE"],"enum":["Hypercall","HypercallAddress"],"mod":["parameters"],"struct":["GuestPhysAddr","GuestVirtAddr"]};

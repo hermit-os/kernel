@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HIGH_PRIO","IDLE_PRIO","LOW_PRIO","NORMAL_PRIO","NO_PRIORITIES"],"struct":["Priority","TaskId"]};

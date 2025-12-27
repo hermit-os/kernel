@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BarrierKind","BarrierType"],"fn":["mem_barrier"]};
