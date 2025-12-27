@@ -17,6 +17,7 @@ use memory_addresses::arch::aarch64::PhysAddr;
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::timer_interrupts;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
@@ -93,10 +94,8 @@ pub(crate) fn install_handlers() {
 
 	fn timer_handler() {
 		debug!("Handle timer interrupt");
-
-		// disable timer
-		CNTP_CVAL_EL0.set(0);
-		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
+		timer_interrupts::clear_active();
+		timer_interrupts::set_next_timer();
 	}
 
 	for (key, value) in get_interrupt_handlers().into_iter() {
