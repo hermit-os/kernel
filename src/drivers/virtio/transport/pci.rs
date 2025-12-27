@@ -11,7 +11,6 @@ use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
 
-use mem_barrier::{BarrierKind, BarrierType, mem_barrier};
 use memory_addresses::PhysAddr;
 use pci_types::capability::PciCapability;
 use virtio::pci::{
@@ -301,7 +300,6 @@ impl ComCfg {
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -312,7 +310,6 @@ impl ComCfg {
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -322,29 +319,29 @@ impl ComCfg {
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
-		self.com_cfg.as_mut_ptr().device_status().update(|s| {
-			mem_barrier(BarrierKind::Mmio, BarrierType::General);
-			s | DeviceStatus::ACKNOWLEDGE
-		});
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::ACKNOWLEDGE);
 	}
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
-		self.com_cfg.as_mut_ptr().device_status().update(|s| {
-			mem_barrier(BarrierKind::Mmio, BarrierType::General);
-			s | DeviceStatus::DRIVER
-		});
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::DRIVER);
 	}
 
 	/// Sets the FEATURES_OK bit in the device status field.
 	///
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
-		self.com_cfg.as_mut_ptr().device_status().update(|s| {
-			mem_barrier(BarrierKind::Mmio, BarrierType::General);
-			s | DeviceStatus::FEATURES_OK
-		});
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::FEATURES_OK);
 	}
 
 	/// In order to correctly check feature negotiaten, this function
@@ -355,7 +352,6 @@ impl ComCfg {
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
 		let status = self.com_cfg.as_ptr().device_status().read();
-		mem_barrier(BarrierKind::Dma, BarrierType::Read);
 		status.contains(DeviceStatus::FEATURES_OK)
 	}
 
@@ -363,10 +359,10 @@ impl ComCfg {
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
-		self.com_cfg.as_mut_ptr().device_status().update(|s| {
-			mem_barrier(BarrierKind::Mmio, BarrierType::General);
-			s | DeviceStatus::DRIVER_OK
-		});
+		self.com_cfg
+			.as_mut_ptr()
+			.device_status()
+			.update(|s| s | DeviceStatus::DRIVER_OK);
 	}
 
 	/// Returns the features offered by the device.
@@ -377,22 +373,17 @@ impl ComCfg {
 
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		device_feature_select.write(1.into());
 
 		// read high 32 bits of device features
-		mem_barrier(BarrierKind::Mmio, BarrierType::General);
 		let mut device_features = u64::from(device_feature.read().to_ne()) << 32;
 
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
-		mem_barrier(BarrierKind::Mmio, BarrierType::General);
 		device_feature_select.write(0.into());
 
 		// read low 32 bits of device features
-		mem_barrier(BarrierKind::Mmio, BarrierType::General);
 		device_features |= u64::from(device_feature.read().to_ne());
-		mem_barrier(BarrierKind::Mmio, BarrierType::Read);
 
 		virtio::F::from_bits_retain(u128::from(device_features).into())
 	}
@@ -409,20 +400,16 @@ impl ComCfg {
 
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		driver_feature_select.write(0.into());
 
 		// write low 32 bits of device features
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		driver_feature.write(low.into());
 
 		// Indicate to device that driver_features field shows high 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		driver_feature_select.write(1.into());
 
 		// write high 32 bits of device features
-		mem_barrier(BarrierKind::Mmio, BarrierType::Write);
 		driver_feature.write(high.into());
 	}
 }
