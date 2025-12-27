@@ -92,6 +92,15 @@ jobs:
           cargo fmt --all --check
           cargo fmt --all --check --manifest-path hermit-builtins/Cargo.toml
 
+  lock-file:
+    name: Lock file
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: mkroening/rust-toolchain-toml@main
+      - run: cargo update -w --locked
+      - run: cargo update -w --locked --manifest-path hermit-builtins/Cargo.toml
+
   typos:
     name: Typos
     runs-on: ubuntu-latest
