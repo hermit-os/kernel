@@ -168,43 +168,41 @@ pub fn init_drivers() {
 									);
 									if let Ok(VirtioDriver::Console(drv)) =
 										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+										&& let Some(gic) = GIC.lock().as_mut()
 									{
-										if let Some(gic) = GIC.lock().as_mut() {
-											// enable timer interrupt
-											let virtio_irqid = if irqtype == 1 {
-												IntId::ppi(irq)
-											} else if irqtype == 0 {
-												IntId::spi(irq)
-											} else {
-												panic!("Invalid interrupt type");
-											};
-											gic.set_interrupt_priority(
+										// enable timer interrupt
+										let virtio_irqid = if irqtype == 1 {
+											IntId::ppi(irq)
+										} else if irqtype == 0 {
+											IntId::spi(irq)
+										} else {
+											panic!("Invalid interrupt type");
+										};
+										gic.set_interrupt_priority(
+											virtio_irqid,
+											Some(cpu_id),
+											0x00,
+										);
+										if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+											gic.set_trigger(
 												virtio_irqid,
 												Some(cpu_id),
-												0x00,
+												Trigger::Level,
 											);
-											if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-												gic.set_trigger(
-													virtio_irqid,
-													Some(cpu_id),
-													Trigger::Level,
-												);
-											} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1
-											{
-												gic.set_trigger(
-													virtio_irqid,
-													Some(cpu_id),
-													Trigger::Edge,
-												);
-											} else {
-												panic!("Invalid interrupt level!");
-											}
-											gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
-
-											register_driver(MmioDriver::VirtioConsole(
-												hermit_sync::InterruptTicketMutex::new(*drv),
-											));
+										} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+											gic.set_trigger(
+												virtio_irqid,
+												Some(cpu_id),
+												Trigger::Edge,
+											);
+										} else {
+											panic!("Invalid interrupt level!");
 										}
+										gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+
+										register_driver(MmioDriver::VirtioConsole(
+											hermit_sync::InterruptTicketMutex::new(*drv),
+										));
 									}
 								}
 								_ => {}
