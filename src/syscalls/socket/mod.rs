@@ -1126,8 +1126,6 @@ pub unsafe extern "C" fn sys_sendto(
 	addr: *const sockaddr,
 	addr_len: socklen_t,
 ) -> isize {
-	let endpoint;
-
 	if addr.is_null() || addr_len == 0 {
 		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
@@ -1137,6 +1135,8 @@ pub unsafe extern "C" fn sys_sendto(
 			let Ok(sa_family) = (unsafe { Af::try_from((*addr).sa_family) }) else {
 				return (-i32::from(Errno::Inval)).try_into().unwrap();
 			};
+
+			let endpoint;
 
 			if sa_family == Af::Inet {
 				if addr_len < u32::try_from(size_of::<sockaddr_in>()).unwrap() {
@@ -1154,7 +1154,7 @@ pub unsafe extern "C" fn sys_sendto(
 				endpoint = None;
 			}
 		} else {
-			endpoint = None;
+			let endpoint = None;
 		}
 	}
 
