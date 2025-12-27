@@ -1,6 +1,8 @@
+use std::ffi::OsStr;
+use std::io;
+
 use anyhow::Result;
 use clap::Args;
-use xshell::cmd;
 
 use crate::arch::Arch;
 
@@ -10,31 +12,34 @@ pub struct Doc;
 
 impl Doc {
 	pub fn run(self) -> Result<()> {
-		let sh = crate::sh()?;
-
 		for arch in Arch::all() {
 			arch.install()?;
 			let triple = arch.triple();
+			let target = format!("--target={triple}");
+			let target = target.as_str();
 
-			cmd!(sh, "cargo doc --target={triple}")
-				.arg("--no-deps")
-				.arg("--document-private-items")
-				.arg("--package=hermit-kernel")
-				.run()?;
-
-			cmd!(sh, "cargo doc --target={triple}")
-				.arg("--no-deps")
-				.arg("--document-private-items")
-				.arg("--manifest-path=hermit-builtins/Cargo.toml")
-				.run()?;
+			doc([target, "--package=hermit-kernel"])?;
+			doc([target, "--manifest-path=hermit-builtins/Cargo.toml"])?;
 		}
 
-		cmd!(sh, "cargo doc")
-			.arg("--no-deps")
-			.arg("--document-private-items")
-			.arg("--package=xtask")
-			.run()?;
-
+		doc(["--package=xtask"])?;
 		Ok(())
 	}
+}
+
+fn doc<I, S>(args: I) -> io::Result<()>
+where
+	I: IntoIterator<Item = S>,
+	S: AsRef<OsStr>,
+{
+	let mut cmd = crate::cargo();
+	cmd.arg("doc");
+	cmd.arg("--no-deps");
+	cmd.arg("--document-private-items");
+	cmd.args(args);
+
+	eprintln!("$ {cmd:?}");
+	cmd.spawn()?.wait()?;
+
+	Ok(())
 }
