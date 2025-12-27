@@ -247,7 +247,7 @@ pub fn init_drivers() {
 						if let Ok(VirtioDriver::Network(drv)) =
 							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 						{
-							*NETWORK_DEVICE.lock() = Some(drv);
+							*NETWORK_DEVICE.lock() = Some(*drv);
 						}
 					}
 					#[cfg(feature = "virtio-console")]

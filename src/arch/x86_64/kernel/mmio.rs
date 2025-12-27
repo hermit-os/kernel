@@ -219,7 +219,7 @@ pub(crate) fn init_drivers() {
 			warn!("Found MMIO device, but we guess the interrupt number {irq}!");
 			match mmio_virtio::init_device(mmio, irq) {
 				Ok(VirtioDriver::Network(drv)) => {
-					*NETWORK_DEVICE.lock() = Some(drv);
+					*NETWORK_DEVICE.lock() = Some(*drv);
 				}
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(_)) => unreachable!(),

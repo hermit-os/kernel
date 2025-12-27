@@ -7,8 +7,6 @@
 
 #![allow(dead_code)]
 
-#[cfg(feature = "virtio-console")]
-use alloc::boxed::Box;
 use core::mem;
 
 use memory_addresses::PhysAddr;
@@ -367,9 +365,9 @@ impl IsrStatus {
 
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-net")]
-	Network(VirtioNetDriver),
+	Network(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-console")]
-	Console(Box<VirtioConsoleDriver>),
+	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 }
 
 #[allow(unused_variables)]
@@ -396,7 +394,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
 				info!("Virtio interrupt handler at line {irq_no}");
 
-				Ok(VirtioDriver::Network(virt_net_drv))
+				Ok(VirtioDriver::Network(alloc::boxed::Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio network driver could not be initialized with device");
@@ -411,7 +409,9 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
 				info!("Virtio interrupt handler at line {irq_no}");
 
-				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
+				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
+					virt_console_drv,
+				)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio console driver could not be initialized with device");

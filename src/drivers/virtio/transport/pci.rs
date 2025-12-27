@@ -7,8 +7,6 @@
 
 #![allow(dead_code)]
 
-#[cfg(any(feature = "virtio-vsock", feature = "virtio-console"))]
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -819,7 +817,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
-				Ok(VirtioDriver::Network(virt_net_drv))
+				Ok(VirtioDriver::Network(alloc::boxed::Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
 				error!(
@@ -837,7 +835,9 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
-				Ok(VirtioDriver::Console(Box::new(virt_console_drv)))
+				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
+					virt_console_drv,
+				)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio console driver could not be initialized with device: {device_id:x}");
@@ -853,7 +853,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
-				Ok(VirtioDriver::Vsock(Box::new(virt_sock_drv)))
+				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_sock_drv)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio sock driver could not be initialized with device: {device_id:x}");
@@ -867,7 +867,9 @@ pub(crate) fn init_device(
 			match VirtioFsDriver::init(device) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
-					Ok(VirtioDriver::FileSystem(virt_fs_drv))
+					Ok(VirtioDriver::FileSystem(alloc::boxed::Box::new(
+						virt_fs_drv,
+					)))
 				}
 				Err(virtio_error) => {
 					error!(
@@ -899,11 +901,11 @@ pub(crate) enum VirtioDriver {
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]
-	Network(VirtioNetDriver),
+	Network(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-console")]
-	Console(Box<VirtioConsoleDriver>),
+	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-vsock")]
-	Vsock(Box<VirtioVsockDriver>),
+	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 	#[cfg(feature = "virtio-fs")]
-	FileSystem(VirtioFsDriver),
+	FileSystem(alloc::boxed::Box<VirtioFsDriver>),
 }

@@ -158,7 +158,7 @@ pub fn init_drivers() {
 										}
 										gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
 
-										*NETWORK_DEVICE.lock() = Some(drv);
+										*NETWORK_DEVICE.lock() = Some(*drv);
 									}
 								}
 								#[cfg(feature = "virtio-console")]
