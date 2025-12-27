@@ -675,6 +675,10 @@ fn calibrate_timer() {
 
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
+		if wt < processor::get_timer_ticks() {
+			error!("Wakeup time is in the past.");
+			return;
+		}
 		if processor::supports_tsc_deadline() {
 			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
 			// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
