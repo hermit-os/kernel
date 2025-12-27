@@ -33,6 +33,11 @@ impl Clippy {
 				.arg("--no-default-features")
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
+			clippy()
+				.arg("--no-default-features")
+				// FIXME: also enable virtio-fs and virtio-vsock once they no longer imply PCI
+				.arg("--features=tcp,virtio-console,virtio-net")
+				.run()?;
 
 			match *arch {
 				Arch::X86_64 => {
