@@ -23,11 +23,12 @@ use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
-use crate::env;
+use crate::errno::Errno;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::{FrameAlloc, PageAlloc, PageBox, PageRangeAllocator};
+use crate::{env, io};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -84,7 +85,7 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 
 fn check_linux_args(
 	linux_mmio: &'static [String],
-) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
+) -> io::Result<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let page_range = PageBox::new(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
@@ -133,10 +134,10 @@ fn check_linux_args(
 		}
 	}
 
-	Err("Network card not found!")
+	Err(Errno::Nodev)
 }
 
-fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
+fn guess_device() -> io::Result<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
@@ -181,12 +182,12 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 		return Ok((mmio, IRQ_NUMBER));
 	}
 
-	Err("Network card not found!")
+	Err(Errno::Nodev)
 }
 
 /// Tries to find the network device within the specified address range.
 /// Returns a reference to it within the Ok() if successful or an Err() on failure.
-fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
+fn detect_network() -> io::Result<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	let linux_mmio = env::mmio();
 
 	if linux_mmio.is_empty() {
