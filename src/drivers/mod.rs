@@ -77,7 +77,7 @@ pub(crate) fn init() {
 	// Initialize PCI Drivers
 	#[cfg(feature = "pci")]
 	crate::drivers::pci::init();
-	#[cfg(all(not(feature = "pci"), target_arch = "x86_64", feature = "virtio-net"))]
+	#[cfg(all(not(feature = "pci"), feature = "virtio", target_arch = "x86_64"))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
 	#[cfg(all(
 		not(feature = "pci"),
