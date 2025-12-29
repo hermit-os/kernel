@@ -23,11 +23,12 @@ use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
-use crate::env;
+use crate::errno::Errno;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::{FrameAlloc, PageAlloc, PageBox, PageRangeAllocator};
+use crate::{env, io};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -68,27 +69,25 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 		return None;
 	}
 
-	// We found a MMIO-device (whose 512-bit address in this structure).
-	trace!("Found a MMIO-device at {mmio:p}");
-
-	// Verify the device-ID to find the network card
 	let id = mmio.as_ptr().device_id().read();
 
-	if id != virtio::Id::Net {
-		trace!("It's not a network card at {mmio:p}");
+	if id == virtio::Id::Reserved {
 		return None;
 	}
+
+	info!("Found Virtio {id:?} device: {mmio:p}");
 
 	Some(mmio)
 }
 
 fn check_linux_args(
 	linux_mmio: &'static [String],
-) -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
+) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let page_range = PageBox::new(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
 
+	let mut devices = vec![];
 	for arg in linux_mmio {
 		trace!("check linux parameter: {arg}");
 
@@ -125,7 +124,7 @@ fn check_linux_args(
 					FrameAlloc::allocate_at(frame_range).unwrap_err();
 				}
 
-				return Ok((mmio, irq));
+				devices.push((mmio, irq));
 			}
 			_ => {
 				warn!("Invalid prefix in {arg}");
@@ -133,10 +132,10 @@ fn check_linux_args(
 		}
 	}
 
-	Err("Network card not found!")
+	devices
 }
 
-fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
+fn guess_device() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
@@ -144,11 +143,16 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 	let virtual_address = VirtAddr::from(page_range.start());
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
+	let mut devices = vec![];
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
 		trace!("try to detect MMIO device at physical address {current_address:#X}");
 		// Have we crossed a page boundary in the last iteration?
 		// info!("before the {}. paging", current_page);
 		if current_address / BasePageSize::SIZE as usize > current_page {
+			if !devices.is_empty() {
+				return devices;
+			}
+
 			let mut flags = PageTableEntryFlags::empty();
 			flags.normal().writable();
 			paging::map::<BasePageSize>(
@@ -168,8 +172,6 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 			continue;
 		};
 
-		info!("Found network card at {mmio:p}");
-
 		if cfg!(debug_assertions) {
 			let len = usize::try_from(BasePageSize::SIZE).unwrap();
 			let start = current_address.align_down(len);
@@ -178,15 +180,13 @@ fn guess_device() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'stati
 			FrameAlloc::allocate_at(frame_range).unwrap_err();
 		}
 
-		return Ok((mmio, IRQ_NUMBER));
+		devices.push((mmio, IRQ_NUMBER));
 	}
 
-	Err("Network card not found!")
+	devices
 }
 
-/// Tries to find the network device within the specified address range.
-/// Returns a reference to it within the Ok() if successful or an Err() on failure.
-fn detect_network() -> Result<(VolatileRef<'static, DeviceRegisters>, u8), &'static str> {
+fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	let linux_mmio = env::mmio();
 
 	if linux_mmio.is_empty() {
@@ -212,23 +212,34 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 }
 
 pub(crate) fn init_drivers() {
-	// virtio: MMIO Device Discovery
 	without_interrupts(|| {
-		#[cfg(feature = "virtio-net")]
-		if let Ok((mmio, irq)) = detect_network() {
-			warn!("Found MMIO device, but we guess the interrupt number {irq}!");
+		let devices = detect_devices();
+
+		for (mmio, irq) in devices {
 			match mmio_virtio::init_device(mmio, irq) {
+				#[cfg(feature = "virtio-net")]
 				Ok(VirtioDriver::Network(drv)) => {
 					*NETWORK_DEVICE.lock() = Some(*drv);
 				}
 				#[cfg(feature = "virtio-console")]
-				Ok(VirtioDriver::Console(_)) => unreachable!(),
+				Ok(VirtioDriver::Console(drv)) => {
+					register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
+				}
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}
-		} else {
-			warn!("Unable to find mmio device");
 		}
 
 		MMIO_DRIVERS.finalize();
+
+		#[cfg(feature = "virtio-console")]
+		if get_console_driver().is_some() {
+			use crate::console::IoDevice;
+			use crate::drivers::console::VirtioUART;
+
+			info!("Switch to virtio console");
+			crate::console::CONSOLE
+				.lock()
+				.replace_device(IoDevice::Virtio(VirtioUART::new()));
+		}
 	});
 }

@@ -250,6 +250,8 @@ jobs:
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console qemu --devices virtio-console-pci
         if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console --no-default-features qemu --devices virtio-console-mmio --microvm
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console --no-default-features qemu --devices virtio-console-mmio
         if: matrix.arch != 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package thread_test --smp 4 qemu ${{ matrix.flags }}
