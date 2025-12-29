@@ -182,7 +182,7 @@ memory_addresses = { version = "0.2.3", default-features = false, features = [
 ] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-riscv = "0.15"
+riscv = "0.16"
 sbi-rt = "0.0.3"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
