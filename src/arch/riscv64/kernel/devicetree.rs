@@ -10,7 +10,10 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::interrupts::init_plic;
-#[cfg(all(feature = "virtio-console", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "virtio-console", feature = "virtio-fs"),
+	not(feature = "pci"),
+))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging::{self, PageSize};
 #[cfg(feature = "virtio-console")]
@@ -26,14 +29,21 @@ use crate::drivers::pci::get_console_driver;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(all(
-	any(feature = "virtio-console", feature = "virtio-net"),
+	any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-net",
+	),
 	not(feature = "pci"),
 ))]
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
-#[cfg(all(feature = "virtio-console", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "virtio-console", feature = "virtio-fs"),
+	not(feature = "pci")
+))]
 use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
@@ -233,6 +243,12 @@ pub fn init_drivers() {
 					#[cfg(feature = "virtio-console")]
 					Ok(VirtioDriver::Console(drv)) => {
 						register_driver(MmioDriver::VirtioConsole(
+							hermit_sync::InterruptSpinMutex::new(*drv),
+						));
+					}
+					#[cfg(feature = "virtio-fs")]
+					Ok(VirtioDriver::FileSystem(drv)) => {
+						register_driver(MmioDriver::VirtioFs(
 							hermit_sync::InterruptSpinMutex::new(*drv),
 						));
 					}

@@ -22,6 +22,8 @@ use crate::drivers::InterruptLine;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
+#[cfg(feature = "virtio-fs")]
+use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::VirtioIdExt;
@@ -355,6 +357,8 @@ impl IsrStatus {
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-fs")]
+	FileSystem(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(feature = "virtio-net")]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
 }
@@ -392,6 +396,23 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "virtio-fs")]
+		virtio::Id::Fs => {
+			// TODO: check subclass
+			// TODO: proper error handling on driver creation fail
+			match VirtioFsDriver::init(dev_id, registers, irq_no) {
+				Ok(virt_fs_drv) => {
+					info!("Virtio filesystem driver initialized.");
+					Ok(VirtioDriver::FileSystem(alloc::boxed::Box::new(
+						virt_fs_drv,
+					)))
+				}
+				Err(virtio_error) => {
+					error!("Virtio fs driver could not be initialized with device");
+					Err(DriverError::InitVirtioDevFail(virtio_error))
+				}
+			}
+		}
 		#[cfg(feature = "virtio-net")]
 		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no) {
 			Ok(virt_net_drv) => {

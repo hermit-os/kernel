@@ -5,7 +5,7 @@ use core::{ptr, str};
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
-#[cfg(feature = "virtio-console")]
+#[cfg(any(feature = "virtio-console", feature = "virtio-fs"))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -18,10 +18,16 @@ use crate::arch::x86_64::mm::paging::{
 };
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(feature = "virtio-fs")]
+use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
-#[cfg(any(feature = "virtio-console", feature = "virtio-net"))]
+#[cfg(any(
+	feature = "virtio-console",
+	feature = "virtio-fs",
+	feature = "virtio-net"
+))]
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
@@ -40,6 +46,8 @@ static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-fs")]
+	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 }
 
 impl MmioDriver {
@@ -47,6 +55,13 @@ impl MmioDriver {
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+		}
+	}
+
+	#[cfg(feature = "virtio-fs")]
+	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
+		match self {
+			Self::VirtioFs(drv) => Some(drv),
 		}
 	}
 }
@@ -195,7 +210,7 @@ fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	}
 }
 
-#[cfg(feature = "virtio-console")]
+#[cfg(any(feature = "virtio-console", feature = "virtio-fs"))]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
@@ -211,6 +226,14 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.find_map(|drv| drv.get_console_driver())
 }
 
+#[cfg(feature = "virtio-fs")]
+pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_filesystem_driver())
+}
+
 pub(crate) fn init_drivers() {
 	without_interrupts(|| {
 		let devices = detect_devices();
@@ -220,6 +243,10 @@ pub(crate) fn init_drivers() {
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
+				}
+				#[cfg(feature = "virtio-fs")]
+				Ok(VirtioDriver::FileSystem(drv)) => {
+					register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-net")]
 				Ok(VirtioDriver::Net(drv)) => {
