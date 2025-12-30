@@ -217,13 +217,13 @@ pub(crate) fn init_drivers() {
 
 		for (mmio, irq) in devices {
 			match mmio_virtio::init_device(mmio, irq) {
-				#[cfg(feature = "virtio-net")]
-				Ok(VirtioDriver::Net(drv)) => {
-					*NETWORK_DEVICE.lock() = Some(*drv);
-				}
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
+				}
+				#[cfg(feature = "virtio-net")]
+				Ok(VirtioDriver::Net(drv)) => {
+					*NETWORK_DEVICE.lock() = Some(*drv);
 				}
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}

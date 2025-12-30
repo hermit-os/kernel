@@ -780,16 +780,16 @@ pub(crate) fn init_device(
 }
 
 pub(crate) enum VirtioDriver {
+	#[cfg(feature = "virtio-console")]
+	Console(alloc::boxed::Box<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-fs")]
+	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
-	#[cfg(feature = "virtio-console")]
-	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
-	#[cfg(feature = "virtio-fs")]
-	Fs(alloc::boxed::Box<VirtioFsDriver>),
 }

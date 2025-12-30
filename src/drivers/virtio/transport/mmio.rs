@@ -353,10 +353,10 @@ impl IsrStatus {
 }
 
 pub(crate) enum VirtioDriver {
-	#[cfg(feature = "virtio-net")]
-	Net(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-net")]
+	Net(alloc::boxed::Box<VirtioNetDriver>),
 }
 
 #[allow(unused_variables)]
