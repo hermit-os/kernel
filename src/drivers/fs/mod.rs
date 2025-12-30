@@ -6,7 +6,7 @@
 //! [File System Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-45800011
 
 #[cfg(feature = "pci")]
-pub mod virtio_pci;
+pub mod pci;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
