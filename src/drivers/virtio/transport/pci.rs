@@ -26,7 +26,7 @@ use crate::arch::pci::PciConfigRegion;
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "virtio-fs")]
-use crate::drivers::fs::virtio_fs::VirtioFsDriver;
+use crate::drivers::fs::VirtioFsDriver;
 #[cfg(all(
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 	not(feature = "rtl8139"),
