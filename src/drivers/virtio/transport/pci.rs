@@ -182,7 +182,6 @@ pub struct UniCapsColl {
 	pub(crate) com_cfg: ComCfg,
 	pub(crate) notif_cfg: NotifCfg,
 	pub(crate) isr_cfg: IsrStatus,
-	pub(crate) sh_mem_cfg_list: Vec<ShMemCfg>,
 	pub(crate) dev_cfg_list: Vec<PciCap>,
 }
 /// Wraps a [`CommonCfg`] in order to preserve
@@ -291,11 +290,6 @@ impl ComCfg {
 
 	pub fn device_config_space(&self) -> VolatilePtr<'_, CommonCfg, ReadOnly> {
 		self.com_cfg.as_ptr()
-	}
-
-	/// Returns the device status field.
-	pub fn dev_status(&self) -> u8 {
-		self.com_cfg.as_ptr().device_status().read().bits()
 	}
 
 	/// Resets the device status field to zero.
@@ -421,6 +415,7 @@ pub struct NotifCfg {
 	base_addr: u64,
 	notify_off_multiplier: u32,
 	/// defines the maximum size of the notification space, starting from base_addr.
+	#[cfg(debug_assertions)]
 	length: u64,
 }
 
@@ -449,12 +444,21 @@ impl NotifCfg {
 		Some(NotifCfg {
 			base_addr,
 			notify_off_multiplier,
+			#[cfg(debug_assertions)]
 			length: cap.len(),
 		})
 	}
 
 	pub fn notification_location(&self, vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
 		let addend = u32::from(vq_cfg_handler.notif_off()) * self.notify_off_multiplier;
+
+		// TODO: This should be
+		// cap.length >= queue_notify_off * notify_off_multiplier + 4
+		// if VIRTIO_F_NOTIFICATION_DATA has been negotiated.
+		// Knowing this here requires a larger refactoring.
+		#[cfg(debug_assertions)]
+		assert!(self.length >= u64::from(addend + 2));
+
 		let addr = self.base_addr + u64::from(addend);
 		ptr::with_exposed_provenance_mut(addr.try_into().unwrap())
 	}
@@ -529,106 +533,6 @@ impl IsrStatus {
 
 	pub fn acknowledge(&mut self) {
 		// nothing to do
-	}
-}
-
-/// Shared memory configuration structure of Virtio PCI devices.
-/// See Virtio specification v1.1. - 4.1.4.7
-///
-/// Each shared memory region is defined via a single shared
-/// memory structure. Each region is identified by an id indicated
-/// via the capability.id field of PciCapRaw.
-///
-/// The shared memory region is defined via a PciCap64 structure.
-/// See Virtio specification v.1.1 - 4.1.4 for structure.
-///
-// Only used for capabilities that require offsets or lengths
-// larger than 4GB.
-// #[repr(C)]
-// struct PciCap64 {
-//    pci_cap: PciCap,
-//    offset_hi: u32,
-//    length_hi: u32
-pub struct ShMemCfg {
-	mem_addr: u64,
-	length: u64,
-	sh_mem: ShMem,
-	/// Shared memory regions are identified via an ID
-	/// See Virtio specification v1.1. - 4.1.4.7
-	id: u8,
-}
-
-impl ShMemCfg {
-	fn new(cap: &PciCap) -> Option<Self> {
-		if cap.bar.length < cap.len() + cap.offset() {
-			error!(
-				"Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
-				cap.cap.id, cap.dev_id, cap.bar.index
-			);
-			return None;
-		}
-
-		let offset = cap.cap.offset.to_ne();
-		let length = cap.cap.length.to_ne();
-
-		let virt_addr_raw = cap.bar.mem_addr + offset;
-		let raw_ptr = ptr::with_exposed_provenance_mut::<u8>(virt_addr_raw.try_into().unwrap());
-
-		// Zero initialize shared memory area
-		unsafe {
-			for i in 0..usize::try_from(length).unwrap() {
-				*(raw_ptr.add(i)) = 0;
-			}
-		};
-
-		// Currently in place in order to ensure a safe cast below
-		// "len: cap.bar.length as usize"
-		// In order to remove this assert a safe conversion from
-		// kernel PciBar struct into usize must be made
-		assert!(mem::size_of::<usize>() == 8);
-
-		Some(ShMemCfg {
-			mem_addr: virt_addr_raw,
-			length: cap.len(),
-			sh_mem: ShMem {
-				ptr: raw_ptr,
-				len: cap.bar.length as usize,
-			},
-			id: cap.cap.id,
-		})
-	}
-}
-
-/// Defines a shared memory locate at location ptr with a length of len.
-/// The shared memories Drop implementation does not dealloc the memory
-/// behind the pointer but sets it to zero, to prevent leakage of data.
-struct ShMem {
-	ptr: *mut u8,
-	len: usize,
-}
-
-impl core::ops::Deref for ShMem {
-	type Target = [u8];
-
-	fn deref(&self) -> &[u8] {
-		unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
-	}
-}
-
-impl core::ops::DerefMut for ShMem {
-	fn deref_mut(&mut self) -> &mut [u8] {
-		unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
-	}
-}
-
-// Upon drop the shared memory region is "deleted" with zeros.
-impl Drop for ShMem {
-	fn drop(&mut self) {
-		for i in 0..self.len {
-			unsafe {
-				*(self.ptr.add(i)) = 0;
-			}
-		}
 	}
 }
 
@@ -708,7 +612,6 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	let mut com_cfg = None;
 	let mut notif_cfg = None;
 	let mut isr_cfg = None;
-	let mut sh_mem_cfg_list = Vec::new();
 	let mut dev_cfg_list = Vec::new();
 	// Map Caps in virtual memory
 	for pci_cap in cap_list {
@@ -743,15 +646,12 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					}
 				}
 			}
-			CapCfgType::SharedMemory => match ShMemCfg::new(&pci_cap) {
-				Some(sh_mem) => sh_mem_cfg_list.push(sh_mem),
-				None => {
-					let cap_id = pci_cap.cap.id;
-					error!(
-						"Shared Memory config capability with id {cap_id} of device {device_id:x} could not be used!"
-					);
-				}
-			},
+			CapCfgType::SharedMemory => {
+				let cap_id = pci_cap.cap.id;
+				error!(
+					"Shared Memory config capability with id {cap_id} of device {device_id:x} could not be used!"
+				);
+			}
 			CapCfgType::Device => dev_cfg_list.push(pci_cap),
 
 			// PCI's configuration space is allowed to hold other structures, which are not virtio specific and are therefore ignored
@@ -764,7 +664,6 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 		com_cfg: com_cfg.ok_or(VirtioError::NoComCfg(device_id))?,
 		notif_cfg: notif_cfg.ok_or(VirtioError::NoNotifCfg(device_id))?,
 		isr_cfg: isr_cfg.ok_or(VirtioError::NoIsrCfg(device_id))?,
-		sh_mem_cfg_list,
 		dev_cfg_list,
 	})
 }
