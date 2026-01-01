@@ -500,7 +500,7 @@ pub(crate) fn init() {
 			#[cfg(feature = "virtio")]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
-				Ok(VirtioDriver::Network(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(*drv),
+				Ok(VirtioDriver::Net(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(*drv),
 
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
@@ -515,7 +515,7 @@ pub(crate) fn init() {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-fs")]
-				Ok(VirtioDriver::FileSystem(drv)) => {
+				Ok(VirtioDriver::Fs(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
 				}
 				_ => {}

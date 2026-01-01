@@ -124,7 +124,7 @@ pub fn init_drivers() {
 									debug!(
 										"Found network card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
 									);
-									if let Ok(VirtioDriver::Network(drv)) =
+									if let Ok(VirtioDriver::Net(drv)) =
 										mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 										&& let Some(gic) = GIC.lock().as_mut()
 									{

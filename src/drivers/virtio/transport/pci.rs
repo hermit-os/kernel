@@ -804,7 +804,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
-				Ok(VirtioDriver::Network(alloc::boxed::Box::new(virt_net_drv)))
+				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
 				error!(
@@ -854,9 +854,7 @@ pub(crate) fn init_device(
 			match VirtioFsDriver::init(device) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
-					Ok(VirtioDriver::FileSystem(alloc::boxed::Box::new(
-						virt_fs_drv,
-					)))
+					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
 					error!(
@@ -888,11 +886,11 @@ pub(crate) enum VirtioDriver {
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]
-	Network(alloc::boxed::Box<VirtioNetDriver>),
+	Net(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 	#[cfg(feature = "virtio-fs")]
-	FileSystem(alloc::boxed::Box<VirtioFsDriver>),
+	Fs(alloc::boxed::Box<VirtioFsDriver>),
 }
