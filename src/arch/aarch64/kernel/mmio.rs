@@ -19,7 +19,9 @@ use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::console::VirtioUART;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
-use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
+use crate::drivers::virtio::transport::mmio as mmio_virtio;
+#[cfg(any(feature = "virtio-console", feature = "virtio-net"))]
+use crate::drivers::virtio::transport::mmio::VirtioDriver;
 #[cfg(feature = "virtio-net")]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
