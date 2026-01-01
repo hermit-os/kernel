@@ -854,9 +854,7 @@ pub(crate) fn init_device(
 			match VirtioFsDriver::init(device) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
-					Ok(VirtioDriver::FileSystem(alloc::boxed::Box::new(
-						virt_fs_drv,
-					)))
+					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
 					error!(
@@ -894,5 +892,5 @@ pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 	#[cfg(feature = "virtio-fs")]
-	FileSystem(alloc::boxed::Box<VirtioFsDriver>),
+	Fs(alloc::boxed::Box<VirtioFsDriver>),
 }

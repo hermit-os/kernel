@@ -515,7 +515,7 @@ pub(crate) fn init() {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-fs")]
-				Ok(VirtioDriver::FileSystem(drv)) => {
+				Ok(VirtioDriver::Fs(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
 				}
 				_ => {}
