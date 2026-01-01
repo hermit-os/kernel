@@ -244,7 +244,7 @@ pub fn init_drivers() {
 					virtio::Id::Net => {
 						debug!("Found virtio network card at {mmio:p}");
 
-						if let Ok(VirtioDriver::Network(drv)) =
+						if let Ok(VirtioDriver::Net(drv)) =
 							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
 						{
 							*NETWORK_DEVICE.lock() = Some(*drv);

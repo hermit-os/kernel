@@ -218,7 +218,7 @@ pub(crate) fn init_drivers() {
 		for (mmio, irq) in devices {
 			match mmio_virtio::init_device(mmio, irq) {
 				#[cfg(feature = "virtio-net")]
-				Ok(VirtioDriver::Network(drv)) => {
+				Ok(VirtioDriver::Net(drv)) => {
 					*NETWORK_DEVICE.lock() = Some(*drv);
 				}
 				#[cfg(feature = "virtio-console")]

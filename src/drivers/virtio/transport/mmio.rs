@@ -365,7 +365,7 @@ impl IsrStatus {
 
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-net")]
-	Network(alloc::boxed::Box<VirtioNetDriver>),
+	Net(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 }
@@ -394,7 +394,7 @@ pub(crate) fn init_device(
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
 				info!("Virtio interrupt handler at line {irq_no}");
 
-				Ok(VirtioDriver::Network(alloc::boxed::Box::new(virt_net_drv)))
+				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio network driver could not be initialized with device");
