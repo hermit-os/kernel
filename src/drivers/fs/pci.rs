@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use volatile::VolatileRef;
 
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::fs::virtio_fs::{FsDevCfg, VirtioFsDriver};
+use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;

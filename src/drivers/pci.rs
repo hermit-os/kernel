@@ -26,7 +26,7 @@ use crate::console::IoDevice;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "virtio-fs")]
-use crate::drivers::fs::virtio_fs::VirtioFsDriver;
+use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
