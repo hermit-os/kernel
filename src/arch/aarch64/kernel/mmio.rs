@@ -164,7 +164,7 @@ pub fn init_drivers() {
 							match drv {
 								#[cfg(feature = "virtio-console")]
 								VirtioDriver::Console(drv) => register_driver(MmioDriver::VirtioConsole(
-									hermit_sync::InterruptTicketMutex::new(*drv),
+									InterruptTicketMutex::new(*drv),
 								)),
 								#[cfg(feature = "virtio-net")]
 								VirtioDriver::Net(drv) => *NETWORK_DEVICE.lock() = Some(*drv),
