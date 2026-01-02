@@ -690,6 +690,41 @@ pub(crate) fn init_device(
 	let id = virtio::Id::from(u8::try_from(device_id - 0x1040).unwrap());
 
 	match id {
+		#[cfg(feature = "virtio-console")]
+		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
+			Ok(virt_console_drv) => {
+				info!("Virtio console driver initialized.");
+
+				let irq = device.get_irq().unwrap();
+				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {irq}");
+
+				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
+					virt_console_drv,
+				)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio console driver could not be initialized with device: {device_id:x}");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
+		#[cfg(feature = "virtio-fs")]
+		virtio::Id::Fs => {
+			// TODO: check subclass
+			// TODO: proper error handling on driver creation fail
+			match VirtioFsDriver::init(device) {
+				Ok(virt_fs_drv) => {
+					info!("Virtio filesystem driver initialized.");
+					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
+				}
+				Err(virtio_error) => {
+					error!(
+						"Virtio filesystem driver could not be initialized with device: {device_id:x}"
+					);
+					Err(DriverError::InitVirtioDevFail(virtio_error))
+				}
+			}
+		}
 		#[cfg(all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(feature = "rtl8139"),
@@ -712,24 +747,6 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
-			Ok(virt_console_drv) => {
-				info!("Virtio console driver initialized.");
-
-				let irq = device.get_irq().unwrap();
-				crate::arch::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
-
-				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
-					virt_console_drv,
-				)))
-			}
-			Err(virtio_error) => {
-				error!("Virtio console driver could not be initialized with device: {device_id:x}");
-				Err(DriverError::InitVirtioDevFail(virtio_error))
-			}
-		},
 		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
 			Ok(virt_sock_drv) => {
@@ -746,23 +763,6 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
-		#[cfg(feature = "virtio-fs")]
-		virtio::Id::Fs => {
-			// TODO: check subclass
-			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(device) {
-				Ok(virt_fs_drv) => {
-					info!("Virtio filesystem driver initialized.");
-					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
-				}
-				Err(virtio_error) => {
-					error!(
-						"Virtio filesystem driver could not be initialized with device: {device_id:x}"
-					);
-					Err(DriverError::InitVirtioDevFail(virtio_error))
-				}
-			}
-		}
 		id => {
 			if let Some(feature) = id.as_feature() {
 				error!("Virtio driver {id:?} is currently not active.");

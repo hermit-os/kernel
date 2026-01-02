@@ -240,16 +240,6 @@ pub fn init_drivers() {
 				}
 
 				match id {
-					#[cfg(all(feature = "virtio-net", not(feature = "gem-net")))]
-					virtio::Id::Net => {
-						debug!("Found virtio network card at {mmio:p}");
-
-						if let Ok(VirtioDriver::Net(drv)) =
-							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-						{
-							*NETWORK_DEVICE.lock() = Some(*drv);
-						}
-					}
 					#[cfg(feature = "virtio-console")]
 					virtio::Id::Console => {
 						debug!("Found virtio console at {mmio:p}");
@@ -260,6 +250,16 @@ pub fn init_drivers() {
 							register_driver(MmioDriver::VirtioConsole(
 								hermit_sync::InterruptSpinMutex::new(*drv),
 							));
+						}
+					}
+					#[cfg(all(feature = "virtio-net", not(feature = "gem-net")))]
+					virtio::Id::Net => {
+						debug!("Found virtio network card at {mmio:p}");
+
+						if let Ok(VirtioDriver::Net(drv)) =
+							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
+						{
+							*NETWORK_DEVICE.lock() = Some(*drv);
 						}
 					}
 					_ => {
