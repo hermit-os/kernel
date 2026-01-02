@@ -239,32 +239,20 @@ pub fn init_drivers() {
 					FrameAlloc::allocate_at(frame_range).unwrap_err();
 				}
 
-				match id {
+				debug!("Found virtio {id:?} at {mmio:p}");
+
+				match mmio_virtio::init_device(mmio, irq.try_into().unwrap()) {
 					#[cfg(feature = "virtio-console")]
-					virtio::Id::Console => {
-						debug!("Found virtio console at {mmio:p}");
-
-						if let Ok(VirtioDriver::Console(drv)) =
-							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-						{
-							register_driver(MmioDriver::VirtioConsole(
-								hermit_sync::InterruptSpinMutex::new(*drv),
-							));
-						}
+					Ok(VirtioDriver::Console(drv)) => {
+						register_driver(MmioDriver::VirtioConsole(
+							hermit_sync::InterruptSpinMutex::new(*drv),
+						));
 					}
-					#[cfg(all(feature = "virtio-net", not(feature = "gem-net")))]
-					virtio::Id::Net => {
-						debug!("Found virtio network card at {mmio:p}");
-
-						if let Ok(VirtioDriver::Net(drv)) =
-							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-						{
-							*NETWORK_DEVICE.lock() = Some(*drv);
-						}
+					#[cfg(feature = "virtio-net")]
+					Ok(VirtioDriver::Net(drv)) => {
+						*NETWORK_DEVICE.lock() = Some(*drv);
 					}
-					_ => {
-						warn!("Found unknown virtio device with ID {id:?} at {mmio:p}");
-					}
+					Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 				}
 			}
 		}
