@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[cfg(all(
 	any(feature = "virtio-net", feature = "virtio-console"),
 	not(feature = "pci")

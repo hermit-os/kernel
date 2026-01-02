@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 
 #[cfg(feature = "virtio-console")]
@@ -29,6 +27,7 @@ impl MmioDriver {
 	}
 }
 
+#[cfg(feature = "virtio-console")]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
