@@ -1,21 +1,12 @@
-#[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
 use core::ptr::NonNull;
 
 use memory_addresses::PhysAddr;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
-#[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
-#[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
 use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::interrupts::init_plic;
@@ -32,11 +23,13 @@ use crate::drivers::mmio::get_console_driver;
 use crate::drivers::net::gem;
 #[cfg(all(feature = "virtio-console", feature = "pci"))]
 use crate::drivers::pci::get_console_driver;
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
+use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
+	any(feature = "virtio-console", feature = "virtio-net"),
+	not(feature = "pci"),
 ))]
-use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
+use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
@@ -176,10 +169,7 @@ pub fn init_drivers() {
 			}
 
 			// Init virtio-mmio
-			#[cfg(all(
-				any(feature = "virtio-net", feature = "virtio-console"),
-				not(feature = "pci")
-			))]
+			#[cfg(all(feature = "virtio", not(feature = "pci")))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
 				debug!("Found virtio mmio device");
 				let virtio_region = virtio_node
@@ -256,14 +246,7 @@ pub fn init_drivers() {
 		}
 	}
 
-	#[cfg(all(
-		any(
-			feature = "virtio-net",
-			feature = "virtio-console",
-			feature = "gem-net"
-		),
-		not(feature = "pci"),
-	))]
+	#[cfg(all(any(feature = "virtio", feature = "gem-net"), not(feature = "pci")))]
 	super::mmio::MMIO_DRIVERS.finalize();
 
 	#[cfg(feature = "virtio-console")]
