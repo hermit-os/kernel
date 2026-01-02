@@ -1,6 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -8,7 +5,9 @@ use core::{ptr, str};
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
-use hermit_sync::{InterruptTicketMutex, without_interrupts};
+#[cfg(feature = "virtio-console")]
+use hermit_sync::InterruptTicketMutex;
+use hermit_sync::without_interrupts;
 use memory_addresses::{PhysAddr, VirtAddr};
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
@@ -22,13 +21,13 @@ use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
+#[cfg(any(feature = "virtio-console", feature = "virtio-net"))]
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
-use crate::errno::Errno;
+use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
-use crate::mm::{FrameAlloc, PageAlloc, PageBox, PageRangeAllocator};
-use crate::{env, io};
+use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -196,6 +195,7 @@ fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	}
 }
 
+#[cfg(feature = "virtio-console")]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
