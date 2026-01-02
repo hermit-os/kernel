@@ -238,13 +238,16 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package hello_world --no-default-features qemu ${{ matrix.flags }} --microvm
         if: matrix.arch == 'x86_64'
+      # FIXME: add ${{ matrix.flags }} once it also works in CI
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin qemu
         if: matrix.arch != 'riscv64'
+      # FIXME: add ${{ matrix.flags }} once it also works in CI
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console qemu --devices virtio-console-pci
         if: matrix.arch != 'riscv64'
+      # FIXME: add ${{ matrix.flags }} once it also works in CI
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console --no-default-features qemu --devices virtio-console-mmio --microvm
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console --no-default-features qemu --devices virtio-console-mmio
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin --features hermit/virtio-console --no-default-features qemu ${{ matrix.flags }} --devices virtio-console-mmio
         if: matrix.arch != 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package thread_test --smp 4 qemu ${{ matrix.flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs qemu ${{ matrix.flags }} --devices virtio-fs-pci
@@ -274,7 +277,7 @@ jobs:
       #   env:
       #     # The buffer is sized to be smaller than the packets received during DHCPv4 address acquisition and thus exercise the buffer merging code path.
       #     HERMIT_MRG_RXBUF_SIZE: 200
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/virtio-net qemu --sudo --devices virtio-net-pci --tap
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/virtio-net qemu ${{ matrix.flags }} --sudo --devices virtio-net-pci --tap
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.flags }} --devices virtio-net-pci --no-default-virtio-features
         if: matrix.arch != 'riscv64'
