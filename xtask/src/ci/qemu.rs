@@ -290,7 +290,7 @@ impl Qemu {
 				cpu_args
 			}
 			Arch::Riscv64 => {
-				if self.accel {
+				let mut cpu_args = if self.accel {
 					todo!()
 				} else if self.devices.contains(&Device::CadenceGem) {
 					// CadenceGem does not seem to work with rv64 as the CPU,
@@ -298,7 +298,9 @@ impl Qemu {
 					vec![]
 				} else {
 					vec!["-cpu".to_owned(), "rv64".to_owned()]
-				}
+				};
+				cpu_args.push("-semihosting".to_owned());
+				cpu_args
 			}
 		}
 	}
