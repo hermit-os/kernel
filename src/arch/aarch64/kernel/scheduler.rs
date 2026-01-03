@@ -177,7 +177,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		let stack = VirtAddr::new(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) as u64);
+		let stack = VirtAddr::from_ptr(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
 		debug!("Using boot stack {stack:p}");
 
 		TaskStacks::Boot(BootStack { stack })
@@ -302,7 +302,7 @@ impl TaskFrame for Task {
 			let state = stack.as_mut_ptr::<State>();
 			#[cfg(not(feature = "common-os"))]
 			if let Some(tls) = &self.tls {
-				(*state).tpidr_el0 = tls.thread_ptr() as u64;
+				(*state).tpidr_el0 = tls.thread_ptr().expose_provenance() as u64;
 			}
 
 			/*
