@@ -314,7 +314,7 @@ impl Qemu {
 					}
 				}
 				Arch::Aarch64 | Arch::Aarch64Be => 144,
-				Arch::Riscv64 => 40,
+				Arch::Riscv64 => 86,
 			};
 		}
 
