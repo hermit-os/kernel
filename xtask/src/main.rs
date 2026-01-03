@@ -21,6 +21,7 @@ use clap::Parser;
 use xshell::Shell;
 
 #[derive(Parser)]
+#[command(args_override_self = true)]
 enum Cli {
 	Build(build::Build),
 
