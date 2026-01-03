@@ -1,5 +1,7 @@
 //! Architecture-specific architecture abstraction.
 
+pub(crate) mod timer_interrupts;
+
 cfg_if::cfg_if! {
 	if #[cfg(target_arch = "aarch64")] {
 		pub(crate) mod aarch64;
