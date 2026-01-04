@@ -7,8 +7,6 @@
 //!
 //! [Virtqueues]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-270006
 
-#![allow(dead_code)]
-
 pub mod packed;
 pub mod split;
 
@@ -69,6 +67,7 @@ pub trait Virtq: Send {
 	/// **INFO:**
 	/// Currently this function is constantly polling the queue while keeping the notifications disabled.
 	/// Upon finish notifications are enabled again.
+	#[allow(dead_code)]
 	fn dispatch_blocking(
 		&mut self,
 		tkn: AvailBufferToken,
@@ -113,6 +112,7 @@ pub trait Virtq: Send {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
+	#[allow(dead_code)]
 	fn dispatch_batch(
 		&mut self,
 		tkns: Vec<(AvailBufferToken, BufferType)>,
@@ -131,6 +131,7 @@ pub trait Virtq: Send {
 	/// a device notification if wanted by the device.
 	///
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
+	#[allow(dead_code)]
 	fn dispatch_batch_await(
 		&mut self,
 		tkns: Vec<(AvailBufferToken, BufferType)>,
@@ -139,11 +140,14 @@ pub trait Virtq: Send {
 
 	/// Returns the size of a Virtqueue. This represents the overall size and not the capacity the
 	/// queue currently has for new descriptors.
+	#[allow(dead_code)]
 	fn size(&self) -> u16;
 
 	// Returns the index (ID) of a Virtqueue.
+	#[allow(dead_code)]
 	fn index(&self) -> u16;
 
+	#[allow(dead_code)]
 	fn has_used_buffers(&self) -> bool;
 }
 
@@ -290,6 +294,7 @@ impl<Descriptor> TransferToken<Descriptor> {
 
 #[derive(Debug)]
 pub enum BufferElem {
+	#[allow(dead_code)]
 	Sized(Box<dyn Any + Send, DeviceAlloc>),
 	Vector(Vec<u8, DeviceAlloc>),
 }
@@ -371,6 +376,7 @@ impl UsedDeviceWritableBuffer {
 	/// in the network driver), as the objects are assumed to be initialized by this function and
 	/// it's undefined behavior to call [MaybeUninit::assume_init] when an object of the correct type
 	/// is not initialized.
+	#[allow(dead_code)]
 	pub unsafe fn pop_front_downcast<T>(&mut self) -> Option<Box<T, DeviceAlloc>>
 	where
 		T: Any,
@@ -431,6 +437,7 @@ impl UsedDeviceWritableBuffer {
 	///
 	/// We may not return a vector as its layout would be different and deallocation would not be correct
 	/// (see the information for [Box::into_non_null_with_allocator]).
+	#[allow(dead_code)]
 	pub fn pop_front_raw(&mut self) -> Option<(Box<dyn Any + Send, DeviceAlloc>, usize)> {
 		let elem = if self.elems.len() <= 2 {
 			self.elems.swap_remove(0)
@@ -450,6 +457,7 @@ impl UsedDeviceWritableBuffer {
 }
 
 pub(crate) struct UsedBufferToken {
+	#[expect(dead_code)]
 	pub send_buff: SmallVec<[BufferElem; 2]>,
 	pub used_recv_buff: UsedDeviceWritableBuffer,
 }
@@ -521,6 +529,7 @@ pub enum BufferType {
 	/// //                                                                          ++++++++++++++++++++++++++
 	/// ```
 	/// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
+	#[expect(dead_code)]
 	Indirect,
 }
 

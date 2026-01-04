@@ -5,8 +5,6 @@
 //!
 //! [Virtio Over PCI Bus]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1150001
 
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -288,6 +286,7 @@ impl ComCfg {
 		}
 	}
 
+	#[allow(dead_code)]
 	pub fn device_config_space(&self) -> VolatilePtr<'_, CommonCfg, ReadOnly> {
 		self.com_cfg.as_ptr()
 	}
@@ -303,6 +302,7 @@ impl ComCfg {
 	/// Sets the device status field to FAILED.
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
+	#[allow(dead_code)]
 	pub fn set_failed(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
@@ -527,10 +527,12 @@ impl IsrStatus {
 		IsrStatus { isr_stat: raw }
 	}
 
+	#[allow(dead_code)]
 	pub fn is_queue_interrupt(&self) -> IsrStatusRaw {
 		self.isr_stat.as_ptr().read()
 	}
 
+	#[allow(dead_code)]
 	pub fn acknowledge(&mut self) {
 		// nothing to do
 	}

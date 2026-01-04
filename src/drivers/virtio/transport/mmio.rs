@@ -5,8 +5,6 @@
 //!
 //! [Virtio Over MMIO]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1650002
 
-#![allow(dead_code)]
-
 use core::mem;
 
 use memory_addresses::PhysAddr;
@@ -107,6 +105,7 @@ impl ComCfg {
 		ComCfg { com_cfg: raw }
 	}
 
+	#[allow(dead_code)]
 	pub fn device_config_space(&self) -> VolatilePtr<'_, DeviceRegisters, ReadOnly> {
 		self.com_cfg.as_ptr()
 	}
@@ -143,6 +142,7 @@ impl ComCfg {
 	/// Sets the device status field to FAILED.
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
+	#[allow(dead_code)]
 	pub fn set_failed(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
@@ -343,10 +343,12 @@ impl IsrStatus {
 		Self { raw }
 	}
 
+	#[allow(dead_code)]
 	pub fn is_queue_interrupt(&self) -> InterruptStatus {
 		self.raw.as_ptr().interrupt_status().read()
 	}
 
+	#[allow(dead_code)]
 	pub fn acknowledge(&mut self) {
 		let ptr = self.raw.as_mut_ptr();
 		let status = ptr.interrupt_status().read();

@@ -7,8 +7,6 @@
 //!
 //! [Packed Virtqueues]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-720008
 
-#![allow(dead_code)]
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
@@ -463,6 +461,7 @@ impl DrvNotif {
 
 impl DevNotif {
 	/// Enables the notification capability for a specific buffer.
+	#[expect(dead_code)]
 	pub fn enable_notif_specific(&mut self) {
 		self.f_notif_idx = true;
 	}
@@ -650,6 +649,7 @@ impl VirtqPrivate for PackedVq {
 }
 
 impl PackedVq {
+	#[allow(dead_code)]
 	pub(crate) fn new(
 		com_cfg: &mut ComCfg,
 		notif_cfg: &NotifCfg,

@@ -2,6 +2,16 @@
 //!
 //! This module provides [`transport`] infrastructure as well as [`virtqueue`] infrastructure.
 
+#![cfg_attr(
+	not(any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-net",
+		feature = "virtio-vsock"
+	)),
+	allow(dead_code)
+)]
+
 pub mod transport;
 pub mod virtqueue;
 
