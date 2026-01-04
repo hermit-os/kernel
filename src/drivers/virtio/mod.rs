@@ -15,6 +15,10 @@
 pub mod transport;
 pub mod virtqueue;
 
+use core::fmt;
+
+use virtio::FeatureBits;
+
 trait VirtioIdExt {
 	fn as_feature(&self) -> Option<&str>;
 }
@@ -32,6 +36,132 @@ impl VirtioIdExt for virtio::Id {
 		Some(feature)
 	}
 }
+
+mod control_registers_access {
+	use core::{array, mem};
+
+	use virtio::{le32, le128};
+	use volatile::VolatilePtr;
+	use volatile::access::ReadWrite;
+
+	pub trait ControlRegistersAccess<'a>: Sized + Copy {
+		fn read_device_feature_word(self, i: u32) -> le32;
+		fn write_driver_feature_word(self, i: u32, word: le32);
+
+		fn read_device_features(self) -> virtio::F {
+			let features = array::from_fn(|i| {
+				let i = u32::try_from(i).unwrap();
+				self.read_device_feature_word(i)
+			});
+
+			let features = unsafe { mem::transmute::<[le32; 4], le128>(features) };
+
+			virtio::F::from_bits_retain(features)
+		}
+
+		fn write_driver_features(self, features: virtio::F) {
+			let features = features.bits();
+
+			let features = unsafe { mem::transmute::<le128, [le32; 4]>(features) };
+
+			for (i, word) in features.into_iter().enumerate() {
+				let i = u32::try_from(i).unwrap();
+				self.write_driver_feature_word(i, word);
+			}
+		}
+	}
+
+	#[cfg(feature = "pci")]
+	impl<'a> ControlRegistersAccess<'a> for VolatilePtr<'a, virtio::pci::CommonCfg, ReadWrite> {
+		fn read_device_feature_word(self, i: u32) -> le32 {
+			use virtio::pci::CommonCfgVolatileFieldAccess;
+
+			self.device_feature_select().write(i.into());
+			self.device_feature().read()
+		}
+
+		fn write_driver_feature_word(self, i: u32, word: le32) {
+			use virtio::pci::CommonCfgVolatileFieldAccess;
+
+			self.driver_feature_select().write(i.into());
+			self.driver_feature().write(word);
+		}
+	}
+
+	#[cfg(not(feature = "pci"))]
+	impl<'a> ControlRegistersAccess<'a> for VolatilePtr<'a, virtio::mmio::DeviceRegisters, ReadWrite> {
+		fn read_device_feature_word(self, i: u32) -> le32 {
+			use virtio::mmio::DeviceRegistersVolatileFieldAccess;
+
+			// QEMU only supports index 0 and 1 for virtio-mmio:
+			// https://gitlab.com/qemu-project/qemu/-/blob/v10.2.0/hw/virtio/virtio-mmio.c#L305-311
+			if i > 1 {
+				return 0.into();
+			}
+
+			self.device_features_sel().write(i.into());
+			self.device_features().read()
+		}
+
+		fn write_driver_feature_word(self, i: u32, word: le32) {
+			use virtio::mmio::DeviceRegistersVolatileFieldAccess;
+
+			// QEMU only supports index 0 and 1 for virtio-mmio:
+			// https://gitlab.com/qemu-project/qemu/-/blob/v10.2.0/hw/virtio/virtio-mmio.c#L326-332
+			if i > 1 {
+				debug_assert!(word.to_ne() == 0);
+				return;
+			}
+
+			self.driver_features_sel().write(i.into());
+			self.driver_features().write(word);
+		}
+	}
+}
+
+pub trait ControlRegisters<'a>: self::control_registers_access::ControlRegistersAccess<'a> {
+	fn negotiate_features<DF>(self, driver_features: DF) -> DF
+	where
+		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
+		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>;
+}
+
+impl<'a, T> ControlRegisters<'a> for T
+where
+	T: self::control_registers_access::ControlRegistersAccess<'a>,
+{
+	fn negotiate_features<DF>(self, driver_features: DF) -> DF
+	where
+		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
+		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>,
+	{
+		let device_features = DF::from(self.read_device_features());
+		info!("device_features = {device_features:?}");
+		debug_assert!(
+			device_features.requirements_satisfied(),
+			"The device offers a feature which requires another feature which was not offered."
+		);
+
+		info!("driver_features = {driver_features:?}");
+		debug_assert!(
+			driver_features.requirements_satisfied(),
+			"The driver offers a feature which requires another feature which was not offered.",
+		);
+
+		let common_features = device_features.intersection(driver_features);
+		info!("common_features = {common_features:?}");
+		// This should be logically unreachable.
+		debug_assert!(
+			common_features.requirements_satisfied(),
+			"We negotiated a feature which requires another feature which was not negotiated."
+		);
+
+		self.write_driver_features(common_features.into());
+
+		common_features
+	}
+}
+
 pub mod error {
 	use thiserror::Error;
 

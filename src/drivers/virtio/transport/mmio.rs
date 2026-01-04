@@ -24,8 +24,8 @@ use crate::drivers::error::DriverError;
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
-use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
@@ -103,6 +103,10 @@ pub struct ComCfg {
 impl ComCfg {
 	pub fn new(raw: VolatileRef<'static, DeviceRegisters>) -> Self {
 		ComCfg { com_cfg: raw }
+	}
+
+	pub fn control_registers(&mut self) -> impl ControlRegisters<'_> {
+		self.com_cfg.as_mut_ptr()
 	}
 
 	#[allow(dead_code)]
@@ -202,50 +206,6 @@ impl ComCfg {
 			.update(|status| status | DeviceStatus::DRIVER_OK);
 	}
 
-	/// Returns the features offered by the device.
-	pub fn dev_features(&mut self) -> virtio::F {
-		let ptr = self.com_cfg.as_mut_ptr();
-
-		// Indicate device to show high 32 bits in device_feature field.
-		// See Virtio specification v1.1. - 4.1.4.3
-		ptr.device_features_sel().write(1.into());
-
-		// read high 32 bits of device features
-		let mut device_features = u64::from(ptr.device_features().read().to_ne()) << 32;
-
-		// Indicate device to show low 32 bits in device_feature field.
-		// See Virtio specification v1.1. - 4.1.4.3
-		ptr.device_features_sel().write(0.into());
-
-		// read low 32 bits of device features
-		device_features |= u64::from(ptr.device_features().read().to_ne());
-
-		virtio::F::from_bits_retain(u128::from(device_features).into())
-	}
-
-	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: virtio::F) {
-		let ptr = self.com_cfg.as_mut_ptr();
-
-		let features = features.bits().to_ne() as u64;
-		let high: u32 = (features >> 32) as u32;
-		let low: u32 = features as u32;
-
-		// Indicate to device that driver_features field shows low 32 bits.
-		// See Virtio specification v1.1. - 4.1.4.3
-		ptr.driver_features_sel().write(0.into());
-
-		// write low 32 bits of device features
-		ptr.driver_features().write(low.into());
-
-		// Indicate to device that driver_features field shows high 32 bits.
-		// See Virtio specification v1.1. - 4.1.4.3
-		ptr.driver_features_sel().write(1.into());
-
-		// write high 32 bits of device features
-		ptr.driver_features().write(high.into());
-	}
-
 	pub fn print_information(&mut self) {
 		let ptr = self.com_cfg.as_ptr();
 
@@ -254,7 +214,6 @@ impl ComCfg {
 		infoentry!("Device version", "{:#X}", ptr.version().read());
 		infoentry!("Device ID", "{:?}", ptr.device_id().read());
 		infoentry!("Vendor ID", "{:#X}", ptr.vendor_id().read());
-		infoentry!("Device Features", "{:#X}", self.dev_features());
 		let ptr = self.com_cfg.as_ptr();
 		infoentry!("Interrupt status", "{:#X}", ptr.interrupt_status().read());
 		infoentry!("Device status", "{:#X}", ptr.status().read());

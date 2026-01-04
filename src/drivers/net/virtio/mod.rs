@@ -21,8 +21,8 @@ use core::str::FromStr;
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
+use virtio::DeviceConfigSpace;
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
-use virtio::{DeviceConfigSpace, FeatureBits};
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
@@ -31,6 +31,7 @@ use self::error::VirtioNetError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
+use crate::drivers::virtio::ControlRegisters;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -646,7 +647,7 @@ impl VirtioNetDriver<Uninit> {
 		let minimal_features = virtio::net::F::VERSION_1 | virtio::net::F::MAC;
 
 		// If wanted, push new features into feats here:
-		let mut features = minimal_features
+		let features = minimal_features
 			// Indirect descriptors can be used
 			| virtio::net::F::INDIRECT_DESC
 			// Packed Vq can be used
@@ -671,73 +672,14 @@ impl VirtioNetDriver<Uninit> {
 		// | virtio::net::F::GUEST_TSO4
 		// | virtio::net::F::GUEST_TSO6
 
-		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
-		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
-		match self.negotiate_features(features) {
-			Ok(()) => info!(
-				"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
-				self.dev_cfg.dev_id
-			),
-			Err(vnet_err) => {
-				match vnet_err {
-					VirtioNetError::FeatureRequirementsNotMet(features) => {
-						error!(
-							"Network drivers feature set {features:?} does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!"
-						);
-						return Err(vnet_err);
-					}
-					VirtioNetError::IncompatibleFeatureSets(drv_feats, dev_feats) => {
-						// Create a new matching feature set for device and driver if the minimal set is met!
-						if !dev_feats.contains(minimal_features) {
-							error!(
-								"Device features set, does not satisfy minimal features needed. Aborting!"
-							);
-							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-						}
+		let negotiated_features = self
+			.com_cfg
+			.control_registers()
+			.negotiate_features(features);
 
-						let common_features = drv_feats & dev_feats;
-						if common_features.is_empty() {
-							error!(
-								"Feature negotiation failed with minimal feature set. Aborting!"
-							);
-							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
-						}
-						features = common_features;
-
-						match self.negotiate_features(features) {
-							Ok(()) => info!(
-								"Driver found a subset of features for virtio device {:x}. Features are: {features:?}",
-								self.dev_cfg.dev_id
-							),
-							Err(vnet_err) => match vnet_err {
-								VirtioNetError::FeatureRequirementsNotMet(features) => {
-									error!(
-										"Network device offers a feature set {features:?} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!"
-									);
-									return Err(vnet_err);
-								}
-								_ => {
-									error!(
-										"Feature Set after reduction still not usable. Set: {features:?}. Aborting!"
-									);
-									return Err(vnet_err);
-								}
-							},
-						}
-					}
-					VirtioNetError::FailFeatureNeg(_) => {
-						error!(
-							"Wanted set of features is NOT supported by device. Set: {features:?}"
-						);
-						return Err(vnet_err);
-					}
-					#[cfg(feature = "pci")]
-					VirtioNetError::NoDevCfg(_) => {
-						error!("No device config found.");
-						return Err(vnet_err);
-					}
-				}
-			}
+		if !negotiated_features.contains(minimal_features) {
+			error!("Device features set, does not satisfy minimal features needed. Aborting!");
+			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -751,7 +693,7 @@ impl VirtioNetDriver<Uninit> {
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
-			self.dev_cfg.features = features;
+			self.dev_cfg.features = negotiated_features;
 		} else {
 			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
@@ -799,32 +741,6 @@ impl VirtioNetDriver<Uninit> {
 			irq: self.irq,
 			checksums: self.checksums,
 		})
-	}
-
-	/// Negotiates a subset of features, understood and wanted by both the OS
-	/// and the device.
-	fn negotiate_features(
-		&mut self,
-		driver_features: virtio::net::F,
-	) -> Result<(), VirtioNetError> {
-		let device_features = virtio::net::F::from(self.com_cfg.dev_features());
-
-		if device_features.requirements_satisfied() {
-			info!("Feature set wanted by network driver are in conformance with specification.");
-		} else {
-			return Err(VirtioNetError::FeatureRequirementsNotMet(device_features));
-		}
-
-		if device_features.contains(driver_features) {
-			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(driver_features.into());
-			Ok(())
-		} else {
-			Err(VirtioNetError::IncompatibleFeatureSets(
-				driver_features,
-				device_features,
-			))
-		}
 	}
 
 	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
@@ -995,18 +911,6 @@ pub mod error {
 			"Virtio network driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
 		)]
 		FailFeatureNeg(u16),
-
-		/// Set of features does not adhere to the requirements of features
-		/// indicated by the specification
-		#[error(
-			"Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {0:?}"
-		)]
-		FeatureRequirementsNotMet(virtio::net::F),
-
-		/// The first field contains the feature bits wanted by the driver.
-		/// but which are incompatible with the device feature set, second field.
-		#[error("Feature set: {0:?} , is incompatible with the device features: {1:?}")]
-		IncompatibleFeatureSets(virtio::net::F, virtio::net::F),
 	}
 }
 

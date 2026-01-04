@@ -19,7 +19,6 @@ use alloc::vec::Vec;
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use smallvec::SmallVec;
-use virtio::FeatureBits;
 use virtio::console::Config;
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
@@ -30,6 +29,7 @@ use crate::drivers::error::DriverError;
 use crate::drivers::mmio::get_console_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_console_driver;
+use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioConsoleError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -293,34 +293,6 @@ impl VirtioConsoleDriver {
 		self.com_cfg.set_failed();
 	}
 
-	/// Negotiates a subset of features, understood and wanted by both the OS
-	/// and the device.
-	fn negotiate_features(
-		&mut self,
-		driver_features: virtio::console::F,
-	) -> Result<(), VirtioConsoleError> {
-		let device_features = virtio::console::F::from(self.com_cfg.dev_features());
-
-		if device_features.requirements_satisfied() {
-			info!("Feature set wanted by console driver are in conformance with specification.");
-		} else {
-			return Err(VirtioConsoleError::FeatureRequirementsNotMet(
-				device_features,
-			));
-		}
-
-		if device_features.contains(driver_features) {
-			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(driver_features.into());
-			Ok(())
-		} else {
-			Err(VirtioConsoleError::IncompatibleFeatureSets(
-				driver_features,
-				device_features,
-			))
-		}
-	}
-
 	pub fn init_dev(&mut self) -> Result<(), VirtioConsoleError> {
 		// Reset
 		self.com_cfg.reset_dev();
@@ -331,8 +303,16 @@ impl VirtioConsoleDriver {
 		// Indicate device, that driver is able to handle it
 		self.com_cfg.set_drv();
 
-		let features = virtio::console::F::VERSION_1;
-		self.negotiate_features(features)?;
+		let minimal_features = virtio::console::F::VERSION_1;
+		let negotiated_features = self
+			.com_cfg
+			.control_registers()
+			.negotiate_features(minimal_features);
+
+		if !negotiated_features.contains(minimal_features) {
+			error!("Device features set, does not satisfy minimal features needed. Aborting!");
+			return Err(VirtioConsoleError::FailFeatureNeg(self.dev_cfg.dev_id));
+		}
 
 		// Indicates the device, that the current feature set is final for the driver
 		// and will not be changed.
@@ -345,7 +325,7 @@ impl VirtioConsoleDriver {
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
-			self.dev_cfg.features = features;
+			self.dev_cfg.features = negotiated_features;
 		} else {
 			return Err(VirtioConsoleError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
@@ -429,17 +409,5 @@ pub mod error {
 			"Virtio console device driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
 		)]
 		FailFeatureNeg(u16),
-
-		/// Set of features does not adhere to the requirements of features
-		/// indicated by the specification
-		#[error(
-			"Virtio console driver tried to set feature bit without setting dependency feature. Feat set: {0:?}"
-		)]
-		FeatureRequirementsNotMet(virtio::console::F),
-
-		/// The first u64 contains the feature bits wanted by the driver.
-		/// but which are incompatible with the device feature set, second u64.
-		#[error("Feature set: {0:?} , is incompatible with the device features: {1:?}")]
-		IncompatibleFeatureSets(virtio::console::F, virtio::console::F),
 	}
 }
