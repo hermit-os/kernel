@@ -40,7 +40,6 @@ pub mod error {
 	#[cfg(feature = "virtio-vsock")]
 	pub use crate::drivers::vsock::error::VirtioVsockError;
 
-	#[allow(dead_code)]
 	#[derive(Error, Debug)]
 	pub enum VirtioError {
 		#[cfg(feature = "pci")]
@@ -87,9 +86,5 @@ pub mod error {
 		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
 		ConsoleDriver(VirtioConsoleError),
-
-		#[cfg(not(feature = "pci"))]
-		#[error("Driver failure")]
-		Unknown,
 	}
 }
