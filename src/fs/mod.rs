@@ -1,4 +1,4 @@
-#[cfg(all(feature = "virtio-fs", feature = "pci"))]
+#[cfg(feature = "virtio-fs")]
 pub(crate) mod fuse;
 mod mem;
 mod uhyve;
@@ -364,7 +364,7 @@ pub(crate) fn init() {
 	*cwd = Some("/tmp".to_owned());
 	drop(cwd);
 
-	#[cfg(all(feature = "virtio-fs", feature = "pci"))]
+	#[cfg(feature = "virtio-fs")]
 	fuse::init();
 	if crate::env::is_uhyve() {
 		uhyve::init();

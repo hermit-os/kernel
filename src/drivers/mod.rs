@@ -79,11 +79,7 @@ pub(crate) fn init() {
 	crate::drivers::pci::init();
 	#[cfg(all(not(feature = "pci"), feature = "virtio", target_arch = "x86_64"))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
-	#[cfg(all(
-		not(feature = "pci"),
-		target_arch = "aarch64",
-		any(feature = "virtio-console", feature = "virtio-net"),
-	))]
+	#[cfg(all(not(feature = "pci"), feature = "virtio", target_arch = "aarch64"))]
 	crate::arch::aarch64::kernel::mmio::init_drivers();
 
 	#[cfg(target_arch = "riscv64")]

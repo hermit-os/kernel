@@ -1,27 +1,19 @@
-#![allow(dead_code)]
-
-#[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
 use core::ptr::NonNull;
 
 use memory_addresses::PhysAddr;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
-#[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
-#[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
-))]
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
 use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::interrupts::init_plic;
-#[cfg(all(feature = "virtio-console", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "virtio-console", feature = "virtio-fs"),
+	not(feature = "pci"),
+))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging::{self, PageSize};
 #[cfg(feature = "virtio-console")]
@@ -34,15 +26,24 @@ use crate::drivers::mmio::get_console_driver;
 use crate::drivers::net::gem;
 #[cfg(all(feature = "virtio-console", feature = "pci"))]
 use crate::drivers::pci::get_console_driver;
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
+use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(all(
-	any(feature = "virtio-net", feature = "virtio-console"),
-	not(feature = "pci")
+	any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-net",
+	),
+	not(feature = "pci"),
 ))]
-use crate::drivers::virtio::transport::mmio::{self as mmio_virtio, VirtioDriver};
+use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
-#[cfg(all(feature = "virtio-console", not(feature = "pci")))]
+#[cfg(all(
+	any(feature = "virtio-console", feature = "virtio-fs"),
+	not(feature = "pci")
+))]
 use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
@@ -178,10 +179,7 @@ pub fn init_drivers() {
 			}
 
 			// Init virtio-mmio
-			#[cfg(all(
-				any(feature = "virtio-net", feature = "virtio-console"),
-				not(feature = "pci")
-			))]
+			#[cfg(all(feature = "virtio", not(feature = "pci")))]
 			if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
 				debug!("Found virtio mmio device");
 				let virtio_region = virtio_node
@@ -239,45 +237,32 @@ pub fn init_drivers() {
 					FrameAlloc::allocate_at(frame_range).unwrap_err();
 				}
 
-				match id {
-					#[cfg(all(feature = "virtio-net", not(feature = "gem-net")))]
-					virtio::Id::Net => {
-						debug!("Found virtio network card at {mmio:p}");
+				debug!("Found virtio {id:?} at {mmio:p}");
 
-						if let Ok(VirtioDriver::Net(drv)) =
-							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-						{
-							*NETWORK_DEVICE.lock() = Some(*drv);
-						}
-					}
+				match mmio_virtio::init_device(mmio, irq.try_into().unwrap()) {
 					#[cfg(feature = "virtio-console")]
-					virtio::Id::Console => {
-						debug!("Found virtio console at {mmio:p}");
-
-						if let Ok(VirtioDriver::Console(drv)) =
-							mmio_virtio::init_device(mmio, irq.try_into().unwrap())
-						{
-							register_driver(MmioDriver::VirtioConsole(
-								hermit_sync::InterruptSpinMutex::new(*drv),
-							));
-						}
+					Ok(VirtioDriver::Console(drv)) => {
+						register_driver(MmioDriver::VirtioConsole(
+							hermit_sync::InterruptSpinMutex::new(*drv),
+						));
 					}
-					_ => {
-						warn!("Found unknown virtio device with ID {id:?} at {mmio:p}");
+					#[cfg(feature = "virtio-fs")]
+					Ok(VirtioDriver::FileSystem(drv)) => {
+						register_driver(MmioDriver::VirtioFs(
+							hermit_sync::InterruptSpinMutex::new(*drv),
+						));
 					}
+					#[cfg(feature = "virtio-net")]
+					Ok(VirtioDriver::Net(drv)) => {
+						*NETWORK_DEVICE.lock() = Some(*drv);
+					}
+					Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 				}
 			}
 		}
 	}
 
-	#[cfg(all(
-		any(
-			feature = "virtio-net",
-			feature = "virtio-console",
-			feature = "gem-net"
-		),
-		not(feature = "pci"),
-	))]
+	#[cfg(all(any(feature = "virtio", feature = "gem-net"), not(feature = "pci")))]
 	super::mmio::MMIO_DRIVERS.finalize();
 
 	#[cfg(feature = "virtio-console")]

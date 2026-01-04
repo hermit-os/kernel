@@ -64,6 +64,11 @@ pub enum Device {
 	/// virtio-console via PCI.
 	VirtioConsolePci,
 
+	/// virtio-fs via MMIO.
+	///
+	/// This option also starts the `virtiofsd` virtio-fs vhost-user device daemon.
+	VirtioFsMmio,
+
 	/// virtio-fs via PCI.
 	///
 	/// This option also starts the `virtiofsd` virtio-fs vhost-user device daemon.
@@ -82,7 +87,8 @@ impl Qemu {
 
 		let virtiofsd = self
 			.devices
-			.contains(&Device::VirtioFsPci)
+			.iter()
+			.any(|device| matches!(device, Device::VirtioFsMmio | Device::VirtioFsPci))
 			.then(spawn_virtiofsd)
 			.transpose()?;
 		thread::sleep(Duration::from_millis(100));
@@ -377,7 +383,12 @@ impl Qemu {
 
 					netdev_args
 				}
-				Device::VirtioFsPci => {
+				device @ (Device::VirtioFsMmio | Device::VirtioFsPci) => {
+					let device_arg = match device {
+						Device::VirtioFsMmio => "vhost-user-fs-device",
+						Device::VirtioFsPci => "vhost-user-fs-pci",
+						_ => unreachable!(),
+					};
 					let default_virtio_features = if !self.no_default_virtio_features {
 						",packed=on"
 					} else {
@@ -388,7 +399,7 @@ impl Qemu {
 						"socket,id=char0,path=./vhostqemu".to_owned(),
 						"-device".to_owned(),
 						format!(
-							"vhost-user-fs-pci,queue-size=1024{default_virtio_features},chardev=char0,tag=root"
+							"{device_arg},queue-size=1024{default_virtio_features},chardev=char0,tag=root"
 						),
 						"-object".to_owned(),
 						format!(

@@ -5,8 +5,13 @@
 //!
 //! [File System Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-45800011
 
-#[cfg(feature = "pci")]
-mod pci;
+cfg_if::cfg_if! {
+	if #[cfg(feature = "pci")] {
+		mod pci;
+	} else {
+		mod mmio;
+	}
+}
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;

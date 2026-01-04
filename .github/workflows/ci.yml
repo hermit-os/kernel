@@ -160,7 +160,7 @@ jobs:
           - profile: dev
             hermit-careful: 1
           - arch: x86_64
-            packages: qemu-system-x86 libcap-ng-dev libseccomp-dev uftrace
+            packages: qemu-system-x86 uftrace
             qemu_flags: --accel --sudo
           - arch: aarch64
             packages: qemu-system-aarch64 ipxe-qemu
@@ -185,7 +185,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends ${{ matrix.packages }}
+          sudo apt-get install --no-install-recommends libcap-ng-dev libseccomp-dev ${{ matrix.packages }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add llvm-tools
@@ -216,7 +216,6 @@ jobs:
       - run: cargo +stable install --locked uhyve
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
-        if: matrix.arch == 'x86_64'
       - run: cargo +stable install cargo-careful
         if: matrix.profile == 'dev'
       - run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --no-default-features firecracker --sudo
@@ -262,6 +261,11 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --features fs --smp 4 qemu ${{ matrix.qemu_flags }} --devices virtio-fs-pci --no-default-virtio-features
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --no-default-features --features fs qemu ${{ matrix.qemu_flags }} --devices virtio-fs-mmio --microvm
+        if: matrix.arch == 'x86_64'
+      # FIXME: enable on aarch64_be, once it works
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --no-default-features --features fs qemu ${{ matrix.qemu_flags }} --devices virtio-fs-mmio
+        if: matrix.arch != 'x86_64' && matrix.arch != 'aarch64_be'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo qemu ${{ matrix.qemu_flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --smp 4 qemu ${{ matrix.qemu_flags }}
         # https://github.com/hermit-os/kernel/issues/1286
