@@ -4,7 +4,7 @@ use volatile::VolatileRef;
 
 use crate::drivers::InterruptLine;
 use crate::drivers::net::virtio::{Init, NetDevCfg, Uninit, VirtioNetDriver};
-use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
+use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 
 // Backend-dependent interface for Virtio network driver
@@ -13,7 +13,7 @@ impl VirtioNetDriver<Uninit> {
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<Self, VirtioNetError> {
+	) -> Result<Self, VirtioError> {
 		let dev_cfg_raw: &'static virtio::net::Config = unsafe {
 			&*registers
 				.borrow_mut()
@@ -54,18 +54,10 @@ impl VirtioNetDriver<Uninit> {
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
 	) -> Result<VirtioNetDriver<Init>, VirtioError> {
-		if let Ok(drv) = VirtioNetDriver::new(dev_id, registers, irq) {
-			match drv.init_dev() {
-				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
-				Ok(mut initialized_drv) => {
-					initialized_drv.print_information();
-					Ok(initialized_drv)
-				}
-			}
-		} else {
-			error!("Unable to create Driver. Aborting!");
-			Err(VirtioError::Unknown)
-		}
+		let drv = VirtioNetDriver::new(dev_id, registers, irq)?;
+		let mut drv = drv.init_dev().map_err(VirtioError::NetDriver)?;
+		drv.print_information();
+		Ok(drv)
 	}
 }
 
