@@ -43,6 +43,7 @@ impl DescrRing {
 	fn descr_table_mut(&mut self) -> &mut [MaybeUninit<virtq::Desc>] {
 		unsafe { &mut *self.descr_table_cell.get() }
 	}
+	#[expect(dead_code)]
 	fn avail_ring(&self) -> &virtq::Avail {
 		unsafe { &*self.avail_ring_cell.get() }
 	}

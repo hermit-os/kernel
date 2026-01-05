@@ -56,6 +56,7 @@ impl VirtioFsDriver {
 	) -> Result<VirtioFsDriver, VirtioError> {
 		let mut drv = VirtioFsDriver::new(dev_id, registers, irq)?;
 		drv.init_dev().map_err(VirtioError::FsDriver)?;
+		drv.com_cfg.print_information();
 		Ok(drv)
 	}
 }

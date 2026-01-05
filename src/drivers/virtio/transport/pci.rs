@@ -5,8 +5,6 @@
 //!
 //! [Virtio Over PCI Bus]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1150001
 
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -35,9 +33,9 @@ use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::pci::error::PciError;
-use crate::drivers::virtio::VirtioIdExt;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
+use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
@@ -271,6 +269,10 @@ impl VqCfgHandler<'_> {
 
 // Public Interface of ComCfg
 impl ComCfg {
+	pub fn control_registers(&mut self) -> impl ControlRegisters<'_> {
+		self.com_cfg.as_mut_ptr()
+	}
+
 	/// Select a queue via an index. If queue does NOT exist returns `None`, else
 	/// returns `Some(VqCfgHandler)`.
 	///
@@ -288,6 +290,7 @@ impl ComCfg {
 		}
 	}
 
+	#[allow(dead_code)]
 	pub fn device_config_space(&self) -> VolatilePtr<'_, CommonCfg, ReadOnly> {
 		self.com_cfg.as_ptr()
 	}
@@ -303,6 +306,7 @@ impl ComCfg {
 	/// Sets the device status field to FAILED.
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
+	#[allow(dead_code)]
 	pub fn set_failed(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
@@ -357,54 +361,6 @@ impl ComCfg {
 			.as_mut_ptr()
 			.device_status()
 			.update(|s| s | DeviceStatus::DRIVER_OK);
-	}
-
-	/// Returns the features offered by the device.
-	pub fn dev_features(&mut self) -> virtio::F {
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		let device_feature_select = com_cfg.device_feature_select();
-		let device_feature = com_cfg.device_feature();
-
-		// Indicate device to show high 32 bits in device_feature field.
-		// See Virtio specification v1.1. - 4.1.4.3
-		device_feature_select.write(1.into());
-
-		// read high 32 bits of device features
-		let mut device_features = u64::from(device_feature.read().to_ne()) << 32;
-
-		// Indicate device to show low 32 bits in device_feature field.
-		// See Virtio specification v1.1. - 4.1.4.3
-		device_feature_select.write(0.into());
-
-		// read low 32 bits of device features
-		device_features |= u64::from(device_feature.read().to_ne());
-
-		virtio::F::from_bits_retain(u128::from(device_features).into())
-	}
-
-	/// Write selected features into driver_select field.
-	pub fn set_drv_features(&mut self, features: virtio::F) {
-		let features = features.bits().to_ne() as u64;
-		let com_cfg = self.com_cfg.as_mut_ptr();
-		let driver_feature_select = com_cfg.driver_feature_select();
-		let driver_feature = com_cfg.driver_feature();
-
-		let high: u32 = (features >> 32) as u32;
-		let low: u32 = features as u32;
-
-		// Indicate to device that driver_features field shows low 32 bits.
-		// See Virtio specification v1.1. - 4.1.4.3
-		driver_feature_select.write(0.into());
-
-		// write low 32 bits of device features
-		driver_feature.write(low.into());
-
-		// Indicate to device that driver_features field shows high 32 bits.
-		// See Virtio specification v1.1. - 4.1.4.3
-		driver_feature_select.write(1.into());
-
-		// write high 32 bits of device features
-		driver_feature.write(high.into());
 	}
 }
 
@@ -527,10 +483,12 @@ impl IsrStatus {
 		IsrStatus { isr_stat: raw }
 	}
 
+	#[allow(dead_code)]
 	pub fn is_queue_interrupt(&self) -> IsrStatusRaw {
 		self.isr_stat.as_ptr().read()
 	}
 
+	#[allow(dead_code)]
 	pub fn acknowledge(&mut self) {
 		// nothing to do
 	}

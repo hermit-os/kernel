@@ -24,13 +24,13 @@ use fuse_abi::linux::fuse_out_header;
 use num_enum::TryFromPrimitive;
 use pci_types::InterruptLine;
 use smallvec::SmallVec;
-use virtio::FeatureBits;
 use virtio::fs::ConfigVolatileFieldAccess;
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
+use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioFsError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -80,31 +80,6 @@ impl VirtioFsDriver {
 		self.com_cfg.set_failed();
 	}
 
-	/// Negotiates a subset of features, understood and wanted by both the OS
-	/// and the device.
-	fn negotiate_features(&mut self, driver_features: virtio::fs::F) -> Result<(), VirtioFsError> {
-		let device_features = virtio::fs::F::from(self.com_cfg.dev_features());
-
-		if device_features.requirements_satisfied() {
-			debug!(
-				"Feature set wanted by filesystem driver are in conformance with specification."
-			);
-		} else {
-			return Err(VirtioFsError::FeatureRequirementsNotMet(device_features));
-		}
-
-		if device_features.contains(driver_features) {
-			// If device supports subset of features write feature set to common config
-			self.com_cfg.set_drv_features(driver_features.into());
-			Ok(())
-		} else {
-			Err(VirtioFsError::IncompatibleFeatureSets(
-				driver_features,
-				device_features,
-			))
-		}
-	}
-
 	/// Initializes the device in adherence to specification. Returns Some(VirtioFsError)
 	/// upon failure and None in case everything worked as expected.
 	///
@@ -120,8 +95,16 @@ impl VirtioFsDriver {
 		// Indicate device, that driver is able to handle it
 		self.com_cfg.set_drv();
 
-		let features = virtio::fs::F::VERSION_1;
-		self.negotiate_features(features)?;
+		let minimal_features = virtio::fs::F::VERSION_1;
+		let negotiated_features = self
+			.com_cfg
+			.control_registers()
+			.negotiate_features(minimal_features);
+
+		if !negotiated_features.contains(minimal_features) {
+			error!("Device features set, does not satisfy minimal features needed. Aborting!");
+			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
+		}
 
 		// Indicates the device, that the current feature set is final for the driver
 		// and will not be changed.
@@ -134,7 +117,7 @@ impl VirtioFsDriver {
 				self.dev_cfg.dev_id
 			);
 			// Set feature set in device config fur future use.
-			self.dev_cfg.features = features;
+			self.dev_cfg.features = negotiated_features;
 		} else {
 			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
@@ -289,18 +272,6 @@ pub mod error {
 			"Virtio filesystem driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
 		)]
 		FailFeatureNeg(u16),
-
-		/// The first field contains the feature bits wanted by the driver.
-		/// but which are incompatible with the device feature set, second field.
-		#[error("Feature set: {0:?} , is incompatible with the device features: {1:?}")]
-		IncompatibleFeatureSets(virtio::fs::F, virtio::fs::F),
-
-		/// Set of features does not adhere to the requirements of features
-		/// indicated by the specification
-		#[error(
-			"Virtio filesystem driver tried to set feature bit without setting dependency feature. Feat set: {0:?}"
-		)]
-		FeatureRequirementsNotMet(virtio::fs::F),
 
 		#[error("Virtio filesystem failed, driver failed due unknown reason!")]
 		Unknown,
