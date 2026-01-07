@@ -378,14 +378,13 @@ pub unsafe fn log_page_tables() {
 pub mod mapped_page_range_display {
 	use core::fmt::{self, Write};
 
-	use x86_64::structures::paging::mapper::PageTableFrameMapping;
+	use x86_64::structures::paging::mapper::{PageTableFrameMapping, PhysOffset};
 	use x86_64::structures::paging::{MappedPageTable, OffsetPageTable, PageSize};
 
 	use super::mapped_page_table_iter::{
 		self, MappedPageRangeInclusive, MappedPageRangeInclusiveItem,
 		MappedPageTableRangeInclusiveIter,
 	};
-	use super::offset_page_table::PhysOffset;
 
 	#[expect(dead_code)]
 	pub trait MappedPageTableExt<P: PageTableFrameMapping + Clone> {
@@ -501,14 +500,13 @@ pub mod mapped_page_table_iter {
 	use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 	use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
-	use x86_64::structures::paging::mapper::PageTableFrameMapping;
+	use x86_64::structures::paging::mapper::{PageTableFrameMapping, PhysOffset};
 	use x86_64::structures::paging::page::{AddressNotAligned, PageRangeInclusive};
 	use x86_64::structures::paging::{
 		MappedPageTable, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags,
 		PageTableIndex, PhysFrame, Size1GiB, Size2MiB, Size4KiB,
 	};
 
-	use super::offset_page_table::PhysOffset;
 	use super::walker::{PageTableWalkError, PageTableWalker};
 
 	#[derive(Debug)]
@@ -741,12 +739,10 @@ pub mod mapped_page_table_iter {
 	pub fn offset_page_table_iter<'a>(
 		page_table: &'a OffsetPageTable<'a>,
 	) -> MappedPageTableIter<'a, PhysOffset> {
+		let page_table_frame_mapping = unsafe { PhysOffset::new(page_table.phys_offset()) };
+		let page_table_walker = unsafe { PageTableWalker::new(page_table_frame_mapping) };
 		MappedPageTableIter {
-			page_table_walker: unsafe {
-				PageTableWalker::new(PhysOffset {
-					offset: page_table.phys_offset(),
-				})
-			},
+			page_table_walker,
 			level_4_table: page_table.level_4_table(),
 			p4_index: 0,
 			p3_index: 0,
@@ -981,26 +977,6 @@ mod walker {
 				FrameError::HugeFrame => PageTableWalkError::MappedToHugePage,
 				FrameError::FrameNotPresent => PageTableWalkError::NotMapped,
 			}
-		}
-	}
-}
-
-mod offset_page_table {
-	//! Taken from [`x86_64`]
-
-	use x86_64::VirtAddr;
-	use x86_64::structures::paging::mapper::PageTableFrameMapping;
-	use x86_64::structures::paging::{PageTable, PhysFrame};
-
-	#[derive(Clone, Debug)]
-	pub struct PhysOffset {
-		pub offset: VirtAddr,
-	}
-
-	unsafe impl PageTableFrameMapping for PhysOffset {
-		fn frame_to_pointer(&self, frame: PhysFrame) -> *mut PageTable {
-			let virt = self.offset + frame.start_address().as_u64();
-			virt.as_mut_ptr()
 		}
 	}
 }
