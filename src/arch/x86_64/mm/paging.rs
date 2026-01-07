@@ -500,14 +500,14 @@ pub mod mapped_page_table_iter {
 	use core::ops::{Add, AddAssign, Sub, SubAssign};
 
 	use x86_64::structures::paging::frame::PhysFrameRangeInclusive;
-	use x86_64::structures::paging::mapper::{PageTableFrameMapping, PhysOffset};
+	use x86_64::structures::paging::mapper::{
+		PageTableFrameMapping, PageTableWalkError, PageTableWalker, PhysOffset,
+	};
 	use x86_64::structures::paging::page::{AddressNotAligned, PageRangeInclusive};
 	use x86_64::structures::paging::{
 		MappedPageTable, OffsetPageTable, Page, PageSize, PageTable, PageTableFlags,
 		PageTableIndex, PhysFrame, Size1GiB, Size2MiB, Size4KiB,
 	};
-
-	use super::walker::{PageTableWalkError, PageTableWalker};
 
 	#[derive(Debug)]
 	pub struct MappedPageRangeInclusive<S: PageSize> {
@@ -921,62 +921,6 @@ pub mod mapped_page_table_iter {
 
 		fn next(&mut self) -> Option<Self::Item> {
 			self.next_forward().or_else(|| self.next_forward())
-		}
-	}
-}
-
-mod walker {
-	//! Taken from [`x86_64`]
-
-	use x86_64::structures::paging::PageTable;
-	use x86_64::structures::paging::mapper::PageTableFrameMapping;
-	use x86_64::structures::paging::page_table::{FrameError, PageTableEntry};
-
-	#[derive(Clone, Debug)]
-	pub(super) struct PageTableWalker<P: PageTableFrameMapping> {
-		page_table_frame_mapping: P,
-	}
-
-	impl<P: PageTableFrameMapping> PageTableWalker<P> {
-		#[inline]
-		pub unsafe fn new(page_table_frame_mapping: P) -> Self {
-			Self {
-				page_table_frame_mapping,
-			}
-		}
-
-		/// Internal helper function to get a reference to the page table of the next level.
-		///
-		/// Returns `PageTableWalkError::NotMapped` if the entry is unused. Returns
-		/// `PageTableWalkError::MappedToHugePage` if the `HUGE_PAGE` flag is set
-		/// in the passed entry.
-		#[inline]
-		pub(super) fn next_table<'b>(
-			&self,
-			entry: &'b PageTableEntry,
-		) -> Result<&'b PageTable, PageTableWalkError> {
-			let page_table_ptr = self
-				.page_table_frame_mapping
-				.frame_to_pointer(entry.frame()?);
-			let page_table: &PageTable = unsafe { &*page_table_ptr };
-
-			Ok(page_table)
-		}
-	}
-
-	#[derive(Debug)]
-	pub(super) enum PageTableWalkError {
-		NotMapped,
-		MappedToHugePage,
-	}
-
-	impl From<FrameError> for PageTableWalkError {
-		#[inline]
-		fn from(err: FrameError) -> Self {
-			match err {
-				FrameError::HugeFrame => PageTableWalkError::MappedToHugePage,
-				FrameError::FrameNotPresent => PageTableWalkError::NotMapped,
-			}
 		}
 	}
 }
