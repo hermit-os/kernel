@@ -112,7 +112,7 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 		ptr::with_exposed_provenance_mut::<PageTable>(level_4_table_addr.try_into().unwrap());
 	unsafe {
 		let level_4_table = level_4_table_ptr.as_mut().unwrap();
-		OffsetPageTable::new(level_4_table, x86_64::addr::VirtAddr::new(0x0))
+		OffsetPageTable::new_offset(level_4_table, x86_64::addr::VirtAddr::new(0x0))
 	}
 }
 
