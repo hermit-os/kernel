@@ -21,7 +21,7 @@ use self::tls::Tls;
 use crate::arch::core_local::*;
 use crate::arch::scheduler::TaskStacks;
 use crate::fd::stdio::*;
-use crate::fd::{FileDescriptor, ObjectInterface, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+use crate::fd::{ObjectInterface, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
 use crate::{arch, env};
 
@@ -389,11 +389,8 @@ pub(crate) struct Task {
 	/// Stack of the task
 	pub stacks: TaskStacks,
 	/// Mapping between file descriptor and the referenced IO interface
-	pub object_map: Arc<
-		RwSpinLock<
-			HashMap<FileDescriptor, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
-		>,
-	>,
+	pub object_map:
+		Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>>>,
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Tls>,
@@ -415,9 +412,7 @@ impl Task {
 		task_prio: Priority,
 		stacks: TaskStacks,
 		object_map: Arc<
-			RwSpinLock<
-				HashMap<FileDescriptor, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
-			>,
+			RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>>,
 		>,
 	) -> Task {
 		debug!("Creating new task {tid} on core {core_id}");
@@ -446,11 +441,7 @@ impl Task {
 		static OBJECT_MAP: OnceCell<
 			Arc<
 				RwSpinLock<
-					HashMap<
-						FileDescriptor,
-						Arc<async_lock::RwLock<dyn ObjectInterface>>,
-						RandomState,
-					>,
+					HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
 				>,
 			>,
 		> = OnceCell::new();
@@ -458,7 +449,7 @@ impl Task {
 		if core_id == 0 {
 			OBJECT_MAP
 				.set(Arc::new(RwSpinLock::new(HashMap::<
-					FileDescriptor,
+					RawFd,
 					Arc<async_lock::RwLock<dyn ObjectInterface>>,
 					RandomState,
 				>::with_hasher(

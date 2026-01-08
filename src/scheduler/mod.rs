@@ -26,7 +26,7 @@ use crate::arch::switch::switch_to_task;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::arch::{get_processor_count, interrupts};
 use crate::errno::Errno;
-use crate::fd::{FileDescriptor, ObjectInterface};
+use crate::fd::{ObjectInterface, RawFd};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::{arch, io};
@@ -218,11 +218,8 @@ struct NewTask {
 	prio: Priority,
 	core_id: CoreId,
 	stacks: TaskStacks,
-	object_map: Arc<
-		RwSpinLock<
-			HashMap<FileDescriptor, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
-		>,
-	>,
+	object_map:
+		Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>>>,
 }
 
 impl From<NewTask> for Task {
@@ -459,11 +456,8 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_object_map(
 		&self,
-	) -> Arc<
-		RwSpinLock<
-			HashMap<FileDescriptor, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>,
-		>,
-	> {
+	) -> Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>>>
+	{
 		without_interrupts(|| self.current_task.borrow().object_map.clone())
 	}
 
@@ -472,7 +466,7 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_object(
 		&self,
-		fd: FileDescriptor,
+		fd: RawFd,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
@@ -487,7 +481,7 @@ impl PerCoreScheduler {
 	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
 	pub fn recreate_objmap(&self) -> io::Result<()> {
 		let mut map = HashMap::<
-			FileDescriptor,
+			RawFd,
 			Arc<async_lock::RwLock<dyn ObjectInterface>>,
 			RandomState,
 		>::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
@@ -515,17 +509,17 @@ impl PerCoreScheduler {
 	pub fn insert_object(
 		&self,
 		obj: Arc<async_lock::RwLock<dyn ObjectInterface>>,
-	) -> io::Result<FileDescriptor> {
+	) -> io::Result<RawFd> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let mut object_map = current_task.object_map.write();
 
-			let new_fd = || -> io::Result<FileDescriptor> {
-				let mut fd: FileDescriptor = 0;
+			let new_fd = || -> io::Result<RawFd> {
+				let mut fd: RawFd = 0;
 				loop {
 					if !object_map.contains_key(&fd) {
 						break Ok(fd);
-					} else if fd == FileDescriptor::MAX {
+					} else if fd == RawFd::MAX {
 						break Err(Errno::Overflow);
 					}
 
@@ -541,19 +535,19 @@ impl PerCoreScheduler {
 
 	/// Duplicate a IO interface and returns a new file descriptor as
 	/// identifier to the new copy
-	pub fn dup_object(&self, fd: FileDescriptor) -> io::Result<FileDescriptor> {
+	pub fn dup_object(&self, fd: RawFd) -> io::Result<RawFd> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let mut object_map = current_task.object_map.write();
 
 			let obj = (*(object_map.get(&fd).ok_or(Errno::Inval)?)).clone();
 
-			let new_fd = || -> io::Result<FileDescriptor> {
-				let mut fd: FileDescriptor = 0;
+			let new_fd = || -> io::Result<RawFd> {
+				let mut fd: RawFd = 0;
 				loop {
 					if !object_map.contains_key(&fd) {
 						break Ok(fd);
-					} else if fd == FileDescriptor::MAX {
+					} else if fd == RawFd::MAX {
 						break Err(Errno::Overflow);
 					}
 
@@ -572,11 +566,7 @@ impl PerCoreScheduler {
 		})
 	}
 
-	pub fn dup_object2(
-		&self,
-		fd1: FileDescriptor,
-		fd2: FileDescriptor,
-	) -> io::Result<FileDescriptor> {
+	pub fn dup_object2(&self, fd1: RawFd, fd2: RawFd) -> io::Result<RawFd> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let mut object_map = current_task.object_map.write();
@@ -596,7 +586,7 @@ impl PerCoreScheduler {
 	/// Remove a IO interface, which is named by the file descriptor
 	pub fn remove_object(
 		&self,
-		fd: FileDescriptor,
+		fd: RawFd,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
