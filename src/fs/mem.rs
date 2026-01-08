@@ -12,6 +12,7 @@ use core::mem::{MaybeUninit, offset_of};
 use align_address::Align;
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
+use hermit_entry::ThinTree;
 
 use crate::errno::Errno;
 use crate::executor::block_on;
@@ -302,6 +303,10 @@ impl RomFile {
 	pub fn new(data: &'static [u8], mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
+		Self::new_with_timestamp(data, mode, t)
+	}
+
+	pub fn new_with_timestamp(data: &'static [u8], mode: AccessPermission, t: timespec) -> Self {
 		let attr = FileAttr {
 			st_size: data.len().try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
@@ -372,19 +377,16 @@ impl RamFile {
 	}
 }
 
+type MemDirectoryMap = BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>;
+
 pub struct MemDirectoryInterface {
 	/// Directory entries
-	inner:
-		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
+	inner: Arc<RwLock<MemDirectoryMap>>,
 	read_idx: Mutex<usize>,
 }
 
 impl MemDirectoryInterface {
-	pub fn new(
-		inner: Arc<
-			RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
-		>,
-	) -> Self {
+	pub fn new(inner: Arc<RwLock<MemDirectoryMap>>) -> Self {
 		Self {
 			inner,
 			read_idx: Mutex::new(0),
@@ -455,9 +457,45 @@ impl ObjectInterface for MemDirectoryInterface {
 
 #[derive(Debug)]
 pub(crate) struct MemDirectory {
-	inner:
-		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
+	inner: Arc<RwLock<MemDirectoryMap>>,
 	attr: FileAttr,
+}
+
+fn thin_tree_to_vfs_node(
+	thin_tree: ThinTree<'static>,
+	t: timespec,
+) -> io::Result<Box<dyn VfsNode + Send + Sync>> {
+	Ok(match thin_tree {
+		ThinTree::File { content, metadata } => {
+			let mut st_mode = AccessPermission::S_IRUSR;
+			if metadata.is_exec {
+				st_mode |= AccessPermission::S_IXUSR;
+			}
+			Box::new(RomFile::new_with_timestamp(content, st_mode, t))
+				as Box<dyn VfsNode + Send + Sync>
+		}
+		ThinTree::Directory(d) => Box::new(MemDirectory {
+			inner: Arc::new(RwLock::new(
+				d.into_iter()
+					.map(|(key, value)| {
+						Ok((
+							core::str::from_utf8(key)
+								.expect("unable to interpret Hermit image entry filename as string")
+								.to_owned(),
+							thin_tree_to_vfs_node(value, t)?,
+						))
+					})
+					.collect::<io::Result<_>>()?,
+			)),
+			attr: FileAttr {
+				st_mode: AccessPermission::S_IRUSR | AccessPermission::S_IFDIR,
+				st_atim: t,
+				st_mtim: t,
+				st_ctim: t,
+				..Default::default()
+			},
+		}) as Box<dyn VfsNode + Send + Sync>,
+	})
 }
 
 impl MemDirectory {
@@ -475,6 +513,52 @@ impl MemDirectory {
 				..Default::default()
 			},
 		}
+	}
+
+	/// Create a read-only memory tree from a tar image
+	///
+	/// This ignores top-level files in the image
+	pub fn try_from_image(image: &'static hermit_entry::tar_parser::Bytes) -> io::Result<Self> {
+		let microseconds = arch::kernel::systemtime::now_micros();
+		let t = timespec::from_usec(microseconds as i64);
+
+		// This is not perfectly memory-efficient, but we expect this
+		// to be invoked usually once per kernel boot, so this cost should
+		// be acceptable, given that it reduces code duplication and
+		// makes implementation way easier.
+		let thin_tree = ThinTree::try_from_image(image).map_err(|e| {
+			error!("unable to parse tar image: {e:?}");
+			Errno::Inval
+		})?;
+
+		let tree = match thin_tree {
+			ThinTree::Directory(d) => d
+				.into_iter()
+				.map(|(key, value)| {
+					Ok((
+						core::str::from_utf8(key)
+							.expect("unable to interpret Hermit image entry filename as string")
+							.to_owned(),
+						thin_tree_to_vfs_node(value, t)?,
+					))
+				})
+				.collect::<io::Result<_>>()?,
+			ThinTree::File { .. } => {
+				error!("root of image isn't a directory");
+				return Err(Errno::Inval);
+			}
+		};
+
+		Ok(Self {
+			inner: Arc::new(RwLock::new(tree)),
+			attr: FileAttr {
+				st_mode: AccessPermission::S_IRUSR | AccessPermission::S_IFDIR,
+				st_atim: t,
+				st_mtim: t,
+				st_ctim: t,
+				..Default::default()
+			},
+		})
 	}
 
 	async fn async_traverse_open(
