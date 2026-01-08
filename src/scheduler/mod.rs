@@ -29,6 +29,7 @@ use crate::errno::Errno;
 use crate::fd::{FileDescriptor, ObjectInterface};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
+use crate::timer_interrupts::TimerList;
 use crate::{arch, io};
 
 pub mod task;
@@ -90,15 +91,14 @@ pub(crate) struct PerCoreScheduler {
 	finished_tasks: VecDeque<Rc<RefCell<Task>>>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
+	/// Queue of timer interrupts.
+	pub timers: TimerList,
 }
 
 pub(crate) trait PerCoreSchedulerExt {
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag will be cleared during the reschedule
 	fn reschedule(self);
-
-	#[cfg(feature = "net")]
-	fn add_network_timer(self, wakeup_time: Option<u64>);
 
 	/// Terminate the current task on the current core.
 	fn exit(self, exit_code: i32) -> !;
@@ -168,13 +168,6 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	#[cfg(target_arch = "riscv64")]
 	fn reschedule(self) {
 		without_interrupts(|| self.scheduler());
-	}
-
-	#[cfg(feature = "net")]
-	fn add_network_timer(self, wakeup_time: Option<u64>) {
-		without_interrupts(|| {
-			self.blocked_tasks.add_network_timer(wakeup_time);
-		});
 	}
 
 	fn exit(self, exit_code: i32) -> ! {
@@ -909,6 +902,7 @@ pub(crate) fn add_current_core() {
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
+		timers: TimerList::new(),
 	});
 
 	let scheduler = Box::into_raw(boxed_scheduler);

@@ -42,6 +42,7 @@ use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
 use crate::drivers::{Driver, InterruptLine};
+use crate::executor::network::NETWORK_WAKER;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -417,6 +418,9 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 		}
 
 		self.isr_stat.acknowledge();
+
+		trace!("Waking network waker");
+		NETWORK_WAKER.lock().wake();
 	}
 }
 
