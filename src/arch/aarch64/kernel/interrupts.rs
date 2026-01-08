@@ -24,7 +24,7 @@ use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::kernel::serial::handle_uart_interrupt;
 use crate::mm::{PageAlloc, PageRangeAllocator};
-use crate::scheduler::{self, CoreId};
+use crate::scheduler::{self, CoreId, timer_interrupts};
 use crate::{core_id, core_scheduler, env};
 
 /// The ID of the first Private Peripheral Interrupt.
@@ -93,10 +93,7 @@ pub(crate) fn install_handlers() {
 
 	fn timer_handler() {
 		debug!("Handle timer interrupt");
-
-		// disable timer
-		CNTP_CVAL_EL0.set(0);
-		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
+		timer_interrupts::clear_active_and_set_next();
 	}
 
 	for (key, value) in get_interrupt_handlers().into_iter() {
