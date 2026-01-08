@@ -10,7 +10,7 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::executor::network::{Handle, NIC};
+use crate::executor::network::{Handle, NIC, wake_network_waker};
 use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 use crate::syscalls::socket::Af;
@@ -43,7 +43,9 @@ impl Socket {
 	fn with<R>(&self, f: impl FnOnce(&mut udp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		f(nic.get_mut_socket::<udp::Socket<'_>>(self.handle))
+		let r = f(nic.get_mut_socket::<udp::Socket<'_>>(self.handle));
+		wake_network_waker();
+		r
 	}
 
 	async fn close(&self) -> io::Result<()> {

@@ -43,6 +43,7 @@ use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
 use crate::drivers::{Driver, InterruptLine};
+use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -418,6 +419,8 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
+
+		wake_network_waker();
 	}
 }
 
