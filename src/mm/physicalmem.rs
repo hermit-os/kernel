@@ -115,7 +115,7 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		.map(|m| m.reg().unwrap().next().unwrap());
 
 	for m in all_regions {
-		let start_address = m.starting_address as u64;
+		let start_address = m.starting_address.expose_provenance() as u64;
 		let size = m.size.unwrap() as u64;
 		let end_address = start_address + size;
 
