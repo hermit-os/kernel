@@ -50,77 +50,82 @@ pub(crate) enum NodeKind {
 }
 
 /// VfsNode represents an internal node of the ramdisk.
-pub(crate) trait VfsNode: core::fmt::Debug {
+#[async_trait]
+pub(crate) trait VfsNode: core::fmt::Debug + Send + Sync {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
-
-	/// determines the current file attribute
-	fn get_file_attributes(&self) -> io::Result<FileAttr> {
-		Err(Errno::Nosys)
-	}
 
 	/// Determine the syscall interface
 	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to create a new directory node
-	fn traverse_mkdir(
+	/// Duplicate an object, if possible
+	fn dup(&self) -> Box<dyn VfsNode>;
+
+	/// Traverse into a subdirectory or file
+	async fn traverse_once(&self, _component: &str) -> io::Result<Box<dyn VfsNode>> {
+		Err(Errno::Nosys)
+	}
+
+	/// Traverse into a deep subdirectory or file
+	async fn traverse_multiple(&self, path: &str) -> io::Result<Box<dyn VfsNode>> {
+		let mut node = self.dup();
+		for component in path.split('/').skip(1) {
+			node = node.traverse_once(component).await?;
+		}
+		Ok(node)
+	}
+
+	/// Create a new directory node
+	async fn mkdir(&self, _component: &str, _mode: AccessPermission) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
+	/// Delete a directory node
+	async fn rmdir(&self, _component: &str) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
+	/// Remove the specified file
+	async fn unlink(&self, _component: &str) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
+	/// Open a directory
+	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
+		Err(Errno::Nosys)
+	}
+
+	/// Get file status
+	async fn lstat(&self) -> io::Result<FileAttr> {
+		Err(Errno::Nosys)
+	}
+
+	/// Get file status
+	async fn stat(&self) -> io::Result<FileAttr> {
+		Err(Errno::Nosys)
+	}
+
+	/// Mount a file system
+	async fn mount(&self, _component: &str, _obj: Box<dyn VfsNode>) -> io::Result<()> {
+		Err(Errno::Nosys)
+	}
+
+	/// Open a file
+	async fn open(
 		&self,
-		_components: &mut Vec<&str>,
-		_mode: AccessPermission,
-	) -> io::Result<()> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to delete a directory node
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to remove the specified file
-	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> io::Result<()> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to open a directory
-	fn traverse_readdir(&self, _components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to get file status
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to get file status
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to mount a file system
-	fn traverse_mount(
-		&self,
-		_components: &mut Vec<&str>,
-		_obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> io::Result<()> {
-		Err(Errno::Nosys)
-	}
-
-	/// Helper function to open a file
-	fn traverse_open(
-		&self,
-		_components: &mut Vec<&str>,
+		_component: &str,
 		_option: OpenOption,
 		_mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to create a read-only file
-	fn traverse_create_file(
+	/// Create a read-only file
+	async fn create_file(
 		&self,
-		_components: &mut Vec<&str>,
+		_component: &str,
 		_data: &'static [u8],
 		_mode: AccessPermission,
 	) -> io::Result<()> {
@@ -157,6 +162,16 @@ impl Filesystem {
 		}
 	}
 
+	/// Traverses a path except for the final component
+	async fn traverse_prefinal<'a>(
+		&self,
+		path: &'a str,
+	) -> io::Result<(Box<dyn VfsNode>, &'a str)> {
+		let last_slash = path.rfind('/').ok_or(Errno::Nosys)?;
+		let ret = self.root.traverse_multiple(&path[..last_slash]).await?;
+		Ok((ret, &path[last_slash + 1..]))
+	}
+
 	/// Tries to open file at given path.
 	pub fn open(
 		&self,
@@ -165,45 +180,49 @@ impl Filesystem {
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		debug!("Open file {path} with {opt:?}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_open(&mut components, opt, mode)
+		block_on(
+			async {
+				let (dir, component) = self.traverse_prefinal(path).await?;
+				dir.open(component, opt, mode).await
+			},
+			None,
+		)
 	}
 
 	/// Unlinks a file given by path
 	pub fn unlink(&self, path: &str) -> io::Result<()> {
 		debug!("Unlinking file {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_unlink(&mut components)
+		block_on(
+			async {
+				let (dir, component) = self.traverse_prefinal(path).await?;
+				dir.unlink(component).await
+			},
+			None,
+		)
 	}
 
 	/// Remove directory given by path
 	pub fn rmdir(&self, path: &str) -> io::Result<()> {
 		debug!("Removing directory {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_rmdir(&mut components)
+		block_on(
+			async {
+				let (dir, component) = self.traverse_prefinal(path).await?;
+				dir.rmdir(component).await
+			},
+			None,
+		)
 	}
 
 	/// Create directory given by path
 	pub fn mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
 		debug!("Create directory {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_mkdir(&mut components, mode)
+		block_on(
+			async {
+				let (dir, component) = self.traverse_prefinal(path).await?;
+				dir.mkdir(component, mode).await
+			},
+			None,
+		)
 	}
 
 	pub fn opendir(&self, path: &str) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
@@ -215,55 +234,40 @@ impl Filesystem {
 
 	/// List given directory
 	pub fn readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
-		if path.trim() == "/" {
-			let mut components: Vec<&str> = Vec::new();
-			self.root.traverse_readdir(&mut components)
-		} else {
-			let mut components: Vec<&str> = path.split('/').collect();
-
-			components.reverse();
-			components.pop();
-
-			self.root.traverse_readdir(&mut components)
-		}
+		block_on(
+			async { self.root.traverse_multiple(path).await?.readdir().await },
+			None,
+		)
 	}
 
 	/// stat
 	pub fn stat(&self, path: &str) -> io::Result<FileAttr> {
 		debug!("Getting stats {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_stat(&mut components)
+		block_on(
+			async { self.root.traverse_multiple(path).await?.stat().await },
+			None,
+		)
 	}
 
 	/// lstat
 	pub fn lstat(&self, path: &str) -> io::Result<FileAttr> {
 		debug!("Getting lstats {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_lstat(&mut components)
+		block_on(
+			async { self.root.traverse_multiple(path).await?.lstat().await },
+			None,
+		)
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	pub fn mount(
-		&self,
-		path: &str,
-		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> io::Result<()> {
+	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode + Send + Sync>) -> io::Result<()> {
 		debug!("Mounting {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_mount(&mut components, obj)
+		block_on(
+			async {
+				let (dir, component) = self.traverse_prefinal(path).await?;
+				dir.mount(component, obj).await
+			},
+			None,
+		)
 	}
 
 	/// Create read-only file
@@ -274,13 +278,13 @@ impl Filesystem {
 		mode: AccessPermission,
 	) -> io::Result<()> {
 		debug!("Create read-only file {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_create_file(&mut components, data, mode)
+		block_on(
+			async {
+				let (dir, component) = self.traverse_prefinal(path).await?;
+				dir.create_file(component, data, mode).await
+			},
+			None,
+		)
 	}
 }
 
