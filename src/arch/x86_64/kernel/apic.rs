@@ -502,17 +502,13 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	Ok(PhysAddr::new(mp_config.lapic.into()))
 }
 
+/// Returns the default local APIC address, and initializes the IOAPIC address to their default
 fn default_apic() -> PhysAddr {
-	let default_address = PhysAddr::new(0xfee0_0000);
-
-	warn!("Using default APIC address: {default_address:p}");
-
-	// currently, uhyve doesn't support an IO-APIC
-	if !env::is_uhyve() {
-		init_ioapic_address(default_address);
-	}
-
-	default_address
+	let default_local = PhysAddr::new(0xfee0_0000);
+	let default_ioapic = PhysAddr::new(0xfec0_0000);
+	warn!("Using default APIC addresses: local: {default_local:p}, I/O: {default_ioapic:p}");
+	init_ioapic_address(default_ioapic);
+	default_local
 }
 
 pub fn eoi() {
