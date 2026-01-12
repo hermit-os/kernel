@@ -675,7 +675,8 @@ impl VirtioNetDriver<Uninit> {
 		let negotiated_features = self
 			.com_cfg
 			.control_registers()
-			.negotiate_features(features);
+			.negotiate_features(features)
+			.unwrap();
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");

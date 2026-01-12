@@ -19,6 +19,9 @@ use core::fmt;
 
 use virtio::FeatureBits;
 
+use crate::errno::Errno;
+use crate::io;
+
 trait VirtioIdExt {
 	fn as_feature(&self) -> Option<&str>;
 }
@@ -120,7 +123,7 @@ mod control_registers_access {
 }
 
 pub trait ControlRegisters<'a>: self::control_registers_access::ControlRegistersAccess<'a> {
-	fn negotiate_features<DF>(self, driver_features: DF) -> DF
+	fn negotiate_features<DF>(self, driver_features: DF) -> io::Result<DF>
 	where
 		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
 		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>;
@@ -130,35 +133,41 @@ impl<'a, T> ControlRegisters<'a> for T
 where
 	T: self::control_registers_access::ControlRegistersAccess<'a>,
 {
-	fn negotiate_features<DF>(self, driver_features: DF) -> DF
+	fn negotiate_features<DF>(self, driver_features: DF) -> io::Result<DF>
 	where
 		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
 		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>,
 	{
 		let device_features = DF::from(self.read_device_features());
 		info!("device_features = {device_features:?}");
-		debug_assert!(
-			device_features.requirements_satisfied(),
-			"The device offers a feature which requires another feature which was not offered."
-		);
+		if !device_features.requirements_satisfied() {
+			error!(
+				"The device offers a feature which requires another feature which was not offered."
+			);
+			return Err(Errno::Inval);
+		}
 
 		info!("driver_features = {driver_features:?}");
-		debug_assert!(
-			driver_features.requirements_satisfied(),
-			"The driver offers a feature which requires another feature which was not offered.",
-		);
+		if !driver_features.requirements_satisfied() {
+			error!(
+				"The driver offers a feature which requires another feature which was not offered."
+			);
+			return Err(Errno::Inval);
+		}
 
 		let common_features = device_features.intersection(driver_features);
 		info!("common_features = {common_features:?}");
-		// This should be logically unreachable.
-		debug_assert!(
-			common_features.requirements_satisfied(),
-			"We negotiated a feature which requires another feature which was not negotiated."
-		);
+		if !common_features.requirements_satisfied() {
+			// This should be logically unreachable.
+			error!(
+				"We negotiated a feature which requires another feature which was not negotiated."
+			);
+			return Err(Errno::Inval);
+		}
 
 		self.write_driver_features(common_features.into());
 
-		common_features
+		Ok(common_features)
 	}
 }
 

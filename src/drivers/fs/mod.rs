@@ -99,7 +99,8 @@ impl VirtioFsDriver {
 		let negotiated_features = self
 			.com_cfg
 			.control_registers()
-			.negotiate_features(minimal_features);
+			.negotiate_features(minimal_features)
+			.unwrap();
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
