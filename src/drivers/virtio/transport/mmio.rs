@@ -105,7 +105,7 @@ impl ComCfg {
 		ComCfg { com_cfg: raw }
 	}
 
-	pub fn control_registers(&mut self) -> impl ControlRegisters<'_> {
+	pub fn control_registers(&mut self) -> impl ControlRegisters {
 		self.com_cfg.as_mut_ptr()
 	}
 

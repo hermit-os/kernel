@@ -47,7 +47,7 @@ mod control_registers_access {
 	use volatile::VolatilePtr;
 	use volatile::access::ReadWrite;
 
-	pub trait ControlRegistersAccess<'a>: Sized + Copy {
+	pub trait ControlRegistersAccess: Sized + Copy {
 		fn read_device_feature_word(self, i: u32) -> le32;
 		fn write_driver_feature_word(self, i: u32, word: le32);
 
@@ -75,7 +75,7 @@ mod control_registers_access {
 	}
 
 	#[cfg(feature = "pci")]
-	impl<'a> ControlRegistersAccess<'a> for VolatilePtr<'a, virtio::pci::CommonCfg, ReadWrite> {
+	impl<'a> ControlRegistersAccess for VolatilePtr<'a, virtio::pci::CommonCfg, ReadWrite> {
 		fn read_device_feature_word(self, i: u32) -> le32 {
 			use virtio::pci::CommonCfgVolatileFieldAccess;
 
@@ -92,7 +92,7 @@ mod control_registers_access {
 	}
 
 	#[cfg(not(feature = "pci"))]
-	impl<'a> ControlRegistersAccess<'a> for VolatilePtr<'a, virtio::mmio::DeviceRegisters, ReadWrite> {
+	impl<'a> ControlRegistersAccess for VolatilePtr<'a, virtio::mmio::DeviceRegisters, ReadWrite> {
 		fn read_device_feature_word(self, i: u32) -> le32 {
 			use virtio::mmio::DeviceRegistersVolatileFieldAccess;
 
@@ -122,16 +122,16 @@ mod control_registers_access {
 	}
 }
 
-pub trait ControlRegisters<'a>: self::control_registers_access::ControlRegistersAccess<'a> {
+pub trait ControlRegisters: self::control_registers_access::ControlRegistersAccess {
 	fn negotiate_features<DF>(self, driver_features: DF) -> io::Result<DF>
 	where
 		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
 		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>;
 }
 
-impl<'a, T> ControlRegisters<'a> for T
+impl<T> ControlRegisters for T
 where
-	T: self::control_registers_access::ControlRegistersAccess<'a>,
+	T: self::control_registers_access::ControlRegistersAccess,
 {
 	fn negotiate_features<DF>(self, driver_features: DF) -> io::Result<DF>
 	where
