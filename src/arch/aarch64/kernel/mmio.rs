@@ -110,7 +110,7 @@ pub fn init_drivers() {
 							}
 
 							let virtio_region_start =
-								PhysAddr::new(virtio_region.starting_address as u64);
+								PhysAddr::from(virtio_region.starting_address.expose_provenance());
 
 							assert!(
 								virtio_region.size.unwrap()

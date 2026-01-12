@@ -103,7 +103,7 @@ pub fn init_drivers() {
 					.next()
 					.unwrap();
 
-				let plic_region_start = PhysAddr::new(plic_region.starting_address as u64);
+				let plic_region_start = PhysAddr::from(plic_region.starting_address.addr());
 				debug!(
 					"Init PLIC at {:p}, size: {:x}",
 					plic_region_start,
@@ -119,9 +119,9 @@ pub fn init_drivers() {
 				// TODO: Determine correct context via devicetree and allow more than one context
 				match PLATFORM_MODEL {
 					Model::Virt | Model::Unknown => {
-						init_plic(plic_region.starting_address as usize, 1);
+						init_plic(plic_region.starting_address.expose_provenance(), 1);
 					}
-					Model::Fux40 => init_plic(plic_region.starting_address as usize, 2),
+					Model::Fux40 => init_plic(plic_region.starting_address.expose_provenance(), 2),
 				}
 			}
 
@@ -161,7 +161,8 @@ pub fn init_drivers() {
 					warn!("Expected ethernet-phy node, found something else");
 				}
 
-				let gem_region_start = PhysAddr::new(gem_region.starting_address as u64);
+				let gem_region_start =
+					PhysAddr::from(gem_region.starting_address.expose_provenance());
 				debug!("Init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
 				assert!(
 					gem_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
@@ -193,7 +194,8 @@ pub fn init_drivers() {
 					.next()
 					.unwrap();
 
-				let virtio_region_start = PhysAddr::new(virtio_region.starting_address as u64);
+				let virtio_region_start =
+					PhysAddr::from(virtio_region.starting_address.expose_provenance());
 
 				debug!("Init virtio_mmio at {virtio_region_start:p}, irq: {irq}");
 				assert!(
