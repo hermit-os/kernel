@@ -1710,9 +1710,9 @@ dependencies = [
 
 [[package]]
 name = "semihosting"
-version = "0.1.21"
+version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5669d73a3503b5d34db3359c8c87d1b33ba68b2630c153e340d106c15a8626a7"
+checksum = "828b13930191ed00e8d82485e6d5396a5abd511b9ed1f53b016f77c791fe9769"
 
 [[package]]
 name = "serde"
