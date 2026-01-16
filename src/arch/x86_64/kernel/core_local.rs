@@ -78,7 +78,9 @@ impl CoreLocal {
 		};
 		this.this = ptr::from_ref(this);
 
-		GsBase::write(VirtAddr::from_ptr(this));
+		unsafe {
+			GsBase::write(VirtAddr::from_ptr(this));
+		}
 	}
 
 	#[inline]
