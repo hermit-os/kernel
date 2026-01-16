@@ -213,6 +213,7 @@ exclude = [
 # FIXME: remove once merged: https://github.com/rcore-os/trapframe-rs/pull/16
 trapframe = { git = "https://github.com/hermit-os/trapframe-rs", branch = "global_asm" }
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "be" }
+x86_64 = { git = "https://github.com/rust-osdev/x86_64.git", branch = "next" }
 
 [profile.profiling]
 inherits = "release"
