@@ -84,7 +84,7 @@ pub fn kernel_heap_end() -> VirtAddr {
 			};
 
 			let addr = u64::from(p4_index) << 39;
-			assert_eq!(VirtAddr::new_truncate(addr).p4_index(), p4_index);
+			assert_eq!(x86_64::VirtAddr::new_truncate(addr).p4_index(), p4_index);
 
 			VirtAddr::new_truncate(addr - 1)
 		}

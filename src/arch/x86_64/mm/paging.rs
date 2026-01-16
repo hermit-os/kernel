@@ -27,7 +27,7 @@ unsafe impl FrameAllocator<Size4KiB> for FrameAlloc {
 		let range = FrameAlloc::allocate(layout).ok()?;
 
 		let phys_addr = PhysAddr::from(range.start());
-		Some(PhysFrame::from_start_address(phys_addr.into()).unwrap())
+		Some(PhysFrame::from_start_address(x86_64::PhysAddr::new(phys_addr.as_u64())).unwrap())
 	}
 }
 
@@ -111,7 +111,7 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 		ptr::with_exposed_provenance_mut::<PageTable>(level_4_table_addr.try_into().unwrap());
 	unsafe {
 		let level_4_table = level_4_table_ptr.as_mut().unwrap();
-		OffsetPageTable::new(level_4_table, x86_64::addr::VirtAddr::new(0x0))
+		OffsetPageTable::from_phys_offset(level_4_table, x86_64::addr::VirtAddr::new(0x0))
 	}
 }
 
@@ -135,7 +135,7 @@ pub fn is_recursive() -> bool {
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	let addr = x86_64::VirtAddr::from(virtual_address);
+	let addr = x86_64::VirtAddr::new(virtual_address.as_u64());
 
 	let translate_result = unsafe { identity_mapped_page_table() }.translate(addr);
 
@@ -167,13 +167,14 @@ pub fn map<S>(
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let pages = {
-		let start = Page::<S>::containing_address(virtual_address.into());
+		let start = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.as_u64()));
 		let end = start + count as u64;
 		Page::range(start, end)
 	};
 
 	let frames = {
-		let start = PhysFrame::<S>::containing_address(physical_address.into());
+		let start =
+			PhysFrame::<S>::containing_address(x86_64::PhysAddr::new(physical_address.as_u64()));
 		let end = start + count as u64;
 		PhysFrame::range(start, end)
 	};
@@ -193,10 +194,10 @@ pub fn map<S>(
 		S: PageSize + fmt::Debug,
 	{
 		let mut unmapped = false;
-		for (page, frame) in pages.zip(frames) {
+		for (page, frame) in pages.into_iter().zip(frames) {
 			// TODO: Require explicit unmaps
 			let unmap = mapper.unmap(page);
-			if let Ok((_frame, flush)) = unmap {
+			if let Ok((_frame, _flags, flush)) = unmap {
 				unmapped = true;
 				flush.flush();
 				debug!("Had to unmap page {page:?} before mapping.");
@@ -248,7 +249,8 @@ where
 	S: PageSize + fmt::Debug,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
-	let frame = PhysFrame::<S>::from_start_address(phys_addr.into()).unwrap();
+	let frame =
+		PhysFrame::<S>::from_start_address(x86_64::PhysAddr::new(phys_addr.as_u64())).unwrap();
 	let flags = PageTableEntryFlags::PRESENT
 		| PageTableEntryFlags::WRITABLE
 		| PageTableEntryFlags::NO_EXECUTE;
@@ -260,7 +262,7 @@ where
 		Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
 		Err(MapToError::ParentEntryHugePage) => {
 			let page_table = unsafe { identity_mapped_page_table() };
-			let virt_addr = VirtAddr::new(frame.start_address().as_u64()).into();
+			let virt_addr = x86_64::VirtAddr::new(frame.start_address().as_u64());
 			let phys_addr = frame.start_address();
 			assert_eq!(page_table.translate_addr(virt_addr), Some(phys_addr));
 		}
@@ -275,14 +277,14 @@ where
 {
 	trace!("Unmapping virtual address {virtual_address:p} ({count} pages)");
 
-	let first_page = Page::<S>::containing_address(virtual_address.into());
+	let first_page = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.as_u64()));
 	let last_page = first_page + count as u64;
 	let range = Page::range(first_page, last_page);
 
 	for page in range {
 		let unmap_result = unsafe { identity_mapped_page_table() }.unmap(page);
 		match unmap_result {
-			Ok((_frame, flush)) => flush.flush(),
+			Ok((_frame, _flags, flush)) => flush.flush(),
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
 			Err(UnmapError::PageNotMapped) => {
@@ -411,7 +413,12 @@ pub fn create_new_root_page_table() -> usize {
 
 	let entry: u64 = unsafe {
 		let (frame, _flags) = Cr3::read();
-		map::<BasePageSize>(virtaddr, frame.start_address().into(), 1, flags);
+		map::<BasePageSize>(
+			virtaddr,
+			PhysAddr::new(frame.start_address().as_u64()),
+			1,
+			flags,
+		);
 		let entry: &u64 = &*virtaddr.as_ptr();
 
 		*entry
@@ -449,7 +456,7 @@ pub unsafe fn log_page_tables() {
 	}
 
 	let page_table = unsafe { identity_mapped_page_table() };
-	trace!("Page tables:\n{}", page_table.display());
+	trace!("Page tables:\n{}", OffsetPageTableExt::display(&page_table));
 }
 
 pub mod mapped_page_range_display {
@@ -1037,7 +1044,7 @@ mod walker {
 		) -> Result<&'b PageTable, PageTableWalkError> {
 			let page_table_ptr = self
 				.page_table_frame_mapping
-				.frame_to_pointer(entry.frame()?);
+				.frame_to_pointer(entry.frame(false)?);
 			let page_table: &PageTable = unsafe { &*page_table_ptr };
 
 			Ok(page_table)
