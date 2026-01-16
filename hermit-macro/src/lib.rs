@@ -2,6 +2,7 @@ use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::parse_macro_input;
 
+#[clippy::format_args]
 macro_rules! bail {
     ($span:expr, $($tt:tt)*) => {
         return Err(syn::Error::new_spanned($span, format!($($tt)*)))

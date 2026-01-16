@@ -5,6 +5,7 @@
 /// [`std::print`]: https://doc.rust-lang.org/stable/std/macro.print.html
 #[cfg(target_os = "none")]
 #[macro_export]
+#[clippy::format_args]
 macro_rules! print {
     ($($arg:tt)*) => {{
         $crate::console::_print(::core::format_args!($($arg)*));
@@ -18,18 +19,20 @@ macro_rules! print {
 /// [`std::println`]: https://doc.rust-lang.org/stable/std/macro.println.html
 #[cfg(target_os = "none")]
 #[macro_export]
+#[clippy::format_args]
 macro_rules! println {
     () => {
         $crate::print!("\n")
     };
     ($($arg:tt)*) => {{
-        $crate::console::_print(::core::format_args!("{}\n", format_args!($($arg)*)));
+        $crate::console::_print(::core::format_args!("{}\n", ::core::format_args!($($arg)*)));
     }};
 }
 
 /// Emergency output.
 #[cfg(target_os = "none")]
 #[macro_export]
+#[clippy::format_args]
 macro_rules! panic_println {
     () => {{
         $crate::console::_panic_print(::core::format_args!("\n"));
@@ -41,6 +44,7 @@ macro_rules! panic_println {
 
 #[cfg(not(target_os = "none"))]
 #[macro_export]
+#[clippy::format_args]
 macro_rules! panic_println {
     ($($arg:tt)*) => {
         println!($($arg)*);

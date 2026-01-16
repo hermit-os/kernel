@@ -944,23 +944,24 @@ pub fn print_information() {
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
 	if let Some(brand_string) = cpuid.get_processor_brand_string() {
-		infoentry!("Model", brand_string.as_str());
+		let brand_string = brand_string.as_str();
+		infoentry!("Model", "{brand_string}");
 	}
 
-	infoentry!("Frequency", *CPU_FREQUENCY);
-	infoentry!("SpeedStep Technology", FEATURES.cpu_speedstep);
+	let cpu_freq = &*CPU_FREQUENCY;
+	let speedstep = &FEATURES.cpu_speedstep;
+	infoentry!("Frequency", "{cpu_freq}");
+	infoentry!("SpeedStep Technology", "{speedstep}");
 
-	infoentry!("Features", feature_printer);
-	infoentry!(
-		"Physical Address Width",
-		"{} bits",
-		get_physical_address_bits()
-	);
-	infoentry!("Linear Address Width", "{} bits", get_linear_address_bits());
-	infoentry!(
-		"Supports 1GiB Pages",
-		if supports_1gib_pages() { "Yes" } else { "No" }
-	);
+	infoentry!("Features", "{feature_printer}");
+
+	let phys_addr_bits = get_physical_address_bits();
+	let virt_addr_bits = get_linear_address_bits();
+	let size_1gib_pages = if supports_1gib_pages() { "Yes" } else { "No" };
+	infoentry!("Physical Address Width", "{phys_addr_bits} bits");
+	infoentry!("Linear Address Width", "{virt_addr_bits} bits");
+	infoentry!("Supports 1GiB Pages", "{size_1gib_pages}");
+
 	infofooter!();
 }
 

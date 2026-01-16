@@ -995,14 +995,13 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 
 pub fn print_information() {
 	infoheader!(" MULTIPROCESSOR INFORMATION ");
-	infoentry!(
-		"APIC in use",
-		if processor::supports_x2apic() {
-			"x2APIC"
-		} else {
-			"xAPIC"
-		}
-	);
-	infoentry!("Initialized CPUs", arch::get_processor_count());
+	let apic = if processor::supports_x2apic() {
+		"x2APIC"
+	} else {
+		"xAPIC"
+	};
+	infoentry!("APIC in use", "{apic}");
+	let processor_count = arch::get_processor_count();
+	infoentry!("Initialized CPUs", "{processor_count}");
 	infofooter!();
 }
