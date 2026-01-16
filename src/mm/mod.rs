@@ -107,11 +107,10 @@ pub(crate) fn init() {
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
 	let npages = total_mem / BasePageSize::SIZE as usize;
-	let npage_3tables = npages / (BasePageSize::SIZE as usize / mem::align_of::<usize>()) + 1;
-	let npage_2tables =
-		npage_3tables / (BasePageSize::SIZE as usize / mem::align_of::<usize>()) + 1;
-	let npage_1tables =
-		npage_2tables / (BasePageSize::SIZE as usize / mem::align_of::<usize>()) + 1;
+	let npage_div = BasePageSize::SIZE as usize / mem::align_of::<usize>();
+	let npage_3tables = npages / npage_div + 1;
+	let npage_2tables = npage_3tables / npage_div + 1;
+	let npage_1tables = npage_2tables / npage_div + 1;
 	let reserved_space = (npage_3tables + npage_2tables + npage_1tables)
 		* BasePageSize::SIZE as usize
 		+ 2 * LargePageSize::SIZE as usize;
