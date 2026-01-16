@@ -710,7 +710,7 @@ checksum = "6b3851f0f5ba054c215f5d3d9f1b60727db9e7dcfe80712485875de01ba299d9"
 dependencies = [
  "align-address 0.4.0",
  "smallvec",
- "x86_64",
+ "x86_64 0.15.5",
 ]
 
 [[package]]
@@ -929,7 +929,7 @@ dependencies = [
  "uhyve-interface",
  "virtio-spec",
  "volatile 0.6.1",
- "x86_64",
+ "x86_64 0.16.0-rc.0",
  "zerocopy",
  "zeroize",
 ]
@@ -1183,7 +1183,7 @@ checksum = "a33ce19da78c437cf69f8c3265a77ca61e08395678b7b9eac42039add3f4f4fb"
 dependencies = [
  "align-address 0.4.0",
  "cfg-if",
- "x86_64",
+ "x86_64 0.15.5",
 ]
 
 [[package]]
@@ -1897,7 +1897,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93950c9f0fb7d6d36ae73ac4326be946b81816f8559bf10a01087064e2dd4509"
 dependencies = [
  "raw-cpuid",
- "x86_64",
+ "x86_64 0.15.5",
 ]
 
 [[package]]
@@ -1926,7 +1926,7 @@ dependencies = [
  "hermit-abi",
  "memory_addresses 0.4.0",
  "num_enum",
- "x86_64",
+ "x86_64 0.15.5",
 ]
 
 [[package]]
@@ -2338,6 +2338,18 @@ dependencies = [
  "bitflags 2.13.1",
  "const_fn",
  "rustversion",
+ "volatile 0.4.6",
+]
+
+[[package]]
+name = "x86_64"
+version = "0.16.0-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11c3c6a22235681979011629276e06d94bed726762bcc9b870f08f56a20c8e50"
+dependencies = [
+ "bit_field",
+ "bitflags 2.13.1",
+ "const_fn",
  "volatile 0.4.6",
 ]
 
