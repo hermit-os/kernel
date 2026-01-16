@@ -112,7 +112,7 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 		ptr::with_exposed_provenance_mut::<PageTable>(level_4_table_addr.try_into().unwrap());
 	unsafe {
 		let level_4_table = level_4_table_ptr.as_mut().unwrap();
-		OffsetPageTable::new(level_4_table, x86_64::addr::VirtAddr::new(0x0))
+		OffsetPageTable::from_phys_offset(level_4_table, x86_64::addr::VirtAddr::new(0x0))
 	}
 }
 
@@ -179,7 +179,7 @@ pub fn map<S>(
 		for (page, frame) in pages.zip(frames) {
 			// TODO: Require explicit unmaps
 			let unmap = mapper.unmap(page);
-			if let Ok((_frame, flush)) = unmap {
+			if let Ok((_frame, _flags, flush)) = unmap {
 				unmapped = true;
 				flush.flush();
 				debug!("Had to unmap page {page:?} before mapping.");
@@ -265,7 +265,7 @@ where
 	for page in range {
 		let unmap_result = unsafe { identity_mapped_page_table() }.unmap(page);
 		match unmap_result {
-			Ok((_frame, flush)) => flush.flush(),
+			Ok((_frame, _flags, flush)) => flush.flush(),
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
 			Err(UnmapError::PageNotMapped) => {
@@ -372,7 +372,7 @@ pub unsafe fn log_page_tables() {
 	}
 
 	let page_table = unsafe { identity_mapped_page_table() };
-	trace!("Page tables:\n{}", page_table.display());
+	trace!("Page tables:\n{}", OffsetPageTableExt::display(&page_table));
 }
 
 pub mod mapped_page_range_display {
@@ -961,7 +961,7 @@ mod walker {
 		) -> Result<&'b PageTable, PageTableWalkError> {
 			let page_table_ptr = self
 				.page_table_frame_mapping
-				.frame_to_pointer(entry.frame()?);
+				.frame_to_pointer(entry.frame(false)?);
 			let page_table: &PageTable = unsafe { &*page_table_ptr };
 
 			Ok(page_table)
