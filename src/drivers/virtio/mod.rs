@@ -15,9 +15,9 @@
 pub mod transport;
 pub mod virtqueue;
 
-use core::fmt;
+use core::{fmt, mem};
 
-use virtio::FeatureBits;
+use virtio::{DeviceStatus, FeatureBits};
 
 use crate::errno::Errno;
 use crate::io;
@@ -50,6 +50,8 @@ mod control_registers_access {
 	pub trait ControlRegistersAccess: Sized + Copy {
 		fn read_device_feature_word(self, i: u32) -> le32;
 		fn write_driver_feature_word(self, i: u32, word: le32);
+		fn read_device_status(self) -> virtio::DeviceStatus;
+		fn write_device_status(self, device_status: virtio::DeviceStatus);
 
 		fn read_device_features(self) -> virtio::F {
 			let features = array::from_fn(|i| {
@@ -72,6 +74,11 @@ mod control_registers_access {
 				self.write_driver_feature_word(i, word);
 			}
 		}
+
+		fn add_device_status(self, device_status: virtio::DeviceStatus) {
+			let device_status = self.read_device_status() | device_status;
+			self.write_device_status(device_status);
+		}
 	}
 
 	#[cfg(feature = "pci")]
@@ -88,6 +95,18 @@ mod control_registers_access {
 
 			self.driver_feature_select().write(i.into());
 			self.driver_feature().write(word);
+		}
+
+		fn read_device_status(self) -> virtio::DeviceStatus {
+			use virtio::pci::CommonCfgVolatileFieldAccess;
+
+			self.device_status().read()
+		}
+
+		fn write_device_status(self, device_status: virtio::DeviceStatus) {
+			use virtio::pci::CommonCfgVolatileFieldAccess;
+
+			self.device_status().write(device_status);
 		}
 	}
 
@@ -119,6 +138,18 @@ mod control_registers_access {
 			self.driver_features_sel().write(i.into());
 			self.driver_features().write(word);
 		}
+
+		fn read_device_status(self) -> virtio::DeviceStatus {
+			use virtio::pci::CommonCfgVolatileFieldAccess;
+
+			self.device_status().read()
+		}
+
+		fn write_device_status(self, device_status: virtio::DeviceStatus) {
+			use virtio::pci::CommonCfgVolatileFieldAccess;
+
+			self.device_status().write(device_status);
+		}
 	}
 }
 
@@ -127,6 +158,18 @@ pub trait ControlRegisters: self::control_registers_access::ControlRegistersAcce
 	where
 		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
 		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>;
+
+	fn init_device<D>(
+		self,
+		driver: D,
+		id: virtio::Id,
+		setup: impl FnOnce() -> io::Result<()>,
+	) -> io::Result<()>
+	where
+		D: VirtioDriver,
+		D::F:
+			FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
+		virtio::F: From<D::F> + AsRef<D::F> + AsMut<D::F>;
 }
 
 impl<T> ControlRegisters for T
@@ -169,6 +212,88 @@ where
 
 		Ok(common_features)
 	}
+
+	fn init_device<D>(
+		self,
+		driver: D,
+		id: virtio::Id,
+		setup: impl FnOnce() -> io::Result<()>,
+	) -> io::Result<()>
+	where
+		D: VirtioDriver,
+		D::F:
+			FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
+		virtio::F: From<D::F> + AsRef<D::F> + AsMut<D::F>,
+	{
+		struct FailOnDrop<T>(T)
+		where
+			T: self::control_registers_access::ControlRegistersAccess;
+
+		impl<T> Drop for FailOnDrop<T>
+		where
+			T: self::control_registers_access::ControlRegistersAccess,
+		{
+			fn drop(&mut self) {
+				self.0.write_device_status(DeviceStatus::FAILED);
+			}
+		}
+
+		let fail_on_drop = FailOnDrop(self);
+
+		// Reset the device.
+		self.write_device_status(DeviceStatus::empty());
+
+		// Tell the device that we have noticed it.
+		self.add_device_status(DeviceStatus::ACKNOWLEDGE);
+
+		if id != virtio::Id::Net {
+			if let Some(feature) = id.as_feature() {
+				error!("Virtio driver {id:?} is currently not active.");
+				error!("To use the device, recompile the kernel with the {feature} feature.");
+			} else {
+				error!("Virtio device {id:?} is not supported!");
+			}
+			return Err(Errno::Nodev);
+		}
+
+		// Tell the device that we know how to drive it.
+		self.add_device_status(DeviceStatus::DRIVER);
+
+		let negotiated_features = self.negotiate_features(D::FEATURES);
+
+		// Tell the device to check the features.
+		self.add_device_status(DeviceStatus::FEATURES_OK);
+
+		// Check whether the device supports our subset of features.
+		if !self
+			.read_device_status()
+			.contains(DeviceStatus::FEATURES_OK)
+		{
+			error!("The device does not support our subset of features.");
+			return Err(Errno::Nodev);
+		}
+
+		setup()?;
+
+		self.add_device_status(DeviceStatus::DRIVER_OK);
+
+		mem::forget(fail_on_drop);
+		Ok(())
+	}
+}
+
+trait VirtioDriver {
+	type F;
+
+	const FEATURES: Self::F;
+}
+
+struct Net;
+
+impl VirtioDriver for Net {
+	type F = virtio::net::F;
+
+	const FEATURES: Self::F = virtio::net::F::VERSION_1;
 }
 
 pub mod error {
