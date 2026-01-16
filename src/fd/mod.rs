@@ -20,9 +20,9 @@ mod eventfd;
 pub(crate) mod socket;
 pub(crate) mod stdio;
 
-pub(crate) const STDIN_FILENO: FileDescriptor = 0;
-pub(crate) const STDOUT_FILENO: FileDescriptor = 1;
-pub(crate) const STDERR_FILENO: FileDescriptor = 2;
+pub(crate) const STDIN_FILENO: RawFd = 0;
+pub(crate) const STDOUT_FILENO: RawFd = 1;
+pub(crate) const STDERR_FILENO: RawFd = 2;
 
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 #[derive(Debug)]
@@ -48,7 +48,7 @@ pub(crate) enum SocketOption {
 	TcpNoDelay,
 }
 
-pub(crate) type FileDescriptor = i32;
+pub(crate) type RawFd = i32;
 
 bitflags! {
 	/// Options for opening files
@@ -332,7 +332,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	}
 }
 
-pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
+pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -342,19 +342,19 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> io::Result<usize> {
 	block_on(async { obj.read().await.read(buf).await }, None)
 }
 
-pub(crate) fn lseek(fd: FileDescriptor, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+pub(crate) fn lseek(fd: RawFd, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 	let obj = get_object(fd)?;
 
 	block_on(async { obj.read().await.lseek(offset, whence).await }, None)
 }
 
-pub(crate) fn chmod(fd: FileDescriptor, mode: AccessPermission) -> io::Result<()> {
+pub(crate) fn chmod(fd: RawFd, mode: AccessPermission) -> io::Result<()> {
 	let obj = get_object(fd)?;
 
 	block_on(async { obj.read().await.chmod(mode).await }, None)
 }
 
-pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
+pub(crate) fn write(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
 	let obj = get_object(fd)?;
 
 	if buf.is_empty() {
@@ -364,7 +364,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> io::Result<usize> {
 	block_on(async { obj.read().await.write(buf).await }, None)
 }
 
-pub(crate) fn truncate(fd: FileDescriptor, length: usize) -> io::Result<()> {
+pub(crate) fn truncate(fd: RawFd, length: usize) -> io::Result<()> {
 	let obj = get_object(fd)?;
 	block_on(async { obj.read().await.truncate(length).await }, None)
 }
@@ -416,7 +416,7 @@ pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	result
 }
 
-pub fn fstat(fd: FileDescriptor) -> io::Result<FileAttr> {
+pub fn fstat(fd: RawFd) -> io::Result<FileAttr> {
 	let obj = get_object(fd)?;
 	block_on(async { obj.read().await.fstat().await }, None)
 }
@@ -439,7 +439,7 @@ pub fn fstat(fd: FileDescriptor) -> io::Result<FileAttr> {
 /// `EFD_NONBLOCK`: Set the file descriptor in non-blocking mode
 /// `EFD_SEMAPHORE`: Provide semaphore-like semantics for reads
 /// from the new file descriptor.
-pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<FileDescriptor> {
+pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<RawFd> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
 
 	let fd = core_scheduler().insert_object(Arc::new(async_lock::RwLock::new(obj)))?;
@@ -447,15 +447,13 @@ pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<FileDescriptor> {
 	Ok(fd)
 }
 
-pub(crate) fn get_object(
-	fd: FileDescriptor,
-) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+pub(crate) fn get_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 	core_scheduler().get_object(fd)
 }
 
 pub(crate) fn insert_object(
 	obj: Arc<async_lock::RwLock<dyn ObjectInterface>>,
-) -> io::Result<FileDescriptor> {
+) -> io::Result<RawFd> {
 	core_scheduler().insert_object(obj)
 }
 
@@ -463,21 +461,19 @@ pub(crate) fn insert_object(
 // to the same open file description as the descriptor oldfd. The new
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
-pub(crate) fn dup_object(fd: FileDescriptor) -> io::Result<FileDescriptor> {
+pub(crate) fn dup_object(fd: RawFd) -> io::Result<RawFd> {
 	core_scheduler().dup_object(fd)
 }
 
-pub(crate) fn dup_object2(fd1: FileDescriptor, fd2: FileDescriptor) -> io::Result<FileDescriptor> {
+pub(crate) fn dup_object2(fd1: RawFd, fd2: RawFd) -> io::Result<RawFd> {
 	core_scheduler().dup_object2(fd1, fd2)
 }
 
-pub(crate) fn remove_object(
-	fd: FileDescriptor,
-) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+pub(crate) fn remove_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 	core_scheduler().remove_object(fd)
 }
 
-pub(crate) fn isatty(fd: FileDescriptor) -> io::Result<bool> {
+pub(crate) fn isatty(fd: RawFd) -> io::Result<bool> {
 	let obj = get_object(fd)?;
 	block_on(async { obj.read().await.isatty().await }, None)
 }
