@@ -331,9 +331,10 @@ pub fn print_information() {
 	let fdt = env::fdt().unwrap();
 	let cpu0 = fdt.cpus().next().unwrap();
 	let cpu0_compatible = cpu0.property("compatible").unwrap().as_str().unwrap();
+	let cpu_freq = &*CPU_FREQUENCY;
 
 	infoheader!(" CPU INFORMATION ");
-	infoentry!("Processor compatibility", cpu0_compatible);
-	infoentry!("Counter frequency", *CPU_FREQUENCY);
+	infoentry!("Processor compatibility", "{cpu0_compatible}");
+	infoentry!("Counter frequency", "{cpu_freq}");
 	infofooter!();
 }
