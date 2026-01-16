@@ -55,7 +55,6 @@ pub(crate) use crate::arch::*;
 pub use crate::config::DEFAULT_STACK_SIZE;
 pub(crate) use crate::config::*;
 pub use crate::fs::create_file;
-use crate::kernel::is_uhyve_with_pci;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
 #[macro_use]
@@ -245,7 +244,7 @@ fn boot_processor_main() -> ! {
 	#[cfg(feature = "smp")]
 	info!("Compiled with SMP support");
 
-	if is_uhyve_with_pci() || !env::is_uhyve() {
+	if kernel::is_uhyve_with_pci() || !env::is_uhyve() {
 		#[cfg(feature = "pci")]
 		crate::drivers::pci::print_information();
 	}

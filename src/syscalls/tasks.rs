@@ -252,7 +252,7 @@ pub extern "C" fn sys_set_priority(id: Tid, prio: u8) {
 			.set_priority(TaskId::from(id), Priority::from(prio))
 			.expect("Unable to set priority");
 	} else {
-		panic!("Invalid priority {}", prio);
+		panic!("Invalid priority {prio}");
 	}
 }
 
@@ -263,6 +263,6 @@ pub extern "C" fn sys_set_current_task_priority(prio: u8) {
 	if prio > 0 {
 		core_scheduler().set_current_task_priority(Priority::from(prio));
 	} else {
-		panic!("Invalid priority {}", prio);
+		panic!("Invalid priority {prio}");
 	}
 }
