@@ -9,7 +9,6 @@ use hermit_entry::boot_info::{
 use hermit_entry::elf::LoadedKernel;
 use log::info;
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
-use sptr::Strict;
 use vm_fdt::FdtWriterResult;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
@@ -36,7 +35,7 @@ struct Mem;
 
 impl MemoryManagement for Mem {
 	unsafe fn paddr_to_slice<'a>(&self, p: PAddr, sz: usize) -> Option<&'static [u8]> {
-		let ptr = sptr::from_exposed_addr(p as usize);
+		let ptr = ptr::with_exposed_provenance(p as usize);
 		unsafe { Some(slice::from_raw_parts(ptr, sz)) }
 	}
 
@@ -139,7 +138,7 @@ pub fn find_kernel() -> &'static [u8] {
 		PageTableFlags::empty(),
 	);
 
-	unsafe { slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len) }
+	unsafe { slice::from_raw_parts(ptr::with_exposed_provenance(elf_start), elf_len) }
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
@@ -187,7 +186,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
 	let device_tree =
-		DeviceTreeAddress::new(u64::try_from(device_tree.as_ptr().expose_addr()).unwrap());
+		DeviceTreeAddress::new(u64::try_from(device_tree.as_ptr().expose_provenance()).unwrap());
 
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
@@ -202,7 +201,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		},
 	};
 
-	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
+	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
 	let raw_boot_info = boot_info.write();
 
 	unsafe { super::enter_kernel(stack, entry, raw_boot_info) }

@@ -4,7 +4,7 @@ mod address_range;
 mod start;
 
 use core::arch::asm;
-use core::{mem, slice};
+use core::{mem, ptr, slice};
 
 use address_range::AddressRange;
 use fdt::node::FdtNode;
@@ -14,15 +14,14 @@ use hermit_entry::boot_info::{
 };
 use hermit_entry::elf::LoadedKernel;
 use log::info;
-use sptr::Strict;
 
 use crate::BootInfoExt;
 
 fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
-	let initrd_start = sptr::from_exposed_addr_mut::<u8>(initrd_start);
+	let initrd_start = ptr::with_exposed_provenance_mut::<u8>(initrd_start);
 	let initrd_end = chosen.property("linux,initrd-end")?.as_usize()?;
-	let initrd_end = sptr::from_exposed_addr_mut::<u8>(initrd_end);
+	let initrd_end = ptr::with_exposed_provenance_mut::<u8>(initrd_end);
 	// SAFETY: We trust the raw pointer from the firmware
 	let initrd_len = unsafe { initrd_end.offset_from(initrd_start).try_into().unwrap() };
 
@@ -45,7 +44,7 @@ fn find_kernel_multiboot(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
 	let addr = usize::from_be_bytes(reg.value[..mem::size_of::<usize>()].try_into().unwrap());
 	let len = usize::from_be_bytes(reg.value[mem::size_of::<usize>()..].try_into().unwrap());
 
-	let initrd_start = sptr::from_exposed_addr_mut::<u8>(addr);
+	let initrd_start = ptr::with_exposed_provenance_mut::<u8>(addr);
 	// SAFETY: We trust the raw pointer from the firmware
 	Some(unsafe { slice::from_raw_parts(initrd_start, len) })
 }
@@ -114,7 +113,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	};
 
 	let device_tree = {
-		let fdt_addr = start::get_fdt_ptr().expose_addr();
+		let fdt_addr = start::get_fdt_ptr().expose_provenance();
 		DeviceTreeAddress::new(fdt_addr.try_into().unwrap())
 	};
 
@@ -129,7 +128,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	};
 
 	let stack = start::get_stack_ptr();
-	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
+	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
 	let hart_id = start::get_hart_id();
 	let raw_boot_info = boot_info.write();
 

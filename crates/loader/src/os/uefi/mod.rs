@@ -5,7 +5,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::ffi::c_void;
 use core::mem::MaybeUninit;
-use core::slice;
+use core::{ptr, slice};
 
 use align_address::Align;
 use hermit_entry::boot_info::{
@@ -13,7 +13,6 @@ use hermit_entry::boot_info::{
 };
 use hermit_entry::elf::{KernelObject, LoadedKernel};
 use log::info;
-use sptr::Strict;
 use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::fs::{self, FileSystem, Path};
 use uefi::prelude::*;
@@ -43,7 +42,7 @@ fn main() -> Status {
 
 	let mut fdt = Fdt::new("uefi")
 		.unwrap()
-		.rsdp(u64::try_from(rsdp.expose_addr()).unwrap())
+		.rsdp(u64::try_from(rsdp.expose_provenance()).unwrap())
 		.unwrap();
 
 	if let Some(bootargs) = read_bootargs() {
@@ -100,7 +99,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel, fdt: Vec<u8>) -> ! {
 	} = kernel_info;
 
 	let device_tree =
-		DeviceTreeAddress::new(u64::try_from(fdt.leak().as_ptr().expose_addr()).unwrap());
+		DeviceTreeAddress::new(u64::try_from(fdt.leak().as_ptr().expose_provenance()).unwrap());
 
 	let boot_info = BootInfo {
 		hardware_info: HardwareInfo {
@@ -115,8 +114,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel, fdt: Vec<u8>) -> ! {
 	let stack = usize::try_from(boot_info.load_info.kernel_image_addr_range.end)
 		.unwrap()
 		.align_down(PAGE_SIZE);
-	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
-	let stack = sptr::from_exposed_addr_mut(stack);
+	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
+	let stack = ptr::with_exposed_provenance_mut(stack);
 	let raw_boot_info = boot_info.write();
 
 	unsafe { arch::enter_kernel(stack, entry, raw_boot_info) }
