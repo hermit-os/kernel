@@ -137,7 +137,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	// determine boot stack address
 	let new_stack = (ptr::addr_of!(loader_end).addr() + 0x1000).align_up(Size4KiB::SIZE as usize);
 
-	let cmdline_ptr = unsafe {
+	let cmdline_ptr: u32 = unsafe {
 		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_PTR_OFFSET))
 	};
 	let cmdline_size: u32 = unsafe {
@@ -152,7 +152,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		info!("Found command line at {cmdline_ptr:#x}");
 		let slice = unsafe {
 			core::slice::from_raw_parts(
-				sptr::from_exposed_addr(cmdline_ptr),
+				sptr::from_exposed_addr(cmdline_ptr as usize),
 				cmdline_size.try_into().unwrap(),
 			)
 		};
