@@ -7,19 +7,29 @@ use hermit_entry::boot_info::{
 	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
 };
 use hermit_entry::elf::LoadedKernel;
-use hermit_entry::fc::{
-	BOOT_FLAG_OFFSET, CMD_LINE_PTR_OFFSET, CMD_LINE_SIZE_OFFSET, E820_ENTRIES_OFFSET,
-	E820_TABLE_OFFSET, HDR_MAGIC_OFFSET, LINUX_KERNEL_BOOT_FLAG_MAGIC, LINUX_KERNEL_HRD_MAGIC,
-	LINUX_SETUP_HEADER_OFFSET, RAMDISK_IMAGE_OFFSET, RAMDISK_SIZE_OFFSET,
-};
 use log::info;
 use sptr::Strict;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
+use self::fc::*;
 use super::physicalmem::PhysAlloc;
 use super::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, paging};
 use crate::BootInfoExt;
 use crate::fdt::Fdt;
+
+mod fc {
+	pub const LINUX_KERNEL_BOOT_FLAG_MAGIC: u16 = 0xaa55;
+	pub const LINUX_KERNEL_HRD_MAGIC: u32 = 0x53726448;
+	pub const LINUX_SETUP_HEADER_OFFSET: usize = 0x1f1;
+	pub const BOOT_FLAG_OFFSET: usize = 13;
+	pub const HDR_MAGIC_OFFSET: usize = 17;
+	pub const E820_ENTRIES_OFFSET: usize = 0x1e8;
+	pub const E820_TABLE_OFFSET: usize = 0x2d0;
+	pub const RAMDISK_IMAGE_OFFSET: usize = 39;
+	pub const RAMDISK_SIZE_OFFSET: usize = 43;
+	pub const CMD_LINE_PTR_OFFSET: usize = 55;
+	pub const CMD_LINE_SIZE_OFFSET: usize = 71;
+}
 
 unsafe extern "C" {
 	static mut loader_end: u8;
