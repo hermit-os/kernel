@@ -79,28 +79,10 @@ impl CoreLocal {
 	}
 }
 
-#[inline]
-pub(crate) fn core_id() -> CoreId {
-	if cfg!(target_os = "none") {
-		CoreLocal::get().core_id
-	} else {
-		0
-	}
-}
-
-#[inline]
-pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
-}
-
-pub(crate) fn ex() -> &'static StaticExecutor<RawSpinMutex, RawRwSpinLock> {
-	&CoreLocal::get().ex
-}
-
-pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	CoreLocal::get().scheduler.set(scheduler);
-}
-
 pub(crate) fn increment_irq_counter(irq_no: u8) {
 	CoreLocal::get().irq_statistics.inc(irq_no);
 }
+
+#[path = "../../../kernel/core_local.rs"]
+mod core_local_common;
+pub use core_local_common::*;
