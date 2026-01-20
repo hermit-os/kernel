@@ -3,7 +3,7 @@ use core::ptr;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
+use hermit_sync::{OnceCell, SpinMutex};
 use riscv::asm::wfi;
 use riscv::interrupt::{Exception, Interrupt, Trap};
 use riscv::register::{scause, sie, sip, sstatus, stval};
@@ -15,6 +15,10 @@ use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::scheduler;
+
+/// The ID of the first Shared Peripheral Interrupt.
+#[allow(dead_code)]
+const SPI_START: u8 = 0;
 
 /// base address of the PLIC, only one access at the same time is allowed
 static PLIC_BASE: SpinMutex<usize> = SpinMutex::new(0x0);
@@ -50,15 +54,6 @@ pub(crate) fn enable() {
 	unsafe {
 		sstatus::set_sie();
 	}
-}
-
-static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
-	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
-
-#[allow(dead_code)]
-pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\" for interrupt {irq_number}");
-	IRQ_NAMES.lock().insert(irq_number, name);
 }
 
 /// Waits for the next interrupt (Only Supervisor-level software/timer interrupt for now)
@@ -238,3 +233,7 @@ fn external_handler() {
 }
 
 pub(crate) fn print_statistics() {}
+
+#[path = "../../../kernel/interrupts.rs"]
+mod interrupts_common;
+pub(crate) use interrupts_common::*;

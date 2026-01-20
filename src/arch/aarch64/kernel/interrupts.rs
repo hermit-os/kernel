@@ -10,7 +10,7 @@ use arm_gic::{IntId, Trigger};
 use fdt::standard_nodes::Compatible;
 use free_list::PageLayout;
 use hashbrown::HashMap;
-use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
+use hermit_sync::{InterruptSpinMutex, OnceCell, SpinMutex};
 use memory_addresses::VirtAddr;
 use memory_addresses::arch::aarch64::PhysAddr;
 
@@ -482,19 +482,6 @@ pub fn init_cpu() {
 	}
 }
 
-static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
-	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
-
-#[allow(dead_code)]
-pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\" for interrupt {irq_number}");
-	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
-}
-
-fn get_irq_name(irq_number: u8) -> Option<&'static str> {
-	IRQ_NAMES.lock().get(&irq_number).copied()
-}
-
 pub(crate) static IRQ_COUNTERS: InterruptSpinMutex<BTreeMap<CoreId, &IrqStatistics>> =
 	InterruptSpinMutex::new(BTreeMap::new());
 
@@ -534,3 +521,7 @@ pub(crate) fn print_statistics() {
 		}
 	}
 }
+
+#[path = "../../../kernel/interrupts.rs"]
+mod interrupts_common;
+pub(crate) use interrupts_common::*;

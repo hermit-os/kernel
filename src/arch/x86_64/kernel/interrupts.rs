@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
+use hermit_sync::{InterruptSpinMutex, OnceCell};
 #[cfg(not(feature = "idle-poll"))]
 use x86_64::instructions::interrupts::enable_and_hlt;
 pub use x86_64::instructions::interrupts::{disable, enable};
@@ -24,8 +24,10 @@ use crate::drivers::pci::get_interrupt_handlers;
 use crate::scheduler::{self, CoreId};
 
 static IRQ_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> = OnceCell::new();
-static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
-	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+
+/// The ID of the first Shared Peripheral Interrupt.
+#[allow(dead_code)]
+const SPI_START: u8 = 32;
 
 pub(crate) const IST_ENTRIES: usize = 4;
 pub(crate) const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
@@ -332,15 +334,6 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 	scheduler::abort();
 }
 
-pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\" for interrupt {irq_number}");
-	IRQ_NAMES.lock().insert(32 + irq_number, name);
-}
-
-fn get_irq_name(irq_number: u8) -> Option<&'static str> {
-	IRQ_NAMES.lock().get(&irq_number).copied()
-}
-
 pub(crate) static IRQ_COUNTERS: InterruptSpinMutex<BTreeMap<CoreId, &IrqStatistics>> =
 	InterruptSpinMutex::new(BTreeMap::new());
 
@@ -380,3 +373,7 @@ pub(crate) fn print_statistics() {
 		}
 	}
 }
+
+#[path = "../../../kernel/interrupts.rs"]
+mod interrupts_common;
+pub(crate) use interrupts_common::*;
