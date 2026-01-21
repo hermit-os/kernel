@@ -2,9 +2,9 @@
 name = "hermit-loader"
 version = "0.5.6"
 authors = ["The Hermit Project Developers"]
-license = "MIT OR Apache-2.0"
-readme = "README.md"
 edition = "2024"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 align-address = "0.3"
@@ -17,9 +17,17 @@ one-shot-mutex = "0.2"
 take-static = "0.1"
 vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
 
-[features]
-default = []
-fc = ["dep:linux-boot-params"]
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu = "11"
+enum_dispatch = "0.3"
+fdt = { version = "0.1" }
+goblin = { version = "0.10", default-features = false, features = ["elf64"] }
+volatile = { version = "0.6", features = ["derive"] }
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+fdt = "0.1"
+naked-function = "0.1"
+sbi-rt = "0.0.3"
 
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
 multiboot = "0.8"
@@ -29,20 +37,12 @@ linux-boot-params = { version = "0.17", optional = true }
 uart_16550 = "0.4"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 
-[target.'cfg(target_arch = "aarch64")'.dependencies]
-aarch64-cpu = "11"
-enum_dispatch = "0.3"
-fdt = { version = "0.1" }
-goblin = { version = "0.10", default-features = false, features = ["elf64"] }
-volatile =  { version = "0.6", features = ["derive"] }
-
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 
-[target.'cfg(target_arch = "riscv64")'.dependencies]
-fdt = "0.1"
-naked-function = "0.1"
-sbi-rt = "0.0.3"
+[features]
+default = []
+fc = ["dep:linux-boot-params"]
 
 [profile.dev]
 # This is a workaround for the loader growing too large to boot with QEMU's multiboot.
@@ -56,6 +56,4 @@ lto = true
 codegen-units = 1
 
 [workspace]
-members = [
-	"xtask",
-]
+members = ["xtask"]
