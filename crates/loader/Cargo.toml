@@ -14,7 +14,6 @@ cfg-if = "1"
 hermit-entry = { version = "0.10", features = ["loader"] }
 log = "0.4"
 one-shot-mutex = "0.2"
-sptr = "0.3"
 take-static = "0.1"
 vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
 
@@ -43,7 +42,6 @@ uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 fdt = "0.1"
 naked-function = "0.1"
 sbi-rt = "0.0.3"
-sptr = "0.3"
 
 [profile.dev]
 # This is a workaround for the loader growing too large to boot with QEMU's multiboot.

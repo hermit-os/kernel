@@ -3,7 +3,7 @@ mod console;
 
 use core::fmt::Write;
 use core::mem::MaybeUninit;
-use core::slice;
+use core::{ptr, slice};
 
 use hermit_entry::elf::KernelObject;
 use log::info;
@@ -33,7 +33,7 @@ pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	let kernel_addr = kernel.start_addr().unwrap_or(kernel_addr);
 	let memory = unsafe {
 		slice::from_raw_parts_mut(
-			sptr::from_exposed_addr_mut::<MaybeUninit<u8>>(kernel_addr as usize),
+			ptr::with_exposed_provenance_mut::<MaybeUninit<u8>>(kernel_addr as usize),
 			mem_size,
 		)
 	};

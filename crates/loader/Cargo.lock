@@ -412,7 +412,6 @@ dependencies = [
  "naked-function",
  "one-shot-mutex",
  "sbi-rt",
- "sptr",
  "take-static",
  "uart_16550",
  "uefi",
@@ -815,12 +814,6 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
-
-[[package]]
-name = "sptr"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "strsim"

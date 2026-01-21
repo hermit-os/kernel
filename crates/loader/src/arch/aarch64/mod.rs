@@ -16,7 +16,6 @@ use hermit_entry::Entry;
 use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
 use hermit_entry::elf::LoadedKernel;
 use log::info;
-use sptr::Strict;
 
 use crate::BootInfoExt;
 use crate::arch::paging::*;
@@ -50,7 +49,7 @@ const PT_MEM_CD: u64 = 0x70F;
 const PT_SELF: u64 = 1 << 55;
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	(ptr::addr_of_mut!(loader_end).expose_addr() as u64).align_up(LargePageSize::SIZE as u64)
+	(ptr::addr_of_mut!(loader_end).expose_provenance() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub unsafe fn get_dtb_addr() -> u64 {
@@ -59,7 +58,7 @@ pub unsafe fn get_dtb_addr() -> u64 {
 
 pub fn find_kernel() -> &'static [u8] {
 	let dtb = unsafe {
-		Fdt::from_ptr(sptr::from_exposed_addr(get_dtb_addr() as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(get_dtb_addr() as usize))
 			.expect(".dtb file has invalid header")
 	};
 	let module_start = dtb
@@ -80,7 +79,9 @@ pub fn find_kernel() -> &'static [u8] {
 		.unwrap();
 
 	let header = unsafe {
-		&*core::mem::transmute::<*const u8, *const Header>(sptr::from_exposed_addr(module_start))
+		&*core::mem::transmute::<*const u8, *const Header>(ptr::with_exposed_provenance(
+			module_start,
+		))
 	};
 
 	if header.e_ident[0..SELFMAG] != ELFMAG[..] {
@@ -104,7 +105,7 @@ pub fn find_kernel() -> &'static [u8] {
 
 	unsafe {
 		core::slice::from_raw_parts(
-			sptr::from_exposed_addr(module_start),
+			ptr::with_exposed_provenance(module_start),
 			file_size.try_into().unwrap(),
 		)
 	}
@@ -117,7 +118,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	let dtb = unsafe {
-		Fdt::from_ptr(sptr::from_exposed_addr(get_dtb_addr() as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(get_dtb_addr() as usize))
 			.expect(".dtb file has invalid header")
 	};
 	let cpus = dtb.cpus().count();
@@ -130,21 +131,21 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of_mut!(l1_pgtable).expose_addr() as u64 + PT_PT;
-	pgt_slice[511] = ptr::addr_of_mut!(l0_pgtable).expose_addr() as u64 + PT_PT + PT_SELF;
+	pgt_slice[0] = ptr::addr_of_mut!(l1_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt_slice[511] = ptr::addr_of_mut!(l0_pgtable).expose_provenance() as u64 + PT_PT + PT_SELF;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l1_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of_mut!(l2_pgtable).expose_addr() as u64 + PT_PT;
-	pgt_slice[1] = ptr::addr_of_mut!(l2k_pgtable).expose_addr() as u64 + PT_PT;
+	pgt_slice[0] = ptr::addr_of_mut!(l2_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt_slice[1] = ptr::addr_of_mut!(l2k_pgtable).expose_provenance() as u64 + PT_PT;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of_mut!(l3_pgtable).expose_addr() as u64 + PT_PT;
+	pgt_slice[0] = ptr::addr_of_mut!(l3_pgtable).expose_provenance() as u64 + PT_PT;
 
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l3_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
@@ -158,7 +159,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		*i = 0;
 	}
 	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice = ptr::addr_of_mut!(L0mib_pgtable).expose_addr() as u64
+		*pgt_slice = ptr::addr_of_mut!(L0mib_pgtable).expose_provenance() as u64
 			+ (i * BasePageSize::SIZE) as u64
 			+ PT_PT;
 	}
@@ -199,7 +200,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	info!("Successfully set up paging.");
 
 	let dtb = unsafe {
-		Fdt::from_ptr(sptr::from_exposed_addr(DEVICE_TREE as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
 			.expect(".dtb file has invalid header")
 	};
 
@@ -229,8 +230,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	};
 
 	let stack = boot_info.load_info.kernel_image_addr_range.start as usize - KERNEL_STACK_SIZE;
-	let stack = sptr::from_exposed_addr_mut(stack);
-	let entry = sptr::from_exposed_addr(entry_point.try_into().unwrap());
+	let stack = ptr::with_exposed_provenance_mut(stack);
+	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
 	let raw_boot_info = boot_info.write();
 
 	unsafe { enter_kernel(stack, entry, raw_boot_info) }
