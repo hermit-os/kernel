@@ -4,7 +4,7 @@ use core::cell::Cell;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
-use async_executor::StaticExecutor;
+use async_executor::StaticLocalExecutor;
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::{RawRwSpinLock, RawSpinMutex};
@@ -22,7 +22,7 @@ pub struct CoreLocal {
 	/// start address of the kernel stack
 	pub kernel_stack: Cell<u64>,
 	/// The core-local async executor.
-	ex: StaticExecutor<RawSpinMutex, RawRwSpinLock>,
+	ex: StaticLocalExecutor<RawSpinMutex, RawRwSpinLock>,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
@@ -41,7 +41,7 @@ impl CoreLocal {
 				core_id,
 				scheduler: Cell::new(ptr::null_mut()),
 				kernel_stack: Cell::new(0),
-				ex: StaticExecutor::new(),
+				ex: StaticLocalExecutor::new(),
 				#[cfg(feature = "smp")]
 				scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 			};
@@ -84,6 +84,6 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	CoreLocal::get().scheduler.set(scheduler);
 }
 
-pub(crate) fn ex() -> &'static StaticExecutor<RawSpinMutex, RawRwSpinLock> {
+pub(crate) fn ex() -> &'static StaticLocalExecutor<RawSpinMutex, RawRwSpinLock> {
 	&CoreLocal::get().ex
 }
