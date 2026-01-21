@@ -24,7 +24,7 @@ unsafe extern "C" {
 
 mod entry {
 	core::arch::global_asm!(
-		include_str!("entry_fc.s"),
+		include_str!("entry_linux.s"),
 		loader_main = sym crate::os::loader_main,
 	);
 }
@@ -74,7 +74,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());
 	}
 
-	let mut fdt = Fdt::new("firecracker").unwrap();
+	let mut fdt = Fdt::new("linux").unwrap();
 
 	let e820_entries = boot_params_ref.e820_entries();
 	assert!(!e820_entries.is_empty());

@@ -173,7 +173,7 @@ impl Qemu {
 				}
 				cpu_args
 			}
-			Target::X86_64Fc => panic!("unsupported"),
+			Target::X86_64Linux => panic!("unsupported"),
 			Target::Aarch64 | Target::Aarch64Be => {
 				let mut cpu_args = if self.accel {
 					todo!()

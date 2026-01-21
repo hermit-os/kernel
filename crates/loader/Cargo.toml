@@ -46,7 +46,7 @@ built = { version = "0.8", features = ["git2", "chrono"] }
 
 [features]
 default = []
-fc = ["dep:linux-boot-params"]
+linux = ["dep:linux-boot-params"]
 
 [profile.dev]
 # This is a workaround for the loader growing too large to boot with QEMU's multiboot.

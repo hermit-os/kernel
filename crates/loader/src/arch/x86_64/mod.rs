@@ -1,7 +1,7 @@
 cfg_if::cfg_if! {
-	if #[cfg(feature = "fc")] {
-		mod firecracker;
-		pub use self::firecracker::*;
+	if #[cfg(feature = "linux")] {
+		mod linux;
+		pub use self::linux::*;
 	} else if #[cfg(target_os = "none")] {
 		mod multiboot;
 		pub use self::multiboot::*;
