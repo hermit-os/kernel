@@ -115,7 +115,7 @@ jobs:
       - name: Run VM (hello_c, release)
         if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
-      - name: Run VM (hello_world-microvm, fc, release)
+      - name: Run VM (hello_world-microvm, fc, dev)
         run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-fc --sudo
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
       - name: Run VM (hello_world-microvm, fc, release)
