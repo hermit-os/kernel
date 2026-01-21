@@ -407,6 +407,7 @@ dependencies = [
  "fdt",
  "goblin",
  "hermit-entry",
+ "linux-boot-params",
  "log",
  "multiboot",
  "naked-function",
@@ -465,6 +466,12 @@ dependencies = [
  "libc",
  "redox_syscall",
 ]
+
+[[package]]
+name = "linux-boot-params"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55b0ee4b3d02e882f3c742d872f718ae24fae18e411e49aa6624a5d64ff32080"
 
 [[package]]
 name = "linux-raw-sys"

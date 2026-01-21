@@ -19,12 +19,13 @@ vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
 
 [features]
 default = []
-fc = []
+fc = ["dep:linux-boot-params"]
 
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
 multiboot = "0.8"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
+linux-boot-params = { version = "0.17", optional = true }
 uart_16550 = "0.4"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 
