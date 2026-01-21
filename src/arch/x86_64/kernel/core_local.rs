@@ -6,7 +6,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
-use async_executor::StaticExecutor;
+use async_executor::StaticLocalExecutor;
 #[cfg(feature = "smp")]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::{RawRwSpinLock, RawSpinMutex};
@@ -33,7 +33,7 @@ pub(crate) struct CoreLocal {
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 	/// The core-local async executor.
-	ex: StaticExecutor<RawSpinMutex, RawRwSpinLock>,
+	ex: StaticLocalExecutor<RawSpinMutex, RawRwSpinLock>,
 	#[cfg(feature = "smp")]
 	pub hlt: AtomicBool,
 	/// Queues to handle incoming requests from the other cores
@@ -61,7 +61,7 @@ impl CoreLocal {
 			tss: Cell::new(ptr::null_mut()),
 			kernel_stack: Cell::new(ptr::null_mut()),
 			irq_statistics,
-			ex: StaticExecutor::new(),
+			ex: StaticLocalExecutor::new(),
 			#[cfg(feature = "smp")]
 			hlt: AtomicBool::new(false),
 			#[cfg(feature = "smp")]
@@ -110,7 +110,7 @@ pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
 }
 
-pub(crate) fn ex() -> &'static StaticExecutor<RawSpinMutex, RawRwSpinLock> {
+pub(crate) fn ex() -> &'static StaticLocalExecutor<RawSpinMutex, RawRwSpinLock> {
 	&CoreLocal::get().ex
 }
 
