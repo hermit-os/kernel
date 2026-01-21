@@ -5,6 +5,7 @@ authors = ["The Hermit Project Developers"]
 edition = "2024"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
+publish = false
 
 [dependencies]
 align-address = "0.3"
