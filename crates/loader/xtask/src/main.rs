@@ -2,7 +2,6 @@
 
 mod artifact;
 mod build;
-mod cargo_build;
 mod ci;
 mod clippy;
 mod object;

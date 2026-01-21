@@ -1,6 +1,8 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use clap::Args;
+use xshell::Cmd;
 
 use crate::object::Object;
 use crate::target::Target;
@@ -69,5 +71,34 @@ impl Artifact {
 
 	pub fn ci_image(&self, image: &str) -> PathBuf {
 		["data", self.target.arch(), image].iter().collect()
+	}
+
+	fn release_args(&self) -> &'static [&'static str] {
+		if self.release { &["--release"] } else { &[] }
+	}
+}
+
+pub trait CmdExt {
+	fn cargo_build_args(self, artifact: &Artifact) -> Self;
+	fn target_dir_args(self, artifact: &Artifact) -> Self;
+}
+
+impl CmdExt for Cmd<'_> {
+	fn cargo_build_args(self, artifact: &Artifact) -> Self {
+		let cmd = self.target_dir_args(artifact).args(artifact.release_args());
+
+		if let Some(profile) = &artifact.profile {
+			cmd.args(&["--profile", profile])
+		} else {
+			cmd
+		}
+	}
+
+	fn target_dir_args(self, artifact: &Artifact) -> Self {
+		if let Some(target_dir) = &artifact.target_dir {
+			self.args::<&[&OsStr]>(&["--target-dir".as_ref(), target_dir.as_ref()])
+		} else {
+			self
+		}
 	}
 }
