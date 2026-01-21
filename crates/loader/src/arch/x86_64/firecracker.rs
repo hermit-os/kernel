@@ -24,7 +24,7 @@ unsafe extern "C" {
 
 mod entry {
 	core::arch::global_asm!(
-		include_str!("entry_fc.s"),
+		include_str!("entry_linux.s"),
 		loader_main = sym crate::os::loader_main,
 	);
 }
