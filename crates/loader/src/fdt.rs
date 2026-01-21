@@ -70,11 +70,7 @@ impl Fdt {
 	}
 }
 
-#[cfg(all(
-	target_arch = "x86_64",
-	not(target_os = "uefi"),
-	not(feature = "linux")
-))]
+#[cfg(feature = "multiboot")]
 mod x86_64 {
 	use multiboot::information::{MemoryMapIter, MemoryType};
 	use vm_fdt::FdtWriterResult;
