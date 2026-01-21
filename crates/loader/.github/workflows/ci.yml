@@ -95,14 +95,20 @@ jobs:
           gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}
+        if: matrix.arch != 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --release
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --microvm
+        if: matrix.arch != 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --microvm --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --release
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --image hello_c
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --microvm
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --image hello_c --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --microvm --release
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --image hello_c
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --image hello_c --release
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-uefi
         if: matrix.arch == 'x86_64'

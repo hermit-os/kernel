@@ -5,8 +5,8 @@ use xshell::{Shell, cmd};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Target {
-	X86_64,
 	X86_64Linux,
+	X86_64Multiboot,
 	X86_64Uefi,
 	Aarch64,
 	Aarch64Be,
@@ -22,7 +22,7 @@ impl Target {
 			cmd!(sh, "rustup target add {triple}").run()?;
 		}
 
-		if self == &Self::X86_64 {
+		if self == &Self::X86_64Multiboot {
 			cmd!(sh, "rustup component add llvm-tools-preview").run()?;
 		}
 
@@ -31,8 +31,8 @@ impl Target {
 
 	pub fn arch(&self) -> &'static str {
 		match self {
-			Self::X86_64 => "x86_64",
 			Self::X86_64Linux => "x86_64",
+			Self::X86_64Multiboot => "x86_64",
 			Self::X86_64Uefi => "x86_64",
 			Self::Aarch64 => "aarch64",
 			Self::Aarch64Be => "aarch64_be",
@@ -42,8 +42,8 @@ impl Target {
 
 	pub fn triple(&self) -> &'static str {
 		match self {
-			Self::X86_64 => "x86_64-unknown-none",
 			Self::X86_64Linux => "x86_64-unknown-none",
+			Self::X86_64Multiboot => "x86_64-unknown-none",
 			Self::X86_64Uefi => "x86_64-unknown-uefi",
 			Self::Aarch64 => "aarch64-unknown-none-softfloat",
 			Self::Aarch64Be => "aarch64_be-unknown-none-softfloat",
@@ -60,8 +60,8 @@ impl Target {
 
 	pub fn cargo_args(&self) -> &'static [&'static str] {
 		match self {
-			Self::X86_64 => &["--target=x86_64-unknown-none"],
 			Self::X86_64Linux => &["--target=x86_64-unknown-none"],
+			Self::X86_64Multiboot => &["--target=x86_64-unknown-none"],
 			Self::X86_64Uefi => &["--target=x86_64-unknown-uefi"],
 			Self::Aarch64 => &["--target=aarch64-unknown-none-softfloat"],
 			Self::Aarch64Be => &[
@@ -74,12 +74,12 @@ impl Target {
 
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
-			Self::X86_64 => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/link.ld",
-				"-Crelocation-model=static",
-			],
 			Self::X86_64Linux => &[
 				"-Clink-arg=-Tsrc/arch/x86_64/link_linux.ld",
+				"-Crelocation-model=static",
+			],
+			Self::X86_64Multiboot => &[
+				"-Clink-arg=-Tsrc/arch/x86_64/link.ld",
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Uefi => &[],
@@ -104,8 +104,8 @@ impl Target {
 
 	pub fn dist_name(&self) -> &'static str {
 		match self {
-			Self::X86_64 => "hermit-loader-x86_64",
 			Self::X86_64Linux => "hermit-loader-x86_64-linux",
+			Self::X86_64Multiboot => "hermit-loader-x86_64-multiboot",
 			Self::X86_64Uefi => "hermit-loader-x86_64.efi",
 			Self::Aarch64 => "hermit-loader-aarch64",
 			Self::Aarch64Be => "hermit-loader-aarch64_be",
@@ -115,7 +115,7 @@ impl Target {
 
 	pub fn qemu(&self) -> &'static str {
 		match self {
-			Self::X86_64 | Self::X86_64Linux | Self::X86_64Uefi => "x86_64",
+			Self::X86_64Linux | Self::X86_64Multiboot | Self::X86_64Uefi => "x86_64",
 			Self::Aarch64 | Self::Aarch64Be => "aarch64",
 			Self::Riscv64 => "riscv64",
 		}
@@ -127,8 +127,8 @@ impl FromStr for Target {
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
 		match s {
-			"x86_64" => Ok(Self::X86_64),
 			"x86_64-linux" => Ok(Self::X86_64Linux),
+			"x86_64-multiboot" => Ok(Self::X86_64Multiboot),
 			"x86_64-uefi" => Ok(Self::X86_64Uefi),
 			"aarch64" => Ok(Self::Aarch64),
 			"aarch64_be" => Ok(Self::Aarch64Be),
