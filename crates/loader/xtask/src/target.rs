@@ -79,7 +79,7 @@ impl Target {
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Linux => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/link_fc.ld",
+				"-Clink-arg=-Tsrc/arch/x86_64/link_linux.ld",
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Uefi => &[],
