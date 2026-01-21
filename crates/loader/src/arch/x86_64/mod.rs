@@ -1,5 +1,5 @@
 cfg_if::cfg_if! {
-	if #[cfg(feature = "fc")] {
+	if #[cfg(feature = "linux")] {
 		mod firecracker;
 		pub use self::firecracker::*;
 	} else if #[cfg(target_os = "none")] {

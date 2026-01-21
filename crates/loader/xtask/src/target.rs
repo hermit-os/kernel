@@ -90,7 +90,7 @@ impl Target {
 
 	pub fn feature_flags(&self) -> &'static [&'static str] {
 		match self {
-			Self::X86_64Fc => &["--features=fc"],
+			Self::X86_64Fc => &["--features=linux"],
 			_ => &[],
 		}
 	}

@@ -43,7 +43,7 @@ uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 
 [features]
 default = []
-fc = ["dep:linux-boot-params"]
+linux = ["dep:linux-boot-params"]
 
 [profile.dev]
 # This is a workaround for the loader growing too large to boot with QEMU's multiboot.
