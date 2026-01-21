@@ -22,9 +22,7 @@ pub struct Firecracker {
 }
 
 impl Firecracker {
-	pub fn run(mut self) -> Result<()> {
-		self.build.cargo_build.features.push("linux".to_string());
-
+	pub fn run(self) -> Result<()> {
 		self.build.run()?;
 
 		let sh = crate::sh()?;

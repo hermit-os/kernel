@@ -25,6 +25,7 @@ impl Build {
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(self.cargo_build.artifact.target.cargo_args())
+			.args(self.cargo_build.artifact.target.feature_flags())
 			.cargo_build_args(&self.cargo_build)
 			.run()?;
 
