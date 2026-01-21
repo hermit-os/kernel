@@ -42,10 +42,10 @@ jobs:
     name: Run
     strategy:
       matrix:
-        target: [x86_64, aarch64, aarch64_be, riscv64]
+        arch: [x86_64, aarch64, aarch64_be, riscv64]
         os: [ubuntu-latest, macos-latest, windows-latest]
         include:
-          - target: x86_64
+          - arch: x86_64
             os: ubuntu-latest
             flags: --accel --sudo
     runs-on: ${{ matrix.os }}
@@ -80,35 +80,35 @@ jobs:
 
           $HOME/.local/bin/firecracker --version
           echo "FIRECRACKER=$HOME/.local/bin/firecracker" >> "$GITHUB_ENV"
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64'
       - uses: actions/checkout@v6
         with:
           lfs: true
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.target == 'aarch64_be' && 'nightly' || 'stable' }}
-          components: ${{ matrix.target == 'aarch64_be' && 'rust-src' || '' }}
+          toolchain: ${{ matrix.arch == 'aarch64_be' && 'nightly' || 'stable' }}
+          components: ${{ matrix.arch == 'aarch64_be' && 'rust-src' || '' }}
       - name: Dowload OpenSBI
-        if: matrix.target == 'riscv64'
+        if: matrix.arch == 'riscv64'
         run: |
           gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --release
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
-        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-      - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
-        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --microvm
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --microvm --release
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --image hello_c
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --image hello_c --release
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-uefi
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-uefi --release
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci firecracker --target ${{ matrix.arch }}-linux --sudo
+        if: matrix.arch == 'x86_64' && matrix.os == 'ubuntu-latest'
+      - run: cargo xtask ci firecracker --target ${{ matrix.arch }}-linux --sudo --release
+        if: matrix.arch == 'x86_64' && matrix.os == 'ubuntu-latest'
