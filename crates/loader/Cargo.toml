@@ -41,6 +41,9 @@ x86_64 = { version = "0.15", default-features = false, features = ["instructions
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 
+[build-dependencies]
+built = { version = "0.8", features = ["git2", "chrono"] }
+
 [features]
 default = []
 fc = ["dep:linux-boot-params"]

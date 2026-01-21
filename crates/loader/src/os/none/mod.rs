@@ -20,6 +20,7 @@ unsafe extern "C" {
 /// (called from entry.asm or entry.rs)
 pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	crate::log::init();
+	crate::log_built_info();
 
 	unsafe {
 		info!("Loader: [{:p} - {:p}]", &loader_start, &loader_end);
