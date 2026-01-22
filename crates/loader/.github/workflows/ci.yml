@@ -92,9 +92,9 @@ jobs:
         if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-elf --release
         if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-sbi
         if: matrix.arch == 'riscv64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-sbi --release
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot
         if: matrix.arch == 'x86_64'

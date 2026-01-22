@@ -10,7 +10,7 @@ pub enum Target {
 	X86_64Uefi,
 	Aarch64Elf,
 	Aarch64BeElf,
-	Riscv64,
+	Riscv64Sbi,
 }
 
 impl Target {
@@ -36,7 +36,7 @@ impl Target {
 			Self::X86_64Uefi => "x86_64",
 			Self::Aarch64Elf => "aarch64",
 			Self::Aarch64BeElf => "aarch64_be",
-			Self::Riscv64 => "riscv64",
+			Self::Riscv64Sbi => "riscv64",
 		}
 	}
 
@@ -47,7 +47,7 @@ impl Target {
 			Self::X86_64Uefi => "x86_64-unknown-uefi",
 			Self::Aarch64Elf => "aarch64-unknown-none-softfloat",
 			Self::Aarch64BeElf => "aarch64_be-unknown-none-softfloat",
-			Self::Riscv64 => "riscv64imac-unknown-none-elf",
+			Self::Riscv64Sbi => "riscv64imac-unknown-none-elf",
 		}
 	}
 
@@ -68,7 +68,7 @@ impl Target {
 				"--target=aarch64_be-unknown-none-softfloat",
 				"-Zbuild-std=core,alloc,panic_abort",
 			],
-			Self::Riscv64 => &["--target=riscv64imac-unknown-none-elf"],
+			Self::Riscv64Sbi => &["--target=riscv64imac-unknown-none-elf"],
 		}
 	}
 
@@ -84,7 +84,7 @@ impl Target {
 			],
 			Self::X86_64Uefi => &[],
 			Self::Aarch64Elf | Self::Aarch64BeElf => &["-Clink-arg=-Tsrc/arch/aarch64/link.ld"],
-			Self::Riscv64 => &["-Clink-arg=-Tsrc/arch/riscv64/link.ld"],
+			Self::Riscv64Sbi => &["-Clink-arg=-Tsrc/arch/riscv64/link.ld"],
 		}
 	}
 
@@ -111,7 +111,7 @@ impl Target {
 			Self::X86_64Uefi => "hermit-loader-x86_64.efi",
 			Self::Aarch64Elf => "hermit-loader-aarch64-elf",
 			Self::Aarch64BeElf => "hermit-loader-aarch64_be-elf",
-			Self::Riscv64 => "hermit-loader-riscv64",
+			Self::Riscv64Sbi => "hermit-loader-riscv64-sbi",
 		}
 	}
 
@@ -119,7 +119,7 @@ impl Target {
 		match self {
 			Self::X86_64Linux | Self::X86_64Multiboot | Self::X86_64Uefi => "x86_64",
 			Self::Aarch64Elf | Self::Aarch64BeElf => "aarch64",
-			Self::Riscv64 => "riscv64",
+			Self::Riscv64Sbi => "riscv64",
 		}
 	}
 }
@@ -134,7 +134,7 @@ impl FromStr for Target {
 			"x86_64-uefi" => Ok(Self::X86_64Uefi),
 			"aarch64-elf" => Ok(Self::Aarch64Elf),
 			"aarch64_be-elf" => Ok(Self::Aarch64BeElf),
-			"riscv64" => Ok(Self::Riscv64),
+			"riscv64-sbi" => Ok(Self::Riscv64Sbi),
 			s => Err(anyhow!("Unsupported target: {s}")),
 		}
 	}

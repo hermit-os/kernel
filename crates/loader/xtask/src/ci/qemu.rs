@@ -101,7 +101,7 @@ impl Qemu {
 			Target::Aarch64Elf | Target::Aarch64BeElf
 		) {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
-		} else if self.build.target() == Target::Riscv64 {
+		} else if self.build.target() == Target::Riscv64Sbi {
 			vec![
 				"-machine".to_string(),
 				"virt".to_string(),
@@ -202,7 +202,7 @@ impl Qemu {
 				));
 				cpu_args
 			}
-			Target::Riscv64 => {
+			Target::Riscv64Sbi => {
 				let mut cpu_args = if self.accel {
 					todo!()
 				} else {
@@ -239,7 +239,7 @@ impl Qemu {
 			Target::Aarch64Elf | Target::Aarch64BeElf => {
 				memory = memory.max(256);
 			}
-			Target::Riscv64 => {
+			Target::Riscv64Sbi => {
 				memory = memory.max(128);
 			}
 			_ => {}
