@@ -46,6 +46,7 @@ built = { version = "0.8", features = ["git2", "chrono"] }
 # https://github.com/rust-lang/cargo/issues/1197
 [features]
 default = []
+elf = []
 linux = []
 multiboot = []
 x86_64-linux = ["linux", "dep:linux-boot-params"]
