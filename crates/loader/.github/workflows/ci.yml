@@ -79,6 +79,7 @@ jobs:
           echo $HOME/.local/bin >> $GITHUB_PATH
 
           $HOME/.local/bin/firecracker --version
+          echo "FIRECRACKER=$HOME/.local/bin/firecracker" >> "$GITHUB_ENV"
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
       - uses: actions/checkout@v6
         with:
@@ -116,8 +117,8 @@ jobs:
         if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
       - name: Run Firecracker (hello_world-microvm, linux, dev)
-        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
+        run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
       - name: Run Firecracker (hello_world-microvm, linux, release)
-        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
+        run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
