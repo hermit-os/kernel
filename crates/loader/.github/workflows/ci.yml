@@ -105,17 +105,17 @@ jobs:
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
         if: matrix.target == 'x86_64'
       - name: Run VM (hello_world-microvm, dev)
-        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
-      - name: Run VM (hello_world-microvm, release)
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
+      - name: Run VM (hello_world-microvm, release)
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
+        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
       - name: Run VM (hello_c, dev)
-        if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
-      - name: Run VM (hello_c, release)
         if: matrix.target == 'x86_64'
+      - name: Run VM (hello_c, release)
         run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
+        if: matrix.target == 'x86_64'
       - name: Run Firecracker (hello_world-microvm, linux, dev)
         run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
