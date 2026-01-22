@@ -109,6 +109,6 @@ jobs:
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
         if: matrix.target == 'x86_64'
       - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
+        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
       - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
+        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
