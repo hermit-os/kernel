@@ -25,7 +25,7 @@ jobs:
           components: clippy
       - name: Clippy
         run: cargo xtask clippy
-  
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -73,16 +73,17 @@ jobs:
           latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
           curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
           | tar -xz
-          
+
           mkdir -p $HOME/.local/bin
           mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
           echo $HOME/.local/bin >> $GITHUB_PATH
 
           $HOME/.local/bin/firecracker --version
+          echo "FIRECRACKER=$HOME/.local/bin/firecracker" >> "$GITHUB_ENV"
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
       - uses: actions/checkout@v6
         with:
-            lfs: true
+          lfs: true
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
@@ -93,31 +94,21 @@ jobs:
         run: |
           gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-      - name: Run VM (hello_world, dev)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
-      - name: Run VM (hello_world, release)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --release
-      - name: Run VM (hello_world, uefi, dev)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
         if: matrix.target == 'x86_64'
-      - name: Run VM (hello_world, uefi, release)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
         if: matrix.target == 'x86_64'
-      - name: Run VM (hello_world-microvm, dev)
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
+        if: matrix.target == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
+        if: matrix.target == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
+        if: matrix.target == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
+        if: matrix.target == 'x86_64'
+      - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
-      - name: Run VM (hello_world-microvm, release)
+      - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
-      - name: Run VM (hello_c, dev)
-        if: matrix.target == 'x86_64'
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
-      - name: Run VM (hello_c, release)
-        if: matrix.target == 'x86_64'
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
-      - name: Run Firecracker (hello_world-microvm, linux, dev)
-        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
-      - name: Run Firecracker (hello_world-microvm, linux, release)
-        run: FIRECRACKER=$HOME/.local/bin/firecracker cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
