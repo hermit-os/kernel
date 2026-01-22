@@ -19,7 +19,7 @@ You can download prebuilt OVMF images from [rust-osdev/ovmf-prebuilt](https://gi
 cargo xtask build --target <TARGET> --release
 ```
 
-With `<TARGET>` being either `x86_64`, `x86_64-uefi`, `aarch64`, or `riscv64`.
+With `<TARGET>` being either `x86_64-linux`, `x86_64-multiboot`, `x86_64-uefi`, `aarch64`, or `riscv64`.
 
 Afterward, the loader is located in `target/release`.
 

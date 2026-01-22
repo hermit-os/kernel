@@ -112,7 +112,7 @@ impl Qemu {
 
 	fn cpu_args(&self) -> Vec<String> {
 		match self.build.target() {
-			Target::X86_64 | Target::X86_64Uefi => {
+			Target::X86_64Multiboot | Target::X86_64Uefi => {
 				let mut cpu_args = if self.accel {
 					if cfg!(target_os = "linux") {
 						vec![
@@ -130,7 +130,7 @@ impl Qemu {
 				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_string());
 
 				match self.build.target() {
-					Target::X86_64 => {
+					Target::X86_64Multiboot => {
 						cpu_args.push("-kernel".to_string());
 						cpu_args.push(
 							self.build

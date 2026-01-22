@@ -16,8 +16,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo xtask build --release --target aarch64
       - run: cargo xtask build --release --target riscv64
-      - run: cargo xtask build --release --target x86_64
       - run: cargo xtask build --release --target x86_64-linux
+      - run: cargo xtask build --release --target x86_64-multiboot
       - run: cargo xtask build --release --target x86_64-uefi
       - uses: dtolnay/rust-toolchain@nightly
         with:

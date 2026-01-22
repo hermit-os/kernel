@@ -13,8 +13,8 @@ impl Clippy {
 		let sh = crate::sh()?;
 
 		for target in [
-			Target::X86_64,
 			Target::X86_64Linux,
+			Target::X86_64Multiboot,
 			Target::X86_64Uefi,
 			Target::Aarch64,
 			Target::Riscv64,

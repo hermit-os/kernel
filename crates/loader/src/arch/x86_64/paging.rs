@@ -50,7 +50,7 @@ where
 	}
 }
 
-#[cfg(all(target_arch = "x86_64", not(feature = "linux")))]
+#[cfg(feature = "multiboot")]
 pub fn map_range<S>(
 	virtual_start: usize,
 	phys_start: usize,
