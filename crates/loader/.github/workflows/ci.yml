@@ -96,10 +96,6 @@ jobs:
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --release
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
-        if: matrix.target == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
-        if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
         if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
@@ -107,6 +103,10 @@ jobs:
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
         if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
+        if: matrix.target == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
+        if: matrix.target == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
         if: matrix.target == 'x86_64'
       - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
