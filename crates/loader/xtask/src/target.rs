@@ -90,8 +90,8 @@ impl Target {
 
 	pub fn feature_flags(&self) -> &'static [&'static str] {
 		match self {
-			Self::X86_64Linux => &["--features=linux"],
-			Self::X86_64Multiboot => &["--features=multiboot"],
+			Self::X86_64Linux => &["--features=x86_64-linux"],
+			Self::X86_64Multiboot => &["--features=x86_64-multiboot"],
 			_ => &[],
 		}
 	}
