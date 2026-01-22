@@ -25,7 +25,7 @@ jobs:
           components: clippy
       - name: Clippy
         run: cargo xtask clippy
-  
+
   fmt:
     name: Format
     runs-on: ubuntu-latest
@@ -73,7 +73,7 @@ jobs:
           latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
           curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
           | tar -xz
-          
+
           mkdir -p $HOME/.local/bin
           mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} $HOME/.local/bin/firecracker
           echo $HOME/.local/bin >> $GITHUB_PATH
@@ -82,7 +82,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
       - uses: actions/checkout@v6
         with:
-            lfs: true
+          lfs: true
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
