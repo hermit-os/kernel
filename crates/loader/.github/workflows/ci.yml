@@ -94,31 +94,21 @@ jobs:
         run: |
           gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-      - name: Run VM (hello_world, dev)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
-      - name: Run VM (hello_world, release)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --release
-      - name: Run VM (hello_world, uefi, dev)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi
         if: matrix.target == 'x86_64'
-      - name: Run VM (hello_world, uefi, release)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
         if: matrix.target == 'x86_64'
-      - name: Run VM (hello_world-microvm, dev)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-      - name: Run VM (hello_world-microvm, release)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
         if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
-      - name: Run VM (hello_c, dev)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
         if: matrix.target == 'x86_64'
-      - name: Run VM (hello_c, release)
-        run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
         if: matrix.target == 'x86_64'
-      - name: Run Firecracker (hello_world-microvm, linux, dev)
-        run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
+      - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
-      - name: Run Firecracker (hello_world-microvm, linux, release)
-        run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
+      - run: cargo xtask ci firecracker --target ${{ matrix.target }}-linux --sudo --release
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64'
