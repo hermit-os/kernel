@@ -93,6 +93,7 @@ impl Target {
 			Self::X86_64Linux => &["--features=x86_64-linux"],
 			Self::X86_64Multiboot => &["--features=x86_64-multiboot"],
 			Self::Aarch64Elf | Self::Aarch64BeElf => &["--features=elf"],
+			Self::Riscv64Sbi => &["--features=sbi"],
 			_ => &[],
 		}
 	}

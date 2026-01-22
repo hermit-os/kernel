@@ -49,6 +49,7 @@ default = []
 elf = []
 linux = []
 multiboot = []
+sbi = []
 x86_64-linux = ["linux", "dep:linux-boot-params"]
 x86_64-multiboot = ["multiboot", "dep:multiboot"]
 
