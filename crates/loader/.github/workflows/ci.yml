@@ -101,9 +101,9 @@ jobs:
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }}-uefi --release
         if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm
-        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
+        if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --microvm --release
-        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
+        if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c
         if: matrix.target == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.target }} --image hello_c --release
