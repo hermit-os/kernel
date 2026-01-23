@@ -143,10 +143,10 @@ pub(crate) static TTBR0: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
 // A       [1]  Alignment fault checking disabled
 // M       [0]  MMU enable
 #[cfg(all(feature = "smp", target_endian = "little"))]
-static SCTLR_EL1: u64 = 0b100_0000_0101_1101_0000_0001_1101;
+const SCTLR_EL1: u64 = 0b100_0000_0101_1101_0000_0001_1101;
 // The same, but EE and EOE are set to 1 for big endian.
 #[cfg(all(feature = "smp", target_endian = "big"))]
-static SCTLR_EL1: u64 = 0b111_0000_0101_1101_0000_0001_1101;
+const SCTLR_EL1: u64 = 0b111_0000_0101_1101_0000_0001_1101;
 
 #[cfg(feature = "smp")]
 #[unsafe(naked)]
