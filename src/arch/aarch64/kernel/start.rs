@@ -148,20 +148,6 @@ static SCTLR_EL1: u64 = 0b100_0000_0101_1101_0000_0001_1101;
 #[cfg(all(feature = "smp", target_endian = "big"))]
 static SCTLR_EL1: u64 = 0b111_0000_0101_1101_0000_0001_1101;
 
-#[cfg(all(feature = "smp", target_endian = "little"))]
-macro_rules! configure_endianness {
-	() => {
-		"bic x2, x2, #(1 << 24 | 1 << 25)"
-	};
-}
-
-#[cfg(all(feature = "smp", target_endian = "big"))]
-macro_rules! configure_endianness {
-	() => {
-		"orr x2, x2, #(1 << 24 | 1 << 25)"
-	};
-}
-
 #[cfg(feature = "smp")]
 #[unsafe(naked)]
 pub(crate) unsafe extern "C" fn smp_start() -> ! {
@@ -181,7 +167,10 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		"dsb sy",
 		"mrs x2, sctlr_el1",
 		"bic x2, x2, #0x1",
-		configure_endianness!(),
+		#[cfg(target_endian = "little")]
+		"bic x2, x2, #(1 << 24 | 1 << 25)",
+		#[cfg(target_endian = "big")]
+		"orr x2, x2, #(1 << 24 | 1 << 25)",
 		"msr sctlr_el1, x2",
 		"isb",
 
