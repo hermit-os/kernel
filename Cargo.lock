@@ -50,6 +50,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ac6c08a67736554282858203cd9b7ff53cf55f54c34e85689962748a350cbf0"
 
 [[package]]
+name = "align-address"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cee078b3ed87e2621e0389729e2f032cc0408a4548768ced01678c9451c62237"
+
+[[package]]
 name = "allocator-api2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,11 +641,11 @@ dependencies = [
 
 [[package]]
 name = "free-list"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "810f338a4ef98f319a279c9199f35d7ec366c6002ca6a8f18fdcc94cfef9afab"
+checksum = "0ba44ae6efa756ce2b7c4f2f7602adcfd2d85957dccb4bbdcea0675bae0a1a3d"
 dependencies = [
- "align-address",
+ "align-address 0.4.0",
  "smallvec",
  "x86_64",
 ]
@@ -797,7 +803,7 @@ version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "920f9bfe21a23408aade84f1cd2f550c0490be1ec90ae5151b919614808e2e85"
 dependencies = [
- "align-address",
+ "align-address 0.3.0",
  "const_parse",
  "time",
 ]
@@ -808,7 +814,7 @@ version = "0.12.0"
 dependencies = [
  "aarch64-cpu 11.2.0",
  "ahash",
- "align-address",
+ "align-address 0.3.0",
  "anstyle",
  "anyhow",
  "arm-gic",
@@ -1205,7 +1211,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01af0509edc73791972185a4ed1e3e8b2d0f21c3c527f96078586446b61750c4"
 dependencies = [
- "align-address",
+ "align-address 0.3.0",
  "cfg-if",
  "x86_64",
 ]
