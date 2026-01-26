@@ -585,7 +585,6 @@ pub mod mapped_page_table_iter {
 		end: Option<MappedPageItem>,
 	}
 
-	#[expect(dead_code)]
 	pub fn mapped_page_table_range_iter<'a, P: PageTableFrameMapping>(
 		page_table: &'a MappedPageTable<'a, P>,
 	) -> MappedPageTableRangeInclusiveIter<'a, &'a P> {
