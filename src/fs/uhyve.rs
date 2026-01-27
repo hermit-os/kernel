@@ -9,10 +9,11 @@ use async_lock::Mutex;
 use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
-use uhyve_interface::parameters::{
+use uhyve_interface::GuestPhysAddr;
+use uhyve_interface::v2::Hypercall;
+use uhyve_interface::v2::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
 };
-use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
 
 use crate::arch::mm::paging;
 use crate::env::fdt;
@@ -35,15 +36,19 @@ impl UhyveFileHandleInner {
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut lseek_params = LseekParams {
 			fd: self.0,
-			offset,
+			offset: offset.try_into().unwrap(),
 			whence: u8::from(whence).into(),
 		};
 		uhyve_hypercall(Hypercall::FileLseek(&mut lseek_params));
-
-		if lseek_params.offset >= 0 {
-			Ok(lseek_params.offset)
-		} else {
-			Err(Errno::Inval)
+		// TODO: Although we can generally assume that what Uhyve delivers should be
+		// correct for now, it might make sense to build in checks (or at least debug_assert's)
+		match lseek_params.offset {
+			offset if offset >= 0 => Ok(offset.try_into().unwrap()),
+			errno if errno < 0 => Err((errno as i32).abs().try_into().unwrap()),
+			_ => {
+				debug!("Uhyve lseek hypercall yielded a zero.");
+				Err(Errno::Inval)
+			}
 		}
 	}
 }
@@ -56,30 +61,47 @@ impl Read for UhyveFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut read_params = ReadParams {
 			fd: self.0,
-			buf: GuestVirtAddr::from_ptr(buf.as_mut_ptr()),
-			len: buf.len(),
-			ret: 0,
+			buf: GuestPhysAddr::new(
+				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
+			ret: 0i64,
 		};
 		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
-
-		if read_params.ret >= 0 {
-			Ok(read_params.ret.try_into().unwrap())
-		} else {
-			Err(Errno::Io)
+		match read_params.ret {
+			ret if ret >= 0 => Ok(ret.try_into().unwrap()),
+			_ => Err((read_params.ret as i32).abs().try_into().unwrap()),
 		}
 	}
 }
 
 impl Write for UhyveFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		let write_params = WriteParams {
+		let mut write_params = WriteParams {
 			fd: self.0,
-			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
-			len: buf.len(),
+			buf: GuestPhysAddr::new(
+				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
+			ret: 0i64,
 		};
-		uhyve_hypercall(Hypercall::FileWrite(&write_params));
-
-		Ok(write_params.len)
+		// fd refers to a regular file
+		uhyve_hypercall(Hypercall::FileWrite(&mut write_params));
+		match write_params.ret {
+			// Assumption: fd is a regular file, a zero is only valid if the len
+			// (aka. "count") is also zero. Otherwise, however, we assume that something
+			// is wrong in Hermit<>Uhyve communication.
+			ret if ret > 0 || (ret == 0 && write_params.len == 0) => Ok(ret.try_into().unwrap()),
+			errno if errno < 0 => Err((errno as i32).abs().try_into().unwrap()),
+			_ => {
+				debug!("Uhyve write hypercall yielded a zero.");
+				Err(Errno::Inval)
+			}
+		}
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {
@@ -186,13 +208,11 @@ impl VfsNode for UhyveDirectory {
 			ret: -1,
 		};
 		uhyve_hypercall(Hypercall::FileOpen(&mut open_params));
-
-		if open_params.ret > 0 {
-			Ok(Arc::new(async_lock::RwLock::new(UhyveFileHandle::new(
-				open_params.ret,
-			))))
-		} else {
-			Err(Errno::Io)
+		let ret = open_params.ret; // circumvent packed field access
+		match ret {
+			// Assumption: Uhyve will never return a standard stream.
+			ret if ret >= 0 => Ok(Arc::new(async_lock::RwLock::new(UhyveFileHandle::new(ret)))),
+			_ => Err(ret.abs().try_into().unwrap()),
 		}
 	}
 
@@ -208,11 +228,10 @@ impl VfsNode for UhyveDirectory {
 			ret: -1,
 		};
 		uhyve_hypercall(Hypercall::FileUnlink(&mut unlink_params));
-
-		if unlink_params.ret == 0 {
-			Ok(())
-		} else {
-			Err(Errno::Io)
+		let ret = unlink_params.ret; // circumvent packed field access
+		match ret {
+			0 => Ok(()),
+			_ => Err(unlink_params.ret.abs().try_into().unwrap()),
 		}
 	}
 
