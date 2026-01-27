@@ -16,7 +16,7 @@ defaults:
 jobs:
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust toolchain
@@ -28,7 +28,7 @@ jobs:
 
   fmt:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust toolchain
@@ -46,7 +46,7 @@ jobs:
         include:
           - arch: x86_64
             flags: --accel --sudo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Install QEMU
         run: |
