@@ -46,7 +46,7 @@ jobs:
         include:
           - arch: x86_64
             flags: --accel --sudo
-    runs-on: ubuntu-24.04
+    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     steps:
       - name: Install QEMU
         run: |
