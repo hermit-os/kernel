@@ -43,28 +43,15 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64, aarch64_be, riscv64]
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
           - arch: x86_64
-            os: ubuntu-latest
             flags: --accel --sudo
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
-      - name: Install QEMU (ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install QEMU
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-x86 qemu-system-arm qemu-system-misc
-      - name: Install QEMU (macos)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew update
-          brew install qemu
-      - name: Install QEMU (windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          winget install --id SoftwareFreedomConservancy.QEMU -e --accept-source-agreements
-          echo "C:\Program Files\qemu" >> $GITHUB_PATH
       - name: Install firecracker
         run: |
           # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
@@ -80,7 +67,7 @@ jobs:
 
           $HOME/.local/bin/firecracker --version
           echo "FIRECRACKER=$HOME/.local/bin/firecracker" >> "$GITHUB_ENV"
-        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64'
+        if: matrix.arch == 'x86_64'
       - uses: actions/checkout@v6
         with:
           lfs: true
@@ -115,6 +102,6 @@ jobs:
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-uefi --release
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci firecracker --target ${{ matrix.arch }}-linux --sudo
-        if: matrix.arch == 'x86_64' && matrix.os == 'ubuntu-latest'
+        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci firecracker --target ${{ matrix.arch }}-linux --sudo --release
-        if: matrix.arch == 'x86_64' && matrix.os == 'ubuntu-latest'
+        if: matrix.arch == 'x86_64'
