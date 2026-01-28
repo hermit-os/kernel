@@ -29,7 +29,6 @@ unsafe extern "C" {
 	static mut l2k_pgtable: u64;
 	static mut l3_pgtable: u64;
 	static mut L0mib_pgtable: u64;
-	static mut fdt_addr: u64;
 }
 
 /// start address of the RAM at Qemu's virt emulation
@@ -52,13 +51,9 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	(ptr::addr_of_mut!(loader_end).expose_provenance() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
-pub unsafe fn get_fdt_addr() -> u64 {
-	unsafe { if fdt_addr != 0 { fdt_addr } else { DEVICE_TREE } }
-}
-
 pub fn find_kernel() -> &'static [u8] {
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(get_fdt_addr() as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
 			.expect(".fdt file has invalid header")
 	};
 	let module_start = fdt
@@ -118,7 +113,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(get_fdt_addr() as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
 			.expect(".fdt file has invalid header")
 	};
 	let cpus = fdt.cpus().count();
@@ -223,7 +218,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		hardware_info: HardwareInfo {
 			phys_addr_range: ram_start..ram_start + ram_size,
 			serial_port_base: SerialPortBase::new(0x1000),
-			device_tree: unsafe { core::num::NonZeroU64::new(get_fdt_addr()) },
+			device_tree: core::num::NonZeroU64::new(DEVICE_TREE),
 		},
 		load_info,
 		platform_info: PlatformInfo::LinuxBoot,

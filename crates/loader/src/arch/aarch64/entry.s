@@ -4,21 +4,6 @@
 
 .section .text
 
-_linux: // Let's fake being linux! https://www.kernel.org/doc/Documentation/arm64/booting.txt
-    nop                      // code0: Do nothing here (no uefi)
-    b       _linux_start     // code1: Branch to real stuff....
-    .quad   0                // text_offset: linux needs none, neither do we
-    .quad   prog_size
-    .quad   2                // flags: 4k pagesize. might need adjustment. Page size currently undefined.
-    .quad   0                // res2: reserved
-    .quad   0                // res3: reserved
-    .quad   0                // res4: reserved
-    .long   0x644d5241       // magic: "ARMx64"
-    .long   0                // res5: header size for efi boot. Not needed.
-    .align  8
-_linux_start:
-	adr x8, fdt_addr
-	str x0, [x8, 0]
 _start:
 	// Only proceed on the boot core. Park it otherwise.
 	mrs	x1, mpidr_el1
@@ -103,7 +88,6 @@ el_1_entry:
 .global l2k_pgtable
 .global l3_pgtable
 .global L0mib_pgtable
-.global fdt_addr
 
 .align 12
 l0_pgtable:
@@ -136,5 +120,3 @@ L16mib_pgtable:
     .space 512*8, 0
 L18mib_pgtable:
     .space 512*8, 0
-fdt_addr:
-    .space 8, 0
