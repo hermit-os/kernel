@@ -814,7 +814,7 @@ version = "0.12.0"
 dependencies = [
  "aarch64-cpu 11.2.0",
  "ahash",
- "align-address 0.3.0",
+ "align-address 0.4.0",
  "anstyle",
  "anyhow",
  "arm-gic",

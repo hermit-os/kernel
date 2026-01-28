@@ -105,7 +105,7 @@ unreadable_literal = "warn"
 hermit-macro = { version = "=0.1.0", path = "hermit-macro" }
 virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
-align-address = "0.3"
+align-address = "0.4"
 anstyle = { version = "1", default-features = false }
 async-executor = { git = "https://github.com/hermit-os/async-executor.git", branch = "no_std", default-features = false, features = ["static"] }
 async-lock = { version = "3.4.2", default-features = false }
