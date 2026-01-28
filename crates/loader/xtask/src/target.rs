@@ -79,7 +79,7 @@ impl Target {
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Multiboot => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/link.ld",
+				"-Clink-arg=-Tsrc/arch/x86_64/link_multiboot.ld",
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Uefi => &[],
