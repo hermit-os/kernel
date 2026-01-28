@@ -42,10 +42,16 @@ uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 [build-dependencies]
 built = { version = "0.8", features = ["git2", "chrono"] }
 
+# FIXME: When target-specific features exist, remove the workaround features.
+# https://github.com/rust-lang/cargo/issues/1197
 [features]
 default = []
-linux = ["dep:linux-boot-params"]
-multiboot = ["dep:multiboot"]
+elf = []
+linux = []
+multiboot = []
+sbi = []
+x86_64-linux = ["linux", "dep:linux-boot-params"]
+x86_64-multiboot = ["multiboot", "dep:multiboot"]
 
 [profile.dev]
 # This is a workaround for the loader growing too large to boot with QEMU's multiboot.

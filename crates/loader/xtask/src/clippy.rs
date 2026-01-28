@@ -16,8 +16,8 @@ impl Clippy {
 			Target::X86_64Linux,
 			Target::X86_64Multiboot,
 			Target::X86_64Uefi,
-			Target::Aarch64,
-			Target::Riscv64,
+			Target::Aarch64Elf,
+			Target::Riscv64Sbi,
 		] {
 			target.install()?;
 			let triple = target.triple();

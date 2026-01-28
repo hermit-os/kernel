@@ -14,13 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo xtask build --release --target aarch64
-      - run: cargo xtask build --release --target riscv64
+      - run: cargo xtask build --release --target aarch64-elf
+      - run: cargo xtask build --release --target riscv64-sbi
       - run: cargo xtask build --release --target x86_64-linux
       - run: cargo xtask build --release --target x86_64-multiboot
       - run: cargo xtask build --release --target x86_64-uefi
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rust-src
-      - run: cargo xtask build --release --target aarch64_be
+      - run: cargo xtask build --release --target aarch64_be-elf
       - run: gh release create ${GITHUB_REF#refs/tags/} --draft --title ${GITHUB_REF#refs/tags/v} target/release/hermit-loader-*

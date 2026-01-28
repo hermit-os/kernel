@@ -88,10 +88,14 @@ jobs:
         run: |
           gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
           tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}
-        if: matrix.arch != 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }} --release
-        if: matrix.arch != 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-elf
+        if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-elf --release
+        if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-sbi
+        if: matrix.arch == 'riscv64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-sbi --release
+        if: matrix.arch == 'riscv64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --release
