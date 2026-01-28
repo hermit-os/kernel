@@ -1,20 +1,14 @@
-cfg_if::cfg_if! {
-	if #[cfg(feature = "linux")] {
-		mod linux;
-		pub use self::linux::*;
-	} else if #[cfg(feature = "multiboot")] {
-		mod multiboot;
-		pub use self::multiboot::*;
-	}
-}
-
 mod console;
 #[cfg(target_os = "none")]
 mod paging;
 #[cfg(target_os = "none")]
 mod physicalmem;
+mod platform;
 
 pub use console::Console;
+
+#[cfg(target_os = "none")]
+pub use self::platform::{boot_kernel, find_kernel};
 
 #[cfg(target_os = "none")]
 const KERNEL_STACK_SIZE: u64 = 32_768;

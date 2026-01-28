@@ -75,11 +75,11 @@ impl Target {
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64Linux => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/link_linux.ld",
+				"-Clink-arg=-Tsrc/arch/x86_64/platform/linux/link.ld",
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Multiboot => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/link_multiboot.ld",
+				"-Clink-arg=-Tsrc/arch/x86_64/platform/multiboot/link.ld",
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Uefi => &[],
