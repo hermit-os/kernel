@@ -47,6 +47,7 @@ fn log_built_info() {
 	info!("Architecture: {arch}");
 	info!("Operating system: {}", built_info::CFG_OS);
 	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
+	info!("Built with {}", built_info::RUSTC_VERSION);
 	info!("Built on {}", built_info::BUILT_TIME_UTC);
 }
 
