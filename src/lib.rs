@@ -209,6 +209,8 @@ fn boot_processor_main() -> ! {
 
 		info!("Git version: {git_version}{dirty}{opt_level}");
 	}
+	let arch = built_info::TARGET.split_once('-').unwrap().0;
+	info!("Architecture: {arch}");
 	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
 	info!("Built on {}", built_info::BUILT_TIME_UTC);
 
