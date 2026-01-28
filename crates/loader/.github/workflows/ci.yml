@@ -48,9 +48,9 @@ jobs:
             packages: qemu-system-x86
             flags: --accel --sudo
           - arch: aarch64
-            packages: qemu-system-arm
+            packages: qemu-system-arm ipxe-qemu
           - arch: aarch64_be
-            packages: qemu-system-arm
+            packages: qemu-system-arm ipxe-qemu
           - arch: riscv64
             packages: qemu-system-misc
     runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
@@ -58,7 +58,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install ${{ matrix.packages }}
+          sudo apt-get install --no-install-recommends ${{ matrix.packages }}
       - name: Install firecracker
         run: |
           # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
