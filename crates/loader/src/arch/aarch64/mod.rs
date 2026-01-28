@@ -6,7 +6,7 @@ pub mod entry;
 pub mod paging;
 
 use core::arch::asm;
-use core::ptr::{self};
+use core::ptr;
 
 use aarch64_cpu::asm::barrier::{NSH, SY, dmb, dsb, isb};
 use align_address::Align;
