@@ -16,12 +16,12 @@ fn stdout() -> SerialPort {
 	/// Physical address of UART0 at Qemu's virt emulation
 	const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 
-	let dtb = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(super::get_dtb_addr() as usize))
-			.expect(".dtb file has invalid header")
+	let fdt = unsafe {
+		Fdt::from_ptr(ptr::with_exposed_provenance(super::get_fdt_addr() as usize))
+			.expect(".fdt file has invalid header")
 	};
 
-	let property = dtb.chosen().stdout();
+	let property = fdt.chosen().stdout();
 	property
 		.and_then(|node| get_device(node))
 		.unwrap_or(SerialPort::Qemu(QemuSerial::from_addr(
