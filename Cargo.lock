@@ -9,7 +9,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2df0852593ebb4ed15e4fce123daf16a272b8d4449ae75050d6b9d7cea461a21"
 dependencies = [
  "aarch64-cpu 10.0.0",
- "memory_addresses",
+ "memory_addresses 0.2.3",
  "tock-registers 0.9.0",
 ]
 
@@ -814,7 +814,7 @@ version = "0.12.0"
 dependencies = [
  "aarch64-cpu 11.2.0",
  "ahash",
- "align-address 0.3.0",
+ "align-address 0.4.0",
  "anstyle",
  "anyhow",
  "arm-gic",
@@ -844,7 +844,7 @@ dependencies = [
  "lock_api",
  "log",
  "mem-barrier",
- "memory_addresses",
+ "memory_addresses 0.3.0",
  "num-traits",
  "num_enum",
  "pci-ids",
@@ -1212,6 +1212,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01af0509edc73791972185a4ed1e3e8b2d0f21c3c527f96078586446b61750c4"
 dependencies = [
  "align-address 0.3.0",
+ "cfg-if",
+ "x86_64",
+]
+
+[[package]]
+name = "memory_addresses"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b0d19077c1bd58a846e275c3bb80527600ab8afbfb2768a80eb39f77cf93f1d"
+dependencies = [
+ "align-address 0.4.0",
  "cfg-if",
  "x86_64",
 ]
@@ -1999,7 +2010,7 @@ checksum = "ff4f1b21b9d7368474a8cebf8e34348ea1eff1c44201a0ee54b129fbe5b8f9d1"
 dependencies = [
  "aarch64",
  "hermit-abi",
- "memory_addresses",
+ "memory_addresses 0.2.3",
  "num_enum",
  "x86_64",
 ]
