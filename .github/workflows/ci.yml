@@ -163,12 +163,12 @@ jobs:
             packages: qemu-system-x86 uftrace
             qemu_flags: --accel --sudo
           - arch: aarch64
-            packages: qemu-system-aarch64 ipxe-qemu
+            packages: qemu-system-arm ipxe-qemu
             rs_flags: --features hermit/semihosting
           # FIXME: enable semihosting once it works with QEMU
           # See https://github.com/taiki-e/semihosting/issues/18.
           - arch: aarch64_be
-            packages: qemu-system-aarch64 ipxe-qemu
+            packages: qemu-system-arm ipxe-qemu
           - arch: riscv64
             packages: qemu-system-misc
             rs_flags: --features hermit/semihosting
