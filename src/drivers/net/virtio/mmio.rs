@@ -39,7 +39,7 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			inner: Uninit,
 			num_vqs: 0,
-			irq,
+			irq: Some(irq),
 			checksums: ChecksumCapabilities::default(),
 		})
 	}

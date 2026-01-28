@@ -537,6 +537,49 @@ pub(crate) fn init() {
 	});
 }
 
+/// MSI-X Table entry.  
+#[cfg(feature = "msix")]
+#[repr(C)]
+#[derive(volatile::VolatileFieldAccess)]
+pub(crate) struct MsixTableEntry {
+	/// Message Address
+	message_address: u32,
+
+	/// Message Upper Address
+	message_upper_address: u32,
+
+	/// Message Data
+	message_data: u32,
+
+	/// Vector Control
+	vector_control: u32,
+}
+
+#[cfg(feature = "msix")]
+impl MsixTableEntry {
+	#[cfg(target_arch = "x86_64")]
+	pub fn configure(msix_entry: volatile::VolatilePtr<'_, Self>, vector: u8) {
+		use MsixTableEntryVolatileFieldAccess;
+		use bit_field::BitField;
+
+		// Mask the entry because "[s]oftware must not modify the Address, Data, or Steering Tag fields
+		// of an entry while it is unmasked." (PCIe spec. 6.1.4.2)
+		msix_entry
+			.vector_control()
+			.update(|mut control| *control.set_bit(0, true));
+
+		msix_entry
+			.message_address()
+			.update(|mut addr_low| *addr_low.set_bits(20..32, 0xfee));
+		msix_entry
+			.message_data()
+			.update(|mut data| *data.set_bits(0..8, u32::from(vector) + 32));
+		msix_entry
+			.vector_control()
+			.update(|mut control| *control.set_bit(0, false));
+	}
+}
+
 /// A module containing PCI specific errors
 ///
 /// Errors include...

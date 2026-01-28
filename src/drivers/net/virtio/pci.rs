@@ -36,6 +36,8 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			isr_cfg,
 			dev_cfg_list,
+			#[cfg(feature = "msix")]
+			msix_table,
 			..
 		} = caps_coll;
 
@@ -44,14 +46,18 @@ impl VirtioNetDriver<Uninit> {
 			return Err(error::VirtioNetError::NoDevCfg(device_id));
 		};
 
+		let irq = device.get_irq();
+
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg,
 			isr_stat: isr_cfg,
 			notif_cfg,
+			#[cfg(feature = "msix")]
+			msix_table,
 			inner: Uninit,
 			num_vqs: 0,
-			irq: device.get_irq().unwrap(),
+			irq,
 			checksums: ChecksumCapabilities::default(),
 		})
 	}

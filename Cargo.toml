@@ -118,6 +118,12 @@ pci = ["virtio?/pci"]
 ## [PCI ID]: https://pci-ids.ucw.cz/
 pci-ids = ["dep:pci-ids"]
 
+## Causes the drivers to use _MSI-X (Message Signaled Interrupt)_ when
+## the PCI device and the driver (currently only virtio-net) supports it. 
+## It is only supported on x86_64 and is known to not work with all virtual
+## devices.
+msix = ["volatile/derive"]
+
 ## Enables semihosting support.
 ##
 ## Semihosting allows communicating with the host for
