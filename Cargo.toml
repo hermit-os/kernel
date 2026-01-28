@@ -120,14 +120,14 @@ endian-num = { version = "0.2", optional = true, features = ["linux-types"] }
 enum_dispatch = "0.3"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
-fuse-abi = { version = "0.2", features = ["linux"], optional = true }
+fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
 hashbrown = { version = "0.16", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10.6", features = ["kernel"] }
 hermit-sync = "0.1"
 lock_api = "0.4"
 log = { version = "0.4", default-features = false }
-mem-barrier = { version = "0.1.0", features = ["nightly"], optional = true }
+mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
 pci-ids = { version = "0.2", optional = true }
 pci_types = { version = "0.10" }
