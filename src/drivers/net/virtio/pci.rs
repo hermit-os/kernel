@@ -36,6 +36,8 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			isr_cfg,
 			dev_cfg_list,
+			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+			msix_table,
 			..
 		} = caps_coll;
 
@@ -44,14 +46,21 @@ impl VirtioNetDriver<Uninit> {
 			return Err(error::VirtioNetError::NoDevCfg(device_id));
 		};
 
+		let irq = device.get_irq();
+		if irq.is_none() {
+			warn!("No interrupt lanes found for virtio-net.");
+		}
+
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg,
 			isr_stat: isr_cfg,
 			notif_cfg,
+			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+			msix_table,
 			inner: Uninit,
 			num_vqs: 0,
-			irq: device.get_irq().unwrap(),
+			irq,
 			checksums: ChecksumCapabilities::default(),
 		})
 	}
