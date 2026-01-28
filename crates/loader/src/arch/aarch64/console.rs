@@ -17,7 +17,7 @@ fn stdout() -> SerialPort {
 	const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(super::get_fdt_addr() as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(super::DEVICE_TREE as usize))
 			.expect(".fdt file has invalid header")
 	};
 
