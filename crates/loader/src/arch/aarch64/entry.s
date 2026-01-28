@@ -17,7 +17,7 @@ _linux: // Let's fake being linux! https://www.kernel.org/doc/Documentation/arm6
     .long   0                // res5: header size for efi boot. Not needed.
     .align  8
 _linux_start:
-	adr x8, dtb_addr
+	adr x8, fdt_addr
 	str x0, [x8, 0]
 _start:
 	// Only proceed on the boot core. Park it otherwise.
@@ -103,7 +103,7 @@ el_1_entry:
 .global l2k_pgtable
 .global l3_pgtable
 .global L0mib_pgtable
-.global dtb_addr
+.global fdt_addr
 
 .align 12
 l0_pgtable:
@@ -136,5 +136,5 @@ L16mib_pgtable:
     .space 512*8, 0
 L18mib_pgtable:
     .space 512*8, 0
-dtb_addr:
+fdt_addr:
     .space 8, 0

@@ -6,7 +6,7 @@ pub mod entry;
 pub mod paging;
 
 use core::arch::asm;
-use core::ptr::{self};
+use core::ptr;
 
 use aarch64_cpu::asm::barrier::{NSH, SY, dmb, dsb, isb};
 use align_address::Align;
@@ -29,14 +29,14 @@ unsafe extern "C" {
 	static mut l2k_pgtable: u64;
 	static mut l3_pgtable: u64;
 	static mut L0mib_pgtable: u64;
-	static mut dtb_addr: u64;
+	static mut fdt_addr: u64;
 }
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
 /// Default stack size of the kernel
 const KERNEL_STACK_SIZE: usize = 32_768;
-/// Qemu assumes for ELF kernel that the DTB is located at
+/// Qemu assumes for ELF kernel that the fdt is located at
 /// start of RAM (0x4000_0000)
 /// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
 const DEVICE_TREE: u64 = RAM_START;
@@ -52,16 +52,16 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	(ptr::addr_of_mut!(loader_end).expose_provenance() as u64).align_up(LargePageSize::SIZE as u64)
 }
 
-pub unsafe fn get_dtb_addr() -> u64 {
-	unsafe { if dtb_addr != 0 { dtb_addr } else { DEVICE_TREE } }
+pub unsafe fn get_fdt_addr() -> u64 {
+	unsafe { if fdt_addr != 0 { fdt_addr } else { DEVICE_TREE } }
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	let dtb = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(get_dtb_addr() as usize))
-			.expect(".dtb file has invalid header")
+	let fdt = unsafe {
+		Fdt::from_ptr(ptr::with_exposed_provenance(get_fdt_addr() as usize))
+			.expect(".fdt file has invalid header")
 	};
-	let module_start = dtb
+	let module_start = fdt
 		.find_node("/chosen")
 		.unwrap()
 		.children()
@@ -117,11 +117,11 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point,
 	} = kernel_info;
 
-	let dtb = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(get_dtb_addr() as usize))
-			.expect(".dtb file has invalid header")
+	let fdt = unsafe {
+		Fdt::from_ptr(ptr::with_exposed_provenance(get_fdt_addr() as usize))
+			.expect(".fdt file has invalid header")
 	};
-	let cpus = dtb.cpus().count();
+	let cpus = fdt.cpus().count();
 	info!("Detect {cpus} CPU(s)");
 
 	let uart_address: u32 = CONSOLE.lock().get().get_stdout();
@@ -199,12 +199,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	info!("Successfully set up paging.");
 
-	let dtb = unsafe {
+	let fdt = unsafe {
 		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
-			.expect(".dtb file has invalid header")
+			.expect(".fdt file has invalid header")
 	};
 
-	if let Some(device_type) = dtb
+	if let Some(device_type) = fdt
 		.find_node("/memory")
 		.and_then(|node| node.property("device_type"))
 	{
@@ -214,7 +214,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		assert!(device_type == "memory");
 	}
 	info!("Memory found!");
-	let regions = dtb.memory().regions().next().unwrap();
+	let regions = fdt.memory().regions().next().unwrap();
 	let ram_start = regions.starting_address as u64;
 	let ram_size = regions.size.unwrap() as u64;
 
@@ -223,7 +223,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		hardware_info: HardwareInfo {
 			phys_addr_range: ram_start..ram_start + ram_size,
 			serial_port_base: SerialPortBase::new(0x1000),
-			device_tree: unsafe { core::num::NonZeroU64::new(get_dtb_addr()) },
+			device_tree: unsafe { core::num::NonZeroU64::new(get_fdt_addr()) },
 		},
 		load_info,
 		platform_info: PlatformInfo::LinuxBoot,
