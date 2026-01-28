@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
-align-address = "0.3"
+align-address = "0.4"
 allocator-api2 = { version = "0.4", default-features = false }
 anstyle = { version = "1", default-features = false }
 cfg-if = "1"
