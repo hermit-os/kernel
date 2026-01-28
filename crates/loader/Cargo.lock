@@ -25,12 +25,6 @@ dependencies = [
 
 [[package]]
 name = "align-address"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ac6c08a67736554282858203cd9b7ff53cf55f54c34e85689962748a350cbf0"
-
-[[package]]
-name = "align-address"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cee078b3ed87e2621e0389729e2f032cc0408a4548768ced01678c9451c62237"
@@ -498,7 +492,7 @@ version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b12e2085187f60d10d5842792075a7cf2e5c49ce8a368a1fc3a6c4188de8979"
 dependencies = [
- "align-address 0.4.0",
+ "align-address",
  "byte-unit",
  "const_parse",
  "goblin",
@@ -515,7 +509,7 @@ name = "hermit-loader"
 version = "0.5.6"
 dependencies = [
  "aarch64-cpu",
- "align-address 0.3.0",
+ "align-address",
  "allocator-api2 0.4.0",
  "anstyle",
  "built",
