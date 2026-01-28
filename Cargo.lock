@@ -1207,9 +1207,9 @@ checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
 name = "memory_addresses"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01af0509edc73791972185a4ed1e3e8b2d0f21c3c527f96078586446b61750c4"
+checksum = "8bda000d3ae14c3036d35e0251ece9684731c5123c5149e7bd34b978c25b11e3"
 dependencies = [
  "align-address 0.3.0",
  "cfg-if",

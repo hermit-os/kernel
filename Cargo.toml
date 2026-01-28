@@ -167,7 +167,7 @@ free-list = { version = "0.3", features = ["x86_64"] }
 raw-cpuid = "11"
 uart_16550 = "0.4"
 x86_64 = "0.15"
-memory_addresses = { version = "0.2.3", default-features = false, features = [
+memory_addresses = { version = "0.2.4", default-features = false, features = [
 	"x86_64",
 	"conv-x86_64",
 ] }
@@ -177,7 +177,7 @@ aarch64-cpu = "11"
 arm-gic = { version = "0.6" }
 arm-pl011-uart = { version = "0.4", default-features = false }
 semihosting = { version = "0.1", optional = true }
-memory_addresses = { version = "0.2.3", default-features = false, features = [
+memory_addresses = { version = "0.2.4", default-features = false, features = [
 	"aarch64",
 ] }
 
@@ -187,7 +187,7 @@ sbi-rt = "0.0.3"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
 trapframe = "0.10"
-memory_addresses = { version = "0.2.3", default-features = false, features = [
+memory_addresses = { version = "0.2.4", default-features = false, features = [
 	"riscv64",
 ] }
 
