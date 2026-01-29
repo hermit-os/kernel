@@ -1155,7 +1155,9 @@ pub fn writefs(fs: usize) {
 			FS::write_base(base);
 		}
 	} else {
-		FsBase::write(base);
+		unsafe {
+			FsBase::write(base);
+		}
 	}
 }
 
@@ -1167,7 +1169,9 @@ pub fn writegs(gs: usize) {
 			GS::write_base(base);
 		}
 	} else {
-		GsBase::write(base);
+		unsafe {
+			GsBase::write(base);
+		}
 	}
 }
 
