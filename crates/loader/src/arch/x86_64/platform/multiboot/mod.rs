@@ -12,10 +12,9 @@ use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use vm_fdt::FdtWriterResult;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
-use super::paging;
-use super::physicalmem::PhysAlloc;
 use crate::BootInfoExt;
-use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT};
+use crate::arch::x86_64::physicalmem::PhysAlloc;
+use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, paging};
 use crate::fdt::Fdt;
 
 unsafe extern "C" {
@@ -26,7 +25,7 @@ unsafe extern "C" {
 #[allow(bad_asm_style)]
 mod entry {
 	core::arch::global_asm!(
-		include_str!("entry_multiboot.s"),
+		include_str!("entry.s"),
 		loader_main = sym crate::os::loader_main,
 	);
 }
@@ -204,5 +203,5 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
 	let raw_boot_info = boot_info.write();
 
-	unsafe { super::enter_kernel(stack, entry, raw_boot_info) }
+	unsafe { crate::arch::x86_64::enter_kernel(stack, entry, raw_boot_info) }
 }
