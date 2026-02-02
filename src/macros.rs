@@ -90,7 +90,7 @@ macro_rules! hermit_var {
 	($name:expr) => {{
 		use alloc::borrow::Cow;
 
-		match crate::env::var($name) {
+		match $crate::env::var($name) {
 			Some(val) => Some(Cow::from(val)),
 			None => option_env!($name).map(Cow::Borrowed),
 		}
