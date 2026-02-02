@@ -119,6 +119,7 @@ impl VirtioFsDriver {
 			// Set feature set in device config fur future use.
 			self.dev_cfg.features = negotiated_features;
 		} else {
+			error!("The device does not support our subset of features.");
 			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
