@@ -1,0 +1,13 @@
+load virtio 0:1 ${loadaddr} /hermit.fit
+iminfo
+
+fdt addr ${loadaddr}
+fdt get value hermit_load /images/ramdisk-1 load
+
+fdt addr ${fdt_addr}
+fdt mknode /chosen module@${hermit_load}
+fdt set /chosen/module@${hermit_load} compatible "multiboot,module\0multiboot,ramdisk"
+fdt set /chosen/module@${hermit_load} reg <${hermit_load} 0>
+fdt print
+
+bootm

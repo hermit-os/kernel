@@ -24,6 +24,10 @@ pub struct Qemu {
 	#[arg(long)]
 	microvm: bool,
 
+	/// Run with U-Boot.
+	#[arg(long)]
+	u_boot: bool,
+
 	#[command(flatten)]
 	build: Build,
 
@@ -77,13 +81,35 @@ impl Qemu {
 	fn prepare_image(&self) -> Result<()> {
 		let sh = crate::sh()?;
 
-		if self.build.target() == Target::X86_64Uefi {
-			sh.create_dir("target/esp/efi/boot")?;
-			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
-			sh.copy_file(
-				self.build.ci_image(self.image.as_deref().unwrap()),
-				"target/esp/efi/boot/hermit-app",
-			)?;
+		match self.build.target() {
+			Target::X86_64Uefi => {
+				sh.create_dir("target/esp/efi/boot")?;
+				sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
+				sh.copy_file(
+					self.build.ci_image(self.image.as_deref().unwrap()),
+					"target/esp/efi/boot/hermit-app",
+				)?;
+			}
+			Target::Aarch64Elf | Target::Aarch64BeElf if self.u_boot => {
+				sh.create_dir("target/boot")?;
+				sh.copy_file(self.build.dist_object(), "target/boot/hermit-loader")?;
+				sh.copy_file(
+					self.build.ci_image(self.image.as_deref().unwrap()),
+					"target/boot/hermit-app",
+				)?;
+
+				cmd!(
+					sh,
+					"mkimage -f xtask/src/ci/u-boot/boot.its target/boot/boot.scr"
+				)
+				.run()?;
+				cmd!(
+					sh,
+					"mkimage -E -f xtask/src/ci/u-boot/hermit.its target/boot/hermit.fit"
+				)
+				.run()?;
+			}
+			_ => (),
 		}
 
 		Ok(())
@@ -200,13 +226,20 @@ impl Qemu {
 					]
 				};
 				cpu_args.push("-semihosting".to_string());
-				cpu_args.push("-device".to_string());
-				cpu_args.push(format!(
-					"guest-loader,addr=0x48000000,initrd={}",
-					self.build
-						.ci_image(self.image.as_deref().unwrap())
-						.display()
-				));
+				if self.u_boot {
+					cpu_args.push("-bios".to_string());
+					cpu_args.push("/usr/lib/u-boot/qemu_arm64/u-boot.bin".to_string());
+					cpu_args.push("-drive".to_string());
+					cpu_args.push("format=raw,file=fat:rw:target/boot".to_string());
+				} else {
+					cpu_args.push("-device".to_string());
+					cpu_args.push(format!(
+						"guest-loader,addr=0x48000000,initrd={}",
+						self.build
+							.ci_image(self.image.as_deref().unwrap())
+							.display()
+					));
+				}
 				cpu_args
 			}
 			Target::Riscv64Sbi => {
