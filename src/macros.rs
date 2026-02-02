@@ -38,7 +38,7 @@ macro_rules! panic_println {
         $crate::console::_panic_print(::core::format_args!("\n"));
     }};
     ($($arg:tt)*) => {{
-        $crate::console::_panic_print(::core::format_args!("{}\n", format_args!($($arg)*)));
+        $crate::console::_panic_print(::core::format_args!("{}\n", ::core::format_args!($($arg)*)));
     }};
 }
 
@@ -47,7 +47,7 @@ macro_rules! panic_println {
 #[clippy::format_args]
 macro_rules! panic_println {
     ($($arg:tt)*) => {
-        println!($($arg)*);
+        ::std::println!($($arg)*);
     };
 }
 
@@ -87,14 +87,16 @@ macro_rules! dbg {
 /// (might not be present as well).
 #[allow(unused_macros)]
 macro_rules! hermit_var {
-	($name:expr) => {{
-		use alloc::borrow::Cow;
-
+	($name:expr) => {
 		match $crate::env::var($name) {
-			Some(val) => Some(Cow::from(val)),
-			None => option_env!($name).map(Cow::Borrowed),
+			::core::option::Option::Some(val) => {
+				::core::option::Option::Some(::alloc::borrow::Cow::from(val))
+			}
+			::core::option::Option::None => {
+				::core::option_env!($name).map(::alloc::borrow::Cow::Borrowed)
+			}
 		}
-	}};
+	};
 }
 
 /// Tries to fetch the specified environment variable with a default value.
