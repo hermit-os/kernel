@@ -51,17 +51,9 @@ impl Qemu {
 			eprintln!("::endgroup::")
 		}
 
+		self.prepare_image()?;
+
 		let sh = crate::sh()?;
-
-		if self.build.target() == Target::X86_64Uefi {
-			sh.create_dir("target/esp/efi/boot")?;
-			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
-			sh.copy_file(
-				self.build.ci_image(self.image.as_deref().unwrap()),
-				"target/esp/efi/boot/hermit-app",
-			)?;
-		}
-
 		let target = self.build.target();
 		let qemu = target.qemu();
 		let qemu = env::var("QEMU").unwrap_or_else(|_| format!("qemu-system-{qemu}"));
@@ -78,6 +70,21 @@ impl Qemu {
 		eprintln!("$ {qemu}");
 		let status = Command::from(qemu).status()?;
 		ensure!(status.qemu_success(), "QEMU exit code: {:?}", status.code());
+
+		Ok(())
+	}
+
+	fn prepare_image(&self) -> Result<()> {
+		let sh = crate::sh()?;
+
+		if self.build.target() == Target::X86_64Uefi {
+			sh.create_dir("target/esp/efi/boot")?;
+			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
+			sh.copy_file(
+				self.build.ci_image(self.image.as_deref().unwrap()),
+				"target/esp/efi/boot/hermit-app",
+			)?;
+		}
 
 		Ok(())
 	}
