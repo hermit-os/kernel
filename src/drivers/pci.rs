@@ -517,7 +517,7 @@ pub(crate) fn init() {
 				Ok(VirtioDriver::Vsock(drv)) => {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
 				}
-				_ => {}
+				Err(err) => error!("Could not initialize virtio-pci device: {err}"),
 			}
 		}
 
@@ -532,8 +532,9 @@ pub(crate) fn init() {
 				adapter.device_id()
 			);
 
-			if let Ok(drv) = rtl8139::init_device(adapter) {
-				*crate::executor::device::NETWORK_DEVICE.lock() = Some(drv);
+			match rtl8139::init_device(adapter) {
+				Ok(drv) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
+				Err(err) => error!("Could not initialize rtl8139 device: {err}"),
 			}
 		}
 	});
