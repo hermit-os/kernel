@@ -12,6 +12,9 @@ macro_rules! print {
     }};
 }
 
+#[allow(unused_imports)]
+pub(crate) use print;
+
 /// Prints to the standard output, with a newline.
 ///
 /// Adapted from [`std::println`].
@@ -22,12 +25,15 @@ macro_rules! print {
 #[clippy::format_args]
 macro_rules! println {
     () => {
-        $crate::print!("\n")
+        $crate::macros::print!("\n")
     };
     ($($arg:tt)*) => {{
         $crate::console::_print(::core::format_args!("{}\n", ::core::format_args!($($arg)*)));
     }};
 }
+
+#[allow(unused_imports)]
+pub(crate) use println;
 
 /// Emergency output.
 #[cfg(target_os = "none")]
@@ -62,23 +68,26 @@ macro_rules! dbg {
     // `$val` expression could be a block (`{ .. }`), in which case the `eprintln!`
     // will be malformed.
     () => {
-        $crate::println!("[{}:{}]", ::core::file!(), ::core::line!())
+        $crate::macros::println!("[{}:{}]", ::core::file!(), ::core::line!())
     };
     ($val:expr $(,)?) => {
         // Use of `match` here is intentional because it affects the lifetimes
         // of temporaries - https://stackoverflow.com/a/48732525/1063961
         match $val {
             tmp => {
-                $crate::println!("[{}:{}] {} = {:#?}",
+                $crate::macros::println!("[{}:{}] {} = {:#?}",
                     ::core::file!(), ::core::line!(), ::core::stringify!($val), &tmp);
                 tmp
             }
         }
     };
     ($($val:expr),+ $(,)?) => {
-        ($($crate::dbg!($val)),+,)
+        ($($crate::macros::dbg!($val)),+,)
     };
 }
+
+#[allow(unused_imports)]
+pub(crate) use dbg;
 
 /// Returns the value of the specified environment variable.
 ///
@@ -99,12 +108,17 @@ macro_rules! hermit_var {
 	};
 }
 
+#[allow(unused_imports)]
+pub(crate) use hermit_var;
+
 /// Tries to fetch the specified environment variable with a default value.
 ///
 /// Fetches according to [`hermit_var`] or returns the specified default value.
 #[allow(unused_macros)]
 macro_rules! hermit_var_or {
 	($name:expr, $default:expr) => {
-		hermit_var!($name).as_deref().unwrap_or($default)
+		$crate::macros::hermit_var!($name)
+			.as_deref()
+			.unwrap_or($default)
 	};
 }
