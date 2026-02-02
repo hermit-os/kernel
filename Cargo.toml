@@ -150,7 +150,7 @@ smp = ["acpi"]
 #! ### Network Features
 
 ## Enables TCP support.
-tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
+tcp = ["net", "smoltcp", "smoltcp/socket-tcp", "smoltcp/segmentation-offload"]
 
 ## Enables UDP support.
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
@@ -412,6 +412,7 @@ exclude = [
 
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "be" }
+smoltcp = { git = "https://github.com/cagatay-y/smoltcp", branch = "segmentation-offload" }
 
 [profile.profiling]
 inherits = "release"
