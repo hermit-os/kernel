@@ -104,16 +104,9 @@ qemu-system-aarch64 \
 
 ### 64-bit RISC-V
 
-For 64-bit RISC-V, we need a recent version of [OpenSBI].
-To download the release asset with [GitHub CLI] and extract the correct binary, run:
-
-```bash
-gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
-tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
-```
+For 64-bit RISC-V, we need a recent version of [OpenSBI] (lp64 `fw_jump.bin`).
 
 [OpenSBI]: https://github.com/riscv-software-src/opensbi
-[GitHub CLI]: https://cli.github.com/
 
 The QEMU base command is as follows:
 
@@ -124,7 +117,7 @@ qemu-system-riscv64 \
     -smp 1 \
     -m 128M \
     -display none -serial stdio \
-    -bios opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
+    -bios share/opensbi/lp64/generic/firmware/fw_jump.bin
     -kernel <LOADER>
     -initrd <APP> 
 ```
