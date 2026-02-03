@@ -52,7 +52,7 @@ jobs:
           - arch: aarch64_be
             packages: qemu-system-arm ipxe-qemu u-boot-qemu u-boot-tools
           - arch: riscv64
-            packages: qemu-system-misc
+            packages: qemu-system-misc opensbi
     runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     steps:
       - name: Install Packages
@@ -83,11 +83,6 @@ jobs:
         with:
           toolchain: ${{ matrix.arch == 'aarch64_be' && 'nightly' || 'stable' }}
           components: ${{ matrix.arch == 'aarch64_be' && 'rust-src' || '' }}
-      - name: Dowload OpenSBI
-        if: matrix.arch == 'riscv64'
-        run: |
-          gh release download v1.7 --repo riscv-software-src/opensbi --pattern 'opensbi-*-rv-bin.tar.xz'
-          tar -xvf opensbi-*-rv-bin.tar.xz opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-elf
         if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-elf --release
