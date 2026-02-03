@@ -11,6 +11,7 @@ extend-ignore-identifiers-re = [
 Acces = "Acces"
 BARs = "BARs"
 BMCR_ANE = "BMCR_ANE"
+consts = "consts"
 DT_WHT = "DT_WHT"
 DtWht = "DtWht"
 RCR_AER = "RCR_AER"
