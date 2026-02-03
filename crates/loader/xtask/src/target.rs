@@ -74,17 +74,8 @@ impl Target {
 
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
-			Self::X86_64Linux => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/platform/linux/link.ld",
-				"-Crelocation-model=static",
-			],
-			Self::X86_64Multiboot => &[
-				"-Clink-arg=-Tsrc/arch/x86_64/platform/multiboot/link.ld",
-				"-Crelocation-model=static",
-			],
-			Self::X86_64Uefi => &[],
-			Self::Aarch64Elf | Self::Aarch64BeElf => &["-Clink-arg=-Tsrc/arch/aarch64/link.ld"],
-			Self::Riscv64Sbi => &["-Clink-arg=-Tsrc/arch/riscv64/link.ld"],
+			Self::X86_64Linux | Self::X86_64Multiboot => &["-Crelocation-model=static"],
+			_ => &[],
 		}
 	}
 
