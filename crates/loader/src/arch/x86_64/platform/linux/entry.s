@@ -3,8 +3,6 @@
 
 .code64
 
-.set BOOT_STACK_SIZE, 4096
-
 .extern loader_start		# defined in linker script
 .extern loader_end
 
@@ -16,8 +14,8 @@ _start:
     cli # avoid any interrupt
 
     # Initialize stack pointer
-    movabs rsp, OFFSET boot_stack
-    add rsp, BOOT_STACK_SIZE - 16
+    movabs rsp, OFFSET {stack}
+    add rsp, {stack_top_offset}
 
     mov [boot_params], rsi
 
@@ -67,8 +65,8 @@ start64:
     mov gs, ax
     cld
     # set default stack pointer
-    movabs rsp, OFFSET boot_stack
-    add rsp, BOOT_STACK_SIZE-16
+    movabs rsp, OFFSET {stack}
+    add rsp, {stack_top_offset}
 
     # jump to the boot processors's C code
     jmp {loader_main}
@@ -80,11 +78,6 @@ invalid:
 .align 8
 boot_params:
     .8byte 0
-
-.align 4096
-.global boot_stack
-boot_stack:
-    .fill BOOT_STACK_SIZE, 1, 0xcd
 
 # Bootstrap page tables are used during the initialization.
 .align 4096

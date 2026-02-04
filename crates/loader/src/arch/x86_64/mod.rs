@@ -6,6 +6,8 @@ mod paging;
 #[cfg(target_os = "none")]
 mod physicalmem;
 mod platform;
+#[cfg(target_os = "none")]
+mod stack;
 
 pub use console::Console;
 
