@@ -7,7 +7,7 @@ SECTIONS
 {
   loader_start = phys;
   .mboot phys : AT(ADDR(.mboot)) {
-    *(.mboot)
+    KEEP(*(.mboot))
   }
   .text ALIGN(4096) : AT(ADDR(.text)) {
     *(.text)
