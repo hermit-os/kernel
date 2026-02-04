@@ -132,11 +132,11 @@ L1:
     or eax, (1 << 31)       # enable paging
     mov cr0, eax
 
-    lgdt [GDT64.Pointer] # Load the 64-bit global descriptor table.
+    lgdt [{gdt_ptr}] # Load the 64-bit global descriptor table.
     # https://github.com/llvm/llvm-project/issues/46048
     .att_syntax prefix
     # Set the code segment and enter 64-bit long mode.
-    ljmp $GDT64.Code, $start64
+    ljmp ${kernel_code_selector}, $start64
     .intel_syntax noprefix
 
 # there is no long mode
@@ -146,7 +146,7 @@ Linvalid:
 .code64
 start64:
     # initialize segment registers
-    mov ax, OFFSET GDT64.Data
+    mov ax, {kernel_data_selector}
     mov ds, eax
     mov es, eax
     mov ss, eax
@@ -163,34 +163,6 @@ start64:
     jmp start64+0x28
 
 .section .data
-.align 4
-# we need already a valid GDT to switch in the 64bit modus
-GDT64:                      # Global Descriptor Table (64-bit).
-.set GDT64.Null, . - GDT64  # The null descriptor.
-    .2byte 0                # Limit (low).
-    .2byte 0                # Base (low).
-    .byte 0                 # Base (middle)
-    .byte 0                 # Access.
-    .byte 0                 # Granularity.
-    .byte 0                 # Base (high).
-.set GDT64.Code, . - GDT64  # The code descriptor.
-    .2byte 0xffff           # Limit (low).
-    .2byte 0                # Base (low).
-    .byte 0                 # Base (middle)
-    .byte 0b10011011        # Access.
-    .byte 0b10101111        # Granularity.
-    .byte 0                 # Base (high).
-.set GDT64.Data, . - GDT64  # The data descriptor.
-    .2byte 0xffff           # Limit (low).
-    .2byte 0                # Base (low).
-    .byte 0                 # Base (middle)
-    .byte 0b10010011        # Access.
-    .byte 0b11001111        # Granularity.
-    .byte 0                 # Base (high).
-GDT64.Pointer:              # The GDT-pointer.
-    .2byte . - GDT64 - 1    # Limit.
-    .8byte GDT64            # Base.
-
 .global mb_info
 .align 8
 mb_info:

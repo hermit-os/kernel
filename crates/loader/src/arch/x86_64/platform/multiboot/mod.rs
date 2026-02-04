@@ -27,6 +27,9 @@ mod entry {
 	core::arch::global_asm!(
 		include_str!("entry.s"),
 		loader_main = sym crate::os::loader_main,
+		gdt_ptr = sym crate::arch::x86_64::gdt::GDT_PTR,
+		kernel_code_selector = const crate::arch::x86_64::gdt::Gdt::kernel_code_selector().0,
+		kernel_data_selector = const crate::arch::x86_64::gdt::Gdt::kernel_data_selector().0,
 	);
 }
 
