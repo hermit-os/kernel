@@ -50,7 +50,8 @@ _start:
     mov cr3, rax
 
     lgdt [GDT64.Pointer] # Load the 64-bit global descriptor table.
-    jmp start64 # Set the code segment and enter 64-bit long mode.
+    # CS should already be set to SegmentSelector ( index: 1, rpl: Ring0 )
+    jmp start64
 
 .section .text
 .align 8
