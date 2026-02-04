@@ -30,34 +30,6 @@ mboot:
     .4byte MULTIBOOT_CHECKSUM
     .4byte 0, 0, 0, 0, 0 # address fields
 
-.align 4
-# we need already a valid GDT to switch in the 64bit modus
-GDT64:                      # Global Descriptor Table (64-bit).
-.set GDT64.Null, . - GDT64  # The null descriptor.
-    .2byte 0                # Limit (low).
-    .2byte 0                # Base (low).
-    .byte 0                 # Base (middle)
-    .byte 0                 # Access.
-    .byte 0                 # Granularity.
-    .byte 0                 # Base (high).
-.set GDT64.Code, . - GDT64  # The code descriptor.
-    .2byte 0                # Limit (low).
-    .2byte 0                # Base (low).
-    .byte 0                 # Base (middle)
-    .byte 0b10011010        # Access.
-    .byte 0b00100000        # Granularity.
-    .byte 0                 # Base (high).
-.set GDT64.Data, . - GDT64  # The data descriptor.
-    .2byte 0                # Limit (low).
-    .2byte 0                # Base (low).
-    .byte 0                 # Base (middle)
-    .byte 0b10010010        # Access.
-    .byte 0b00000000        # Granularity.
-    .byte 0                 # Base (high).
-GDT64.Pointer:              # The GDT-pointer.
-    .2byte . - GDT64 - 1    # Limit.
-    .8byte GDT64            # Base.
-
 .section .text
 .align 4
 .global _start
@@ -191,6 +163,33 @@ start64:
     jmp start64+0x28
 
 .section .data
+.align 4
+# we need already a valid GDT to switch in the 64bit modus
+GDT64:                      # Global Descriptor Table (64-bit).
+.set GDT64.Null, . - GDT64  # The null descriptor.
+    .2byte 0                # Limit (low).
+    .2byte 0                # Base (low).
+    .byte 0                 # Base (middle)
+    .byte 0                 # Access.
+    .byte 0                 # Granularity.
+    .byte 0                 # Base (high).
+.set GDT64.Code, . - GDT64  # The code descriptor.
+    .2byte 0                # Limit (low).
+    .2byte 0                # Base (low).
+    .byte 0                 # Base (middle)
+    .byte 0b10011010        # Access.
+    .byte 0b00100000        # Granularity.
+    .byte 0                 # Base (high).
+.set GDT64.Data, . - GDT64  # The data descriptor.
+    .2byte 0                # Limit (low).
+    .2byte 0                # Base (low).
+    .byte 0                 # Base (middle)
+    .byte 0b10010010        # Access.
+    .byte 0b00000000        # Granularity.
+    .byte 0                 # Base (high).
+GDT64.Pointer:              # The GDT-pointer.
+    .2byte . - GDT64 - 1    # Limit.
+    .8byte GDT64            # Base.
 
 .global mb_info
 .align 8
