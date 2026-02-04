@@ -85,18 +85,18 @@ GDT64:                      # Global Descriptor Table (64-bit).
     .byte 0                 # Granularity.
     .byte 0                 # Base (high).
 .set GDT64.Code, . - GDT64  # The code descriptor.
-    .2byte 0                # Limit (low).
+    .2byte 0xffff           # Limit (low).
     .2byte 0                # Base (low).
     .byte 0                 # Base (middle)
-    .byte 0b10011010        # Access.
-    .byte 0b00100000        # Granularity.
+    .byte 0b10011011        # Access.
+    .byte 0b10101111        # Granularity.
     .byte 0                 # Base (high).
 .set GDT64.Data, . - GDT64  # The data descriptor.
-    .2byte 0                # Limit (low).
+    .2byte 0xffff           # Limit (low).
     .2byte 0                # Base (low).
     .byte 0                 # Base (middle)
-    .byte 0b10010010        # Access.
-    .byte 0b00000000        # Granularity.
+    .byte 0b10010011        # Access.
+    .byte 0b11001111        # Granularity.
     .byte 0                 # Base (high).
 GDT64.Pointer:              # The GDT-pointer.
     .2byte . - GDT64 - 1    # Limit.
