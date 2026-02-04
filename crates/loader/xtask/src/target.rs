@@ -29,6 +29,7 @@ impl Target {
 		Ok(())
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn arch(&self) -> &'static str {
 		match self {
 			Self::X86_64Linux => "x86_64",
@@ -107,6 +108,7 @@ impl Target {
 		}
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn qemu(&self) -> &'static str {
 		match self {
 			Self::X86_64Linux | Self::X86_64Multiboot | Self::X86_64Uefi => "x86_64",

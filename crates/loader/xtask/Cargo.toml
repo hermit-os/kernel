@@ -2,10 +2,14 @@
 name = "xtask"
 edition = "2024"
 
+[features]
+default = ["ci"]
+ci = ["dep:ovmf-prebuilt", "dep:sysinfo"]
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 llvm-tools = "0.1"
-ovmf-prebuilt = "0.2"
-sysinfo = "0.38"
+ovmf-prebuilt = { version = "0.2", optional = true }
+sysinfo = { version = "0.38", optional = true }
 xshell = "0.2"

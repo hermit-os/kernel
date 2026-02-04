@@ -69,6 +69,7 @@ impl Artifact {
 		.into()
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn ci_image(&self, image: &str) -> PathBuf {
 		["data", self.target.arch(), image].iter().collect()
 	}

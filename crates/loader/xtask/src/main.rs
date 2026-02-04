@@ -2,6 +2,7 @@
 
 mod artifact;
 mod build;
+#[cfg(feature = "ci")]
 mod ci;
 mod clippy;
 mod object;
@@ -16,6 +17,7 @@ use clap::Parser;
 #[derive(Parser)]
 enum Cli {
 	Build(build::Build),
+	#[cfg(feature = "ci")]
 	#[command(subcommand)]
 	Ci(ci::Ci),
 	Clippy(clippy::Clippy),
@@ -25,6 +27,7 @@ impl Cli {
 	fn run(self) -> Result<()> {
 		match self {
 			Self::Build(build) => build.run(),
+			#[cfg(feature = "ci")]
 			Self::Ci(ci) => ci.run(),
 			Self::Clippy(clippy) => clippy.run(),
 		}
