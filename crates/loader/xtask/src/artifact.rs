@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use clap::Args;
@@ -97,7 +96,7 @@ impl CmdExt for Cmd<'_> {
 
 	fn target_dir_args(self, artifact: &Artifact) -> Self {
 		if let Some(target_dir) = &artifact.target_dir {
-			self.args::<&[&OsStr]>(&["--target-dir".as_ref(), target_dir.as_ref()])
+			self.arg("--target-dir").arg(target_dir)
 		} else {
 			self
 		}
