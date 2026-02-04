@@ -57,7 +57,7 @@ impl Read for SerialDevice {
 
 impl ReadReady for SerialDevice {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
-		Ok(UART_DEVICE.lock().buffer.read_ready()?)
+		Ok(!UART_DEVICE.lock().buffer.is_empty())
 	}
 }
 
