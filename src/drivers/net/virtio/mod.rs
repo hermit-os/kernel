@@ -20,7 +20,10 @@ use core::str::FromStr;
 
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
-use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
+use smoltcp::wire::{
+	ETHERNET_HEADER_LEN, EthernetFrame, IpAddress, IpProtocol, Ipv4Packet, Ipv6Packet, TcpPacket,
+	UdpPacket,
+};
 use virtio::DeviceConfigSpace;
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
 use volatile::VolatileRef;
@@ -305,6 +308,105 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 pub struct RxToken<'a> {
 	recv_vqs: &'a mut RxQueues,
 	is_mrg_rxbuf_enabled: bool,
+	checksums: ChecksumCapabilities,
+}
+
+impl RxToken<'_> {
+	/// If we advertised receive checksum offload to smoltcp, we need to validate the packet
+	/// either by checking its virtio-net headers or checksum. Otherwise, it's smoltcp's responsibility
+	/// to validate the frame and we can pass the frame directly.
+	fn is_ethernet_frame_passable(&self, hdr: &Hdr, frame: &[u8]) -> bool {
+		// Nothing is offloaded to the device. We can pass the frame right off to smoltcp.
+		if self.checksums.tcp.rx() && self.checksums.udp.rx() {
+			return true;
+		}
+
+		let Ok(ethernet_frame) = EthernetFrame::new_checked(frame) else {
+			return false;
+		};
+
+		// We are receiving a frame that was sent by another virtio-net driver on the same host.
+		// Normally, the device should have filled in the checksum but passed the buffers right along
+		// instead as checksumming is not necessary for two guests on the same host.
+		if hdr.flags.contains(virtio::net::HdrF::NEEDS_CSUM) {
+			return true;
+		}
+
+		// We cannot benefit from the same host optimization but we've promised smoltcp to only pass frames
+		// that are validated so we need to do the validation ourselves.
+		match ethernet_frame.ethertype() {
+			smoltcp::wire::EthernetProtocol::Ipv4 => {
+				let Ok(ip_packet) = Ipv4Packet::new_checked(ethernet_frame.payload()) else {
+					return false;
+				};
+
+				// DATA_VALID only validates the outermost packet checksum, which is IPv4 in this case. Thus,
+				// it does not save us from validating the layer above IP.
+				if !hdr.flags.contains(virtio::net::HdrF::DATA_VALID) && !ip_packet.verify_checksum() {
+				    return false;
+				}
+
+				Self::is_ip_packet_passable(
+					ip_packet.next_header(),
+					ip_packet.payload(),
+					IpAddress::Ipv4(ip_packet.src_addr()),
+					IpAddress::Ipv4(ip_packet.dst_addr()),
+					&self.checksums,
+				)
+			}
+			smoltcp::wire::EthernetProtocol::Ipv6 => {
+				let Ok(ip_packet) = Ipv6Packet::new_checked(ethernet_frame.payload()) else {
+					return false;
+				};
+				// One level of checksum has been validated and IPv6 headers don't have their own checksums,
+				// so the validation from the device must have been for the IP protocol.
+				hdr.flags.contains(virtio::net::HdrF::DATA_VALID) || Self::is_ip_packet_passable(
+					ip_packet.next_header(),
+					ip_packet.payload(),
+					IpAddress::Ipv6(ip_packet.src_addr()),
+					IpAddress::Ipv6(ip_packet.dst_addr()),
+					&self.checksums,
+				)
+			}
+			// ARP packets don't have checksums.
+			smoltcp::wire::EthernetProtocol::Arp
+			// We should have not taken over the validation of any unknown protocol from smoltcp and may let
+			// it take care of it.
+			| smoltcp::wire::EthernetProtocol::Unknown(_) => {
+				true
+			}
+		}
+	}
+
+	fn is_ip_packet_passable(
+		next_header: IpProtocol,
+		payload: &[u8],
+		src_addr: IpAddress,
+		dst_addr: IpAddress,
+		checksum_capabilities: &ChecksumCapabilities,
+	) -> bool {
+		match next_header {
+			smoltcp::wire::IpProtocol::Tcp => {
+				if checksum_capabilities.tcp.rx() {
+					return true;
+				}
+				let Ok(packet) = TcpPacket::new_checked(payload) else {
+					return false;
+				};
+				packet.verify_checksum(&src_addr, &dst_addr)
+			}
+			smoltcp::wire::IpProtocol::Udp => {
+				if checksum_capabilities.udp.rx() {
+					return true;
+				}
+				let Ok(packet) = UdpPacket::new_checked(payload) else {
+					return false;
+				};
+				packet.verify_checksum(&src_addr, &dst_addr)
+			}
+			_ => true,
+		}
+	}
 }
 
 impl smoltcp::phy::RxToken for RxToken<'_> {
@@ -335,18 +437,6 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 		};
 
 		let mut combined_packets = first_packet;
-
-		let first_tkn = buffer_token_from_hdr(
-			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
-			unsafe {
-				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
-			},
-			self.recv_vqs.buf_size,
-		);
-		self.recv_vqs.vqs[0]
-			.dispatch(first_tkn, false, BufferType::Direct)
-			.unwrap();
-
 		for _ in 1..num_buffers {
 			let mut buffer_tkn = self.recv_vqs.get_next().unwrap();
 			// The descriptor that was meant for the header of another frame was used for a portion of the current frame's contents.
@@ -371,7 +461,24 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 				.unwrap();
 		}
 
-		f(&combined_packets)
+		let res = if self.is_ethernet_frame_passable(&first_header, &combined_packets) {
+			f(&combined_packets)
+		} else {
+			f(&[])
+		};
+
+		let first_tkn = buffer_token_from_hdr(
+			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
+			unsafe {
+				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
+			},
+			self.recv_vqs.buf_size,
+		);
+		self.recv_vqs.vqs[0]
+			.dispatch(first_tkn, false, BufferType::Direct)
+			.unwrap();
+
+		res
 	}
 }
 
@@ -447,6 +554,7 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 				RxToken {
 					recv_vqs: &mut self.inner.recv_vqs,
 					is_mrg_rxbuf_enabled: self.dev_cfg.features.contains(virtio::net::F::MRG_RXBUF),
+					checksums: self.checksums.clone(),
 				},
 				TxToken {
 					send_vqs: &mut self.inner.send_vqs,
@@ -664,7 +772,9 @@ impl VirtioNetDriver<Uninit> {
 			// Multiqueue support
 			| virtio::net::F::MQ
 			// Checksum calculation can partially be offloaded to the device
-			| virtio::net::F::CSUM;
+			| virtio::net::F::CSUM
+			// Partially checksummed frames can be received
+			| virtio::net::F::GUEST_CSUM;
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
