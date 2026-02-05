@@ -219,7 +219,7 @@ jobs:
           echo "UHYVE=$CARGO_HOME/bin/uhyve" >> "$GITHUB_ENV"
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
-      - run: cargo +stable install cargo-careful
+      - uses: taiki-e/install-action@cargo-careful
         if: matrix.profile == 'dev'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --no-default-features firecracker --sudo
         if: matrix.arch == 'x86_64'
