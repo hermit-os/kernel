@@ -152,8 +152,8 @@ dependencies = [
 
 [[package]]
 name = "async-executor"
-version = "1.13.2"
-source = "git+https://github.com/hermit-os/async-executor.git?branch=no_std#d703026ada41be60c55eb79d0b29a1fbf18b7a0b"
+version = "1.13.3"
+source = "git+https://github.com/hermit-os/async-executor.git?branch=lock_api#408e8c367be3f1b552a784820d6806cd3fc52c26"
 dependencies = [
  "async-task",
  "concurrent-queue",
