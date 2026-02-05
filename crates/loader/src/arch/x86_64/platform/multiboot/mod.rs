@@ -19,7 +19,6 @@ use crate::fdt::Fdt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;
-	static mut mb_info: usize;
 }
 
 #[allow(bad_asm_style)]
@@ -36,9 +35,11 @@ mod entry {
 	);
 }
 
-unsafe extern "C" fn rust_start(mb_info_addr: usize) -> ! {
+static mut MB_INFO: usize = 0;
+
+unsafe extern "C" fn rust_start(mb_info: usize) -> ! {
 	unsafe {
-		mb_info = mb_info_addr;
+		MB_INFO = mb_info;
 	}
 	unsafe {
 		crate::os::loader_main();
@@ -70,7 +71,7 @@ pub struct DeviceTree;
 impl DeviceTree {
 	pub fn create() -> FdtWriterResult<&'static [u8]> {
 		let mut mem = Mem;
-		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+		let multiboot = unsafe { Multiboot::from_ptr(MB_INFO as u64, &mut mem).unwrap() };
 
 		let memory_regions = multiboot
 			.memory_regions()
@@ -94,14 +95,14 @@ pub fn find_kernel() -> &'static [u8] {
 	paging::clean_up();
 	// Identity-map the Multiboot information.
 	unsafe {
-		assert!(mb_info > 0, "Could not find Multiboot information");
-		info!("Found Multiboot information at {:#x}", { mb_info });
-		paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty())
+		assert!(MB_INFO > 0, "Could not find Multiboot information");
+		info!("Found Multiboot information at {:#x}", { MB_INFO });
+		paging::map::<Size4KiB>(MB_INFO, MB_INFO, 1, PageTableFlags::empty())
 	}
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
-	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+	let multiboot = unsafe { Multiboot::from_ptr(MB_INFO as u64, &mut mem).unwrap() };
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
@@ -162,15 +163,15 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	let mut mem = Mem;
-	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+	let multiboot = unsafe { Multiboot::from_ptr(MB_INFO as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
 	let mut new_stack = ptr::addr_of!(loader_end)
 		.addr()
 		.align_up(Size4KiB::SIZE as usize);
 
-	if new_stack + KERNEL_STACK_SIZE as usize > unsafe { mb_info } {
-		new_stack = (unsafe { mb_info } + mem::size_of::<Multiboot<'_, '_>>())
+	if new_stack + KERNEL_STACK_SIZE as usize > unsafe { MB_INFO } {
+		new_stack = (unsafe { MB_INFO } + mem::size_of::<Multiboot<'_, '_>>())
 			.align_up(Size4KiB::SIZE as usize);
 	}
 
@@ -211,7 +212,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		load_info,
 		platform_info: PlatformInfo::Multiboot {
 			command_line,
-			multiboot_info_addr: (unsafe { mb_info } as u64).try_into().unwrap(),
+			multiboot_info_addr: (unsafe { MB_INFO } as u64).try_into().unwrap(),
 		},
 	};
 

@@ -134,9 +134,3 @@ start64:
     # jump to the boot processors's C code
     jmp {loader_main}
     jmp start64+0x28
-
-.section .data
-.global mb_info
-.align 8
-mb_info:
-    .8byte 0

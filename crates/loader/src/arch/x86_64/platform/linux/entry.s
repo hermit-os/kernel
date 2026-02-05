@@ -49,9 +49,3 @@ start64:
     jmp {loader_main}
 invalid:
     jmp invalid
-
-.section .data
-.global boot_params
-.align 8
-boot_params:
-    .8byte 0

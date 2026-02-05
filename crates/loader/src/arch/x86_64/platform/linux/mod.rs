@@ -19,7 +19,6 @@ use crate::fdt::Fdt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;
-	static mut boot_params: usize;
 }
 
 mod entry {
@@ -35,9 +34,11 @@ mod entry {
 	);
 }
 
-unsafe extern "C" fn rust_start(boot_params_addr: usize) -> ! {
+static mut BOOT_PARAMS: usize = 0;
+
+unsafe extern "C" fn rust_start(boot_params: usize) -> ! {
 	unsafe {
-		boot_params = boot_params_addr;
+		BOOT_PARAMS = boot_params;
 	}
 	unsafe {
 		crate::os::loader_main();
@@ -134,7 +135,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		load_info,
 		platform_info: PlatformInfo::LinuxBootParams {
 			command_line: Some(command_line),
-			boot_params_addr: (unsafe { boot_params } as u64).try_into().unwrap(),
+			boot_params_addr: (unsafe { BOOT_PARAMS } as u64).try_into().unwrap(),
 		},
 	};
 
@@ -155,7 +156,7 @@ trait BootParamsExt {
 
 impl BootParamsExt for BootParams {
 	unsafe fn map() {
-		let addr = unsafe { boot_params };
+		let addr = unsafe { BOOT_PARAMS };
 
 		info!("Linux boot parameters: {addr:#x}");
 		assert!(addr.is_aligned_to(Size4KiB::SIZE as usize));
@@ -166,7 +167,7 @@ impl BootParamsExt for BootParams {
 	}
 
 	unsafe fn get() -> &'static Self {
-		let addr = unsafe { boot_params };
+		let addr = unsafe { BOOT_PARAMS };
 		let ptr = ptr::with_exposed_provenance(addr);
 		unsafe { &*ptr }
 	}
