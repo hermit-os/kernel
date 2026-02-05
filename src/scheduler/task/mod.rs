@@ -20,6 +20,8 @@ use memory_addresses::VirtAddr;
 use self::tls::Tls;
 use crate::arch::core_local::*;
 use crate::arch::scheduler::TaskStacks;
+#[cfg(not(feature = "common-os"))]
+use crate::arch::scheduler::set_init_task_tls;
 use crate::fd::stdio::*;
 use crate::fd::{ObjectInterface, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
@@ -488,7 +490,7 @@ impl Task {
 			stacks: TaskStacks::from_boot_stacks(),
 			object_map: OBJECT_MAP.get().unwrap().clone(),
 			#[cfg(not(feature = "common-os"))]
-			tls: None,
+			tls: set_init_task_tls(),
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 		}

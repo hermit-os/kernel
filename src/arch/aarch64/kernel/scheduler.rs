@@ -1,5 +1,7 @@
 //! Architecture dependent interface to initialize a task
 
+#[cfg(not(feature = "common-os"))]
+use core::arch::asm;
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
@@ -15,6 +17,8 @@ use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::PerCoreSchedulerExt;
+#[cfg(not(feature = "common-os"))]
+use crate::scheduler::task::tls::Tls;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
@@ -337,4 +341,24 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 	isb(SY);
 
 	core_scheduler().get_last_stack_pointer().as_u64()
+}
+
+/// Initializes the TLS for the init/boot task and sets the ipidr_el0 register to the respective value
+#[cfg(not(feature = "common-os"))]
+pub fn set_init_task_tls() -> Option<Tls> {
+	Tls::from_env().inspect(|tls| {
+		// we must immediately set the tls offset, because the thread is already running, so setting
+		// it via the stack doesn't work.
+		//
+		// Safety:
+		// This is safe, because the TLS address won't change during runtime. So even if the tls was
+		// already set, it will only be set to the value it previously had.
+		unsafe {
+			asm!(
+				"msr tpidr_el0, {tls}",
+				tls = in(reg) tls.thread_ptr().expose_provenance(),
+				options(nomem, nostack, preserves_flags),
+			);
+		};
+	})
 }

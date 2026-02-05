@@ -16,7 +16,11 @@ use crate::arch::x86_64::mm::paging::{
 use crate::config::*;
 use crate::env;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+#[cfg(not(feature = "common-os"))]
+use crate::processor::writefs;
 use crate::scheduler::PerCoreSchedulerExt;
+#[cfg(not(feature = "common-os"))]
+use crate::scheduler::task::tls::Tls;
 use crate::scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
@@ -331,4 +335,15 @@ pub fn install_timer_handler() {
 			.set_stack_index(0);
 	}
 	interrupts::add_irq_name(apic::TIMER_INTERRUPT_NUMBER - 32, "Timer");
+}
+
+/// Initializes the TLS for the init/boot task and sets FS register to the respective value
+#[cfg(not(feature = "common-os"))]
+pub fn set_init_task_tls() -> Option<Tls> {
+	// we must immediately set the tls offset, because the thread is already running, so setting
+	// it via the stack doesn't work.
+	//
+	// This is safe, because the TLS address won't change during runtime. So even if the tls was
+	// already set, it will only be set to the value it previously had.
+	Tls::from_env().inspect(|tls| writefs(tls.thread_ptr().addr()))
 }
