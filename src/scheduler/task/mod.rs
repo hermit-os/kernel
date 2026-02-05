@@ -477,6 +477,13 @@ impl Task {
 			}
 		}
 
+		#[cfg(not(feature = "common-os"))]
+		let tls = if cfg!(feature = "instrument-mcount") {
+			Tls::from_env().inspect(Tls::set_thread_ptr)
+		} else {
+			None
+		};
+
 		Task {
 			id: tid,
 			status: TaskStatus::Idle,
@@ -488,7 +495,7 @@ impl Task {
 			stacks: TaskStacks::from_boot_stacks(),
 			object_map: OBJECT_MAP.get().unwrap().clone(),
 			#[cfg(not(feature = "common-os"))]
-			tls: None,
+			tls,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 		}
