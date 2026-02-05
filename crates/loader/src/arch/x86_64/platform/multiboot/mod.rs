@@ -19,7 +19,7 @@ use crate::fdt::Fdt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;
-	static mb_info: usize;
+	static mut mb_info: usize;
 }
 
 #[allow(bad_asm_style)]
@@ -36,7 +36,10 @@ mod entry {
 	);
 }
 
-unsafe extern "C" fn rust_start() -> ! {
+unsafe extern "C" fn rust_start(mb_info_addr: usize) -> ! {
+	unsafe {
+		mb_info = mb_info_addr;
+	}
 	unsafe {
 		crate::os::loader_main();
 	}
@@ -92,7 +95,7 @@ pub fn find_kernel() -> &'static [u8] {
 	// Identity-map the Multiboot information.
 	unsafe {
 		assert!(mb_info > 0, "Could not find Multiboot information");
-		info!("Found Multiboot information at {mb_info:#x}");
+		info!("Found Multiboot information at {:#x}", { mb_info });
 		paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty())
 	}
 

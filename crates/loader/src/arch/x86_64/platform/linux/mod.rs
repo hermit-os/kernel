@@ -19,7 +19,7 @@ use crate::fdt::Fdt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;
-	static boot_params: usize;
+	static mut boot_params: usize;
 }
 
 mod entry {
@@ -35,7 +35,10 @@ mod entry {
 	);
 }
 
-unsafe extern "C" fn rust_start() -> ! {
+unsafe extern "C" fn rust_start(boot_params_addr: usize) -> ! {
+	unsafe {
+		boot_params = boot_params_addr;
+	}
 	unsafe {
 		crate::os::loader_main();
 	}

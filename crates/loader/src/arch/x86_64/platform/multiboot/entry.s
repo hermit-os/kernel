@@ -38,8 +38,8 @@ _start:
     mov esp, OFFSET {stack}
     add esp, {stack_top_offset}
 
-    # Interpret multiboot information
-    mov [mb_info], ebx
+    # Move the 32-bit physical address of the Multiboot information structure into `RDI` as first argument to `rust_start`.
+    mov edi, ebx
 
 # This will set up the x86 control registers:
 # Caching and the floating point unit are enabled
