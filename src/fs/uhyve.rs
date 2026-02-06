@@ -3,7 +3,6 @@ use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -127,53 +126,82 @@ impl Clone for UhyveFileHandle {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+// Unlike src/fs/fuse.rs, we do not prepend / before $prefix
+// TODO: rename to `UhyveEntry`
 pub(crate) struct UhyveDirectory {
-	prefix: Option<String>,
+	prefix: String,
 }
 
 impl UhyveDirectory {
-	pub const fn new(prefix: Option<String>) -> Self {
-		UhyveDirectory { prefix }
+	pub fn new(prefix: Option<String>) -> Self {
+		UhyveDirectory {
+			prefix: prefix.unwrap_or_default(),
+		}
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
-		// Unlike src/fs/fuse.rs, we skip the first element here so as to not prepend / before /root
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.skip(1)
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
+	fn traversal_path(&self, component: &str) -> CString {
+		let mut path = self.prefix.clone();
+		if !self.prefix.is_empty() {
+			path.push('/');
 		}
+		path.push_str(component);
+		CString::new(path).unwrap()
 	}
 }
 
+#[async_trait]
 impl VfsNode for UhyveDirectory {
 	/// Returns the node type
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
 	}
 
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn dup(&self) -> Box<dyn VfsNode> {
+		Box::new(self.clone())
+	}
+
+	async fn traverse_once(&self, component: &str) -> io::Result<Box<dyn VfsNode>> {
+		let mut prefix = self.prefix.clone();
+		if !prefix.is_empty() {
+			prefix.push('/');
+		}
+		prefix.push_str(component);
+		Ok(Box::new(Self { prefix }))
+	}
+
+	async fn traverse_multiple(&self, mut path: &str) -> io::Result<Box<dyn VfsNode>> {
+		let mut prefix = self.prefix.clone();
+		// this part prevents inserting double-slashes or no slashes between prefix and path
+		if !path.is_empty() {
+			if let Some(x) = path.strip_prefix("/") {
+				path = x;
+			} else {
+				return Err(Errno::Nosys);
+			}
+			if !prefix.is_empty() {
+				prefix.push('/');
+			}
+		}
+		prefix.push_str(path);
+		Ok(Box::new(Self { prefix }))
+	}
+
+	async fn stat(&self) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	async fn lstat(&self) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_open(
+	async fn open(
 		&self,
-		components: &mut Vec<&str>,
+		component: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(component);
 
 		let mut open_params = OpenParams {
 			name: GuestPhysAddr::new(
@@ -196,8 +224,8 @@ impl VfsNode for UhyveDirectory {
 		}
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	async fn unlink(&self, component: &str) -> io::Result<()> {
+		let path = self.traversal_path(component);
 
 		let mut unlink_params = UnlinkParams {
 			name: GuestPhysAddr::new(
@@ -216,15 +244,11 @@ impl VfsNode for UhyveDirectory {
 		}
 	}
 
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	async fn rmdir(&self, _component: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_mkdir(
-		&self,
-		_components: &mut Vec<&str>,
-		_mode: AccessPermission,
-	) -> io::Result<()> {
+	async fn mkdir(&self, _component: &str, _mode: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 }
