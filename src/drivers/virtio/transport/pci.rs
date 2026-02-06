@@ -181,6 +181,12 @@ pub struct UniCapsColl {
 	pub(crate) notif_cfg: NotifCfg,
 	pub(crate) isr_cfg: IsrStatus,
 	pub(crate) dev_cfg_list: Vec<PciCap>,
+	#[cfg(all(
+		feature = "virtio-net",
+		not(feature = "rtl8139"),
+		target_arch = "x86_64"
+	))]
+	pub(crate) msix_table: Option<VolatileRef<'static, [crate::drivers::pci::MsixEntry]>>,
 }
 /// Wraps a [`CommonCfg`] in order to preserve
 /// the original structure.
@@ -254,6 +260,19 @@ impl VqCfgHandler<'_> {
 			.as_mut_ptr()
 			.queue_device()
 			.write(addr.as_u64().into());
+	}
+
+	#[cfg(all(
+		feature = "virtio-net",
+		not(feature = "rtl8139"),
+		target_arch = "x86_64"
+	))]
+	pub fn set_msix_table_index(&mut self, index: u16) {
+		self.select_queue();
+		self.raw
+			.as_mut_ptr()
+			.queue_msix_vector()
+			.write(index.into());
 	}
 
 	pub fn notif_off(&mut self) -> u16 {
@@ -515,43 +534,6 @@ impl PciBar {
 	}
 }
 
-/// Reads all PCI capabilities, starting at the capabilities list pointer from the
-/// PCI device.
-///
-/// Returns ONLY Virtio specific capabilities, which allow to locate the actual capability
-/// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
-fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciError> {
-	let device_id = device.device_id();
-
-	let capabilities = device
-		.capabilities()
-		.unwrap()
-		.filter_map(|capability| match capability {
-			PciCapability::Vendor(capability) => Some(capability),
-			_ => None,
-		})
-		.map(|addr| CapData::read(addr, device.access()).unwrap())
-		.filter(|cap| cap.cfg_type != CapCfgType::Pci)
-		.flat_map(|cap| {
-			let slot = cap.bar;
-			device
-				.memory_map_bar(slot, true)
-				.map(|(addr, size)| PciCap {
-					bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
-					dev_id: device_id,
-					cap,
-				})
-		})
-		.collect::<Vec<_>>();
-
-	if capabilities.is_empty() {
-		error!("No virtio capability found for device {device_id:x}");
-		Err(PciError::NoVirtioCaps(device_id))
-	} else {
-		Ok(capabilities)
-	}
-}
-
 pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, VirtioError> {
 	let device_id = device.device_id();
 
@@ -561,58 +543,106 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 		return Err(VirtioError::FromPci(PciError::NoCapPtr(device_id)));
 	}
 
-	// Get list of PciCaps pointing to capabilities
-	let cap_list = match read_caps(device) {
-		Ok(list) => list,
-		Err(pci_error) => return Err(VirtioError::FromPci(pci_error)),
-	};
-
 	let mut com_cfg = None;
 	let mut notif_cfg = None;
 	let mut isr_cfg = None;
 	let mut dev_cfg_list = Vec::new();
-	// Map Caps in virtual memory
-	for pci_cap in cap_list {
-		match pci_cap.cap.cfg_type {
-			CapCfgType::Common => {
-				if com_cfg.is_none() {
-					match pci_cap.map_common_cfg() {
-						Some(cap) => com_cfg = Some(ComCfg::new(cap)),
-						None => error!(
-							"Common config capability of device {device_id:x} could not be mapped!"
-						),
-					}
-				}
-			}
-			CapCfgType::Notify => {
-				if notif_cfg.is_none() {
-					match NotifCfg::new(&pci_cap) {
-						Some(notif) => notif_cfg = Some(notif),
-						None => error!(
-							"Notification config capability of device {device_id:x} could not be used!"
-						),
-					}
-				}
-			}
-			CapCfgType::Isr => {
-				if isr_cfg.is_none() {
-					match pci_cap.map_isr_status() {
-						Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat)),
-						None => error!(
-							"ISR status config capability of device {device_id:x} could not be used!"
-						),
-					}
-				}
-			}
-			CapCfgType::SharedMemory => {
-				let cap_id = pci_cap.cap.id;
-				error!(
-					"Shared Memory config capability with id {cap_id} of device {device_id:x} could not be used!"
-				);
-			}
-			CapCfgType::Device => dev_cfg_list.push(pci_cap),
+	#[cfg(all(
+		feature = "virtio-net",
+		not(feature = "rtl8139"),
+		target_arch = "x86_64"
+	))]
+	let mut msix_table = None;
 
-			// PCI's configuration space is allowed to hold other structures, which are not virtio specific and are therefore ignored
+	// Reads all PCI capabilities, starting at the capabilities list pointer from the
+	// PCI device.
+	//
+	// Maps ONLY Virtio specific capabilities and the MSI-X capability , which allow to locate the actual capability
+	// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
+	for capability in device.capabilities().unwrap() {
+		match capability {
+			PciCapability::Vendor(addr) => {
+				let cap = CapData::read(addr, device.access()).unwrap();
+				if cap.cfg_type == CapCfgType::Pci {
+					continue;
+				}
+				let slot = cap.bar;
+				let Some((addr, size)) = device.memory_map_bar(slot, true) else {
+					continue;
+				};
+				let pci_cap = PciCap {
+					bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
+					dev_id: device_id,
+					cap,
+				};
+				match pci_cap.cap.cfg_type {
+					CapCfgType::Common => {
+						if com_cfg.is_none() {
+							match pci_cap.map_common_cfg() {
+								Some(cap) => com_cfg = Some(ComCfg::new(cap)),
+								None => error!(
+									"Common config capability of device {device_id:x} could not be mapped!"
+								),
+							}
+						}
+					}
+					CapCfgType::Notify => {
+						if notif_cfg.is_none() {
+							match NotifCfg::new(&pci_cap) {
+								Some(notif) => notif_cfg = Some(notif),
+								None => error!(
+									"Notification config capability of device {device_id:x} could not be used!"
+								),
+							}
+						}
+					}
+					CapCfgType::Isr => {
+						if isr_cfg.is_none() {
+							match pci_cap.map_isr_status() {
+								Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat)),
+								None => error!(
+									"ISR status config capability of device {device_id:x} could not be used!"
+								),
+							}
+						}
+					}
+					CapCfgType::SharedMemory => {
+						let cap_id = pci_cap.cap.id;
+						error!(
+							"Shared Memory config capability with id {cap_id} of device {device_id:x} could not be used!"
+						);
+					}
+					CapCfgType::Device => dev_cfg_list.push(pci_cap),
+					_ => continue,
+				}
+			}
+			#[cfg(all(
+				feature = "virtio-net",
+				not(feature = "rtl8139"),
+				target_arch = "x86_64"
+			))]
+			PciCapability::MsiX(mut msix_capability) => {
+				// We prefer legacy interrupts
+				if device.get_irq().is_some() {
+					continue;
+				}
+				msix_capability.set_enabled(true, device.access());
+				let (base_addr, _) = device
+					.memory_map_bar(msix_capability.table_bar(), true)
+					.unwrap();
+				let table_ptr = NonNull::slice_from_raw_parts(
+					NonNull::with_exposed_provenance(
+						core::num::NonZero::new(
+							base_addr.as_usize()
+								+ usize::try_from(msix_capability.table_offset()).unwrap(),
+						)
+						.unwrap(),
+					),
+					msix_capability.table_size().into(),
+				);
+				msix_table = Some(unsafe { VolatileRef::new(table_ptr) });
+			}
+			// PCI's configuration space is allowed to hold other structures, which are not useful for us and are therefore ignored
 			// in the following
 			_ => continue,
 		}
@@ -623,6 +653,12 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 		notif_cfg: notif_cfg.ok_or(VirtioError::NoNotifCfg(device_id))?,
 		isr_cfg: isr_cfg.ok_or(VirtioError::NoIsrCfg(device_id))?,
 		dev_cfg_list,
+		#[cfg(all(
+			feature = "virtio-net",
+			not(feature = "rtl8139"),
+			target_arch = "x86_64"
+		))]
+		msix_table,
 	})
 }
 
@@ -690,9 +726,10 @@ pub(crate) fn init_device(
 		))]
 		virtio::Id::Net => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
+				use crate::drivers::Driver;
 				info!("Virtio network driver initialized.");
 
-				let irq = device.get_irq().unwrap();
+				let irq = virt_net_drv.get_interrupt_number();
 				crate::arch::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
