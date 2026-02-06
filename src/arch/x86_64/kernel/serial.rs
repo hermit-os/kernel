@@ -1,7 +1,10 @@
 use alloc::collections::VecDeque;
+use core::hint;
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
+use uart_16550::backend::PioBackend;
+use uart_16550::{Config, Uart16550};
 
 #[cfg(feature = "pci")]
 use crate::arch::x86_64::kernel::interrupts;
@@ -16,7 +19,7 @@ static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
 	Lazy::new(|| unsafe { InterruptTicketMutex::new(UartDevice::new()) });
 
 struct UartDevice {
-	pub uart: uart_16550::SerialPort,
+	pub uart: Uart16550<PioBackend>,
 	pub buffer: VecDeque<u8>,
 }
 
@@ -27,8 +30,10 @@ impl UartDevice {
 			.serial_port_base
 			.unwrap()
 			.get();
-		let mut uart = unsafe { uart_16550::SerialPort::new(base) };
-		uart.init();
+		let mut uart = unsafe { Uart16550::new_port(base).unwrap() };
+		uart.init(Config::default()).unwrap();
+		uart.test_loopback().unwrap();
+		uart.check_remote_ready_to_receive().unwrap();
 
 		Self {
 			uart,
@@ -65,11 +70,12 @@ impl Write for SerialDevice {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let mut guard = UART_DEVICE.lock();
 
-		for &data in buf {
-			guard.uart.send(data);
+		loop {
+			match guard.uart.try_send_bytes(buf) {
+				Ok(n) => return Ok(n),
+				Err(_) => hint::spin_loop(),
+			}
 		}
-
-		Ok(buf.len())
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {
@@ -81,8 +87,9 @@ impl Write for SerialDevice {
 pub(crate) fn get_serial_handler() -> (InterruptLine, fn()) {
 	fn serial_handler() {
 		let mut guard = UART_DEVICE.lock();
-		if let Ok(c) = guard.uart.try_receive() {
-			guard.buffer.push_back(c);
+
+		while let Ok(byte) = guard.uart.try_receive_byte() {
+			guard.buffer.push_back(byte);
 		}
 
 		drop(guard);
