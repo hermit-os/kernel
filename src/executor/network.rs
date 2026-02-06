@@ -26,10 +26,10 @@ use crate::arch;
 use crate::drivers::net::{NetworkDevice, NetworkDriver};
 #[cfg(feature = "dns")]
 use crate::errno::Errno;
-use crate::executor::spawn;
+use crate::executor::{WakerRegistration, spawn};
 #[cfg(feature = "dns")]
 use crate::io;
-use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::timer_interrupts::{Source, create_timer};
 
 pub(crate) enum NetworkState<'a> {
 	Missing,
@@ -189,14 +189,48 @@ async fn dhcpv4_run() {
 	.await;
 }
 
+pub(crate) static NETWORK_WAKER: InterruptTicketMutex<WakerRegistration> =
+	InterruptTicketMutex::new(WakerRegistration::new());
+
+#[track_caller]
+pub(crate) fn wake_network_waker() {
+	if log_enabled!(log::Level::Trace) {
+		let module = core::panic::Location::caller()
+			.file()
+			.rsplit('/')
+			.map(|m| m.split_once('.').map_or(m, |i| i.0))
+			.find(|m| *m != "mod")
+			.unwrap();
+		trace!(target: module, "Waking network waker");
+	}
+
+	NETWORK_WAKER.lock().wake();
+}
+
 async fn network_run() {
 	future::poll_fn(|cx| {
 		if let Some(mut guard) = NIC.try_lock() {
 			match &mut *guard {
 				NetworkState::Initialized(nic) => {
-					nic.poll_common(now());
-					// FIXME: only wake when progress can be made
-					cx.waker().wake_by_ref();
+					let now = now();
+
+					match nic.poll_common(now) {
+						PollResult::SocketStateChanged => {
+							// Progress was made
+							cx.waker().wake_by_ref();
+						}
+						PollResult::None => {
+							// Very likely no progress can be made, so set up a timer interrupt to wake the waker
+							NETWORK_WAKER.lock().register(cx.waker());
+							nic.set_polling_mode(false);
+							if let Some(wakeup_time) = nic.poll_delay(now).map(|d| d.total_micros())
+							{
+								create_timer(Source::Network, wakeup_time);
+								trace!("Configured an interrupt for {wakeup_time:?}");
+							}
+						}
+					}
+
 					Poll::Pending
 				}
 				_ => Poll::Ready(()),
@@ -254,14 +288,7 @@ pub(crate) fn init() {
 
 	*guard = NetworkInterface::create();
 
-	if let NetworkState::Initialized(nic) = &mut *guard {
-		let time = now();
-		nic.poll_common(time);
-		let wakeup_time = nic
-			.poll_delay(time)
-			.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-		crate::core_scheduler().add_network_timer(wakeup_time);
-
+	if let NetworkState::Initialized(_) = &mut *guard {
 		spawn(network_run());
 		#[cfg(feature = "dhcpv4")]
 		spawn(dhcpv4_run());
