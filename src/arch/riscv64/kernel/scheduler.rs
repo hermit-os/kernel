@@ -1,3 +1,5 @@
+#[cfg(not(feature = "common-os"))]
+use core::arch::asm;
 use core::{mem, ptr};
 
 use align_address::Align;
@@ -8,6 +10,8 @@ use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+#[cfg(not(feature = "common-os"))]
+use crate::scheduler::task::tls::Tls;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
@@ -384,4 +388,23 @@ pub fn wakeup_handler() {
 #[unsafe(no_mangle)]
 pub fn set_current_kernel_stack() {
 	core_scheduler().set_current_kernel_stack();
+}
+
+/// Initializes the TLS for the init/boot task and sets the TP register to the respective value
+#[cfg(not(feature = "common-os"))]
+pub fn set_init_task_tls() -> Option<Tls> {
+	Tls::from_env().inspect(|tls| {
+		// we must immediately set the tls offset, because the thread is already running, so setting
+		// it via the stack doesn't work.
+		// Safety:
+		// This is safe, because the TLS address won't change during runtime. So even if the tls was
+		// already set, it will only be set to the value it previously had.
+		unsafe {
+			asm!(
+				"mv tp, {tls}",
+				tls = in(reg) tls.thread_ptr().expose_provenance(),
+				options(nomem, nostack),
+			);
+		}
+	})
 }
