@@ -3,7 +3,6 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
-use alloc::collections::btree_map::Entry;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -15,6 +14,7 @@ use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 
 use crate::errno::Errno;
+use crate::executor::block_on;
 use crate::fd::{AccessPermission, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, FileType, NodeKind, SeekWhence, VfsNode};
 use crate::syscalls::Dirent64;
@@ -261,12 +261,11 @@ impl RamFileInterface {
 	}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct RomFile {
 	data: Arc<RomFileInner>,
 }
 
-#[async_trait]
 impl VfsNode for RomFile {
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::File
@@ -278,20 +277,24 @@ impl VfsNode for RomFile {
 		))))
 	}
 
-	fn dup(&self) -> Box<dyn VfsNode> {
-		Box::new(self.clone())
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
+		block_on(async { Ok(*self.data.attr.read().await) }, None)
 	}
 
-	async fn traverse_once(&self, _component: &str) -> io::Result<Box<dyn VfsNode>> {
-		Err(Errno::Badf)
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		if components.is_empty() {
+			self.get_file_attributes()
+		} else {
+			Err(Errno::Badf)
+		}
 	}
 
-	async fn lstat(&self) -> io::Result<FileAttr> {
-		Ok(*self.data.attr.read().await)
-	}
-
-	async fn stat(&self) -> io::Result<FileAttr> {
-		Ok(*self.data.attr.read().await)
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		if components.is_empty() {
+			self.get_file_attributes()
+		} else {
+			Err(Errno::Badf)
+		}
 	}
 }
 
@@ -314,12 +317,11 @@ impl RomFile {
 	}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct RamFile {
 	data: Arc<RwLock<RamFileInner>>,
 }
 
-#[async_trait]
 impl VfsNode for RamFile {
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::File
@@ -331,20 +333,24 @@ impl VfsNode for RamFile {
 		))))
 	}
 
-	fn dup(&self) -> Box<dyn VfsNode> {
-		Box::new(self.clone())
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
+		block_on(async { Ok(self.data.read().await.attr) }, None)
 	}
 
-	async fn traverse_once(&self, _component: &str) -> io::Result<Box<dyn VfsNode>> {
-		Err(Errno::Badf)
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		if components.is_empty() {
+			self.get_file_attributes()
+		} else {
+			Err(Errno::Badf)
+		}
 	}
 
-	async fn lstat(&self) -> io::Result<FileAttr> {
-		Ok(self.data.read().await.attr)
-	}
-
-	async fn stat(&self) -> io::Result<FileAttr> {
-		Ok(self.data.read().await.attr)
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		if components.is_empty() {
+			self.get_file_attributes()
+		} else {
+			Err(Errno::Badf)
+		}
 	}
 }
 
@@ -368,12 +374,17 @@ impl RamFile {
 
 pub struct MemDirectoryInterface {
 	/// Directory entries
-	inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode>>>>,
+	inner:
+		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
 	read_idx: Mutex<usize>,
 }
 
 impl MemDirectoryInterface {
-	pub fn new(inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode>>>>) -> Self {
+	pub fn new(
+		inner: Arc<
+			RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
+		>,
+	) -> Self {
 		Self {
 			inner,
 			read_idx: Mutex::new(0),
@@ -444,7 +455,8 @@ impl ObjectInterface for MemDirectoryInterface {
 
 #[derive(Debug)]
 pub(crate) struct MemDirectory {
-	inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode>>>>,
+	inner:
+		Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>>,
 	attr: FileAttr,
 }
 
@@ -464,9 +476,48 @@ impl MemDirectory {
 			},
 		}
 	}
+
+	async fn async_traverse_open(
+		&self,
+		components: &mut Vec<&str>,
+		opt: OpenOption,
+		mode: AccessPermission,
+	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
+		if let Some(component) = components.pop() {
+			if components.is_empty() {
+				let mut guard = self.inner.write().await;
+				if let Some(file) = guard.get(component) {
+					if opt.contains(OpenOption::O_DIRECTORY)
+						&& file.get_kind() != NodeKind::Directory
+					{
+						return Err(Errno::Notdir);
+					}
+
+					if file.get_kind() == NodeKind::File || file.get_kind() == NodeKind::Directory {
+						return file.get_object();
+					} else {
+						return Err(Errno::Noent);
+					}
+				} else if opt.contains(OpenOption::O_CREAT) {
+					let file = Box::new(RamFile::new(mode));
+					guard.insert(component.to_owned(), file.clone());
+					return Ok(Arc::new(RwLock::new(RamFileInterface::new(
+						file.data.clone(),
+					))));
+				} else {
+					return Err(Errno::Noent);
+				}
+			}
+
+			if let Some(directory) = self.inner.read().await.get(component) {
+				return directory.traverse_open(components, opt, mode);
+			}
+		}
+
+		Err(Errno::Noent)
+	}
 }
 
-#[async_trait]
 impl VfsNode for MemDirectory {
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
@@ -478,117 +529,210 @@ impl VfsNode for MemDirectory {
 		))))
 	}
 
-	fn dup(&self) -> Box<dyn VfsNode> {
-		Box::new(MemDirectory {
-			inner: Arc::clone(&self.inner),
-			attr: self.attr,
-		})
-	}
-
-	async fn traverse_once(&self, component: &str) -> io::Result<Box<dyn VfsNode>> {
-		if let Some(directory) = self.inner.read().await.get(component) {
-			Ok(directory.dup())
-		} else {
-			Err(Errno::Badf)
-		}
-	}
-
-	async fn mkdir(&self, component: &str, mode: AccessPermission) -> io::Result<()> {
-		self.inner
-			.write()
-			.await
-			.insert(component.to_owned(), Box::new(MemDirectory::new(mode)));
-		Ok(())
-	}
-
-	async fn rmdir(&self, component: &str) -> io::Result<()> {
-		let mut guard = self.inner.write().await;
-		let obj = guard.remove(component).ok_or(Errno::Noent)?;
-		if obj.get_kind() == NodeKind::Directory {
-			Ok(())
-		} else {
-			guard.insert(component.to_owned(), obj);
-			Err(Errno::Notdir)
-		}
-	}
-
-	async fn unlink(&self, component: &str) -> io::Result<()> {
-		let mut guard = self.inner.write().await;
-		let obj = guard.remove(component).ok_or(Errno::Noent)?;
-		if obj.get_kind() == NodeKind::File {
-			Ok(())
-		} else {
-			guard.insert(component.to_owned(), obj);
-			Err(Errno::Isdir)
-		}
-	}
-
-	async fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
-		Ok(self
-			.inner
-			.read()
-			.await
-			.keys()
-			.map(|name| DirectoryEntry::new(name.clone()))
-			.collect())
-	}
-
-	async fn lstat(&self) -> io::Result<FileAttr> {
+	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Ok(self.attr)
 	}
 
-	async fn stat(&self) -> io::Result<FileAttr> {
-		Ok(self.attr)
+	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if let Some(directory) = self.inner.read().await.get(component) {
+						return directory.traverse_mkdir(components, mode);
+					}
+
+					if components.is_empty() {
+						self.inner
+							.write()
+							.await
+							.insert(component.to_owned(), Box::new(MemDirectory::new(mode)));
+						return Ok(());
+					}
+				}
+
+				Err(Errno::Badf)
+			},
+			None,
+		)
 	}
 
-	async fn mount(&self, component: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
-		let mut guard = self.inner.write().await;
-		match guard.entry(component.to_owned()) {
-			Entry::Vacant(vac) => {
-				vac.insert(obj);
-				Ok(())
-			}
-			Entry::Occupied(_) => Err(Errno::Badf),
-		}
+	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if components.is_empty() {
+						let mut guard = self.inner.write().await;
+
+						let obj = guard.remove(component).ok_or(Errno::Noent)?;
+						if obj.get_kind() == NodeKind::Directory {
+							return Ok(());
+						} else {
+							guard.insert(component.to_owned(), obj);
+							return Err(Errno::Notdir);
+						}
+					} else if let Some(directory) = self.inner.read().await.get(component) {
+						return directory.traverse_rmdir(components);
+					}
+				}
+
+				Err(Errno::Badf)
+			},
+			None,
+		)
 	}
 
-	async fn open(
+	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if components.is_empty() {
+						let mut guard = self.inner.write().await;
+
+						let obj = guard.remove(component).ok_or(Errno::Noent)?;
+						if obj.get_kind() == NodeKind::File {
+							return Ok(());
+						} else {
+							guard.insert(component.to_owned(), obj);
+							return Err(Errno::Isdir);
+						}
+					} else if let Some(directory) = self.inner.read().await.get(component) {
+						return directory.traverse_unlink(components);
+					}
+				}
+
+				Err(Errno::Badf)
+			},
+			None,
+		)
+	}
+
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if let Some(directory) = self.inner.read().await.get(component) {
+						directory.traverse_readdir(components)
+					} else {
+						Err(Errno::Badf)
+					}
+				} else {
+					let mut entries: Vec<DirectoryEntry> = Vec::new();
+					for name in self.inner.read().await.keys() {
+						entries.push(DirectoryEntry::new(name.clone()));
+					}
+
+					Ok(entries)
+				}
+			},
+			None,
+		)
+	}
+
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if components.is_empty()
+						&& let Some(node) = self.inner.read().await.get(component)
+					{
+						return node.get_file_attributes();
+					}
+
+					if let Some(directory) = self.inner.read().await.get(component) {
+						directory.traverse_lstat(components)
+					} else {
+						Err(Errno::Badf)
+					}
+				} else {
+					Err(Errno::Nosys)
+				}
+			},
+			None,
+		)
+	}
+
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if components.is_empty()
+						&& let Some(node) = self.inner.read().await.get(component)
+					{
+						return node.get_file_attributes();
+					}
+
+					if let Some(directory) = self.inner.read().await.get(component) {
+						directory.traverse_stat(components)
+					} else {
+						Err(Errno::Badf)
+					}
+				} else {
+					Err(Errno::Nosys)
+				}
+			},
+			None,
+		)
+	}
+
+	fn traverse_mount(
 		&self,
-		component: &str,
+		components: &mut Vec<&str>,
+		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
+	) -> io::Result<()> {
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if let Some(directory) = self.inner.read().await.get(component) {
+						return directory.traverse_mount(components, obj);
+					}
+
+					if components.is_empty() {
+						self.inner.write().await.insert(component.to_owned(), obj);
+						return Ok(());
+					}
+				}
+
+				Err(Errno::Badf)
+			},
+			None,
+		)
+	}
+
+	fn traverse_open(
+		&self,
+		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		let mut guard = self.inner.write().await;
-		if let Some(file) = guard.get(component) {
-			if opt.contains(OpenOption::O_DIRECTORY) && file.get_kind() != NodeKind::Directory {
-				Err(Errno::Notdir)
-			} else if file.get_kind() == NodeKind::File || file.get_kind() == NodeKind::Directory {
-				file.get_object()
-			} else {
-				Err(Errno::Noent)
-			}
-		} else if opt.contains(OpenOption::O_CREAT) {
-			let file = Box::new(RamFile::new(mode));
-			guard.insert(component.to_owned(), file.clone());
-			Ok(Arc::new(RwLock::new(RamFileInterface::new(
-				file.data.clone(),
-			))))
-		} else {
-			Err(Errno::Noent)
-		}
+		block_on(self.async_traverse_open(components, opt, mode), None)
 	}
 
-	async fn create_file(
+	fn traverse_create_file(
 		&self,
-		component: &str,
+		components: &mut Vec<&str>,
 		data: &'static [u8],
 		mode: AccessPermission,
 	) -> io::Result<()> {
-		let file = RomFile::new(data, mode);
-		self.inner
-			.write()
-			.await
-			.insert(component.to_owned(), Box::new(file));
-		Ok(())
+		block_on(
+			async {
+				if let Some(component) = components.pop() {
+					if components.is_empty() {
+						let file = RomFile::new(data, mode);
+						self.inner
+							.write()
+							.await
+							.insert(component.to_owned(), Box::new(file));
+						return Ok(());
+					}
+
+					if let Some(directory) = self.inner.read().await.get(component) {
+						return directory.traverse_create_file(components, data, mode);
+					}
+				}
+
+				Err(Errno::Noent)
+			},
+			None,
+		)
 	}
 }
