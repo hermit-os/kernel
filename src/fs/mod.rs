@@ -103,7 +103,7 @@ pub(crate) trait VfsNode: fmt::Debug {
 	fn traverse_mount(
 		&self,
 		_components: &mut Vec<&str>,
-		_obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
+		_obj: Box<dyn VfsNode + Send + Sync>,
 	) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
@@ -252,11 +252,7 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	pub fn mount(
-		&self,
-		path: &str,
-		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> io::Result<()> {
+	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode + Send + Sync>) -> io::Result<()> {
 		debug!("Mounting {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();
