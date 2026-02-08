@@ -740,6 +740,7 @@ mod dirent_display {
 	pub(super) struct Dirent64Display<'a> {
 		dirent: &'a Dirent64,
 	}
+
 	impl<'a> Dirent64Display<'a> {
 		/// # Safety
 		/// The `d_name` ptr of `dirent` must be valid and zero-terminated.
