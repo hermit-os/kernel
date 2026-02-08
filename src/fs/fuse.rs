@@ -63,6 +63,7 @@ pub(crate) mod ops {
 	#![allow(clippy::type_complexity)]
 	use alloc::boxed::Box;
 	use alloc::ffi::CString;
+	use core::fmt;
 
 	use fuse_abi::linux;
 	use fuse_abi::linux::*;
@@ -81,9 +82,9 @@ pub(crate) mod ops {
 	pub(crate) trait Op {
 		const OP_CODE: fuse_opcode;
 
-		type InStruct: core::fmt::Debug;
+		type InStruct: fmt::Debug;
 		type InPayload: ?Sized;
-		type OutStruct: core::fmt::Debug;
+		type OutStruct: fmt::Debug;
 		type OutPayload: ?Sized;
 	}
 

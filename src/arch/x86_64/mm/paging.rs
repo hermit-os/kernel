@@ -1,5 +1,4 @@
-use core::fmt::Debug;
-use core::ptr;
+use core::{fmt, ptr};
 
 use free_list::PageLayout;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
@@ -146,7 +145,7 @@ pub fn map<S>(
 	count: usize,
 	flags: PageTableEntryFlags,
 ) where
-	S: PageSize + Debug,
+	S: PageSize + fmt::Debug,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let pages = {
@@ -173,7 +172,7 @@ pub fn map<S>(
 	) -> bool
 	where
 		M: Mapper<S>,
-		S: PageSize + Debug,
+		S: PageSize + fmt::Debug,
 	{
 		let mut unmapped = false;
 		for (page, frame) in pages.zip(frames) {
@@ -205,7 +204,7 @@ pub fn map<S>(
 /// the number of successful mapped pages are returned as error value.
 pub fn map_heap<S>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
-	S: PageSize + Debug,
+	S: PageSize + fmt::Debug,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let flags = {
@@ -228,7 +227,7 @@ where
 
 pub fn identity_map<S>(phys_addr: PhysAddr)
 where
-	S: PageSize + Debug,
+	S: PageSize + fmt::Debug,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	let frame = PhysFrame::<S>::from_start_address(phys_addr.into()).unwrap();
@@ -253,7 +252,7 @@ where
 
 pub fn unmap<S>(virtual_address: VirtAddr, count: usize)
 where
-	S: PageSize + Debug,
+	S: PageSize + fmt::Debug,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
 	trace!("Unmapping virtual address {virtual_address:p} ({count} pages)");

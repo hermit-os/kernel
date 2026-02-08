@@ -10,6 +10,7 @@ extern crate alloc;
 mod common;
 
 use alloc::vec::Vec;
+use core::fmt;
 use core::mem::size_of;
 
 const PATTERN: u8 = 0xab;
@@ -19,7 +20,7 @@ const PATTERN: u8 = 0xab;
 /// Probably not a super good test
 fn mem<T>()
 where
-	T: core::fmt::Debug,
+	T: fmt::Debug,
 	T: num_traits::int::PrimInt,
 {
 	unsafe extern "C" {

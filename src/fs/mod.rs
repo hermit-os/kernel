@@ -8,6 +8,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::BitAnd;
 
 use async_trait::async_trait;
@@ -50,7 +51,7 @@ pub(crate) enum NodeKind {
 }
 
 /// VfsNode represents an internal node of the ramdisk.
-pub(crate) trait VfsNode: core::fmt::Debug {
+pub(crate) trait VfsNode: fmt::Debug {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
 

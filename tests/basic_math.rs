@@ -8,6 +8,7 @@
 #[macro_use]
 extern crate float_cmp;
 
+use core::fmt;
 use core::hint::black_box;
 
 use common::exit;
@@ -42,7 +43,7 @@ fn subtest() {
 
 fn int_test<T>()
 where
-	T: core::fmt::Debug,
+	T: fmt::Debug,
 	T: num_traits::int::PrimInt,
 {
 	let fifteen = T::from(15).unwrap();
@@ -74,7 +75,7 @@ where
 
 fn sint_test<T>()
 where
-	T: core::fmt::Debug,
+	T: fmt::Debug,
 	T: num_traits::sign::Signed,
 	T: num_traits::int::PrimInt,
 {
