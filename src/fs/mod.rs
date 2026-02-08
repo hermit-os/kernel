@@ -51,7 +51,7 @@ pub(crate) enum NodeKind {
 }
 
 /// VfsNode represents an internal node of the ramdisk.
-pub(crate) trait VfsNode: fmt::Debug {
+pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
 
@@ -103,7 +103,7 @@ pub(crate) trait VfsNode: fmt::Debug {
 	fn traverse_mount(
 		&self,
 		_components: &mut Vec<&str>,
-		_obj: Box<dyn VfsNode + Send + Sync>,
+		_obj: Box<dyn VfsNode>,
 	) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
@@ -252,7 +252,7 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode + Send + Sync>) -> io::Result<()> {
+	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		debug!("Mounting {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();

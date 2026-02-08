@@ -374,12 +374,12 @@ impl RamFile {
 
 pub struct MemDirectoryInterface {
 	/// Directory entries
-	inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + Send + Sync>>>>,
+	inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode>>>>,
 	read_idx: Mutex<usize>,
 }
 
 impl MemDirectoryInterface {
-	pub fn new(inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + Send + Sync>>>>) -> Self {
+	pub fn new(inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode>>>>) -> Self {
 		Self {
 			inner,
 			read_idx: Mutex::new(0),
@@ -450,7 +450,7 @@ impl ObjectInterface for MemDirectoryInterface {
 
 #[derive(Debug)]
 pub(crate) struct MemDirectory {
-	inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode + Send + Sync>>>>,
+	inner: Arc<RwLock<BTreeMap<String, Box<dyn VfsNode>>>>,
 	attr: FileAttr,
 }
 
@@ -668,11 +668,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_mount(
-		&self,
-		components: &mut Vec<&str>,
-		obj: Box<dyn VfsNode + Send + Sync>,
-	) -> io::Result<()> {
+	fn traverse_mount(&self, components: &mut Vec<&str>, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
