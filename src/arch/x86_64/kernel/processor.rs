@@ -30,7 +30,7 @@ use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{interrupts, pic, pit};
 use crate::env;
 
-/// see <http://biosbits.org>.
+/// See <http://biosbits.org>.
 const MSR_PLATFORM_INFO: u32 = 0xce;
 
 /// See Table 35-2. See Section 14.1, Enhanced Intel  Speedstep® Technology.
@@ -45,7 +45,7 @@ const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
 /// Maximum Ratio Limit of Turbo Mode RO if MSR_PLATFORM_INFO.\[28\] = 0, RW if MSR_PLATFORM_INFO.\[28\] = 1
 const MSR_TURBO_RATIO_LIMIT: u32 = 0x1ad;
 
-/// if CPUID.6H:ECX\[3\] = 1
+/// If CPUID.6H:ECX\[3\] = 1
 const IA32_ENERGY_PERF_BIAS: u32 = 0x1b0;
 
 // See Intel SDM - Volume 1 - Section 7.3.17.1

@@ -21,9 +21,9 @@ use crate::env;
 pub struct FPUState {
 	/// Advanced SIMD 128-bit vector registers.
 	q: [u128; 32],
-	/// fpcr register.
+	/// FPCR register.
 	fpcr: u64,
-	/// fpsr register.
+	/// FPSR register.
 	fpsr: u64,
 }
 

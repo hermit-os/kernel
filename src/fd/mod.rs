@@ -144,11 +144,11 @@ bitflags! {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PollFd {
-	/// file descriptor
+	/// File descriptor
 	pub fd: i32,
-	/// events to look for
+	/// Events to look for
 	pub events: PollEvent,
-	/// events returned
+	/// Events returned
 	pub revents: PollEvent,
 }
 
@@ -197,7 +197,7 @@ impl Default for AccessPermission {
 
 #[async_trait]
 pub(crate) trait ObjectInterface: Sync + Send {
-	/// check if an IO event is possible
+	/// Check if an IO event is possible
 	async fn poll(&self, _event: PollEvent) -> io::Result<PollEvent> {
 		Ok(PollEvent::empty())
 	}
@@ -282,13 +282,13 @@ pub(crate) trait ObjectInterface: Sync + Send {
 		Ok(None)
 	}
 
-	/// receive a message from a socket
+	/// Receive a message from a socket
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 	async fn recvfrom(&self, _buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
 		Err(Errno::Nosys)
 	}
 
-	/// send a message from a socket
+	/// Send a message from a socket
 	///
 	/// The sendto() function shall send a message.
 	/// If the socket is a connectionless-mode socket, the message shall
@@ -300,7 +300,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 		Err(Errno::Nosys)
 	}
 
-	/// shut down part of a full-duplex connection
+	/// Shut down part of a full-duplex connection
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 	async fn shutdown(&self, _how: i32) -> io::Result<()> {
 		Err(Errno::Nosys)

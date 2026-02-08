@@ -55,7 +55,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
 
-	/// determines the current file attribute
+	/// Determines the current file attribute
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
@@ -287,25 +287,25 @@ pub struct FileAttr {
 	pub st_dev: u64,
 	pub st_ino: u64,
 	pub st_nlink: u64,
-	/// access permissions
+	/// Access permissions
 	pub st_mode: AccessPermission,
-	/// user id
+	/// User id
 	pub st_uid: u32,
-	/// group id
+	/// Group id
 	pub st_gid: u32,
-	/// device id
+	/// Device id
 	pub st_rdev: u64,
-	/// size in bytes
+	/// Size in bytes
 	pub st_size: i64,
-	/// block size
+	/// Block size
 	pub st_blksize: i64,
-	/// size in blocks
+	/// Size in blocks
 	pub st_blocks: i64,
-	/// time of last access
+	/// Time of last access
 	pub st_atim: timespec,
-	/// time of last modification
+	/// Time of last modification
 	pub st_mtim: timespec,
-	/// time of last status change
+	/// Time of last status change
 	pub st_ctim: timespec,
 }
 

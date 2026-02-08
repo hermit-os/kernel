@@ -182,13 +182,13 @@ enum PhyPartnerAbility {
 	ANEnableMask = 0x1000,
 }
 
-/// size of a receive buffer (must be multiple of 64)
+/// Size of a receive buffer (must be multiple of 64)
 const RX_BUF_LEN: u32 = 1600;
 const RX_BUFFER_MULTIPLE: u32 = 64;
 /// Number of receive buffers
 const RX_BUF_NUM: u32 = 64;
 
-/// size of a transmit buffer
+/// Size of a transmit buffer
 const TX_BUF_LEN: u32 = 1600;
 /// Number of transmit buffers
 const TX_BUF_NUM: u32 = 1;

@@ -23,9 +23,9 @@ use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::pci::PciDevice;
 use crate::mm::device_alloc::DeviceAlloc;
 
-/// size of the receive buffer
+/// Size of the receive buffer
 const RX_BUF_LEN: usize = 8192;
-/// size of the send buffer
+/// Size of the send buffer
 const TX_BUF_LEN: usize = 4096;
 
 /// Reset, set to 1 to invoke S/W reset, held to 1 while resetting
@@ -41,24 +41,24 @@ const CR_BUFE: u8 = 0x01;
 const CR9346_EEM1: u8 = 0x80;
 /// 00 = Normal, 01 = Auto-load, 10 = Programming, 11 = Config, Register write enabled
 const CR9346_EEM0: u8 = 0x40;
-/// status of EESK
+/// Status of EESK
 const CR9346_EESK: u8 = 0x4;
-/// status of EEDI
+/// Status of EEDI
 const CR9346_EEDI: u8 = 0x2;
-/// status of EEDO
+/// Status of EEDO
 const CR9346_EEDO: u8 = 0x1;
 
-/// leds status
+/// Leds status
 const CONFIG1_LEDS: u8 = 0xc0;
-/// is the driver loaded ?
+/// Is the driver loaded ?
 const CONFIG1_DVRLOAD: u8 = 0x20;
-/// lanwake mode
+/// Lanwake mode
 const CONFIG1_LWACT: u8 = 0x10;
 /// Memory mapping enabled ?
 const CONFIG1_MEMMAP: u8 = 0x8;
 /// IO map enabled ?
 const CONFIG1_IOMAP: u8 = 0x4;
-/// enable the virtual product data
+/// Enable the virtual product data
 const CONFIG1_VPD: u8 = 0x2;
 /// Power Management Enable
 const CONFIG1_PMEN: u8 = 0x1;

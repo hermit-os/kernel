@@ -21,7 +21,7 @@ use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 #[derive(Debug)]
 #[repr(C, packed)]
 pub(crate) struct State {
-	/// stack selector
+	/// Stack selector
 	pub spsel: u64,
 	/// Exception Link Register
 	pub elr_el1: extern "C" fn(extern "C" fn(usize), usize) -> !,
@@ -96,16 +96,16 @@ pub(crate) struct State {
 }
 
 pub struct BootStack {
-	/// stack for kernel tasks
+	/// Stack for kernel tasks
 	stack: VirtAddr,
 }
 
 pub struct CommonStack {
-	/// start address of allocated virtual memory region
+	/// Start address of allocated virtual memory region
 	virt_addr: VirtAddr,
-	/// start address of allocated virtual memory region
+	/// Start address of allocated virtual memory region
 	phys_addr: PhysAddr,
-	/// total size of all stacks
+	/// Total size of all stacks
 	total_size: usize,
 }
 

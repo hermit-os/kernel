@@ -14,9 +14,9 @@ pub type suseconds_t = i32;
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct timeval {
-	/// seconds
+	/// Seconds
 	pub tv_sec: time_t,
-	/// microseconds
+	/// Microseconds
 	pub tv_usec: suseconds_t,
 }
 
@@ -48,9 +48,9 @@ pub struct itimerval {
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(C)]
 pub struct timespec {
-	/// seconds
+	/// Seconds
 	pub tv_sec: time_t,
-	/// nanoseconds
+	/// Nanoseconds
 	pub tv_nsec: i32,
 }
 

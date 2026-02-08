@@ -2,36 +2,36 @@ use core::arch::naked_asm;
 
 use crate::syscalls::*;
 
-/// number of the system call `exit`
+/// Number of the system call `exit`
 const SYSNO_EXIT: usize = 0;
-/// number of the system call `write`
+/// Number of the system call `write`
 const SYSNO_WRITE: usize = 1;
-/// number of the system call `read`
+/// Number of the system call `read`
 const SYSNO_READ: usize = 2;
-/// number of the system call `usleep`
+/// Number of the system call `usleep`
 const SYSNO_USLEEP: usize = 3;
-/// number of the system call `getpid`
+/// Number of the system call `getpid`
 const SYSNO_GETPID: usize = 4;
-/// number of the system call `yield`
+/// Number of the system call `yield`
 const SYSNO_YIELD: usize = 5;
-/// number of the system call `read_entropy`
+/// Number of the system call `read_entropy`
 const SYSNO_READ_ENTROPY: usize = 6;
-/// number of the system call `get_processor_count`
+/// Number of the system call `get_processor_count`
 const SYSNO_GET_PROCESSOR_COUNT: usize = 7;
-/// number of the system call `close`
+/// Number of the system call `close`
 const SYSNO_CLOSE: usize = 8;
-/// number of the system call `futex_wait`
+/// Number of the system call `futex_wait`
 const SYSNO_FUTEX_WAIT: usize = 9;
-/// number of the system call `futex_wake`
+/// Number of the system call `futex_wake`
 const SYSNO_FUTEX_WAKE: usize = 10;
-/// number of the system call `open`
+/// Number of the system call `open`
 const SYSNO_OPEN: usize = 11;
-/// number of the system call `writev`
+/// Number of the system call `writev`
 const SYSNO_WRITEV: usize = 12;
-/// number of the system call `readv`
+/// Number of the system call `readv`
 const SYSNO_READV: usize = 13;
 
-/// total number of system calls
+/// Total number of system calls
 const NO_SYSCALLS: usize = 32;
 
 extern "C" fn invalid_syscall(sys_no: u64) -> ! {

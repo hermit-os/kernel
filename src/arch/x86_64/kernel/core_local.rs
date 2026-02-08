@@ -28,7 +28,7 @@ pub(crate) struct CoreLocal {
 	scheduler: Cell<*mut PerCoreScheduler>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: Cell<*mut TaskStateSegment>,
-	/// start address of the kernel stack
+	/// Start address of the kernel stack
 	pub kernel_stack: Cell<*mut u8>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
