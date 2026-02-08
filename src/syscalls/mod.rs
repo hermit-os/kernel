@@ -736,7 +736,9 @@ mod dirent_display {
 
 	use super::Dirent64;
 
-	/// Helperstruct for unsafe formatting of [`Dirent64`]
+	/// [`Display`] adapter for [`Dirent64`].
+	///
+	/// [`Display`]: fmt::Display
 	pub(super) struct Dirent64Display<'a> {
 		dirent: &'a Dirent64,
 	}

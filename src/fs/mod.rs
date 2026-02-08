@@ -65,7 +65,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to create a new directory node
+	/// Create a new directory node
 	fn traverse_mkdir(
 		&self,
 		_components: &mut Vec<&str>,
@@ -74,32 +74,32 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to delete a directory node
+	/// Delete a directory node
 	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to remove the specified file
+	/// Remove the specified file
 	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to open a directory
+	/// Open a directory
 	fn traverse_readdir(&self, _components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to get file status
+	/// Get file status
 	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to get file status
+	/// Get file status
 	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to mount a file system
+	/// Mount a file system
 	fn traverse_mount(
 		&self,
 		_components: &mut Vec<&str>,
@@ -108,7 +108,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to open a file
+	/// Open a file
 	fn traverse_open(
 		&self,
 		_components: &mut Vec<&str>,
@@ -118,7 +118,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to create a read-only file
+	/// Create a read-only file
 	fn traverse_create_file(
 		&self,
 		_components: &mut Vec<&str>,
