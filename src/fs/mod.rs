@@ -64,53 +64,62 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
+	/// Duplicate an object, if possible
+	fn dup(&self) -> Box<dyn VfsNode>;
+
+	/// Traverse into a subdirectory or file
+	fn traverse_once(&self, _component: &str) -> io::Result<Box<dyn VfsNode>> {
+		Err(Errno::Nosys)
+	}
+
+	/// Traverse into a deep subdirectory or file
+	fn traverse_multiple(&self, path: &str) -> io::Result<Box<dyn VfsNode>> {
+		let mut node = self.dup();
+		for component in path.split('/').skip(1) {
+			node = node.traverse_once(component)?;
+		}
+		Ok(node)
+	}
+
 	/// Helper function to create a new directory node
-	fn traverse_mkdir(
-		&self,
-		_components: &mut Vec<&str>,
-		_mode: AccessPermission,
-	) -> io::Result<()> {
+	fn mkdir(&self, _component: &str, _mode: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to delete a directory node
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	fn rmdir(&self, _component: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to remove the specified file
-	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	fn unlink(&self, _component: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to open a directory
-	fn traverse_readdir(&self, _components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to get file status
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn lstat(&self) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to get file status
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn stat(&self) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to mount a file system
-	fn traverse_mount(
-		&self,
-		_components: &mut Vec<&str>,
-		_obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> io::Result<()> {
+	fn mount(&self, _component: &str, _obj: Box<dyn VfsNode + Send + Sync>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Helper function to open a file
-	fn traverse_open(
+	fn open(
 		&self,
-		_components: &mut Vec<&str>,
+		_component: &str,
 		_option: OpenOption,
 		_mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
@@ -118,9 +127,9 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 
 	/// Helper function to create a read-only file
-	fn traverse_create_file(
+	fn create_file(
 		&self,
-		_components: &mut Vec<&str>,
+		_component: &str,
 		_data: &'static [u8],
 		_mode: AccessPermission,
 	) -> io::Result<()> {
@@ -157,6 +166,13 @@ impl Filesystem {
 		}
 	}
 
+	/// Traverses a path except for the final component
+	fn traverse_prefinal<'a>(&self, path: &'a str) -> io::Result<(Box<dyn VfsNode>, &'a str)> {
+		let last_slash = path.rfind('/').ok_or(Errno::Nosys)?;
+		let ret = self.root.traverse_multiple(&path[..last_slash])?;
+		Ok((ret, &path[last_slash + 1..]))
+	}
+
 	/// Tries to open file at given path.
 	pub fn open(
 		&self,
@@ -165,45 +181,29 @@ impl Filesystem {
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		debug!("Open file {path} with {opt:?}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_open(&mut components, opt, mode)
+		let (dir, component) = self.traverse_prefinal(path)?;
+		dir.open(component, opt, mode)
 	}
 
 	/// Unlinks a file given by path
 	pub fn unlink(&self, path: &str) -> io::Result<()> {
 		debug!("Unlinking file {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_unlink(&mut components)
+		let (dir, component) = self.traverse_prefinal(path)?;
+		dir.unlink(component)
 	}
 
 	/// Remove directory given by path
 	pub fn rmdir(&self, path: &str) -> io::Result<()> {
 		debug!("Removing directory {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_rmdir(&mut components)
+		let (dir, component) = self.traverse_prefinal(path)?;
+		dir.rmdir(component)
 	}
 
 	/// Create directory given by path
 	pub fn mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
 		debug!("Create directory {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_mkdir(&mut components, mode)
+		let (dir, component) = self.traverse_prefinal(path)?;
+		dir.mkdir(component, mode)
 	}
 
 	pub fn opendir(&self, path: &str) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
@@ -215,39 +215,19 @@ impl Filesystem {
 
 	/// List given directory
 	pub fn readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
-		if path.trim() == "/" {
-			let mut components: Vec<&str> = Vec::new();
-			self.root.traverse_readdir(&mut components)
-		} else {
-			let mut components: Vec<&str> = path.split('/').collect();
-
-			components.reverse();
-			components.pop();
-
-			self.root.traverse_readdir(&mut components)
-		}
+		self.root.traverse_multiple(path)?.readdir()
 	}
 
 	/// stat
 	pub fn stat(&self, path: &str) -> io::Result<FileAttr> {
 		debug!("Getting stats {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_stat(&mut components)
+		self.root.traverse_multiple(path)?.stat()
 	}
 
 	/// lstat
 	pub fn lstat(&self, path: &str) -> io::Result<FileAttr> {
 		debug!("Getting lstats {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_lstat(&mut components)
+		self.root.traverse_multiple(path)?.lstat()
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
@@ -257,13 +237,8 @@ impl Filesystem {
 		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
 	) -> io::Result<()> {
 		debug!("Mounting {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_mount(&mut components, obj)
+		let (dir, component) = self.traverse_prefinal(path)?;
+		dir.mount(component, obj)
 	}
 
 	/// Create read-only file
@@ -274,13 +249,8 @@ impl Filesystem {
 		mode: AccessPermission,
 	) -> io::Result<()> {
 		debug!("Create read-only file {path}");
-
-		let mut components: Vec<&str> = path.split('/').collect();
-
-		components.reverse();
-		components.pop();
-
-		self.root.traverse_create_file(&mut components, data, mode)
+		let (dir, component) = self.traverse_prefinal(path)?;
+		dir.create_file(component, data, mode)
 	}
 }
 

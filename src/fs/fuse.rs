@@ -1,5 +1,6 @@
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::collections::btree_set::BTreeSet;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -1093,9 +1094,13 @@ impl ObjectInterface for FuseDirectoryHandle {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+// The `original_prefix` is the one the directory was originally initialized with,
+// `prefix` is the current prefix (normally, `prefix` has `original_prefix` as its prefix).
+// This distinction is used for symlink resolution and directory traversal.
 pub(crate) struct FuseDirectory {
-	prefix: Option<String>,
+	original_prefix: Arc<str>,
+	prefix: String,
 	attr: FileAttr,
 }
 
@@ -1105,7 +1110,8 @@ impl FuseDirectory {
 		let t = timespec::from_usec(microseconds as i64);
 
 		FuseDirectory {
-			prefix,
+			original_prefix: Arc::from(prefix.as_deref().unwrap_or_default()),
+			prefix: prefix.unwrap_or_default(),
 			attr: FileAttr {
 				st_mode: AccessPermission::from_bits(0o777).unwrap() | AccessPermission::S_IFDIR,
 				st_atim: t,
@@ -1116,17 +1122,22 @@ impl FuseDirectory {
 		}
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
+	fn traversal_this(&self) -> CString {
+		let mut path = String::new();
+		path.push('/');
+		path.push_str(&self.prefix);
+		CString::new(path).unwrap()
+	}
+
+	fn traversal_path(&self, component: &str) -> CString {
+		let mut path = String::new();
+		if !self.prefix.is_empty() {
+			path.push('/');
+			path.push_str(&self.prefix);
 		}
+		path.push('/');
+		path.push_str(component);
+		CString::new(path).unwrap()
 	}
 }
 
@@ -1142,12 +1153,56 @@ impl VfsNode for FuseDirectory {
 
 	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-			self.prefix.clone(),
+			if self.prefix.is_empty() {
+				None
+			} else {
+				Some(self.prefix.clone())
+			},
 		))))
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
-		let path = self.traversal_path(components);
+	fn dup(&self) -> Box<dyn VfsNode> {
+		Box::new(self.clone())
+	}
+
+	fn traverse_once(&self, component: &str) -> io::Result<Box<dyn VfsNode>> {
+		let mut prefix = self.prefix.clone();
+		if !prefix.is_empty() {
+			prefix.push('/');
+		}
+		prefix.push_str(component);
+
+		Ok(Box::new(Self {
+			original_prefix: Arc::clone(&self.original_prefix),
+			prefix,
+			attr: todo!(),
+		}))
+	}
+
+	fn traverse_multiple(&self, mut path: &str) -> io::Result<Box<dyn VfsNode>> {
+		let mut prefix = self.prefix.clone();
+		// this part prevents inserting double-slashes or no slashes between prefix and path
+		if !path.is_empty() {
+			if let Some(x) = path.strip_prefix("/") {
+				path = x;
+			} else {
+				return Err(Errno::Nosys);
+			}
+			if !prefix.is_empty() {
+				prefix.push('/');
+			}
+		}
+		prefix.push_str(path);
+
+		Ok(Box::new(Self {
+			original_prefix: Arc::clone(&self.original_prefix),
+			prefix,
+			attr: todo!(),
+		}))
+	}
+
+	fn readdir(&self) -> io::Result<Vec<DirectoryEntry>> {
+		let path = self.traversal_this();
 
 		debug!("FUSE opendir: {path:#?}");
 
@@ -1226,36 +1281,55 @@ impl VfsNode for FuseDirectory {
 		Ok(entries)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn stat(&self) -> io::Result<FileAttr> {
+		let mut prefix = alloc::borrow::Cow::Borrowed(&*self.prefix);
 
-		debug!("FUSE stat: {path:#?}");
+		// handle infinite recursion
+		let mut encountered = BTreeSet::<String>::new();
 
-		// Is there a better way to implement this?
-		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
-		let rsp = get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		while encountered.insert((*prefix).to_owned()) {
+			let mut path = String::new();
+			path.push('/');
+			path.push_str(&prefix);
+			let path = CString::new(path).unwrap();
 
-		if rsp.headers.out_header.error != 0 {
-			return Err(Errno::try_from(-rsp.headers.out_header.error).unwrap());
+			debug!("FUSE stat: {path:#?}");
+
+			// Is there a better way to implement this?
+			let (cmd, rsp_payload_len) = ops::Lookup::create(path);
+			let rsp = get_filesystem_driver()
+				.unwrap()
+				.lock()
+				.send_command(cmd, rsp_payload_len)?;
+
+			if rsp.headers.out_header.error != 0 {
+				return Err(Errno::try_from(-rsp.headers.out_header.error).unwrap());
+			}
+
+			let entry_out = rsp.headers.op_header;
+			let attr = entry_out.attr;
+
+			if attr.mode & S_IFMT != S_IFLNK {
+				return Ok(FileAttr::from(attr));
+			}
+
+			let path = readlink(entry_out.nodeid)?;
+
+			// rewind and re-traverse
+			let mut new_prefix: String = (*self.original_prefix).to_owned();
+			if !path.starts_with('/') {
+				new_prefix.push('/');
+			}
+
+			new_prefix.push_str(&path);
+			prefix = alloc::borrow::Cow::Owned(new_prefix);
 		}
 
-		let entry_out = rsp.headers.op_header;
-		let attr = entry_out.attr;
-
-		if attr.mode & S_IFMT != S_IFLNK {
-			return Ok(FileAttr::from(attr));
-		}
-
-		let path = readlink(entry_out.nodeid)?;
-		let mut components: Vec<&str> = path.split('/').collect();
-		self.traverse_stat(&mut components)
+		Err(Errno::Loop)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn lstat(&self) -> io::Result<FileAttr> {
+		let path = self.traversal_this();
 
 		debug!("FUSE lstat: {path:#?}");
 
@@ -1267,13 +1341,13 @@ impl VfsNode for FuseDirectory {
 		Ok(FileAttr::from(rsp.headers.op_header.attr))
 	}
 
-	fn traverse_open(
+	fn open(
 		&self,
-		components: &mut Vec<&str>,
+		component: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(component);
 
 		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
 
@@ -1345,8 +1419,8 @@ impl VfsNode for FuseDirectory {
 		}
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn unlink(&self, component: &str) -> io::Result<()> {
+		let path = self.traversal_path(component);
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
 		let rsp = get_filesystem_driver()
@@ -1358,8 +1432,8 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn rmdir(&self, component: &str) -> io::Result<()> {
+		let path = self.traversal_path(component);
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
 		let rsp = get_filesystem_driver()
@@ -1371,8 +1445,8 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn mkdir(&self, component: &str, mode: AccessPermission) -> io::Result<()> {
+		let path = self.traversal_path(component);
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
 		let rsp = get_filesystem_driver()
