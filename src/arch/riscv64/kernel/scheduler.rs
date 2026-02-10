@@ -8,6 +8,7 @@ use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
@@ -266,42 +267,12 @@ impl Drop for TaskStacks {
 	}
 }
 
-extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
-	use crate::scheduler::PerCoreSchedulerExt;
-
-	// Check if the task (process or thread) uses Thread-Local-Storage.
-	/*let tls_size = unsafe { &tls_end as *const u8 as usize - &tls_start as *const u8 as usize };
-	if tls_size > 0 {
-		// Yes, it does, so we have to allocate TLS memory.
-		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
-		let tls_allocation_size = tls_size + mem::size_of::<usize>();
-		let tls = TaskTLS::new(tls_allocation_size);
-
-		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = tls.address() + tls_size;
-
-		// TODO: Implement AArch64 TLS
-
-		// Associate the TLS memory to the current task.
-		let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
-		debug!(
-			"Set up TLS for task {} at address {:#X}",
-			current_task_borrowed.id,
-			tls.address()
-		);
-		current_task_borrowed.tls = Some(tls);
-	}*/
-
+extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Call the actual entry point of the task.
-	//unsafe{debug!("state: {:#X?}", *((func as usize -31*8 ) as *const crate::arch::riscv64::kernel::scheduler::State));}
-	//panic!("Not impl");
-	//println!("Task start");
 	func(arg);
-	//println!("Task end");
-
-	// switch_to_kernel!();
 
 	// Exit task
+	debug!("Exit thread with error code 0!");
 	core_scheduler().exit(0)
 }
 
