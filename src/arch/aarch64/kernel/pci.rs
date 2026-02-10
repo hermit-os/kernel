@@ -1,3 +1,5 @@
+use core::ptr;
+
 use arm_gic::{IntId, Trigger};
 use bit_field::BitField;
 use fdt::Fdt;
@@ -44,15 +46,15 @@ impl PciConfigRegion {
 impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, offset: u16) -> u32 {
-		let ptr = core::ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
-		unsafe { u32::from_le(core::ptr::read_volatile(ptr)) }
+		let ptr = ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
+		unsafe { u32::from_le(ptr::read_volatile(ptr)) }
 	}
 
 	#[inline]
 	unsafe fn write(&self, pci_addr: PciAddress, offset: u16, value: u32) {
-		let ptr = core::ptr::with_exposed_provenance_mut(self.addr_from_offset(pci_addr, offset));
+		let ptr = ptr::with_exposed_provenance_mut(self.addr_from_offset(pci_addr, offset));
 		unsafe {
-			core::ptr::write_volatile(ptr, value.to_le());
+			ptr::write_volatile(ptr, value.to_le());
 		}
 	}
 }

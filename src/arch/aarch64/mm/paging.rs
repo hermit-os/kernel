@@ -539,7 +539,7 @@ where
 
 		// Calculate the address of the subtable.
 		let index = page.table_index::<L>();
-		let table_address = core::ptr::from_ref(self).addr();
+		let table_address = ptr::from_ref(self).addr();
 		let subtable_address =
 			(table_address << PAGE_MAP_BITS) & !(usize::MAX << 48) | (index << PAGE_BITS);
 		unsafe { &mut *(ptr::with_exposed_provenance_mut(subtable_address)) }

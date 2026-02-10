@@ -8,6 +8,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem::{MaybeUninit, offset_of};
+use core::ptr;
 
 use align_address::Align;
 use async_lock::{Mutex, RwLock};
@@ -419,12 +420,8 @@ impl ObjectInterface for MemDirectoryInterface {
 					d_type: FileType::Unknown, // TODO: Proper filetype
 					d_name: PhantomData {},
 				});
-				let nameptr = core::ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				core::ptr::copy_nonoverlapping(
-					name.as_bytes().as_ptr().cast::<u8>(),
-					nameptr,
-					namelen,
-				);
+				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
+				ptr::copy_nonoverlapping(name.as_bytes().as_ptr().cast::<u8>(), nameptr, namelen);
 				nameptr.add(namelen).write(0); // zero termination
 			}
 

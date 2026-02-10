@@ -1,5 +1,6 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
+use core::ptr;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64_cpu::asm::barrier::{ISH, SY, dmb, isb};
@@ -149,7 +150,7 @@ pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
 
-	core::ptr::null_mut()
+	ptr::null_mut()
 }
 
 #[unsafe(no_mangle)]
@@ -175,7 +176,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 		return core_scheduler().scheduler().unwrap_or_default();
 	}
 
-	core::ptr::null_mut()
+	ptr::null_mut()
 }
 
 #[unsafe(no_mangle)]

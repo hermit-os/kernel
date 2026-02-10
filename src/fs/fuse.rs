@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use core::mem::{MaybeUninit, align_of, offset_of, size_of};
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, mem};
+use core::{future, mem, ptr};
 
 use align_address::Align;
 use async_lock::Mutex;
@@ -1055,8 +1055,8 @@ impl ObjectInterface for FuseDirectoryHandle {
 					d_type: (dirent.type_ as u8).try_into().unwrap(),
 					d_name: PhantomData {},
 				});
-				let nameptr = core::ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				core::ptr::copy_nonoverlapping(
+				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
+				ptr::copy_nonoverlapping(
 					dirent.name.as_ptr().cast::<u8>(),
 					nameptr,
 					dirent.namelen as usize,

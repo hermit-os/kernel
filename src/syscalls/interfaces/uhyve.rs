@@ -13,7 +13,7 @@ use crate::syscalls::interfaces::SyscallInterface;
 #[cfg_attr(target_arch = "riscv64", expect(dead_code))]
 pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
 	let len = buf.len();
-	let buf = virtual_to_physical(VirtAddr::from_ptr(core::ptr::from_ref::<[u8]>(buf)))
+	let buf = virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref::<[u8]>(buf)))
 		.unwrap()
 		.as_u64()
 		.into();

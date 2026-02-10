@@ -5,7 +5,7 @@ use alloc::ffi::CString;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
-use core::ptr::null;
+use core::ptr;
 
 use dirent_display::Dirent64Display;
 use hermit_sync::Lazy;
@@ -94,7 +94,7 @@ pub extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!("__sys_alloc called with size {size:#x}, align {align:#x} is an invalid layout!");
-		return core::ptr::null_mut();
+		return ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
@@ -113,7 +113,7 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 		warn!(
 			"__sys_alloc_zeroed called with size {size:#x}, align {align:#x} is an invalid layout!"
 		);
-		return core::ptr::null_mut();
+		return ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc_zeroed(layout) };
@@ -130,7 +130,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!("__sys_malloc called with size {size:#x}, align {align:#x} is an invalid layout!");
-		return core::ptr::null_mut();
+		return ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
@@ -174,7 +174,7 @@ pub unsafe extern "C" fn sys_realloc(
 			warn!(
 				"__sys_realloc called with ptr {ptr:p}, size {size:#x}, align {align:#x}, new_size {new_size:#x} is an invalid layout!"
 			);
-			return core::ptr::null_mut();
+			return ptr::null_mut();
 		}
 		let layout = layout_res.unwrap();
 		let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
@@ -352,7 +352,7 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 pub unsafe extern "C" fn sys_getcwd(buf: *mut c_char, size: usize) -> *const c_char {
 	let error = |e: Errno| {
 		e.set_errno();
-		null::<c_char>()
+		ptr::null::<c_char>()
 	};
 
 	if size == 0 {
@@ -867,8 +867,6 @@ pub extern "C" fn sys_image_start_addr() -> usize {
 
 #[cfg(test)]
 mod tests {
-	use core::ptr;
-
 	use super::*;
 
 	#[cfg(target_os = "none")]
