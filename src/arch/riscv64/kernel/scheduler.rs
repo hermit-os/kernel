@@ -12,71 +12,74 @@ use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
+/// For details, see [RISC-V Calling Conventions].
+///
+/// [RISC-V Calling Conventions]: https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/v1.0/riscv-cc.adoc
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct State {
-	/// Return address register
+	/// x1: Return address
 	ra: unsafe extern "C" fn(extern "C" fn(usize), usize, u64),
-	/// Stack pointer register
+	/// x2: Stack pointer
 	sp: usize,
-	/// Global pointer register
+	/// x3: Global pointer
 	gp: usize,
-	/// Thread pointer register
+	/// x4: Thread pointer
 	tp: usize,
-	/// x5 register
-	x5: usize,
-	/// x6 register
-	x6: usize,
-	/// x7 register
-	x7: usize,
-	/// x8 register
-	x8: usize,
-	/// x9 register
-	x9: usize,
-	/// Function arguments/return values
+	/// x5: Temporary register
+	t0: usize,
+	/// x6: Temporary register
+	t1: usize,
+	/// x7: Temporary register
+	t2: usize,
+	/// x8: Callee-saved register
+	s0: usize,
+	/// x9: Callee-saved register
+	s1: usize,
+	/// x10: Argument register
 	a0: usize,
-	/// a1 register
+	/// x11: Argument register
 	a1: usize,
-	/// a2 register
+	/// x12: Argument register
 	a2: usize,
-	/// x13 register
-	x13: usize,
-	/// x14 register
-	x14: usize,
-	/// x15 register
-	x15: usize,
-	/// x16 register
-	x16: usize,
-	/// x17 register
-	x17: usize,
-	/// x18 register
-	x18: usize,
-	/// x19 register
-	x19: usize,
-	/// x20 register
-	x20: usize,
-	/// x21 register
-	x21: usize,
-	/// x22 register
-	x22: usize,
-	/// x23 register
-	x23: usize,
-	/// x24 register
-	x24: usize,
-	/// x25 register
-	x25: usize,
-	/// x26 register
-	x26: usize,
-	/// x27 register
-	x27: usize,
-	/// x28 register
-	x28: usize,
-	/// x29 register
-	x29: usize,
-	/// x30 register
-	x30: usize,
-	/// x31 register
-	x31: usize,
+	/// x13: Argument register
+	a3: usize,
+	/// x14: Argument register
+	a4: usize,
+	/// x15: Argument register
+	a5: usize,
+	/// x16: Argument register
+	a6: usize,
+	/// x17: Argument register
+	a7: usize,
+	/// x18: Callee-saved register
+	s2: usize,
+	/// x19: Callee-saved register
+	s3: usize,
+	/// x20: Callee-saved register
+	s4: usize,
+	/// x21: Callee-saved register
+	s5: usize,
+	/// x22: Callee-saved register
+	s6: usize,
+	/// x23: Callee-saved register
+	s7: usize,
+	/// x24: Callee-saved register
+	s8: usize,
+	/// x25: Callee-saved register
+	s9: usize,
+	/// x26: Callee-saved register
+	s10: usize,
+	/// x27: Callee-saved register
+	s11: usize,
+	/// x28: Temporary register
+	t3: usize,
+	/// x29: Temporary register
+	t4: usize,
+	/// x30: Temporary register
+	t5: usize,
+	/// x31: Temporary register
+	t6: usize,
 }
 
 pub struct BootStack {
