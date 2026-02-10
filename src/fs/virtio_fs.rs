@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, mem, ptr, slice};
+use core::{future, iter, mem, ptr, slice};
 
 use align_address::Align;
 use async_lock::Mutex;
@@ -966,12 +966,12 @@ impl Clone for VirtioFsFileHandle {
 }
 
 pub struct VirtioFsDirectoryHandle {
-	name: Option<String>,
+	name: String,
 	read_position: Mutex<usize>,
 }
 
 impl VirtioFsDirectoryHandle {
-	pub fn new(name: Option<String>) -> Self {
+	pub fn new(name: String) -> Self {
 		Self {
 			name,
 			read_position: Mutex::new(0),
@@ -982,10 +982,10 @@ impl VirtioFsDirectoryHandle {
 #[async_trait]
 impl ObjectInterface for VirtioFsDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let path: CString = if let Some(name) = &self.name {
-			CString::new("/".to_owned() + name).unwrap()
-		} else {
+		let path = if self.name.is_empty() {
 			CString::new("/").unwrap()
+		} else {
+			CString::new("/".to_owned() + &self.name).unwrap()
 		};
 
 		debug!("virtio-fs opendir: {path:#?}");
@@ -1100,12 +1100,12 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 
 #[derive(Debug)]
 pub(crate) struct VirtioFsDirectory {
-	prefix: Option<String>,
+	prefix: String,
 	attr: FileAttr,
 }
 
 impl VirtioFsDirectory {
-	pub fn new(prefix: Option<String>) -> Self {
+	pub fn new(prefix: String) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 
@@ -1122,10 +1122,9 @@ impl VirtioFsDirectory {
 	}
 
 	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref
-			.iter()
-			.copied()
+		let prefix = self.prefix.as_str();
+		let components_with_prefix = iter::once(prefix)
+			.filter(|prefix| !prefix.is_empty())
 			.chain(components.iter().copied().rev());
 		let path: String = components_with_prefix
 			.flat_map(|component| ["/", component])
@@ -1306,7 +1305,7 @@ impl VfsNode for VirtioFsDirectory {
 			let mut path = path.into_string().unwrap();
 			path.remove(0);
 			return Ok(Arc::new(async_lock::RwLock::new(
-				VirtioFsDirectoryHandle::new(Some(path)),
+				VirtioFsDirectoryHandle::new(path),
 			)));
 		}
 
@@ -1418,7 +1417,7 @@ pub(crate) fn init() {
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(mount_point.as_str(), Box::new(VirtioFsDirectory::new(None)))
+			.mount(mount_point.as_str(), Box::new(VirtioFsDirectory::new(String::new())))
 			.expect("Mount failed. Invalid mount_point?");
 		return;
 	}
@@ -1516,7 +1515,7 @@ pub(crate) fn init() {
 				.unwrap()
 				.mount(
 					&("/".to_owned() + entry.as_str()),
-					Box::new(VirtioFsDirectory::new(Some(entry))),
+					Box::new(VirtioFsDirectory::new(entry)),
 				)
 				.expect("Mount failed. Invalid mount_point?");
 		} else {

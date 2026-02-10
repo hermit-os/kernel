@@ -4,6 +4,7 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::iter;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -129,19 +130,18 @@ impl Clone for UhyveFileHandle {
 
 #[derive(Debug)]
 pub(crate) struct UhyveDirectory {
-	prefix: Option<String>,
+	prefix: String,
 }
 
 impl UhyveDirectory {
-	pub const fn new(prefix: Option<String>) -> Self {
+	pub const fn new(prefix: String) -> Self {
 		UhyveDirectory { prefix }
 	}
 
 	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref
-			.iter()
-			.copied()
+		let prefix = self.prefix.as_str();
+		let components_with_prefix = iter::once(prefix)
+			.filter(|prefix| !prefix.is_empty())
 			.chain(components.iter().copied().rev());
 		// Unlike src/fs/virtio_fs.rs, we skip the first element here so as to not prepend / before /root
 		let path: String = components_with_prefix
@@ -250,7 +250,7 @@ pub(crate) fn init() {
 			.unwrap()
 			.mount(
 				&mount_point,
-				Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
+				Box::new(UhyveDirectory::new(mount_point.clone())),
 			)
 			.expect("Mount failed. Duplicate mount_point?");
 		return;
@@ -260,7 +260,7 @@ pub(crate) fn init() {
 	for mount_point in mount_str.split('\0') {
 		info!("Mounting uhyve filesystem at {mount_point}");
 
-		let obj = Box::new(UhyveDirectory::new(Some(mount_point.to_owned())));
+		let obj = Box::new(UhyveDirectory::new(mount_point.to_owned()));
 		let Err(errno) = fs::FILESYSTEM.get().unwrap().mount(mount_point, obj) else {
 			return;
 		};
@@ -270,7 +270,7 @@ pub(crate) fn init() {
 		let (parent_path, _file_name) = mount_point.rsplit_once('/').unwrap();
 		create_dir_recursive(parent_path, AccessPermission::S_IRWXU).unwrap();
 
-		let obj = Box::new(UhyveDirectory::new(Some(mount_point.to_owned())));
+		let obj = Box::new(UhyveDirectory::new(mount_point.to_owned()));
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
