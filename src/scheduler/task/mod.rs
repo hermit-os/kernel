@@ -18,6 +18,7 @@ use memory_addresses::VirtAddr;
 
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
+use super::timer_interrupts::{Source, create_timer_abs};
 use crate::arch::core_local::*;
 use crate::arch::scheduler::TaskStacks;
 use crate::fd::stdio::*;
@@ -521,16 +522,12 @@ impl BlockedTask {
 
 pub(crate) struct BlockedTaskQueue {
 	list: LinkedList<BlockedTask>,
-	#[cfg(feature = "net")]
-	network_wakeup_time: Option<u64>,
 }
 
 impl BlockedTaskQueue {
 	pub const fn new() -> Self {
 		Self {
 			list: LinkedList::new(),
-			#[cfg(feature = "net")]
-			network_wakeup_time: None,
 		}
 	}
 
@@ -557,20 +554,6 @@ impl BlockedTaskQueue {
 		borrowed.status = TaskStatus::Ready;
 	}
 
-	#[cfg(feature = "net")]
-	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
-		self.network_wakeup_time = wakeup_time;
-
-		let next = self.list.front().and_then(|t| t.wakeup_time);
-
-		let time = match (wakeup_time, next) {
-			(Some(a), Some(b)) => Some(a.min(b)),
-			(a, b) => a.or(b),
-		};
-
-		arch::set_oneshot_timer(time);
-	}
-
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
@@ -592,35 +575,20 @@ impl BlockedTaskQueue {
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
 			let mut cursor = self.list.cursor_front_mut();
-			let set_oneshot_timer = || {
-				#[cfg(not(feature = "net"))]
-				arch::set_oneshot_timer(wakeup_time);
-				#[cfg(feature = "net")]
-				match self.network_wakeup_time {
-					Some(time) => {
-						if time > wt {
-							arch::set_oneshot_timer(wakeup_time);
-						} else {
-							arch::set_oneshot_timer(self.network_wakeup_time);
-						}
-					}
-					_ => arch::set_oneshot_timer(wakeup_time),
-				}
-			};
 
 			while let Some(node) = cursor.current() {
 				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
 					cursor.insert_before(new_node);
 
-					set_oneshot_timer();
+					create_timer_abs(Source::Scheduler, wt);
 					return;
 				}
 
 				cursor.move_next();
 			}
 
-			set_oneshot_timer();
+			create_timer_abs(Source::Scheduler, wt);
 		}
 
 		self.list.push_back(new_node);
@@ -631,13 +599,6 @@ impl BlockedTaskQueue {
 		let mut first_task = true;
 		let mut cursor = self.list.cursor_front_mut();
 
-		#[cfg(feature = "net")]
-		if let Some(wakeup_time) = self.network_wakeup_time
-			&& wakeup_time <= arch::processor::get_timer_ticks()
-		{
-			self.network_wakeup_time = None;
-		}
-
 		// Loop through all blocked tasks to find it.
 		while let Some(node) = cursor.current() {
 			if node.task.borrow().id == task.get_id() {
@@ -647,29 +608,12 @@ impl BlockedTaskQueue {
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
 				// next task's wakeup time (if any).
-				#[cfg(feature = "net")]
-				if first_task {
-					arch::set_oneshot_timer(cursor.current().map_or_else(
-						|| self.network_wakeup_time,
-						|node| match node.wakeup_time {
-							Some(wt) => {
-								if let Some(timer) = self.network_wakeup_time {
-									if wt < timer { Some(wt) } else { Some(timer) }
-								} else {
-									Some(wt)
-								}
-							}
-							None => self.network_wakeup_time,
-						},
-					));
-				}
-				#[cfg(not(feature = "net"))]
-				if first_task {
-					arch::set_oneshot_timer(
-						cursor
-							.current()
-							.map_or_else(|| None, |node| node.wakeup_time),
-					);
+				if first_task
+					&& let Some(wakeup) = cursor
+						.current()
+						.map_or_else(|| None, |node| node.wakeup_time)
+				{
+					create_timer_abs(Source::Scheduler, wakeup);
 				}
 
 				// Wake it up.
@@ -693,15 +637,6 @@ impl BlockedTaskQueue {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
 
-		#[cfg(feature = "net")]
-		if let Some(mut guard) = crate::executor::network::NIC.try_lock()
-			&& let crate::executor::network::NetworkState::Initialized(nic) = &mut *guard
-		{
-			let now = crate::executor::network::now();
-			nic.poll_common(now);
-			self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
-		}
-
 		// Get the wakeup time of this task and check if we have reached the first task
 		// that hasn't elapsed yet or waits indefinitely.
 		// This iterator has to be consumed to actually remove the elements.
@@ -717,20 +652,9 @@ impl BlockedTaskQueue {
 		}
 
 		let new_task_wakeup_time = self.list.front().and_then(|task| task.wakeup_time);
-		cfg_if::cfg_if! {
-			if 	#[cfg(feature = "net")] {
-				let network_wakeup_time = self.network_wakeup_time;
-			} else {
-				let network_wakeup_time = None;
-			}
-		};
-		let timer_wakeup_time = match (new_task_wakeup_time, network_wakeup_time) {
-			(None, None) => None,
-			(None, Some(network_wt)) => Some(network_wt),
-			(Some(task_wt), None) => Some(task_wt),
-			(Some(task_wt), Some(network_wt)) => Some(u64::min(task_wt, network_wt)),
-		};
 
-		arch::set_oneshot_timer(timer_wakeup_time);
+		if let Some(wakeup) = new_task_wakeup_time {
+			create_timer_abs(Source::Scheduler, wakeup);
+		}
 	}
 }

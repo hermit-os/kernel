@@ -8,6 +8,7 @@ use smoltcp::time::Instant;
 
 use crate::drivers::net::NetworkDriver;
 use crate::drivers::{Driver, InterruptLine};
+use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
 pub(crate) struct LoopbackDriver {
@@ -122,7 +123,7 @@ impl NetworkDriver for LoopbackDriver {
 	}
 
 	fn handle_interrupt(&mut self) {
-		// no-op
+		wake_network_waker();
 	}
 }
 

@@ -32,6 +32,7 @@ use crate::drivers::net::{NetworkDriver, mtu};
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::drivers::{Driver, InterruptLine};
+use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::{BasePageSize, PageSize};
 
@@ -276,6 +277,8 @@ impl NetworkDriver for GEMDriver {
 
 	fn handle_interrupt(&mut self) {
 		self.tx_fields.handle_interrupt();
+
+		wake_network_waker();
 	}
 }
 

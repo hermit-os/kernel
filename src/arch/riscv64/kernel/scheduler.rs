@@ -5,11 +5,11 @@ use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
-use crate::arch::riscv64::kernel::processor::set_oneshot_timer;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
+use crate::scheduler::timer_interrupts;
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 /// For details, see [RISC-V Calling Conventions].
@@ -334,9 +334,9 @@ unsafe extern "C" fn task_start(func: extern "C" fn(usize), arg: usize, user_sta
 }
 
 pub fn timer_handler() {
-	//increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER.into());
+	debug!("Handle timer interrupt");
+	timer_interrupts::clear_active_and_set_next();
 	core_scheduler().handle_waiting_tasks();
-	set_oneshot_timer(None);
 	core_scheduler().scheduler();
 }
 

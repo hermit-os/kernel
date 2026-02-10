@@ -16,8 +16,8 @@ use crate::arch::x86_64::mm::paging::{
 use crate::config::*;
 use crate::env;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
-use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
+use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
 
 #[repr(C, packed)]
 struct State {
@@ -318,6 +318,10 @@ impl TaskFrame for Task {
 
 extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
+
+	debug!("Handle timer interrupt");
+	timer_interrupts::clear_active_and_set_next();
+
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().reschedule();
