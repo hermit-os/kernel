@@ -1213,7 +1213,6 @@ checksum = "01af0509edc73791972185a4ed1e3e8b2d0f21c3c527f96078586446b61750c4"
 dependencies = [
  "align-address 0.3.0",
  "cfg-if",
- "x86_64",
 ]
 
 [[package]]
@@ -2004,13 +2003,12 @@ dependencies = [
 
 [[package]]
 name = "uhyve-interface"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff4f1b21b9d7368474a8cebf8e34348ea1eff1c44201a0ee54b129fbe5b8f9d1"
+version = "0.2.0"
+source = "git+https://github.com/n0toose/uhyve?branch=uhyve-if-v2_io-plus-rcx#f98d604dce2280677e5d8bf296765bc18cc20173"
 dependencies = [
  "aarch64",
  "hermit-abi",
- "memory_addresses 0.2.3",
+ "memory_addresses 0.3.0",
  "num_enum",
  "x86_64",
 ]

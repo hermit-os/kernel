@@ -142,7 +142,7 @@ thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
 zerocopy = { version = "0.8", default-features = false }
-uhyve-interface = "0.1.4"
+uhyve-interface = "0.2.0"
 
 [dependencies.smoltcp]
 version = "0.12"
@@ -211,6 +211,7 @@ exclude = [
 ]
 
 [patch.crates-io]
+uhyve-interface = { git = "https://github.com/n0toose/uhyve", branch = "uhyve-if-v2_io-plus-rcx" }
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "be" }
 
 [profile.profiling]

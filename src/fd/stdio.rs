@@ -4,9 +4,12 @@ use core::task::Poll;
 
 use async_trait::async_trait;
 use embedded_io::{Read, ReadReady, Write};
-use uhyve_interface::parameters::WriteParams;
-use uhyve_interface::{GuestVirtAddr, Hypercall};
+use memory_addresses::VirtAddr;
+use uhyve_interface::GuestPhysAddr;
+use uhyve_interface::v2::Hypercall;
+use uhyve_interface::v2::parameters::WriteParams;
 
+use crate::arch::mm::paging;
 use crate::console::{CONSOLE, CONSOLE_WAKER};
 use crate::fd::{
 	AccessPermission, FileAttr, ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO,
@@ -159,14 +162,20 @@ impl ObjectInterface for UhyveStdout {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		let write_params = WriteParams {
+		let mut write_params = WriteParams {
 			fd: STDOUT_FILENO,
-			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
-			len: buf.len(),
+			buf: GuestPhysAddr::new(
+				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
+			ret: 0i64,
 		};
-		uhyve_hypercall(Hypercall::FileWrite(&write_params));
-
-		Ok(write_params.len)
+		uhyve_hypercall(Hypercall::FileWrite(&mut write_params));
+		// Assumption: Uhyve will write to stdout and manually override the ret.
+		debug_assert_eq!(write_params.len, write_params.ret as u64);
+		Ok(write_params.ret.try_into().unwrap())
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {
@@ -198,14 +207,20 @@ impl ObjectInterface for UhyveStderr {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		let write_params = WriteParams {
+		let mut write_params = WriteParams {
 			fd: STDERR_FILENO,
-			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
-			len: buf.len(),
+			buf: GuestPhysAddr::new(
+				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
+			ret: 0i64,
 		};
-		uhyve_hypercall(Hypercall::FileWrite(&write_params));
-
-		Ok(write_params.len)
+		uhyve_hypercall(Hypercall::FileWrite(&mut write_params));
+		// Assumption: Uhyve will write to stdout and manually override the ret.
+		debug_assert_eq!(write_params.len, write_params.ret as u64);
+		Ok(write_params.ret.try_into().unwrap())
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {
