@@ -130,6 +130,10 @@ impl Clone for UhyveFileHandle {
 
 #[derive(Debug)]
 pub(crate) struct UhyveDirectory {
+	/// The external path of this directory.
+	///
+	/// Before talking to virtio-fs, the relative path inside this directory is
+	/// adjoined with this prefix.
 	prefix: String,
 }
 
