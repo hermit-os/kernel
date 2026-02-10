@@ -40,7 +40,6 @@ alloc-stats = ["talc/counters"]
 common-os = []
 dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
-fs = ["virtio-fs"]
 fsgsbase = []
 gem-net = ["net", "dep:tock-registers"]
 idle-poll = []
@@ -70,6 +69,7 @@ warn-prebuilt = []
 
 # Deprecated
 console = ["virtio-console"]
+fs = ["virtio-fs"]
 fuse = ["virtio-fs"]
 vsock = ["virtio-vsock"]
 
