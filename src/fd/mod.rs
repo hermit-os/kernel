@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::future::{self, Future};
 use core::mem::MaybeUninit;
+use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
@@ -377,7 +378,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 			let fd = i.fd;
 			i.revents = PollEvent::empty();
 			if let Ok(obj) = core_scheduler().get_object(fd) {
-				let mut pinned = core::pin::pin!(async { obj.read().await.poll(i.events).await });
+				let mut pinned = pin!(async { obj.read().await.poll(i.events).await });
 				if let Ready(Ok(e)) = pinned.as_mut().poll(cx)
 					&& !e.is_empty()
 				{

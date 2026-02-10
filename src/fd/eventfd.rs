@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::collections::vec_deque::VecDeque;
 use core::future::{self, Future};
 use core::mem;
+use core::pin::pin;
 use core::task::{Poll, Waker, ready};
 
 use async_lock::Mutex;
@@ -54,7 +55,7 @@ impl ObjectInterface for EventFd {
 
 		future::poll_fn(|cx| {
 			if self.flags.contains(EventFlags::EFD_SEMAPHORE) {
-				let mut pinned = core::pin::pin!(self.state.lock());
+				let mut pinned = pin!(self.state.lock());
 				let mut guard = ready!(pinned.as_mut().poll(cx));
 				if guard.counter > 0 {
 					guard.counter -= 1;
@@ -68,7 +69,7 @@ impl ObjectInterface for EventFd {
 					Poll::Pending
 				}
 			} else {
-				let mut pinned = core::pin::pin!(self.state.lock());
+				let mut pinned = pin!(self.state.lock());
 				let mut guard = ready!(pinned.as_mut().poll(cx));
 				let tmp = guard.counter;
 				if tmp > 0 {
@@ -99,7 +100,7 @@ impl ObjectInterface for EventFd {
 		let c = u64::from_ne_bytes(buf[..len].try_into().unwrap());
 
 		future::poll_fn(|cx| {
-			let mut pinned = core::pin::pin!(self.state.lock());
+			let mut pinned = pin!(self.state.lock());
 			let mut guard = ready!(pinned.as_mut().poll(cx));
 			if u64::MAX - guard.counter > c {
 				guard.counter += c;
@@ -145,7 +146,7 @@ impl ObjectInterface for EventFd {
 
 		future::poll_fn(|cx| {
 			if ret.is_empty() {
-				let mut pinned = core::pin::pin!(self.state.lock());
+				let mut pinned = pin!(self.state.lock());
 				let mut guard = ready!(pinned.as_mut().poll(cx));
 				if event
 					.intersects(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDNORM)
