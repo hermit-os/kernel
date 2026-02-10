@@ -56,25 +56,25 @@ struct State {
 	rcx: u64,
 	/// RAX register
 	rax: u64,
-	/// status flags
+	/// Status flags
 	rflags: u64,
-	/// instruction pointer
+	/// Instruction pointer
 	rip: extern "C" fn(extern "C" fn(usize), usize, u64) -> !,
 }
 
 pub struct BootStack {
-	/// stack for kernel tasks
+	/// Stack for kernel tasks
 	stack: VirtAddr,
-	/// stack to handle interrupts
+	/// Stack to handle interrupts
 	ist1: VirtAddr,
 }
 
 pub struct CommonStack {
-	/// start address of allocated virtual memory region
+	/// Start address of allocated virtual memory region
 	virt_addr: VirtAddr,
-	/// start address of allocated virtual memory region
+	/// Start address of allocated virtual memory region
 	phys_addr: PhysAddr,
-	/// total size of all stacks
+	/// Total size of all stacks
 	total_size: usize,
 }
 

@@ -14,13 +14,13 @@ use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 #[repr(C, packed)]
 #[derive(Clone, Copy, Debug)]
 pub struct State {
-	/// return address register
+	/// Return address register
 	ra: unsafe extern "C" fn(extern "C" fn(usize), usize, u64),
-	/// stack pointer register
+	/// Stack pointer register
 	sp: usize,
-	/// global pointer register
+	/// Global pointer register
 	gp: usize,
-	/// thread pointer register
+	/// Thread pointer register
 	tp: usize,
 	/// x5 register
 	x5: usize,
@@ -79,16 +79,16 @@ pub struct State {
 }
 
 pub struct BootStack {
-	/// stack for kernel tasks
+	/// Stack for kernel tasks
 	stack: VirtAddr,
 }
 
 pub struct CommonStack {
-	/// start address of allocated virtual memory region
+	/// Start address of allocated virtual memory region
 	virt_addr: VirtAddr,
-	/// start address of allocated virtual memory region
+	/// Start address of allocated virtual memory region
 	phys_addr: PhysAddr,
-	/// total size of all stacks
+	/// Total size of all stacks
 	total_size: usize,
 }
 

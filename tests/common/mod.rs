@@ -36,7 +36,7 @@ pub fn exit(failure: bool) -> ! {
 	}
 }
 
-/// defines runtime_entry and passes arguments as Rust String to main method with signature:
+/// Defines runtime_entry and passes arguments as Rust String to main method with signature:
 /// `fn main(args: Vec<String>) -> Result<(), ()>;`
 #[macro_export]
 macro_rules! runtime_entry_with_args {

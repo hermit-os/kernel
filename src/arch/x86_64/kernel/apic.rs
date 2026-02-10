@@ -384,7 +384,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	Ok(PhysAddr::new(madt_header.local_apic_address.into()))
 }
 
-/// Helper function to search Floating Pointer Structure of the Multiprocessing Specification
+/// Search Floating Pointer Structure of the Multiprocessing Specification
 fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static ApicMP, ()> {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let page_range = PageBox::new(layout).unwrap();
@@ -415,7 +415,7 @@ fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static Apic
 	Err(())
 }
 
-/// Helper function to detect APIC by the Multiprocessor Specification
+/// Detect APIC by the Multiprocessor Specification
 fn detect_from_mp() -> Result<PhysAddr, ()> {
 	let mp_float = if let Ok(mpf) = search_mp_floating(
 		AddrRange::new(PhysAddr::new(0x9f000u64), PhysAddr::new(0xa0000u64)).unwrap(),

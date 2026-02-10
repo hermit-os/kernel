@@ -8,6 +8,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt;
 use core::ops::BitAnd;
 
 use async_trait::async_trait;
@@ -50,21 +51,21 @@ pub(crate) enum NodeKind {
 }
 
 /// VfsNode represents an internal node of the ramdisk.
-pub(crate) trait VfsNode: core::fmt::Debug {
+pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
 
-	/// determines the current file attribute
+	/// Determines the current file attribute
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	/// Determine the syscall interface
+	/// Determines the syscall interface
 	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to create a new directory node
+	/// Creates a new directory node
 	fn traverse_mkdir(
 		&self,
 		_components: &mut Vec<&str>,
@@ -73,41 +74,41 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to delete a directory node
+	/// Deletes a directory node
 	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to remove the specified file
+	/// Removes the specified file
 	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to open a directory
+	/// Opens a directory
 	fn traverse_readdir(&self, _components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to get file status
+	/// Gets file status
 	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to get file status
+	/// Gets file status
 	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to mount a file system
+	/// Mounts a file system
 	fn traverse_mount(
 		&self,
 		_components: &mut Vec<&str>,
-		_obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
+		_obj: Box<dyn VfsNode>,
 	) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to open a file
+	/// Opens a file
 	fn traverse_open(
 		&self,
 		_components: &mut Vec<&str>,
@@ -117,7 +118,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		Err(Errno::Nosys)
 	}
 
-	/// Helper function to create a read-only file
+	/// Creates a read-only file
 	fn traverse_create_file(
 		&self,
 		_components: &mut Vec<&str>,
@@ -251,11 +252,7 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	pub fn mount(
-		&self,
-		path: &str,
-		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
-	) -> io::Result<()> {
+	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		debug!("Mounting {path}");
 
 		let mut components: Vec<&str> = path.split('/').collect();
@@ -290,25 +287,25 @@ pub struct FileAttr {
 	pub st_dev: u64,
 	pub st_ino: u64,
 	pub st_nlink: u64,
-	/// access permissions
+	/// Access permissions
 	pub st_mode: AccessPermission,
-	/// user id
+	/// User id
 	pub st_uid: u32,
-	/// group id
+	/// Group id
 	pub st_gid: u32,
-	/// device id
+	/// Device id
 	pub st_rdev: u64,
-	/// size in bytes
+	/// Size in bytes
 	pub st_size: i64,
-	/// block size
+	/// Block size
 	pub st_blksize: i64,
-	/// size in blocks
+	/// Size in blocks
 	pub st_blocks: i64,
-	/// time of last access
+	/// Time of last access
 	pub st_atim: timespec,
-	/// time of last modification
+	/// Time of last modification
 	pub st_mtim: timespec,
-	/// time of last status change
+	/// Time of last status change
 	pub st_ctim: timespec,
 }
 

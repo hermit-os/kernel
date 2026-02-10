@@ -8,7 +8,7 @@ use crate::arch;
 use crate::arch::mm::paging::{self, virtual_to_physical};
 use crate::syscalls::interfaces::SyscallInterface;
 
-/// perform a SerialWriteBuffer hypercall with `buf` as payload.
+/// Perform a SerialWriteBuffer hypercall with `buf` as payload.
 #[inline]
 #[cfg_attr(target_arch = "riscv64", expect(dead_code))]
 pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
@@ -21,7 +21,7 @@ pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
 	uhyve_hypercall(Hypercall::SerialWriteBuffer(&p));
 }
 
-/// calculates the physical address of the struct passed as reference.
+/// Calculates the physical address of the struct passed as reference.
 #[inline]
 fn data_addr<T>(data: &T) -> u64 {
 	paging::virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref(data)))
@@ -29,7 +29,7 @@ fn data_addr<T>(data: &T) -> u64 {
 		.as_u64()
 }
 
-/// calculates the hypercall data argument
+/// Calculates the hypercall data argument
 #[inline]
 fn hypercall_data(hypercall: &Hypercall<'_>) -> u64 {
 	match hypercall {

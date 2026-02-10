@@ -18,11 +18,11 @@ use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, Sock
 use crate::syscalls::socket::Af;
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
-/// further receives will be disallowed
+/// Further receives will be disallowed
 pub const SHUT_RD: i32 = 0;
-/// further sends will be disallowed
+/// Further sends will be disallowed
 pub const SHUT_WR: i32 = 1;
-/// further sends and receives will be disallowed
+/// Further sends and receives will be disallowed
 pub const SHUT_RDWR: i32 = 2;
 /// The default queue size for incoming connections
 pub const DEFAULT_BACKLOG: i32 = 128;

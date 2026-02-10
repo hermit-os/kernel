@@ -327,7 +327,7 @@ pub(crate) fn map(
 }
 
 #[allow(dead_code)]
-/// unmaps virtual address, without 'freeing' physical memory it is mapped to!
+/// Unmaps virtual address, without 'freeing' physical memory it is mapped to!
 pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 

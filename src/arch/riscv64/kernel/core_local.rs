@@ -19,7 +19,7 @@ pub struct CoreLocal {
 	core_id: CoreId,
 	/// Scheduler of the current Core.
 	scheduler: Cell<*mut PerCoreScheduler>,
-	/// start address of the kernel stack
+	/// Start address of the kernel stack
 	pub kernel_stack: Cell<u64>,
 	/// The core-local async executor.
 	ex: StaticLocalExecutor<RawSpinMutex, RawRwSpinLock>,

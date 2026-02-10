@@ -655,7 +655,7 @@ pub unsafe extern "C" fn sys_ioctl(fd: RawFd, cmd: i32, argp: *mut core::ffi::c_
 	}
 }
 
-/// manipulate file descriptor
+/// Manipulate file descriptor
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
@@ -736,10 +736,13 @@ mod dirent_display {
 
 	use super::Dirent64;
 
-	/// Helperstruct for unsafe formatting of [`Dirent64`]
+	/// [`Display`] adapter for [`Dirent64`].
+	///
+	/// [`Display`]: fmt::Display
 	pub(super) struct Dirent64Display<'a> {
 		dirent: &'a Dirent64,
 	}
+
 	impl<'a> Dirent64Display<'a> {
 		/// # Safety
 		/// The `d_name` ptr of `dirent` must be valid and zero-terminated.

@@ -6,8 +6,7 @@ use x86_64::registers::segmentation::SegmentSelector;
 
 use crate::arch::mm::paging::ExceptionStackFrame;
 
-/// Helper function to swap the GS register, if the user-space is
-/// is interrupted.
+/// Swap the GS register, if the user-space is is interrupted.
 #[cfg(feature = "common-os")]
 #[inline(always)]
 pub(crate) fn swapgs(stack_frame: &ExceptionStackFrame) {
