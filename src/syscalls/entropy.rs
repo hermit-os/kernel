@@ -34,8 +34,8 @@ unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	let ret = entropy::read(buf, flags);
 	if ret < 0 {
 		warn!("Unable to read entropy! Fallback to a naive implementation!");
-		for i in &mut *buf {
-			*i = (generate_park_miller_lehmer_random_number() & 0xff)
+		for byte in &mut *buf {
+			*byte = (generate_park_miller_lehmer_random_number() & 0xff)
 				.try_into()
 				.unwrap();
 		}

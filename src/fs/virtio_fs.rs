@@ -1496,8 +1496,8 @@ pub(crate) fn init() {
 		"virtio-fs don't mount the host directories 'tmp' and 'proc' into the guest file system!"
 	);
 
-	for i in entries {
-		let i_cstr = CString::new(i.as_str()).unwrap();
+	for entry in entries {
+		let i_cstr = CString::new(entry.as_str()).unwrap();
 		let (cmd, rsp_payload_len) = ops::Lookup::create(i_cstr);
 		let rsp = get_filesystem_driver()
 			.unwrap()
@@ -1507,17 +1507,17 @@ pub(crate) fn init() {
 
 		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-			info!("virtio-fs mount {i} to /{i}");
+			info!("virtio-fs mount {entry} to /{entry}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
 				.mount(
-					&("/".to_owned() + i.as_str()),
-					Box::new(VirtioFsDirectory::new(Some(i))),
+					&("/".to_owned() + entry.as_str()),
+					Box::new(VirtioFsDirectory::new(Some(entry))),
 				)
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
-			warn!("virtio-fs don't mount {i}. It isn't a directory!");
+			warn!("virtio-fs don't mount {entry}. It isn't a directory!");
 		}
 	}
 }

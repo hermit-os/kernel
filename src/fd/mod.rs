@@ -374,19 +374,19 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 	future::poll_fn(|cx| {
 		let mut counter: u64 = 0;
 
-		for i in &mut *fds {
-			let fd = i.fd;
-			i.revents = PollEvent::empty();
+		for poll_fd in &mut *fds {
+			let fd = poll_fd.fd;
+			poll_fd.revents = PollEvent::empty();
 			let Ok(obj) = core_scheduler().get_object(fd) else {
 				continue;
 			};
 
-			let mut pinned = pin!(async { obj.read().await.poll(i.events).await });
+			let mut pinned = pin!(async { obj.read().await.poll(poll_fd.events).await });
 			if let Ready(Ok(e)) = pinned.as_mut().poll(cx)
 				&& !e.is_empty()
 			{
 				counter += 1;
-				i.revents = e;
+				poll_fd.revents = e;
 			}
 		}
 

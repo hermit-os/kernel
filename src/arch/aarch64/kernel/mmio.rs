@@ -94,8 +94,8 @@ pub fn init_drivers() {
 				continue;
 			};
 
-			for i in compatible.all() {
-				if i == "virtio,mmio" {
+			for compatible in compatible.all() {
+				if compatible == "virtio,mmio" {
 					let virtio_region = node
 						.reg()
 						.expect("reg property for virtio mmio not found in FDT")
