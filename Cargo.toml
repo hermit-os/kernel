@@ -44,6 +44,7 @@ fs = ["virtio-fs"]
 fsgsbase = []
 gem-net = ["net", "dep:tock-registers"]
 idle-poll = []
+instrument-mcount = [] # Inserts function instrument code for mcount-based tracing
 kernel-stack = []
 net = []
 mman = []
