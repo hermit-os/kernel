@@ -1,6 +1,5 @@
 use core::arch::asm;
-use core::fmt;
-use core::mem::offset_of;
+use core::{fmt, mem};
 
 use aarch64_cpu::registers::*;
 use hermit_sync::{Lazy, OnceCell, without_interrupts};
@@ -64,9 +63,9 @@ impl FPUState {
 				"msr fpsr, {intermediate}",
 				".arch_extension nofp",
 				fpu_state = in(reg) self,
-				off_q = const offset_of!(FPUState, q),
-				off_fpcr = const offset_of!(FPUState, fpcr),
-				off_fpsr = const offset_of!(FPUState, fpsr),
+				off_q = const mem::offset_of!(FPUState, q),
+				off_fpcr = const mem::offset_of!(FPUState, fpcr),
+				off_fpsr = const mem::offset_of!(FPUState, fpsr),
 				intermediate = out(reg) _,
 			);
 		}
@@ -100,9 +99,9 @@ impl FPUState {
 				"str {intermediate}, [{fpu_state}, {off_fpsr}]",
 				".arch_extension nofp",
 				fpu_state = in(reg) self,
-				off_q = const offset_of!(FPUState, q),
-				off_fpcr = const offset_of!(FPUState, fpcr),
-				off_fpsr = const offset_of!(FPUState, fpsr),
+				off_q = const mem::offset_of!(FPUState, q),
+				off_fpcr = const mem::offset_of!(FPUState, fpcr),
+				off_fpsr = const mem::offset_of!(FPUState, fpsr),
 				intermediate = out(reg) _,
 			);
 		}

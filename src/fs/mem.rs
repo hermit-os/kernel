@@ -7,8 +7,8 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-use core::mem::{MaybeUninit, offset_of};
-use core::ptr;
+use core::mem::MaybeUninit;
+use core::{mem, ptr};
 
 use align_address::Align;
 use async_lock::{Mutex, RwLock};
@@ -397,7 +397,7 @@ impl ObjectInterface for MemDirectoryInterface {
 		for name in self.inner.read().await.keys().skip(*read_idx) {
 			let namelen = name.len();
 
-			let dirent_len = offset_of!(Dirent64, d_name) + namelen + 1;
+			let dirent_len = mem::offset_of!(Dirent64, d_name) + namelen + 1;
 			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
 
 			if next_dirent > buf.len() {

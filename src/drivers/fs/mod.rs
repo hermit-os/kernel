@@ -18,7 +18,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
-use core::str;
+use core::{mem, str};
 
 use fuse_abi::linux::fuse_out_header;
 use num_enum::TryFromPrimitive;
@@ -247,10 +247,9 @@ impl FuseInterface for VirtioFsDriver {
 
 		// SAFETY: the conditional above ensures that the second field was filled in, so we can transmute it from MaybeUninit to normal.
 		let headers = unsafe {
-			core::mem::transmute::<
-				Box<RspHeader<O, MaybeUninit<O::OutStruct>>, _>,
-				Box<RspHeader<O>, _>,
-			>(headers)
+			mem::transmute::<Box<RspHeader<O, MaybeUninit<O::OutStruct>>, _>, Box<RspHeader<O>, _>>(
+				headers,
+			)
 		};
 		let payload = transfer_result.used_recv_buff.pop_front_vec();
 		Ok(Rsp { headers, payload })

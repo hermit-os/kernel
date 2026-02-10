@@ -8,6 +8,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 use core::ops::BitAnd;
 use core::{fmt, slice};
 
@@ -140,7 +141,7 @@ impl DirectoryReader {
 
 #[async_trait]
 impl ObjectInterface for DirectoryReader {
-	async fn getdents(&self, _buf: &mut [core::mem::MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn getdents(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let _ = &self.0; // Dummy statement to avoid warning for the moment
 		unimplemented!()
 	}

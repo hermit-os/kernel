@@ -1,7 +1,7 @@
 use alloc::collections::{BTreeMap, btree_map};
 use alloc::vec::Vec;
-use core::future;
 use core::task::Poll;
+use core::{future, mem};
 
 use hermit_sync::InterruptTicketMutex;
 use virtio::vsock::{Hdr, Op, Type};
@@ -63,7 +63,7 @@ impl RawSocket {
 async fn vsock_run() {
 	future::poll_fn(|cx| {
 		if let Some(driver) = hardware::get_vsock_driver() {
-			const HEADER_SIZE: usize = core::mem::size_of::<Hdr>();
+			const HEADER_SIZE: usize = mem::size_of::<Hdr>();
 			let mut driver_guard = driver.lock();
 			let mut hdr: Option<Hdr> = None;
 			let mut fwd_cnt: u32 = 0;

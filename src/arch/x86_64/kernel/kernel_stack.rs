@@ -2,7 +2,7 @@ use core::mem;
 
 use crate::core_local::CoreLocal;
 
-type Reg = core::mem::MaybeUninit<usize>;
+type Reg = mem::MaybeUninit<usize>;
 
 #[unsafe(naked)]
 pub unsafe extern "C" fn call_with_stack(

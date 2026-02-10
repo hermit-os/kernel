@@ -10,8 +10,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
-use core::ops;
 use core::sync::atomic::{Ordering, fence};
+use core::{mem, ops};
 
 use align_address::Align;
 #[cfg(not(feature = "pci"))]
@@ -687,7 +687,7 @@ impl PackedVq {
 		let mut descr_ring = DescriptorRing::new(vq_size);
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len =
-			core::mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
+			mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event = Box::<pvirtq::EventSuppress, _>::new_zeroed_in(DeviceAlloc);
 		let dev_event = Box::<pvirtq::EventSuppress, _>::new_zeroed_in(DeviceAlloc);

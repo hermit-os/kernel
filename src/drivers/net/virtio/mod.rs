@@ -15,9 +15,9 @@ cfg_if::cfg_if! {
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem::{ManuallyDrop, MaybeUninit, transmute};
-use core::slice;
+use core::mem::{ManuallyDrop, MaybeUninit};
 use core::str::FromStr;
+use core::{mem, slice};
 
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
@@ -340,7 +340,9 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 		let first_tkn = buffer_token_from_hdr(
 			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
 			unsafe {
-				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
+				mem::transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(
+					first_header,
+				)
 			},
 			self.recv_vqs.buf_size,
 		);

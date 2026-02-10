@@ -1,4 +1,4 @@
-use core::ptr;
+use core::{mem, ptr};
 
 use arm_gic::{IntId, Trigger};
 use bit_field::BitField;
@@ -69,11 +69,11 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 	let mut residual_slice = pci_node.property("ranges").unwrap().value;
 	let mut value_slice;
 	while !residual_slice.is_empty() {
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let _mid = u32::from_be_bytes(value_slice.try_into().unwrap());
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let _low = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		match high.get_bits(24..=25) {
@@ -84,8 +84,7 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 					warn!("Found already IO space");
 				}
 
-				(value_slice, residual_slice) =
-					residual_slice.split_at(core::mem::size_of::<u64>());
+				(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u64>());
 				io_start = u64::from_be_bytes(value_slice.try_into().unwrap());
 			}
 			0b10 => {
@@ -95,8 +94,7 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 					warn!("Found already 32 bit memory space");
 				}
 
-				(value_slice, residual_slice) =
-					residual_slice.split_at(core::mem::size_of::<u64>());
+				(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u64>());
 				mem32_start = u64::from_be_bytes(value_slice.try_into().unwrap());
 			}
 			0b11 => {
@@ -106,15 +104,14 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 					warn!("Found already 64 bit memory space");
 				}
 
-				(value_slice, residual_slice) =
-					residual_slice.split_at(core::mem::size_of::<u64>());
+				(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u64>());
 				mem64_start = u64::from_be_bytes(value_slice.try_into().unwrap());
 			}
 			_ => panic!("Unknown space code"),
 		}
 
 		// currently, the size is ignores
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u64>());
 		//let size = u64::from_be_bytes(value_slice.try_into().unwrap());
 	}
 
@@ -145,33 +142,33 @@ fn detect_interrupt(
 	let mut residual_slice = pci_node.property("interrupt-map").unwrap().value;
 	let mut value_slice;
 	while !residual_slice.is_empty() {
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let _mid = u32::from_be_bytes(value_slice.try_into().unwrap());
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let _low = u32::from_be_bytes(value_slice.try_into().unwrap());
 
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		//let child_specifier = u32::from_be_bytes(value_slice.try_into().unwrap());
 
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		//let parent = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		for _i in 0..cell_sizes.address_cells {
-			(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+			(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 			//let parent_address = u32::from_be_bytes(value_slice.try_into().unwrap());
 		}
 
 		// The 1st cell is the interrupt type; 0 for SPI interrupts, 1 for PPI
 		// interrupts.
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let irq_type = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		// The 2nd cell contains the interrupt number for the interrupt type.
 		// SPI interrupts are in the range [0-987].  PPI interrupts are in the
 		// range [0-15].
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let irq_number = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		// The 3rd cell is the flags, encoded as follows:
@@ -187,7 +184,7 @@ fn detect_interrupt(
 		// DEFINED and as such not guaranteed to be present (most SoC available
 		// in 2014 seem to ignore the setting of this flag and use the hardware
 		// default value).
-		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		(value_slice, residual_slice) = residual_slice.split_at(mem::size_of::<u32>());
 		let irq_flags = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		trace!("Interrupt type {irq_type:#x}, number {irq_number:#x} flags {irq_flags:#x}");
