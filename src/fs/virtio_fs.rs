@@ -985,7 +985,8 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 		let path = if self.name.is_empty() {
 			CString::new("/").unwrap()
 		} else {
-			CString::new("/".to_owned() + &self.name).unwrap()
+			let path = ["/", &self.name].join("");
+			CString::new(path).unwrap()
 		};
 
 		debug!("virtio-fs opendir: {path:#?}");
@@ -1410,14 +1411,17 @@ pub(crate) fn init() {
 		let mount_point = if mount_point.starts_with('/') {
 			mount_point
 		} else {
-			"/".to_owned() + &mount_point
+			["/", &mount_point].join("")
 		};
 
 		info!("Mounting virtio-fs at {mount_point}");
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(mount_point.as_str(), Box::new(VirtioFsDirectory::new(String::new())))
+			.mount(
+				mount_point.as_str(),
+				Box::new(VirtioFsDirectory::new(String::new())),
+			)
 			.expect("Mount failed. Invalid mount_point?");
 		return;
 	}
@@ -1509,14 +1513,12 @@ pub(crate) fn init() {
 
 		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-			info!("virtio-fs mount {entry} to /{entry}");
+			let path = ["/", &entry].join("");
+			info!("virtio-fs mount {entry} to {path}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
-				.mount(
-					&("/".to_owned() + entry.as_str()),
-					Box::new(VirtioFsDirectory::new(entry)),
-				)
+				.mount(&path, Box::new(VirtioFsDirectory::new(entry)))
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
 			warn!("virtio-fs don't mount {entry}. It isn't a directory!");
