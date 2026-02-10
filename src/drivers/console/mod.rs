@@ -282,10 +282,23 @@ impl VirtioConsoleDriver {
 
 	/// Handle interrupt and acknowledge interrupt
 	pub fn handle_interrupt(&mut self) {
-		let _status = self.isr_stat.is_queue_interrupt();
+		let status = self.isr_stat.is_queue_interrupt();
+
+		#[cfg(not(feature = "pci"))]
+		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
+			info!("Configuration changes are not possible! Aborting");
+			todo!("Implement possibility to change config on the fly...")
+		}
+
+		#[cfg(feature = "pci")]
+		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
+			info!("Configuration changes are not possible! Aborting");
+			todo!("Implement possibility to change config on the fly...")
+		}
+
+		self.isr_stat.acknowledge();
 
 		crate::console::CONSOLE_WAKER.lock().wake();
-		self.isr_stat.acknowledge();
 	}
 
 	#[cfg(feature = "pci")]
