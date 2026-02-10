@@ -638,7 +638,9 @@ fn check_rftrace(image: &Path) -> Result<()> {
 	let image_name = image.file_name().unwrap().to_str().unwrap();
 
 	let nm = crate::binutil("nm").unwrap();
-	let symbols = cmd!(sh, "{nm} --numeric-sort {image}").output()?.stdout;
+	let symbols = cmd!(sh, "{nm} --demangle --numeric-sort {image}")
+		.output()?
+		.stdout;
 	sh.write_file(format!("shared/tracedir/{image_name}.sym"), symbols)?;
 
 	let replay = cmd!(
