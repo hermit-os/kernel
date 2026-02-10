@@ -302,16 +302,11 @@ impl IsrStatus {
 		Self { raw }
 	}
 
-	#[allow(dead_code)]
-	pub fn is_queue_interrupt(&self) -> InterruptStatus {
-		self.raw.as_ptr().interrupt_status().read()
-	}
-
-	#[allow(dead_code)]
-	pub fn acknowledge(&mut self) {
+	pub fn acknowledge(&mut self) -> InterruptStatus {
 		let ptr = self.raw.as_mut_ptr();
 		let status = ptr.interrupt_status().read();
 		ptr.interrupt_ack().write(status);
+		status
 	}
 }
 
