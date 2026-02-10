@@ -139,7 +139,10 @@ impl UhyveDirectory {
 
 	fn traversal_path(&self, components: &[&str]) -> CString {
 		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
+		let components_with_prefix = prefix_deref
+			.iter()
+			.copied()
+			.chain(components.iter().copied().rev());
 		// Unlike src/fs/virtio_fs.rs, we skip the first element here so as to not prepend / before /root
 		let path: String = components_with_prefix
 			.flat_map(|component| ["/", component])

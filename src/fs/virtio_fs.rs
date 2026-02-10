@@ -1123,7 +1123,10 @@ impl VirtioFsDirectory {
 
 	fn traversal_path(&self, components: &[&str]) -> CString {
 		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
+		let components_with_prefix = prefix_deref
+			.iter()
+			.copied()
+			.chain(components.iter().copied().rev());
 		let path: String = components_with_prefix
 			.flat_map(|component| ["/", component])
 			.collect();
