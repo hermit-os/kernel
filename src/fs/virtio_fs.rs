@@ -1126,6 +1126,7 @@ impl VirtioFsDirectory {
 			.chain(components.iter().copied().rev());
 		let path: String = components_with_prefix
 			.flat_map(|component| ["/", component])
+			.skip(1)
 			.collect();
 		if path.is_empty() {
 			CString::new("/").unwrap()
@@ -1417,7 +1418,7 @@ pub(crate) fn init() {
 			.unwrap()
 			.mount(
 				mount_point.as_str(),
-				Box::new(VirtioFsDirectory::new(String::new())),
+				Box::new(VirtioFsDirectory::new("/".to_owned())),
 			)
 			.expect("Mount failed. Invalid mount_point?");
 		return;
@@ -1515,7 +1516,7 @@ pub(crate) fn init() {
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
-				.mount(&path, Box::new(VirtioFsDirectory::new(entry)))
+				.mount(&path, Box::new(VirtioFsDirectory::new(path.clone())))
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
 			warn!("virtio-fs don't mount {entry}. It isn't a directory!");
