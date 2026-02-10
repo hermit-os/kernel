@@ -143,7 +143,6 @@ impl UhyveDirectory {
 		let components_with_prefix = iter::once(prefix)
 			.filter(|prefix| !prefix.is_empty())
 			.chain(components.iter().copied().rev());
-		// Unlike src/fs/virtio_fs.rs, we skip the first element here so as to not prepend / before /root
 		let path: String = components_with_prefix
 			.flat_map(|component| ["/", component])
 			.skip(1)
