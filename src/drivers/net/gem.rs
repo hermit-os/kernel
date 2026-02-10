@@ -480,7 +480,7 @@ impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
 		let buffer_addr =
 			self.rx_fields.rxbuffer.as_usize() + (self.buffer_index * RX_BUF_LEN) as usize;
 		let buffer_ptr = ptr::with_exposed_provenance_mut::<u8>(buffer_addr);
-		let buffer = unsafe { core::slice::from_raw_parts_mut(buffer_ptr, length as usize) };
+		let buffer = unsafe { slice::from_raw_parts_mut(buffer_ptr, length as usize) };
 		trace!("BUFFER: {buffer:x?}");
 		let res = f(buffer);
 		self.rx_buffer_consumed();

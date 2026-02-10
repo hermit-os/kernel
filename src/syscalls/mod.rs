@@ -5,7 +5,7 @@ use alloc::ffi::CString;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
-use core::ptr;
+use core::{ptr, slice};
 
 use dirent_display::Dirent64Display;
 use hermit_sync::Lazy;
@@ -493,7 +493,7 @@ pub extern "C" fn sys_close(fd: RawFd) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read(fd: RawFd, buf: *mut u8, len: usize) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
+	let slice = unsafe { slice::from_raw_parts_mut(buf.cast(), len) };
 	crate::fd::read(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| v.try_into().unwrap(),
@@ -523,12 +523,11 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 	}
 
 	let mut read_bytes: isize = 0;
-	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+	let iovec_buffers = unsafe { slice::from_raw_parts(iov, iovcnt) };
 
 	for iovec_buf in iovec_buffers {
-		let buf = unsafe {
-			core::slice::from_raw_parts_mut(iovec_buf.iov_base.cast(), iovec_buf.iov_len)
-		};
+		let buf =
+			unsafe { slice::from_raw_parts_mut(iovec_buf.iov_base.cast(), iovec_buf.iov_len) };
 
 		let len = crate::fd::read(fd, buf).map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
@@ -550,7 +549,7 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 }
 
 unsafe fn write(fd: RawFd, buf: *const u8, len: usize) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
+	let slice = unsafe { slice::from_raw_parts(buf, len) };
 	crate::fd::write(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| v.try_into().unwrap(),
@@ -602,10 +601,10 @@ pub unsafe extern "C" fn sys_writev(fd: RawFd, iov: *const iovec, iovcnt: usize)
 	}
 
 	let mut written_bytes: isize = 0;
-	let iovec_buffers = unsafe { core::slice::from_raw_parts(iov, iovcnt) };
+	let iovec_buffers = unsafe { slice::from_raw_parts(iov, iovcnt) };
 
 	for iovec_buf in iovec_buffers {
-		let buf = unsafe { core::slice::from_raw_parts(iovec_buf.iov_base, iovec_buf.iov_len) };
+		let buf = unsafe { slice::from_raw_parts(iovec_buf.iov_base, iovec_buf.iov_len) };
 
 		let len = crate::fd::write(fd, buf).map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
@@ -790,7 +789,7 @@ pub unsafe extern "C" fn sys_getdents64(fd: RawFd, dirp: *mut Dirent64, count: u
 		return (-i32::from(Errno::Inval)).into();
 	}
 
-	let slice = unsafe { core::slice::from_raw_parts_mut(dirp.cast(), count) };
+	let slice = unsafe { slice::from_raw_parts_mut(dirp.cast(), count) };
 
 	let obj = get_object(fd);
 	obj.map_or_else(
@@ -832,7 +831,7 @@ pub extern "C" fn sys_isatty(fd: i32) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
-	let slice = unsafe { core::slice::from_raw_parts_mut(fds, nfds) };
+	let slice = unsafe { slice::from_raw_parts_mut(fds, nfds) };
 	let timeout = if timeout >= 0 {
 		Some(core::time::Duration::from_millis(
 			timeout.try_into().unwrap(),

@@ -10,6 +10,7 @@ use core::mem::{self, size_of};
 use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 #[allow(unused_imports)]
 use core::ops::DerefMut;
+use core::slice;
 
 use cfg_if::cfg_if;
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
@@ -565,7 +566,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 
 	match block_on(get_query_result(query), None) {
 		Ok(addr_vec) => {
-			let slice = unsafe { core::slice::from_raw_parts_mut(inaddr, len) };
+			let slice = unsafe { slice::from_raw_parts_mut(inaddr, len) };
 
 			match addr_vec[0] {
 				IpAddress::Ipv4(ipv4_addr) => slice.copy_from_slice(&ipv4_addr.octets()),
@@ -1106,7 +1107,7 @@ pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
 	if flags == 0 {
-		let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
+		let slice = unsafe { slice::from_raw_parts_mut(buf.cast(), len) };
 		fd::read(fd, slice).map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
 			|v| v.try_into().unwrap(),
@@ -1159,7 +1160,7 @@ pub unsafe extern "C" fn sys_sendto(
 	}
 
 	if let Some(endpoint) = endpoint {
-		let slice = unsafe { core::slice::from_raw_parts(buf, len) };
+		let slice = unsafe { slice::from_raw_parts(buf, len) };
 		let obj = get_object(fd);
 
 		obj.map_or_else(
@@ -1186,7 +1187,7 @@ pub unsafe extern "C" fn sys_recvfrom(
 	addr: *mut sockaddr,
 	addrlen: *mut socklen_t,
 ) -> isize {
-	let slice = unsafe { core::slice::from_raw_parts_mut(buf.cast(), len) };
+	let slice = unsafe { slice::from_raw_parts_mut(buf.cast(), len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),

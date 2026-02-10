@@ -8,8 +8,8 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::fmt;
 use core::ops::BitAnd;
+use core::{fmt, slice};
 
 use async_trait::async_trait;
 use embedded_io::{Read, Write};
@@ -616,7 +616,7 @@ impl embedded_io::ErrorType for File {
 
 impl Read for File {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let buf = unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr().cast(), buf.len()) };
+		let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr().cast(), buf.len()) };
 		fd::read(self.fd, buf)
 	}
 }

@@ -1,6 +1,8 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
 use core::ptr;
+#[cfg(feature = "common-os")]
+use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
@@ -316,7 +318,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 	let stack_pointer =
 		stack_pointer - 128 /* red zone */ - arg.len() * core::mem::size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
-	let argv = unsafe { core::slice::from_raw_parts_mut(stack_ptr, arg.len()) };
+	let argv = unsafe { slice::from_raw_parts_mut(stack_ptr, arg.len()) };
 	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
 	// align stack pointer to fulfill the requirements of the x86_64 ABI
 	let stack_pointer = (stack_pointer - len).align_down(16) - core::mem::size_of::<usize>();

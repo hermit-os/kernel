@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use core::mem::{MaybeUninit, align_of, offset_of, size_of};
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, mem, ptr};
+use core::{future, mem, ptr, slice};
 
 use align_address::Align;
 use async_lock::Mutex;
@@ -1208,7 +1208,7 @@ impl VfsNode for FuseDirectory {
 			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
 			let name: &'static [u8] = unsafe {
-				core::slice::from_raw_parts(
+				slice::from_raw_parts(
 					dirent.name.as_ptr().cast(),
 					dirent.namelen.try_into().unwrap(),
 				)
@@ -1456,7 +1456,7 @@ pub(crate) fn init() {
 				offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
 				let name: &'static [u8] = unsafe {
-					core::slice::from_raw_parts(
+					slice::from_raw_parts(
 						dirent.name.as_ptr().cast(),
 						dirent.namelen.try_into().unwrap(),
 					)

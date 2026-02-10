@@ -16,6 +16,7 @@ cfg_if::cfg_if! {
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::{ManuallyDrop, MaybeUninit, transmute};
+use core::slice;
 use core::str::FromStr;
 
 use smallvec::SmallVec;
@@ -353,7 +354,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 			// Thus, we cannot cast it to a Hdr.
 			let (header_descriptor, used_len) = buffer_tkn.used_recv_buff.pop_front_raw().unwrap();
 			combined_packets.extend_from_slice(unsafe {
-				core::slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
+				slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
 			});
 
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
