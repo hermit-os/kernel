@@ -387,7 +387,11 @@ impl PciDriver {
 			}
 			#[cfg(feature = "virtio-fs")]
 			Self::VirtioFs(drv) => {
-				fn fuse_handler() {}
+				fn fuse_handler() {
+					if let Some(driver) = get_filesystem_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
 
 				let irq_number = drv.lock().get_interrupt_number();
 
