@@ -483,12 +483,8 @@ impl IsrStatus {
 		IsrStatus { isr_stat: raw }
 	}
 
-	pub fn is_queue_interrupt(&self) -> IsrStatusRaw {
+	pub fn acknowledge(&mut self) -> IsrStatusRaw {
 		self.isr_stat.as_ptr().read()
-	}
-
-	pub fn acknowledge(&mut self) {
-		// nothing to do
 	}
 }
 
