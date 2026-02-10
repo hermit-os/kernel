@@ -12,7 +12,7 @@ pub struct Build {
 	#[command(flatten)]
 	cargo_build: CargoBuild,
 
-	/// Enable the `-Z instrument-mcount` flag.
+	/// Deprecated: use `--features instrument-mcount` instead.
 	#[arg(long)]
 	pub instrument_mcount: bool,
 
@@ -22,8 +22,14 @@ pub struct Build {
 }
 
 impl Build {
-	pub fn run(self) -> Result<()> {
+	pub fn run(mut self) -> Result<()> {
 		let sh = crate::sh()?;
+
+		if self.instrument_mcount {
+			self.cargo_build
+				.features
+				.push("instrument-mcount".to_owned());
+		}
 
 		self.cargo_build.artifact.arch.install_for_build()?;
 
@@ -96,7 +102,12 @@ impl Build {
 			.map(|s| vec![s])
 			.unwrap_or_default();
 
-		if self.instrument_mcount {
+		if self
+			.cargo_build
+			.features
+			.iter()
+			.any(|feature| feature == "instrument-mcount")
+		{
 			rustflags.push("-Zinstrument-mcount");
 			rustflags.push("-Cpasses=ee-instrument<post-inline>");
 		}

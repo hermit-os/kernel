@@ -146,6 +146,41 @@ impl Tls {
 	pub fn thread_ptr(&self) -> *mut () {
 		self.thread_ptr
 	}
+
+	/// Sets the thread pointer register to this TLS's thread pointer value.
+	///
+	/// This should only be used for the idle task. Since the idle task is
+	/// already running, we don't create a new stack frame that we would put
+	/// the thread pointer value into otherwise.
+	///
+	/// The idle task does not enter userspace. That's why it does not need a
+	/// TLS most of the time. In special situations such as instrumenting the
+	/// kernel, the tracer or profiler or `mcount` implementation such as
+	/// rftrace might use TLS for differentiating between the idle task and
+	/// other tasks.
+	pub fn set_thread_ptr(&self) {
+		cfg_if::cfg_if! {
+			if #[cfg(target_arch = "aarch64")] {
+				use aarch64_cpu::registers::{TPIDR_EL0, Writeable};
+
+				let addr = self.thread_ptr().expose_provenance();
+				TPIDR_EL0.set(addr.try_into().unwrap());
+			} else if #[cfg(target_arch = "riscv64")] {
+				unsafe {
+					core::arch::asm!(
+						"mv tp, {}",
+						in(reg) self.thread_ptr().expose_provenance(),
+						options(nomem, nostack, preserves_flags),
+					);
+				}
+			} else if #[cfg(target_arch = "x86_64")] {
+				use crate::arch::x86_64::kernel::processor;
+
+				let addr = self.thread_ptr().expose_provenance();
+				processor::writefs(addr);
+			}
+		}
+	}
 }
 
 mod allocation {
