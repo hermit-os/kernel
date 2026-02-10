@@ -673,6 +673,8 @@ pub(crate) fn init_device(
 			match VirtioFsDriver::init(device) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
+					let irq = device.get_irq().unwrap();
+					crate::arch::interrupts::add_irq_name(irq, "virtio");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
