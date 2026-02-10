@@ -1098,6 +1098,10 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 
 #[derive(Debug)]
 pub(crate) struct VirtioFsDirectory {
+	/// The external path of this directory.
+	///
+	/// Before talking to virtio-fs, the relative path inside this directory is
+	/// adjoined with this prefix.
 	prefix: String,
 	attr: FileAttr,
 }
