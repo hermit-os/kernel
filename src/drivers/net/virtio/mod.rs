@@ -15,8 +15,9 @@ cfg_if::cfg_if! {
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem::{ManuallyDrop, MaybeUninit, transmute};
+use core::mem::{ManuallyDrop, MaybeUninit};
 use core::str::FromStr;
+use core::{mem, slice};
 
 use smallvec::SmallVec;
 use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
@@ -339,7 +340,9 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 		let first_tkn = buffer_token_from_hdr(
 			// SAFETY: Box<T> -> Box<MaybeUninit<T>> is sound
 			unsafe {
-				transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(first_header)
+				mem::transmute::<Box<Hdr, DeviceAlloc>, Box<MaybeUninit<Hdr>, DeviceAlloc>>(
+					first_header,
+				)
 			},
 			self.recv_vqs.buf_size,
 		);
@@ -353,7 +356,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 			// Thus, we cannot cast it to a Hdr.
 			let (header_descriptor, used_len) = buffer_tkn.used_recv_buff.pop_front_raw().unwrap();
 			combined_packets.extend_from_slice(unsafe {
-				core::slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
+				slice::from_raw_parts((&raw const *header_descriptor).cast::<u8>(), used_len)
 			});
 
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();

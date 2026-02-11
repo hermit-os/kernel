@@ -257,7 +257,7 @@ impl SplitVq {
 		let size = vq_handler.set_vq_size(max_size);
 
 		let mut descr_table_cell = unsafe {
-			core::mem::transmute::<
+			mem::transmute::<
 				Box<[MaybeUninit<virtq::Desc>], DeviceAlloc>,
 				Box<UnsafeCell<[MaybeUninit<virtq::Desc>]>, DeviceAlloc>,
 			>(Box::new_uninit_slice_in(size.into(), DeviceAlloc))

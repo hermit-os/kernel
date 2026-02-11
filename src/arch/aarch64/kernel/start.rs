@@ -2,6 +2,8 @@
 
 use core::arch::{asm, naked_asm};
 #[cfg(feature = "smp")]
+use core::ptr;
+#[cfg(feature = "smp")]
 use core::sync::atomic::AtomicPtr;
 
 use aarch64_cpu::asm::barrier::{SY, dsb};
@@ -117,7 +119,7 @@ const fn mair(attr: u64, mt: u64) -> u64 {
 }
 
 #[cfg(feature = "smp")]
-pub(crate) static TTBR0: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+pub(crate) static TTBR0: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(feature = "smp")]
 #[unsafe(naked)]

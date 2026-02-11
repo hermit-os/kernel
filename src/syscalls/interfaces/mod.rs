@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ptr;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
@@ -34,13 +35,13 @@ pub trait SyscallInterface: Send + Sync {
 			let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();
 			envv.push(ptr);
 		}
-		envv.push(core::ptr::null::<u8>());
+		envv.push(ptr::null::<u8>());
 
 		let argc = argv.len() as i32;
 		let argv = argv.leak().as_ptr();
 		// do we have more than a end marker? If not, return as null pointer
 		let envv = if envv.len() == 1 {
-			core::ptr::null::<*const u8>()
+			ptr::null::<*const u8>()
 		} else {
 			envv.leak().as_ptr()
 		};

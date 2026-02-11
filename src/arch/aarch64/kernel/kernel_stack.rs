@@ -1,6 +1,6 @@
 use core::mem;
 
-type Reg = core::mem::MaybeUninit<usize>;
+type Reg = mem::MaybeUninit<usize>;
 
 #[unsafe(naked)]
 pub unsafe extern "C" fn call_with_kernel_stack(

@@ -5,10 +5,10 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-use core::mem::{MaybeUninit, align_of, offset_of, size_of};
+use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, mem};
+use core::{future, mem, ptr, slice};
 
 use align_address::Align;
 use async_lock::Mutex;
@@ -541,9 +541,7 @@ impl<O: ops::Op> CmdHeader<O> {
 		CmdHeader {
 			in_header: fuse_in_header {
 				// The length we need the provide in the header is not the same as the size of the struct because of padding, so we need to calculate it manually.
-				len: (core::mem::size_of::<fuse_in_header>()
-					+ core::mem::size_of::<O::InStruct>()
-					+ len)
+				len: (mem::size_of::<fuse_in_header>() + mem::size_of::<O::InStruct>() + len)
 					.try_into()
 					.expect("The command is too large"),
 				opcode: O::OP_CODE.into(),
@@ -1017,14 +1015,14 @@ impl ObjectInterface for FuseDirectoryHandle {
 			rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>(),
 		);
 
-		if len <= core::mem::size_of::<fuse_dirent>() {
+		if len <= mem::size_of::<fuse_dirent>() {
 			debug!("FUSE no new dirs");
 			return Err(Errno::Noent);
 		}
 
 		let mut ret = 0;
 
-		while (rsp.headers.out_header.len as usize) - *rsp_offset > size_of::<fuse_dirent>() {
+		while (rsp.headers.out_header.len as usize) - *rsp_offset > mem::size_of::<fuse_dirent>() {
 			let dirent = unsafe {
 				&*rsp
 					.payload
@@ -1035,8 +1033,8 @@ impl ObjectInterface for FuseDirectoryHandle {
 					.cast::<fuse_dirent>()
 			};
 
-			let dirent_len = offset_of!(Dirent64, d_name) + dirent.namelen as usize + 1;
-			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
+			let dirent_len = mem::offset_of!(Dirent64, d_name) + dirent.namelen as usize + 1;
+			let next_dirent = (buf_offset + dirent_len).align_up(mem::align_of::<Dirent64>());
 
 			if next_dirent > buf.len() {
 				// target buffer full -> we return the nr. of bytes written (like linux does)
@@ -1049,14 +1047,14 @@ impl ObjectInterface for FuseDirectoryHandle {
 				target_dirent.write(Dirent64 {
 					d_ino: dirent.ino,
 					d_off: 0,
-					d_reclen: (dirent_len.align_up(align_of::<Dirent64>()))
+					d_reclen: (dirent_len.align_up(mem::align_of::<Dirent64>()))
 						.try_into()
 						.unwrap(),
 					d_type: (dirent.type_ as u8).try_into().unwrap(),
 					d_name: PhantomData {},
 				});
-				let nameptr = core::ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				core::ptr::copy_nonoverlapping(
+				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
+				ptr::copy_nonoverlapping(
 					dirent.name.as_ptr().cast::<u8>(),
 					nameptr,
 					dirent.namelen as usize,
@@ -1064,7 +1062,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 				nameptr.add(dirent.namelen as usize).write(0); // zero termination
 			}
 
-			*rsp_offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+			*rsp_offset += mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
 			// Align to dirent struct
 			*rsp_offset = ((*rsp_offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 			buf_offset = next_dirent;
@@ -1186,13 +1184,13 @@ impl VfsNode for FuseDirectory {
 			(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 		};
 
-		if len <= core::mem::size_of::<fuse_dirent>() {
+		if len <= mem::size_of::<fuse_dirent>() {
 			debug!("FUSE no new dirs");
 			return Err(Errno::Noent);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while (rsp.headers.out_header.len as usize) - offset > core::mem::size_of::<fuse_dirent>() {
+		while (rsp.headers.out_header.len as usize) - offset > mem::size_of::<fuse_dirent>() {
 			let dirent = unsafe {
 				&*rsp
 					.payload
@@ -1203,12 +1201,12 @@ impl VfsNode for FuseDirectory {
 					.cast::<fuse_dirent>()
 			};
 
-			offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+			offset += mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
 			// Align to dirent struct
 			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
 			let name: &'static [u8] = unsafe {
-				core::slice::from_raw_parts(
+				slice::from_raw_parts(
 					dirent.name.as_ptr().cast(),
 					dirent.namelen.try_into().unwrap(),
 				)
@@ -1432,15 +1430,10 @@ pub(crate) fn init() {
 				(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 			};
 
-			assert!(
-				len > core::mem::size_of::<fuse_dirent>(),
-				"FUSE no new dirs"
-			);
+			assert!(len > mem::size_of::<fuse_dirent>(), "FUSE no new dirs");
 
 			let mut entries: Vec<String> = Vec::new();
-			while (rsp.headers.out_header.len as usize) - offset
-				> core::mem::size_of::<fuse_dirent>()
-			{
+			while (rsp.headers.out_header.len as usize) - offset > mem::size_of::<fuse_dirent>() {
 				let dirent = unsafe {
 					&*rsp
 						.payload
@@ -1451,12 +1444,12 @@ pub(crate) fn init() {
 						.cast::<fuse_dirent>()
 				};
 
-				offset += core::mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+				offset += mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
 				// Align to dirent struct
 				offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
 				let name: &'static [u8] = unsafe {
-					core::slice::from_raw_parts(
+					slice::from_raw_parts(
 						dirent.name.as_ptr().cast(),
 						dirent.namelen.try_into().unwrap(),
 					)

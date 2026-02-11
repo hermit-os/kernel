@@ -926,8 +926,8 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		core::ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
-		core::ptr::write_volatile(
+		ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
+		ptr::write_volatile(
 			(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>()).as_mut_ptr::<u32>(),
 			value,
 		);
@@ -938,8 +938,8 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		core::ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
-		value = core::ptr::read_volatile(
+		ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
+		value = ptr::read_volatile(
 			(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>()).as_ptr::<u32>(),
 		);
 	}
@@ -971,9 +971,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit.
 			// Wait until previous interrupt was delivered.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { core::ptr::read_volatile(value_ref) }
-				& APIC_ICR_DELIVERY_STATUS_PENDING)
-				> 0
+			while (unsafe { ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0
 			{
 				spin_loop();
 			}

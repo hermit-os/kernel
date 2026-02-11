@@ -2,6 +2,8 @@
 use core::arch::asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
+#[cfg(feature = "common-os")]
+use core::{mem, slice};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -260,7 +262,7 @@ where
 		// So the thread pointer needs to be `block_ptr + tls_offset`.
 		// GNU style TLS requires `fs:0` to represent the same address as the thread pointer.
 		// Since the thread pointer points to the end of the TLS blocks, we need to store it there.
-		let tcb_size = core::mem::size_of::<*mut ()>();
+		let tcb_size = mem::size_of::<*mut ()>();
 		let tls_offset = tls_size as usize;
 
 		let tls_memsz = (tls_offset + tcb_size).align_up(BasePageSize::SIZE as usize);
@@ -313,13 +315,12 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 		+ (code_size + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE.try_into().unwrap())
 		- 8;
 
-	let stack_pointer =
-		stack_pointer - 128 /* red zone */ - arg.len() * core::mem::size_of::<*mut u8>();
+	let stack_pointer = stack_pointer - 128 /* red zone */ - arg.len() * mem::size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
-	let argv = unsafe { core::slice::from_raw_parts_mut(stack_ptr, arg.len()) };
+	let argv = unsafe { slice::from_raw_parts_mut(stack_ptr, arg.len()) };
 	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
 	// align stack pointer to fulfill the requirements of the x86_64 ABI
-	let stack_pointer = (stack_pointer - len).align_down(16) - core::mem::size_of::<usize>();
+	let stack_pointer = (stack_pointer - len).align_down(16) - mem::size_of::<usize>();
 
 	let mut pos: usize = 0;
 	for (i, s) in arg.iter().enumerate() {
@@ -329,7 +330,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			pos += bytes.len();
 
 			unsafe {
-				core::ptr::copy_nonoverlapping(bytes.as_ptr(), argv[i], bytes.len());
+				ptr::copy_nonoverlapping(bytes.as_ptr(), argv[i], bytes.len());
 			}
 		} else {
 			panic!("Unable to create C string!");

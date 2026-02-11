@@ -1,5 +1,5 @@
 #[cfg(not(feature = "newlib"))]
-use core::mem::size_of;
+use core::mem;
 use core::slice;
 
 use hermit_sync::TicketMutex;
@@ -64,7 +64,7 @@ pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 	let mut buf = value.cast();
-	let mut len = size_of::<u32>();
+	let mut len = mem::size_of::<u32>();
 	while len != 0 {
 		let res = unsafe { read_entropy(buf, len, 0) };
 		if res < 0 {
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
 	let mut buf = value.cast();
-	let mut len = size_of::<u64>();
+	let mut len = mem::size_of::<u64>();
 	while len != 0 {
 		let res = unsafe { read_entropy(buf, len, 0) };
 		if res < 0 {

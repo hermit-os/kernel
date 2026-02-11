@@ -10,8 +10,7 @@ extern crate alloc;
 mod common;
 
 use alloc::vec::Vec;
-use core::fmt;
-use core::mem::size_of;
+use core::{fmt, mem};
 
 const PATTERN: u8 = 0xab;
 
@@ -32,9 +31,9 @@ where
 	let post_dest_vec_size: u32 = 1;
 	let t_base_pattern: T = T::from(PATTERN).unwrap();
 	let mut pattern: T = t_base_pattern;
-	// Fill pattern of type T with size_of<T> times the byte pattern
+	// Fill pattern of type T with mem::size_of<T> times the byte pattern
 	// The "pre" and "post part of the destination vector are later filled with this pattern
-	for _i in 1..size_of::<T>() {
+	for _i in 1..mem::size_of::<T>() {
 		pattern = pattern.shl(8) + t_base_pattern;
 	}
 	let pattern = pattern; // remove mut
@@ -82,7 +81,7 @@ where
 		memcpy(
 			b.as_mut_ptr().add(pre_dest_vec_size as usize).cast::<u8>(),
 			a.as_ptr().cast::<u8>(),
-			((size_of::<T>() as u32) * vec_size) as usize,
+			((mem::size_of::<T>() as u32) * vec_size) as usize,
 		);
 	}
 	// Assert that `pattern` in pre section was not changed by memcpy
@@ -113,7 +112,7 @@ where
 			memcmp(
 				b.as_ptr().add(pre_dest_vec_size as usize).cast::<u8>(),
 				a.as_ptr().cast::<u8>(),
-				size_of::<T>() * vec_size as usize,
+				mem::size_of::<T>() * vec_size as usize,
 			),
 			0
 		);

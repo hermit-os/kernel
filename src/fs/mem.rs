@@ -7,7 +7,8 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-use core::mem::{MaybeUninit, offset_of};
+use core::mem::MaybeUninit;
+use core::{mem, ptr};
 
 use align_address::Align;
 use async_lock::{Mutex, RwLock};
@@ -396,7 +397,7 @@ impl ObjectInterface for MemDirectoryInterface {
 		for name in self.inner.read().await.keys().skip(*read_idx) {
 			let namelen = name.len();
 
-			let dirent_len = offset_of!(Dirent64, d_name) + namelen + 1;
+			let dirent_len = mem::offset_of!(Dirent64, d_name) + namelen + 1;
 			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
 
 			if next_dirent > buf.len() {
@@ -419,12 +420,8 @@ impl ObjectInterface for MemDirectoryInterface {
 					d_type: FileType::Unknown, // TODO: Proper filetype
 					d_name: PhantomData {},
 				});
-				let nameptr = core::ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				core::ptr::copy_nonoverlapping(
-					name.as_bytes().as_ptr().cast::<u8>(),
-					nameptr,
-					namelen,
-				);
+				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
+				ptr::copy_nonoverlapping(name.as_bytes().as_ptr().cast::<u8>(), nameptr, namelen);
 				nameptr.add(namelen).write(0); // zero termination
 			}
 
