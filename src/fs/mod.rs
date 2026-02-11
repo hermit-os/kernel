@@ -1,7 +1,7 @@
-#[cfg(feature = "virtio-fs")]
-pub(crate) mod fuse;
 mod mem;
 mod uhyve;
+#[cfg(feature = "virtio-fs")]
+pub(crate) mod virtio_fs;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -363,7 +363,7 @@ pub(crate) fn init() {
 	drop(cwd);
 
 	#[cfg(feature = "virtio-fs")]
-	fuse::init();
+	virtio_fs::init();
 	if crate::env::is_uhyve() {
 		uhyve::init();
 	}

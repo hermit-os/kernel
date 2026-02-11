@@ -42,7 +42,7 @@ use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
 };
 use crate::errno::Errno;
-use crate::fs::fuse::{self, FuseError, FuseInterface, Rsp, RspHeader};
+use crate::fs::virtio_fs::{self, FuseError, FuseInterface, Rsp, RspHeader};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -175,16 +175,16 @@ impl VirtioFsDriver {
 }
 
 impl FuseInterface for VirtioFsDriver {
-	fn send_command<O: fuse::ops::Op + 'static>(
+	fn send_command<O: virtio_fs::ops::Op + 'static>(
 		&mut self,
-		cmd: fuse::Cmd<O>,
+		cmd: virtio_fs::Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<fuse::Rsp<O>, FuseError>
+	) -> Result<virtio_fs::Rsp<O>, FuseError>
 	where
-		<O as fuse::ops::Op>::InStruct: Send,
-		<O as fuse::ops::Op>::OutStruct: Send,
+		<O as virtio_fs::ops::Op>::InStruct: Send,
+		<O as virtio_fs::ops::Op>::OutStruct: Send,
 	{
-		let fuse::Cmd {
+		let virtio_fs::Cmd {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
 		} = cmd;

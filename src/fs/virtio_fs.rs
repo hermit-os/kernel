@@ -24,7 +24,7 @@ use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
-use crate::fs::fuse::ops::SetAttrValidFields;
+use crate::fs::virtio_fs::ops::SetAttrValidFields;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
