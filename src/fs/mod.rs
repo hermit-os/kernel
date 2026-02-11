@@ -442,31 +442,32 @@ where
 	F: FnOnce(&str) -> io::Result<T>,
 {
 	if name.starts_with("/") {
-		callback(name)
-	} else {
-		let cwd = WORKING_DIRECTORY.lock();
-		if let Some(cwd) = cwd.as_ref() {
-			let mut path = String::with_capacity(cwd.len() + name.len() + 1);
-			path.push_str(cwd);
-			path.push('/');
-			path.push_str(name);
-
-			callback(&path)
-		} else {
-			// Relative path with no CWD, this is weird/impossible
-			Err(Errno::Badf)
-		}
+		return callback(name);
 	}
+
+	let cwd = WORKING_DIRECTORY.lock();
+
+	let Some(cwd) = cwd.as_ref() else {
+		// Relative path with no CWD, this is weird/impossible
+		return Err(Errno::Badf);
+	};
+
+	let mut path = String::with_capacity(cwd.len() + name.len() + 1);
+	path.push_str(cwd);
+	path.push('/');
+	path.push_str(name);
+
+	callback(&path)
 }
 
 pub fn truncate(name: &str, size: usize) -> io::Result<()> {
 	with_relative_filename(name, |name| {
 		let fs = FILESYSTEM.get().ok_or(Errno::Inval)?;
-		if let Ok(file) = fs.open(name, OpenOption::O_TRUNC, AccessPermission::empty()) {
-			block_on(async { file.read().await.truncate(size).await }, None)
-		} else {
-			Err(Errno::Badf)
-		}
+		let file = fs
+			.open(name, OpenOption::O_TRUNC, AccessPermission::empty())
+			.map_err(|_| Errno::Badf)?;
+
+		block_on(async { file.read().await.truncate(size).await }, None)
 	})
 }
 
@@ -488,11 +489,8 @@ pub fn open(name: &str, flags: OpenOption, mode: AccessPermission) -> io::Result
 
 pub fn get_cwd() -> io::Result<String> {
 	let cwd = WORKING_DIRECTORY.lock();
-	if let Some(cwd) = cwd.as_ref() {
-		Ok(cwd.clone())
-	} else {
-		Err(Errno::Noent)
-	}
+	let cwd = cwd.as_ref().ok_or(Errno::Noent)?;
+	Ok(cwd.clone())
 }
 
 pub fn set_cwd(cwd: &str) -> io::Result<()> {
@@ -502,9 +500,7 @@ pub fn set_cwd(cwd: &str) -> io::Result<()> {
 	if cwd.starts_with("/") {
 		*working_dir = Some(cwd.to_owned());
 	} else {
-		let Some(working_dir) = working_dir.as_mut() else {
-			return Err(Errno::Badf);
-		};
+		let working_dir = working_dir.as_mut().ok_or(Errno::Badf)?;
 		working_dir.push('/');
 		working_dir.push_str(cwd);
 	}

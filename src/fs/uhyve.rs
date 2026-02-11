@@ -40,11 +40,11 @@ impl UhyveFileHandleInner {
 		};
 		uhyve_hypercall(Hypercall::FileLseek(&mut lseek_params));
 
-		if lseek_params.offset >= 0 {
-			Ok(lseek_params.offset)
-		} else {
-			Err(Errno::Inval)
+		if lseek_params.offset < 0 {
+			return Err(Errno::Inval);
 		}
+
+		Ok(lseek_params.offset)
 	}
 }
 
@@ -62,11 +62,11 @@ impl Read for UhyveFileHandleInner {
 		};
 		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
 
-		if read_params.ret >= 0 {
-			Ok(read_params.ret.try_into().unwrap())
-		} else {
-			Err(Errno::Io)
+		if read_params.ret < 0 {
+			return Err(Errno::Io);
 		}
+
+		Ok(read_params.ret.try_into().unwrap())
 	}
 }
 
@@ -187,13 +187,13 @@ impl VfsNode for UhyveDirectory {
 		};
 		uhyve_hypercall(Hypercall::FileOpen(&mut open_params));
 
-		if open_params.ret > 0 {
-			Ok(Arc::new(async_lock::RwLock::new(UhyveFileHandle::new(
-				open_params.ret,
-			))))
-		} else {
-			Err(Errno::Io)
+		if open_params.ret <= 0 {
+			return Err(Errno::Io);
 		}
+
+		Ok(Arc::new(async_lock::RwLock::new(UhyveFileHandle::new(
+			open_params.ret,
+		))))
 	}
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
@@ -209,11 +209,11 @@ impl VfsNode for UhyveDirectory {
 		};
 		uhyve_hypercall(Hypercall::FileUnlink(&mut unlink_params));
 
-		if unlink_params.ret == 0 {
-			Ok(())
-		} else {
-			Err(Errno::Io)
+		if unlink_params.ret != 0 {
+			return Err(Errno::Io);
 		}
+
+		Ok(())
 	}
 
 	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
@@ -231,38 +231,14 @@ impl VfsNode for UhyveDirectory {
 
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
+
 	let mount_str = fdt().and_then(|fdt| {
 		fdt.find_node("/uhyve,mounts")
 			.and_then(|node| node.property("mounts"))
 			.and_then(|property| property.as_str())
 	});
-	if let Some(mount_str) = mount_str {
-		assert_ne!(mount_str.len(), 0, "Invalid /uhyve,mounts node in FDT");
-		for mount_point in mount_str.split('\0') {
-			info!("Mounting uhyve filesystem at {mount_point}");
 
-			if let Err(errno) = fs::FILESYSTEM.get().unwrap().mount(
-				mount_point,
-				Box::new(UhyveDirectory::new(Some(mount_point.to_owned()))),
-			) {
-				assert_eq!(errno, Errno::Badf);
-				debug!(
-					"Mounting of {mount_point} failed with {errno:?}. Creating missing parent folders"
-				);
-				let (parent_path, _file_name) = mount_point.rsplit_once('/').unwrap();
-				create_dir_recursive(parent_path, AccessPermission::S_IRWXU).unwrap();
-
-				fs::FILESYSTEM
-					.get()
-					.unwrap()
-					.mount(
-						mount_point,
-						Box::new(UhyveDirectory::new(Some(mount_point.to_owned()))),
-					)
-					.unwrap();
-			}
-		}
-	} else {
+	let Some(mount_str) = mount_str else {
 		// No FDT -> Uhyve legacy mounting (to /root)
 		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_owned();
 		info!("Mounting uhyve filesystem at {mount_point}");
@@ -274,5 +250,28 @@ pub(crate) fn init() {
 				Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
 			)
 			.expect("Mount failed. Duplicate mount_point?");
+		return;
+	};
+
+	assert_ne!(mount_str.len(), 0, "Invalid /uhyve,mounts node in FDT");
+	for mount_point in mount_str.split('\0') {
+		info!("Mounting uhyve filesystem at {mount_point}");
+
+		let obj = Box::new(UhyveDirectory::new(Some(mount_point.to_owned())));
+		let Err(errno) = fs::FILESYSTEM.get().unwrap().mount(mount_point, obj) else {
+			return;
+		};
+
+		assert_eq!(errno, Errno::Badf);
+		debug!("Mounting of {mount_point} failed with {errno:?}. Creating missing parent folders");
+		let (parent_path, _file_name) = mount_point.rsplit_once('/').unwrap();
+		create_dir_recursive(parent_path, AccessPermission::S_IRWXU).unwrap();
+
+		let obj = Box::new(UhyveDirectory::new(Some(mount_point.to_owned())));
+		fs::FILESYSTEM
+			.get()
+			.unwrap()
+			.mount(mount_point, obj)
+			.unwrap();
 	}
 }
