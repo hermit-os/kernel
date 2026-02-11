@@ -8,7 +8,7 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, iter, mem, ptr, slice};
+use core::{future, mem, ptr, slice};
 
 use align_address::Align;
 use async_lock::Mutex;
@@ -1126,20 +1126,11 @@ impl VirtioFsDirectory {
 		}
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
+	fn traversal_path(&self, path: &str) -> CString {
 		let prefix = self.prefix.as_str();
-		let components_with_prefix = iter::once(prefix)
-			.filter(|prefix| !prefix.is_empty())
-			.chain(components.iter().copied().rev());
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.skip(1)
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
-		}
+		let prefix = prefix.strip_suffix("/").unwrap_or(prefix);
+		let path = [prefix, path].join("/");
+		CString::new(path).unwrap()
 	}
 }
 
@@ -1159,8 +1150,8 @@ impl VfsNode for VirtioFsDirectory {
 		)))
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
-		let path = self.traversal_path(components);
+	fn traverse_readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs opendir: {path:#?}");
 
@@ -1239,8 +1230,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(entries)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs stat: {path:#?}");
 
@@ -1263,12 +1254,11 @@ impl VfsNode for VirtioFsDirectory {
 		}
 
 		let path = readlink(entry_out.nodeid)?;
-		let mut components: Vec<&str> = path.split('/').collect();
-		self.traverse_stat(&mut components)
+		self.traverse_stat(&path)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs lstat: {path:#?}");
 
@@ -1282,11 +1272,11 @@ impl VfsNode for VirtioFsDirectory {
 
 	fn traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs open: {path:#?}, {opt:?} {mode:?}");
 
@@ -1358,8 +1348,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(Arc::new(async_lock::RwLock::new(file)))
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
 		let rsp = get_filesystem_driver()
@@ -1371,8 +1361,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_rmdir(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
 		let rsp = get_filesystem_driver()
@@ -1384,8 +1374,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
+		let path = self.traversal_path(path);
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
 		let rsp = get_filesystem_driver()

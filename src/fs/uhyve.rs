@@ -3,8 +3,6 @@ use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::iter;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -142,20 +140,11 @@ impl UhyveDirectory {
 		UhyveDirectory { prefix }
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
+	fn traversal_path(&self, path: &str) -> CString {
 		let prefix = self.prefix.as_str();
-		let components_with_prefix = iter::once(prefix)
-			.filter(|prefix| !prefix.is_empty())
-			.chain(components.iter().copied().rev());
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.skip(1)
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
-		}
+		let prefix = prefix.strip_suffix("/").unwrap_or(prefix);
+		let path = [prefix, path].join("/");
+		CString::new(path).unwrap()
 	}
 }
 
@@ -165,21 +154,21 @@ impl VfsNode for UhyveDirectory {
 		NodeKind::Directory
 	}
 
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_stat(&self, _path: &str) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_lstat(&self, _path: &str) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
 	fn traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(path);
 
 		let mut open_params = OpenParams {
 			name: GuestPhysAddr::new(
@@ -202,8 +191,8 @@ impl VfsNode for UhyveDirectory {
 		))))
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let mut unlink_params = UnlinkParams {
 			name: GuestPhysAddr::new(
@@ -222,15 +211,11 @@ impl VfsNode for UhyveDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	fn traverse_rmdir(&self, _path: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_mkdir(
-		&self,
-		_components: &mut Vec<&str>,
-		_mode: AccessPermission,
-	) -> io::Result<()> {
+	fn traverse_mkdir(&self, _path: &str, _mode: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 }
