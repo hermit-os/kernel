@@ -726,7 +726,7 @@ impl FuseFileHandleInner {
 	}
 
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		debug!("FUSE lseek: offset: {offset}, whence: {whence:?}");
+		debug!("virtio-fs lseek: offset: {offset}, whence: {whence:?}");
 
 		// Seek on fuse file systems seems to be a little odd: All reads are referenced from the
 		// beginning of the file, thus we have to track the offset ourself. Also, a read doesn't
@@ -767,7 +767,7 @@ impl FuseFileHandleInner {
 	}
 
 	fn fstat(&mut self) -> io::Result<FileAttr> {
-		debug!("FUSE getattr");
+		debug!("virtio-fs getattr");
 
 		let nid = self.fuse_nid.ok_or(Errno::Io)?;
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
@@ -786,7 +786,7 @@ impl FuseFileHandleInner {
 	}
 
 	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
-		debug!("FUSE setattr");
+		debug!("virtio-fs setattr");
 
 		let nid = self.fuse_nid.ok_or(Errno::Io)?;
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
@@ -842,7 +842,7 @@ impl Read for FuseFileHandleInner {
 
 impl Write for FuseFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		debug!("FUSE write!");
+		debug!("virtio-fs write!");
 		let mut truncated_len = buf.len();
 		if truncated_len > MAX_WRITE_LEN {
 			debug!(
@@ -988,7 +988,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 			CString::new("/").unwrap()
 		};
 
-		debug!("FUSE opendir: {path:#?}");
+		debug!("virtio-fs opendir: {path:#?}");
 
 		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
 
@@ -1002,7 +1002,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
-		debug!("FUSE readdir: {path:#?}");
+		debug!("virtio-fs readdir: {path:#?}");
 
 		// Linux seems to allocate a single page to store the dirfile
 		let len = MAX_READ_LEN as u32;
@@ -1023,7 +1023,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		);
 
 		if len <= mem::size_of::<fuse_dirent>() {
-			debug!("FUSE no new dirs");
+			debug!("virtio-fs no new dirs");
 			return Err(Errno::Noent);
 		}
 
@@ -1154,7 +1154,7 @@ impl VfsNode for FuseDirectory {
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
 		let path = self.traversal_path(components);
 
-		debug!("FUSE opendir: {path:#?}");
+		debug!("virtio-fs opendir: {path:#?}");
 
 		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
 
@@ -1168,7 +1168,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
-		debug!("FUSE readdir: {path:#?}");
+		debug!("virtio-fs readdir: {path:#?}");
 
 		// Linux seems to allocate a single page to store the dirfile
 		let len = MAX_READ_LEN as u32;
@@ -1191,7 +1191,7 @@ impl VfsNode for FuseDirectory {
 		};
 
 		if len <= mem::size_of::<fuse_dirent>() {
-			debug!("FUSE no new dirs");
+			debug!("virtio-fs no new dirs");
 			return Err(Errno::Noent);
 		}
 
@@ -1234,7 +1234,7 @@ impl VfsNode for FuseDirectory {
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
 
-		debug!("FUSE stat: {path:#?}");
+		debug!("virtio-fs stat: {path:#?}");
 
 		// Is there a better way to implement this?
 		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
@@ -1262,7 +1262,7 @@ impl VfsNode for FuseDirectory {
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		let path = self.traversal_path(components);
 
-		debug!("FUSE lstat: {path:#?}");
+		debug!("virtio-fs lstat: {path:#?}");
 
 		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
 		let rsp = get_filesystem_driver()
@@ -1280,7 +1280,7 @@ impl VfsNode for FuseDirectory {
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		let path = self.traversal_path(components);
 
-		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
+		debug!("virtio-fs open: {path:#?}, {opt:?} {mode:?}");
 
 		if opt.contains(OpenOption::O_DIRECTORY) {
 			if opt.contains(OpenOption::O_CREAT) {
@@ -1331,7 +1331,7 @@ impl VfsNode for FuseDirectory {
 			file_guard.fuse_nid = lookup(path);
 
 			if file_guard.fuse_nid.is_none() {
-				warn!("Fuse lookup seems to have failed!");
+				warn!("virtio-fs lookup seems to have failed!");
 				return Err(Errno::Noent);
 			}
 
@@ -1393,7 +1393,7 @@ impl VfsNode for FuseDirectory {
 }
 
 pub(crate) fn init() {
-	debug!("Try to initialize fuse filesystem");
+	debug!("Try to initialize virtio-fs filesystem");
 
 	let Some(driver) = get_filesystem_driver() else {
 		return;
@@ -1401,7 +1401,7 @@ pub(crate) fn init() {
 
 	let (cmd, rsp_payload_len) = ops::Init::create();
 	let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
-	trace!("fuse init answer: {rsp:?}");
+	trace!("virtio-fs init answer: {rsp:?}");
 
 	let mount_point = driver.lock().get_mount_point();
 	if mount_point != "/" {
@@ -1453,7 +1453,7 @@ pub(crate) fn init() {
 		(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 	};
 
-	assert!(len > mem::size_of::<fuse_dirent>(), "FUSE no new dirs");
+	assert!(len > mem::size_of::<fuse_dirent>(), "virtio-fs no new dirs");
 
 	let mut entries: Vec<String> = Vec::new();
 	while (rsp.headers.out_header.len as usize) - offset > mem::size_of::<fuse_dirent>() {
@@ -1492,7 +1492,9 @@ pub(crate) fn init() {
 	entries.retain(|x| x != "..");
 	entries.retain(|x| x != "tmp");
 	entries.retain(|x| x != "proc");
-	warn!("Fuse don't mount the host directories 'tmp' and 'proc' into the guest file system!");
+	warn!(
+		"virtio-fs don't mount the host directories 'tmp' and 'proc' into the guest file system!"
+	);
 
 	for i in entries {
 		let i_cstr = CString::new(i.as_str()).unwrap();
@@ -1505,7 +1507,7 @@ pub(crate) fn init() {
 
 		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-			info!("Fuse mount {i} to /{i}");
+			info!("virtio-fs mount {i} to /{i}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
@@ -1515,7 +1517,7 @@ pub(crate) fn init() {
 				)
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
-			warn!("Fuse don't mount {i}. It isn't a directory!");
+			warn!("virtio-fs don't mount {i}. It isn't a directory!");
 		}
 	}
 }
