@@ -31,7 +31,7 @@ use volatile::access::ReadOnly;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
-use crate::drivers::virtio::error::VirtioFsError;
+use crate::drivers::virtio::error::VirtioFsInitError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -85,7 +85,7 @@ impl VirtioFsDriver {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
-	pub(crate) fn init_dev(&mut self) -> Result<(), VirtioFsError> {
+	pub(crate) fn init_dev(&mut self) -> Result<(), VirtioFsInitError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -103,7 +103,7 @@ impl VirtioFsDriver {
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -120,7 +120,7 @@ impl VirtioFsDriver {
 			self.dev_cfg.features = negotiated_features;
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
 		// 1 highprio queue, and n normal request queues
@@ -133,7 +133,7 @@ impl VirtioFsDriver {
 			.to_ne() + 1;
 		if vqnum == 0 {
 			error!("0 request queues requested from device. Aborting!");
-			return Err(VirtioFsError::Unknown);
+			return Err(VirtioFsInitError::Unknown);
 		}
 
 		// create the queues and tell device about them
@@ -277,7 +277,7 @@ pub mod error {
 
 	/// Network filesystem error enum.
 	#[derive(Error, Debug, Copy, Clone)]
-	pub enum VirtioFsError {
+	pub enum VirtioFsInitError {
 		#[cfg(feature = "pci")]
 		#[error(
 			"Virtio filesystem driver failed, for device {0:x}, due to a missing or malformed device config!"
