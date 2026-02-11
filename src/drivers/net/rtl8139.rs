@@ -578,42 +578,46 @@ impl smoltcp::phy::Device for RTL8139Driver {
 	type TxToken<'a> = TxToken<'a>;
 
 	fn receive(&mut self, _: smoltcp::time::Instant) -> Option<(RxToken<'_>, TxToken<'_>)> {
-		if !self.rx_fields.rx_in_use && self.has_packet() {
-			self.rx_fields.rx_in_use = true;
-			let regs = self.regs.as_mut_ptr();
-
-			Some((
-				RxToken {
-					capr: map_field!(regs.capr),
-					rx_fields: &mut self.rx_fields,
-				},
-				TxToken {
-					tsd0: map_field!(regs.tsd0),
-					tsd1: map_field!(regs.tsd1),
-					tsd2: map_field!(regs.tsd2),
-					tsd3: map_field!(regs.tsd3),
-					tx_fields: &mut self.tx_fields,
-				},
-			))
-		} else {
-			None
+		if self.rx_fields.rx_in_use {
+			return None;
 		}
-	}
 
-	fn transmit(&mut self, _: smoltcp::time::Instant) -> Option<TxToken<'_>> {
-		if self.tx_fields.remaining_bufs > 0 {
-			let regs = self.regs.as_mut_ptr();
+		if !self.has_packet() {
+			return None;
+		}
 
-			Some(TxToken {
+		self.rx_fields.rx_in_use = true;
+		let regs = self.regs.as_mut_ptr();
+
+		Some((
+			RxToken {
+				capr: map_field!(regs.capr),
+				rx_fields: &mut self.rx_fields,
+			},
+			TxToken {
 				tsd0: map_field!(regs.tsd0),
 				tsd1: map_field!(regs.tsd1),
 				tsd2: map_field!(regs.tsd2),
 				tsd3: map_field!(regs.tsd3),
 				tx_fields: &mut self.tx_fields,
-			})
-		} else {
-			None
+			},
+		))
+	}
+
+	fn transmit(&mut self, _: smoltcp::time::Instant) -> Option<TxToken<'_>> {
+		if self.tx_fields.remaining_bufs == 0 {
+			return None;
 		}
+
+		let regs = self.regs.as_mut_ptr();
+
+		Some(TxToken {
+			tsd0: map_field!(regs.tsd0),
+			tsd1: map_field!(regs.tsd1),
+			tsd2: map_field!(regs.tsd2),
+			tsd3: map_field!(regs.tsd3),
+			tx_fields: &mut self.tx_fields,
+		})
 	}
 
 	fn capabilities(&self) -> smoltcp::phy::DeviceCapabilities {
@@ -746,11 +750,13 @@ pub(crate) fn init_device(
 	let mut regs = None;
 
 	for i in 0..MAX_BARS {
-		if let Some(Bar::Memory32 { .. }) = device.get_bar(i.try_into().unwrap()) {
-			let (addr, _size) = device.memory_map_bar(i.try_into().unwrap(), true).unwrap();
+		let Some(Bar::Memory32 { .. }) = device.get_bar(i.try_into().unwrap()) else {
+			continue;
+		};
 
-			regs = Some(unsafe { VolatileRef::new(NonNull::new(addr.as_mut_ptr()).unwrap()) });
-		}
+		let (addr, _size) = device.memory_map_bar(i.try_into().unwrap(), true).unwrap();
+
+		regs = Some(unsafe { VolatileRef::new(NonNull::new(addr.as_mut_ptr()).unwrap()) });
 	}
 
 	let mut regs = regs.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?;

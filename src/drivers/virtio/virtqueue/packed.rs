@@ -120,19 +120,16 @@ impl DescriptorRing {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 
-		let first_ctrl_settings;
-		let first_buffer;
-		let mut ctrl;
-
 		let mut tkn_iterator = tkn_lst.into_iter();
-		if let Some(first_tkn) = tkn_iterator.next() {
-			ctrl = self.push_without_making_available(&first_tkn)?;
-			first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
-			first_buffer = first_tkn;
-		} else {
+		let Some(first_tkn) = tkn_iterator.next() else {
 			// Empty batches are an error
 			return Err(VirtqError::BufferNotSpecified);
-		}
+		};
+
+		let mut ctrl = self.push_without_making_available(&first_tkn)?;
+		let first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
+		let first_buffer = first_tkn;
+
 		// Push the remaining tokens (if any)
 		for tkn in tkn_iterator {
 			ctrl.make_avail(tkn);
@@ -276,46 +273,46 @@ impl ReadCtrl<'_> {
 	fn poll_next(&mut self) -> Option<(TransferToken<pvirtq::Desc>, u32)> {
 		// Check if descriptor has been marked used.
 		let desc = &self.desc_ring.ring[usize::from(self.position)];
-		if self.desc_ring.is_marked_used(desc.flags) {
-			let buff_id = desc.id.to_ne();
-			let tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
-				.take()
-				.expect(
-					"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
-				);
-
-			// Retrieve if any has been written to the queue. If this is the case, we calculate the overall length
-			// This is necessary in order to provide the drivers with the correct access, to usable data.
-			//
-			// According to the standard the device signals solely via the first written descriptor if anything has been written to
-			// the write descriptors of a buffer.
-			// See Virtio specification v1.1. - 2.7.4
-			//                                - 2.7.5
-			//                                - 2.7.6
-			// let mut write_len = if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
-			//      self.desc_ring.ring[self.position].len
-			//  } else {
-			//      0
-			//  };
-			//
-			// INFO:
-			// Due to the behavior of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
-			// flag correctly upon writes. Hence we omit it, in order to receive data.
-
-			// We need to read the written length before advancing the position.
-			let write_len = desc.len.to_ne();
-
-			for _ in 0..tkn.num_consuming_descr() {
-				self.incrmt();
-			}
-			unsafe {
-				self.desc_ring.indexes.deallocate(buff_id.into());
-			}
-
-			Some((tkn, write_len))
-		} else {
-			None
+		if !self.desc_ring.is_marked_used(desc.flags) {
+			return None;
 		}
+
+		let buff_id = desc.id.to_ne();
+		let tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
+			.take()
+			.expect(
+				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
+			);
+
+		// Retrieve if any has been written to the queue. If this is the case, we calculate the overall length
+		// This is necessary in order to provide the drivers with the correct access, to usable data.
+		//
+		// According to the standard the device signals solely via the first written descriptor if anything has been written to
+		// the write descriptors of a buffer.
+		// See Virtio specification v1.1. - 2.7.4
+		//                                - 2.7.5
+		//                                - 2.7.6
+		// let mut write_len = if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
+		//      self.desc_ring.ring[self.position].len
+		//  } else {
+		//      0
+		//  };
+		//
+		// INFO:
+		// Due to the behavior of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
+		// flag correctly upon writes. Hence we omit it, in order to receive data.
+
+		// We need to read the written length before advancing the position.
+		let write_len = desc.len.to_ne();
+
+		for _ in 0..tkn.num_consuming_descr() {
+			self.incrmt();
+		}
+		unsafe {
+			self.desc_ring.indexes.deallocate(buff_id.into());
+		}
+
+		Some((tkn, write_len))
 	}
 
 	fn incrmt(&mut self) {
@@ -670,9 +667,9 @@ impl PackedVq {
 		}
 
 		// Get a handler to the queues configuration area.
-		let Some(mut vq_handler) = com_cfg.select_vq(index) else {
-			return Err(VirtqError::QueueNotExisting(index));
-		};
+		let mut vq_handler = com_cfg
+			.select_vq(index)
+			.ok_or(VirtqError::QueueNotExisting(index))?;
 
 		// Must catch zero size as it is not allowed for packed queues.
 		// Must catch size larger 0x8000 (2^15) as it is not allowed for packed queues.

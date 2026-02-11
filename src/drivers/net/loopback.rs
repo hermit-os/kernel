@@ -79,18 +79,18 @@ impl smoltcp::phy::Device for LoopbackDriver {
 	type TxToken<'a> = TxToken<'a>;
 
 	fn receive(&mut self, _: Instant) -> Option<(RxToken<'_>, TxToken<'_>)> {
-		if self.queue.lock().len() > self.reserved_receives.load(Ordering::Relaxed) {
-			self.reserved_receives.fetch_add(1, Ordering::Relaxed);
-			Some((
-				RxToken {
-					queue: &self.queue,
-					reserved_receives: &self.reserved_receives,
-				},
-				TxToken { queue: &self.queue },
-			))
-		} else {
-			None
+		if self.queue.lock().len() <= self.reserved_receives.load(Ordering::Relaxed) {
+			return None;
 		}
+
+		self.reserved_receives.fetch_add(1, Ordering::Relaxed);
+		Some((
+			RxToken {
+				queue: &self.queue,
+				reserved_receives: &self.reserved_receives,
+			},
+			TxToken { queue: &self.queue },
+		))
 	}
 
 	fn transmit(&mut self, _: Instant) -> Option<TxToken<'_>> {

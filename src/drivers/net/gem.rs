@@ -421,28 +421,24 @@ impl smoltcp::phy::Device for GEMDriver {
 		&mut self,
 		timestamp: smoltcp::time::Instant,
 	) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		if let Some(rx_index) = self.next_rx_index()
-			&& let Some(tx_index) = self.next_tx_index()
-		{
-			self.reserve_tx_index(tx_index);
+		let rx_index = self.next_rx_index()?;
+		let tx_index = self.next_tx_index()?;
 
-			// Starting point to search for next frame
-			self.rx_counter = (rx_index + 1) % RX_BUF_NUM;
-			self.rx_fields.rxbuffer_reserved[usize::try_from(rx_index).unwrap()] = true;
+		self.reserve_tx_index(tx_index);
 
-			Some((
-				RxToken {
-					buffer_index: rx_index,
-					rx_fields: &mut self.rx_fields,
-				},
-				TxToken {
-					buffer_index: tx_index,
-					tx_fields: &mut self.tx_fields,
-				},
-			))
-		} else {
-			None
-		}
+		// Starting point to search for next frame
+		self.rx_counter = (rx_index + 1) % RX_BUF_NUM;
+		self.rx_fields.rxbuffer_reserved[usize::try_from(rx_index).unwrap()] = true;
+
+		let rx_token = RxToken {
+			buffer_index: rx_index,
+			rx_fields: &mut self.rx_fields,
+		};
+		let tx_token = TxToken {
+			buffer_index: tx_index,
+			tx_fields: &mut self.tx_fields,
+		};
+		Some((rx_token, tx_token))
 	}
 	fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
 		self.handle_interrupt();

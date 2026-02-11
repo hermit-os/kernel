@@ -75,11 +75,8 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 	/// Returns the bar at bar-register `slot`.
 	pub fn get_bar(&self, slot: u8) -> Option<Bar> {
 		let header = self.header();
-		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
-			return endpoint.bar(slot, &self.access);
-		}
-
-		None
+		let endpoint = EndpointHeader::from_header(header, &self.access)?;
+		endpoint.bar(slot, &self.access)
 	}
 
 	/// Configure the bar at register `slot`
@@ -375,9 +372,11 @@ impl PciDriver {
 			#[cfg(feature = "virtio-vsock")]
 			Self::VirtioVsock(drv) => {
 				fn vsock_handler() {
-					if let Some(driver) = get_vsock_driver() {
-						driver.lock().handle_interrupt();
-					}
+					let Some(driver) = get_vsock_driver() else {
+						return;
+					};
+
+					driver.lock().handle_interrupt();
 				}
 
 				let irq_number = drv.lock().get_interrupt_number();
@@ -387,9 +386,11 @@ impl PciDriver {
 			#[cfg(feature = "virtio-fs")]
 			Self::VirtioFs(drv) => {
 				fn fuse_handler() {
-					if let Some(driver) = get_filesystem_driver() {
-						driver.lock().handle_interrupt();
-					}
+					let Some(driver) = get_filesystem_driver() else {
+						return;
+					};
+
+					driver.lock().handle_interrupt();
 				}
 
 				let irq_number = drv.lock().get_interrupt_number();
@@ -399,9 +400,11 @@ impl PciDriver {
 			#[cfg(feature = "virtio-console")]
 			Self::VirtioConsole(drv) => {
 				fn console_handler() {
-					if let Some(driver) = get_console_driver() {
-						driver.lock().handle_interrupt();
-					}
+					let Some(driver) = get_console_driver() else {
+						return;
+					};
+
+					driver.lock().handle_interrupt();
 				}
 
 				let irq_number = drv.lock().get_interrupt_number();

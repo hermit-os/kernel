@@ -50,11 +50,11 @@ pub(crate) fn mtu() -> u16 {
 	/// This is 1500 IP MTU and a 14-byte ethernet header.
 	const DEFAULT_MTU: u16 = DEFAULT_IP_MTU + 14;
 
-	if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-		u16::from_str(&my_mtu).unwrap()
-	} else {
-		DEFAULT_MTU
-	}
+	let Some(my_mtu) = hermit_var!("HERMIT_MTU") else {
+		return DEFAULT_MTU;
+	};
+
+	u16::from_str(&my_mtu).unwrap()
 }
 
 cfg_if::cfg_if! {

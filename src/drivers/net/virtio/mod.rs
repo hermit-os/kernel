@@ -439,39 +439,43 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 		&mut self,
 		_timestamp: smoltcp::time::Instant,
 	) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		if self.inner.recv_vqs.has_packet() && {
-			self.free_up_send_capacity();
-			self.inner.send_capacity >= u32::from(BUFF_PER_PACKET)
-		} {
-			self.inner.send_capacity -= u32::from(BUFF_PER_PACKET);
-			Some((
-				RxToken {
-					recv_vqs: &mut self.inner.recv_vqs,
-					is_mrg_rxbuf_enabled: self.dev_cfg.features.contains(virtio::net::F::MRG_RXBUF),
-				},
-				TxToken {
-					send_vqs: &mut self.inner.send_vqs,
-					checksums: self.checksums.clone(),
-					send_capacity: &mut self.inner.send_capacity,
-				},
-			))
-		} else {
-			None
+		if !self.inner.recv_vqs.has_packet() {
+			return None;
 		}
+
+		self.free_up_send_capacity();
+
+		self.inner.send_capacity = self
+			.inner
+			.send_capacity
+			.checked_sub(u32::from(BUFF_PER_PACKET))?;
+
+		Some((
+			RxToken {
+				recv_vqs: &mut self.inner.recv_vqs,
+				is_mrg_rxbuf_enabled: self.dev_cfg.features.contains(virtio::net::F::MRG_RXBUF),
+			},
+			TxToken {
+				send_vqs: &mut self.inner.send_vqs,
+				checksums: self.checksums.clone(),
+				send_capacity: &mut self.inner.send_capacity,
+			},
+		))
 	}
 
 	fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
 		self.free_up_send_capacity();
-		if self.inner.send_capacity >= u32::from(BUFF_PER_PACKET) {
-			self.inner.send_capacity -= u32::from(BUFF_PER_PACKET);
-			Some(TxToken {
-				send_vqs: &mut self.inner.send_vqs,
-				checksums: self.checksums.clone(),
-				send_capacity: &mut self.inner.send_capacity,
-			})
-		} else {
-			None
-		}
+
+		self.inner.send_capacity = self
+			.inner
+			.send_capacity
+			.checked_sub(u32::from(BUFF_PER_PACKET))?;
+
+		Some(TxToken {
+			send_vqs: &mut self.inner.send_vqs,
+			checksums: self.checksums.clone(),
+			send_capacity: &mut self.inner.send_capacity,
+		})
 	}
 }
 
