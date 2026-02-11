@@ -138,13 +138,15 @@ impl Semaphore {
 	/// This will increment the number of resources in this semaphore by 1 and
 	/// will notify any pending waiters in `acquire` or `access` if necessary.
 	pub fn release(&self) {
-		if let Some(task) = {
-			let mut locked_state = self.state.lock();
-			locked_state.count += 1;
-			locked_state.queue.pop()
-		} {
-			// Wake up any task that has been waiting for this semaphore.
-			core_scheduler().custom_wakeup(task);
+		let mut locked_state = self.state.lock();
+		locked_state.count += 1;
+		let task = locked_state.queue.pop();
+
+		let Some(task) = task else {
+			return;
 		};
+
+		// Wake up any task that has been waiting for this semaphore.
+		core_scheduler().custom_wakeup(task);
 	}
 }

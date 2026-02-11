@@ -83,21 +83,19 @@ impl ErrorType for VirtioUART {
 
 impl Read for VirtioUART {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		if let Some(drv) = get_console_driver() {
-			drv.lock().read(buf)
-		} else {
-			Err(Errno::Io)
-		}
+		let drv = get_console_driver().ok_or(Errno::Io)?;
+
+		drv.lock().read(buf)
 	}
 }
 
 impl ReadReady for VirtioUART {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
-		if let Some(drv) = get_console_driver() {
-			Ok(drv.lock().has_packet())
-		} else {
-			Ok(false)
-		}
+		let Some(drv) = get_console_driver() else {
+			return Ok(false);
+		};
+
+		Ok(drv.lock().has_packet())
 	}
 }
 
@@ -138,15 +136,19 @@ impl RxQueue {
 	}
 
 	pub fn enable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.enable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.enable_notifs();
 	}
 
 	pub fn disable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.disable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.disable_notifs();
 	}
 
 	fn has_packet(&self) -> bool {
@@ -161,21 +163,17 @@ impl RxQueue {
 	where
 		F: FnMut(&[u8]) -> usize,
 	{
-		if let Some(mut buffer_tkn) = self.get_next() {
-			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
+		let Some(mut buffer_tkn) = self.get_next() else {
+			return Ok(0);
+		};
 
-			if let Some(ref mut vq) = self.vq {
-				let result = f(&packet[..]);
+		let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
+		let vq = self.vq.as_mut().unwrap();
+		let result = f(&packet[..]);
 
-				fill_queue(vq, 1, self.packet_size);
+		fill_queue(vq, 1, self.packet_size);
 
-				return Ok(result);
-			} else {
-				panic!("Invalid length of receive queue");
-			}
-		}
-
-		Ok(0)
+		Ok(result)
 	}
 }
 
@@ -199,21 +197,27 @@ impl TxQueue {
 	}
 
 	pub fn enable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.enable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.enable_notifs();
 	}
 
 	pub fn disable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.disable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.disable_notifs();
 	}
 
 	fn poll(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			while vq.try_recv().is_ok() {}
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		while vq.try_recv().is_ok() {}
 	}
 
 	/// Provides a slice to copy the packet and transfer the packet
@@ -223,25 +227,23 @@ impl TxQueue {
 		// We need to poll to get the queue to remove elements from the table and make space for
 		// what we are about to add
 		self.poll();
-		if let Some(ref mut vq) = self.vq {
-			assert!(buf.len() < usize::try_from(self.packet_length).unwrap());
-			let mut packet = Vec::with_capacity_in(buf.len(), DeviceAlloc);
-			packet.extend_from_slice(buf);
+		let vq = self.vq.as_mut().unwrap();
 
-			let buff_tkn = AvailBufferToken::new(
-				{
-					let mut vec = SmallVec::new();
-					vec.push(BufferElem::Vector(packet));
-					vec
-				},
-				SmallVec::new(),
-			)
-			.unwrap();
+		assert!(buf.len() < usize::try_from(self.packet_length).unwrap());
+		let mut packet = Vec::with_capacity_in(buf.len(), DeviceAlloc);
+		packet.extend_from_slice(buf);
 
-			vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
-		} else {
-			panic!("Unable to get send queue");
-		}
+		let buff_tkn = AvailBufferToken::new(
+			{
+				let mut vec = SmallVec::new();
+				vec.push(BufferElem::Vector(packet));
+				vec
+			},
+			SmallVec::new(),
+		)
+		.unwrap();
+
+		vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
 	}
 }
 

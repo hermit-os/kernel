@@ -58,32 +58,34 @@ enum Model {
 /// This function should only be called once
 pub fn init() {
 	debug!("Init devicetree");
-	if let Some(fdt) = env::fdt() {
-		let model = fdt
-			.find_node("/")
-			.unwrap()
-			.property("compatible")
-			.expect("compatible not found in FDT")
-			.as_str()
-			.unwrap();
+	let Some(fdt) = env::fdt() else {
+		return;
+	};
 
-		let platform_model = if model.contains("riscv-virtio") {
-			Model::Virt
-		} else if model.contains("sifive,hifive-unmatched-a00")
-			|| model.contains("sifive,hifive-unleashed-a00")
-			|| model.contains("sifive,fu740")
-			|| model.contains("sifive,fu540")
-		{
-			Model::Fux40
-		} else {
-			warn!("Unknown platform, guessing PLIC context 1");
-			Model::Unknown
-		};
-		unsafe {
-			PLATFORM_MODEL = platform_model;
-		}
-		info!("Model: {model}");
+	let model = fdt
+		.find_node("/")
+		.unwrap()
+		.property("compatible")
+		.expect("compatible not found in FDT")
+		.as_str()
+		.unwrap();
+
+	let platform_model = if model.contains("riscv-virtio") {
+		Model::Virt
+	} else if model.contains("sifive,hifive-unmatched-a00")
+		|| model.contains("sifive,hifive-unleashed-a00")
+		|| model.contains("sifive,fu740")
+		|| model.contains("sifive,fu540")
+	{
+		Model::Fux40
+	} else {
+		warn!("Unknown platform, guessing PLIC context 1");
+		Model::Unknown
+	};
+	unsafe {
+		PLATFORM_MODEL = platform_model;
 	}
+	info!("Model: {model}");
 }
 
 /// Inits drivers based on the device tree

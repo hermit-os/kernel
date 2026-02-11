@@ -96,12 +96,12 @@ impl ObjectInterface for RomFileInterface {
 			_ => return Err(Errno::Inval),
 		};
 
-		if (0..=data_len).contains(&new_pos) {
-			*pos_guard = new_pos as usize;
-			Ok(new_pos)
-		} else {
-			Err(Errno::Inval)
+		if !(0..=data_len).contains(&new_pos) {
+			return Err(Errno::Inval);
 		}
+
+		*pos_guard = new_pos as usize;
+		Ok(new_pos)
 	}
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
@@ -283,19 +283,19 @@ impl VfsNode for RomFile {
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if components.is_empty() {
-			self.get_file_attributes()
-		} else {
-			Err(Errno::Badf)
+		if !components.is_empty() {
+			return Err(Errno::Badf);
 		}
+
+		self.get_file_attributes()
 	}
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if components.is_empty() {
-			self.get_file_attributes()
-		} else {
-			Err(Errno::Badf)
+		if !components.is_empty() {
+			return Err(Errno::Badf);
 		}
+
+		self.get_file_attributes()
 	}
 }
 
@@ -339,19 +339,19 @@ impl VfsNode for RamFile {
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if components.is_empty() {
-			self.get_file_attributes()
-		} else {
-			Err(Errno::Badf)
+		if !components.is_empty() {
+			return Err(Errno::Badf);
 		}
+
+		self.get_file_attributes()
 	}
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if components.is_empty() {
-			self.get_file_attributes()
-		} else {
-			Err(Errno::Badf)
+		if !components.is_empty() {
+			return Err(Errno::Badf);
 		}
+
+		self.get_file_attributes()
 	}
 }
 
@@ -474,38 +474,35 @@ impl MemDirectory {
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		if let Some(component) = components.pop() {
-			if components.is_empty() {
-				let mut guard = self.inner.write().await;
-				if let Some(file) = guard.get(component) {
-					if opt.contains(OpenOption::O_DIRECTORY)
-						&& file.get_kind() != NodeKind::Directory
-					{
-						return Err(Errno::Notdir);
-					}
+		let component = components.pop().ok_or(Errno::Noent)?;
 
-					if file.get_kind() == NodeKind::File || file.get_kind() == NodeKind::Directory {
-						return file.get_object();
-					} else {
-						return Err(Errno::Noent);
-					}
-				} else if opt.contains(OpenOption::O_CREAT) {
-					let file = Box::new(RamFile::new(mode));
-					guard.insert(component.to_owned(), file.clone());
-					return Ok(Arc::new(RwLock::new(RamFileInterface::new(
-						file.data.clone(),
-					))));
-				} else {
-					return Err(Errno::Noent);
-				}
-			}
-
-			if let Some(directory) = self.inner.read().await.get(component) {
-				return directory.traverse_open(components, opt, mode);
-			}
+		if !components.is_empty() {
+			let inner = self.inner.read().await;
+			let directory = inner.get(component).ok_or(Errno::Noent)?;
+			return directory.traverse_open(components, opt, mode);
 		}
 
-		Err(Errno::Noent)
+		let mut inner = self.inner.write().await;
+		let Some(file) = inner.get(component) else {
+			if opt.contains(OpenOption::O_CREAT) {
+				let file = Box::new(RamFile::new(mode));
+				inner.insert(component.to_owned(), file.clone());
+				let file = Arc::new(RwLock::new(RamFileInterface::new(file.data.clone())));
+				return Ok(file);
+			}
+
+			return Err(Errno::Noent);
+		};
+
+		if opt.contains(OpenOption::O_DIRECTORY) && file.get_kind() != NodeKind::Directory {
+			return Err(Errno::Notdir);
+		}
+
+		if file.get_kind() != NodeKind::File && file.get_kind() != NodeKind::Directory {
+			return Err(Errno::Noent);
+		}
+
+		file.get_object()
 	}
 }
 
@@ -527,21 +524,21 @@ impl VfsNode for MemDirectory {
 	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if let Some(directory) = self.inner.read().await.get(component) {
-						return directory.traverse_mkdir(components, mode);
-					}
+				let component = components.pop().ok_or(Errno::Badf)?;
 
-					if components.is_empty() {
-						self.inner
-							.write()
-							.await
-							.insert(component.to_owned(), Box::new(MemDirectory::new(mode)));
-						return Ok(());
-					}
+				if let Some(directory) = self.inner.read().await.get(component) {
+					return directory.traverse_mkdir(components, mode);
 				}
 
-				Err(Errno::Badf)
+				if !components.is_empty() {
+					return Err(Errno::Badf);
+				}
+
+				self.inner
+					.write()
+					.await
+					.insert(component.to_owned(), Box::new(MemDirectory::new(mode)));
+				Ok(())
 			},
 			None,
 		)
@@ -550,23 +547,23 @@ impl VfsNode for MemDirectory {
 	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if components.is_empty() {
-						let mut guard = self.inner.write().await;
+				let component = components.pop().ok_or(Errno::Badf)?;
 
-						let obj = guard.remove(component).ok_or(Errno::Noent)?;
-						if obj.get_kind() == NodeKind::Directory {
-							return Ok(());
-						} else {
-							guard.insert(component.to_owned(), obj);
-							return Err(Errno::Notdir);
-						}
-					} else if let Some(directory) = self.inner.read().await.get(component) {
-						return directory.traverse_rmdir(components);
-					}
+				if !components.is_empty() {
+					let inner = &*self.inner.read().await;
+					let directory = inner.get(component).ok_or(Errno::Badf)?;
+					return directory.traverse_rmdir(components);
 				}
 
-				Err(Errno::Badf)
+				let mut guard = self.inner.write().await;
+
+				let obj = guard.remove(component).ok_or(Errno::Noent)?;
+				if obj.get_kind() != NodeKind::Directory {
+					guard.insert(component.to_owned(), obj);
+					return Err(Errno::Notdir);
+				}
+
+				Ok(())
 			},
 			None,
 		)
@@ -575,23 +572,23 @@ impl VfsNode for MemDirectory {
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if components.is_empty() {
-						let mut guard = self.inner.write().await;
+				let component = components.pop().ok_or(Errno::Badf)?;
 
-						let obj = guard.remove(component).ok_or(Errno::Noent)?;
-						if obj.get_kind() == NodeKind::File {
-							return Ok(());
-						} else {
-							guard.insert(component.to_owned(), obj);
-							return Err(Errno::Isdir);
-						}
-					} else if let Some(directory) = self.inner.read().await.get(component) {
-						return directory.traverse_unlink(components);
-					}
+				if !components.is_empty() {
+					let inner = self.inner.read().await;
+					let directory = inner.get(component).ok_or(Errno::Badf)?;
+					return directory.traverse_unlink(components);
 				}
 
-				Err(Errno::Badf)
+				let mut guard = self.inner.write().await;
+
+				let obj = guard.remove(component).ok_or(Errno::Noent)?;
+				if obj.get_kind() != NodeKind::File {
+					guard.insert(component.to_owned(), obj);
+					return Err(Errno::Isdir);
+				}
+
+				Ok(())
 			},
 			None,
 		)
@@ -601,19 +598,17 @@ impl VfsNode for MemDirectory {
 		block_on(
 			async {
 				if let Some(component) = components.pop() {
-					if let Some(directory) = self.inner.read().await.get(component) {
-						directory.traverse_readdir(components)
-					} else {
-						Err(Errno::Badf)
-					}
-				} else {
-					let mut entries: Vec<DirectoryEntry> = Vec::new();
-					for name in self.inner.read().await.keys() {
-						entries.push(DirectoryEntry::new(name.clone()));
-					}
+					let inner = self.inner.read().await;
+					let directory = inner.get(component).ok_or(Errno::Badf)?;
+					return directory.traverse_readdir(components);
+				};
 
-					Ok(entries)
+				let mut entries = Vec::new();
+				for name in self.inner.read().await.keys() {
+					entries.push(DirectoryEntry::new(name.clone()));
 				}
+
+				Ok(entries)
 			},
 			None,
 		)
@@ -622,21 +617,17 @@ impl VfsNode for MemDirectory {
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if components.is_empty()
-						&& let Some(node) = self.inner.read().await.get(component)
-					{
-						return node.get_file_attributes();
-					}
+				let component = components.pop().ok_or(Errno::Nosys)?;
 
-					if let Some(directory) = self.inner.read().await.get(component) {
-						directory.traverse_lstat(components)
-					} else {
-						Err(Errno::Badf)
-					}
-				} else {
-					Err(Errno::Nosys)
+				if !components.is_empty() {
+					let inner = self.inner.read().await;
+					let directory = inner.get(component).ok_or(Errno::Badf)?;
+					return directory.traverse_lstat(components);
 				}
+
+				let inner = self.inner.read().await;
+				let node = inner.get(component).ok_or(Errno::Badf)?;
+				node.get_file_attributes()
 			},
 			None,
 		)
@@ -645,21 +636,17 @@ impl VfsNode for MemDirectory {
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if components.is_empty()
-						&& let Some(node) = self.inner.read().await.get(component)
-					{
-						return node.get_file_attributes();
-					}
+				let component = components.pop().ok_or(Errno::Nosys)?;
 
-					if let Some(directory) = self.inner.read().await.get(component) {
-						directory.traverse_stat(components)
-					} else {
-						Err(Errno::Badf)
-					}
-				} else {
-					Err(Errno::Nosys)
+				if !components.is_empty() {
+					let inner = self.inner.read().await;
+					let directory = inner.get(component).ok_or(Errno::Badf)?;
+					return directory.traverse_stat(components);
 				}
+
+				let inner = self.inner.read().await;
+				let node = inner.get(component).ok_or(Errno::Badf)?;
+				node.get_file_attributes()
 			},
 			None,
 		)
@@ -668,18 +655,18 @@ impl VfsNode for MemDirectory {
 	fn traverse_mount(&self, components: &mut Vec<&str>, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if let Some(directory) = self.inner.read().await.get(component) {
-						return directory.traverse_mount(components, obj);
-					}
+				let component = components.pop().ok_or(Errno::Badf)?;
 
-					if components.is_empty() {
-						self.inner.write().await.insert(component.to_owned(), obj);
-						return Ok(());
-					}
+				if let Some(directory) = self.inner.read().await.get(component) {
+					return directory.traverse_mount(components, obj);
 				}
 
-				Err(Errno::Badf)
+				if !components.is_empty() {
+					return Err(Errno::Badf);
+				}
+
+				self.inner.write().await.insert(component.to_owned(), obj);
+				Ok(())
 			},
 			None,
 		)
@@ -702,22 +689,20 @@ impl VfsNode for MemDirectory {
 	) -> io::Result<()> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
-					if components.is_empty() {
-						let file = RomFile::new(data, mode);
-						self.inner
-							.write()
-							.await
-							.insert(component.to_owned(), Box::new(file));
-						return Ok(());
-					}
+				let component = components.pop().ok_or(Errno::Noent)?;
 
-					if let Some(directory) = self.inner.read().await.get(component) {
-						return directory.traverse_create_file(components, data, mode);
-					}
+				if !components.is_empty() {
+					let inner = self.inner.read().await;
+					let directory = inner.get(component).ok_or(Errno::Noent)?;
+					return directory.traverse_create_file(components, data, mode);
 				}
 
-				Err(Errno::Noent)
+				let file = RomFile::new(data, mode);
+				self.inner
+					.write()
+					.await
+					.insert(component.to_owned(), Box::new(file));
+				Ok(())
 			},
 			None,
 		)

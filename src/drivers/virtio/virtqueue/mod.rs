@@ -392,19 +392,16 @@ impl UsedDeviceWritableBuffer {
 			self.elems.remove(0)
 		};
 
-		if let BufferElem::Sized(sized) = elem {
-			match sized.downcast::<MaybeUninit<T>>() {
-				Ok(cast) => {
-					self.remaining_written_len -= u32::try_from(size_of::<T>()).unwrap();
-					Some(unsafe { cast.assume_init() })
-				}
-				Err(_) => {
-					panic!("Attempted to downcast element to wrong type");
-				}
-			}
-		} else {
+		let BufferElem::Sized(sized) = elem else {
 			panic!("Attempted to pop elements in order different from insertion");
-		}
+		};
+
+		let cast = sized
+			.downcast::<MaybeUninit<T>>()
+			.expect("Attempted to downcast element to wrong type");
+
+		self.remaining_written_len -= u32::try_from(size_of::<T>()).unwrap();
+		Some(unsafe { cast.assume_init() })
 	}
 
 	pub fn pop_front_vec(&mut self) -> Option<Vec<u8, DeviceAlloc>> {
@@ -418,17 +415,17 @@ impl UsedDeviceWritableBuffer {
 			self.elems.remove(0)
 		};
 
-		if let BufferElem::Vector(mut vector) = elem {
-			let new_len = u32::min(
-				vector.capacity().try_into().unwrap(),
-				self.remaining_written_len,
-			);
-			self.remaining_written_len -= new_len;
-			unsafe { vector.set_len(new_len.try_into().unwrap()) };
-			Some(vector)
-		} else {
+		let BufferElem::Vector(mut vector) = elem else {
 			panic!("Attempted to pop elements in order different from insertion");
-		}
+		};
+
+		let new_len = u32::min(
+			vector.capacity().try_into().unwrap(),
+			self.remaining_written_len,
+		);
+		self.remaining_written_len -= new_len;
+		unsafe { vector.set_len(new_len.try_into().unwrap()) };
+		Some(vector)
 	}
 
 	/// It is possible for devices to use descriptors for a type other than what they were meant.
@@ -445,14 +442,14 @@ impl UsedDeviceWritableBuffer {
 			self.elems.remove(0)
 		};
 
-		if let BufferElem::Sized(sized) = elem {
-			let capacity = u32::try_from(size_of_val(sized.as_ref())).unwrap();
-			let len = u32::min(capacity, self.remaining_written_len);
-			self.remaining_written_len -= len;
-			Some((sized, len.try_into().unwrap()))
-		} else {
+		let BufferElem::Sized(sized) = elem else {
 			panic!("This function is meant for the Sized variant of the BufferElem enum.");
-		}
+		};
+
+		let capacity = u32::try_from(size_of_val(sized.as_ref())).unwrap();
+		let len = u32::min(capacity, self.remaining_written_len);
+		self.remaining_written_len -= len;
+		Some((sized, len.try_into().unwrap()))
 	}
 }
 

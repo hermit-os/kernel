@@ -39,9 +39,11 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	#[cfg(feature = "virtio-console")]
 	if let Some(drv) = get_console_driver() {
 		fn console_handler() {
-			if let Some(driver) = get_console_driver() {
-				driver.lock().handle_interrupt();
-			}
+			let Some(driver) = get_console_driver() else {
+				return;
+			};
+
+			driver.lock().handle_interrupt();
 		}
 
 		let irq_number = drv.lock().get_interrupt_number();
@@ -54,9 +56,11 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	#[cfg(feature = "virtio-fs")]
 	if let Some(drv) = get_filesystem_driver() {
 		fn fuse_handler() {
-			if let Some(driver) = get_filesystem_driver() {
-				driver.lock().handle_interrupt();
-			}
+			let Some(driver) = get_filesystem_driver() else {
+				return;
+			};
+
+			driver.lock().handle_interrupt();
 		}
 
 		let irq_number = drv.lock().get_interrupt_number();

@@ -281,13 +281,13 @@ impl ComCfg {
 		self.com_cfg.as_mut_ptr().queue_select().write(index.into());
 
 		if self.com_cfg.as_mut_ptr().queue_size().read().to_ne() == 0 {
-			None
-		} else {
-			Some(VqCfgHandler {
-				vq_index: index,
-				raw: self.com_cfg.borrow_mut(),
-			})
+			return None;
 		}
+
+		Some(VqCfgHandler {
+			vq_index: index,
+			raw: self.com_cfg.borrow_mut(),
+		})
 	}
 
 	#[allow(dead_code)]
@@ -540,10 +540,10 @@ fn read_caps(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciCap>, PciErro
 
 	if capabilities.is_empty() {
 		error!("No virtio capability found for device {device_id:x}");
-		Err(PciError::NoVirtioCaps(device_id))
-	} else {
-		Ok(capabilities)
+		return Err(PciError::NoVirtioCaps(device_id));
 	}
+
+	Ok(capabilities)
 }
 
 pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, VirtioError> {

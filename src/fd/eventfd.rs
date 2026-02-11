@@ -106,11 +106,11 @@ impl ObjectInterface for EventFd {
 				guard.counter += c;
 				if self.flags.contains(EventFlags::EFD_SEMAPHORE) {
 					for _i in 0..c {
-						if let Some(cx) = guard.read_queue.pop_front() {
-							cx.wake_by_ref();
-						} else {
+						let Some(cx) = guard.read_queue.pop_front() else {
 							break;
-						}
+						};
+
+						cx.wake_by_ref();
 					}
 				} else if let Some(cx) = guard.read_queue.pop_front() {
 					cx.wake_by_ref();

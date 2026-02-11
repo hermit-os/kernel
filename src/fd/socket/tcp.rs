@@ -266,38 +266,38 @@ impl ObjectInterface for Socket {
 
 	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
-		if let ListenEndpoint::Ip(endpoint) = endpoint {
-			self.endpoint.port = endpoint.port;
-			if let Some(addr) = endpoint.addr {
-				self.endpoint.addr = addr;
-			}
-			Ok(())
-		} else {
-			Err(Errno::Io)
+		let ListenEndpoint::Ip(endpoint) = endpoint else {
+			return Err(Errno::Io);
+		};
+
+		self.endpoint.port = endpoint.port;
+		if let Some(addr) = endpoint.addr {
+			self.endpoint.addr = addr;
 		}
+		Ok(())
 	}
 
 	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
-		if let Endpoint::Ip(endpoint) = endpoint {
-			self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
-				.map_err(|_| Errno::Io)?;
+		let Endpoint::Ip(endpoint) = endpoint else {
+			return Err(Errno::Io);
+		};
 
-			future::poll_fn(|cx| {
-				self.with(|socket| match socket.state() {
-					tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(Errno::Fault)),
-					tcp::State::Listen => Poll::Ready(Err(Errno::Io)),
-					tcp::State::SynSent | tcp::State::SynReceived => {
-						socket.register_send_waker(cx.waker());
-						Poll::Pending
-					}
-					_ => Poll::Ready(Ok(())),
-				})
+		self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
+			.map_err(|_| Errno::Io)?;
+
+		future::poll_fn(|cx| {
+			self.with(|socket| match socket.state() {
+				tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(Errno::Fault)),
+				tcp::State::Listen => Poll::Ready(Err(Errno::Io)),
+				tcp::State::SynSent | tcp::State::SynReceived => {
+					socket.register_send_waker(cx.waker());
+					Poll::Pending
+				}
+				_ => Poll::Ready(Ok(())),
 			})
-			.await
-		} else {
-			Err(Errno::Io)
-		}
+		})
+		.await
 	}
 
 	async fn accept(

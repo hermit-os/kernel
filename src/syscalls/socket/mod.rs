@@ -548,11 +548,10 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 	};
 
 	let name = unsafe { core::ffi::CStr::from_ptr(name) };
-	let name = if let Ok(name) = name.to_str() {
-		name.to_owned()
-	} else {
+	let Ok(name) = name.to_str() else {
 		return -i32::from(Errno::Inval);
 	};
+	let name = name.to_owned();
 
 	let query = {
 		let mut guard = NIC.lock();
@@ -865,53 +864,53 @@ pub unsafe extern "C" fn sys_getsockname(
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| {
-			if let Ok(Some(endpoint)) = block_on(async { v.read().await.getsockname().await }, None)
-			{
-				if !addr.is_null() && !addrlen.is_null() {
-					let addrlen = unsafe { &mut *addrlen };
+			let Ok(Some(endpoint)) = block_on(async { v.read().await.getsockname().await }, None)
+			else {
+				return -i32::from(Errno::Inval);
+			};
 
-					match endpoint {
-						#[cfg(feature = "net")]
-						Endpoint::Ip(endpoint) => match endpoint.addr {
-							IpAddress::Ipv4(_) => {
-								if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
-									let addr = unsafe { &mut *addr.cast() };
-									*addr = sockaddr_in::from(endpoint);
-									*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
+			if addr.is_null() || addrlen.is_null() {
+				return -i32::from(Errno::Inval);
+			}
 
-									0
-								} else {
-									-i32::from(Errno::Inval)
-								}
-							}
-							#[cfg(feature = "net")]
-							IpAddress::Ipv6(_) => {
-								if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
-									let addr = unsafe { &mut *addr.cast() };
-									*addr = sockaddr_in6::from(endpoint);
-									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
+			let addrlen = unsafe { &mut *addrlen };
 
-									0
-								} else {
-									-i32::from(Errno::Inval)
-								}
-							}
-						},
-						#[cfg(feature = "virtio-vsock")]
-						Endpoint::Vsock(_) => {
-							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
-								warn!("unsupported device");
-								0
-							} else {
-								-i32::from(Errno::Inval)
-							}
+			match endpoint {
+				#[cfg(feature = "net")]
+				Endpoint::Ip(endpoint) => match endpoint.addr {
+					IpAddress::Ipv4(_) => {
+						if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
+							let addr = unsafe { &mut *addr.cast() };
+							*addr = sockaddr_in::from(endpoint);
+							*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
+
+							0
+						} else {
+							-i32::from(Errno::Inval)
 						}
 					}
-				} else {
-					-i32::from(Errno::Inval)
+					#[cfg(feature = "net")]
+					IpAddress::Ipv6(_) => {
+						if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
+							let addr = unsafe { &mut *addr.cast() };
+							*addr = sockaddr_in6::from(endpoint);
+							*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
+
+							0
+						} else {
+							-i32::from(Errno::Inval)
+						}
+					}
+				},
+				#[cfg(feature = "virtio-vsock")]
+				Endpoint::Vsock(_) => {
+					if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
+						warn!("unsupported device");
+						0
+					} else {
+						-i32::from(Errno::Inval)
+					}
 				}
-			} else {
-				-i32::from(Errno::Inval)
 			}
 		},
 	)
@@ -1027,44 +1026,46 @@ pub unsafe extern "C" fn sys_getpeername(
 	obj.map_or_else(
 		|e| -i32::from(e),
 		|v| {
-			if let Ok(Some(endpoint)) = block_on(async { v.read().await.getpeername().await }, None)
-			{
-				if !addr.is_null() && !addrlen.is_null() {
-					let addrlen = unsafe { &mut *addrlen };
+			let Ok(Some(endpoint)) = block_on(async { v.read().await.getpeername().await }, None)
+			else {
+				return 0;
+			};
 
-					match endpoint {
-						#[cfg(feature = "net")]
-						Endpoint::Ip(endpoint) => match endpoint.addr {
-							IpAddress::Ipv4(_) => {
-								if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
-									let addr = unsafe { &mut *addr.cast() };
-									*addr = sockaddr_in::from(endpoint);
-									*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
-								} else {
-									return -i32::from(Errno::Inval);
-								}
-							}
-							IpAddress::Ipv6(_) => {
-								if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
-									let addr = unsafe { &mut *addr.cast() };
-									*addr = sockaddr_in6::from(endpoint);
-									*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
-								} else {
-									return -i32::from(Errno::Inval);
-								}
-							}
-						},
-						#[cfg(feature = "virtio-vsock")]
-						Endpoint::Vsock(_) => {
-							if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
-								warn!("unsupported device");
-							} else {
-								return -i32::from(Errno::Inval);
-							}
+			if addr.is_null() || addrlen.is_null() {
+				return -i32::from(Errno::Inval);
+			}
+
+			let addrlen = unsafe { &mut *addrlen };
+
+			match endpoint {
+				#[cfg(feature = "net")]
+				Endpoint::Ip(endpoint) => match endpoint.addr {
+					IpAddress::Ipv4(_) => {
+						if *addrlen >= u32::try_from(size_of::<sockaddr_in>()).unwrap() {
+							let addr = unsafe { &mut *addr.cast() };
+							*addr = sockaddr_in::from(endpoint);
+							*addrlen = size_of::<sockaddr_in>().try_into().unwrap();
+						} else {
+							return -i32::from(Errno::Inval);
 						}
 					}
-				} else {
-					return -i32::from(Errno::Inval);
+					IpAddress::Ipv6(_) => {
+						if *addrlen >= u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
+							let addr = unsafe { &mut *addr.cast() };
+							*addr = sockaddr_in6::from(endpoint);
+							*addrlen = size_of::<sockaddr_in6>().try_into().unwrap();
+						} else {
+							return -i32::from(Errno::Inval);
+						}
+					}
+				},
+				#[cfg(feature = "virtio-vsock")]
+				Endpoint::Vsock(_) => {
+					if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
+						warn!("unsupported device");
+					} else {
+						return -i32::from(Errno::Inval);
+					}
 				}
 			}
 
@@ -1158,22 +1159,22 @@ pub unsafe extern "C" fn sys_sendto(
 		}
 	}
 
-	if let Some(endpoint) = endpoint {
-		let slice = unsafe { slice::from_raw_parts(buf, len) };
-		let obj = get_object(fd);
+	let Some(endpoint) = endpoint else {
+		return (-i32::from(Errno::Inval)).try_into().unwrap();
+	};
 
-		obj.map_or_else(
-			|e| isize::try_from(-i32::from(e)).unwrap(),
-			|v| {
-				block_on(async { v.read().await.sendto(slice, endpoint).await }, None).map_or_else(
-					|e| isize::try_from(-i32::from(e)).unwrap(),
-					|v| v.try_into().unwrap(),
-				)
-			},
-		)
-	} else {
-		(-i32::from(Errno::Inval)).try_into().unwrap()
-	}
+	let slice = unsafe { slice::from_raw_parts(buf, len) };
+	let obj = get_object(fd);
+
+	obj.map_or_else(
+		|e| isize::try_from(-i32::from(e)).unwrap(),
+		|v| {
+			block_on(async { v.read().await.sendto(slice, endpoint).await }, None).map_or_else(
+				|e| isize::try_from(-i32::from(e)).unwrap(),
+				|v| v.try_into().unwrap(),
+			)
+		},
+	)
 }
 
 #[hermit_macro::system(errno)]

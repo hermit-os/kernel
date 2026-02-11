@@ -79,15 +79,19 @@ impl RxQueue {
 	}
 
 	pub fn enable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.enable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.enable_notifs();
 	}
 
 	pub fn disable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.disable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.disable_notifs();
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
@@ -107,13 +111,11 @@ impl RxQueue {
 			};
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
 
-			if let Some(ref mut vq) = self.vq {
-				f(&header, &packet[..]);
+			let vq = self.vq.as_mut().expect("Invalid length of receive queue");
 
-				fill_queue(vq, 1, self.packet_size);
-			} else {
-				panic!("Invalid length of receive queue");
-			}
+			f(&header, &packet[..]);
+
+			fill_queue(vq, 1, self.packet_size);
 		}
 	}
 }
@@ -138,21 +140,27 @@ impl TxQueue {
 	}
 
 	pub fn enable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.enable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.enable_notifs();
 	}
 
 	pub fn disable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.disable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.disable_notifs();
 	}
 
 	fn poll(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			while vq.try_recv().is_ok() {}
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		while vq.try_recv().is_ok() {}
 	}
 
 	/// Provides a slice to copy the packet and transfer the packet
@@ -165,31 +173,29 @@ impl TxQueue {
 		// We need to poll to get the queue to remove elements from the table and make space for
 		// what we are about to add
 		self.poll();
-		if let Some(ref mut vq) = self.vq {
-			assert!(len < usize::try_from(self.packet_length).unwrap());
-			let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
-			let result = unsafe {
-				let result = f(packet.spare_capacity_mut().assume_init_mut());
-				packet.set_len(len);
-				result
-			};
+		let vq = self.vq.as_mut().expect("Unable to get send queue");
 
-			let buff_tkn = AvailBufferToken::new(
-				{
-					let mut vec = SmallVec::new();
-					vec.push(BufferElem::Vector(packet));
-					vec
-				},
-				SmallVec::new(),
-			)
-			.unwrap();
-
-			vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
-
+		assert!(len < usize::try_from(self.packet_length).unwrap());
+		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
+		let result = unsafe {
+			let result = f(packet.spare_capacity_mut().assume_init_mut());
+			packet.set_len(len);
 			result
-		} else {
-			panic!("Unable to get send queue");
-		}
+		};
+
+		let buff_tkn = AvailBufferToken::new(
+			{
+				let mut vec = SmallVec::new();
+				vec.push(BufferElem::Vector(packet));
+				vec
+			},
+			SmallVec::new(),
+		)
+		.unwrap();
+
+		vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
+
+		result
 	}
 }
 
@@ -217,15 +223,19 @@ impl EventQueue {
 	}
 
 	pub fn enable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.enable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.enable_notifs();
 	}
 
 	pub fn disable_notifs(&mut self) {
-		if let Some(ref mut vq) = self.vq {
-			vq.disable_notifs();
-		}
+		let Some(vq) = &mut self.vq else {
+			return;
+		};
+
+		vq.disable_notifs();
 	}
 }
 

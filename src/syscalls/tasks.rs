@@ -231,9 +231,11 @@ pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
 pub extern "C" fn sys_wakeup_task(id: Tid) {
 	let task_id = TaskId::from(id);
 
-	if let Some(handle) = BLOCKED_TASKS.lock().remove(&task_id) {
-		core_scheduler().custom_wakeup(handle);
-	}
+	let Some(handle) = BLOCKED_TASKS.lock().remove(&task_id) else {
+		return;
+	};
+
+	core_scheduler().custom_wakeup(handle);
 }
 
 /// Determine the priority of the current thread

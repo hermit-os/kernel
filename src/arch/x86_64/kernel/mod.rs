@@ -324,16 +324,13 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 
 	let mut pos: usize = 0;
 	for (i, s) in arg.iter().enumerate() {
-		if let Ok(s) = CString::new(*s) {
-			let bytes = s.as_bytes_with_nul();
-			argv[i] = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
-			pos += bytes.len();
+		let s = CString::new(*s).unwrap();
+		let bytes = s.as_bytes_with_nul();
+		argv[i] = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
+		pos += bytes.len();
 
-			unsafe {
-				argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
-			}
-		} else {
-			panic!("Unable to create C string!");
+		unsafe {
+			argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
 		}
 	}
 

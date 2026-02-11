@@ -271,13 +271,13 @@ impl<S: PageSize> Iterator for PageIter<S> {
 	type Item = Page<S>;
 
 	fn next(&mut self) -> Option<Page<S>> {
-		if self.current.virtual_address <= self.last.virtual_address {
-			let p = self.current;
-			self.current.virtual_address += S::SIZE;
-			Some(p)
-		} else {
-			None
+		if self.last.virtual_address < self.current.virtual_address {
+			return None;
 		}
+
+		let p = self.current;
+		self.current.virtual_address += S::SIZE;
+		Some(p)
 	}
 }
 

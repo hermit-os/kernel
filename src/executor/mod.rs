@@ -58,9 +58,11 @@ impl WakerRegistration {
 	/// Wake the registered waker, if any.
 	#[allow(dead_code)]
 	pub fn wake(&mut self) {
-		if let Some(w) = self.waker.take() {
-			w.wake();
-		}
+		let Some(w) = self.waker.take() else {
+			return;
+		};
+
+		w.wake();
 	}
 }
 
