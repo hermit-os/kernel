@@ -1,6 +1,3 @@
-#[cfg(feature = "virtio-console")]
-use alloc::collections::VecDeque;
-
 use ahash::RandomState;
 use hashbrown::HashMap;
 
@@ -48,14 +45,10 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		}
 
 		let irq_number = drv.lock().get_interrupt_number();
-
-		if let Some(map) = handlers.get_mut(&irq_number) {
-			map.push_back(console_handler);
-		} else {
-			let mut map: InterruptHandlerQueue = VecDeque::new();
-			map.push_back(console_handler);
-			handlers.insert(irq_number, map);
-		}
+		handlers
+			.entry(irq_number)
+			.or_default()
+			.push_back(console_handler);
 	}
 
 	#[cfg(feature = "virtio-fs")]

@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -425,13 +424,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 	for drv in PCI_DRIVERS.finalize().iter() {
 		let (irq_number, handler) = drv.get_interrupt_handler();
 
-		if let Some(map) = handlers.get_mut(&irq_number) {
-			map.push_back(handler);
-		} else {
-			let mut map: InterruptHandlerQueue = VecDeque::new();
-			map.push_back(handler);
-			handlers.insert(irq_number, map);
-		}
+		handlers.entry(irq_number).or_default().push_back(handler);
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -439,13 +432,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 		use crate::kernel::serial::get_serial_handler;
 		let (irq_number, handler) = get_serial_handler();
 
-		if let Some(map) = handlers.get_mut(&irq_number) {
-			map.push_back(handler);
-		} else {
-			let mut map: InterruptHandlerQueue = VecDeque::new();
-			map.push_back(handler);
-			handlers.insert(irq_number, map);
-		}
+		handlers.entry(irq_number).or_default().push_back(handler);
 	}
 
 	#[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
