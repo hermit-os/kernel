@@ -272,19 +272,20 @@ pub fn supports_2mib_pages() -> bool {
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
-	if let Some(wt) = wakeup_time {
-		debug!("Starting Timer: {:x}", get_timestamp());
-		unsafe {
-			sie::set_stimer();
-		}
-		let next_time = wt * u64::from(get_frequency());
-
-		sbi_rt::set_timer(next_time);
-	} else {
+	let Some(wt) = wakeup_time else {
 		// Disable the Timer (and clear a pending interrupt)
 		debug!("Stopping Timer");
 		sbi_rt::set_timer(u64::MAX);
+		return;
+	};
+
+	debug!("Starting Timer: {:x}", get_timestamp());
+	unsafe {
+		sie::set_stimer();
 	}
+	let next_time = wt * u64::from(get_frequency());
+
+	sbi_rt::set_timer(next_time);
 }
 
 pub fn wakeup_core(core_to_wakeup: CoreId) {

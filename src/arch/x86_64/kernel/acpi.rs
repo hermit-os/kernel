@@ -392,40 +392,41 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 	// Find the "_S5_" object in the bytecode.
 	let s5 = [b'_', b'S', b'5', b'_', AML_PACKAGEOP];
 	let s5_position = aml.windows(s5.len()).position(|window| window == s5);
-	if let Some(i) = s5_position {
-		// We have found an "_S5_" object that looks valid.
-		// To be sure, verify that it begins with an AML_NAMEOP or an AML_NAMEOP and a backslash.
-		if i > 2 && (aml[i - 1] == AML_NAMEOP || (aml[i - 2] == AML_NAMEOP && aml[i - 1] == b'\\'))
-		{
-			// This is a valid "_S5_" object.
-			// It should be followed by this structure:
-			//    - single byte for PkgLength (index 5)
-			//    - single byte for NumElements (index 6)
-			let pkg_length = aml[i + 5];
-			let num_elements = aml[i + 6];
+	let Some(i) = s5_position else {
+		return;
+	};
 
-			// Bits 6-7 of PkgLength are non-zero for larger packages, resulting in a different structure.
-			// This mustn't be the case for the "_S5_" object.
-			if pkg_length & 0b1100_0000 == 0 && num_elements > 0 {
-				// The next byte is an opcode describing the data.
-				// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
-				// However, if the data is a zero or one byte, this may also be indicated by the opcode.
-				let op = aml[i + 7];
-				let slp_typa = match op {
-					AML_ZEROOP => 0,
-					AML_ONEOP => 1,
-					AML_BYTEPREFIX => aml[i + 8],
-					_ => return,
-				};
+	// We have found an "_S5_" object that looks valid.
+	// To be sure, verify that it begins with an AML_NAMEOP or an AML_NAMEOP and a backslash.
+	if i > 2 && (aml[i - 1] == AML_NAMEOP || (aml[i - 2] == AML_NAMEOP && aml[i - 1] == b'\\')) {
+		// This is a valid "_S5_" object.
+		// It should be followed by this structure:
+		//    - single byte for PkgLength (index 5)
+		//    - single byte for NumElements (index 6)
+		let pkg_length = aml[i + 5];
+		let num_elements = aml[i + 6];
 
-				// All assumptions are correct, so slp_typa is supposed to contain valid information.
-				// Now we have all information we need for powering off through ACPI.
-				//
-				// Note that Power Off may also be controlled through PM1B_CNT_BLK / SLP_TYPB
-				// according to the ACPI Specification. However, this has not yet been observed on real computers
-				// and therefore not implemented.
-				SLP_TYPA.set(slp_typa).unwrap();
-			}
+		// Bits 6-7 of PkgLength are non-zero for larger packages, resulting in a different structure.
+		// This mustn't be the case for the "_S5_" object.
+		if pkg_length & 0b1100_0000 == 0 && num_elements > 0 {
+			// The next byte is an opcode describing the data.
+			// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
+			// However, if the data is a zero or one byte, this may also be indicated by the opcode.
+			let op = aml[i + 7];
+			let slp_typa = match op {
+				AML_ZEROOP => 0,
+				AML_ONEOP => 1,
+				AML_BYTEPREFIX => aml[i + 8],
+				_ => return,
+			};
+
+			// All assumptions are correct, so slp_typa is supposed to contain valid information.
+			// Now we have all information we need for powering off through ACPI.
+			//
+			// Note that Power Off may also be controlled through PM1B_CNT_BLK / SLP_TYPB
+			// according to the ACPI Specification. However, this has not yet been observed on real computers
+			// and therefore not implemented.
+			SLP_TYPA.set(slp_typa).unwrap();
 		}
 	}
 }
@@ -498,15 +499,16 @@ pub fn get_mcfg_table() -> Option<&'static AcpiTable<'static>> {
 }
 
 pub fn poweroff() {
-	if let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
-	{
-		let bits = (u16::from(slp_typa) << 10) | SLP_EN;
-		debug!("Powering Off through ACPI (port {pm1a_cnt_blk:?}, bitmask {bits:#X})");
-		unsafe {
-			pm1a_cnt_blk.write(bits);
-		}
-	} else {
+	let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
+	else {
 		warn!("ACPI Power Off is not available");
+		return;
+	};
+
+	let bits = (u16::from(slp_typa) << 10) | SLP_EN;
+	debug!("Powering Off through ACPI (port {pm1a_cnt_blk:?}, bitmask {bits:#X})");
+	unsafe {
+		pm1a_cnt_blk.write(bits);
 	}
 }
 

@@ -275,13 +275,13 @@ impl CpuFrequency {
 	) -> Result<(), ()> {
 		//The clock frequency must never be set to zero, otherwise a division by zero will
 		//occur during runtime
-		if mhz > 0 {
-			self.mhz = mhz;
-			self.source = source;
-			Ok(())
-		} else {
-			Err(())
+		if mhz == 0 {
+			return Err(());
 		}
+
+		self.mhz = mhz;
+		self.source = source;
+		Ok(())
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
@@ -327,31 +327,28 @@ impl CpuFrequency {
 		&mut self,
 		cpuid: &CpuId<CpuIdReaderNative>,
 	) -> Result<(), ()> {
-		if let Some(processor_brand) = cpuid.get_processor_brand_string() {
-			let brand_string = processor_brand.as_str();
-			let ghz_find = brand_string.find("GHz");
+		let processor_brand = cpuid.get_processor_brand_string().ok_or(())?;
 
-			if let Some(ghz_find) = ghz_find {
-				let index = ghz_find - 4;
-				let thousand_char = brand_string.chars().nth(index).unwrap();
-				let decimal_char = brand_string.chars().nth(index + 1).unwrap();
-				let hundred_char = brand_string.chars().nth(index + 2).unwrap();
-				let ten_char = brand_string.chars().nth(index + 3).unwrap();
+		let brand_string = processor_brand.as_str();
+		let ghz_find = brand_string.find("GHz");
 
-				if let (Some(thousand), '.', Some(hundred), Some(ten)) = (
-					thousand_char.to_digit(10),
-					decimal_char,
-					hundred_char.to_digit(10),
-					ten_char.to_digit(10),
-				) {
-					let mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
-					return self
-						.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdBrandString);
-				}
-			}
+		let ghz_find = ghz_find.ok_or(())?;
+
+		let index = ghz_find - 4;
+		let thousand_char = brand_string.chars().nth(index).unwrap();
+		let decimal_char = brand_string.chars().nth(index + 1).unwrap();
+		let hundred_char = brand_string.chars().nth(index + 2).unwrap();
+		let ten_char = brand_string.chars().nth(index + 3).unwrap();
+
+		let thousand = thousand_char.to_digit(10).ok_or(())?;
+		if decimal_char != '.' {
+			return Err(());
 		}
+		let hundred = hundred_char.to_digit(10).ok_or(())?;
+		let ten = ten_char.to_digit(10).ok_or(())?;
 
-		Err(())
+		let mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
+		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdBrandString)
 	}
 
 	fn detect_from_fdt(&mut self) -> Result<(), ()> {
@@ -967,27 +964,28 @@ pub fn print_information() {
 
 pub fn seed_entropy() -> Option<[u8; 32]> {
 	let mut buf = [0; 32];
-	if FEATURES.supports_rdseed {
-		for word in buf.chunks_mut(8) {
-			let mut value = 0;
 
-			// Some RDRAND implementations on AMD CPUs have had bugs where the carry
-			// flag was incorrectly set without there actually being a random value
-			// available. Even though no bugs are known for RDSEED, we should not
-			// consider the default values random for extra security.
-			while unsafe { _rdseed64_step(&mut value) != 1 } || value == 0 || value == u64::MAX {
-				// Spin as per the recommendation in the
-				// Intel® Digital Random Number Generator (DRNG) implementation guide
-				spin_loop();
-			}
+	if !FEATURES.supports_rdseed {
+		return None;
+	}
 
-			word.copy_from_slice(&value.to_ne_bytes());
+	for word in buf.chunks_mut(8) {
+		let mut value = 0;
+
+		// Some RDRAND implementations on AMD CPUs have had bugs where the carry
+		// flag was incorrectly set without there actually being a random value
+		// available. Even though no bugs are known for RDSEED, we should not
+		// consider the default values random for extra security.
+		while unsafe { _rdseed64_step(&mut value) != 1 } || value == 0 || value == u64::MAX {
+			// Spin as per the recommendation in the
+			// Intel® Digital Random Number Generator (DRNG) implementation guide
+			spin_loop();
 		}
 
-		Some(buf)
-	} else {
-		None
+		word.copy_from_slice(&value.to_ne_bytes());
 	}
+
+	Some(buf)
 }
 
 #[inline]

@@ -157,13 +157,13 @@ impl CpuFrequency {
 	) -> Result<(), ()> {
 		//The clock frequency must never be set to zero, otherwise a division by zero will
 		//occur during runtime
-		if khz > 0 {
-			self.khz = khz;
-			self.source = source;
-			Ok(())
-		} else {
-			Err(())
+		if khz == 0 {
+			return Err(());
 		}
+
+		self.khz = khz;
+		self.source = source;
+		Ok(())
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
@@ -306,18 +306,19 @@ pub fn detect_frequency() {
 
 #[inline]
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
-	if let Some(wt) = wakeup_time {
-		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-		let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
-		let deadline = (wt / 1000) * freq;
-
-		CNTP_CVAL_EL0.set(deadline);
-		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
-	} else {
+	let Some(wt) = wakeup_time else {
 		// disable timer
 		CNTP_CVAL_EL0.set(0);
 		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
-	}
+		return;
+	};
+
+	// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
+	let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
+	let deadline = (wt / 1000) * freq;
+
+	CNTP_CVAL_EL0.set(deadline);
+	CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {

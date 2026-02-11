@@ -150,33 +150,34 @@ pub fn boot_next_processor() {
 
 	let next_hart_index = lsb(new_hart_mask);
 
-	if let Some(next_hart_id) = next_hart_index {
-		{
-			debug!("Allocating stack for hard_id {next_hart_id}");
-			let frame_layout = PageLayout::from_size(KERNEL_STACK_SIZE).unwrap();
-			let frame_range = FrameAlloc::allocate(frame_layout)
-				.expect("Failed to allocate boot stack for new core");
-			let stack = ptr::with_exposed_provenance_mut(frame_range.start());
-			CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
-		}
-
-		info!(
-			"Starting CPU {} with hart_id {}",
-			core_id() + 1,
-			next_hart_id
-		);
-
-		// TODO: Old: Changing cpu_online will cause uhyve to start the next processor
-		CPU_ONLINE.fetch_add(1, Ordering::Release);
-
-		//When running bare-metal/QEMU we use the firmware to start the next hart
-		if !env::is_uhyve() {
-			let start_addr = (start::_start as *const ()).expose_provenance();
-			sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
-		}
-	} else {
+	let Some(next_hart_id) = next_hart_index else {
 		info!("All processors are initialized");
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
+		return;
+	};
+
+	{
+		debug!("Allocating stack for hard_id {next_hart_id}");
+		let frame_layout = PageLayout::from_size(KERNEL_STACK_SIZE).unwrap();
+		let frame_range =
+			FrameAlloc::allocate(frame_layout).expect("Failed to allocate boot stack for new core");
+		let stack = ptr::with_exposed_provenance_mut(frame_range.start());
+		CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
+	}
+
+	info!(
+		"Starting CPU {} with hart_id {}",
+		core_id() + 1,
+		next_hart_id
+	);
+
+	// TODO: Old: Changing cpu_online will cause uhyve to start the next processor
+	CPU_ONLINE.fetch_add(1, Ordering::Release);
+
+	//When running bare-metal/QEMU we use the firmware to start the next hart
+	if !env::is_uhyve() {
+		let start_addr = (start::_start as *const ()).expose_provenance();
+		sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
 	}
 }
 

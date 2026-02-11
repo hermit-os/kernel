@@ -301,13 +301,13 @@ impl<S: PageSize> Iterator for PageIter<S> {
 	type Item = Page<S>;
 
 	fn next(&mut self) -> Option<Page<S>> {
-		if self.current.virtual_address <= self.last.virtual_address {
-			let p = self.current;
-			self.current.virtual_address += S::SIZE;
-			Some(p)
-		} else {
-			None
+		if self.last.virtual_address < self.current.virtual_address {
+			return None;
 		}
+
+		let p = self.current;
+		self.current.virtual_address += S::SIZE;
+		Some(p)
 	}
 }
 
@@ -434,11 +434,11 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 
-		if self.entries[index].is_present() {
-			Some(self.entries[index])
-		} else {
-			None
+		if !self.entries[index].is_present() {
+			return None;
 		}
+
+		Some(self.entries[index])
 	}
 
 	/// Maps a single page to the given physical address.
@@ -467,15 +467,15 @@ where
 		assert!(L::LEVEL <= S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 
-		if self.entries[index].is_present() {
-			if L::LEVEL < S::MAP_LEVEL {
-				let subtable = self.subtable::<S>(page);
-				subtable.get_page_table_entry::<S>(page)
-			} else {
-				Some(self.entries[index])
-			}
+		if !self.entries[index].is_present() {
+			return None;
+		}
+
+		if L::LEVEL < S::MAP_LEVEL {
+			let subtable = self.subtable::<S>(page);
+			subtable.get_page_table_entry::<S>(page)
 		} else {
-			None
+			Some(self.entries[index])
 		}
 	}
 
@@ -685,10 +685,10 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 	}
 
 	if map_counter < nr_pages {
-		Err(map_counter)
-	} else {
-		Ok(())
+		return Err(map_counter);
 	}
+
+	Ok(())
 }
 
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {

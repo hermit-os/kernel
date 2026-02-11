@@ -129,54 +129,54 @@ pub(crate) fn install_handlers() {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_fiq(_state: &State) -> *mut usize {
-	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
-		let vector: u8 = u32::from(irqid).try_into().unwrap();
+	let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) else {
+		return ptr::null_mut();
+	};
 
-		debug!("Receive fiq {vector}");
-		increment_irq_counter(vector);
+	let vector: u8 = u32::from(irqid).try_into().unwrap();
 
-		if let Some(handlers) = INTERRUPT_HANDLERS.get()
-			&& let Some(queue) = handlers.get(&vector)
-		{
-			for handler in queue.iter() {
-				handler();
-			}
+	debug!("Receive fiq {vector}");
+	increment_irq_counter(vector);
+
+	if let Some(handlers) = INTERRUPT_HANDLERS.get()
+		&& let Some(queue) = handlers.get(&vector)
+	{
+		for handler in queue.iter() {
+			handler();
 		}
-		crate::executor::run();
-		core_scheduler().handle_waiting_tasks();
-
-		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
-
-		return core_scheduler().scheduler().unwrap_or_default();
 	}
+	crate::executor::run();
+	core_scheduler().handle_waiting_tasks();
 
-	ptr::null_mut()
+	GicV3::end_interrupt(irqid, InterruptGroup::Group1);
+
+	core_scheduler().scheduler().unwrap_or_default()
 }
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
-	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) {
-		let vector: u8 = u32::from(irqid).try_into().unwrap();
+	let Some(irqid) = GicV3::get_and_acknowledge_interrupt(InterruptGroup::Group1) else {
+		return ptr::null_mut();
+	};
 
-		debug!("Receive interrupt {vector}");
-		increment_irq_counter(vector);
+	let vector: u8 = u32::from(irqid).try_into().unwrap();
 
-		if let Some(handlers) = INTERRUPT_HANDLERS.get()
-			&& let Some(queue) = handlers.get(&vector)
-		{
-			for handler in queue.iter() {
-				handler();
-			}
+	debug!("Receive interrupt {vector}");
+	increment_irq_counter(vector);
+
+	if let Some(handlers) = INTERRUPT_HANDLERS.get()
+		&& let Some(queue) = handlers.get(&vector)
+	{
+		for handler in queue.iter() {
+			handler();
 		}
-		crate::executor::run();
-		core_scheduler().handle_waiting_tasks();
-
-		GicV3::end_interrupt(irqid, InterruptGroup::Group1);
-
-		return core_scheduler().scheduler().unwrap_or_default();
 	}
+	crate::executor::run();
+	core_scheduler().handle_waiting_tasks();
 
-	ptr::null_mut()
+	GicV3::end_interrupt(irqid, InterruptGroup::Group1);
+
+	core_scheduler().scheduler().unwrap_or_default()
 }
 
 #[unsafe(no_mangle)]
@@ -436,51 +436,54 @@ pub(crate) fn init() {
 pub fn init_cpu() {
 	let cpu_id: usize = core_id().try_into().unwrap();
 
-	if let Some(ref mut gic) = *GIC.lock() {
-		debug!("Mark cpu {cpu_id} as awake");
+	let mut gic = GIC.lock();
+	let Some(gic) = &mut *gic else {
+		return;
+	};
 
-		gic.setup(cpu_id);
-		GicV3::set_priority_mask(0xff);
+	debug!("Mark cpu {cpu_id} as awake");
 
-		let fdt = env::fdt().unwrap();
+	gic.setup(cpu_id);
+	GicV3::set_priority_mask(0xff);
 
-		if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
-			let irq_slice = timer_node.property("interrupts").unwrap().value;
-			/* Secure Phys IRQ */
-			let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-			let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-			let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-			/* Non-secure Phys IRQ */
-			let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-			let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-			let (irqflags, _irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-			let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-			let irq = u32::from_be_bytes(irq.try_into().unwrap());
-			let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+	let fdt = env::fdt().unwrap();
 
-			// enable timer interrupt
-			let timer_irqid = if irqtype == 1 {
-				IntId::ppi(irq)
-			} else if irqtype == 0 {
-				IntId::spi(irq)
-			} else {
-				panic!("Invalid interrupt type");
-			};
-			gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
-			if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
-			} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-				gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
-			} else {
-				panic!("Invalid interrupt level!");
-			}
-			gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
+	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
+		let irq_slice = timer_node.property("interrupts").unwrap().value;
+		/* Secure Phys IRQ */
+		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		/* Non-secure Phys IRQ */
+		let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irqflags, _irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+		let irq = u32::from_be_bytes(irq.try_into().unwrap());
+		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+
+		// enable timer interrupt
+		let timer_irqid = if irqtype == 1 {
+			IntId::ppi(irq)
+		} else if irqtype == 0 {
+			IntId::spi(irq)
+		} else {
+			panic!("Invalid interrupt type");
+		};
+		gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00);
+		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level);
+		} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge);
+		} else {
+			panic!("Invalid interrupt level!");
 		}
-
-		let reschedid = IntId::sgi(SGI_RESCHED.into());
-		gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01);
-		gic.enable_interrupt(reschedid, Some(cpu_id), true);
+		gic.enable_interrupt(timer_irqid, Some(cpu_id), true);
 	}
+
+	let reschedid = IntId::sgi(SGI_RESCHED.into());
+	gic.set_interrupt_priority(reschedid, Some(cpu_id), 0x01);
+	gic.enable_interrupt(reschedid, Some(cpu_id), true);
 }
 
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =

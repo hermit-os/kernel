@@ -269,54 +269,56 @@ pub fn init() {
 					let mut cmd = CommandRegister::empty();
 					let mut range_iter = 0..MAX_BARS;
 					while let Some(i) = range_iter.next() {
-						if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
-							match bar {
-								Bar::Io { .. } => {
-									dev.set_bar(
-										i.try_into().unwrap(),
-										Bar::Io {
-											port: io_start.try_into().unwrap(),
-										},
-									);
-									io_start += 0x20;
-									cmd |= CommandRegister::IO_ENABLE
-										| CommandRegister::BUS_MASTER_ENABLE;
-								}
-								Bar::Memory32 {
-									address: _,
-									size,
-									prefetchable,
-								} => {
-									dev.set_bar(
-										i.try_into().unwrap(),
-										Bar::Memory32 {
-											address: mem32_start.try_into().unwrap(),
-											size,
-											prefetchable,
-										},
-									);
-									mem32_start += u64::from(size);
-									cmd |= CommandRegister::MEMORY_ENABLE
-										| CommandRegister::BUS_MASTER_ENABLE;
-								}
-								Bar::Memory64 {
-									address: _,
-									size,
-									prefetchable,
-								} => {
-									dev.set_bar(
-										i.try_into().unwrap(),
-										Bar::Memory64 {
-											address: mem64_start,
-											size,
-											prefetchable,
-										},
-									);
-									mem64_start += size;
-									cmd |= CommandRegister::MEMORY_ENABLE
-										| CommandRegister::BUS_MASTER_ENABLE;
-									range_iter.next(); // Skip 32-bit bar that is part of the 64-bit bar
-								}
+						let Some(bar) = dev.get_bar(i.try_into().unwrap()) else {
+							continue;
+						};
+
+						match bar {
+							Bar::Io { .. } => {
+								dev.set_bar(
+									i.try_into().unwrap(),
+									Bar::Io {
+										port: io_start.try_into().unwrap(),
+									},
+								);
+								io_start += 0x20;
+								cmd |=
+									CommandRegister::IO_ENABLE | CommandRegister::BUS_MASTER_ENABLE;
+							}
+							Bar::Memory32 {
+								address: _,
+								size,
+								prefetchable,
+							} => {
+								dev.set_bar(
+									i.try_into().unwrap(),
+									Bar::Memory32 {
+										address: mem32_start.try_into().unwrap(),
+										size,
+										prefetchable,
+									},
+								);
+								mem32_start += u64::from(size);
+								cmd |= CommandRegister::MEMORY_ENABLE
+									| CommandRegister::BUS_MASTER_ENABLE;
+							}
+							Bar::Memory64 {
+								address: _,
+								size,
+								prefetchable,
+							} => {
+								dev.set_bar(
+									i.try_into().unwrap(),
+									Bar::Memory64 {
+										address: mem64_start,
+										size,
+										prefetchable,
+									},
+								);
+								mem64_start += size;
+								cmd |= CommandRegister::MEMORY_ENABLE
+									| CommandRegister::BUS_MASTER_ENABLE;
+								range_iter.next(); // Skip 32-bit bar that is part of the 64-bit bar
 							}
 						}
 					}

@@ -670,45 +670,47 @@ fn calibrate_timer() {
 }
 
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
-	if let Some(wt) = wakeup_time {
-		if processor::supports_tsc_deadline() {
-			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-			// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
-			// (see processor::get_timer_ticks).
-			let tsc_deadline = wt * (u64::from(processor::get_frequency()));
-
-			// Enable the APIC Timer in TSC-Deadline Mode and let it start by writing to the respective MSR.
-			local_apic_write(
-				IA32_X2APIC_LVT_TIMER,
-				APIC_LVT_TIMER_TSC_DEADLINE | u64::from(TIMER_INTERRUPT_NUMBER),
-			);
-			let mut ia32_tsc_deadline = IA32_TSC_DEADLINE;
-			unsafe {
-				ia32_tsc_deadline.write(tsc_deadline);
-			}
-		} else {
-			// Calculate the relative timeout from the absolute wakeup time.
-			// Maintain a minimum value of one tick, otherwise the timer interrupt does not fire at all.
-			// The Timer Counter Register is also a 32-bit register, which we must not overflow for longer timeouts.
-			let current_time = processor::get_timer_ticks();
-			let ticks = if wt > current_time {
-				wt - current_time
-			} else {
-				1
-			};
-			let init_count = cmp::min(
-				CALIBRATED_COUNTER_VALUE.get().unwrap() * ticks,
-				u64::from(u32::MAX),
-			);
-
-			// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
-			local_apic_write(IA32_X2APIC_LVT_TIMER, u64::from(TIMER_INTERRUPT_NUMBER));
-			local_apic_write(IA32_X2APIC_INIT_COUNT, init_count);
-		}
-	} else {
+	let Some(wt) = wakeup_time else {
 		// Disable the APIC Timer.
 		local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_MASK);
+		return;
+	};
+
+	if processor::supports_tsc_deadline() {
+		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
+		// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
+		// (see processor::get_timer_ticks).
+		let tsc_deadline = wt * (u64::from(processor::get_frequency()));
+
+		// Enable the APIC Timer in TSC-Deadline Mode and let it start by writing to the respective MSR.
+		local_apic_write(
+			IA32_X2APIC_LVT_TIMER,
+			APIC_LVT_TIMER_TSC_DEADLINE | u64::from(TIMER_INTERRUPT_NUMBER),
+		);
+		let mut ia32_tsc_deadline = IA32_TSC_DEADLINE;
+		unsafe {
+			ia32_tsc_deadline.write(tsc_deadline);
+		}
+		return;
 	}
+
+	// Calculate the relative timeout from the absolute wakeup time.
+	// Maintain a minimum value of one tick, otherwise the timer interrupt does not fire at all.
+	// The Timer Counter Register is also a 32-bit register, which we must not overflow for longer timeouts.
+	let current_time = processor::get_timer_ticks();
+	let ticks = if wt > current_time {
+		wt - current_time
+	} else {
+		1
+	};
+	let init_count = cmp::min(
+		CALIBRATED_COUNTER_VALUE.get().unwrap() * ticks,
+		u64::from(u32::MAX),
+	);
+
+	// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
+	local_apic_write(IA32_X2APIC_LVT_TIMER, u64::from(TIMER_INTERRUPT_NUMBER));
+	local_apic_write(IA32_X2APIC_INIT_COUNT, init_count);
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
