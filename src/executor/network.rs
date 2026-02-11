@@ -191,22 +191,21 @@ async fn dhcpv4_run() {
 
 async fn network_run() {
 	future::poll_fn(|cx| {
-		if let Some(mut guard) = NIC.try_lock() {
-			match &mut *guard {
-				NetworkState::Initialized(nic) => {
-					nic.poll_common(now());
-					// FIXME: only wake when progress can be made
-					cx.waker().wake_by_ref();
-					Poll::Pending
-				}
-				_ => Poll::Ready(()),
-			}
-		} else {
+		let Some(mut guard) = NIC.try_lock() else {
 			// FIXME: only wake when progress can be made
 			cx.waker().wake_by_ref();
 			// another task is already using the NIC => don't check
-			Poll::Pending
-		}
+			return Poll::Pending;
+		};
+
+		let NetworkState::Initialized(nic) = &mut *guard else {
+			return Poll::Ready(());
+		};
+
+		nic.poll_common(now());
+		// FIXME: only wake when progress can be made
+		cx.waker().wake_by_ref();
+		Poll::Pending
 	})
 	.await;
 }
@@ -254,18 +253,20 @@ pub(crate) fn init() {
 
 	*guard = NetworkInterface::create();
 
-	if let NetworkState::Initialized(nic) = &mut *guard {
-		let time = now();
-		nic.poll_common(time);
-		let wakeup_time = nic
-			.poll_delay(time)
-			.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-		crate::core_scheduler().add_network_timer(wakeup_time);
+	let NetworkState::Initialized(nic) = &mut *guard else {
+		return;
+	};
 
-		spawn(network_run());
-		#[cfg(feature = "dhcpv4")]
-		spawn(dhcpv4_run());
-	}
+	let time = now();
+	nic.poll_common(time);
+	let wakeup_time = nic
+		.poll_delay(time)
+		.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+	crate::core_scheduler().add_network_timer(wakeup_time);
+
+	spawn(network_run());
+	#[cfg(feature = "dhcpv4")]
+	spawn(dhcpv4_run());
 }
 
 impl<'a> NetworkInterface<'a> {
