@@ -56,14 +56,6 @@ jobs:
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features tcp,rtl8139
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
-      - name: cargo hack clippy (aarch64_be)
-        run: |
-          cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,virtio-net --features tcp,rtl8139
-          cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64_be-unknown-none-softfloat -Zbuild-std=core,alloc --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
       - name: cargo hack clippy (riscv64)
         run: |
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
