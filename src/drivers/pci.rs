@@ -531,6 +531,30 @@ pub(crate) fn init() {
 	});
 }
 
+#[repr(C)]
+pub(crate) struct MsixEntry {
+	addr_low: u32,
+	addr_high: u32,
+	data: u32,
+	control: u32,
+}
+
+impl MsixEntry {
+	#[cfg(target_arch = "x86_64")]
+	pub fn configure(msix_entry: volatile::VolatilePtr<'_, Self>, vector: u8) {
+		use bit_field::BitField;
+		use volatile::map_field;
+
+		// Mask the entry because "[s]oftware must not modify the Address, Data, or Steering Tag fields
+		// of an entry while it is unmasked." (PCIe spec. 6.1.4.2)
+		map_field!(msix_entry.control).update(|mut control| *control.set_bit(0, true));
+
+		map_field!(msix_entry.addr_low).update(|mut addr_low| *addr_low.set_bits(20..32, 0xfee));
+		map_field!(msix_entry.data).update(|mut data| *data.set_bits(0..8, u32::from(vector) + 32));
+		map_field!(msix_entry.control).update(|mut control| *control.set_bit(0, false));
+	}
+}
+
 /// A module containing PCI specific errors
 ///
 /// Errors include...

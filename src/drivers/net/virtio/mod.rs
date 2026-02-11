@@ -32,6 +32,8 @@ use self::error::VirtioNetError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
+#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+use crate::drivers::pci::MsixEntry;
 use crate::drivers::virtio::ControlRegisters;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
@@ -239,11 +241,13 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
+	#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+	pub(super) msix_table: Option<VolatileRef<'static, [MsixEntry]>>,
 
 	pub(super) inner: T,
 
 	pub(super) num_vqs: u16,
-	pub(super) irq: InterruptLine,
+	pub(super) irq: Option<InterruptLine>,
 	pub(super) checksums: ChecksumCapabilities,
 }
 
@@ -477,7 +481,7 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 
 impl Driver for VirtioNetDriver<Init> {
 	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
+		self.irq.unwrap()
 	}
 
 	fn get_name(&self) -> &'static str {
@@ -733,11 +737,33 @@ impl VirtioNetDriver<Uninit> {
 		}
 		debug!("{:?}", self.checksums);
 
+		// If self.irq is some, it was filled with a legacy interrupt number which we prefer over MSI-X.
+		#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+		if self.irq.is_none()
+			&& let Some(msix_table) = self.msix_table.as_mut()
+		{
+			warn!(
+				"Setting up message signaled interrupts as a fallback. MSI-X is known to not work on all platforms (e.g. QEMU with TAP)."
+			);
+			// Chosen arbitatrily. Ideally does not clash with another interrupt line.
+			const MSIX_VECTOR: u8 = 112;
+			let msix_entry = unsafe {
+				msix_table
+					.as_mut_ptr()
+					.map(|table| table.get_unchecked_mut(0))
+			};
+			MsixEntry::configure(msix_entry, MSIX_VECTOR);
+			self.com_cfg.select_vq(0).unwrap().set_msix_table_index(0);
+			self.irq = Some(MSIX_VECTOR);
+		};
+
 		Ok(VirtioNetDriver {
 			dev_cfg: self.dev_cfg,
 			com_cfg: self.com_cfg,
 			isr_stat: self.isr_stat,
 			notif_cfg: self.notif_cfg,
+			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+			msix_table: self.msix_table,
 			inner,
 			num_vqs: self.num_vqs,
 			irq: self.irq,
