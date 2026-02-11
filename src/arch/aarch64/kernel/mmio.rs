@@ -194,7 +194,7 @@ pub fn init_drivers() {
 							InterruptTicketMutex::new(*drv),
 						)),
 						#[cfg(feature = "virtio-fs")]
-						VirtioDriver::FileSystem(drv) => register_driver(MmioDriver::VirtioFs(
+						VirtioDriver::Fs(drv) => register_driver(MmioDriver::VirtioFs(
 							hermit_sync::InterruptTicketMutex::new(*drv),
 						)),
 						#[cfg(feature = "virtio-net")]
