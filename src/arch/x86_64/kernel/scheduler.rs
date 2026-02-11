@@ -1,7 +1,7 @@
 //! Architecture dependent interface to initialize a task
 
 use core::arch::naked_asm;
-use core::{mem, ptr};
+use core::mem;
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
@@ -140,12 +140,9 @@ impl TaskStacks {
 
 		// clear user stack
 		unsafe {
-			ptr::write_bytes(
-				(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
-					.as_mut_ptr::<u8>(),
-				0,
-				user_stack_size,
-			);
+			(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
+				.as_mut_ptr::<u8>()
+				.write_bytes(0, user_stack_size);
 		}
 
 		TaskStacks::Common(CommonStack {

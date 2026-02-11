@@ -1,4 +1,4 @@
-use core::{mem, ptr};
+use core::mem;
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
@@ -161,13 +161,9 @@ impl TaskStacks {
 		// clear user stack
 		debug!("Clearing user stack...");
 		unsafe {
-			ptr::write_bytes(
-				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
-					//(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE)
-					.as_mut_ptr::<u8>(),
-				0,
-				user_stack_size,
-			);
+			(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
+				.as_mut_ptr::<u8>()
+				.write_bytes(0, user_stack_size);
 		}
 
 		debug!("Creating stacks finished");
