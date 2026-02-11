@@ -245,7 +245,7 @@ pub(crate) fn init_drivers() {
 					register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-fs")]
-				Ok(VirtioDriver::FileSystem(drv)) => {
+				Ok(VirtioDriver::Fs(drv)) => {
 					register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-net")]

@@ -251,7 +251,7 @@ pub fn init_drivers() {
 						));
 					}
 					#[cfg(feature = "virtio-fs")]
-					Ok(VirtioDriver::FileSystem(drv)) => {
+					Ok(VirtioDriver::Fs(drv)) => {
 						register_driver(MmioDriver::VirtioFs(
 							hermit_sync::InterruptSpinMutex::new(*drv),
 						));

@@ -314,7 +314,7 @@ pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-fs")]
-	FileSystem(alloc::boxed::Box<VirtioFsDriver>),
+	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(feature = "virtio-net")]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
 }
@@ -360,9 +360,7 @@ pub(crate) fn init_device(
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					crate::arch::interrupts::add_irq_name(irq_no, "virtio");
-					Ok(VirtioDriver::FileSystem(alloc::boxed::Box::new(
-						virt_fs_drv,
-					)))
+					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
 					error!("Virtio fs driver could not be initialized with device");
