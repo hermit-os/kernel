@@ -323,11 +323,11 @@ pub unsafe extern "C" fn sys_fstat(fd: RawFd, stat: *mut FileAttr) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> RawFd {
-	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
-		crate::fs::opendir(name).unwrap_or_else(|e| -i32::from(e))
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
+		return -i32::from(Errno::Inval);
+	};
+
+	crate::fs::opendir(name).unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system(errno)]
@@ -340,11 +340,11 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 		return -i32::from(Errno::Inval);
 	};
 
-	if let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() {
-		crate::fs::open(name, flags, mode).unwrap_or_else(|e| -i32::from(e))
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
+		return -i32::from(Errno::Inval);
+	};
+
+	crate::fs::open(name, flags, mode).unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system]
@@ -395,13 +395,13 @@ pub extern "C" fn sys_fchdir(_fd: RawFd) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
-	if let Ok(name) = unsafe { CStr::from_ptr(path) }.to_str() {
-		crate::fs::set_cwd(name)
-			.map(|()| 0)
-			.unwrap_or_else(|e| -i32::from(e))
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	let Ok(name) = unsafe { CStr::from_ptr(path) }.to_str() else {
+		return -i32::from(Errno::Inval);
+	};
+
+	crate::fs::set_cwd(name)
+		.map(|()| 0)
+		.unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system]
@@ -851,11 +851,11 @@ pub unsafe extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
-	if let Some(flags) = EventFlags::from_bits(flags) {
-		crate::fd::eventfd(initval, flags).unwrap_or_else(|e| -i32::from(e))
-	} else {
-		-i32::from(Errno::Inval)
-	}
+	let Some(flags) = EventFlags::from_bits(flags) else {
+		return -i32::from(Errno::Inval);
+	};
+
+	crate::fd::eventfd(initval, flags).unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system]
