@@ -42,7 +42,7 @@ use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
 };
 use crate::errno::Errno;
-use crate::fs::virtio_fs::{self, FuseError, FuseInterface, Rsp, RspHeader};
+use crate::fs::virtio_fs::{self, Rsp, RspHeader, VirtioFsError, VirtioFsInterface};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -174,12 +174,12 @@ impl VirtioFsDriver {
 	}
 }
 
-impl FuseInterface for VirtioFsDriver {
+impl VirtioFsInterface for VirtioFsDriver {
 	fn send_command<O: virtio_fs::ops::Op + 'static>(
 		&mut self,
 		cmd: virtio_fs::Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<virtio_fs::Rsp<O>, FuseError>
+	) -> Result<virtio_fs::Rsp<O>, VirtioFsError>
 	where
 		<O as virtio_fs::ops::Op>::InStruct: Send,
 		<O as virtio_fs::ops::Op>::OutStruct: Send,
@@ -238,7 +238,7 @@ impl FuseInterface for VirtioFsDriver {
 			// "However, if the reply is an error reply (i.e., error is set), then no further payload data should be sent,
 			// independent of the request." (fuse man page)
 
-			return Err(FuseError::IOError(
+			return Err(VirtioFsError::IOError(
 				Errno::try_from_primitive(-headers.out_header.error).unwrap_or(Errno::Io),
 			));
 		}

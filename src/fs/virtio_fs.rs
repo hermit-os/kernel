@@ -46,12 +46,12 @@ const U64_SIZE: usize = mem::size_of::<u64>();
 const S_IFLNK: u32 = 0o120_000;
 const S_IFMT: u32 = 0o170_000;
 
-pub(crate) trait FuseInterface {
+pub(crate) trait VirtioFsInterface {
 	fn send_command<O: ops::Op + 'static>(
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<Rsp<O>, FuseError>
+	) -> Result<Rsp<O>, VirtioFsError>
 	where
 		<O as ops::Op>::InStruct: Send,
 		<O as ops::Op>::OutStruct: Send;
@@ -622,22 +622,22 @@ pub(crate) struct Rsp<O: ops::Op> {
 }
 
 #[derive(Debug)]
-pub(crate) enum FuseError {
+pub(crate) enum VirtioFsError {
 	VirtqError(VirtqError),
 	IOError(Errno),
 }
 
-impl From<VirtqError> for FuseError {
+impl From<VirtqError> for VirtioFsError {
 	fn from(value: VirtqError) -> Self {
 		Self::VirtqError(value)
 	}
 }
 
-impl From<FuseError> for Errno {
-	fn from(value: FuseError) -> Self {
+impl From<VirtioFsError> for Errno {
+	fn from(value: VirtioFsError) -> Self {
 		match value {
-			FuseError::VirtqError(virtq_error) => virtq_error.into(),
-			FuseError::IOError(io_error) => io_error,
+			VirtioFsError::VirtqError(virtq_error) => virtq_error.into(),
+			VirtioFsError::IOError(io_error) => io_error,
 		}
 	}
 }
@@ -671,13 +671,13 @@ fn readlink(nid: u64) -> io::Result<String> {
 }
 
 #[derive(Debug)]
-struct FuseFileHandleInner {
+struct VirtioFsFileHandleInner {
 	fuse_nid: Option<u64>,
 	fuse_fh: Option<u64>,
 	offset: usize,
 }
 
-impl FuseFileHandleInner {
+impl VirtioFsFileHandleInner {
 	pub fn new() -> Self {
 		Self {
 			fuse_nid: None,
@@ -805,11 +805,11 @@ impl FuseFileHandleInner {
 	}
 }
 
-impl ErrorType for FuseFileHandleInner {
+impl ErrorType for VirtioFsFileHandleInner {
 	type Error = Errno;
 }
 
-impl Read for FuseFileHandleInner {
+impl Read for VirtioFsFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
@@ -840,7 +840,7 @@ impl Read for FuseFileHandleInner {
 	}
 }
 
-impl Write for FuseFileHandleInner {
+impl Write for VirtioFsFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		debug!("virtio-fs write!");
 		let mut truncated_len = buf.len();
@@ -882,7 +882,7 @@ impl Write for FuseFileHandleInner {
 	}
 }
 
-impl Drop for FuseFileHandleInner {
+impl Drop for VirtioFsFileHandleInner {
 	fn drop(&mut self) {
 		let Some(fuse_nid) = self.fuse_nid else {
 			return;
@@ -901,16 +901,16 @@ impl Drop for FuseFileHandleInner {
 	}
 }
 
-struct FuseFileHandle(Arc<Mutex<FuseFileHandleInner>>);
+struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
 
-impl FuseFileHandle {
+impl VirtioFsFileHandle {
 	pub fn new() -> Self {
-		Self(Arc::new(Mutex::new(FuseFileHandleInner::new())))
+		Self(Arc::new(Mutex::new(VirtioFsFileHandleInner::new())))
 	}
 }
 
 #[async_trait]
-impl ObjectInterface for FuseFileHandle {
+impl ObjectInterface for VirtioFsFileHandle {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		self.0.lock().await.poll(event).await
 	}
@@ -958,19 +958,19 @@ impl ObjectInterface for FuseFileHandle {
 	}
 }
 
-impl Clone for FuseFileHandle {
+impl Clone for VirtioFsFileHandle {
 	fn clone(&self) -> Self {
-		warn!("FuseFileHandle: clone not tested");
+		warn!("VirtioFsFileHandle: clone not tested");
 		Self(self.0.clone())
 	}
 }
 
-pub struct FuseDirectoryHandle {
+pub struct VirtioFsDirectoryHandle {
 	name: Option<String>,
 	read_position: Mutex<usize>,
 }
 
-impl FuseDirectoryHandle {
+impl VirtioFsDirectoryHandle {
 	pub fn new(name: Option<String>) -> Self {
 		Self {
 			name,
@@ -980,7 +980,7 @@ impl FuseDirectoryHandle {
 }
 
 #[async_trait]
-impl ObjectInterface for FuseDirectoryHandle {
+impl ObjectInterface for VirtioFsDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let path: CString = if let Some(name) = &self.name {
 			CString::new("/".to_owned() + name).unwrap()
@@ -1099,17 +1099,17 @@ impl ObjectInterface for FuseDirectoryHandle {
 }
 
 #[derive(Debug)]
-pub(crate) struct FuseDirectory {
+pub(crate) struct VirtioFsDirectory {
 	prefix: Option<String>,
 	attr: FileAttr,
 }
 
-impl FuseDirectory {
+impl VirtioFsDirectory {
 	pub fn new(prefix: Option<String>) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 
-		FuseDirectory {
+		VirtioFsDirectory {
 			prefix,
 			attr: FileAttr {
 				st_mode: AccessPermission::from_bits(0o777).unwrap() | AccessPermission::S_IFDIR,
@@ -1135,7 +1135,7 @@ impl FuseDirectory {
 	}
 }
 
-impl VfsNode for FuseDirectory {
+impl VfsNode for VirtioFsDirectory {
 	/// Returns the node type
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
@@ -1146,9 +1146,9 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-			self.prefix.clone(),
-		))))
+		Ok(Arc::new(async_lock::RwLock::new(
+			VirtioFsDirectoryHandle::new(self.prefix.clone()),
+		)))
 	}
 
 	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
@@ -1302,12 +1302,12 @@ impl VfsNode for FuseDirectory {
 
 			let mut path = path.into_string().unwrap();
 			path.remove(0);
-			return Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-				Some(path),
-			))));
+			return Ok(Arc::new(async_lock::RwLock::new(
+				VirtioFsDirectoryHandle::new(Some(path)),
+			)));
 		}
 
-		let file = FuseFileHandle::new();
+		let file = VirtioFsFileHandle::new();
 
 		// 1.FUSE_INIT to create session
 		// Already done
@@ -1415,7 +1415,7 @@ pub(crate) fn init() {
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(mount_point.as_str(), Box::new(FuseDirectory::new(None)))
+			.mount(mount_point.as_str(), Box::new(VirtioFsDirectory::new(None)))
 			.expect("Mount failed. Invalid mount_point?");
 		return;
 	}
@@ -1513,7 +1513,7 @@ pub(crate) fn init() {
 				.unwrap()
 				.mount(
 					&("/".to_owned() + i.as_str()),
-					Box::new(FuseDirectory::new(Some(i))),
+					Box::new(VirtioFsDirectory::new(Some(i))),
 				)
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
