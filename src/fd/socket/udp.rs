@@ -124,35 +124,35 @@ impl ObjectInterface for Socket {
 
 	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
-		if let ListenEndpoint::Ip(endpoint) = endpoint {
-			self.local_endpoint.port = endpoint.port;
-			if let Some(addr) = endpoint.addr {
-				self.local_endpoint.addr = addr;
-			}
-			self.with(|socket| socket.bind(endpoint).map_err(|_| Errno::Addrinuse))
-		} else {
-			Err(Errno::Io)
+		let ListenEndpoint::Ip(endpoint) = endpoint else {
+			return Err(Errno::Io);
+		};
+
+		self.local_endpoint.port = endpoint.port;
+		if let Some(addr) = endpoint.addr {
+			self.local_endpoint.addr = addr;
 		}
+		self.with(|socket| socket.bind(endpoint).map_err(|_| Errno::Addrinuse))
 	}
 
 	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		#[allow(irrefutable_let_patterns)]
-		if let Endpoint::Ip(endpoint) = endpoint {
-			self.remote_endpoint = Some(endpoint);
-			Ok(())
-		} else {
-			Err(Errno::Io)
-		}
+		let Endpoint::Ip(endpoint) = endpoint else {
+			return Err(Errno::Io);
+		};
+
+		self.remote_endpoint = Some(endpoint);
+		Ok(())
 	}
 
 	async fn sendto(&self, buf: &[u8], endpoint: Endpoint) -> io::Result<usize> {
 		#[allow(irrefutable_let_patterns)]
-		if let Endpoint::Ip(endpoint) = endpoint {
-			let meta = UdpMetadata::from(endpoint);
-			self.write_with_meta(buf, &meta).await
-		} else {
-			Err(Errno::Io)
-		}
+		let Endpoint::Ip(endpoint) = endpoint else {
+			return Err(Errno::Io);
+		};
+
+		let meta = UdpMetadata::from(endpoint);
+		self.write_with_meta(buf, &meta).await
 	}
 
 	async fn recvfrom(&self, buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
@@ -219,12 +219,10 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		if let Some(endpoint) = self.remote_endpoint {
-			let meta = UdpMetadata::from(endpoint);
-			self.write_with_meta(buf, &meta).await
-		} else {
-			Err(Errno::Inval)
-		}
+		let endpoint = self.remote_endpoint.ok_or(Errno::Inval)?;
+
+		let meta = UdpMetadata::from(endpoint);
+		self.write_with_meta(buf, &meta).await
 	}
 
 	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
