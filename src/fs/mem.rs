@@ -421,7 +421,7 @@ impl ObjectInterface for MemDirectoryInterface {
 					d_name: PhantomData {},
 				});
 				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				ptr::copy_nonoverlapping(name.as_bytes().as_ptr().cast::<u8>(), nameptr, namelen);
+				nameptr.copy_from_nonoverlapping(name.as_bytes().as_ptr().cast::<u8>(), namelen);
 				nameptr.add(namelen).write(0); // zero termination
 			}
 

@@ -1,0 +1,15 @@
+disallowed-methods = [
+    # Use pointer methods instead of functions
+    { path = "core::ptr::copy_nonoverlapping", reason = "use the method instead: `pointer::copy_from_nonoverlapping` or `pointer::copy_to_nonoverlapping`" },
+    { path = "core::ptr::copy", reason = "use the method instead: `pointer::copy_from` or `pointer::copy_to`" },
+    { path = "core::ptr::drop_in_place", reason = "use the method instead: `pointer::drop_in_place`" },
+    { path = "core::ptr::read", reason = "use the method instead: `pointer::read`" },
+    { path = "core::ptr::read_unaligned", reason = "use the method instead: `pointer::read_unaligned`" },
+    { path = "core::ptr::read_volatile", reason = "use the method instead: `pointer::read_volatile`" },
+    { path = "core::ptr::replace", reason = "use the method instead: `pointer::replace`" },
+    { path = "core::ptr::swap", reason = "use the method instead: `pointer::swap`" },
+    { path = "core::ptr::write_bytes", reason = "use the method instead: `pointer::write_bytes`" },
+    { path = "core::ptr::write", reason = "use the method instead: `pointer::write`" },
+    { path = "core::ptr::write_unaligned", reason = "use the method instead: `pointer::write_unaligned`" },
+    { path = "core::ptr::write_volatile", reason = "use the method instead: `pointer::write_volatile`" },
+]

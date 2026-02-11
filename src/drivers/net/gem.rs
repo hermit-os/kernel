@@ -346,10 +346,12 @@ impl RxToken<'_> {
 
 		unsafe {
 			// Clear word1 (is this really necessary?)
-			ptr::write_volatile(word1_addr.as_mut_ptr::<u32>(), 0);
+			word1_addr.as_mut_ptr::<u32>().write_volatile(0);
 			// Give back ownership to GEM
-			let word0_entry = ptr::read_volatile(word0_addr.as_mut_ptr::<u32>());
-			ptr::write_volatile(word0_addr.as_mut_ptr::<u32>(), word0_entry & 0xffff_fffe);
+			let word0_entry = word0_addr.as_mut_ptr::<u32>().read_volatile();
+			word0_addr
+				.as_mut_ptr::<u32>()
+				.write_volatile(word0_entry & 0xffff_fffe);
 		}
 	}
 }
@@ -362,7 +364,7 @@ impl GEMDriver {
 		for i in 0..RX_BUF_NUM {
 			let index = (i + self.rx_counter) % RX_BUF_NUM;
 			let word0_addr = (self.rx_fields.rxbuffer_list + u64::from(index * 8));
-			let word0_entry = unsafe { ptr::read_volatile(word0_addr.as_mut_ptr::<u32>()) };
+			let word0_entry = unsafe { word0_addr.as_mut_ptr::<u32>().read_volatile() };
 			// Is buffer owned by GEM?
 			if (word0_entry & 0x1) != 0 {
 				return Some(index);
@@ -378,7 +380,7 @@ impl GEMDriver {
 			let index = (i + self.tx_counter) % TX_BUF_NUM;
 			let word1_addr =
 				(self.tx_fields.txbuffer_list + u64::from(index * 8 + 4)).as_mut_ptr::<u32>();
-			let word1 = unsafe { ptr::read_volatile(word1_addr) };
+			let word1 = unsafe { word1_addr.read_volatile() };
 			// Reuse a used buffer
 			if word1 & TX_DESC_USED != 0
 				&& !self.tx_fields.txbuffer_reserved[usize::try_from(i).unwrap()]
@@ -468,7 +470,7 @@ impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
 		debug!("receive_rx_buffer");
 
 		let word1_addr = self.rx_fields.rxbuffer_list + u64::from(self.buffer_index * 8 + 4);
-		let word1_entry = unsafe { ptr::read_volatile(word1_addr.as_mut_ptr::<u32>()) };
+		let word1_entry = unsafe { word1_addr.as_mut_ptr::<u32>().read_volatile() };
 		let length = word1_entry & 0x1fff;
 		debug!(
 			"Received frame in buffer {}, length: {length}",
@@ -507,11 +509,11 @@ impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
 
 		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
 			.as_mut_ptr::<u32>();
-		let word1 = unsafe { ptr::read_volatile(word1_addr) };
+		let word1 = unsafe { word1_addr.read_volatile() };
 
 		// Clear used bit
 		unsafe {
-			ptr::write_volatile(word1_addr, word1 & (!TX_DESC_USED));
+			word1_addr.write_volatile(word1 & (!TX_DESC_USED));
 		}
 
 		// Address of the tx buffer
@@ -525,14 +527,12 @@ impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
 		// Address of word[1] of the buffer descriptor
 		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
 			.as_mut_ptr::<u32>();
-		let word1 = unsafe { ptr::read_volatile(word1_addr) };
+		let word1 = unsafe { word1_addr.read_volatile() };
 
 		unsafe {
 			// Set length of frame and mark as single buffer Ethernet frame
-			ptr::write_volatile(
-				word1_addr,
-				(word1 & TX_DESC_WRAP) | TX_DESC_LAST | len as u32,
-			);
+
+			word1_addr.write_volatile((word1 & TX_DESC_WRAP) | TX_DESC_LAST | len as u32);
 
 			// Enable TX
 			(*self.tx_fields.gem)
@@ -549,9 +549,9 @@ impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
 		// Set used bit to indicate that the buffer can be reused
 		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
 			.as_mut_ptr::<u32>();
-		let word1 = unsafe { ptr::read_volatile(word1_addr) };
+		let word1 = unsafe { word1_addr.read_volatile() };
 		unsafe {
-			ptr::write_volatile(word1_addr, word1 | TX_DESC_USED);
+			word1_addr.write_volatile(word1 | TX_DESC_USED);
 		}
 
 		result
@@ -766,8 +766,8 @@ pub fn init_device(
 			if i == RX_BUF_NUM - 1 {
 				word0_entry |= 0b10;
 			}
-			ptr::write_volatile(word0, word0_entry);
-			ptr::write_volatile(word1, 0x0);
+			word0.write_volatile(word0_entry);
+			word1.write_volatile(0x0);
 		}
 
 		let rx_qbar: u32 = DeviceAlloc
@@ -793,8 +793,8 @@ pub fn init_device(
 			if i == TX_BUF_NUM - 1 {
 				word1_entry |= TX_DESC_WRAP;
 			}
-			ptr::write_volatile(word0, word0_entry);
-			ptr::write_volatile(word1, word1_entry);
+			word0.write_volatile(word0_entry);
+			word1.write_volatile(word1_entry);
 		}
 
 		let tx_qbar: u32 = DeviceAlloc

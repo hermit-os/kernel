@@ -46,15 +46,16 @@ impl PciConfigRegion {
 impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, offset: u16) -> u32 {
-		let ptr = ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
-		unsafe { u32::from_le(ptr::read_volatile(ptr)) }
+		let ptr: *const u32 = ptr::with_exposed_provenance(self.addr_from_offset(pci_addr, offset));
+		unsafe { u32::from_le(ptr.read_volatile()) }
 	}
 
 	#[inline]
 	unsafe fn write(&self, pci_addr: PciAddress, offset: u16, value: u32) {
-		let ptr = ptr::with_exposed_provenance_mut(self.addr_from_offset(pci_addr, offset));
+		let ptr: *mut u32 =
+			ptr::with_exposed_provenance_mut(self.addr_from_offset(pci_addr, offset));
 		unsafe {
-			ptr::write_volatile(ptr, value.to_le());
+			ptr.write_volatile(value.to_le());
 		}
 	}
 }

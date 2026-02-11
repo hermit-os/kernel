@@ -1,8 +1,8 @@
 //! Architecture dependent interface to initialize a task
 
 use core::arch::naked_asm;
+use core::mem;
 use core::sync::atomic::Ordering;
-use core::{mem, ptr};
 
 use aarch64_cpu::asm::barrier::{SY, isb};
 use aarch64_cpu::registers::*;
@@ -162,11 +162,9 @@ impl TaskStacks {
 
 		// clear user stack
 		unsafe {
-			ptr::write_bytes(
-				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE).as_mut_ptr::<u8>(),
-				0,
-				user_stack_size,
-			);
+			(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE)
+				.as_mut_ptr::<u8>()
+				.write_bytes(0, user_stack_size);
 		}
 
 		TaskStacks::Common(CommonStack {

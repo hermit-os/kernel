@@ -330,7 +330,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			pos += bytes.len();
 
 			unsafe {
-				ptr::copy_nonoverlapping(bytes.as_ptr(), argv[i], bytes.len());
+				argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
 			}
 		} else {
 			panic!("Unable to create C string!");

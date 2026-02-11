@@ -1054,9 +1054,8 @@ impl ObjectInterface for FuseDirectoryHandle {
 					d_name: PhantomData {},
 				});
 				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				ptr::copy_nonoverlapping(
+				nameptr.copy_from_nonoverlapping(
 					dirent.name.as_ptr().cast::<u8>(),
-					nameptr,
 					dirent.namelen as usize,
 				);
 				nameptr.add(dirent.namelen as usize).write(0); // zero termination

@@ -779,11 +779,10 @@ pub fn boot_application_processors() {
 		);
 	}
 	unsafe {
-		ptr::copy_nonoverlapping(
-			smp_boot_code.as_ptr(),
-			SMP_BOOT_CODE_ADDRESS.as_mut_ptr(),
-			smp_boot_code.len(),
-		);
+		// FIXME: do bounds checking. Better yet: do the copy via slices
+		SMP_BOOT_CODE_ADDRESS
+			.as_mut_ptr::<u8>()
+			.copy_from_nonoverlapping(smp_boot_code.as_ptr(), smp_boot_code.len());
 	}
 
 	unsafe {
@@ -926,11 +925,15 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
-		ptr::write_volatile(
-			(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>()).as_mut_ptr::<u32>(),
-			value,
-		);
+		IOAPIC_ADDRESS
+			.get()
+			.unwrap()
+			.as_mut_ptr::<u32>()
+			.write_volatile(reg);
+
+		(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>())
+			.as_mut_ptr::<u32>()
+			.write_volatile(value);
 	}
 }
 
@@ -938,10 +941,15 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
-		value = ptr::read_volatile(
-			(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>()).as_ptr::<u32>(),
-		);
+		IOAPIC_ADDRESS
+			.get()
+			.unwrap()
+			.as_mut_ptr::<u32>()
+			.write_volatile(reg);
+
+		value = (*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>())
+			.as_ptr::<u32>()
+			.read_volatile();
 	}
 
 	value
@@ -963,31 +971,28 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 		}
 	} else {
 		// Write the value.
-		let value_ref = unsafe {
-			&mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_mut_ptr::<u32>())
-		};
+		let ptr = translate_x2apic_msr_to_xapic_address(x2apic_msr).as_mut_ptr::<u32>();
 
 		if x2apic_msr == IA32_X2APIC_ICR {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit.
 			// Wait until previous interrupt was delivered.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0
-			{
+			while (unsafe { ptr.read_volatile() } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0 {
 				spin_loop();
 			}
 
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
 			let destination = ((value >> 8) & 0xff00_0000) as u32;
-			let icr2 = unsafe {
-				&mut *((*LOCAL_APIC_ADDRESS.get().unwrap() + APIC_ICR2).as_mut_ptr::<u32>())
-			};
-			*icr2 = destination;
+			let icr2 = (*LOCAL_APIC_ADDRESS.get().unwrap() + APIC_ICR2).as_mut_ptr::<u32>();
+			unsafe { icr2.write_volatile(destination) };
 
 			// The remaining data without the destination will now be written into ICR1.
 		}
 
-		*value_ref = value as u32;
+		unsafe {
+			ptr.write_volatile(value as u32);
+		}
 	}
 }
 
