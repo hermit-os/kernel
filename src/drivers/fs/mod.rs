@@ -236,7 +236,7 @@ impl VirtioFsInterface for VirtioFsDriver {
 			|| (written_header_len - size_of::<fuse_out_header>()) != size_of::<O::OutStruct>()
 		{
 			// "However, if the reply is an error reply (i.e., error is set), then no further payload data should be sent,
-			// independent of the request." (fuse man page)
+			// independent of the request." (FUSE man page)
 
 			return Err(VirtioFsError::IOError(
 				Errno::try_from_primitive(-headers.out_header.error).unwrap_or(Errno::Io),

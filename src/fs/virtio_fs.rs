@@ -321,7 +321,7 @@ pub(crate) mod ops {
 					padding: 0,
 					fh,
 
-					// Fuse attributes mapping: https://github.com/libfuse/libfuse/blob/fc1c8da0cf8a18d222cb1feed0057ba44ea4d18f/lib/fuse_lowlevel.c#L105
+					// FUSE attributes mapping: https://github.com/libfuse/libfuse/blob/fc1c8da0cf8a18d222cb1feed0057ba44ea4d18f/lib/fuse_lowlevel.c#L105
 					size: attr.st_size as u64,
 					atime: attr.st_atim.tv_sec as u64,
 					atimensec: attr.st_atim.tv_nsec as u32,
@@ -728,7 +728,7 @@ impl VirtioFsFileHandleInner {
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		debug!("virtio-fs lseek: offset: {offset}, whence: {whence:?}");
 
-		// Seek on fuse file systems seems to be a little odd: All reads are referenced from the
+		// Seek on FUSE file systems seems to be a little odd: All reads are referenced from the
 		// beginning of the file, thus we have to track the offset ourself. Also, a read doesn't
 		// move the read pointer on the remote side, so we can't get the current position using
 		// remote lseek when referencing from `Cur` and we have to use the internally tracked
@@ -1313,7 +1313,7 @@ impl VfsNode for VirtioFsDirectory {
 		// Already done
 		let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
 
-		// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
+		// Differentiate between opening and creating new file, since FUSE does not support O_CREAT on open.
 		if opt.contains(OpenOption::O_CREAT) {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
 			let (cmd, rsp_payload_len) =
