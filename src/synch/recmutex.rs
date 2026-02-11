@@ -63,29 +63,29 @@ impl RecursiveMutex {
 	}
 
 	pub fn release(&self) {
-		if let Some(task) = {
-			let mut locked_state = self.state.lock();
+		let mut locked_state = self.state.lock();
 
-			// We could do a sanity check here whether the RecursiveMutex is actually held by the current task.
-			// But let's just trust our code using this function for the sake of simplicity and performance.
+		// We could do a sanity check here whether the RecursiveMutex is actually held by the current task.
+		// But let's just trust our code using this function for the sake of simplicity and performance.
 
-			// Decrement the counter (recursive mutex behavior).
-			if locked_state.count > 0 {
-				locked_state.count -= 1;
-			}
-
-			if locked_state.count == 0 {
-				// Release the entire recursive mutex.
-				locked_state.current_tid = None;
-
-				locked_state.queue.pop()
-			} else {
-				None
-			}
-		} {
-			// Wake up any task that has been waiting for this mutex.
-			core_scheduler().custom_wakeup(task);
+		// Decrement the counter (recursive mutex behavior).
+		if locked_state.count > 0 {
+			locked_state.count -= 1;
 		}
+
+		if locked_state.count > 0 {
+			return;
+		}
+
+		// Release the entire recursive mutex.
+		locked_state.current_tid = None;
+
+		let Some(task) = locked_state.queue.pop() else {
+			return;
+		};
+
+		// Wake up any task that has been waiting for this mutex.
+		core_scheduler().custom_wakeup(task);
 	}
 }
 

@@ -196,26 +196,22 @@ impl TaskHandlePriorityQueue {
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<TaskHandle> {
-		if let Some(queue) = &mut self.queues[queue_index] {
-			let task = queue.pop_front();
+		let queue = self.queues[queue_index].as_mut()?;
 
-			if queue.is_empty() {
-				*self.prio_bitmap &= !(1 << queue_index as u64);
-			}
+		let task = queue.pop_front();
 
-			task
-		} else {
-			None
+		if queue.is_empty() {
+			*self.prio_bitmap &= !(1 << queue_index as u64);
 		}
+
+		task
 	}
 
 	/// Pop the task handle with the highest priority from the queue
 	pub fn pop(&mut self) -> Option<TaskHandle> {
-		if let Some(i) = msb(self.prio_bitmap.into_inner()) {
-			return self.pop_from_queue(i as usize);
-		}
+		let i = msb(self.prio_bitmap.into_inner())?;
 
-		None
+		self.pop_from_queue(i as usize)
 	}
 
 	/// Remove a specific task handle from the priority queue. Returns `true` if
@@ -290,18 +286,18 @@ impl PriorityTaskQueue {
 		//assert!(prio < NO_PRIORITIES, "Priority {} is too high", prio);
 
 		let queue = &mut self.queues[queue_index];
-		if task_index <= queue.len() {
-			// Calling remove is unstable: https://github.com/rust-lang/rust/issues/69210
-			let mut split_list = queue.split_off(task_index);
-			let element = split_list.pop_front();
-			queue.append(&mut split_list);
-			if queue.is_empty() {
-				self.prio_bitmap &= !(1 << queue_index as u64);
-			}
-			element
-		} else {
-			None
+		if queue.len() < task_index {
+			return None;
 		}
+
+		// Calling remove is unstable: https://github.com/rust-lang/rust/issues/69210
+		let mut split_list = queue.split_off(task_index);
+		let element = split_list.pop_front();
+		queue.append(&mut split_list);
+		if queue.is_empty() {
+			self.prio_bitmap &= !(1 << queue_index as u64);
+		}
+		element
 	}
 
 	/// Returns true if the queue is empty.
@@ -318,50 +314,44 @@ impl PriorityTaskQueue {
 
 	/// Pop the task with the highest priority from the queue
 	pub fn pop(&mut self) -> Option<Rc<RefCell<Task>>> {
-		if let Some(i) = msb(self.prio_bitmap) {
-			return self.pop_from_queue(i as usize);
-		}
+		let i = msb(self.prio_bitmap)?;
 
-		None
+		self.pop_from_queue(i as usize)
 	}
 
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
-		if let Some(i) = msb(self.prio_bitmap)
-			&& i >= u32::from(prio.into())
-		{
-			return self.pop_from_queue(i as usize);
+		let i = msb(self.prio_bitmap)?;
+
+		if i < u32::from(prio.into()) {
+			return None;
 		}
 
-		None
+		self.pop_from_queue(i as usize)
 	}
 
 	/// Returns the highest priority of all available task
 	#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
 	pub fn get_highest_priority(&self) -> Priority {
-		if let Some(i) = msb(self.prio_bitmap) {
-			Priority::from(i.try_into().unwrap())
-		} else {
-			IDLE_PRIO
-		}
+		let Some(i) = msb(self.prio_bitmap) else {
+			return IDLE_PRIO;
+		};
+
+		Priority::from(i.try_into().unwrap())
 	}
 
 	/// Change priority of specific task
 	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
 		let old_priority = handle.get_priority().into() as usize;
-		if let Some(index) = self.queues[old_priority]
+		let index = self.queues[old_priority]
 			.iter()
 			.position(|current_task| current_task.borrow().id == handle.id)
-		{
-			let Some(task) = self.remove_from_queue(index, old_priority) else {
-				return Err(());
-			};
-			task.borrow_mut().prio = prio;
-			self.push(task);
-			return Ok(());
-		}
+			.ok_or(())?;
 
-		Err(())
+		let task = self.remove_from_queue(index, old_priority).ok_or(())?;
+		task.borrow_mut().prio = prio;
+		self.push(task);
+		Ok(())
 	}
 }
 

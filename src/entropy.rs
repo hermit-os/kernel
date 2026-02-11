@@ -35,14 +35,14 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> isize {
 	let pool = match pool {
 		Some(pool) if now.saturating_sub(pool.last_reseed) <= RESEED_INTERVAL => pool,
 		pool => {
-			if let Some(seed) = seed_entropy() {
-				pool.insert(Pool {
-					rng: ChaCha20Rng::from_seed(seed),
-					last_reseed: now,
-				})
-			} else {
+			let Some(seed) = seed_entropy() else {
 				return -i32::from(Errno::Nosys) as isize;
-			}
+			};
+
+			pool.insert(Pool {
+				rng: ChaCha20Rng::from_seed(seed),
+				last_reseed: now,
+			})
 		}
 	};
 
