@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::future::{self, Future};
 use core::mem::MaybeUninit;
@@ -6,16 +5,17 @@ use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
-use async_trait::async_trait;
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
+pub(crate) use self::delegate::Fd;
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fs::{FileAttr, SeekWhence};
 use crate::io;
 
+mod delegate;
 mod eventfd;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 pub(crate) mod socket;
@@ -196,7 +196,6 @@ impl Default for AccessPermission {
 	}
 }
 
-#[async_trait]
 pub(crate) trait ObjectInterface: Sync + Send {
 	/// Check if an IO event is possible
 	async fn poll(&self, _event: PollEvent) -> io::Result<PollEvent> {
@@ -234,9 +233,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `accept` a connection on a socket
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn accept(
-		&mut self,
-	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
+	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
 		Err(Errno::Inval)
 	}
 
@@ -445,18 +442,16 @@ pub fn fstat(fd: RawFd) -> io::Result<FileAttr> {
 pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<RawFd> {
 	let obj = self::eventfd::EventFd::new(initval, flags);
 
-	let fd = core_scheduler().insert_object(Arc::new(async_lock::RwLock::new(obj)))?;
+	let fd = core_scheduler().insert_object(Arc::new(async_lock::RwLock::new(obj.into())))?;
 
 	Ok(fd)
 }
 
-pub(crate) fn get_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+pub(crate) fn get_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 	core_scheduler().get_object(fd)
 }
 
-pub(crate) fn insert_object(
-	obj: Arc<async_lock::RwLock<dyn ObjectInterface>>,
-) -> io::Result<RawFd> {
+pub(crate) fn insert_object(obj: Arc<async_lock::RwLock<Fd>>) -> io::Result<RawFd> {
 	core_scheduler().insert_object(obj)
 }
 
@@ -472,7 +467,7 @@ pub(crate) fn dup_object2(fd1: RawFd, fd2: RawFd) -> io::Result<RawFd> {
 	core_scheduler().dup_object2(fd1, fd2)
 }
 
-pub(crate) fn remove_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+pub(crate) fn remove_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 	core_scheduler().remove_object(fd)
 }
 

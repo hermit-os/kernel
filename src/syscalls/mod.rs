@@ -25,8 +25,8 @@ use crate::env;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
-	self, AccessOption, AccessPermission, EventFlags, OpenOption, PollFd, RawFd, dup_object,
-	dup_object2, get_object, isatty, remove_object,
+	self, AccessOption, AccessPermission, EventFlags, ObjectInterface, OpenOption, PollFd, RawFd,
+	dup_object, dup_object2, get_object, isatty, remove_object,
 };
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]

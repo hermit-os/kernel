@@ -1,8 +1,6 @@
-use alloc::boxed::Box;
 use core::future;
 use core::task::Poll;
 
-use async_trait::async_trait;
 use embedded_io::{Read, ReadReady, Write};
 use uhyve_interface::parameters::WriteParams;
 use uhyve_interface::{GuestVirtAddr, Hypercall};
@@ -16,7 +14,6 @@ use crate::syscalls::interfaces::uhyve_hypercall;
 
 pub struct GenericStdin;
 
-#[async_trait]
 impl ObjectInterface for GenericStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = if CONSOLE.lock().read_ready()? {
@@ -64,7 +61,6 @@ impl GenericStdin {
 
 pub struct GenericStdout;
 
-#[async_trait]
 impl ObjectInterface for GenericStdout {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
@@ -96,7 +92,6 @@ impl GenericStdout {
 
 pub struct GenericStderr;
 
-#[async_trait]
 impl ObjectInterface for GenericStderr {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
@@ -128,7 +123,6 @@ impl GenericStderr {
 
 pub struct UhyveStdin;
 
-#[async_trait]
 impl ObjectInterface for UhyveStdin {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
@@ -151,7 +145,6 @@ impl UhyveStdin {
 
 pub struct UhyveStdout;
 
-#[async_trait]
 impl ObjectInterface for UhyveStdout {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
@@ -190,7 +183,6 @@ impl UhyveStdout {
 
 pub struct UhyveStderr;
 
-#[async_trait]
 impl ObjectInterface for UhyveStderr {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
