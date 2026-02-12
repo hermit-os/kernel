@@ -901,7 +901,7 @@ impl Drop for VirtioFsFileHandleInner {
 	}
 }
 
-struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
+pub struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
 
 impl VirtioFsFileHandle {
 	pub fn new() -> Self {

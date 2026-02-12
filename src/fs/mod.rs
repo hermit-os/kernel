@@ -1,5 +1,5 @@
-mod mem;
-mod uhyve;
+pub(crate) mod mem;
+pub(crate) mod uhyve;
 #[cfg(feature = "virtio-fs")]
 pub(crate) mod virtio_fs;
 
@@ -131,7 +131,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 }
 
 #[derive(Clone)]
-struct DirectoryReader(Vec<DirectoryEntry>);
+pub(crate) struct DirectoryReader(Vec<DirectoryEntry>);
 
 impl DirectoryReader {
 	pub fn new(data: Vec<DirectoryEntry>) -> Self {

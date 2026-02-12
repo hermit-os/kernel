@@ -37,7 +37,7 @@ impl RomFileInner {
 	}
 }
 
-struct RomFileInterface {
+pub struct RomFileInterface {
 	/// Position within the file
 	pos: Mutex<usize>,
 	/// File content
