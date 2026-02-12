@@ -1,11 +1,9 @@
-use alloc::boxed::Box;
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
 use core::future;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
-use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
@@ -14,7 +12,7 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC};
-use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::syscalls::socket::Af;
 use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
@@ -111,7 +109,6 @@ impl Socket {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
@@ -300,9 +297,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn accept(
-		&mut self,
-	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
+	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
 		if !self.is_listen {
 			self.listen(DEFAULT_BACKLOG).await?;
 		}
@@ -361,7 +356,7 @@ impl ObjectInterface for Socket {
 			is_listen: false,
 		};
 
-		Ok((Arc::new(async_lock::RwLock::new(socket)), endpoint))
+		Ok((Arc::new(async_lock::RwLock::new(socket.into())), endpoint))
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {

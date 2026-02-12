@@ -6,7 +6,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use async_lock::Mutex;
-use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
 use uhyve_interface::parameters::{
@@ -17,6 +16,7 @@ use uhyve_interface::{GuestPhysAddr, GuestVirtAddr, Hypercall};
 use crate::arch::mm::paging;
 use crate::env::fdt;
 use crate::errno::Errno;
+use crate::fd::Fd;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 	create_dir_recursive,
@@ -106,7 +106,6 @@ impl UhyveFileHandle {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for UhyveFileHandle {
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		self.0.lock().await.read(buf)
@@ -172,7 +171,7 @@ impl VfsNode for UhyveDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		let path = self.traversal_path(components);
 
 		let mut open_params = OpenParams {
@@ -191,9 +190,9 @@ impl VfsNode for UhyveDirectory {
 			return Err(Errno::Io);
 		}
 
-		Ok(Arc::new(async_lock::RwLock::new(UhyveFileHandle::new(
-			open_params.ret,
-		))))
+		Ok(Arc::new(async_lock::RwLock::new(
+			UhyveFileHandle::new(open_params.ret).into(),
+		)))
 	}
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {

@@ -1,9 +1,7 @@
-use alloc::boxed::Box;
 use core::future;
 use core::mem::MaybeUninit;
 use core::task::Poll;
 
-use async_trait::async_trait;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
@@ -75,7 +73,6 @@ impl Socket {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
