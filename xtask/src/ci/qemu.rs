@@ -193,9 +193,12 @@ impl Qemu {
 		let image_args = if self.uefi {
 			let sh = crate::sh()?;
 			sh.remove_path("target/esp")?;
-			sh.create_dir("target/esp/efi/boot")?;
-			sh.copy_file(loader, "target/esp/efi/boot/bootx64.efi")?;
-			sh.copy_file(image, "target/esp/efi/boot/hermit-app")?;
+
+			// Spec: https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html#removable-media-boot-behavior
+			// EDK II: https://github.com/tianocore/edk2/blob/edk2-stable202511/MdePkg/Include/Uefi/UefiSpec.h#L2264-L2273
+			sh.create_dir("target/esp/EFI/BOOT")?;
+			sh.copy_file(loader, "target/esp/EFI/BOOT/BOOTX64.EFI")?;
+			sh.copy_file(image, "target/esp/EFI/BOOT/hermit-app")?;
 
 			use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
 
