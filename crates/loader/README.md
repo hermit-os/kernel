@@ -44,14 +44,14 @@ qemu-system-x86_64 \
 #### UEFI Boot
 
 For booting from UEFI, we have to set up an EFI system partition (ESP).
-OVMF will automatically load and execute the loader if placed at `\efi\boot\bootx64.efi` in the ESP.
+OVMF will automatically load and execute the loader if placed at `\EFI\BOOT\BOOTX64.EFI` in the ESP.
 The Hermit application has to be next to the loader with the filename `hermit-app`.
 You can set the ESP up with the following commands:
 
 ```bash
-$ mkdir -p esp/efi/boot
-$ cp <LOADER> esp/efi/boot/bootx64.efi
-$ cp <APP> esp/efi/boot/hermit-app
+$ mkdir -p esp/EFI/BOOT
+$ cp <LOADER> esp/EFI/BOOT/BOOTX64.EFI
+$ cp <APP> esp/EFI/BOOT/hermit-app
 ```
 
 Then, you can boot Hermit like this:
