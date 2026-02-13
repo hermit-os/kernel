@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["spawn","spawn_unchecked"],"struct":["Builder","FallibleTask","Runnable","ScheduleInfo","Task","WithInfo"],"trait":["Schedule"]};

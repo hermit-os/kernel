@@ -1,0 +1,9 @@
+(function() {
+    const implementors = Object.fromEntries([["align_address",[]],["memory_addresses",[["impl <a class=\"trait\" href=\"align_address/trait.Align.html\" title=\"trait align_address::Align\">Align</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/core/primitive.u64.html\">u64</a>&gt; for <a class=\"struct\" href=\"memory_addresses/arch/x86_64/struct.PhysAddr.html\" title=\"struct memory_addresses::arch::x86_64::PhysAddr\">PhysAddr</a>",0],["impl <a class=\"trait\" href=\"align_address/trait.Align.html\" title=\"trait align_address::Align\">Align</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/core/primitive.u64.html\">u64</a>&gt; for <a class=\"struct\" href=\"memory_addresses/arch/x86_64/struct.VirtAddr.html\" title=\"struct memory_addresses::arch::x86_64::VirtAddr\">VirtAddr</a>",0],["impl <a class=\"trait\" href=\"align_address/trait.Align.html\" title=\"trait align_address::Align\">Align</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/core/primitive.usize.html\">usize</a>&gt; for <a class=\"struct\" href=\"memory_addresses/arch/fallback/struct.PhysAddr.html\" title=\"struct memory_addresses::arch::fallback::PhysAddr\">PhysAddr</a>",0],["impl <a class=\"trait\" href=\"align_address/trait.Align.html\" title=\"trait align_address::Align\">Align</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/core/primitive.usize.html\">usize</a>&gt; for <a class=\"struct\" href=\"memory_addresses/arch/fallback/struct.VirtAddr.html\" title=\"struct memory_addresses::arch::fallback::VirtAddr\">VirtAddr</a>",0]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":59,"fragment_lengths":[20,1543]}
