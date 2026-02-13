@@ -83,11 +83,13 @@ impl Qemu {
 
 		match self.build.target() {
 			Target::X86_64Uefi => {
-				sh.create_dir("target/esp/efi/boot")?;
-				sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
+				// Spec: https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html#removable-media-boot-behavior
+				// EDK II: https://github.com/tianocore/edk2/blob/edk2-stable202511/MdePkg/Include/Uefi/UefiSpec.h#L2264-L2273
+				sh.create_dir("target/esp/EFI/BOOT")?;
+				sh.copy_file(self.build.dist_object(), "target/esp/EFI/BOOT/BOOTX64.EFI")?;
 				sh.copy_file(
 					self.build.ci_image(self.image.as_deref().unwrap()),
-					"target/esp/efi/boot/hermit-app",
+					"target/esp/EFI/BOOT/hermit-app",
 				)?;
 			}
 			Target::Aarch64Elf | Target::Aarch64BeElf if self.u_boot => {

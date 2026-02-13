@@ -62,7 +62,7 @@ fn read_app() -> Vec<u8> {
 	let image_handle = boot::image_handle();
 	let fs = boot::get_image_file_system(image_handle).expect("should open file system");
 
-	let path = Path::new(cstr16!(r"\efi\boot\hermit-app"));
+	let path = Path::new(cstr16!(r"\EFI\BOOT\hermit-app"));
 
 	let data = FileSystem::new(fs)
 		.read(path)
@@ -78,7 +78,7 @@ fn read_bootargs() -> Option<String> {
 	let image_handle = boot::image_handle();
 	let fs = boot::get_image_file_system(image_handle).expect("should open file system");
 
-	let path = Path::new(cstr16!(r"\efi\boot\hermit-bootargs"));
+	let path = Path::new(cstr16!(r"\EFI\BOOT\hermit-bootargs"));
 
 	match FileSystem::new(fs).read_to_string(path) {
 		Ok(bootargs) => {
