@@ -168,7 +168,7 @@ pub mod error {
 	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
 	#[cfg(feature = "virtio-fs")]
-	pub use crate::drivers::fs::error::VirtioFsError;
+	pub use crate::drivers::fs::error::VirtioFsInitError;
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(feature = "rtl8139"),
@@ -217,7 +217,7 @@ pub mod error {
 
 		#[cfg(feature = "virtio-fs")]
 		#[error(transparent)]
-		FsDriver(VirtioFsError),
+		FsDriver(VirtioFsInitError),
 
 		#[cfg(feature = "virtio-vsock")]
 		#[error(transparent)]

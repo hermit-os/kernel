@@ -31,7 +31,7 @@ use volatile::access::ReadOnly;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
-use crate::drivers::virtio::error::VirtioFsError;
+use crate::drivers::virtio::error::VirtioFsInitError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -42,7 +42,7 @@ use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
 };
 use crate::errno::Errno;
-use crate::fs::fuse::{self, FuseError, FuseInterface, Rsp, RspHeader};
+use crate::fs::virtio_fs::{self, Rsp, RspHeader, VirtioFsError, VirtioFsInterface};
 use crate::mm::device_alloc::DeviceAlloc;
 
 /// A wrapper struct for the raw configuration structure.
@@ -85,7 +85,7 @@ impl VirtioFsDriver {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
-	pub(crate) fn init_dev(&mut self) -> Result<(), VirtioFsError> {
+	pub(crate) fn init_dev(&mut self) -> Result<(), VirtioFsInitError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -103,7 +103,7 @@ impl VirtioFsDriver {
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -120,7 +120,7 @@ impl VirtioFsDriver {
 			self.dev_cfg.features = negotiated_features;
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioFsError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
 		// 1 highprio queue, and n normal request queues
@@ -133,7 +133,7 @@ impl VirtioFsDriver {
 			.to_ne() + 1;
 		if vqnum == 0 {
 			error!("0 request queues requested from device. Aborting!");
-			return Err(VirtioFsError::Unknown);
+			return Err(VirtioFsInitError::Unknown);
 		}
 
 		// create the queues and tell device about them
@@ -174,17 +174,17 @@ impl VirtioFsDriver {
 	}
 }
 
-impl FuseInterface for VirtioFsDriver {
-	fn send_command<O: fuse::ops::Op + 'static>(
+impl VirtioFsInterface for VirtioFsDriver {
+	fn send_command<O: virtio_fs::ops::Op + 'static>(
 		&mut self,
-		cmd: fuse::Cmd<O>,
+		cmd: virtio_fs::Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<fuse::Rsp<O>, FuseError>
+	) -> Result<virtio_fs::Rsp<O>, VirtioFsError>
 	where
-		<O as fuse::ops::Op>::InStruct: Send,
-		<O as fuse::ops::Op>::OutStruct: Send,
+		<O as virtio_fs::ops::Op>::InStruct: Send,
+		<O as virtio_fs::ops::Op>::OutStruct: Send,
 	{
-		let fuse::Cmd {
+		let virtio_fs::Cmd {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
 		} = cmd;
@@ -236,9 +236,9 @@ impl FuseInterface for VirtioFsDriver {
 			|| (written_header_len - size_of::<fuse_out_header>()) != size_of::<O::OutStruct>()
 		{
 			// "However, if the reply is an error reply (i.e., error is set), then no further payload data should be sent,
-			// independent of the request." (fuse man page)
+			// independent of the request." (FUSE man page)
 
-			return Err(FuseError::IOError(
+			return Err(VirtioFsError::IOError(
 				Errno::try_from_primitive(-headers.out_header.error).unwrap_or(Errno::Io),
 			));
 		}
@@ -277,7 +277,7 @@ pub mod error {
 
 	/// Network filesystem error enum.
 	#[derive(Error, Debug, Copy, Clone)]
-	pub enum VirtioFsError {
+	pub enum VirtioFsInitError {
 		#[cfg(feature = "pci")]
 		#[error(
 			"Virtio filesystem driver failed, for device {0:x}, due to a missing or malformed device config!"
