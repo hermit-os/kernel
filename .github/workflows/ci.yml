@@ -263,8 +263,6 @@ jobs:
         if: matrix.arch != 'x86_64' && matrix.arch != 'aarch64_be'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo qemu ${{ matrix.qemu_flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --smp 4 qemu ${{ matrix.qemu_flags }}
-        # https://github.com/hermit-os/kernel/issues/1286
-        continue-on-error: ${{ matrix.arch == 'riscv64' }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --smp 4 qemu ${{ matrix.qemu_flags }} --uefi
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rftrace-example qemu ${{ matrix.qemu_flags }} --devices virtio-fs-pci
