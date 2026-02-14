@@ -339,11 +339,13 @@ pub(crate) fn init() {
 	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
 	FILESYSTEM.set(Filesystem::new()).unwrap();
-	FILESYSTEM
-		.get()
-		.unwrap()
-		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
-		.expect("Unable to create /tmp");
+	if !(crate::env::is_uhyve() && cfg!(feature = "uhyve-tmp")) {
+		FILESYSTEM
+			.get()
+			.unwrap()
+			.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
+			.expect("Unable to create /tmp");
+	}
 	FILESYSTEM
 		.get()
 		.unwrap()
