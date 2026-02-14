@@ -119,6 +119,9 @@ async fn vsock_run() {
 			} else if op == Op::Response && type_ == Type::Stream {
 				if raw.remote_cid == header_cid && raw.state == VsockState::Connecting {
 					raw.state = VsockState::Connected;
+					raw.peer_buf_alloc = header.buf_alloc.to_ne();
+					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
+					raw.tx_waker.wake();
 				}
 			} else if raw.remote_cid == header_cid {
 				hdr = Some(*header);
