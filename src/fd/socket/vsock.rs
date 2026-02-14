@@ -161,7 +161,7 @@ impl ObjectInterface for Socket {
 				const HEADER_SIZE: usize = mem::size_of::<Hdr>();
 				let port = VSOCK_MAP.lock().connect(ep.port, ep.cid)?;
 				self.port = port;
-				self.port = ep.cid;
+				self.cid = ep.cid;
 
 				future::poll_fn(|cx| {
 					if let Some(mut driver_guard) = hardware::get_vsock_driver().unwrap().try_lock()
