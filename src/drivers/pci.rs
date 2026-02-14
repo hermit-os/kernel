@@ -491,6 +491,9 @@ pub(crate) fn init() {
 				adapter.device_id()
 			);
 
+			#[cfg(not(feature = "virtio"))]
+			error!("Virtio support is disabled.");
+
 			#[cfg(feature = "virtio")]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(feature = "virtio-console")]
