@@ -27,7 +27,7 @@ impl VirtioFsDriver {
 	pub fn new(
 		caps_coll: UniCapsColl,
 		device: &PciDevice<PciConfigRegion>,
-	) -> Result<Self, error::VirtioFsError> {
+	) -> Result<Self, error::VirtioFsInitError> {
 		let device_id = device.device_id();
 
 		let UniCapsColl {
@@ -40,7 +40,7 @@ impl VirtioFsDriver {
 
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioFsDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
-			return Err(error::VirtioFsError::NoDevCfg(device_id));
+			return Err(error::VirtioFsInitError::NoDevCfg(device_id));
 		};
 
 		Ok(VirtioFsDriver {

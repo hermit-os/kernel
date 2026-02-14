@@ -1,7 +1,7 @@
-#[cfg(feature = "virtio-fs")]
-pub(crate) mod fuse;
 mod mem;
 mod uhyve;
+#[cfg(feature = "virtio-fs")]
+pub(crate) mod virtio_fs;
 
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -67,52 +67,44 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	}
 
 	/// Creates a new directory node
-	fn traverse_mkdir(
-		&self,
-		_components: &mut Vec<&str>,
-		_mode: AccessPermission,
-	) -> io::Result<()> {
+	fn traverse_mkdir(&self, _path: &str, _mode: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Deletes a directory node
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	fn traverse_rmdir(&self, _path: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Removes the specified file
-	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	fn traverse_unlink(&self, _path: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Opens a directory
-	fn traverse_readdir(&self, _components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
+	fn traverse_readdir(&self, _path: &str) -> io::Result<Vec<DirectoryEntry>> {
 		Err(Errno::Nosys)
 	}
 
 	/// Gets file status
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_lstat(&self, _path: &str) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
 	/// Gets file status
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_stat(&self, _path: &str) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
 	/// Mounts a file system
-	fn traverse_mount(
-		&self,
-		_components: &mut Vec<&str>,
-		_obj: Box<dyn VfsNode>,
-	) -> io::Result<()> {
+	fn traverse_mount(&self, _path: &str, _obj: Box<dyn VfsNode>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Opens a file
 	fn traverse_open(
 		&self,
-		_components: &mut Vec<&str>,
+		_path: &str,
 		_option: OpenOption,
 		_mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
@@ -122,7 +114,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	/// Creates a read-only file
 	fn traverse_create_file(
 		&self,
-		_components: &mut Vec<&str>,
+		_path: &str,
 		_data: &'static [u8],
 		_mode: AccessPermission,
 	) -> io::Result<()> {
@@ -167,49 +159,58 @@ impl Filesystem {
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		debug!("Open file {path} with {opt:?}");
-		let mut components: Vec<&str> = path.split('/').collect();
 
-		components.reverse();
-		components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		self.root.traverse_open(&mut components, opt, mode)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
+
+		self.root.traverse_open(rest, opt, mode)
 	}
 
 	/// Unlinks a file given by path
 	pub fn unlink(&self, path: &str) -> io::Result<()> {
 		debug!("Unlinking file {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
 
-		components.reverse();
-		components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		self.root.traverse_unlink(&mut components)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
+
+		self.root.traverse_unlink(rest)
 	}
 
 	/// Remove directory given by path
 	pub fn rmdir(&self, path: &str) -> io::Result<()> {
 		debug!("Removing directory {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
 
-		components.reverse();
-		components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		self.root.traverse_rmdir(&mut components)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
+
+		self.root.traverse_rmdir(rest)
 	}
 
 	/// Create directory given by path
 	pub fn mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
 		debug!("Create directory {path}");
-		let mut components: Vec<&str> = path.split('/').collect();
 
-		components.reverse();
-		components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		self.root.traverse_mkdir(&mut components, mode)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
+
+		self.root.traverse_mkdir(rest, mode)
 	}
 
 	pub fn opendir(&self, path: &str) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
 		debug!("Open directory {path}");
+
 		Ok(Arc::new(async_lock::RwLock::new(DirectoryReader::new(
 			self.readdir(path)?,
 		))))
@@ -217,51 +218,54 @@ impl Filesystem {
 
 	/// List given directory
 	pub fn readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
-		if path.trim() == "/" {
-			let mut components: Vec<&str> = Vec::new();
-			self.root.traverse_readdir(&mut components)
-		} else {
-			let mut components: Vec<&str> = path.split('/').collect();
+		debug!("Readdir {path}");
 
-			components.reverse();
-			components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-			self.root.traverse_readdir(&mut components)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
 		}
+
+		self.root.traverse_readdir(rest)
 	}
 
 	/// stat
 	pub fn stat(&self, path: &str) -> io::Result<FileAttr> {
 		debug!("Getting stats {path}");
 
-		let mut components: Vec<&str> = path.split('/').collect();
-		components.reverse();
-		components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		self.root.traverse_stat(&mut components)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
+
+		self.root.traverse_stat(rest)
 	}
 
 	/// lstat
 	pub fn lstat(&self, path: &str) -> io::Result<FileAttr> {
 		debug!("Getting lstats {path}");
 
-		let mut components: Vec<&str> = path.split('/').collect();
-		components.reverse();
-		components.pop();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		self.root.traverse_lstat(&mut components)
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
+
+		self.root.traverse_lstat(rest)
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
 	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		debug!("Mounting {path}");
 
-		let mut components: Vec<&str> = path.split('/').collect();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		components.reverse();
-		components.pop();
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
 
-		self.root.traverse_mount(&mut components, obj)
+		self.root.traverse_mount(rest, obj)
 	}
 
 	/// Create read-only file
@@ -273,12 +277,13 @@ impl Filesystem {
 	) -> io::Result<()> {
 		debug!("Create read-only file {path}");
 
-		let mut components: Vec<&str> = path.split('/').collect();
+		let (component, rest) = path.split_once("/").ok_or(Errno::Noent)?;
 
-		components.reverse();
-		components.pop();
+		if !component.is_empty() {
+			return Err(Errno::Noent);
+		}
 
-		self.root.traverse_create_file(&mut components, data, mode)
+		self.root.traverse_create_file(rest, data, mode)
 	}
 }
 
@@ -363,7 +368,7 @@ pub(crate) fn init() {
 	drop(cwd);
 
 	#[cfg(feature = "virtio-fs")]
-	fuse::init();
+	virtio_fs::init();
 	if crate::env::is_uhyve() {
 		uhyve::init();
 	}

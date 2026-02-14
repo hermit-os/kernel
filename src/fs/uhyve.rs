@@ -3,7 +3,6 @@ use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 
 use async_lock::Mutex;
 use async_trait::async_trait;
@@ -129,27 +128,23 @@ impl Clone for UhyveFileHandle {
 
 #[derive(Debug)]
 pub(crate) struct UhyveDirectory {
-	prefix: Option<String>,
+	/// The external path of this directory.
+	///
+	/// Before talking to virtio-fs, the relative path inside this directory is
+	/// adjoined with this prefix.
+	prefix: String,
 }
 
 impl UhyveDirectory {
-	pub const fn new(prefix: Option<String>) -> Self {
+	pub const fn new(prefix: String) -> Self {
 		UhyveDirectory { prefix }
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
-		// Unlike src/fs/fuse.rs, we skip the first element here so as to not prepend / before /root
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.skip(1)
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
-		}
+	fn traversal_path(&self, path: &str) -> CString {
+		let prefix = self.prefix.as_str();
+		let prefix = prefix.strip_suffix("/").unwrap_or(prefix);
+		let path = [prefix, path].join("/");
+		CString::new(path).unwrap()
 	}
 }
 
@@ -159,21 +154,21 @@ impl VfsNode for UhyveDirectory {
 		NodeKind::Directory
 	}
 
-	fn traverse_stat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_stat(&self, _path: &str) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_lstat(&self, _path: &str) -> io::Result<FileAttr> {
 		Err(Errno::Nosys)
 	}
 
 	fn traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(path);
 
 		let mut open_params = OpenParams {
 			name: GuestPhysAddr::new(
@@ -196,8 +191,8 @@ impl VfsNode for UhyveDirectory {
 		))))
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let mut unlink_params = UnlinkParams {
 			name: GuestPhysAddr::new(
@@ -216,15 +211,11 @@ impl VfsNode for UhyveDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> io::Result<()> {
+	fn traverse_rmdir(&self, _path: &str) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
-	fn traverse_mkdir(
-		&self,
-		_components: &mut Vec<&str>,
-		_mode: AccessPermission,
-	) -> io::Result<()> {
+	fn traverse_mkdir(&self, _path: &str, _mode: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 }
@@ -247,7 +238,7 @@ pub(crate) fn init() {
 			.unwrap()
 			.mount(
 				&mount_point,
-				Box::new(UhyveDirectory::new(Some(mount_point.clone()))),
+				Box::new(UhyveDirectory::new(mount_point.clone())),
 			)
 			.expect("Mount failed. Duplicate mount_point?");
 		return;
@@ -257,7 +248,7 @@ pub(crate) fn init() {
 	for mount_point in mount_str.split('\0') {
 		info!("Mounting uhyve filesystem at {mount_point}");
 
-		let obj = Box::new(UhyveDirectory::new(Some(mount_point.to_owned())));
+		let obj = Box::new(UhyveDirectory::new(mount_point.to_owned()));
 		let Err(errno) = fs::FILESYSTEM.get().unwrap().mount(mount_point, obj) else {
 			return;
 		};
@@ -267,7 +258,7 @@ pub(crate) fn init() {
 		let (parent_path, _file_name) = mount_point.rsplit_once('/').unwrap();
 		create_dir_recursive(parent_path, AccessPermission::S_IRWXU).unwrap();
 
-		let obj = Box::new(UhyveDirectory::new(Some(mount_point.to_owned())));
+		let obj = Box::new(UhyveDirectory::new(mount_point.to_owned()));
 		fs::FILESYSTEM
 			.get()
 			.unwrap()

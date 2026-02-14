@@ -24,7 +24,7 @@ use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::PollEvent;
-use crate::fs::fuse::ops::SetAttrValidFields;
+use crate::fs::virtio_fs::ops::SetAttrValidFields;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
@@ -46,12 +46,12 @@ const U64_SIZE: usize = mem::size_of::<u64>();
 const S_IFLNK: u32 = 0o120_000;
 const S_IFMT: u32 = 0o170_000;
 
-pub(crate) trait FuseInterface {
+pub(crate) trait VirtioFsInterface {
 	fn send_command<O: ops::Op + 'static>(
 		&mut self,
 		cmd: Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<Rsp<O>, FuseError>
+	) -> Result<Rsp<O>, VirtioFsError>
 	where
 		<O as ops::Op>::InStruct: Send,
 		<O as ops::Op>::OutStruct: Send;
@@ -321,7 +321,7 @@ pub(crate) mod ops {
 					padding: 0,
 					fh,
 
-					// Fuse attributes mapping: https://github.com/libfuse/libfuse/blob/fc1c8da0cf8a18d222cb1feed0057ba44ea4d18f/lib/fuse_lowlevel.c#L105
+					// FUSE attributes mapping: https://github.com/libfuse/libfuse/blob/fc1c8da0cf8a18d222cb1feed0057ba44ea4d18f/lib/fuse_lowlevel.c#L105
 					size: attr.st_size as u64,
 					atime: attr.st_atim.tv_sec as u64,
 					atimensec: attr.st_atim.tv_nsec as u32,
@@ -622,22 +622,22 @@ pub(crate) struct Rsp<O: ops::Op> {
 }
 
 #[derive(Debug)]
-pub(crate) enum FuseError {
+pub(crate) enum VirtioFsError {
 	VirtqError(VirtqError),
 	IOError(Errno),
 }
 
-impl From<VirtqError> for FuseError {
+impl From<VirtqError> for VirtioFsError {
 	fn from(value: VirtqError) -> Self {
 		Self::VirtqError(value)
 	}
 }
 
-impl From<FuseError> for Errno {
-	fn from(value: FuseError) -> Self {
+impl From<VirtioFsError> for Errno {
+	fn from(value: VirtioFsError) -> Self {
 		match value {
-			FuseError::VirtqError(virtq_error) => virtq_error.into(),
-			FuseError::IOError(io_error) => io_error,
+			VirtioFsError::VirtqError(virtq_error) => virtq_error.into(),
+			VirtioFsError::IOError(io_error) => io_error,
 		}
 	}
 }
@@ -671,13 +671,13 @@ fn readlink(nid: u64) -> io::Result<String> {
 }
 
 #[derive(Debug)]
-struct FuseFileHandleInner {
+struct VirtioFsFileHandleInner {
 	fuse_nid: Option<u64>,
 	fuse_fh: Option<u64>,
 	offset: usize,
 }
 
-impl FuseFileHandleInner {
+impl VirtioFsFileHandleInner {
 	pub fn new() -> Self {
 		Self {
 			fuse_nid: None,
@@ -726,9 +726,9 @@ impl FuseFileHandleInner {
 	}
 
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		debug!("FUSE lseek: offset: {offset}, whence: {whence:?}");
+		debug!("virtio-fs lseek: offset: {offset}, whence: {whence:?}");
 
-		// Seek on fuse file systems seems to be a little odd: All reads are referenced from the
+		// Seek on FUSE file systems seems to be a little odd: All reads are referenced from the
 		// beginning of the file, thus we have to track the offset ourself. Also, a read doesn't
 		// move the read pointer on the remote side, so we can't get the current position using
 		// remote lseek when referencing from `Cur` and we have to use the internally tracked
@@ -767,7 +767,7 @@ impl FuseFileHandleInner {
 	}
 
 	fn fstat(&mut self) -> io::Result<FileAttr> {
-		debug!("FUSE getattr");
+		debug!("virtio-fs getattr");
 
 		let nid = self.fuse_nid.ok_or(Errno::Io)?;
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
@@ -786,7 +786,7 @@ impl FuseFileHandleInner {
 	}
 
 	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
-		debug!("FUSE setattr");
+		debug!("virtio-fs setattr");
 
 		let nid = self.fuse_nid.ok_or(Errno::Io)?;
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
@@ -805,11 +805,11 @@ impl FuseFileHandleInner {
 	}
 }
 
-impl ErrorType for FuseFileHandleInner {
+impl ErrorType for VirtioFsFileHandleInner {
 	type Error = Errno;
 }
 
-impl Read for FuseFileHandleInner {
+impl Read for VirtioFsFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
@@ -840,9 +840,9 @@ impl Read for FuseFileHandleInner {
 	}
 }
 
-impl Write for FuseFileHandleInner {
+impl Write for VirtioFsFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		debug!("FUSE write!");
+		debug!("virtio-fs write!");
 		let mut truncated_len = buf.len();
 		if truncated_len > MAX_WRITE_LEN {
 			debug!(
@@ -882,7 +882,7 @@ impl Write for FuseFileHandleInner {
 	}
 }
 
-impl Drop for FuseFileHandleInner {
+impl Drop for VirtioFsFileHandleInner {
 	fn drop(&mut self) {
 		let Some(fuse_nid) = self.fuse_nid else {
 			return;
@@ -901,16 +901,16 @@ impl Drop for FuseFileHandleInner {
 	}
 }
 
-struct FuseFileHandle(Arc<Mutex<FuseFileHandleInner>>);
+struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
 
-impl FuseFileHandle {
+impl VirtioFsFileHandle {
 	pub fn new() -> Self {
-		Self(Arc::new(Mutex::new(FuseFileHandleInner::new())))
+		Self(Arc::new(Mutex::new(VirtioFsFileHandleInner::new())))
 	}
 }
 
 #[async_trait]
-impl ObjectInterface for FuseFileHandle {
+impl ObjectInterface for VirtioFsFileHandle {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		self.0.lock().await.poll(event).await
 	}
@@ -958,20 +958,20 @@ impl ObjectInterface for FuseFileHandle {
 	}
 }
 
-impl Clone for FuseFileHandle {
+impl Clone for VirtioFsFileHandle {
 	fn clone(&self) -> Self {
-		warn!("FuseFileHandle: clone not tested");
+		warn!("VirtioFsFileHandle: clone not tested");
 		Self(self.0.clone())
 	}
 }
 
-pub struct FuseDirectoryHandle {
-	name: Option<String>,
+pub struct VirtioFsDirectoryHandle {
+	name: String,
 	read_position: Mutex<usize>,
 }
 
-impl FuseDirectoryHandle {
-	pub fn new(name: Option<String>) -> Self {
+impl VirtioFsDirectoryHandle {
+	pub fn new(name: String) -> Self {
 		Self {
 			name,
 			read_position: Mutex::new(0),
@@ -980,15 +980,16 @@ impl FuseDirectoryHandle {
 }
 
 #[async_trait]
-impl ObjectInterface for FuseDirectoryHandle {
+impl ObjectInterface for VirtioFsDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let path: CString = if let Some(name) = &self.name {
-			CString::new("/".to_owned() + name).unwrap()
-		} else {
+		let path = if self.name.is_empty() {
 			CString::new("/").unwrap()
+		} else {
+			let path = ["/", &self.name].join("");
+			CString::new(path).unwrap()
 		};
 
-		debug!("FUSE opendir: {path:#?}");
+		debug!("virtio-fs opendir: {path:#?}");
 
 		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
 
@@ -1002,7 +1003,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
-		debug!("FUSE readdir: {path:#?}");
+		debug!("virtio-fs readdir: {path:#?}");
 
 		// Linux seems to allocate a single page to store the dirfile
 		let len = MAX_READ_LEN as u32;
@@ -1023,7 +1024,7 @@ impl ObjectInterface for FuseDirectoryHandle {
 		);
 
 		if len <= mem::size_of::<fuse_dirent>() {
-			debug!("FUSE no new dirs");
+			debug!("virtio-fs no new dirs");
 			return Err(Errno::Noent);
 		}
 
@@ -1099,17 +1100,21 @@ impl ObjectInterface for FuseDirectoryHandle {
 }
 
 #[derive(Debug)]
-pub(crate) struct FuseDirectory {
-	prefix: Option<String>,
+pub(crate) struct VirtioFsDirectory {
+	/// The external path of this directory.
+	///
+	/// Before talking to virtio-fs, the relative path inside this directory is
+	/// adjoined with this prefix.
+	prefix: String,
 	attr: FileAttr,
 }
 
-impl FuseDirectory {
-	pub fn new(prefix: Option<String>) -> Self {
+impl VirtioFsDirectory {
+	pub fn new(prefix: String) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 
-		FuseDirectory {
+		VirtioFsDirectory {
 			prefix,
 			attr: FileAttr {
 				st_mode: AccessPermission::from_bits(0o777).unwrap() | AccessPermission::S_IFDIR,
@@ -1121,21 +1126,15 @@ impl FuseDirectory {
 		}
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
-		}
+	fn traversal_path(&self, path: &str) -> CString {
+		let prefix = self.prefix.as_str();
+		let prefix = prefix.strip_suffix("/").unwrap_or(prefix);
+		let path = [prefix, path].join("/");
+		CString::new(path).unwrap()
 	}
 }
 
-impl VfsNode for FuseDirectory {
+impl VfsNode for VirtioFsDirectory {
 	/// Returns the node type
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
@@ -1146,15 +1145,15 @@ impl VfsNode for FuseDirectory {
 	}
 
 	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-			self.prefix.clone(),
-		))))
+		Ok(Arc::new(async_lock::RwLock::new(
+			VirtioFsDirectoryHandle::new(self.prefix.clone()),
+		)))
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
-		let path = self.traversal_path(components);
+	fn traverse_readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
+		let path = self.traversal_path(path);
 
-		debug!("FUSE opendir: {path:#?}");
+		debug!("virtio-fs opendir: {path:#?}");
 
 		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
 
@@ -1168,7 +1167,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
-		debug!("FUSE readdir: {path:#?}");
+		debug!("virtio-fs readdir: {path:#?}");
 
 		// Linux seems to allocate a single page to store the dirfile
 		let len = MAX_READ_LEN as u32;
@@ -1191,7 +1190,7 @@ impl VfsNode for FuseDirectory {
 		};
 
 		if len <= mem::size_of::<fuse_dirent>() {
-			debug!("FUSE no new dirs");
+			debug!("virtio-fs no new dirs");
 			return Err(Errno::Noent);
 		}
 
@@ -1231,10 +1230,10 @@ impl VfsNode for FuseDirectory {
 		Ok(entries)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
+		let path = self.traversal_path(path);
 
-		debug!("FUSE stat: {path:#?}");
+		debug!("virtio-fs stat: {path:#?}");
 
 		// Is there a better way to implement this?
 		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
@@ -1255,14 +1254,13 @@ impl VfsNode for FuseDirectory {
 		}
 
 		let path = readlink(entry_out.nodeid)?;
-		let mut components: Vec<&str> = path.split('/').collect();
-		self.traverse_stat(&mut components)
+		self.traverse_stat(&path)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
+		let path = self.traversal_path(path);
 
-		debug!("FUSE lstat: {path:#?}");
+		debug!("virtio-fs lstat: {path:#?}");
 
 		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
 		let rsp = get_filesystem_driver()
@@ -1274,13 +1272,13 @@ impl VfsNode for FuseDirectory {
 
 	fn traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(path);
 
-		debug!("FUSE open: {path:#?}, {opt:?} {mode:?}");
+		debug!("virtio-fs open: {path:#?}, {opt:?} {mode:?}");
 
 		if opt.contains(OpenOption::O_DIRECTORY) {
 			if opt.contains(OpenOption::O_CREAT) {
@@ -1302,18 +1300,18 @@ impl VfsNode for FuseDirectory {
 
 			let mut path = path.into_string().unwrap();
 			path.remove(0);
-			return Ok(Arc::new(async_lock::RwLock::new(FuseDirectoryHandle::new(
-				Some(path),
-			))));
+			return Ok(Arc::new(async_lock::RwLock::new(
+				VirtioFsDirectoryHandle::new(path),
+			)));
 		}
 
-		let file = FuseFileHandle::new();
+		let file = VirtioFsFileHandle::new();
 
 		// 1.FUSE_INIT to create session
 		// Already done
 		let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
 
-		// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
+		// Differentiate between opening and creating new file, since FUSE does not support O_CREAT on open.
 		if opt.contains(OpenOption::O_CREAT) {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
 			let (cmd, rsp_payload_len) =
@@ -1331,7 +1329,7 @@ impl VfsNode for FuseDirectory {
 			file_guard.fuse_nid = lookup(path);
 
 			if file_guard.fuse_nid.is_none() {
-				warn!("Fuse lookup seems to have failed!");
+				warn!("virtio-fs lookup seems to have failed!");
 				return Err(Errno::Noent);
 			}
 
@@ -1350,8 +1348,8 @@ impl VfsNode for FuseDirectory {
 		Ok(Arc::new(async_lock::RwLock::new(file)))
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
 		let rsp = get_filesystem_driver()
@@ -1363,8 +1361,8 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_rmdir(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
 		let rsp = get_filesystem_driver()
@@ -1376,8 +1374,8 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
+		let path = self.traversal_path(path);
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
 		let rsp = get_filesystem_driver()
@@ -1393,7 +1391,7 @@ impl VfsNode for FuseDirectory {
 }
 
 pub(crate) fn init() {
-	debug!("Try to initialize fuse filesystem");
+	debug!("Try to initialize virtio-fs filesystem");
 
 	let Some(driver) = get_filesystem_driver() else {
 		return;
@@ -1401,21 +1399,24 @@ pub(crate) fn init() {
 
 	let (cmd, rsp_payload_len) = ops::Init::create();
 	let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
-	trace!("fuse init answer: {rsp:?}");
+	trace!("virtio-fs init answer: {rsp:?}");
 
 	let mount_point = driver.lock().get_mount_point();
 	if mount_point != "/" {
 		let mount_point = if mount_point.starts_with('/') {
 			mount_point
 		} else {
-			"/".to_owned() + &mount_point
+			["/", &mount_point].join("")
 		};
 
 		info!("Mounting virtio-fs at {mount_point}");
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(mount_point.as_str(), Box::new(FuseDirectory::new(None)))
+			.mount(
+				mount_point.as_str(),
+				Box::new(VirtioFsDirectory::new("/".to_owned())),
+			)
 			.expect("Mount failed. Invalid mount_point?");
 		return;
 	}
@@ -1453,7 +1454,7 @@ pub(crate) fn init() {
 		(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
 	};
 
-	assert!(len > mem::size_of::<fuse_dirent>(), "FUSE no new dirs");
+	assert!(len > mem::size_of::<fuse_dirent>(), "virtio-fs no new dirs");
 
 	let mut entries: Vec<String> = Vec::new();
 	while (rsp.headers.out_header.len as usize) - offset > mem::size_of::<fuse_dirent>() {
@@ -1492,10 +1493,12 @@ pub(crate) fn init() {
 	entries.retain(|x| x != "..");
 	entries.retain(|x| x != "tmp");
 	entries.retain(|x| x != "proc");
-	warn!("Fuse don't mount the host directories 'tmp' and 'proc' into the guest file system!");
+	warn!(
+		"virtio-fs don't mount the host directories 'tmp' and 'proc' into the guest file system!"
+	);
 
-	for i in entries {
-		let i_cstr = CString::new(i.as_str()).unwrap();
+	for entry in entries {
+		let i_cstr = CString::new(entry.as_str()).unwrap();
 		let (cmd, rsp_payload_len) = ops::Lookup::create(i_cstr);
 		let rsp = get_filesystem_driver()
 			.unwrap()
@@ -1505,17 +1508,15 @@ pub(crate) fn init() {
 
 		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-			info!("Fuse mount {i} to /{i}");
+			let path = ["/", &entry].join("");
+			info!("virtio-fs mount {entry} to {path}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
-				.mount(
-					&("/".to_owned() + i.as_str()),
-					Box::new(FuseDirectory::new(Some(i))),
-				)
+				.mount(&path, Box::new(VirtioFsDirectory::new(path.clone())))
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
-			warn!("Fuse don't mount {i}. It isn't a directory!");
+			warn!("virtio-fs don't mount {entry}. It isn't a directory!");
 		}
 	}
 }

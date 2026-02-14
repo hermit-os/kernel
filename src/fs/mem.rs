@@ -282,16 +282,16 @@ impl VfsNode for RomFile {
 		block_on(async { Ok(*self.data.attr.read().await) }, None)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if !components.is_empty() {
+	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
+		if !path.is_empty() {
 			return Err(Errno::Badf);
 		}
 
 		self.get_file_attributes()
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if !components.is_empty() {
+	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
+		if !path.is_empty() {
 			return Err(Errno::Badf);
 		}
 
@@ -338,16 +338,16 @@ impl VfsNode for RamFile {
 		block_on(async { Ok(self.data.read().await.attr) }, None)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if !components.is_empty() {
+	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
+		if !path.is_empty() {
 			return Err(Errno::Badf);
 		}
 
 		self.get_file_attributes()
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		if !components.is_empty() {
+	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
+		if !path.is_empty() {
 			return Err(Errno::Badf);
 		}
 
@@ -470,16 +470,16 @@ impl MemDirectory {
 
 	async fn async_traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		let component = components.pop().ok_or(Errno::Noent)?;
+		let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
-		if !components.is_empty() {
+		if !rest.is_empty() {
 			let inner = self.inner.read().await;
 			let directory = inner.get(component).ok_or(Errno::Noent)?;
-			return directory.traverse_open(components, opt, mode);
+			return directory.traverse_open(rest, opt, mode);
 		}
 
 		let mut inner = self.inner.write().await;
@@ -521,16 +521,16 @@ impl VfsNode for MemDirectory {
 		Ok(self.attr)
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
+	fn traverse_mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Badf)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
 				if let Some(directory) = self.inner.read().await.get(component) {
-					return directory.traverse_mkdir(components, mode);
+					return directory.traverse_mkdir(rest, mode);
 				}
 
-				if !components.is_empty() {
+				if !rest.is_empty() {
 					return Err(Errno::Badf);
 				}
 
@@ -544,15 +544,15 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
+	fn traverse_rmdir(&self, path: &str) -> io::Result<()> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Badf)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
-				if !components.is_empty() {
+				if !rest.is_empty() {
 					let inner = &*self.inner.read().await;
 					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_rmdir(components);
+					return directory.traverse_rmdir(rest);
 				}
 
 				let mut guard = self.inner.write().await;
@@ -569,15 +569,15 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
+	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Badf)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
-				if !components.is_empty() {
+				if !rest.is_empty() {
 					let inner = self.inner.read().await;
 					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_unlink(components);
+					return directory.traverse_unlink(rest);
 				}
 
 				let mut guard = self.inner.write().await;
@@ -594,13 +594,13 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
+	fn traverse_readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
 		block_on(
 			async {
-				if let Some(component) = components.pop() {
+				if let Some((component, rest)) = path.split_once("/") {
 					let inner = self.inner.read().await;
 					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_readdir(components);
+					return directory.traverse_readdir(rest);
 				};
 
 				let mut entries = Vec::new();
@@ -614,15 +614,15 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Nosys)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
-				if !components.is_empty() {
+				if !rest.is_empty() {
 					let inner = self.inner.read().await;
 					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_lstat(components);
+					return directory.traverse_lstat(rest);
 				}
 
 				let inner = self.inner.read().await;
@@ -633,15 +633,15 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
+	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Nosys)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
-				if !components.is_empty() {
+				if !rest.is_empty() {
 					let inner = self.inner.read().await;
 					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_stat(components);
+					return directory.traverse_stat(rest);
 				}
 
 				let inner = self.inner.read().await;
@@ -652,16 +652,16 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
-	fn traverse_mount(&self, components: &mut Vec<&str>, obj: Box<dyn VfsNode>) -> io::Result<()> {
+	fn traverse_mount(&self, path: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Badf)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
 				if let Some(directory) = self.inner.read().await.get(component) {
-					return directory.traverse_mount(components, obj);
+					return directory.traverse_mount(rest, obj);
 				}
 
-				if !components.is_empty() {
+				if !rest.is_empty() {
 					return Err(Errno::Badf);
 				}
 
@@ -674,27 +674,31 @@ impl VfsNode for MemDirectory {
 
 	fn traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<RwLock<dyn ObjectInterface>>> {
-		block_on(self.async_traverse_open(components, opt, mode), None)
+		block_on(self.async_traverse_open(path, opt, mode), None)
 	}
 
 	fn traverse_create_file(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		data: &'static [u8],
 		mode: AccessPermission,
 	) -> io::Result<()> {
 		block_on(
 			async {
-				let component = components.pop().ok_or(Errno::Noent)?;
+				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
-				if !components.is_empty() {
+				if component.is_empty() {
+					return Err(Errno::Noent);
+				}
+
+				if !rest.is_empty() {
 					let inner = self.inner.read().await;
 					let directory = inner.get(component).ok_or(Errno::Noent)?;
-					return directory.traverse_create_file(components, data, mode);
+					return directory.traverse_create_file(rest, data, mode);
 				}
 
 				let file = RomFile::new(data, mode);
