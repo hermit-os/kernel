@@ -26,7 +26,7 @@ use crate::arch::switch::switch_to_task;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::arch::{get_processor_count, interrupts};
 use crate::errno::Errno;
-use crate::fd::{ObjectInterface, RawFd};
+use crate::fd::{Fd, RawFd};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::{arch, io};
@@ -217,8 +217,7 @@ struct NewTask {
 	prio: Priority,
 	core_id: CoreId,
 	stacks: TaskStacks,
-	object_map:
-		Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>>>,
+	object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 }
 
 impl From<NewTask> for Task {
@@ -455,18 +454,14 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_object_map(
 		&self,
-	) -> Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<dyn ObjectInterface>>, RandomState>>>
-	{
+	) -> Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>> {
 		without_interrupts(|| self.current_task.borrow().object_map.clone())
 	}
 
 	/// Map a file descriptor to their IO interface and returns
 	/// the shared reference
 	#[inline]
-	pub fn get_object(
-		&self,
-		fd: RawFd,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	pub fn get_object(&self, fd: RawFd) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let object_map = current_task.object_map.read();
@@ -479,11 +474,9 @@ impl PerCoreScheduler {
 	#[cfg(feature = "common-os")]
 	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
 	pub fn recreate_objmap(&self) -> io::Result<()> {
-		let mut map = HashMap::<
-			RawFd,
-			Arc<async_lock::RwLock<dyn ObjectInterface>>,
-			RandomState,
-		>::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
+		let mut map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
+			RandomState::with_seeds(0, 0, 0, 0),
+		);
 
 		without_interrupts(|| {
 			let mut current_task = self.current_task.borrow_mut();
@@ -505,10 +498,7 @@ impl PerCoreScheduler {
 
 	/// Insert a new IO interface and returns a file descriptor as
 	/// identifier to this object
-	pub fn insert_object(
-		&self,
-		obj: Arc<async_lock::RwLock<dyn ObjectInterface>>,
-	) -> io::Result<RawFd> {
+	pub fn insert_object(&self, obj: Arc<async_lock::RwLock<Fd>>) -> io::Result<RawFd> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let mut object_map = current_task.object_map.write();
@@ -583,10 +573,7 @@ impl PerCoreScheduler {
 	}
 
 	/// Remove a IO interface, which is named by the file descriptor
-	pub fn remove_object(
-		&self,
-		fd: RawFd,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	pub fn remove_object(&self, fd: RawFd) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let mut object_map = current_task.object_map.write();

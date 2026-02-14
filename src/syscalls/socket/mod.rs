@@ -619,7 +619,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 		}
 
-		let socket = Arc::new(async_lock::RwLock::new(socket));
+		let socket = Arc::new(async_lock::RwLock::new(socket.into()));
 		let fd = insert_object(socket).expect("FD is already used");
 
 		return fd;
@@ -644,7 +644,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 				block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 			}
 
-			let socket = Arc::new(async_lock::RwLock::new(socket));
+			let socket = Arc::new(async_lock::RwLock::new(socket.into()));
 			let fd = insert_object(socket).expect("FD is already used");
 
 			return fd;
@@ -660,7 +660,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 				block_on(socket.set_status_flags(fd::StatusFlags::O_NONBLOCK), None).unwrap();
 			}
 
-			let socket = Arc::new(async_lock::RwLock::new(socket));
+			let socket = Arc::new(async_lock::RwLock::new(socket.into()));
 			let fd = insert_object(socket).expect("FD is already used");
 
 			return fd;
