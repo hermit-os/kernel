@@ -115,68 +115,72 @@ impl Socket {
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
-					let available = PollEvent::POLLOUT
-						| PollEvent::POLLWRNORM
-						| PollEvent::POLLWRBAND
-						| PollEvent::POLLIN
-						| PollEvent::POLLRDNORM
-						| PollEvent::POLLRDBAND;
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
 
-					let ret = event & available;
+			for handle in self.handle.iter() {
+				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+				match socket.state() {
+					tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+						let available = PollEvent::POLLOUT
+							| PollEvent::POLLWRNORM
+							| PollEvent::POLLWRBAND
+							| PollEvent::POLLIN | PollEvent::POLLRDNORM
+							| PollEvent::POLLRDBAND;
 
-					if ret.is_empty() {
-						Poll::Ready(Ok(PollEvent::POLLHUP))
-					} else {
-						Poll::Ready(Ok(ret))
+						let ret = event & available;
+
+						if ret.is_empty() {
+							return Poll::Ready(Ok(PollEvent::POLLHUP));
+						} else {
+							return Poll::Ready(Ok(ret));
+						}
 					}
-				}
-				tcp::State::FinWait1 | tcp::State::FinWait2 | tcp::State::TimeWait => {
-					Poll::Ready(Ok(PollEvent::POLLHUP))
-				}
-				tcp::State::Listen => {
-					socket.register_recv_waker(cx.waker());
-					socket.register_send_waker(cx.waker());
-					Poll::Pending
-				}
-				_ => {
-					let mut available = PollEvent::empty();
-
-					if socket.can_recv() || socket.may_recv() && self.is_listen {
-						// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
-						available.insert(
-							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
-						);
+					tcp::State::FinWait1 | tcp::State::FinWait2 | tcp::State::TimeWait => {
+						return Poll::Ready(Ok(PollEvent::POLLHUP));
 					}
-
-					if socket.can_send() {
-						available.insert(
-							PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
-						);
+					tcp::State::Listen => {
+						socket.register_recv_waker(cx.waker());
+						socket.register_send_waker(cx.waker());
 					}
+					_ => {
+						let mut available = PollEvent::empty();
 
-					let ret = event & available;
-
-					if ret.is_empty() {
-						if event.intersects(
-							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
-						) {
-							socket.register_recv_waker(cx.waker());
+						if socket.can_recv() || socket.may_recv() && self.is_listen {
+							// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
+							available.insert(
+								PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
+							);
 						}
 
-						if event.intersects(
-							PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
-						) {
-							socket.register_send_waker(cx.waker());
+						if socket.can_send() {
+							available.insert(
+								PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+							);
 						}
 
-						Poll::Pending
-					} else {
-						Poll::Ready(Ok(ret))
+						let ret = event & available;
+
+						if ret.is_empty() {
+							if event.intersects(
+								PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
+							) {
+								socket.register_recv_waker(cx.waker());
+							}
+
+							if event.intersects(
+								PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+							) {
+								socket.register_send_waker(cx.waker());
+							}
+						} else {
+							return Poll::Ready(Ok(ret));
+						}
 					}
-				}
-			})
+				};
+			}
+
+			Poll::Pending
 		})
 		.await
 	}
