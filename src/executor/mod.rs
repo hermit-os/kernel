@@ -136,6 +136,36 @@ pub fn init() {
 	crate::executor::alloc_stats::init();
 }
 
+fn maybe_set_network_timer(now: u64) {
+	if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+		let delay = if let Ok(nic) = guard.as_nic_mut() {
+			let mut delay_micros = nic
+				.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
+				.map(|d| d.total_micros());
+
+			// Under heavy workloads, we may be lagging behind, in which case we
+			// need to try to catch up immediately
+			while delay_micros == Some(0) {
+				nic.poll_common(crate::executor::network::now());
+				delay_micros = nic
+					.poll_delay(crate::executor::network::now())
+					.map(|d| d.total_micros());
+			}
+
+			// We will yield back to userspace and may not have an opportunity to handle
+			// network traffic unless we enable interrupts
+			nic.set_polling_mode(false);
+
+			delay_micros
+		} else {
+			None
+		};
+
+		core_local::core_scheduler()
+			.add_network_timer(delay.map(|d| crate::arch::processor::get_timer_ticks() + d));
+	}
+}
+
 /// Blocks the current thread on `f`, running the executor when idling.
 pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> io::Result<T>
 where
@@ -159,21 +189,7 @@ where
 		if let Poll::Ready(t) = result {
 			// allow network interrupts
 			#[cfg(feature = "net")]
-			{
-				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
-					let delay = if let Ok(nic) = guard.as_nic_mut() {
-						nic.set_polling_mode(false);
-
-						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
-							.map(|d| d.total_micros())
-					} else {
-						None
-					};
-					core_local::core_scheduler().add_network_timer(
-						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
-					);
-				}
-			}
+			maybe_set_network_timer(now);
 
 			return t;
 		}
@@ -183,21 +199,7 @@ where
 		{
 			// allow network interrupts
 			#[cfg(feature = "net")]
-			{
-				if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
-					let delay = if let Ok(nic) = guard.as_nic_mut() {
-						nic.set_polling_mode(false);
-
-						nic.poll_delay(Instant::from_micros_const(now.try_into().unwrap()))
-							.map(|d| d.total_micros())
-					} else {
-						None
-					};
-					core_local::core_scheduler().add_network_timer(
-						delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
-					);
-				}
-			}
+			maybe_set_network_timer(now);
 
 			return Err(Errno::Time);
 		}
