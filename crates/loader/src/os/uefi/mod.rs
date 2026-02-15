@@ -8,11 +8,12 @@ use core::mem::MaybeUninit;
 use core::{ptr, slice};
 
 use align_address::Align;
+use anyhow::anyhow;
 use hermit_entry::boot_info::{
 	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
 };
 use hermit_entry::elf::{KernelObject, LoadedKernel};
-use log::info;
+use log::{error, info};
 use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
 use uefi::fs::{self, FileSystem, Path};
 use uefi::prelude::*;
@@ -29,7 +30,9 @@ fn main() -> Status {
 	crate::log::init();
 	crate::log_built_info();
 
-	let kernel_image = read_app();
+	let mut esp = Esp::new().unwrap();
+
+	let kernel_image = esp.read_app();
 	let kernel = KernelObject::parse(&kernel_image).unwrap();
 
 	let kernel_memory = alloc_page_slice(kernel.mem_size()).unwrap();
@@ -46,7 +49,7 @@ fn main() -> Status {
 		.rsdp(u64::try_from(rsdp.expose_provenance()).unwrap())
 		.unwrap();
 
-	if let Some(bootargs) = read_bootargs() {
+	if let Some(bootargs) = esp.read_bootargs() {
 		fdt = fdt.bootargs(bootargs).unwrap();
 	}
 
@@ -56,41 +59,6 @@ fn main() -> Status {
 	let fdt = fdt.memory_map(&mut memory_map).unwrap().finish().unwrap();
 
 	unsafe { boot_kernel(kernel_info, fdt) }
-}
-
-fn read_app() -> Vec<u8> {
-	let image_handle = boot::image_handle();
-	let fs = boot::get_image_file_system(image_handle).expect("should open file system");
-
-	let path = Path::new(cstr16!(r"\EFI\BOOT\hermit-app"));
-
-	let data = FileSystem::new(fs)
-		.read(path)
-		.expect("should read file content");
-
-	let len = data.len();
-	info!("Read Hermit application from \"{path}\" (size = {len} B)");
-
-	data
-}
-
-fn read_bootargs() -> Option<String> {
-	let image_handle = boot::image_handle();
-	let fs = boot::get_image_file_system(image_handle).expect("should open file system");
-
-	let path = Path::new(cstr16!(r"\EFI\BOOT\hermit-bootargs"));
-
-	match FileSystem::new(fs).read_to_string(path) {
-		Ok(bootargs) => {
-			info!("Read Hermit bootargs from from \"{path}\": {bootargs}");
-			Some(bootargs)
-		}
-		Err(fs::Error::Io(err)) if err.uefi_error.status() == Status::NOT_FOUND => {
-			info!("Hermit bootargs file does not exist: \"{path}\"");
-			None
-		}
-		Err(err) => panic!("{err:?}"),
-	}
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel, fdt: Vec<u8>) -> ! {
@@ -153,4 +121,66 @@ fn rsdp() -> *const c_void {
 		info!("Found ACPI {version} RSDP at {rsdp:p}");
 		rsdp
 	})
+}
+
+pub struct Esp {
+	fs: FileSystem,
+}
+
+impl Esp {
+	pub fn new() -> uefi::Result<Self> {
+		let image_handle = boot::image_handle();
+		let fs = boot::get_image_file_system(image_handle)?;
+		let fs = FileSystem::new(fs);
+		Ok(Self { fs })
+	}
+
+	pub fn read_app(&mut self) -> Vec<u8> {
+		self.read_app_at(cstr16!(r"\EFI\BOOT\hermit-app")).unwrap()
+	}
+
+	pub fn read_bootargs(&mut self) -> Option<String> {
+		self.read_bootargs_at(cstr16!(r"\EFI\BOOT\hermit-bootargs"))
+	}
+
+	fn read_app_at<P: AsRef<Path>>(&mut self, path: P) -> Option<Vec<u8>> {
+		fn inner(fs: &mut FileSystem, path: &Path) -> Option<Vec<u8>> {
+			match fs.read(path) {
+				Ok(data) => {
+					let len = data.len();
+					info!("Read Hermit application from {path} (size = {len} B)");
+					Some(data)
+				}
+				Err(err) => {
+					let err = anyhow!(err);
+					error!("Could not read Hermit application: {err:?}");
+					None
+				}
+			}
+		}
+
+		inner(&mut self.fs, path.as_ref())
+	}
+
+	fn read_bootargs_at<P: AsRef<Path>>(&mut self, path: P) -> Option<String> {
+		fn inner(fs: &mut FileSystem, path: &Path) -> Option<String> {
+			match fs.read_to_string(path) {
+				Ok(bootargs) => {
+					info!("Read Hermit bootargs from from {path}: {bootargs}");
+					Some(bootargs)
+				}
+				Err(fs::Error::Io(err)) if err.uefi_error.status() == Status::NOT_FOUND => {
+					info!("Hermit bootargs not found at {path}");
+					None
+				}
+				Err(err) => {
+					let err = anyhow!(err);
+					error!("Could not read Hermit bootargs: {err:#}");
+					None
+				}
+			}
+		}
+
+		inner(&mut self.fs, path.as_ref())
+	}
 }

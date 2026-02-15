@@ -37,6 +37,7 @@ uart_16550 = "0.4"
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
+anyhow = { version = "1", default-features = false }
 uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
 
 [build-dependencies]
