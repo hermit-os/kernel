@@ -89,9 +89,11 @@ impl Qemu {
 				// EDK II: https://github.com/tianocore/edk2/blob/edk2-stable202511/MdePkg/Include/Uefi/UefiSpec.h#L2264-L2273
 				sh.create_dir("target/esp/EFI/BOOT")?;
 				sh.copy_file(self.build.dist_object(), "target/esp/EFI/BOOT/BOOTX64.EFI")?;
+
+				sh.create_dir("target/esp/EFI/hermit")?;
 				sh.copy_file(
 					self.build.ci_image(self.image.as_deref().unwrap()),
-					"target/esp/EFI/BOOT/hermit-app",
+					"target/esp/EFI/hermit/hermit-app",
 				)?;
 			}
 			Target::Aarch64Elf | Target::Aarch64BeElf if self.u_boot => {
