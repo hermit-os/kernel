@@ -20,7 +20,7 @@ _start:
     mov [boot_params], rsi
 
     # Set CR3
-    mov rax, OFFSET .LLEVEL_4_TABLE
+    mov rax, OFFSET {level_4_table}
     mov cr3, rax
 
     lgdt [{gdt_ptr}] # Load the 64-bit global descriptor table.
@@ -54,48 +54,3 @@ invalid:
 .align 8
 boot_params:
     .8byte 0
-
-// Page Tables.
-//
-// This defines the page tables that we switch to by setting `CR3` to `.LLEVEL_4_TABLE`.
-
-    // Page Table Flags.
-    //
-    // For details, see <https://github.com/rust-osdev/x86_64/blob/v0.15.4/src/structures/paging/page_table.rs#L136-L199>.
-    .equiv PAGE_TABLE_FLAGS_PRESENT, 1
-    .equiv PAGE_TABLE_FLAGS_WRITABLE, 1 << 1
-    .equiv PAGE_TABLE_FLAGS_HUGE_PAGE, 1 << 7
-
-    .equiv PAGE_TABLE_ENTRY_COUNT, 512
-
-    .equiv SIZE_4_KIB, 0x1000
-    .equiv SIZE_2_MIB, SIZE_4_KIB * PAGE_TABLE_ENTRY_COUNT
-    .equiv SIZE_1_GIB, SIZE_2_MIB * PAGE_TABLE_ENTRY_COUNT
-
-    .equiv PAGE_TABLE_FLAGS, PAGE_TABLE_FLAGS_PRESENT | PAGE_TABLE_FLAGS_WRITABLE
-    .equiv PAGE_FLAGS, PAGE_TABLE_FLAGS | PAGE_TABLE_FLAGS_HUGE_PAGE
-
-    .type .LLEVEL_4_TABLE,@object
-    .section .data..LLEVEL_4_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_4_TABLE:
-    .quad .LLEVEL_3_TABLE + PAGE_TABLE_FLAGS
-    .align SIZE_4_KIB
-    .size .LLEVEL_4_TABLE, . - .LLEVEL_4_TABLE
-
-    .type .LLEVEL_3_TABLE,@object
-    .section .data..LLEVEL_3_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_3_TABLE:
-    .quad .LLEVEL_2_TABLE + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
-    .size .LLEVEL_3_TABLE, . - .LLEVEL_3_TABLE
-
-    .type .LLEVEL_2_TABLE,@object
-    .section .data..LLEVEL_2_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_2_TABLE:
-    // `.rept` is not guaranteed to be supported by Rust.
-    .rept PAGE_TABLE_ENTRY_COUNT
-    .quad \+ * SIZE_2_MIB + PAGE_FLAGS
-    .endr
