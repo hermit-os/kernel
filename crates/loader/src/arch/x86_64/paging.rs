@@ -2,9 +2,9 @@ use core::fmt::Debug;
 use core::ptr;
 
 use log::warn;
-use x86_64::structures::paging::mapper::CleanUp;
+use x86_64::structures::paging::mapper::{CleanUp, MapToError};
 use x86_64::structures::paging::{
-	Mapper, Page, PageSize, PageTableFlags, PhysFrame, RecursivePageTable,
+	Mapper, Page, PageSize, PageTableFlags, PhysFrame, RecursivePageTable, Translate,
 };
 
 use super::physicalmem::PhysAlloc;
@@ -41,11 +41,16 @@ where
 	let mut table = unsafe { recursive_page_table() };
 
 	for (page, frame) in pages.zip(frames) {
-		unsafe {
-			table
-				.map_to(page, frame, flags, &mut PhysAlloc)
-				.unwrap()
-				.flush();
+		let mapper_result = unsafe { table.map_to(page, frame, flags, &mut PhysAlloc) };
+		match mapper_result {
+			Ok(mapper_flush) => mapper_flush.flush(),
+			Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
+			Err(MapToError::ParentEntryHugePage) => {
+				let current_addr = table.translate_addr(page.start_address()).unwrap();
+				let expected_addr = frame.start_address();
+				assert_eq!(current_addr, expected_addr);
+			}
+			Err(err) => panic!("could not map {frame:?}: {err:?}"),
 		}
 	}
 }
@@ -75,11 +80,16 @@ pub fn map_range<S>(
 	let page_range = core::iter::successors(Some(first_page), |page| Some(*page + 1u64));
 	let frame_range = PhysFrame::<S>::range(first_frame, last_frame);
 	for (page, frame) in core::iter::zip(page_range, frame_range) {
-		unsafe {
-			table
-				.map_to(page, frame, flags, &mut PhysAlloc)
-				.unwrap()
-				.flush();
+		let mapper_result = unsafe { table.map_to(page, frame, flags, &mut PhysAlloc) };
+		match mapper_result {
+			Ok(mapper_flush) => mapper_flush.flush(),
+			Err(MapToError::PageAlreadyMapped(current_frame)) => assert_eq!(current_frame, frame),
+			Err(MapToError::ParentEntryHugePage) => {
+				let current_addr = table.translate_addr(page.start_address()).unwrap();
+				let expected_addr = frame.start_address();
+				assert_eq!(current_addr, expected_addr);
+			}
+			Err(err) => panic!("could not map {frame:?}: {err:?}"),
 		}
 	}
 }
