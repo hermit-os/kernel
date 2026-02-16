@@ -164,8 +164,7 @@ mb_info:
     .align SIZE_4_KIB
 .LLEVEL_4_TABLE:
     .quad .LLEVEL_3_TABLE + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
-    .quad .LLEVEL_4_TABLE + PAGE_TABLE_FLAGS
+    .align SIZE_4_KIB
     .size .LLEVEL_4_TABLE, . - .LLEVEL_4_TABLE
 
     .type .LLEVEL_3_TABLE,@object
