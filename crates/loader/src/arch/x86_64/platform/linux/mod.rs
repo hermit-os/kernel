@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use core::ffi::CStr;
 use core::ptr::write_bytes;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{ptr, slice};
 
 use align_address::Align;
@@ -35,9 +35,9 @@ mod entry {
 	);
 }
 
-static BOOT_PARAMS: AtomicUsize = AtomicUsize::new(0);
+static BOOT_PARAMS: AtomicPtr<BootParams> = AtomicPtr::new(ptr::null_mut());
 
-unsafe extern "C" fn rust_start(boot_params: usize) -> ! {
+unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
 	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
 	unsafe {
 		crate::os::loader_main();
@@ -134,9 +134,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		load_info,
 		platform_info: PlatformInfo::LinuxBootParams {
 			command_line: Some(command_line),
-			boot_params_addr: (BOOT_PARAMS.load(Ordering::Relaxed) as u64)
-				.try_into()
-				.unwrap(),
+			boot_params_addr: u64::try_from(
+				BOOT_PARAMS.load(Ordering::Relaxed).expose_provenance(),
+			)
+			.unwrap()
+			.try_into()
+			.unwrap(),
 		},
 	};
 
@@ -157,9 +160,10 @@ trait BootParamsExt {
 
 impl BootParamsExt for BootParams {
 	unsafe fn map() {
-		let addr = BOOT_PARAMS.load(Ordering::Relaxed);
+		let ptr = BOOT_PARAMS.load(Ordering::Relaxed);
 
-		info!("Linux boot parameters: {addr:#x}");
+		info!("Linux boot parameters: {ptr:p}");
+		let addr = ptr.expose_provenance();
 		assert!(addr.is_aligned_to(Size4KiB::SIZE as usize));
 		assert_ne!(addr, 0);
 
@@ -168,8 +172,7 @@ impl BootParamsExt for BootParams {
 	}
 
 	unsafe fn get() -> &'static Self {
-		let addr = BOOT_PARAMS.load(Ordering::Relaxed);
-		let ptr = ptr::with_exposed_provenance(addr);
+		let ptr = BOOT_PARAMS.load(Ordering::Relaxed);
 		unsafe { &*ptr }
 	}
 

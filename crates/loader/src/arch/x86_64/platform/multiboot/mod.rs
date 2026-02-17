@@ -1,6 +1,6 @@
 use alloc::borrow::ToOwned;
 use core::ptr::write_bytes;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{mem, ptr, slice};
 
 use align_address::Align;
@@ -9,7 +9,7 @@ use hermit_entry::boot_info::{
 };
 use hermit_entry::elf::LoadedKernel;
 use log::info;
-use multiboot::information::{MemoryManagement, Multiboot, PAddr};
+use multiboot::information::{MemoryManagement, Multiboot, MultibootInfo, PAddr};
 use vm_fdt::FdtWriterResult;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
@@ -36,9 +36,9 @@ mod entry {
 	);
 }
 
-static MB_INFO: AtomicUsize = AtomicUsize::new(0);
+static MB_INFO: AtomicPtr<MultibootInfo> = AtomicPtr::new(ptr::null_mut());
 
-unsafe extern "C" fn rust_start(mb_info: usize) -> ! {
+unsafe extern "C" fn rust_start(mb_info: *mut MultibootInfo) -> ! {
 	MB_INFO.store(mb_info, Ordering::Relaxed);
 	unsafe {
 		crate::os::loader_main();
@@ -95,13 +95,18 @@ pub fn find_kernel() -> &'static [u8] {
 	paging::clean_up();
 	// Identity-map the Multiboot information.
 	let mb_info = MB_INFO.load(Ordering::Relaxed);
-	assert!(mb_info > 0, "Could not find Multiboot information");
-	info!("Found Multiboot information at {mb_info:#x}");
-	paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty());
+	assert!(!mb_info.is_null(), "Could not find Multiboot information");
+	info!("Found Multiboot information at {mb_info:p}");
+	paging::map::<Size4KiB>(
+		mb_info.expose_provenance(),
+		mb_info.expose_provenance(),
+		1,
+		PageTableFlags::empty(),
+	);
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
-	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+	let multiboot = unsafe { Multiboot::from_ref(&mut *mb_info, &mut mem) };
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
@@ -170,9 +175,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		.addr()
 		.align_up(Size4KiB::SIZE as usize);
 
-	if new_stack + KERNEL_STACK_SIZE as usize > mb_info {
-		new_stack =
-			(mb_info + mem::size_of::<Multiboot<'_, '_>>()).align_up(Size4KiB::SIZE as usize);
+	if new_stack + KERNEL_STACK_SIZE as usize > mb_info.addr() {
+		new_stack = (mb_info.addr() + mem::size_of::<Multiboot<'_, '_>>())
+			.align_up(Size4KiB::SIZE as usize);
 	}
 
 	let command_line = multiboot.command_line();
