@@ -17,7 +17,8 @@ _start:
     movabs rsp, OFFSET {stack}
     add rsp, {stack_top_offset}
 
-    mov [boot_params], rsi
+    # Move the base address of the struct boot_params into `RDI` as first argument to `rust_start`.
+    mov rdi, rsi
 
     # Set CR3
     mov rax, OFFSET {level_4_table}
@@ -48,9 +49,3 @@ start64:
     jmp {loader_main}
 invalid:
     jmp invalid
-
-.section .data
-.global boot_params
-.align 8
-boot_params:
-    .8byte 0

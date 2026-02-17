@@ -1,6 +1,7 @@
 use alloc::borrow::ToOwned;
 use core::ffi::CStr;
 use core::ptr::write_bytes;
+use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{ptr, slice};
 
 use align_address::Align;
@@ -19,13 +20,12 @@ use crate::fdt::Fdt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;
-	static boot_params: usize;
 }
 
 mod entry {
 	core::arch::global_asm!(
 		include_str!("entry.s"),
-		loader_main = sym crate::os::loader_main,
+		loader_main = sym super::rust_start,
 		stack = sym crate::arch::x86_64::stack::STACK,
 		stack_top_offset = const crate::arch::x86_64::stack::Stack::top_offset(),
 		level_4_table = sym crate::arch::x86_64::page_tables::LEVEL_4_TABLE,
@@ -33,6 +33,15 @@ mod entry {
 		kernel_code_selector = const crate::arch::x86_64::gdt::Gdt::kernel_code_selector().0,
 		kernel_data_selector = const crate::arch::x86_64::gdt::Gdt::kernel_data_selector().0,
 	);
+}
+
+static BOOT_PARAMS: AtomicPtr<BootParams> = AtomicPtr::new(ptr::null_mut());
+
+unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
+	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
+	unsafe {
+		crate::os::loader_main();
+	}
 }
 
 pub fn find_kernel() -> &'static [u8] {
@@ -125,7 +134,12 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		load_info,
 		platform_info: PlatformInfo::LinuxBootParams {
 			command_line: Some(command_line),
-			boot_params_addr: (unsafe { boot_params } as u64).try_into().unwrap(),
+			boot_params_addr: u64::try_from(
+				BOOT_PARAMS.load(Ordering::Relaxed).expose_provenance(),
+			)
+			.unwrap()
+			.try_into()
+			.unwrap(),
 		},
 	};
 
@@ -146,9 +160,10 @@ trait BootParamsExt {
 
 impl BootParamsExt for BootParams {
 	unsafe fn map() {
-		let addr = unsafe { boot_params };
+		let ptr = BOOT_PARAMS.load(Ordering::Relaxed);
 
-		info!("Linux boot parameters: {addr:#x}");
+		info!("Linux boot parameters: {ptr:p}");
+		let addr = ptr.expose_provenance();
 		assert!(addr.is_aligned_to(Size4KiB::SIZE as usize));
 		assert_ne!(addr, 0);
 
@@ -157,8 +172,7 @@ impl BootParamsExt for BootParams {
 	}
 
 	unsafe fn get() -> &'static Self {
-		let addr = unsafe { boot_params };
-		let ptr = ptr::with_exposed_provenance(addr);
+		let ptr = BOOT_PARAMS.load(Ordering::Relaxed);
 		unsafe { &*ptr }
 	}
 

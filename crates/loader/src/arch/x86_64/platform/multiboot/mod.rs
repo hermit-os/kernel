@@ -1,5 +1,6 @@
 use alloc::borrow::ToOwned;
 use core::ptr::write_bytes;
+use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{mem, ptr, slice};
 
 use align_address::Align;
@@ -8,7 +9,7 @@ use hermit_entry::boot_info::{
 };
 use hermit_entry::elf::LoadedKernel;
 use log::info;
-use multiboot::information::{MemoryManagement, Multiboot, PAddr};
+use multiboot::information::{MemoryManagement, Multiboot, MultibootInfo, PAddr};
 use vm_fdt::FdtWriterResult;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
@@ -19,14 +20,13 @@ use crate::fdt::Fdt;
 
 unsafe extern "C" {
 	static mut loader_end: u8;
-	static mb_info: usize;
 }
 
 #[allow(bad_asm_style)]
 mod entry {
 	core::arch::global_asm!(
 		include_str!("entry.s"),
-		loader_main = sym crate::os::loader_main,
+		loader_main = sym super::rust_start,
 		stack = sym crate::arch::x86_64::stack::STACK,
 		stack_top_offset = const crate::arch::x86_64::stack::Stack::top_offset(),
 		level_4_table = sym crate::arch::x86_64::page_tables::LEVEL_4_TABLE,
@@ -34,6 +34,15 @@ mod entry {
 		kernel_code_selector = const crate::arch::x86_64::gdt::Gdt::kernel_code_selector().0,
 		kernel_data_selector = const crate::arch::x86_64::gdt::Gdt::kernel_data_selector().0,
 	);
+}
+
+static MB_INFO: AtomicPtr<MultibootInfo> = AtomicPtr::new(ptr::null_mut());
+
+unsafe extern "C" fn rust_start(mb_info: *mut MultibootInfo) -> ! {
+	MB_INFO.store(mb_info, Ordering::Relaxed);
+	unsafe {
+		crate::os::loader_main();
+	}
 }
 
 struct Mem;
@@ -60,6 +69,7 @@ pub struct DeviceTree;
 
 impl DeviceTree {
 	pub fn create() -> FdtWriterResult<&'static [u8]> {
+		let mb_info = MB_INFO.load(Ordering::Relaxed);
 		let mut mem = Mem;
 		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
@@ -84,15 +94,19 @@ pub fn find_kernel() -> &'static [u8] {
 
 	paging::clean_up();
 	// Identity-map the Multiboot information.
-	unsafe {
-		assert!(mb_info > 0, "Could not find Multiboot information");
-		info!("Found Multiboot information at {mb_info:#x}");
-		paging::map::<Size4KiB>(mb_info, mb_info, 1, PageTableFlags::empty())
-	}
+	let mb_info = MB_INFO.load(Ordering::Relaxed);
+	assert!(!mb_info.is_null(), "Could not find Multiboot information");
+	info!("Found Multiboot information at {mb_info:p}");
+	paging::map::<Size4KiB>(
+		mb_info.expose_provenance(),
+		mb_info.expose_provenance(),
+		1,
+		PageTableFlags::empty(),
+	);
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
-	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+	let multiboot = unsafe { Multiboot::from_ref(&mut *mb_info, &mut mem) };
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
@@ -153,6 +167,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	let mut mem = Mem;
+	let mb_info = MB_INFO.load(Ordering::Relaxed);
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
@@ -160,8 +175,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		.addr()
 		.align_up(Size4KiB::SIZE as usize);
 
-	if new_stack + KERNEL_STACK_SIZE as usize > unsafe { mb_info } {
-		new_stack = (unsafe { mb_info } + mem::size_of::<Multiboot<'_, '_>>())
+	if new_stack + KERNEL_STACK_SIZE as usize > mb_info.addr() {
+		new_stack = (mb_info.addr() + mem::size_of::<Multiboot<'_, '_>>())
 			.align_up(Size4KiB::SIZE as usize);
 	}
 
@@ -202,7 +217,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		load_info,
 		platform_info: PlatformInfo::Multiboot {
 			command_line,
-			multiboot_info_addr: (unsafe { mb_info } as u64).try_into().unwrap(),
+			multiboot_info_addr: (mb_info as u64).try_into().unwrap(),
 		},
 	};
 
