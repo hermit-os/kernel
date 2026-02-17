@@ -33,7 +33,7 @@ _start:
     and eax, 0xFFFFF000       # page align lower half
     mov rdi, rax
     shr rdi, 9                # (edi >> 12) * 8 (index for boot_pgt)
-    add rdi, OFFSET boot_pgt1
+    add rdi, OFFSET .LLEVEL_1_TABLE_1
     or rax, 0x3               # set present and writable bits
     mov [rdi], rax
     add rcx, 0x1000
@@ -44,7 +44,7 @@ _start:
     pop rdi
 
     # Set CR3
-    mov rax, OFFSET boot_pml4
+    mov rax, OFFSET .LLEVEL_4_TABLE
     mov cr3, rax
 
     lgdt [{gdt_ptr}] # Load the 64-bit global descriptor table.
@@ -81,7 +81,7 @@ boot_params:
 
 // Page Tables.
 //
-// This defines the page tables that we switch to by setting `CR3` to `boot_pml4`.
+// This defines the page tables that we switch to by setting `CR3` to `.LLEVEL_4_TABLE`.
 
     // Page Table Flags.
     //
@@ -98,18 +98,18 @@ boot_params:
     .equiv PAGE_TABLE_FLAGS, PAGE_TABLE_FLAGS_PRESENT | PAGE_TABLE_FLAGS_WRITABLE
 
     .align SIZE_4_KIB
-boot_pml4:
-    .quad boot_pdpt + PAGE_TABLE_FLAGS
+.LLEVEL_4_TABLE:
+    .quad .LLEVEL_3_TABLE + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
-    .quad boot_pml4 + PAGE_TABLE_FLAGS
-boot_pdpt:
-    .quad boot_pgd + PAGE_TABLE_FLAGS
+    .quad .LLEVEL_4_TABLE + PAGE_TABLE_FLAGS
+.LLEVEL_3_TABLE:
+    .quad .LLEVEL_2_TABLE + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
-boot_pgd:
-    .quad boot_pgt1 + PAGE_TABLE_FLAGS
-    .quad boot_pgt2 + PAGE_TABLE_FLAGS
+.LLEVEL_2_TABLE:
+    .quad .LLEVEL_1_TABLE_1 + PAGE_TABLE_FLAGS
+    .quad .LLEVEL_1_TABLE_2 + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
-boot_pgt1:
+.LLEVEL_1_TABLE_1:
     .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
-boot_pgt2:
+.LLEVEL_1_TABLE_2:
     .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
