@@ -167,7 +167,7 @@ mb_info:
     .8byte 0
 
 # Bootstrap page tables are used during the initialization.
-.align 4096
+    .align 4096
 boot_pml4:
     .8byte boot_pdpt + 0x3  # PG_PRESENT | PG_RW
     .fill 510, 8, 0         # PAGE_MAP_ENTRIES - 2
