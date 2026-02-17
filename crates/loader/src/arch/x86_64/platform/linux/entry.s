@@ -64,6 +64,7 @@ boot_params:
     // For details, see <https://github.com/rust-osdev/x86_64/blob/v0.15.4/src/structures/paging/page_table.rs#L136-L199>.
     .equiv PAGE_TABLE_FLAGS_PRESENT, 1
     .equiv PAGE_TABLE_FLAGS_WRITABLE, 1 << 1
+    .equiv PAGE_TABLE_FLAGS_HUGE_PAGE, 1 << 7
 
     .equiv PAGE_TABLE_ENTRY_COUNT, 512
 
@@ -72,6 +73,7 @@ boot_params:
     .equiv SIZE_1_GIB, SIZE_2_MIB * PAGE_TABLE_ENTRY_COUNT
 
     .equiv PAGE_TABLE_FLAGS, PAGE_TABLE_FLAGS_PRESENT | PAGE_TABLE_FLAGS_WRITABLE
+    .equiv PAGE_FLAGS, PAGE_TABLE_FLAGS | PAGE_TABLE_FLAGS_HUGE_PAGE
 
     .type .LLEVEL_4_TABLE,@object
     .section .data..LLEVEL_4_TABLE,"awR",@progbits
@@ -93,16 +95,7 @@ boot_params:
     .section .data..LLEVEL_2_TABLE,"awR",@progbits
     .align SIZE_4_KIB
 .LLEVEL_2_TABLE:
-    .quad .LLEVEL_1_TABLE + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
-    .size .LLEVEL_2_TABLE, . - .LLEVEL_2_TABLE
-
-    .type .LLEVEL_1_TABLE,@object
-    .section .data..LLEVEL_1_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_1_TABLE:
     // `.rept` is not guaranteed to be supported by Rust.
     .rept PAGE_TABLE_ENTRY_COUNT
-    .quad \+ * SIZE_4_KIB + PAGE_TABLE_FLAGS
+    .quad \+ * SIZE_2_MIB + PAGE_FLAGS
     .endr
-    .size .LLEVEL_1_TABLE, . - .LLEVEL_1_TABLE
