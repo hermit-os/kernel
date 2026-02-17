@@ -46,31 +46,6 @@ _start:
 # Bootstrap page tables are loaded and page size
 # extensions (huge pages) enabled.
 cpu_init:
-
-    # initialize page tables
-    # map kernel 1:1
-    push edi
-    push ebx
-    push ecx
-    mov ecx, OFFSET loader_start
-    mov ebx, OFFSET loader_end
-    add ebx, 0x1000
-L0: cmp ecx, ebx
-    jae L1
-    mov eax, ecx
-    and eax, 0xFFFFF000       # page align lower half
-    mov edi, eax
-    shr edi, 9                # (edi >> 12) * 8 (index for boot_pgt)
-    add edi, OFFSET .LLEVEL_1_TABLE
-    or eax, 0x3               # set present and writable bits
-    mov [edi], eax
-    add ecx, 0x1000
-    jmp L0
-L1:
-    pop ecx
-    pop ebx
-    pop edi
-
     # check for long mode
 
     # do we have the instruction cpuid?
@@ -213,5 +188,8 @@ mb_info:
     .section .data..LLEVEL_1_TABLE,"awR",@progbits
     .align SIZE_4_KIB
 .LLEVEL_1_TABLE:
-    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
+    // `.rept` is not guaranteed to be supported by Rust.
+    .rept PAGE_TABLE_ENTRY_COUNT
+    .quad \+ * SIZE_4_KIB + PAGE_TABLE_FLAGS
+    .endr
     .size .LLEVEL_1_TABLE, . - .LLEVEL_1_TABLE

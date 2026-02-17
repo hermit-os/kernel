@@ -19,30 +19,6 @@ _start:
 
     mov [boot_params], rsi
 
-    # initialize page tables
-    # map kernel 1:1
-    push rdi
-    push rbx
-    push rcx
-    movabs rcx, OFFSET loader_start
-    movabs rbx, OFFSET loader_end
-    add rbx, 0x1000
- L0: cmp rcx, rbx
-    jae L1
-    mov rax, rcx
-    and eax, 0xFFFFF000       # page align lower half
-    mov rdi, rax
-    shr rdi, 9                # (edi >> 12) * 8 (index for boot_pgt)
-    add rdi, OFFSET .LLEVEL_1_TABLE
-    or rax, 0x3               # set present and writable bits
-    mov [rdi], rax
-    add rcx, 0x1000
-    jmp L0
- L1:
-    pop rcx
-    pop rbx
-    pop rdi
-
     # Set CR3
     mov rax, OFFSET .LLEVEL_4_TABLE
     mov cr3, rax
@@ -126,5 +102,8 @@ boot_params:
     .section .data..LLEVEL_1_TABLE,"awR",@progbits
     .align SIZE_4_KIB
 .LLEVEL_1_TABLE:
-    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
+    // `.rept` is not guaranteed to be supported by Rust.
+    .rept PAGE_TABLE_ENTRY_COUNT
+    .quad \+ * SIZE_4_KIB + PAGE_TABLE_FLAGS
+    .endr
     .size .LLEVEL_1_TABLE, . - .LLEVEL_1_TABLE
