@@ -79,20 +79,37 @@ invalid:
 boot_params:
     .8byte 0
 
-# Bootstrap page tables are used during the initialization.
-    .align 4096
+// Page Tables.
+//
+// This defines the page tables that we switch to by setting `CR3` to `boot_pml4`.
+
+    // Page Table Flags.
+    //
+    // For details, see <https://github.com/rust-osdev/x86_64/blob/v0.15.4/src/structures/paging/page_table.rs#L136-L199>.
+    .equiv PAGE_TABLE_FLAGS_PRESENT, 1
+    .equiv PAGE_TABLE_FLAGS_WRITABLE, 1 << 1
+
+    .equiv PAGE_TABLE_ENTRY_COUNT, 512
+
+    .equiv SIZE_4_KIB, 0x1000
+    .equiv SIZE_2_MIB, SIZE_4_KIB * PAGE_TABLE_ENTRY_COUNT
+    .equiv SIZE_1_GIB, SIZE_2_MIB * PAGE_TABLE_ENTRY_COUNT
+
+    .equiv PAGE_TABLE_FLAGS, PAGE_TABLE_FLAGS_PRESENT | PAGE_TABLE_FLAGS_WRITABLE
+
+    .align SIZE_4_KIB
 boot_pml4:
-    .8byte boot_pdpt + 0x3  # PG_PRESENT | PG_RW
-    .fill 510, 8, 0         # PAGE_MAP_ENTRIES - 2
-    .8byte boot_pml4 + 0x3  # PG_PRESENT | PG_RW
+    .8byte boot_pdpt + PAGE_TABLE_FLAGS
+    .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
+    .8byte boot_pml4 + PAGE_TABLE_FLAGS
 boot_pdpt:
-    .8byte boot_pgd + 0x3   # PG_PRESENT | PG_RW
-    .fill 511, 8, 0         # PAGE_MAP_ENTRIES - 1
+    .8byte boot_pgd + PAGE_TABLE_FLAGS
+    .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
 boot_pgd:
-    .8byte boot_pgt1 + 0x3  # PG_PRESENT | PG_RW
-    .8byte boot_pgt2 + 0x3  # PG_PRESENT | PG_RW
-    .fill 510, 8, 0         # PAGE_MAP_ENTRIES - 1
+    .8byte boot_pgt1 + PAGE_TABLE_FLAGS
+    .8byte boot_pgt2 + PAGE_TABLE_FLAGS
+    .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
 boot_pgt1:
-    .fill 512, 8, 0
+    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
 boot_pgt2:
-    .fill 512, 8, 0
+    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
