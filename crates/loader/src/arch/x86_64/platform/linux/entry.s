@@ -97,19 +97,42 @@ boot_params:
 
     .equiv PAGE_TABLE_FLAGS, PAGE_TABLE_FLAGS_PRESENT | PAGE_TABLE_FLAGS_WRITABLE
 
+    .type .LLEVEL_4_TABLE,@object
+    .section .data..LLEVEL_4_TABLE,"awR",@progbits
     .align SIZE_4_KIB
 .LLEVEL_4_TABLE:
     .quad .LLEVEL_3_TABLE + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
     .quad .LLEVEL_4_TABLE + PAGE_TABLE_FLAGS
+    .size .LLEVEL_4_TABLE, . - .LLEVEL_4_TABLE
+
+    .type .LLEVEL_3_TABLE,@object
+    .section .data..LLEVEL_3_TABLE,"awR",@progbits
+    .align SIZE_4_KIB
 .LLEVEL_3_TABLE:
     .quad .LLEVEL_2_TABLE + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
+    .size .LLEVEL_3_TABLE, . - .LLEVEL_3_TABLE
+
+    .type .LLEVEL_2_TABLE,@object
+    .section .data..LLEVEL_2_TABLE,"awR",@progbits
+    .align SIZE_4_KIB
 .LLEVEL_2_TABLE:
     .quad .LLEVEL_1_TABLE_1 + PAGE_TABLE_FLAGS
     .quad .LLEVEL_1_TABLE_2 + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
+    .size .LLEVEL_2_TABLE, . - .LLEVEL_2_TABLE
+
+    .type .LLEVEL_1_TABLE_1,@object
+    .section .data..LLEVEL_1_TABLE_1,"awR",@progbits
+    .align SIZE_4_KIB
 .LLEVEL_1_TABLE_1:
     .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
+    .size .LLEVEL_1_TABLE_1, . - .LLEVEL_1_TABLE_1
+
+    .type .LLEVEL_1_TABLE_2,@object
+    .section .data..LLEVEL_1_TABLE_2,"awR",@progbits
+    .align SIZE_4_KIB
 .LLEVEL_1_TABLE_2:
     .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
+    .size .LLEVEL_1_TABLE_2, . - .LLEVEL_1_TABLE_2
