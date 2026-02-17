@@ -99,15 +99,15 @@ boot_params:
 
     .align SIZE_4_KIB
 boot_pml4:
-    .8byte boot_pdpt + PAGE_TABLE_FLAGS
+    .quad boot_pdpt + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
-    .8byte boot_pml4 + PAGE_TABLE_FLAGS
+    .quad boot_pml4 + PAGE_TABLE_FLAGS
 boot_pdpt:
-    .8byte boot_pgd + PAGE_TABLE_FLAGS
+    .quad boot_pgd + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
 boot_pgd:
-    .8byte boot_pgt1 + PAGE_TABLE_FLAGS
-    .8byte boot_pgt2 + PAGE_TABLE_FLAGS
+    .quad boot_pgt1 + PAGE_TABLE_FLAGS
+    .quad boot_pgt2 + PAGE_TABLE_FLAGS
     .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
 boot_pgt1:
     .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
