@@ -2,6 +2,8 @@ mod console;
 #[cfg(target_os = "none")]
 mod gdt;
 #[cfg(target_os = "none")]
+mod page_tables;
+#[cfg(target_os = "none")]
 mod paging;
 #[cfg(target_os = "none")]
 mod physicalmem;

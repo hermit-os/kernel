@@ -46,31 +46,6 @@ _start:
 # Bootstrap page tables are loaded and page size
 # extensions (huge pages) enabled.
 cpu_init:
-
-    # initialize page tables
-    # map kernel 1:1
-    push edi
-    push ebx
-    push ecx
-    mov ecx, OFFSET loader_start
-    mov ebx, OFFSET loader_end
-    add ebx, 0x1000
-L0: cmp ecx, ebx
-    jae L1
-    mov eax, ecx
-    and eax, 0xFFFFF000       # page align lower half
-    mov edi, eax
-    shr edi, 9                # (edi >> 12) * 8 (index for boot_pgt)
-    add edi, OFFSET .LLEVEL_1_TABLE_1
-    or eax, 0x3               # set present and writable bits
-    mov [edi], eax
-    add ecx, 0x1000
-    jmp L0
-L1:
-    pop ecx
-    pop ebx
-    pop edi
-
     # check for long mode
 
     # do we have the instruction cpuid?
@@ -100,7 +75,7 @@ L1:
     jz Linvalid # They aren't, there is no long mode.
 
     # Set CR3
-    mov eax, OFFSET .LLEVEL_4_TABLE
+    mov eax, OFFSET {level_4_table}
     mov cr3, eax
 
     # we need to enable PAE modus
@@ -165,61 +140,3 @@ start64:
 .align 8
 mb_info:
     .8byte 0
-
-// Page Tables.
-//
-// This defines the page tables that we switch to by setting `CR3` to `.LLEVEL_4_TABLE`.
-
-    // Page Table Flags.
-    //
-    // For details, see <https://github.com/rust-osdev/x86_64/blob/v0.15.4/src/structures/paging/page_table.rs#L136-L199>.
-    .equiv PAGE_TABLE_FLAGS_PRESENT, 1
-    .equiv PAGE_TABLE_FLAGS_WRITABLE, 1 << 1
-
-    .equiv PAGE_TABLE_ENTRY_COUNT, 512
-
-    .equiv SIZE_4_KIB, 0x1000
-    .equiv SIZE_2_MIB, SIZE_4_KIB * PAGE_TABLE_ENTRY_COUNT
-    .equiv SIZE_1_GIB, SIZE_2_MIB * PAGE_TABLE_ENTRY_COUNT
-
-    .equiv PAGE_TABLE_FLAGS, PAGE_TABLE_FLAGS_PRESENT | PAGE_TABLE_FLAGS_WRITABLE
-
-    .type .LLEVEL_4_TABLE,@object
-    .section .data..LLEVEL_4_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_4_TABLE:
-    .quad .LLEVEL_3_TABLE + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
-    .quad .LLEVEL_4_TABLE + PAGE_TABLE_FLAGS
-    .size .LLEVEL_4_TABLE, . - .LLEVEL_4_TABLE
-
-    .type .LLEVEL_3_TABLE,@object
-    .section .data..LLEVEL_3_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_3_TABLE:
-    .quad .LLEVEL_2_TABLE + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
-    .size .LLEVEL_3_TABLE, . - .LLEVEL_3_TABLE
-
-    .type .LLEVEL_2_TABLE,@object
-    .section .data..LLEVEL_2_TABLE,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_2_TABLE:
-    .quad .LLEVEL_1_TABLE_1 + PAGE_TABLE_FLAGS
-    .quad .LLEVEL_1_TABLE_2 + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
-    .size .LLEVEL_2_TABLE, . - .LLEVEL_2_TABLE
-
-    .type .LLEVEL_1_TABLE_1,@object
-    .section .data..LLEVEL_1_TABLE_1,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_1_TABLE_1:
-    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
-    .size .LLEVEL_1_TABLE_1, . - .LLEVEL_1_TABLE_1
-
-    .type .LLEVEL_1_TABLE_2,@object
-    .section .data..LLEVEL_1_TABLE_2,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_1_TABLE_2:
-    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
-    .size .LLEVEL_1_TABLE_2, . - .LLEVEL_1_TABLE_2
