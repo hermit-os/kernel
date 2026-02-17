@@ -27,7 +27,6 @@ use crate::{BootInfoExt, arch};
 fn main() -> Status {
 	uefi::helpers::init().unwrap();
 	crate::log::init();
-	crate::log_built_info();
 
 	let kernel_image = read_app();
 	let kernel = KernelObject::parse(&kernel_image).unwrap();

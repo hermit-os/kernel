@@ -10,6 +10,8 @@ pub fn init() {
 		.map(|var| var.parse().unwrap())
 		.unwrap_or(LevelFilter::Info);
 	log::set_max_level(level_filter);
+
+	crate::log_built_info();
 }
 
 struct Logger;
