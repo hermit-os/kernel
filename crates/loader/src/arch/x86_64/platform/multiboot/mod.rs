@@ -39,6 +39,7 @@ mod entry {
 static MB_INFO: AtomicPtr<MultibootInfo> = AtomicPtr::new(ptr::null_mut());
 
 unsafe extern "C" fn rust_start(mb_info: *mut MultibootInfo) -> ! {
+	crate::log::init();
 	MB_INFO.store(mb_info, Ordering::Relaxed);
 	unsafe {
 		crate::os::loader_main();

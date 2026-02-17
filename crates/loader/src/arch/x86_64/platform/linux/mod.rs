@@ -38,6 +38,7 @@ mod entry {
 static BOOT_PARAMS: AtomicPtr<BootParams> = AtomicPtr::new(ptr::null_mut());
 
 unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
+	crate::log::init();
 	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
 	unsafe {
 		crate::os::loader_main();

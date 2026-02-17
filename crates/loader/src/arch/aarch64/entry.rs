@@ -55,6 +55,7 @@ pub unsafe fn start_rust() -> ! {
 }
 
 unsafe fn pre_init() -> ! {
+	crate::log::init();
 	info!("Enter startup code");
 
 	/* disable interrupts */

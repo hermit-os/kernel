@@ -49,6 +49,7 @@ pub unsafe extern "C" fn _start(hart_id: usize, fdt: *const u8) -> ! {
 }
 
 extern "C" fn start(hart_id: usize, fdt: *const u8) -> ! {
+	crate::log::init();
 	HART_ID.store(hart_id, Ordering::Relaxed);
 	FDT.store(fdt.cast_mut(), Ordering::Relaxed);
 
