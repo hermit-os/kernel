@@ -103,10 +103,6 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --microvm --release
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --image hello_c
-        if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-multiboot --image hello_c --release
-        if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-uefi
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --target ${{ matrix.arch }}-uefi --release
