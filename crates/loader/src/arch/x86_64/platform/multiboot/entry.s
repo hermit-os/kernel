@@ -61,7 +61,7 @@ L0: cmp ecx, ebx
     and eax, 0xFFFFF000       # page align lower half
     mov edi, eax
     shr edi, 9                # (edi >> 12) * 8 (index for boot_pgt)
-    add edi, OFFSET .LLEVEL_1_TABLE_1
+    add edi, OFFSET .LLEVEL_1_TABLE
     or eax, 0x3               # set present and writable bits
     mov [edi], eax
     add ecx, 0x1000
@@ -205,21 +205,13 @@ mb_info:
     .section .data..LLEVEL_2_TABLE,"awR",@progbits
     .align SIZE_4_KIB
 .LLEVEL_2_TABLE:
-    .quad .LLEVEL_1_TABLE_1 + PAGE_TABLE_FLAGS
-    .quad .LLEVEL_1_TABLE_2 + PAGE_TABLE_FLAGS
-    .fill PAGE_TABLE_ENTRY_COUNT - 2, 8, 0
+    .quad .LLEVEL_1_TABLE + PAGE_TABLE_FLAGS
+    .fill PAGE_TABLE_ENTRY_COUNT - 1, 8, 0
     .size .LLEVEL_2_TABLE, . - .LLEVEL_2_TABLE
 
-    .type .LLEVEL_1_TABLE_1,@object
-    .section .data..LLEVEL_1_TABLE_1,"awR",@progbits
+    .type .LLEVEL_1_TABLE,@object
+    .section .data..LLEVEL_1_TABLE,"awR",@progbits
     .align SIZE_4_KIB
-.LLEVEL_1_TABLE_1:
+.LLEVEL_1_TABLE:
     .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
-    .size .LLEVEL_1_TABLE_1, . - .LLEVEL_1_TABLE_1
-
-    .type .LLEVEL_1_TABLE_2,@object
-    .section .data..LLEVEL_1_TABLE_2,"awR",@progbits
-    .align SIZE_4_KIB
-.LLEVEL_1_TABLE_2:
-    .fill PAGE_TABLE_ENTRY_COUNT, 8, 0
-    .size .LLEVEL_1_TABLE_2, . - .LLEVEL_1_TABLE_2
+    .size .LLEVEL_1_TABLE, . - .LLEVEL_1_TABLE
