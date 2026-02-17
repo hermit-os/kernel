@@ -3,6 +3,15 @@ use core::fmt;
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
+pub fn init() {
+	static LOGGER: Logger = Logger;
+	log::set_logger(&LOGGER).unwrap();
+	let level_filter = option_env!("LOADER_LOG")
+		.map(|var| var.parse().unwrap())
+		.unwrap_or(LevelFilter::Info);
+	log::set_max_level(level_filter);
+}
+
 struct Logger;
 
 impl log::Log for Logger {
@@ -49,13 +58,4 @@ impl fmt::Display for ColorLevel {
 
 fn no_color() -> bool {
 	option_env!("NO_COLOR").is_some_and(|val| !val.is_empty())
-}
-
-pub fn init() {
-	static LOGGER: Logger = Logger;
-	log::set_logger(&LOGGER).unwrap();
-	let level_filter = option_env!("LOADER_LOG")
-		.map(|var| var.parse().unwrap())
-		.unwrap_or(LevelFilter::Info);
-	log::set_max_level(level_filter);
 }
