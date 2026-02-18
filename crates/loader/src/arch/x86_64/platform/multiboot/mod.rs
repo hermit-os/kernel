@@ -41,6 +41,13 @@ static MB_INFO: AtomicPtr<MultibootInfo> = AtomicPtr::new(ptr::null_mut());
 unsafe extern "C" fn rust_start(mb_info: *mut MultibootInfo) -> ! {
 	crate::log::init();
 	MB_INFO.store(mb_info, Ordering::Relaxed);
+
+	let mut mem = Mem;
+	let multiboot = unsafe { Multiboot::from_ref(&mut *mb_info, &mut mem) };
+	let highest_address = multiboot.find_highest_address().align_up(Size2MiB::SIZE) as usize;
+	// Memory after the highest end address is unused and available for the physical memory manager.
+	PhysAlloc::init(highest_address);
+
 	unsafe {
 		crate::os::loader_main();
 	}
@@ -125,8 +132,6 @@ pub fn find_kernel() -> &'static [u8] {
 	info!("Module length: {elf_len:#x}");
 
 	let highest_address = multiboot.find_highest_address().align_up(Size2MiB::SIZE) as usize;
-	// Memory after the highest end address is unused and available for the physical memory manager.
-	PhysAlloc::init(highest_address);
 
 	// Identity-map the ELF header of the first module and until the 2 MiB
 	// mapping starts. We cannot start the 2 MiB mapping right from

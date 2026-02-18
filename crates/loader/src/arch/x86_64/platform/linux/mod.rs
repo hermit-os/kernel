@@ -40,6 +40,14 @@ static BOOT_PARAMS: AtomicPtr<BootParams> = AtomicPtr::new(ptr::null_mut());
 unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
 	crate::log::init();
 	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
+
+	let free_addr = ptr::addr_of!(loader_end)
+		.addr()
+		.align_up(Size2MiB::SIZE as usize);
+	// Memory after the highest end address is unused and available for the physical memory manager.
+	info!("Intializing PhysAlloc with {free_addr:#x}");
+	PhysAlloc::init(free_addr);
+
 	unsafe {
 		crate::os::loader_main();
 	}
@@ -54,13 +62,6 @@ pub fn find_kernel() -> &'static [u8] {
 	let boot_params_ref = unsafe { BootParams::get() };
 
 	assert!(boot_params_ref.supported());
-
-	let free_addr = ptr::addr_of!(loader_end)
-		.addr()
-		.align_up(Size2MiB::SIZE as usize);
-	// Memory after the highest end address is unused and available for the physical memory manager.
-	info!("Intializing PhysAlloc with {free_addr:#x}");
-	PhysAlloc::init(free_addr);
 
 	boot_params_ref.map_ramdisk().unwrap()
 }
