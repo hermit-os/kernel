@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use clap::Args;
@@ -69,6 +68,7 @@ impl Artifact {
 		.into()
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn ci_image(&self, image: &str) -> PathBuf {
 		["data", self.target.arch(), image].iter().collect()
 	}
@@ -96,7 +96,7 @@ impl CmdExt for Cmd<'_> {
 
 	fn target_dir_args(self, artifact: &Artifact) -> Self {
 		if let Some(target_dir) = &artifact.target_dir {
-			self.args::<&[&OsStr]>(&["--target-dir".as_ref(), target_dir.as_ref()])
+			self.arg("--target-dir").arg(target_dir)
 		} else {
 			self
 		}

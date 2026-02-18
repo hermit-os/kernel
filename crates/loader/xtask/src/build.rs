@@ -1,4 +1,5 @@
 use std::env::{self, VarError};
+#[cfg(feature = "ci")]
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -65,14 +66,17 @@ impl Build {
 		Ok(rustflags.join("\x1f"))
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn dist_object(&self) -> PathBuf {
 		self.artifact.dist_object().into()
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn target(&self) -> Target {
 		self.artifact.target
 	}
 
+	#[cfg(feature = "ci")]
 	pub fn ci_image(&self, image: &str) -> PathBuf {
 		self.artifact.ci_image(image)
 	}
