@@ -91,8 +91,6 @@ impl DeviceTree {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	use core::cmp;
-
 	paging::clean_up();
 	// Identity-map the Multiboot information.
 	let mb_info = MB_INFO.load(Ordering::Relaxed);
@@ -126,15 +124,9 @@ pub fn find_kernel() -> &'static [u8] {
 	let elf_len = (first_module.end - first_module.start) as usize;
 	info!("Module length: {elf_len:#x}");
 
-	// Find the maximum end address from the remaining modules
-	let mut end_address = first_module.end;
-	for m in module_iter {
-		end_address = cmp::max(end_address, m.end);
-	}
-
-	let modules_mapping_end = end_address.align_up(Size2MiB::SIZE) as usize;
+	let highest_address = multiboot.find_highest_address().align_up(Size2MiB::SIZE) as usize;
 	// Memory after the highest end address is unused and available for the physical memory manager.
-	PhysAlloc::init(modules_mapping_end);
+	PhysAlloc::init(highest_address);
 
 	// Identity-map the ELF header of the first module and until the 2 MiB
 	// mapping starts. We cannot start the 2 MiB mapping right from
@@ -152,7 +144,7 @@ pub fn find_kernel() -> &'static [u8] {
 	paging::map_range::<Size2MiB>(
 		first_module_mapping_end,
 		first_module_mapping_end,
-		modules_mapping_end,
+		highest_address,
 		PageTableFlags::empty(),
 	);
 
