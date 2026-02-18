@@ -58,8 +58,6 @@ pub fn find_kernel() -> &'static [u8] {
 	let free_addr = ptr::addr_of!(loader_end)
 		.addr()
 		.align_up(Size2MiB::SIZE as usize);
-	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
-	let free_addr = free_addr.max(0x800000);
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	info!("Intializing PhysAlloc with {free_addr:#x}");
 	PhysAlloc::init(free_addr);

@@ -133,10 +133,8 @@ pub fn find_kernel() -> &'static [u8] {
 	}
 
 	let modules_mapping_end = end_address.align_up(Size2MiB::SIZE) as usize;
-	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
-	let free_memory_address = cmp::max(modules_mapping_end, 0x800000);
 	// Memory after the highest end address is unused and available for the physical memory manager.
-	PhysAlloc::init(free_memory_address);
+	PhysAlloc::init(modules_mapping_end);
 
 	// Identity-map the ELF header of the first module and until the 2 MiB
 	// mapping starts. We cannot start the 2 MiB mapping right from
