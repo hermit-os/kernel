@@ -26,7 +26,7 @@ unsafe extern "C" {
 mod entry {
 	core::arch::global_asm!(
 		include_str!("entry.s"),
-		loader_main = sym super::rust_start,
+		rust_start = sym super::rust_start,
 		stack = sym crate::arch::x86_64::stack::STACK,
 		stack_top_offset = const crate::arch::x86_64::stack::Stack::top_offset(),
 		level_4_table = sym crate::arch::x86_64::page_tables::LEVEL_4_TABLE,
@@ -39,6 +39,7 @@ mod entry {
 static MB_INFO: AtomicPtr<MultibootInfo> = AtomicPtr::new(ptr::null_mut());
 
 unsafe extern "C" fn rust_start(mb_info: *mut MultibootInfo) -> ! {
+	crate::log::init();
 	MB_INFO.store(mb_info, Ordering::Relaxed);
 	unsafe {
 		crate::os::loader_main();

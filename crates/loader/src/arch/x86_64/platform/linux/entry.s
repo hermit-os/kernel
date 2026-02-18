@@ -46,6 +46,6 @@ start64:
     add rsp, {stack_top_offset}
 
     # jump to the boot processors's C code
-    jmp {loader_main}
+    jmp {rust_start}
 invalid:
     jmp invalid

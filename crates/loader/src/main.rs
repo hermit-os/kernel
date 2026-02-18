@@ -21,36 +21,6 @@ mod os;
 #[cfg(any(target_os = "uefi", all(target_arch = "x86_64", target_os = "none")))]
 extern crate alloc;
 
-mod built_info {
-	include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
-
-fn log_built_info() {
-	let version = env!("CARGO_PKG_VERSION");
-	info!("Hermit Loader version {version}");
-	if let Some(git_version) = built_info::GIT_VERSION {
-		let dirty = if built_info::GIT_DIRTY == Some(true) {
-			" (dirty)"
-		} else {
-			""
-		};
-
-		let opt_level = if built_info::OPT_LEVEL == "3" {
-			format_args!("")
-		} else {
-			format_args!(" (opt-level={})", built_info::OPT_LEVEL)
-		};
-
-		info!("Git version: {git_version}{dirty}{opt_level}");
-	}
-	let arch = built_info::TARGET.split_once('-').unwrap().0;
-	info!("Architecture: {arch}");
-	info!("Operating system: {}", built_info::CFG_OS);
-	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
-	info!("Built with {}", built_info::RUSTC_VERSION);
-	info!("Built on {}", built_info::BUILT_TIME_UTC);
-}
-
 trait BootInfoExt {
 	fn write(self) -> &'static RawBootInfo;
 }
