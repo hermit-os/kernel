@@ -5,7 +5,12 @@ edition = "2024"
 
 [features]
 default = ["ci"]
-ci = ["dep:ovmf-prebuilt", "dep:sysinfo", "dep:ureq", "dep:wait-timeout"]
+ci = [
+	"dep:ovmf-prebuilt",
+	"dep:sysinfo",
+	"dep:ureq",
+	"dep:wait-timeout",
+]
 
 [dependencies]
 anyhow = "1.0"

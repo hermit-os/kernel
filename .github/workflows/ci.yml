@@ -69,12 +69,14 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-cargofmt
       - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add rustfmt
       - run: |
-          cargo fmt --all --check
-          cargo fmt --all --check --manifest-path hermit-builtins/Cargo.toml
+          cargo cargofmt --all --check
+          cargo cargofmt --all --check --manifest-path hermit-builtins/Cargo.toml
 
   lock-file:
     name: Lock file
