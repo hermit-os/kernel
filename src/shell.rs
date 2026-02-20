@@ -45,7 +45,7 @@ pub(crate) fn init() {
 	shell.commands.insert(
 		"shutdown",
 		ShellCommand {
-			help: "Shutdown HermitOS",
+			help: "Shutdown Hermit",
 			func: |_, _| crate::scheduler::shutdown(0),
 			aliases: &["s"],
 		},

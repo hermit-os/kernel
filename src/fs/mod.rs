@@ -351,7 +351,7 @@ pub(crate) fn init() {
 		.expect("Unable to create /proc");
 
 	if let Ok(mut file) = File::create("/proc/version") {
-		if write!(file, "HermitOS version {VERSION} # UTC {UTC_BUILT_TIME}").is_err() {
+		if write!(file, "Hermit version {VERSION} # UTC {UTC_BUILT_TIME}").is_err() {
 			error!("Unable to write in /proc/version");
 		}
 	} else {
