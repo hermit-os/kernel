@@ -4,7 +4,7 @@ use core::str::FromStr;
 
 use cfg_if::cfg_if;
 use smoltcp::iface::{Config, Interface, SocketSet};
-#[cfg(feature = "trace")]
+#[cfg(feature = "net-trace")]
 use smoltcp::phy::Tracer;
 use smoltcp::phy::{Device, Medium};
 #[cfg(feature = "dhcpv4")]
@@ -42,19 +42,19 @@ impl<'a> NetworkInterface<'a> {
 				feature = "rtl8139",
 				feature = "virtio-net",
 			))] {
-				#[cfg_attr(feature = "trace", expect(unused_mut))]
+				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
 				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
 					return NetworkState::InitializationFailed;
 				};
 			} else {
-				#[cfg_attr(feature = "trace", expect(unused_mut))]
+				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
 				let mut device = LoopbackDriver::new();
 			}
 		}
 
 		let mac = device.get_mac_address();
 
-		#[cfg(feature = "trace")]
+		#[cfg(feature = "net-trace")]
 		let mut device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
 
 		let ethernet_addr = EthernetAddress(mac);

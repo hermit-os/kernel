@@ -46,6 +46,7 @@ idle-poll = []
 instrument-mcount = [] # Inserts function instrument code for mcount-based tracing
 kernel-stack = []
 net = []
+net-trace = ["smoltcp?/log", "smoltcp?/verbose"]
 mman = []
 mmap = ["mman"] # Deprecated in favor of mman
 newlib = []
@@ -57,7 +58,6 @@ shell = ["simple-shell"]
 smp = ["acpi"] # on x86_64, SMP only works together with ACPI
 strace = []
 tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
-trace = ["smoltcp?/log", "smoltcp?/verbose"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 vga = []
 virtio = ["dep:virtio", "dep:mem-barrier"]
@@ -71,6 +71,7 @@ warn-prebuilt = []
 console = ["virtio-console"]
 fs = ["virtio-fs"]
 fuse = ["virtio-fs"]
+trace = ["net-trace"]
 vsock = ["virtio-vsock"]
 
 [lints.rust]
