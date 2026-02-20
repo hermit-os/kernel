@@ -9,6 +9,7 @@
 )]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![feature(linkage)]
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_as_bytes)]
