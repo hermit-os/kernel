@@ -1,3 +1,11 @@
+//! Memory management syscalls.
+//!
+//! These system calls are similar to [sys/mman.h].
+//!
+//! <div class="warning">These system calls are not very POSIX-like yet!</div>
+//!
+//! [sys/mman.h]: https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/sys_mman.h.html
+
 use core::ffi::{c_int, c_void};
 
 use align_address::Align;
