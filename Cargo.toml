@@ -50,43 +50,222 @@ default = [
 	"virtio-net",
 	"virtio-vsock",
 ]
+
+#! ### Syscall Features
+
+## Enables multiple address spaces.
+##
+## This feature makes Hermit use traditional system calls for communicating with the kernel
+## instead of using function calls.
+##
+## Note that this feature is not complete yet.
 common-os = []
+
+## Enables support for memory management system calls.
+##
+## This feature enables functions similar to [sys/mman.h].
+##
+## For details, see [`syscalls::mman`].
+##
+## [sys/mman.h]: https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/sys_mman.h.html
 mman = []
+
+## Enables support for C and C++ applications via Hermit's [Newlib].
+##
+## For details of running C and C++ applications with Hermit, see [hermit-c].
+##
+## [Newlib]: https://github.com/hermit-os/newlib
+## [hermit-c]: https://github.com/hermit-os/hermit-c
 newlib = []
+
+#! ### Hardware Features
+#!
+#! [microvm]: https://www.qemu.org/docs/master/system/i386/microvm.html
+#! [Uhyve]: https://github.com/hermit-os/uhyve
+
+## Enables _Advanced Configuration and Power Interface_ ([ACPI]) support.
+##
+## This is not useful on [microvm]s and [Uhyve].
+##
+## [ACPI]: https://uefi.org/specs/ACPI/6.6/
 acpi = []
+
+## Enables using the [FSGSBASE] instruction family.
+##
+## This feature only applies to x86-64.
+##
+## Using the FSGSBASE instruction family over RDMSR and WRMSR is more efficient.
+##
+## According to QEMU, the FSGSBASE instruction family is supported since at least Intel's IvyBridge
+## (2012) and AMD's EPYC (2017).
+##
+## [FSGSBASE]: https://www.intel.com/content/www/us/en/developer/articles/technical/software-security-guidance/best-practices/guidance-enabling-fsgsbase.html
 fsgsbase = []
+
+## Enables _Peripheral Component Interconnect_ ([PCI]) support.
+##
+## This is not useful on [microvm]s.
+##
+## If this feature is disabled, MMIO-based transports are used for devices.
+##
+## [PCI]: https://pcisig.com/
 pci = ["virtio?/pci"]
+
+## Enables semihosting support.
+##
+## Semihosting allows communicating with the host for
+##
+## - `stdin`, `stdout`, `stderr`,
+## - accessing the host file system,
+## - shutting down with an exit code,
+## - getting program arguments,
+## - getting the time, and
+## - generating random data.
+##
+## Note that Hermit currently only supports shutting down with an exit code.
+##
+## For details, see the [`semihosting`] crate, [Semihosting for AArch32 and Aarch64], and
+## [RISC-V Semihosting].
+##
+## [`semihosting`]: https://docs.rs/semihosting
+## [Semihosting for AArch32 and Aarch64]: https://github.com/riscv-non-isa/riscv-semihosting/releases/download/1.0/riscv-semihosting.pdf
+## [RISC-V Semihosting]: https://github.com/ARM-software/abi-aa/tree/2025Q4/semihosting
 semihosting = ["dep:semihosting"]
+
+## Enables _symmetric multiprocessing_ (SMP) support.
+##
+## This allows utilizing _multi-core processors_ (MCP).
+##
+## This currently enables the `acpi` feature, since ACPI is used for booting the
+## _application processor_s (AP) from the _boot-strap processor_ (BSP).
 smp = ["acpi"]
+
+#! ### Network Features
+
+## Enables TCP support.
 tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
+
+## Enables UDP support.
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
+
+## Enables DHCPv4 support.
 dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
+
+## Enables DNS support.
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
+
+## Enables pretty-printing the network traffic to the serial device.
 net-trace = ["smoltcp?/log", "smoltcp?/verbose"]
+
+#! ### Network Drivers
+#!
+#! Currently, Hermit does not support multiple network drivers at the same time.
+#!
+#! If none of these drivers is enabled, but the `net` feature is active, a loopback driver
+#! will be enabled as a fallback.
+
+## Enables the virtio-net driver.
 virtio-net = ["net", "virtio"]
+
+## Enables the RTL8139 network driver.
 rtl8139 = ["net", "pci", "volatile/derive", "endian-num"]
+
+## Enables the Cadence Gigabit Ethernet MAC (GEM) network driver.
 gem-net = ["net", "dep:tock-registers"]
+
+#! ### Virtio Drivers
+
+## Enables the virtio-console driver.
 virtio-console = ["virtio"]
+
+## Enables the virtio-fs driver.
 virtio-fs = ["virtio", "dep:fuse-abi", "fuse-abi/num_enum"]
+
+## Enables the virtio-vsock driver.
 virtio-vsock = ["virtio", "pci"]
+
+#! ### Other Drivers
+
+## Enables the _Video Graphics Array_ (VGA) driver.
+##
+## This is only useful on PCs (x86-64).
 vga = []
+
+#! ### Performance Features
+
+## Disables putting the CPU to sleep.
+##
+## Compared to waiting for interrupts, this improves performance but maxes out CPU utilization.
 idle-poll = []
+
+#! ### Debugging Features
+
+## Enables regularly printing allocation statistics.
 alloc-stats = ["talc/counters"]
+
+## Inserts function instrument code for mcount-based tracing.
+##
+## This allows instrumentation-based profiling of the kernel.
+##
+## For details, see [rftrace].
+##
+## [rftrace]: https://github.com/hermit-os/rftrace
 instrument-mcount = []
+
+## Enables switching to a Kernel-specific stack in system calls.
+##
+## This can be useful to avoid and debug stack overflows.
+##
+## This only implemented for x86-64 and AArch64 CPUs.
 kernel-stack = []
+
+## Enables a kernel shell.
+##
+## The shell can be used for displaying the current number of received interrupts and for shutting
+## down the system.
 shell = ["simple-shell"]
+
+## Enables printing system calls.
 strace = []
+
+#! ### Internal Features
+
+## Enables the network backend.
+##
+## This is automatically enabled by any network feature.
 net = []
+
+## Enables the virtio driver backend.
+##
+## This is automatically enabled by any virtio driver.
 virtio = ["dep:virtio", "dep:mem-barrier"]
+
+## Enables a warning that this libhermit.a was prebuilt.
 warn-prebuilt = []
 
-# Deprecated
+#! ### Deprecated Features
+
+## An alias for the `virtio-console` feature.
 console = ["virtio-console"]
+
+## An alias for the `virtio-fs` feature.
 fs = ["virtio-fs"]
+
+## An alias for the `virtio-fs` feature.
 fuse = ["virtio-fs"]
+
+## An alias for the `mman` feature.
 mmap = ["mman"]
+
+## Configures the kernel to be used via its unstable Rust API.
+##
+## This feature is not needed to use the kernel via its unstable Rust API.
 nostd = []
+
+## An alias for the `net-trace` feature.
 trace = ["net-trace"]
+
+## An alias for the `virtio-vsock` feature.
 vsock = ["virtio-vsock"]
 
 [lints.rust]
