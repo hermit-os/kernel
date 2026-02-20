@@ -34,7 +34,19 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["kernel-stack", "pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "virtio-fs", "virtio-net", "virtio-vsock"]
+default = [
+	"acpi",
+	"dhcpv4",
+	"fsgsbase",
+	"kernel-stack",
+	"pci-ids",
+	"pci",
+	"smp",
+	"tcp",
+	"virtio-fs",
+	"virtio-net",
+	"virtio-vsock",
+]
 acpi = []
 alloc-stats = ["talc/counters"]
 common-os = []
