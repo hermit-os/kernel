@@ -27,6 +27,14 @@
 //! cargo xtask build --help
 //! ```
 //!
+//! # Features
+//!
+#![cfg_attr(
+	not(feature = "document-features"),
+	doc = "Activate the `document-features` Cargo feature to see feature docs here."
+)]
+#![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
+//!
 //! [hermit-rs]: https://github.com/hermit-os/hermit-rs
 //! [hermit-c]: https://github.com/hermit-os/hermit-c
 
