@@ -18,6 +18,9 @@ exclude = [
 	".gitignore",
 ]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 name = "hermit"
 
