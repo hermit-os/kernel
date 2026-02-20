@@ -1,6 +1,34 @@
-//! First version is derived and adapted for Hermit from
-//! Philipp Oppermann's excellent series of blog posts (<http://blog.phil-opp.com/>)
-//! and Eric Kidd's toy OS (<https://github.com/emk/toyos-rs>).
+//! The Hermit kernel.
+//!
+//! This _library operating system_ (libOS) compiles to a static library
+//! (libhermit.a) that applications can link against to create a _Unikernel_.
+//!
+//! The API documented here does not matter to such an application.
+//! Such an application would use it's languages standard library which
+//! internally calls this kernel's system call functions ([`syscalls`]).
+//!
+//! # Using Hermit
+//!
+//! To run a Rust application with Hermit, see [hermit-rs].
+//!
+//! To run a C or C++ application with Hermit, see [hermit-c].
+//!
+//! # Building the kernel manually
+//!
+//! You can build the kernel with default features for x86-64 like this:
+//!
+//! ```sh
+//! cargo xtask build --arch x86_64
+//! ```
+//!
+//! For more information, run:
+//!
+//! ```
+//! cargo xtask build --help
+//! ```
+//!
+//! [hermit-rs]: https://github.com/hermit-os/hermit-rs
+//! [hermit-c]: https://github.com/hermit-os/hermit-c
 
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(
