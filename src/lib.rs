@@ -237,15 +237,6 @@ fn boot_processor_main() -> ! {
 	#[cfg(feature = "smp")]
 	synch_all_cores();
 
-	#[cfg(feature = "pci")]
-	info!("Compiled with PCI support");
-	#[cfg(all(feature = "acpi", target_arch = "x86_64"))]
-	info!("Compiled with ACPI support");
-	#[cfg(all(feature = "fsgsbase", target_arch = "x86_64"))]
-	info!("Compiled with FSGSBASE support");
-	#[cfg(feature = "smp")]
-	info!("Compiled with SMP support");
-
 	if kernel::is_uhyve_with_pci() || !env::is_uhyve() {
 		#[cfg(feature = "pci")]
 		crate::drivers::pci::print_information();
