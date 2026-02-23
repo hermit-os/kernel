@@ -137,7 +137,7 @@ pub(crate) fn init() {
 
 	#[cfg(feature = "common-os")]
 	{
-		info!("Using HermitOS as common OS!");
+		info!("Using Hermit as common OS!");
 
 		// we reserve at least 75% of the memory for the user space
 		let reserve: usize = (avail_mem * 75) / 100;
