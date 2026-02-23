@@ -274,4 +274,17 @@ pub(crate) fn init() {
 			.mount(mount_point, obj)
 			.unwrap();
 	}
+
+	#[cfg(feature = "uhyve-tmp")]
+	{
+		info!("Mounting /tmp as uhyve filesystem");
+		fs::FILESYSTEM
+			.get()
+			.unwrap()
+			.mount(
+				"/tmp",
+				Box::new(UhyveDirectory::new(Some("/tmp".to_string()))),
+			)
+			.unwrap();
+	}
 }

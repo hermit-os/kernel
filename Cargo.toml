@@ -58,6 +58,7 @@ smp = ["acpi"] # on x86_64, SMP only works together with ACPI
 strace = []
 tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
 trace = ["smoltcp?/log", "smoltcp?/verbose"]
+uhyve-tmp = []
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 vga = []
 virtio = ["dep:virtio", "dep:mem-barrier"]
