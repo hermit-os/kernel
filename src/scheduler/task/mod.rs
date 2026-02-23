@@ -708,7 +708,7 @@ impl BlockedTaskQueue {
 
 		let new_task_wakeup_time = self.list.front().and_then(|task| task.wakeup_time);
 		cfg_if::cfg_if! {
-			if 	#[cfg(feature = "net")] {
+			if #[cfg(feature = "net")] {
 				let network_wakeup_time = self.network_wakeup_time;
 			} else {
 				let network_wakeup_time = None;

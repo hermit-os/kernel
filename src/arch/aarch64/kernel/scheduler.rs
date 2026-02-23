@@ -303,10 +303,8 @@ impl TaskFrame for Task {
 				(*state).tpidr_el0 = tls.thread_ptr().expose_provenance() as u64;
 			}
 
-			/*
-			 * The elr_el1 needs to hold the address of the
-			 * first function to be called when returning from exception handler.
-			 */
+			// The elr_el1 needs to hold the address of the
+			// first function to be called when returning from exception handler.
 			(*state).elr_el1 = task_start;
 			(*state).x0 = func as usize as u64; // use second argument to transfer the entry point
 			(*state).x1 = arg as u64;
