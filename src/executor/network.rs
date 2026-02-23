@@ -66,9 +66,9 @@ pub(crate) static NIC: InterruptTicketMutex<NetworkState<'_>> =
 pub(crate) struct NetworkInterface<'a> {
 	pub(super) iface: smoltcp::iface::Interface,
 	pub(super) sockets: SocketSet<'a>,
-	#[cfg(feature = "trace")]
+	#[cfg(feature = "net-trace")]
 	pub(super) device: smoltcp::phy::Tracer<NetworkDevice>,
-	#[cfg(not(feature = "trace"))]
+	#[cfg(not(feature = "net-trace"))]
 	pub(super) device: NetworkDevice,
 	#[cfg(feature = "dhcpv4")]
 	pub(super) dhcp_handle: SocketHandle,
@@ -344,16 +344,16 @@ impl<'a> NetworkInterface<'a> {
 		feature = "virtio-net",
 	))]
 	fn handle_interrupt(&mut self) {
-		#[cfg(feature = "trace")]
+		#[cfg(feature = "net-trace")]
 		self.device.get_mut().handle_interrupt();
-		#[cfg(not(feature = "trace"))]
+		#[cfg(not(feature = "net-trace"))]
 		self.device.handle_interrupt();
 	}
 
 	pub(crate) fn set_polling_mode(&mut self, value: bool) {
-		#[cfg(feature = "trace")]
+		#[cfg(feature = "net-trace")]
 		self.device.get_mut().set_polling_mode(value);
-		#[cfg(not(feature = "trace"))]
+		#[cfg(not(feature = "net-trace"))]
 		self.device.set_polling_mode(value);
 	}
 }
