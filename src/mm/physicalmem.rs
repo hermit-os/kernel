@@ -62,12 +62,14 @@ pub fn total_memory_size() -> usize {
 }
 
 pub unsafe fn map_frame_range(frame_range: PageRange) {
-	cfg_if::cfg_if! {
-		if #[cfg(target_arch = "aarch64")] {
+	cfg_select! {
+		target_arch = "aarch64" => {
 			type IdentityPageSize = crate::arch::mm::paging::BasePageSize;
-		} else if #[cfg(target_arch = "riscv64")] {
+		}
+		target_arch = "riscv64" => {
 			type IdentityPageSize = crate::arch::mm::paging::HugePageSize;
-		} else if #[cfg(target_arch = "x86_64")] {
+		}
+		target_arch = "x86_64" => {
 			type IdentityPageSize = crate::arch::mm::paging::LargePageSize;
 		}
 	}
@@ -234,11 +236,12 @@ unsafe fn init() {
 		return;
 	}
 
-	cfg_if::cfg_if! {
-		if #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))] {
+	cfg_select! {
+		any(target_arch = "aarch64", target_arch = "riscv64") => {
 			error!("Could not detect physical memory from FDT");
 			unsafe { detect_from_limits().unwrap(); }
-		} else {
+		}
+		_ => {
 			panic!("Could not detect physical memory from FDT");
 		}
 	}

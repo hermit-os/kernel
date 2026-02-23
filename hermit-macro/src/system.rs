@@ -174,13 +174,14 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 
 			#kernel_func
 
-			cfg_if::cfg_if! {
-				if #[cfg(all(
+			cfg_select! {
+				all(
 					feature = "kernel-stack",
 					not(any(target_arch = "riscv64", feature = "common-os")),
-				))] {
+				) => {
 					unsafe { crate::arch::kernel::kernel_stack::#kernel_function_ident(#(#args,)* #kernel_ident) }
-				} else {
+				}
+				_ => {
 					#unsafety { #kernel_ident(#(#args),*) }
 				}
 			}
@@ -254,13 +255,14 @@ mod tests {
 					ret
 				}
 
-				cfg_if::cfg_if! {
-					if #[cfg(all(
+				cfg_select! {
+					all(
 						feature = "kernel-stack",
 						not(any(target_arch = "riscv64", feature = "common-os")),
-					))] {
+					) => {
 						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(a, b, _sys_test) }
-					} else {
+					}
+					_ => {
 						{ _sys_test(a, b) }
 					}
 				}
@@ -322,13 +324,14 @@ mod tests {
 					ret
 				}
 
-				cfg_if::cfg_if! {
-					if #[cfg(all(
+				cfg_select! {
+					all(
 						feature = "kernel-stack",
 						not(any(target_arch = "riscv64", feature = "common-os")),
-					))] {
+					) => {
 						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(a, b, _sys_test) }
-					} else {
+					}
+					_ => {
 						unsafe { _sys_test(a, b) }
 					}
 				}
@@ -392,13 +395,14 @@ mod tests {
 					ret
 				}
 
-				cfg_if::cfg_if! {
-					if #[cfg(all(
+				cfg_select! {
+					all(
 						feature = "kernel-stack",
 						not(any(target_arch = "riscv64", feature = "common-os")),
-					))] {
+					) => {
 						unsafe { crate::arch::kernel::kernel_stack::kernel_function2(a, b, _sys_test) }
-					} else {
+					}
+					_ => {
 						{ _sys_test(a, b) }
 					}
 				}

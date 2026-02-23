@@ -57,24 +57,26 @@ pub(crate) fn mtu() -> u16 {
 	u16::from_str(&my_mtu).unwrap()
 }
 
-cfg_if::cfg_if! {
-	if #[cfg(all(
+cfg_select! {
+	all(
 		not(feature = "pci"),
 		any(
 			all(target_arch = "riscv64", feature = "gem-net"),
 			feature = "virtio-net",
 		),
-	))] {
+	) => {
 		pub(crate) use crate::arch::kernel::mmio::NetworkDevice;
-	} else if #[cfg(all(
+	}
+	all(
 		feature = "pci",
 		any(
 			feature = "rtl8139",
 			feature = "virtio-net",
 		),
-	))] {
+	) => {
 		pub(crate) use crate::drivers::pci::NetworkDevice;
-	} else {
+	}
+	_ => {
 		pub(crate) use loopback::NetworkDevice;
 	}
 }

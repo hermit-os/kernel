@@ -7,10 +7,11 @@
 
 #![allow(dead_code)]
 
-cfg_if::cfg_if! {
-	if #[cfg(feature = "pci")] {
+cfg_select! {
+	feature = "pci" => {
 		mod pci;
-	} else {
+	}
+	_ => {
 		mod mmio;
 	}
 }

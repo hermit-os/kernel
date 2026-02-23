@@ -229,10 +229,11 @@ pub fn halt() {
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
-	cfg_if::cfg_if! {
-		if #[cfg(feature = "semihosting")] {
+	cfg_select! {
+		feature = "semihosting" => {
 			semihosting::process::exit(error_code)
-		} else {
+		}
+		_ => {
 			// use SBI shutdown
 			match sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason).into_result() {
 				Ok(_) => unreachable!("System reset shouldn't have returned with success."),

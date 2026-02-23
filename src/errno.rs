@@ -708,10 +708,11 @@ pub extern "C" fn sys_get_errno() -> i32 {
 #[cfg(not(feature = "nostd"))]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_errno() -> i32 {
-	cfg_if::cfg_if! {
-		if #[cfg(any(feature = "common-os", target_arch = "riscv64"))] {
+	cfg_select! {
+		any(feature = "common-os", target_arch = "riscv64") => {
 			0
-		} else {
+		}
+		_ => {
 			unsafe { *sys_errno_location() }
 		}
 	}
@@ -727,10 +728,11 @@ pub(crate) trait ToErrno {
 		Self: Sized,
 	{
 		if let Some(errno) = self.to_errno() {
-			cfg_if::cfg_if! {
-				if #[cfg(any(feature = "common-os", feature = "nostd", target_arch = "riscv64"))] {
+			cfg_select! {
+				any(feature = "common-os", feature = "nostd", target_arch = "riscv64") => {
 					let _ = errno;
-				} else {
+				}
+				_ => {
 					unsafe {
 						*sys_errno_location() = errno;
 					}
