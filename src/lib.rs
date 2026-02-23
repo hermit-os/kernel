@@ -55,7 +55,6 @@ use arch::core_local::*;
 pub(crate) use crate::arch::*;
 pub use crate::config::DEFAULT_STACK_SIZE;
 pub(crate) use crate::config::*;
-pub use crate::fs::create_file;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
 #[macro_use]
