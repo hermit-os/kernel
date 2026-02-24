@@ -175,7 +175,7 @@ fn detect_interrupt(
 		// The 3rd cell is the flags, encoded as follows:
 		// bits[3:0] trigger type and level flags.
 		//		1 = low-to-high edge triggered
-		// 		2 = high-to-low edge triggered (invalid for SPIs)
+		//		2 = high-to-low edge triggered (invalid for SPIs)
 		//		4 = active high level-sensitive
 		//		8 = active low level-sensitive (invalid for SPIs).
 		// bits[15:8] PPI interrupt cpu mask.  Each bit corresponds to each of

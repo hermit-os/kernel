@@ -84,7 +84,7 @@ register_bitfields! [
 			DBW64 = 1,
 			DBW128 = 2
 		],
-		MDCCLKDIV 	OFFSET(18) NUMBITS(3) [
+		MDCCLKDIV	OFFSET(18) NUMBITS(3) [
 			CLK_DIV8 = 0,
 			CLK_DIV16 = 1,
 			CLK_DIV32 = 2,
@@ -659,9 +659,6 @@ pub fn init_device(
 		// Program the Network Control Register
 
 		// Enable MDIO and enable transmitter/receiver
-		// (*gem).network_control.modify(
-		// 	NetworkControl::MDEN::SET + NetworkControl::TXEN::SET + NetworkControl::RXEN::SET,
-		// );
 		(*gem).network_control.modify(NetworkControl::MDEN::SET);
 
 		// PHY Initialization

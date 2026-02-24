@@ -417,12 +417,6 @@ where
 	) {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
 
-		// trace!(
-		// 	"Mapping frame {:#X} to page {:#X}",
-		// 	physical_address,
-		// 	page.virtual_address,
-		// );
-
 		if L::LEVEL > S::MAP_LEVEL {
 			let index = page.table_index::<L>();
 
@@ -567,11 +561,6 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 			}
 			let ppn = pte.address().as_u64();
 			for j in i..PAGE_LEVELS {
-				// trace!(
-				// 	"ppn: {:#X}, {:#X}",
-				// 	ppn,
-				// 	ppn & (PAGE_MAP_MASK << (PAGE_BITS + j * PAGE_MAP_BITS)) as u64
-				// );
 				phys_address |= ppn & (PAGE_MAP_MASK << (PAGE_BITS + j * PAGE_MAP_BITS)) as u64;
 			}
 			return Some(PhysAddr::new(phys_address));

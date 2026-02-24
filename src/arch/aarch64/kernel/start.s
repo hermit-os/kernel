@@ -281,9 +281,9 @@ el1_error_invalid:
 .global vector_table
 vector_table:
 /* Current EL with SP0 */
-ventry el1_sp0_sync  	        // Synchronous EL1t
-ventry el1_sp0_irq	        // IRQ EL1t
-ventry el1_sp0_fiq   	        // FIQ EL1t
+ventry el1_sp0_sync             // Synchronous EL1t
+ventry el1_sp0_irq              // IRQ EL1t
+ventry el1_sp0_fiq              // FIQ EL1t
 ventry el1_sp0_error            // Error EL1t
 
 /* Current EL with SPx */
