@@ -111,6 +111,13 @@ fsgsbase = []
 ## [PCI]: https://pcisig.com/
 pci = ["virtio?/pci"]
 
+## Embeds the [PCI ID] database into the kernel.
+##
+## This enables displaying human-readable names for PCI devices.
+##
+## [PCI ID]: https://pci-ids.ucw.cz/
+pci-ids = ["dep:pci-ids"]
+
 ## Enables semihosting support.
 ##
 ## Semihosting allows communicating with the host for
