@@ -164,6 +164,12 @@ dns = ["net", "smoltcp", "smoltcp/socket-dns"]
 ## Enables pretty-printing the network traffic to the serial device.
 net-trace = ["smoltcp?/log", "smoltcp?/verbose"]
 
+## Enables generation of packet capture files. The files are placed under the
+## mount point on the host, with the name provided via the HERMIT_PCAP_NAME environment
+## variable, or the device name by default.
+write-pcap-file = []
+
+
 #! ### Network Drivers
 #!
 #! Currently, Hermit does not support multiple network drivers at the same time.
