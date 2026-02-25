@@ -45,7 +45,11 @@ pub(crate) enum NetworkState<'a> {
 	feature = "virtio-net",
 ))]
 pub(crate) fn network_handler() {
-	NIC.lock().as_nic_mut().unwrap().handle_interrupt();
+	// It is possible for us to receive interrupts before we are done with initializing the network interface.
+	// This may for example be caused by an interrupt that was meant for the filesystem driver.
+	if let Ok(nic) = NIC.lock().as_nic_mut() {
+		nic.handle_interrupt();
+	}
 }
 
 impl<'a> NetworkState<'a> {
@@ -63,13 +67,24 @@ static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(0);
 pub(crate) static NIC: InterruptTicketMutex<NetworkState<'_>> =
 	InterruptTicketMutex::new(NetworkState::Missing);
 
+type MaybePcapDevice = cfg_select! {
+		feature = "write-pcap-file" => {
+			smoltcp::phy::PcapWriter<NetworkDevice, crate::executor::device::pcap_writer::FileSink>
+		}
+		_ => NetworkDevice,
+};
+
+type MaybeTracerDevice = cfg_select! {
+		feature = "net-trace" => {
+			smoltcp::phy::Tracer<MaybePcapDevice>
+		}
+		_ => MaybePcapDevice,
+};
+
 pub(crate) struct NetworkInterface<'a> {
 	pub(super) iface: smoltcp::iface::Interface,
 	pub(super) sockets: SocketSet<'a>,
-	#[cfg(feature = "net-trace")]
-	pub(super) device: smoltcp::phy::Tracer<NetworkDevice>,
-	#[cfg(not(feature = "net-trace"))]
-	pub(super) device: NetworkDevice,
+	pub(super) device: MaybeTracerDevice,
 	#[cfg(feature = "dhcpv4")]
 	pub(super) dhcp_handle: SocketHandle,
 	#[cfg(feature = "dns")]
@@ -368,24 +383,21 @@ impl<'a> NetworkInterface<'a> {
 		feature = "virtio-net",
 	))]
 	fn handle_interrupt(&mut self) {
-		cfg_select! {
-			feature = "net-trace" => {
-				self.device.get_mut().handle_interrupt();
-			}
-			_ => {
-				self.device.handle_interrupt();
-			}
-		}
+		self.get_inner_device().handle_interrupt();
 	}
 
 	pub(crate) fn set_polling_mode(&mut self, value: bool) {
-		cfg_select! {
-			feature = "net-trace" => {
-				self.device.get_mut().set_polling_mode(value);
-			}
-			_ => {
-				self.device.set_polling_mode(value);
-			}
-		}
+		self.get_inner_device().set_polling_mode(value);
+	}
+
+	/// Gets the device inside the [smoltcp::phy::Tracer] and [smoltcp::phy::PcapWriter] layers.
+	fn get_inner_device(&mut self) -> &mut impl NetworkDriver {
+		let device = &mut self.device;
+		#[cfg(feature = "net-trace")]
+		let device = device.get_mut();
+		#[cfg(feature = "write-pcap-file")]
+		let device = device.get_mut();
+
+		device
 	}
 }

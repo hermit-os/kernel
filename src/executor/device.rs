@@ -6,6 +6,8 @@ use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "net-trace")]
 use smoltcp::phy::Tracer;
 use smoltcp::phy::{Device, Medium};
+#[cfg(feature = "write-pcap-file")]
+use smoltcp::phy::{PcapMode, PcapWriter};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 #[cfg(all(feature = "dns", not(feature = "dhcpv4")))]
@@ -16,6 +18,8 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
+#[cfg(feature = "write-pcap-file")]
+use crate::drivers::Driver;
 use crate::drivers::net::NetworkDriver;
 
 cfg_select! {
@@ -42,18 +46,29 @@ impl<'a> NetworkInterface<'a> {
 				feature = "rtl8139",
 				feature = "virtio-net",
 			) => {
-				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
+				#[cfg_attr(any(feature = "net-trace", feature = "write-pcap-file"), expect(unused_mut))]
 				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
 					return NetworkState::InitializationFailed;
 				};
 			}
 			_ => {
-				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
+				#[cfg_attr(any(feature = "net-trace", feature = "write-pcap-file"), expect(unused_mut))]
 				let mut device = LoopbackDriver::new();
 			}
 		}
 
 		let mac = device.get_mac_address();
+
+		#[cfg_attr(feature = "net-trace", expect(unused_mut))]
+		#[cfg(feature = "write-pcap-file")]
+		let mut device = {
+			let default_name = device.get_name();
+			PcapWriter::new(
+				device,
+				pcap_writer::FileSink::new(default_name),
+				PcapMode::Both,
+			)
+		};
 
 		#[cfg(feature = "net-trace")]
 		let mut device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
@@ -130,5 +145,104 @@ impl<'a> NetworkInterface<'a> {
 			#[cfg(feature = "dns")]
 			dns_handle,
 		}))
+	}
+}
+
+#[cfg(feature = "write-pcap-file")]
+pub(in crate::executor) mod pcap_writer {
+	use core::fmt::Write as _;
+
+	use embedded_io::Write as _;
+	use smoltcp::phy::PcapSink;
+
+	use crate::errno::Errno;
+	use crate::fs::File;
+
+	/// Sink for packet captures. If the file Option is None, the writes are ignored.
+	/// This is useful when we fail to create the sink file at runtime.
+	pub struct FileSink(Option<File>);
+
+	impl FileSink {
+		pub(super) fn new(device_name: &str) -> Self {
+			let (parent, file_prefix, extension) = parse_path(device_name);
+			let mut path = format!("{parent}/{file_prefix}");
+			let base_len = path.len();
+			for i in 1.. {
+				if let Some(extension) = extension {
+					path.push('.');
+					path.push_str(extension);
+				}
+				match File::create_new(path.as_str()) {
+					Ok(file) => {
+						info!("The packet capture will be written to '{path}'.");
+						return Self(Some(file));
+					}
+					Err(Errno::Exist) => {
+						path.truncate(base_len);
+						write!(&mut path, " ({i})").unwrap();
+					}
+					Err(e) => {
+						if e == Errno::Noent {
+							error!("'{parent}/' does not exist. Is it mounted?");
+						}
+						error!(
+							"Error {e:?} encountered while creating the pcap file. No pcap file will be written."
+						);
+						break;
+					}
+				}
+			}
+			Self(None)
+		}
+	}
+
+	fn parse_path(device_name: &str) -> (&str, &str, Option<&str>) {
+		let mut parent = "/root";
+		let mut file_prefix = device_name;
+		let mut extension = Some("pcap");
+
+		if let Some(path) = crate::env::var("HERMIT_PCAP_PATH").filter(|var| !var.is_empty()) {
+			let file_name = if let Some((l, r)) = path.rsplit_once('/') {
+				parent = l;
+				if r.is_empty() { None } else { Some(r) }
+			} else {
+				Some(path.as_str())
+			};
+
+			if let Some(file_name) = file_name {
+				(file_prefix, extension) = if let Some((l, r)) = file_name.rsplit_once('.')
+					&& !l.is_empty()
+				{
+					(l, Some(r))
+				} else {
+					(file_name, None)
+				}
+			};
+		}
+		(parent, file_prefix, extension)
+	}
+
+	impl PcapSink for FileSink {
+		fn write(&mut self, data: &[u8]) {
+			let Some(file) = self.0.as_mut() else {
+				trace!("No file to write packet capture.");
+				return;
+			};
+
+			if let Err(err) = file.write(data) {
+				error!("Error while writing to the pcap file: {err}");
+			}
+		}
+
+		fn flush(&mut self) {
+			let Some(file) = self.0.as_mut() else {
+				trace!("No file to write packet capture.");
+				return;
+			};
+
+			if let Err(err) = file.flush() {
+				error!("Error while flushing the pcap file: {err}");
+			}
+		}
 	}
 }
