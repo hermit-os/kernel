@@ -420,7 +420,6 @@ impl<'a> NetworkInterface<'a> {
 	}
 
 	/// Gets the device inside the [smoltcp::phy::Tracer] and [smoltcp::phy::PcapWriter] layers.
-
 	fn get_inner_device(&mut self) -> &mut NetworkDevice {
 		let device = &mut self.device;
 		#[cfg(feature = "net-trace")]
