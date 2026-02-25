@@ -237,6 +237,9 @@ strace = []
 
 #! ### Internal Features
 
+## Documents the Cargo features in the crate docs.
+document-features = ["dep:document-features"]
+
 ## Enables the network backend.
 ##
 ## This is automatically enabled by any network feature.
