@@ -402,6 +402,7 @@ impl<'a> NetworkInterface<'a> {
 	))]
 	fn handle_interrupt(&mut self) {
 		self.get_inner_device().handle_interrupt();
+<<<<<<< HEAD
 	}
 
 	#[cfg(all(
@@ -413,6 +414,8 @@ impl<'a> NetworkInterface<'a> {
 	fn handle_device_configuration_interrupt(&mut self) {
 		self.get_inner_device()
 			.handle_device_configuration_interrupt();
+=======
+>>>>>>> 456cbb6b1 (feat(network): support packet capture file creation)
 	}
 
 	pub(crate) fn set_polling_mode(&mut self, value: bool) {
@@ -420,7 +423,11 @@ impl<'a> NetworkInterface<'a> {
 	}
 
 	/// Gets the device inside the [smoltcp::phy::Tracer] and [smoltcp::phy::PcapWriter] layers.
+<<<<<<< HEAD
 	fn get_inner_device(&mut self) -> &mut NetworkDevice {
+=======
+	fn get_inner_device(&mut self) -> &mut impl NetworkDriver {
+>>>>>>> 456cbb6b1 (feat(network): support packet capture file creation)
 		let device = &mut self.device;
 		#[cfg(feature = "net-trace")]
 		let device = device.get_mut();
