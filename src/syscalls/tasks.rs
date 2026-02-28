@@ -18,7 +18,7 @@ pub type Tid = i32;
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_getpid() -> Tid {
-	0
+	unimplemented!()
 }
 
 #[cfg(feature = "newlib")]
