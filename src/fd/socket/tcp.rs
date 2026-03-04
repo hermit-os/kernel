@@ -189,7 +189,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				let state = socket.state();
@@ -227,7 +227,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {

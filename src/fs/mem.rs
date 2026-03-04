@@ -59,7 +59,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(ret)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -81,7 +81,7 @@ impl ObjectInterface for RomFileInterface {
 		Ok(len)
 	}
 
-	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		// NOTE: Allocations can never be larger than `isize::MAX` bytes.
 		let data_len = self.inner.data.len() as isize;
 
@@ -155,7 +155,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
 			let t = timespec::from_usec(microseconds as i64);
@@ -183,7 +183,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(len)
 	}
 
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let mut guard = self.inner.write().await;
@@ -205,7 +205,7 @@ impl ObjectInterface for RamFileInterface {
 		Ok(buf.len())
 	}
 
-	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut guard = self.inner.write().await;
 		let mut pos_guard = self.pos.lock().await;
 
@@ -239,14 +239,14 @@ impl ObjectInterface for RamFileInterface {
 		Ok(guard.attr)
 	}
 
-	async fn truncate(&self, size: usize) -> io::Result<()> {
+	async fn truncate(&mut self, size: usize) -> io::Result<()> {
 		let mut guard = self.inner.write().await;
 		guard.data.resize(size, 0);
 		guard.attr.st_size = size as i64;
 		Ok(())
 	}
 
-	async fn chmod(&self, access_permission: AccessPermission) -> io::Result<()> {
+	async fn chmod(&mut self, access_permission: AccessPermission) -> io::Result<()> {
 		let mut guard = self.inner.write().await;
 		guard.attr.st_mode = access_permission;
 		Ok(())
@@ -435,7 +435,7 @@ impl ObjectInterface for MemDirectoryInterface {
 	/// logically the same operation, so we can just use the same fn in the backend.
 	/// Any other offset than 0 is not supported. (Mostly because it doesn't make any sense, as
 	/// userspace applications have no way of knowing valid offsets)
-	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		if whence != SeekWhence::Set && offset != 0 {
 			error!("Invalid offset for directory lseek ({offset})");
 			return Err(Errno::Inval);
