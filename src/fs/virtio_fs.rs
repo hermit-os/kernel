@@ -22,7 +22,6 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
-use crate::executor::block_on;
 use crate::fd::PollEvent;
 use crate::fs::virtio_fs::ops::SetAttrValidFields;
 use crate::fs::{
@@ -671,13 +670,13 @@ fn readlink(nid: u64) -> io::Result<String> {
 }
 
 #[derive(Debug)]
-struct VirtioFsFileHandleInner {
+struct VirtioFsFileHandle {
 	fuse_nid: Option<u64>,
 	fuse_fh: Option<u64>,
 	offset: usize,
 }
 
-impl VirtioFsFileHandleInner {
+impl VirtioFsFileHandle {
 	pub fn new() -> Self {
 		Self {
 			fuse_nid: None,
@@ -706,7 +705,8 @@ impl VirtioFsFileHandleInner {
 	}
 }
 
-impl VirtioFsFileHandleInner {
+#[async_trait]
+impl ObjectInterface for VirtioFsFileHandle {
 	async fn poll(&self, events: PollEvent) -> io::Result<PollEvent> {
 		static KH: AtomicU64 = AtomicU64::new(0);
 		let kh = KH.fetch_add(1, Ordering::SeqCst);
@@ -746,7 +746,15 @@ impl VirtioFsFileHandleInner {
 		.await
 	}
 
-	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+	async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		Read::read(self, buf)
+	}
+
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		Write::write(self, buf)
+	}
+
+	async fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		debug!("virtio-fs lseek: offset: {offset}, whence: {whence:?}");
 
 		// Seek on FUSE file systems seems to be a little odd: All reads are referenced from the
@@ -787,7 +795,7 @@ impl VirtioFsFileHandleInner {
 		}
 	}
 
-	fn fstat(&mut self) -> io::Result<FileAttr> {
+	async fn fstat(&self) -> io::Result<FileAttr> {
 		debug!("virtio-fs getattr");
 
 		let nid = self.fuse_nid.ok_or(Errno::Io)?;
@@ -806,7 +814,7 @@ impl VirtioFsFileHandleInner {
 		Ok(rsp.headers.op_header.attr.into())
 	}
 
-	fn truncate(&mut self, size: usize) -> io::Result<()> {
+	async fn truncate(&mut self, size: usize) -> io::Result<()> {
 		let attr = FileAttr {
 			st_size: size.try_into().unwrap(),
 			..FileAttr::default()
@@ -816,7 +824,7 @@ impl VirtioFsFileHandleInner {
 			.map(|_| ())
 	}
 
-	fn chmod(&mut self, access_permission: AccessPermission) -> io::Result<()> {
+	async fn chmod(&mut self, access_permission: AccessPermission) -> io::Result<()> {
 		let attr = FileAttr {
 			st_mode: access_permission,
 			..FileAttr::default()
@@ -827,11 +835,11 @@ impl VirtioFsFileHandleInner {
 	}
 }
 
-impl ErrorType for VirtioFsFileHandleInner {
+impl ErrorType for VirtioFsFileHandle {
 	type Error = Errno;
 }
 
-impl Read for VirtioFsFileHandleInner {
+impl Read for VirtioFsFileHandle {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
@@ -862,7 +870,7 @@ impl Read for VirtioFsFileHandleInner {
 	}
 }
 
-impl Write for VirtioFsFileHandleInner {
+impl Write for VirtioFsFileHandle {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		debug!("virtio-fs write!");
 		let mut truncated_len = buf.len();
@@ -904,7 +912,7 @@ impl Write for VirtioFsFileHandleInner {
 	}
 }
 
-impl Drop for VirtioFsFileHandleInner {
+impl Drop for VirtioFsFileHandle {
 	fn drop(&mut self) {
 		let Some(fuse_nid) = self.fuse_nid else {
 			return;
@@ -920,45 +928,6 @@ impl Drop for VirtioFsFileHandleInner {
 			.lock()
 			.send_command(cmd, rsp_payload_len)
 			.unwrap();
-	}
-}
-
-struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
-
-impl VirtioFsFileHandle {
-	pub fn new() -> Self {
-		Self(Arc::new(Mutex::new(VirtioFsFileHandleInner::new())))
-	}
-}
-
-#[async_trait]
-impl ObjectInterface for VirtioFsFileHandle {
-	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		self.0.lock().await.poll(event).await
-	}
-
-	async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-		self.0.lock().await.read(buf)
-	}
-
-	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-		self.0.lock().await.write(buf)
-	}
-
-	async fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		self.0.lock().await.lseek(offset, whence)
-	}
-
-	async fn fstat(&self) -> io::Result<FileAttr> {
-		self.0.lock().await.fstat()
-	}
-
-	async fn truncate(&mut self, size: usize) -> io::Result<()> {
-		self.0.lock().await.truncate(size)
-	}
-
-	async fn chmod(&mut self, access_permission: AccessPermission) -> io::Result<()> {
-		self.0.lock().await.chmod(access_permission)
 	}
 }
 
@@ -1304,11 +1273,10 @@ impl VfsNode for VirtioFsDirectory {
 			)));
 		}
 
-		let file = VirtioFsFileHandle::new();
+		let mut file = VirtioFsFileHandle::new();
 
 		// 1.FUSE_INIT to create session
 		// Already done
-		let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
 
 		// Differentiate between opening and creating new file, since FUSE does not support O_CREAT on open.
 		if opt.contains(OpenOption::O_CREAT) {
@@ -1321,28 +1289,26 @@ impl VfsNode for VirtioFsDirectory {
 				.send_command(cmd, rsp_payload_len)?;
 
 			let inner = rsp.headers.op_header;
-			file_guard.fuse_nid = Some(inner.entry.nodeid);
-			file_guard.fuse_fh = Some(inner.open.fh);
+			file.fuse_nid = Some(inner.entry.nodeid);
+			file.fuse_fh = Some(inner.open.fh);
 		} else {
 			// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-			file_guard.fuse_nid = lookup(path);
+			file.fuse_nid = lookup(path);
 
-			if file_guard.fuse_nid.is_none() {
+			if file.fuse_nid.is_none() {
 				warn!("virtio-fs lookup seems to have failed!");
 				return Err(Errno::Noent);
 			}
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, rsp_payload_len) =
-				ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
+				ops::Open::create(file.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
 			let rsp = get_filesystem_driver()
 				.ok_or(Errno::Nosys)?
 				.lock()
 				.send_command(cmd, rsp_payload_len)?;
-			file_guard.fuse_fh = Some(rsp.headers.op_header.fh);
+			file.fuse_fh = Some(rsp.headers.op_header.fh);
 		}
-
-		drop(file_guard);
 
 		Ok(Arc::new(async_lock::RwLock::new(file)))
 	}
