@@ -278,44 +278,51 @@ impl Qemu {
 	}
 
 	fn cpu_args(&self, arch: Arch) -> Vec<String> {
+		let mut cpu_args = vec![];
+
+		if self.accel {
+			cfg_select! {
+				target_os = "linux" => {
+					cpu_args.push("-enable-kvm".to_owned());
+					cpu_args.push("-cpu".to_owned());
+					cpu_args.push("host".to_owned());
+				}
+				_ => {
+					todo!();
+				}
+			}
+		}
+
 		match arch {
 			Arch::X86_64 => {
-				let mut cpu_args = if self.accel {
-					if cfg!(target_os = "linux") {
-						vec![
-							"-enable-kvm".to_owned(),
-							"-cpu".to_owned(),
-							"host".to_owned(),
-						]
-					} else {
-						todo!()
-					}
-				} else {
-					vec!["-cpu".to_owned(), "Skylake-Client".to_owned()]
-				};
+				if !self.accel {
+					cpu_args.push("-cpu".to_owned());
+					cpu_args.push("Skylake-Client".to_owned());
+				}
+
 				cpu_args.push("-device".to_owned());
 				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_owned());
 				cpu_args
 			}
 			Arch::Aarch64 | Arch::Aarch64Be => {
-				let mut cpu_args = if self.accel {
-					todo!()
-				} else {
-					vec!["-cpu".to_owned(), "cortex-a72".to_owned()]
-				};
+				if !self.accel {
+					cpu_args.push("-cpu".to_owned());
+					cpu_args.push("cortex-a72".to_owned());
+				}
+
 				cpu_args.push("-semihosting".to_owned());
 				cpu_args
 			}
 			Arch::Riscv64 => {
-				let mut cpu_args = if self.accel {
-					todo!()
-				} else if self.devices.contains(&Device::CadenceGem) {
+				if !self.accel {
 					// CadenceGem does not seem to work with rv64 as the CPU,
 					// possibly because it requires sifive_u as the machine.
-					vec![]
-				} else {
-					vec!["-cpu".to_owned(), "rv64".to_owned()]
-				};
+					if !self.devices.contains(&Device::CadenceGem) {
+						cpu_args.push("-cpu".to_owned());
+						cpu_args.push("rv64".to_owned());
+					}
+				}
+
 				cpu_args.push("-semihosting".to_owned());
 				cpu_args
 			}
