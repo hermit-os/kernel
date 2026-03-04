@@ -11,7 +11,6 @@ use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddr
 use core::ops::DerefMut;
 use core::{mem, slice};
 
-use cfg_if::cfg_if;
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
@@ -1131,8 +1130,8 @@ pub unsafe extern "C" fn sys_sendto(
 		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
 
-	cfg_if! {
-		if #[cfg(feature = "net")] {
+	cfg_select! {
+		feature = "net" => {
 			let Ok(sa_family) = (unsafe { Af::try_from((*addr).sa_family) }) else {
 				return (-i32::from(Errno::Inval)).try_into().unwrap();
 			};
@@ -1154,7 +1153,8 @@ pub unsafe extern "C" fn sys_sendto(
 			} else {
 				endpoint = None;
 			}
-		} else {
+		}
+		_ => {
 			let endpoint = None;
 		}
 	}

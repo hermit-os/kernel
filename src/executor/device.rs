@@ -2,7 +2,6 @@ use alloc::boxed::Box;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
 
-use cfg_if::cfg_if;
 use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "net-trace")]
 use smoltcp::phy::Tracer;
@@ -19,34 +18,36 @@ use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
 use crate::drivers::net::NetworkDriver;
 
-cfg_if! {
-	if #[cfg(any(
+cfg_select! {
+	any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 		feature = "rtl8139",
 		feature = "virtio-net",
-	))] {
+	) => {
 		use hermit_sync::SpinMutex;
 		use crate::drivers::net::NetworkDevice;
 
 		pub(crate) static NETWORK_DEVICE: SpinMutex<Option<NetworkDevice>> = SpinMutex::new(Option::None);
-	} else {
+	}
+	_ => {
 		use crate::drivers::net::loopback::LoopbackDriver;
 	}
 }
 
 impl<'a> NetworkInterface<'a> {
 	pub(crate) fn create() -> NetworkState<'a> {
-		cfg_if! {
-			if #[cfg(any(
+		cfg_select! {
+			any(
 				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 				feature = "rtl8139",
 				feature = "virtio-net",
-			))] {
+			) => {
 				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
 				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
 					return NetworkState::InitializationFailed;
 				};
-			} else {
+			}
+			_ => {
 				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
 				let mut device = LoopbackDriver::new();
 			}
@@ -77,8 +78,8 @@ impl<'a> NetworkInterface<'a> {
 		#[cfg_attr(all(not(feature = "dhcpv4"), not(feature = "dns")), expect(unused_mut))]
 		let mut sockets = SocketSet::new(vec![]);
 
-		cfg_if! {
-			if #[cfg(feature = "dhcpv4")] {
+		cfg_select! {
+			feature = "dhcpv4" => {
 				if let Some(hermit_ip) = hermit_var!("HERMIT_IP") {
 					warn!("HERMIT_IP was set to {hermit_ip}, but Hermit was built with DHCPv4.");
 					warn!("Ignoring HERMIT_IP.");
@@ -88,7 +89,8 @@ impl<'a> NetworkInterface<'a> {
 				let dhcp_handle = sockets.add(dhcp);
 				#[cfg(feature = "dns")]
 				let dns_handle = None;
-			} else {
+			}
+			_ => {
 				let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 				let mygw =
 					Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();

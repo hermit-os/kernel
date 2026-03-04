@@ -5,10 +5,11 @@
 //!
 //! [File System Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-45800011
 
-cfg_if::cfg_if! {
-	if #[cfg(feature = "pci")] {
+cfg_select! {
+	feature = "pci" => {
 		mod pci;
-	} else {
+	}
+	_ => {
 		mod mmio;
 	}
 }

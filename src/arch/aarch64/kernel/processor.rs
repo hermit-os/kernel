@@ -209,10 +209,11 @@ pub fn halt() {
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
-	cfg_if::cfg_if! {
-		if #[cfg(feature = "semihosting")] {
+	cfg_select! {
+		feature = "semihosting" => {
 			semihosting::process::exit(error_code)
-		} else {
+		}
+		_ => {
 			unsafe {
 				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
 				// call hypervisor to shut down the system

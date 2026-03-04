@@ -828,7 +828,6 @@ dependencies = [
  "bitflags 2.11.0",
  "build-time",
  "built",
- "cfg-if",
  "crossbeam-utils",
  "document-features",
  "embedded-io",

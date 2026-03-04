@@ -1,7 +1,7 @@
 //! Architecture-specific architecture abstraction.
 
-cfg_if::cfg_if! {
-	if #[cfg(target_arch = "aarch64")] {
+cfg_select! {
+	target_arch = "aarch64" => {
 		pub(crate) mod aarch64;
 		pub(crate) use self::aarch64::*;
 
@@ -22,7 +22,8 @@ cfg_if::cfg_if! {
 			get_processor_count,
 		};
 		pub use self::aarch64::mm::paging::{BasePageSize, PageSize};
-	} else if #[cfg(target_arch = "x86_64")] {
+	}
+	target_arch = "x86_64" => {
 		pub(crate) mod x86_64;
 		pub(crate) use self::x86_64::*;
 
@@ -51,7 +52,8 @@ cfg_if::cfg_if! {
 		pub use self::x86_64::mm::create_new_root_page_table;
 		#[cfg(feature = "common-os")]
 		pub use self::x86_64::kernel::{load_application, jump_to_user_land};
-	} else if #[cfg(target_arch = "riscv64")] {
+	}
+	target_arch = "riscv64" => {
 		pub(crate) mod riscv64;
 		pub(crate) use self::riscv64::*;
 

@@ -159,13 +159,14 @@ impl Tls {
 	/// rftrace might use TLS for differentiating between the idle task and
 	/// other tasks.
 	pub fn set_thread_ptr(&self) {
-		cfg_if::cfg_if! {
-			if #[cfg(target_arch = "aarch64")] {
+		cfg_select! {
+			target_arch = "aarch64" => {
 				use aarch64_cpu::registers::{TPIDR_EL0, Writeable};
 
 				let addr = self.thread_ptr().expose_provenance();
 				TPIDR_EL0.set(addr.try_into().unwrap());
-			} else if #[cfg(target_arch = "riscv64")] {
+			}
+			target_arch = "riscv64" => {
 				unsafe {
 					core::arch::asm!(
 						"mv tp, {}",
@@ -173,7 +174,8 @@ impl Tls {
 						options(nomem, nostack, preserves_flags),
 					);
 				}
-			} else if #[cfg(target_arch = "x86_64")] {
+			}
+			target_arch = "x86_64" => {
 				use crate::arch::x86_64::kernel::processor;
 
 				let addr = self.thread_ptr().expose_provenance();
