@@ -785,6 +785,26 @@ impl VirtioFsFileHandleInner {
 		Ok(rsp.headers.op_header.attr.into())
 	}
 
+	fn truncate(&mut self, size: usize) -> io::Result<()> {
+		let attr = FileAttr {
+			st_size: size.try_into().unwrap(),
+			..FileAttr::default()
+		};
+
+		self.set_attr(attr, SetAttrValidFields::FATTR_SIZE)
+			.map(|_| ())
+	}
+
+	fn chmod(&mut self, access_permission: AccessPermission) -> io::Result<()> {
+		let attr = FileAttr {
+			st_mode: access_permission,
+			..FileAttr::default()
+		};
+
+		self.set_attr(attr, SetAttrValidFields::FATTR_MODE)
+			.map(|_| ())
+	}
+
 	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
 		debug!("virtio-fs setattr");
 
@@ -932,29 +952,11 @@ impl ObjectInterface for VirtioFsFileHandle {
 	}
 
 	async fn truncate(&mut self, size: usize) -> io::Result<()> {
-		let attr = FileAttr {
-			st_size: size.try_into().unwrap(),
-			..FileAttr::default()
-		};
-
-		self.0
-			.lock()
-			.await
-			.set_attr(attr, SetAttrValidFields::FATTR_SIZE)
-			.map(|_| ())
+		self.0.lock().await.truncate(size)
 	}
 
 	async fn chmod(&mut self, access_permission: AccessPermission) -> io::Result<()> {
-		let attr = FileAttr {
-			st_mode: access_permission,
-			..FileAttr::default()
-		};
-
-		self.0
-			.lock()
-			.await
-			.set_attr(attr, SetAttrValidFields::FATTR_MODE)
-			.map(|_| ())
+		self.0.lock().await.chmod(access_permission)
 	}
 }
 
