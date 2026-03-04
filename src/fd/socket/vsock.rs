@@ -1,10 +1,8 @@
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::task::Poll;
 use core::{future, mem};
 
-use async_trait::async_trait;
 use virtio::vsock::{Hdr, Op, Type};
 use virtio::{le16, le32, le64};
 
@@ -14,7 +12,7 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::pci as hardware;
 use crate::errno::Errno;
 use crate::executor::vsock::{VSOCK_MAP, VsockState};
-use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
 #[derive(Debug)]
@@ -49,7 +47,6 @@ impl NullSocket {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for NullSocket {}
 
 pub struct Socket {
@@ -68,7 +65,6 @@ impl Socket {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
@@ -237,9 +233,7 @@ impl ObjectInterface for Socket {
 		Ok(())
 	}
 
-	async fn accept(
-		&mut self,
-	) -> io::Result<(Arc<async_lock::RwLock<dyn ObjectInterface>>, Endpoint)> {
+	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
 		let port = self.port;
 		let cid = self.cid;
 
@@ -296,7 +290,7 @@ impl ObjectInterface for Socket {
 		.await?;
 
 		Ok((
-			Arc::new(async_lock::RwLock::new(NullSocket::new())),
+			Arc::new(async_lock::RwLock::new(NullSocket::new().into())),
 			Endpoint::Vsock(endpoint),
 		))
 	}

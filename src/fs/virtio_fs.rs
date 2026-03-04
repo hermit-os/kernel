@@ -12,7 +12,6 @@ use core::{future, mem, ptr, slice};
 
 use align_address::Align;
 use async_lock::Mutex;
-use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use fuse_abi::linux::*;
 
@@ -23,7 +22,7 @@ use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::errno::Errno;
 use crate::executor::block_on;
-use crate::fd::PollEvent;
+use crate::fd::{Fd, PollEvent};
 use crate::fs::virtio_fs::ops::SetAttrValidFields;
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
@@ -901,7 +900,7 @@ impl Drop for VirtioFsFileHandleInner {
 	}
 }
 
-struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
+pub struct VirtioFsFileHandle(Arc<Mutex<VirtioFsFileHandleInner>>);
 
 impl VirtioFsFileHandle {
 	pub fn new() -> Self {
@@ -909,7 +908,6 @@ impl VirtioFsFileHandle {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for VirtioFsFileHandle {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		self.0.lock().await.poll(event).await
@@ -979,7 +977,6 @@ impl VirtioFsDirectoryHandle {
 	}
 }
 
-#[async_trait]
 impl ObjectInterface for VirtioFsDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
 		let path: CString = if let Some(name) = &self.name {
@@ -1145,9 +1142,9 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(self.attr)
 	}
 
-	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		Ok(Arc::new(async_lock::RwLock::new(
-			VirtioFsDirectoryHandle::new(self.prefix.clone()),
+			VirtioFsDirectoryHandle::new(self.prefix.clone()).into(),
 		)))
 	}
 
@@ -1277,7 +1274,7 @@ impl VfsNode for VirtioFsDirectory {
 		components: &mut Vec<&str>,
 		opt: OpenOption,
 		mode: AccessPermission,
-	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
+	) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		let path = self.traversal_path(components);
 
 		debug!("virtio-fs open: {path:#?}, {opt:?} {mode:?}");
@@ -1303,7 +1300,7 @@ impl VfsNode for VirtioFsDirectory {
 			let mut path = path.into_string().unwrap();
 			path.remove(0);
 			return Ok(Arc::new(async_lock::RwLock::new(
-				VirtioFsDirectoryHandle::new(Some(path)),
+				VirtioFsDirectoryHandle::new(Some(path)).into(),
 			)));
 		}
 
@@ -1347,7 +1344,7 @@ impl VfsNode for VirtioFsDirectory {
 
 		drop(file_guard);
 
-		Ok(Arc::new(async_lock::RwLock::new(file)))
+		Ok(Arc::new(async_lock::RwLock::new(file.into())))
 	}
 
 	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
