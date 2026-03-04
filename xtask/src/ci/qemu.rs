@@ -9,6 +9,7 @@ use std::{env, fs, thread};
 use anyhow::{Context, Result, bail, ensure};
 use clap::{Args, ValueEnum};
 use sysinfo::{CpuRefreshKind, System};
+use vsock::VsockStream;
 use wait_timeout::ChildExt;
 use xshell::cmd;
 
@@ -79,6 +80,12 @@ pub enum Device {
 
 	/// virtio-net via PCI.
 	VirtioNetPci,
+
+	/// virtio-vsock via MMIO.
+	VirtioVsockMmio,
+
+	/// virtio-vsock via PCI.
+	VirtioVsockPci,
 }
 
 impl Qemu {
@@ -152,12 +159,13 @@ impl Qemu {
 			"mioudp" => test_mioudp(guest_ip)?,
 			"poll" => test_poll(guest_ip)?,
 			"stdin" => test_stdin(&mut qemu.0)?,
+			"vsock" => test_vsock()?,
 			_ => {}
 		}
 
 		if matches!(
 			image_name,
-			"axum-example" | "http_server" | "http_server_poll" | "http_server_select"
+			"axum-example" | "http_server" | "http_server_poll" | "http_server_select" | "vsock"
 		) || self.devices.contains(&Device::CadenceGem)
 		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to kill the machine ourselves.
 		{
@@ -430,6 +438,16 @@ impl Qemu {
 						"virtconsole,chardev=char0".to_owned(),
 					]
 				}
+				device @ (Device::VirtioVsockMmio | Device::VirtioVsockPci) => {
+					let device_arg = match device {
+						Device::VirtioVsockMmio => "vhost-vsock-device",
+						Device::VirtioVsockPci => "vhost-vsock-pci,disable-legacy=on",
+						_ => unreachable!(),
+					};
+					let device_arg = format!("{device_arg},guest-cid=3");
+
+					vec!["-device".to_owned(), device_arg]
+				}
 			})
 			.collect()
 	}
@@ -541,6 +559,26 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 	for message in messages {
 		assert!(stdout_lines.iter().any(|line| line.contains(message)));
 	}
+
+	Ok(())
+}
+
+fn test_vsock() -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+
+	let mut stream = VsockStream::connect_with_cid_port(3, 9975)?;
+	for message in messages {
+		writeln!(&mut stream, "{message}")?;
+		thread::sleep(Duration::from_secs(1));
+	}
+
+	const BUF_SIZE: usize = 8 * 1024;
+	let mut buf = vec![0; BUF_SIZE];
+	let n = stream.read(&mut buf)?;
+	let s = str::from_utf8(&buf[0..n])?;
+	let received_messages = s.trim().split('\n').collect::<Vec<_>>();
+	assert_eq!(received_messages, messages);
 
 	Ok(())
 }
