@@ -958,13 +958,6 @@ impl ObjectInterface for VirtioFsFileHandle {
 	}
 }
 
-impl Clone for VirtioFsFileHandle {
-	fn clone(&self) -> Self {
-		warn!("VirtioFsFileHandle: clone not tested");
-		Self(self.0.clone())
-	}
-}
-
 pub struct VirtioFsDirectoryHandle {
 	name: Option<String>,
 	read_position: Mutex<usize>,

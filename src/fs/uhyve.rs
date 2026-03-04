@@ -121,12 +121,6 @@ impl ObjectInterface for UhyveFileHandle {
 	}
 }
 
-impl Clone for UhyveFileHandle {
-	fn clone(&self) -> Self {
-		Self(self.0.clone())
-	}
-}
-
 #[derive(Debug)]
 pub(crate) struct UhyveDirectory {
 	prefix: Option<String>,
