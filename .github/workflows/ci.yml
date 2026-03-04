@@ -7,6 +7,7 @@ env:
   GH_TOKEN: ${{ github.token }}
   RUSTFLAGS: -Dwarnings
   RUSTDOCFLAGS: -Dwarnings
+  HERMIT_LOG_LEVEL_FILTER: debug
 
 defaults:
   run:
