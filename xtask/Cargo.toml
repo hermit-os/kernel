@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 default = ["ci"]
-ci = ["dep:ovmf-prebuilt", "dep:sysinfo", "dep:ureq", "dep:wait-timeout"]
+ci = ["dep:ovmf-prebuilt", "dep:sysinfo", "dep:ureq", "dep:vsock", "dep:wait-timeout"]
 
 [dependencies]
 anyhow = "1.0"
@@ -15,5 +15,6 @@ home = "0.5"
 ovmf-prebuilt = { version = "0.2", optional = true }
 sysinfo = { version = "0.38", optional = true }
 ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
+vsock = { version = "0.5", optional = true }
 wait-timeout = { version = "0.2", optional = true }
 xshell = "0.2"
