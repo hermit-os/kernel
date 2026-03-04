@@ -205,18 +205,18 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
 		Err(Errno::Nosys)
 	}
 
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	async fn write(&self, _buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
 		Err(Errno::Nosys)
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
-	async fn lseek(&self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
+	async fn lseek(&mut self, _offset: isize, _whence: SeekWhence) -> io::Result<isize> {
 		Err(Errno::Inval)
 	}
 
@@ -318,12 +318,12 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	}
 
 	/// Truncates the file
-	async fn truncate(&self, _size: usize) -> io::Result<()> {
+	async fn truncate(&mut self, _size: usize) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
 	/// Changes access permissions to the file
-	async fn chmod(&self, _access_permission: AccessPermission) -> io::Result<()> {
+	async fn chmod(&mut self, _access_permission: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 
@@ -340,19 +340,22 @@ pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	block_on(async { obj.read().await.read(buf).await }, None)
+	block_on(async { obj.write().await.read(buf).await }, None)
 }
 
 pub(crate) fn lseek(fd: RawFd, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 	let obj = get_object(fd)?;
 
-	block_on(async { obj.read().await.lseek(offset, whence).await }, None)
+	block_on(
+		async { obj.write().await.lseek(offset, whence).await },
+		None,
+	)
 }
 
 pub(crate) fn chmod(fd: RawFd, mode: AccessPermission) -> io::Result<()> {
 	let obj = get_object(fd)?;
 
-	block_on(async { obj.read().await.chmod(mode).await }, None)
+	block_on(async { obj.write().await.chmod(mode).await }, None)
 }
 
 pub(crate) fn write(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
@@ -362,12 +365,12 @@ pub(crate) fn write(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	block_on(async { obj.read().await.write(buf).await }, None)
+	block_on(async { obj.write().await.write(buf).await }, None)
 }
 
 pub(crate) fn truncate(fd: RawFd, length: usize) -> io::Result<()> {
 	let obj = get_object(fd)?;
-	block_on(async { obj.read().await.truncate(length).await }, None)
+	block_on(async { obj.write().await.truncate(length).await }, None)
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {

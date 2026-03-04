@@ -5,7 +5,6 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use async_lock::Mutex;
 use async_trait::async_trait;
 use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
@@ -25,14 +24,25 @@ use crate::io;
 use crate::syscalls::interfaces::uhyve::uhyve_hypercall;
 
 #[derive(Debug)]
-struct UhyveFileHandleInner(i32);
+struct UhyveFileHandle(i32);
 
-impl UhyveFileHandleInner {
+impl UhyveFileHandle {
 	pub fn new(fd: i32) -> Self {
 		Self(fd)
 	}
+}
 
-	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+#[async_trait]
+impl ObjectInterface for UhyveFileHandle {
+	async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+		Read::read(self, buf)
+	}
+
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+		Write::write(self, buf)
+	}
+
+	async fn lseek(&mut self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let mut lseek_params = LseekParams {
 			fd: self.0,
 			offset,
@@ -48,11 +58,11 @@ impl UhyveFileHandleInner {
 	}
 }
 
-impl ErrorType for UhyveFileHandleInner {
+impl ErrorType for UhyveFileHandle {
 	type Error = Errno;
 }
 
-impl Read for UhyveFileHandleInner {
+impl Read for UhyveFileHandle {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		let mut read_params = ReadParams {
 			fd: self.0,
@@ -70,7 +80,7 @@ impl Read for UhyveFileHandleInner {
 	}
 }
 
-impl Write for UhyveFileHandleInner {
+impl Write for UhyveFileHandle {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let write_params = WriteParams {
 			fd: self.0,
@@ -87,7 +97,7 @@ impl Write for UhyveFileHandleInner {
 	}
 }
 
-impl Drop for UhyveFileHandleInner {
+impl Drop for UhyveFileHandle {
 	fn drop(&mut self) {
 		let mut close_params = CloseParams { fd: self.0, ret: 0 };
 		uhyve_hypercall(Hypercall::FileClose(&mut close_params));
@@ -95,35 +105,6 @@ impl Drop for UhyveFileHandleInner {
 			let ret = close_params.ret; // circumvent packed field access
 			panic!("Can't close fd {} - return value {ret}", self.0);
 		}
-	}
-}
-
-struct UhyveFileHandle(Arc<Mutex<UhyveFileHandleInner>>);
-
-impl UhyveFileHandle {
-	pub fn new(fd: i32) -> Self {
-		Self(Arc::new(Mutex::new(UhyveFileHandleInner::new(fd))))
-	}
-}
-
-#[async_trait]
-impl ObjectInterface for UhyveFileHandle {
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-		self.0.lock().await.read(buf)
-	}
-
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		self.0.lock().await.write(buf)
-	}
-
-	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		self.0.lock().await.lseek(offset, whence)
-	}
-}
-
-impl Clone for UhyveFileHandle {
-	fn clone(&self) -> Self {
-		Self(self.0.clone())
 	}
 }
 

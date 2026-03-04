@@ -320,7 +320,7 @@ impl ObjectInterface for Socket {
 		Ok(())
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -362,7 +362,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();

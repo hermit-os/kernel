@@ -189,7 +189,7 @@ impl ObjectInterface for Socket {
 		.map(|(len, endpoint)| (len, Endpoint::Ip(endpoint)))
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -220,7 +220,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let endpoint = self.remote_endpoint.ok_or(Errno::Inval)?;
 
 		let meta = UdpMetadata::from(endpoint);

@@ -28,7 +28,7 @@ impl ObjectInterface for GenericStdin {
 		Ok(event & available)
 	}
 
-	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			let read_bytes = CONSOLE.lock().read(buf)?;
 			if read_bytes > 0 {
@@ -71,7 +71,7 @@ impl ObjectInterface for GenericStdout {
 		Ok(event & available)
 	}
 
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		CONSOLE.lock().write(buf)
 	}
 
@@ -103,7 +103,7 @@ impl ObjectInterface for GenericStderr {
 		Ok(event & available)
 	}
 
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		CONSOLE.lock().write(buf)
 	}
 
@@ -158,7 +158,7 @@ impl ObjectInterface for UhyveStdout {
 		Ok(event & available)
 	}
 
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let write_params = WriteParams {
 			fd: STDOUT_FILENO,
 			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
@@ -197,7 +197,7 @@ impl ObjectInterface for UhyveStderr {
 		Ok(event & available)
 	}
 
-	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+	async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
 		let write_params = WriteParams {
 			fd: STDERR_FILENO,
 			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),

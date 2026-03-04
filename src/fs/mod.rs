@@ -467,7 +467,7 @@ pub fn truncate(name: &str, size: usize) -> io::Result<()> {
 			.open(name, OpenOption::O_TRUNC, AccessPermission::empty())
 			.map_err(|_| Errno::Badf)?;
 
-		block_on(async { file.read().await.truncate(size).await }, None)
+		block_on(async { file.write().await.truncate(size).await }, None)
 	})
 }
 
