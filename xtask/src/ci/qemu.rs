@@ -287,6 +287,12 @@ impl Qemu {
 					cpu_args.push("-cpu".to_owned());
 					cpu_args.push("host".to_owned());
 				}
+				target_os = "macos" => {
+					cpu_args.push("-accel".to_owned());
+					cpu_args.push("hvf".to_owned());
+					cpu_args.push("-cpu".to_owned());
+					cpu_args.push("host".to_owned());
+				}
 				_ => {
 					todo!();
 				}
