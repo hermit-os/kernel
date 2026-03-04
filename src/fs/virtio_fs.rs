@@ -686,6 +686,27 @@ impl VirtioFsFileHandleInner {
 		}
 	}
 
+	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
+		debug!("virtio-fs setattr");
+
+		let nid = self.fuse_nid.ok_or(Errno::Io)?;
+		let fh = self.fuse_fh.ok_or(Errno::Io)?;
+
+		let (cmd, rsp_payload_len) = ops::Setattr::create(nid, fh, attr, valid);
+		let rsp = get_filesystem_driver()
+			.ok_or(Errno::Nosys)?
+			.lock()
+			.send_command(cmd, rsp_payload_len)?;
+
+		if rsp.headers.out_header.error < 0 {
+			return Err(Errno::Io);
+		}
+
+		Ok(rsp.headers.op_header.attr.into())
+	}
+}
+
+impl VirtioFsFileHandleInner {
 	async fn poll(&self, events: PollEvent) -> io::Result<PollEvent> {
 		static KH: AtomicU64 = AtomicU64::new(0);
 		let kh = KH.fetch_add(1, Ordering::SeqCst);
@@ -803,25 +824,6 @@ impl VirtioFsFileHandleInner {
 
 		self.set_attr(attr, SetAttrValidFields::FATTR_MODE)
 			.map(|_| ())
-	}
-
-	fn set_attr(&mut self, attr: FileAttr, valid: SetAttrValidFields) -> io::Result<FileAttr> {
-		debug!("virtio-fs setattr");
-
-		let nid = self.fuse_nid.ok_or(Errno::Io)?;
-		let fh = self.fuse_fh.ok_or(Errno::Io)?;
-
-		let (cmd, rsp_payload_len) = ops::Setattr::create(nid, fh, attr, valid);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
-
-		if rsp.headers.out_header.error < 0 {
-			return Err(Errno::Io);
-		}
-
-		Ok(rsp.headers.op_header.attr.into())
 	}
 }
 
