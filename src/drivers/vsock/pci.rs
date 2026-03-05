@@ -1,3 +1,5 @@
+use volatile::VolatileRef;
+
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
@@ -5,20 +7,11 @@ use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
 
-/// Virtio's socket device configuration structure.
-/// See specification v1.1. - 5.11.4
-///
-#[derive(Debug, Copy, Clone)]
-#[repr(C)]
-pub(crate) struct VsockDevCfgRaw {
-	/// The guest_cid field contains the guest’s context ID, which uniquely identifies the device
-	/// for its lifetime. The upper 32 bits of the CID are reserved and zeroed.
-	pub guest_cid: u64,
-}
-
 impl VirtioVsockDriver {
 	fn map_cfg(cap: &PciCap) -> Option<VsockDevCfg> {
-		let dev_cfg = pci::map_dev_cfg::<VsockDevCfgRaw>(cap)?;
+		let dev_cfg = pci::map_dev_cfg::<virtio::vsock::Config>(cap)?;
+
+		let dev_cfg = VolatileRef::from_ref(dev_cfg);
 
 		Some(VsockDevCfg {
 			raw: dev_cfg,
@@ -82,10 +75,8 @@ impl VirtioVsockDriver {
 
 		match drv.init_dev() {
 			Ok(()) => {
-				info!(
-					"Socket device with cid {:x}, has been initialized by driver!",
-					drv.dev_cfg.raw.guest_cid
-				);
+				let cid = drv.get_cid();
+				info!("Socket device with cid {cid:x}, has been initialized by driver!");
 
 				Ok(drv)
 			}
