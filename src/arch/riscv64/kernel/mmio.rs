@@ -1,6 +1,10 @@
 use alloc::vec::Vec;
 
-#[cfg(any(feature = "virtio-console", feature = "virtio-fs"))]
+#[cfg(any(
+	feature = "virtio-console",
+	feature = "virtio-fs",
+	feature = "virtio-vsock",
+))]
 use hermit_sync::InterruptSpinMutex;
 
 #[cfg(feature = "virtio-console")]
@@ -11,6 +15,8 @@ use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::net::gem::GEMDriver;
 #[cfg(all(not(feature = "gem-net"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "virtio-vsock")]
+use crate::drivers::vsock::VirtioVsockDriver;
 use crate::init_cell::InitCell;
 
 pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
@@ -20,6 +26,8 @@ pub(crate) enum MmioDriver {
 	VirtioConsole(InterruptSpinMutex<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptSpinMutex<VirtioFsDriver>),
+	#[cfg(feature = "virtio-vsock")]
+	VirtioVsock(InterruptSpinMutex<VirtioVsockDriver>),
 }
 
 impl MmioDriver {
@@ -36,9 +44,20 @@ impl MmioDriver {
 			Self::VirtioFs(drv) => Some(drv),
 		}
 	}
+
+	#[cfg(feature = "virtio-vsock")]
+	fn get_vsock_driver(&self) -> Option<&InterruptSpinMutex<VirtioVsockDriver>> {
+		match self {
+			Self::VirtioVsock(drv) => Some(drv),
+		}
+	}
 }
 
-#[cfg(any(feature = "virtio-console", feature = "virtio-fs"))]
+#[cfg(any(
+	feature = "virtio-console",
+	feature = "virtio-fs",
+	feature = "virtio-vsock",
+))]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
@@ -63,4 +82,12 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptSpinMutex<Virt
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_filesystem_driver())
+}
+
+#[cfg(feature = "virtio-vsock")]
+pub(crate) fn get_vsock_driver() -> Option<&'static InterruptSpinMutex<VirtioVsockDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_vsock_driver())
 }

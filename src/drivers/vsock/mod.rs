@@ -1,7 +1,13 @@
 #![allow(dead_code)]
 
-#[cfg(feature = "pci")]
-pub mod pci;
+cfg_select! {
+	feature = "pci" => {
+		mod pci;
+	}
+	_ => {
+		mod mmio;
+	}
+}
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -18,6 +24,8 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioVsockError;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;

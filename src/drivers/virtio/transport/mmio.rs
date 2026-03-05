@@ -26,6 +26,8 @@ use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
+#[cfg(feature = "virtio-vsock")]
+use crate::drivers::vsock::VirtioVsockDriver;
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
@@ -317,6 +319,8 @@ pub(crate) enum VirtioDriver {
 	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(feature = "virtio-net")]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
+	#[cfg(feature = "virtio-vsock")]
+	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 }
 
 #[allow(unused_variables)]
@@ -385,13 +389,13 @@ pub(crate) fn init_device(
 		},
 		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no) {
-			Ok(virt_net_drv) => {
+			Ok(virt_vsock_drv) => {
 				info!("Virtio sock driver initialized.");
 
 				crate::arch::interrupts::add_irq_name(irq_no, "virtio");
 				info!("Virtio interrupt handler at line {irq_no}");
 
-				Ok(VirtioDriver::Vsock(virt_vsock_drv))
+				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_vsock_drv)))
 			}
 			Err(virtio_error) => {
 				error!("Virtio sock driver could not be initialized with device");
