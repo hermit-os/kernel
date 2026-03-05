@@ -4,7 +4,7 @@
   hermit_rs_manifest_path: benches/micro/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
-      -enable-kvm \
+      -accel kvm \
       -cpu host,migratable=no,+invtsc \
       -smp 4 \
       -m 512M \
@@ -21,7 +21,7 @@
   hermit_rs_manifest_path: benches/alloc/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
-      -enable-kvm \
+      -accel kvm \
       -cpu host,migratable=no,+invtsc \
       -smp 1 \
       -m 7G \
@@ -38,7 +38,7 @@
   hermit_rs_manifest_path: benches/mutex/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
-      -enable-kvm \
+      -accel kvm \
       -cpu host,migratable=no,+invtsc \
       -smp 2 \
       -m 512M \

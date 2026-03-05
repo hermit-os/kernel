@@ -283,7 +283,8 @@ impl Qemu {
 		if self.accel {
 			cfg_select! {
 				target_os = "linux" => {
-					cpu_args.push("-enable-kvm".to_owned());
+					cpu_args.push("-accel".to_owned());
+					cpu_args.push("kvm".to_owned());
 					cpu_args.push("-cpu".to_owned());
 					cpu_args.push("host".to_owned());
 				}
