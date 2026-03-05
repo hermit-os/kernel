@@ -249,6 +249,9 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
+	/// Describes for what protocols and in which directions, if any, the checksum
+	/// should be calculated in software. It is the complement of what is offloaded
+	/// to the hardware.
 	pub(super) checksums: ChecksumCapabilities,
 }
 
