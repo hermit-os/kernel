@@ -537,12 +537,20 @@ pub(crate) fn init() {
 	});
 }
 
+/// MSI-X Table entry.
 #[repr(C)]
-pub(crate) struct MsixEntry {
-	addr_low: u32,
-	addr_high: u32,
-	data: u32,
-	control: u32,
+pub(crate) struct MsixTableEntry {
+    /// Message Address
+	message_address: u32,
+	
+	/// Message Upper Address
+	message_upper_address: u32,
+	
+	/// Message Data
+	message_data: u32,
+	
+	/// Vector Control
+	vector_control: u32,
 }
 
 impl MsixEntry {
