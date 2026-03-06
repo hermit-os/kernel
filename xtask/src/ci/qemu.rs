@@ -4,13 +4,13 @@ use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::from_utf8;
 use std::time::Duration;
-use std::{env, fs, thread};
+use std::{env, fs, io, thread};
 
 use anyhow::{Context, Result, bail, ensure};
 use clap::{Args, ValueEnum};
 use sysinfo::{CpuRefreshKind, System};
 use vsock::VsockStream;
-use wait_timeout::ChildExt;
+use wait_timeout::ChildExt as _;
 use xshell::cmd;
 
 use crate::arch::Arch;
@@ -136,7 +136,8 @@ impl Qemu {
 			qemu.stdin(Stdio::piped()).stdout(Stdio::piped());
 		}
 
-		let mut qemu = KillChildOnDrop(qemu.spawn().context("Failed to spawn QEMU")?);
+		let qemu = qemu.spawn().context("Failed to spawn QEMU")?;
+		let mut qemu = TerminateChildOnDrop(qemu);
 
 		thread::sleep(Duration::from_millis(100));
 		if let Some(status) = qemu.0.try_wait()? {
@@ -167,9 +168,9 @@ impl Qemu {
 			image_name,
 			"axum-example" | "http_server" | "http_server_poll" | "http_server_select" | "vsock"
 		) || self.devices.contains(&Device::CadenceGem)
-		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to kill the machine ourselves.
+		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to terminate the machine ourselves.
 		{
-			qemu.0.kill()?;
+			qemu.0.terminate()?;
 		}
 
 		let status = qemu.0.wait_timeout(Duration::from_secs(60 * 6))?;
@@ -504,7 +505,7 @@ impl Qemu {
 		}
 
 		if arch == Arch::X86_64 {
-			status.code() == Some(3)
+			status.success() || status.code() == Some(3)
 		} else {
 			status.success()
 		}
@@ -523,7 +524,7 @@ impl Qemu {
 	}
 }
 
-fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
+fn spawn_virtiofsd() -> Result<TerminateChildOnDrop> {
 	let sh = crate::sh()?;
 
 	sh.create_dir("shared")?;
@@ -535,7 +536,9 @@ fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
 
 	eprintln!("$ {cmd}");
 
-	Ok(KillChildOnDrop(Command::from(cmd).spawn()?))
+	let virtiofsd = Command::from(cmd).spawn()?;
+	let virtiofsd = TerminateChildOnDrop(virtiofsd);
+	Ok(virtiofsd)
 }
 
 fn get_frequency() -> u64 {
@@ -559,7 +562,7 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 		thread::sleep(Duration::from_secs(1));
 	}
 
-	child.kill()?;
+	child.terminate()?;
 
 	let stdout = child.stdout.take().unwrap();
 	let stdout_lines = BufReader::new(stdout)
@@ -716,10 +719,36 @@ fn check_rftrace(image: &Path) -> Result<()> {
 	Ok(())
 }
 
-struct KillChildOnDrop(Child);
+struct TerminateChildOnDrop(Child);
 
-impl Drop for KillChildOnDrop {
+impl Drop for TerminateChildOnDrop {
 	fn drop(&mut self) {
-		self.0.kill().ok();
+		// We ignore errors here, since the process may already be dead,
+		// resulting in `ESRCH`.
+		self.0.terminate().ok();
+	}
+}
+
+trait ChildExt {
+	// Migrate to `unix_send_signal` once stable:
+	// https://github.com/rust-lang/rust/issues/141975
+	fn send_signal(&self, signal: i32) -> io::Result<()>;
+
+	// We are using `SIGTERM` here to allow `sudo` to forward the signal.
+	fn terminate(&mut self) -> io::Result<()> {
+		self.send_signal(libc::SIGTERM)
+	}
+}
+
+impl ChildExt for Child {
+	fn send_signal(&self, signal: i32) -> io::Result<()> {
+		let pid = self.id() as libc::pid_t;
+
+		let ret = unsafe { libc::kill(pid, signal) };
+		if ret == -1 {
+			return Err(io::Error::last_os_error());
+		}
+
+		Ok(())
 	}
 }

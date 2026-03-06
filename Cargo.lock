@@ -2546,6 +2546,7 @@ dependencies = [
  "clap",
  "goblin",
  "home",
+ "libc",
  "ovmf-prebuilt",
  "sysinfo",
  "ureq",
