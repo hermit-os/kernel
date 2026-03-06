@@ -568,15 +568,31 @@ pub struct File {
 }
 
 impl File {
+	/// Opens a file in write-only mode.
+	///
+	/// This function will create a file if it does not exist, and will truncate it if it does.
+	fn create(path: &str) -> io::Result<File> {
+		let fd = open(
+			path,
+			OpenOption::O_CREAT | OpenOption::O_TRUNC | OpenOption::O_WRONLY,
+			AccessPermission::from_bits(0o666).unwrap(),
+		)?;
+
+		Ok(File {
+			fd,
+			path: path.to_owned(),
+		})
+	}
+
 	/// Creates a new file in read-write mode; error if the file exists.
 	///
 	/// This function will create a file if it does not exist, or return
 	/// an error if it does. This way, if the call succeeds, the file
 	/// returned is guaranteed to be new.
-	pub fn create(path: &str) -> io::Result<Self> {
+	pub fn create_new(path: &str) -> io::Result<Self> {
 		let fd = open(
 			path,
-			OpenOption::O_CREAT | OpenOption::O_RDWR,
+			OpenOption::O_CREAT | OpenOption::O_EXCL | OpenOption::O_RDWR,
 			AccessPermission::from_bits(0o666).unwrap(),
 		)?;
 
