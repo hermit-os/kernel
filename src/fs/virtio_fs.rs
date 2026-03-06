@@ -964,12 +964,12 @@ impl Clone for VirtioFsFileHandle {
 }
 
 pub struct VirtioFsDirectoryHandle {
-	name: Option<String>,
+	name: String,
 	read_position: Mutex<usize>,
 }
 
 impl VirtioFsDirectoryHandle {
-	pub fn new(name: Option<String>) -> Self {
+	pub fn new(name: String) -> Self {
 		Self {
 			name,
 			read_position: Mutex::new(0),
@@ -979,10 +979,11 @@ impl VirtioFsDirectoryHandle {
 
 impl ObjectInterface for VirtioFsDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let path: CString = if let Some(name) = &self.name {
-			CString::new("/".to_owned() + name).unwrap()
-		} else {
+		let path = if self.name.is_empty() {
 			CString::new("/").unwrap()
+		} else {
+			let path = ["/", &self.name].join("");
+			CString::new(path).unwrap()
 		};
 
 		debug!("virtio-fs opendir: {path:#?}");
@@ -1097,12 +1098,16 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 
 #[derive(Debug)]
 pub(crate) struct VirtioFsDirectory {
-	prefix: Option<String>,
+	/// The external path of this directory.
+	///
+	/// Before talking to virtio-fs, the relative path inside this directory is
+	/// adjoined with this prefix.
+	prefix: String,
 	attr: FileAttr,
 }
 
 impl VirtioFsDirectory {
-	pub fn new(prefix: Option<String>) -> Self {
+	pub fn new(prefix: String) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 
@@ -1118,17 +1123,11 @@ impl VirtioFsDirectory {
 		}
 	}
 
-	fn traversal_path(&self, components: &[&str]) -> CString {
-		let prefix_deref = self.prefix.as_deref();
-		let components_with_prefix = prefix_deref.iter().chain(components.iter().rev());
-		let path: String = components_with_prefix
-			.flat_map(|component| ["/", component])
-			.collect();
-		if path.is_empty() {
-			CString::new("/").unwrap()
-		} else {
-			CString::new(path).unwrap()
-		}
+	fn traversal_path(&self, path: &str) -> CString {
+		let prefix = self.prefix.as_str();
+		let prefix = prefix.strip_suffix("/").unwrap_or(prefix);
+		let path = [prefix, path].join("/");
+		CString::new(path).unwrap()
 	}
 }
 
@@ -1148,8 +1147,8 @@ impl VfsNode for VirtioFsDirectory {
 		)))
 	}
 
-	fn traverse_readdir(&self, components: &mut Vec<&str>) -> io::Result<Vec<DirectoryEntry>> {
-		let path = self.traversal_path(components);
+	fn traverse_readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs opendir: {path:#?}");
 
@@ -1228,8 +1227,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(entries)
 	}
 
-	fn traverse_stat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs stat: {path:#?}");
 
@@ -1252,12 +1251,11 @@ impl VfsNode for VirtioFsDirectory {
 		}
 
 		let path = readlink(entry_out.nodeid)?;
-		let mut components: Vec<&str> = path.split('/').collect();
-		self.traverse_stat(&mut components)
+		self.traverse_stat(&path)
 	}
 
-	fn traverse_lstat(&self, components: &mut Vec<&str>) -> io::Result<FileAttr> {
-		let path = self.traversal_path(components);
+	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs lstat: {path:#?}");
 
@@ -1271,11 +1269,11 @@ impl VfsNode for VirtioFsDirectory {
 
 	fn traverse_open(
 		&self,
-		components: &mut Vec<&str>,
+		path: &str,
 		opt: OpenOption,
 		mode: AccessPermission,
 	) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
-		let path = self.traversal_path(components);
+		let path = self.traversal_path(path);
 
 		debug!("virtio-fs open: {path:#?}, {opt:?} {mode:?}");
 
@@ -1300,7 +1298,7 @@ impl VfsNode for VirtioFsDirectory {
 			let mut path = path.into_string().unwrap();
 			path.remove(0);
 			return Ok(Arc::new(async_lock::RwLock::new(
-				VirtioFsDirectoryHandle::new(Some(path)).into(),
+				VirtioFsDirectoryHandle::new(path).into(),
 			)));
 		}
 
@@ -1347,8 +1345,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(Arc::new(async_lock::RwLock::new(file.into())))
 	}
 
-	fn traverse_unlink(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
 		let rsp = get_filesystem_driver()
@@ -1360,8 +1358,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(())
 	}
 
-	fn traverse_rmdir(&self, components: &mut Vec<&str>) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_rmdir(&self, path: &str) -> io::Result<()> {
+		let path = self.traversal_path(path);
 
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
 		let rsp = get_filesystem_driver()
@@ -1373,8 +1371,8 @@ impl VfsNode for VirtioFsDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: AccessPermission) -> io::Result<()> {
-		let path = self.traversal_path(components);
+	fn traverse_mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
+		let path = self.traversal_path(path);
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
 
 		let rsp = get_filesystem_driver()
@@ -1405,14 +1403,17 @@ pub(crate) fn init() {
 		let mount_point = if mount_point.starts_with('/') {
 			mount_point
 		} else {
-			"/".to_owned() + &mount_point
+			["/", &mount_point].join("")
 		};
 
 		info!("Mounting virtio-fs at {mount_point}");
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(mount_point.as_str(), Box::new(VirtioFsDirectory::new(None)))
+			.mount(
+				mount_point.as_str(),
+				Box::new(VirtioFsDirectory::new("/".to_owned())),
+			)
 			.expect("Mount failed. Invalid mount_point?");
 		return;
 	}
@@ -1504,14 +1505,12 @@ pub(crate) fn init() {
 
 		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		if attr.st_mode.contains(AccessPermission::S_IFDIR) {
-			info!("virtio-fs mount {entry} to /{entry}");
+			let path = ["/", &entry].join("");
+			info!("virtio-fs mount {entry} to {path}");
 			fs::FILESYSTEM
 				.get()
 				.unwrap()
-				.mount(
-					&("/".to_owned() + entry.as_str()),
-					Box::new(VirtioFsDirectory::new(Some(entry))),
-				)
+				.mount(&path, Box::new(VirtioFsDirectory::new(path.clone())))
 				.expect("Mount failed. Invalid mount_point?");
 		} else {
 			warn!("virtio-fs don't mount {entry}. It isn't a directory!");
