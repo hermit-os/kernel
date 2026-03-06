@@ -175,10 +175,11 @@ extern "C" fn initd(_arg: usize) {
 
 	// Initialize Drivers
 	drivers::init();
+	// The filesystem needs to be initialized before network to allow writing packet captures to a file.
+	fs::init();
 	crate::executor::init();
 
 	syscalls::init();
-	fs::init();
 	#[cfg(feature = "shell")]
 	shell::init();
 

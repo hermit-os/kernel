@@ -13,6 +13,13 @@ use smoltcp::socket::dns;
 use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
+#[cfg(feature = "write-pcap-file")]
+use {
+	crate::drivers::Driver,
+	crate::fs::File,
+	embedded_io::Write,
+	smoltcp::phy::{PcapMode, PcapSink, PcapWriter},
+};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
@@ -42,18 +49,25 @@ impl<'a> NetworkInterface<'a> {
 				feature = "rtl8139",
 				feature = "virtio-net",
 			) => {
-				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
+				#[cfg_attr(any(feature = "net-trace", feature = "write-pcap-file"), expect(unused_mut))]
 				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
 					return NetworkState::InitializationFailed;
 				};
 			}
 			_ => {
-				#[cfg_attr(feature = "net-trace", expect(unused_mut))]
+				#[cfg_attr(any(feature = "net-trace", feature = "write-pcap-file"), expect(unused_mut))]
 				let mut device = LoopbackDriver::new();
 			}
 		}
 
 		let mac = device.get_mac_address();
+
+		#[cfg_attr(feature = "net-trace", expect(unused_mut))]
+		#[cfg(feature = "write-pcap-file")]
+		let mut device = {
+			let default_name = device.get_name();
+			PcapWriter::new(device, FileSink::new(default_name), PcapMode::Both)
+		};
 
 		#[cfg(feature = "net-trace")]
 		let mut device = Tracer::new(device, |timestamp, printer| trace!("{timestamp} {printer}"));
@@ -130,5 +144,69 @@ impl<'a> NetworkInterface<'a> {
 			#[cfg(feature = "dns")]
 			dns_handle,
 		}))
+	}
+}
+
+#[cfg(feature = "write-pcap-file")]
+/// Sink for packet captures. If the file Option is None, the writes are ignored.
+/// This is useful when we fail to create the sink file at runtime.
+pub(in crate::executor) struct FileSink(Option<File>);
+
+#[cfg(feature = "write-pcap-file")]
+impl FileSink {
+	fn new(default_name: &str) -> Self {
+		use core::ops::ControlFlow;
+
+		use crate::errno::Errno;
+
+		let file_name_base = option_env!("HERMIT_PCAP_NAME").unwrap_or(default_name);
+		let mut file_name = format!("{file_name_base}.pcap");
+		let file = (1..)
+			.try_for_each(|i| {
+				let path = format!("/root/{file_name}");
+				match File::create_new(path.as_str()) {
+					Err(Errno::Exist) => {
+						file_name = format!("{file_name_base} ({i}).pcap");
+						ControlFlow::Continue(())
+					}
+					r => ControlFlow::Break(r),
+				}
+			})
+			.break_value()
+			.unwrap();
+
+		if let Err(e) = file {
+			if e == Errno::Noent {
+				error!("/root is not mounted. Are there any mount points for the VM?");
+			}
+			error!(
+				"Error {e:?} encountered while creating the pcap file. No pcap file will be written."
+			);
+		} else {
+			info!(
+				"The packet capture will be written to a file called \"{file_name}\" under the mount point."
+			);
+		}
+
+		FileSink(file.ok())
+	}
+}
+
+#[cfg(feature = "write-pcap-file")]
+impl PcapSink for FileSink {
+	fn write(&mut self, data: &[u8]) {
+		if let Some(file) = self.0.as_mut()
+			&& let Some(err) = file.write(data).err()
+		{
+			error!("Error while writing to the pcap file: {err}");
+		}
+	}
+
+	fn flush(&mut self) {
+		if let Some(file) = self.0.as_mut()
+			&& let Some(err) = file.flush().err()
+		{
+			error!("Error while flushing the pcap file: {err}");
+		}
 	}
 }
