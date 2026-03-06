@@ -114,10 +114,16 @@ fn scan_bus(bus_range: impl IntoIterator<Item = u8> + Debug, pci_config: PciConf
 			let header = PciHeader::new(pci_address);
 
 			let (device_id, vendor_id) = header.id(pci_config);
-			if device_id != u16::MAX && vendor_id != u16::MAX {
-				let device = PciDevice::new(pci_address, pci_config);
-				PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(device));
+			if device_id == u16::MAX || vendor_id == u16::MAX {
+				// If device 0 on this bus is absent, no devices exist on
+				// this bus — skip the remaining device slots.
+				if device == 0 {
+					break;
+				}
+				continue;
 			}
+			let device = PciDevice::new(pci_address, pci_config);
+			PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(device));
 		}
 	}
 }
