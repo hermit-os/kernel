@@ -720,6 +720,9 @@ struct KillChildOnDrop(Child);
 
 impl Drop for KillChildOnDrop {
 	fn drop(&mut self) {
+		// We ignore errors here, since the process may already be killed,
+		// resulting in `ESRCH`. Note that on Linux, we won't get `ESRCH`,
+		// since `std` uses `pidfd_send_signal` instead of `kill` on Linux.
 		self.0.kill().ok();
 	}
 }
