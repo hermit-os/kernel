@@ -5,11 +5,14 @@ use hashbrown::HashMap;
 pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 #[cfg(feature = "virtio-fs")]
 pub(crate) use crate::arch::kernel::mmio::get_filesystem_driver;
+#[cfg(feature = "virtio-vsock")]
+pub(crate) use crate::arch::kernel::mmio::get_vsock_driver;
 #[cfg(any(
 	feature = "virtio-console",
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
 	feature = "virtio-net",
 	feature = "virtio-fs",
+	feature = "virtio-vsock",
 ))]
 use crate::drivers::Driver;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
@@ -69,6 +72,23 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 			.entry(irq_number)
 			.or_default()
 			.push_back(virtio_fs_handler);
+	}
+
+	#[cfg(feature = "virtio-vsock")]
+	if let Some(drv) = get_vsock_driver() {
+		fn vsock_handler() {
+			let Some(driver) = get_vsock_driver() else {
+				return;
+			};
+
+			driver.lock().handle_interrupt();
+		}
+
+		let irq_number = drv.lock().get_interrupt_number();
+		handlers
+			.entry(irq_number)
+			.or_default()
+			.push_back(vsock_handler);
 	}
 
 	handlers

@@ -1,7 +1,13 @@
 #![allow(dead_code)]
 
-#[cfg(feature = "pci")]
-pub mod pci;
+cfg_select! {
+	feature = "pci" => {
+		mod pci;
+	}
+	_ => {
+		mod mmio;
+	}
+}
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -9,21 +15,23 @@ use core::mem;
 
 use pci_types::InterruptLine;
 use smallvec::SmallVec;
-use virtio::vsock::Hdr;
+use virtio::vsock::{ConfigVolatileFieldAccess, Hdr};
+use volatile::VolatileRef;
+use volatile::access::ReadOnly;
 
 use super::virtio::virtqueue::VirtQueue;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioVsockError;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq,
 };
-#[cfg(feature = "pci")]
-use crate::drivers::vsock::pci::VsockDevCfgRaw;
 use crate::mm::device_alloc::DeviceAlloc;
 
 fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
@@ -243,7 +251,7 @@ impl EventQueue {
 /// Handling the right access to fields, as some are read-only
 /// for the driver.
 pub(crate) struct VsockDevCfg {
-	pub raw: &'static VsockDevCfgRaw,
+	pub raw: VolatileRef<'static, virtio::vsock::Config, ReadOnly>,
 	pub dev_id: u16,
 	pub features: virtio::vsock::F,
 }
@@ -278,7 +286,7 @@ impl VirtioVsockDriver {
 
 	#[inline]
 	pub fn get_cid(&self) -> u64 {
-		self.dev_cfg.raw.guest_cid
+		self.dev_cfg.raw.as_ptr().guest_cid().read().to_ne()
 	}
 
 	#[cfg(feature = "pci")]

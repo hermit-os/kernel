@@ -11,7 +11,11 @@ use volatile::VolatileRef;
 
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(
-	any(feature = "virtio-console", feature = "virtio-fs"),
+	any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-vsock",
+	),
 	not(feature = "pci"),
 ))]
 use crate::arch::riscv64::kernel::mmio::MmioDriver;
@@ -33,6 +37,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 		feature = "virtio-console",
 		feature = "virtio-fs",
 		feature = "virtio-net",
+		feature = "virtio-vsock",
 	),
 	not(feature = "pci"),
 ))]
@@ -41,7 +46,11 @@ use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
 #[cfg(all(
-	any(feature = "virtio-console", feature = "virtio-fs"),
+	any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-vsock",
+	),
 	not(feature = "pci")
 ))]
 use crate::kernel::mmio::register_driver;
@@ -259,6 +268,12 @@ pub fn init_drivers() {
 					#[cfg(feature = "virtio-net")]
 					Ok(VirtioDriver::Net(drv)) => {
 						*NETWORK_DEVICE.lock() = Some(*drv);
+					}
+					#[cfg(feature = "virtio-vsock")]
+					Ok(VirtioDriver::Vsock(drv)) => {
+						register_driver(MmioDriver::VirtioVsock(
+							hermit_sync::InterruptSpinMutex::new(*drv),
+						));
 					}
 					Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 				}

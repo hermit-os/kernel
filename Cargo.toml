@@ -189,7 +189,7 @@ virtio-console = ["virtio"]
 virtio-fs = ["virtio", "dep:fuse-abi", "fuse-abi/num_enum"]
 
 ## Enables the virtio-vsock driver.
-virtio-vsock = ["virtio", "pci"]
+virtio-vsock = ["virtio"]
 
 #! ### Other Drivers
 
