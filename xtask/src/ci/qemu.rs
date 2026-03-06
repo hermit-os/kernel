@@ -136,7 +136,8 @@ impl Qemu {
 			qemu.stdin(Stdio::piped()).stdout(Stdio::piped());
 		}
 
-		let mut qemu = KillChildOnDrop(qemu.spawn().context("Failed to spawn QEMU")?);
+		let qemu = qemu.spawn().context("Failed to spawn QEMU")?;
+		let mut qemu = KillChildOnDrop(qemu);
 
 		thread::sleep(Duration::from_millis(100));
 		if let Some(status) = qemu.0.try_wait()? {
@@ -535,7 +536,9 @@ fn spawn_virtiofsd() -> Result<KillChildOnDrop> {
 
 	eprintln!("$ {cmd}");
 
-	Ok(KillChildOnDrop(Command::from(cmd).spawn()?))
+	let virtiofsd = Command::from(cmd).spawn()?;
+	let virtiofsd = KillChildOnDrop(virtiofsd);
+	Ok(virtiofsd)
 }
 
 fn get_frequency() -> u64 {
