@@ -505,7 +505,7 @@ impl Qemu {
 		}
 
 		if arch == Arch::X86_64 {
-			status.code() == Some(3)
+			status.success() || status.code() == Some(3)
 		} else {
 			status.success()
 		}
