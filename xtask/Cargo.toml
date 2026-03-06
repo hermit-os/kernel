@@ -5,13 +5,14 @@ edition = "2024"
 
 [features]
 default = ["ci"]
-ci = ["dep:ovmf-prebuilt", "dep:sysinfo", "dep:ureq", "dep:vsock", "dep:wait-timeout"]
+ci = ["dep:libc", "dep:ovmf-prebuilt", "dep:sysinfo", "dep:ureq", "dep:vsock", "dep:wait-timeout"]
 
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 goblin = { version = "0.10", default-features = false, features = ["archive", "elf32", "elf64", "std"] }
 home = "0.5"
+libc = { version = "0.2", optional = true }
 ovmf-prebuilt = { version = "0.2", optional = true }
 sysinfo = { version = "0.38", optional = true }
 ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
