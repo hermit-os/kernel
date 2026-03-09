@@ -1,8 +1,9 @@
 use core::ptr;
 
 use memory_addresses::VirtAddr;
-use uhyve_interface::parameters::{ExitParams, SerialWriteBufferParams};
-use uhyve_interface::{Hypercall, HypercallAddress};
+use uhyve_interface::GuestPhysAddr;
+use uhyve_interface::v2::parameters::SerialWriteBufferParams;
+use uhyve_interface::v2::{Hypercall, HypercallAddress};
 
 use crate::arch;
 use crate::arch::mm::paging::virtual_to_physical;
@@ -10,15 +11,17 @@ use crate::arch::mm::paging::virtual_to_physical;
 #[cfg(target_os = "none")]
 hermit_entry::define_uhyve_interface_version!(uhyve_interface::UHYVE_INTERFACE_VERSION);
 
-/// Perform a SerialWriteBuffer hypercall with `buf` as payload.
+/// perform a SerialWriteBuffer hypercall with `buf` as payload
 #[inline]
 pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
-	let len = buf.len();
-	let buf = virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref::<[u8]>(buf)))
-		.unwrap()
-		.as_u64()
-		.into();
-	let p = SerialWriteBufferParams { buf, len };
+	let p = SerialWriteBufferParams {
+		buf: GuestPhysAddr::new(
+			virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref::<[u8]>(buf)))
+				.unwrap()
+				.as_u64(),
+		),
+		len: buf.len() as u64,
+	};
 	uhyve_hypercall(Hypercall::SerialWriteBuffer(&p));
 }
 
@@ -34,9 +37,11 @@ fn data_addr<T>(data: &T) -> u64 {
 #[inline]
 fn hypercall_data(hypercall: &Hypercall<'_>) -> u64 {
 	match hypercall {
-		Hypercall::Cmdsize(data) => data_addr(*data),
-		Hypercall::Cmdval(data) => data_addr(*data),
-		Hypercall::Exit(data) => data_addr(*data),
+		// As we are encoding an exit code (max 32 bits) into "an
+		// address", and memory_addresses complains if an address
+		// has any bits above the 48th one set to 1, we encode
+		// potential negative numbers into a u32, then a u64.
+		Hypercall::Exit(exit_code) => u64::from((*exit_code) as u32),
 		Hypercall::FileClose(data) => data_addr(*data),
 		Hypercall::FileLseek(data) => data_addr(*data),
 		Hypercall::FileOpen(data) => data_addr(*data),
@@ -57,20 +62,25 @@ pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
 	let data = hypercall_data(&hypercall);
 
 	#[cfg(target_arch = "x86_64")]
-	unsafe {
-		use x86_64::instructions::port::Port;
-
-		let data =
-			u32::try_from(data).expect("Hypercall data must lie in the first 4GiB of memory");
-		Port::new(ptr).write(data);
+	{
+		unsafe {
+			use core::arch::asm;
+			asm!(
+				"out dx, eax",
+				in("dx") ptr,
+				in("eax") 0x1234u32,
+				in("rdi") data,
+				options(nostack, preserves_flags)
+			);
+		}
 	}
 
 	#[cfg(target_arch = "aarch64")]
 	unsafe {
 		use core::arch::asm;
 		asm!(
-			"str x8, [{ptr}]",
-			ptr = in(reg) u64::from(ptr),
+			"str x8, [{ptr:x}]",
+			ptr = in(reg) ptr,
 			in("x8") data,
 			options(nostack),
 		);
@@ -81,9 +91,7 @@ pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
 }
 
 pub fn shutdown(error_code: i32) -> ! {
-	let sysexit = ExitParams { arg: error_code };
-	uhyve_hypercall(Hypercall::Exit(&sysexit));
-
+	uhyve_hypercall(Hypercall::Exit(error_code));
 	loop {
 		arch::processor::halt();
 	}
