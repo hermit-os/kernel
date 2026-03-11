@@ -82,7 +82,24 @@ impl MmioDriver {
 	}
 }
 
-unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters>> {
+unsafe fn check_ptr(
+	virtual_address: VirtAddr,
+	current_address: usize,
+) -> Option<VolatileRef<'static, DeviceRegisters>> {
+	trace!("try to detect MMIO device at physical address {current_address:#X}");
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	paging::map::<BasePageSize>(
+		virtual_address,
+		PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
+		1,
+		flags,
+	);
+
+	let addr = virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1));
+	let ptr = ptr::with_exposed_provenance_mut::<u8>(addr);
+
 	// Verify the first register value to find out if this is really an MMIO magic-value.
 	let mmio = unsafe { VolatileRef::new(NonNull::new(ptr.cast::<DeviceRegisters>()).unwrap()) };
 
@@ -107,16 +124,21 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 
 	info!("Found Virtio {id:?} device: {mmio:p}");
 
+	if cfg!(debug_assertions) {
+		let len = usize::try_from(BasePageSize::SIZE).unwrap();
+		let start = current_address.align_down(len);
+		let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+		FrameAlloc::allocate_at(frame_range).unwrap_err();
+	}
+
 	Some(mmio)
 }
 
 fn check_linux_args(
 	linux_mmio: &'static [String],
+	virtual_address: VirtAddr,
 ) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
-
 	let mut devices = vec![];
 	for arg in linux_mmio {
 		trace!("check linux parameter: {arg}");
@@ -128,31 +150,9 @@ fn check_linux_args(
 				let current_address = usize::from_str_radix(without_prefix, 16).unwrap();
 				let irq: u8 = v[1].parse::<u8>().unwrap();
 
-				trace!("try to detect MMIO device at physical address {current_address:#X}");
-
-				let mut flags = PageTableEntryFlags::empty();
-				flags.normal().writable();
-				paging::map::<BasePageSize>(
-					virtual_address,
-					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-					1,
-					flags,
-				);
-
-				let addr = virtual_address.as_usize()
-					| (current_address & (BasePageSize::SIZE as usize - 1));
-				let ptr = ptr::with_exposed_provenance_mut(addr);
-				let Some(mmio) = (unsafe { check_ptr(ptr) }) else {
+				let Some(mmio) = (unsafe { check_ptr(virtual_address, current_address) }) else {
 					continue;
 				};
-
-				if cfg!(debug_assertions) {
-					let len = usize::try_from(BasePageSize::SIZE).unwrap();
-					let start = current_address.align_down(len);
-					let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-					FrameAlloc::allocate_at(frame_range).unwrap_err();
-				}
 
 				devices.push((mmio, irq));
 			}
@@ -165,17 +165,13 @@ fn check_linux_args(
 	devices
 }
 
-fn guess_device() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
+fn guess_device(virtual_address: VirtAddr) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	let mut devices = vec![];
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
-		trace!("try to detect MMIO device at physical address {current_address:#X}");
 		// Have we crossed a page boundary in the last iteration?
 		// info!("before the {}. paging", current_page);
 		if current_address / BasePageSize::SIZE as usize > current_page {
@@ -183,32 +179,12 @@ fn guess_device() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 				return devices;
 			}
 
-			let mut flags = PageTableEntryFlags::empty();
-			flags.normal().writable();
-			paging::map::<BasePageSize>(
-				virtual_address,
-				PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-				1,
-				flags,
-			);
-
 			current_page = current_address / BasePageSize::SIZE as usize;
 		}
 
-		let addr =
-			virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1));
-		let ptr = ptr::with_exposed_provenance_mut(addr);
-		let Some(mmio) = (unsafe { check_ptr(ptr) }) else {
+		let Some(mmio) = (unsafe { check_ptr(virtual_address, current_address) }) else {
 			continue;
 		};
-
-		if cfg!(debug_assertions) {
-			let len = usize::try_from(BasePageSize::SIZE).unwrap();
-			let start = current_address.align_down(len);
-			let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-			FrameAlloc::allocate_at(frame_range).unwrap_err();
-		}
 
 		devices.push((mmio, IRQ_NUMBER));
 	}
@@ -217,12 +193,16 @@ fn guess_device() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 }
 
 fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let page_range = PageBox::new(layout).unwrap();
+	let virtual_address = VirtAddr::from(page_range.start());
+
 	let linux_mmio = env::mmio();
 
 	if linux_mmio.is_empty() {
-		guess_device()
+		guess_device(virtual_address)
 	} else {
-		check_linux_args(linux_mmio)
+		check_linux_args(linux_mmio, virtual_address)
 	}
 }
 
