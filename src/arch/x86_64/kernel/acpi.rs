@@ -183,6 +183,10 @@ impl AcpiTable<'_> {
 	pub fn table_end_address(&self) -> usize {
 		self.header_start_address() + self.header.length as usize
 	}
+
+	pub fn table_byte_len(&self) -> usize {
+		self.header.length as usize - mem::size_of::<AcpiSdtHeader>()
+	}
 }
 
 impl Drop for AcpiTable<'_> {
@@ -383,9 +387,9 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 	// Get the AML code.
 	// As we do not implement an AML interpreter, we search through the bytecode.
 	let aml = unsafe {
-		slice::from_ptr_range(
-			ptr::with_exposed_provenance(table.table_start_address())
-				..ptr::with_exposed_provenance(table.table_end_address()),
+		slice::from_raw_parts(
+			ptr::with_exposed_provenance(table.table_start_address()),
+			table.table_byte_len(),
 		)
 	};
 

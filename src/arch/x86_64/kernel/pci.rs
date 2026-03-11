@@ -124,7 +124,7 @@ fn scan_bus(bus_range: impl IntoIterator<Item = u8> + Debug, pci_config: PciConf
 
 #[cfg(feature = "acpi")]
 mod pcie {
-	use core::{ptr, slice};
+	use core::{mem, ptr, slice};
 
 	use memory_addresses::{PhysAddr, VirtAddr};
 	use pci_types::{ConfigRegionAccess, PciAddress};
@@ -142,8 +142,8 @@ mod pcie {
 		};
 
 		let start = ptr::with_exposed_provenance::<McfgEntry>(table.table_start_address() + 8);
-		let end = ptr::with_exposed_provenance::<McfgEntry>(table.table_end_address());
-		let entries = unsafe { slice::from_ptr_range(start..end) };
+		let len = table.table_byte_len() / mem::size_of::<McfgEntry>();
+		let entries = unsafe { slice::from_raw_parts(start, len) };
 
 		if entries.is_empty() {
 			return false;

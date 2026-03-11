@@ -55,7 +55,6 @@
 )]
 #![feature(linked_list_cursors)]
 #![feature(never_type)]
-#![feature(slice_from_ptr_range)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
 	feature(specialization)
