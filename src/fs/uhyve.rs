@@ -249,7 +249,7 @@ pub(crate) fn init() {
 
 		let obj = Box::new(UhyveDirectory::new(mount_point.to_owned()));
 		let Err(errno) = fs::FILESYSTEM.get().unwrap().mount(mount_point, obj) else {
-			return;
+			continue;
 		};
 
 		assert_eq!(errno, Errno::Badf);
