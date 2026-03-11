@@ -1,4 +1,3 @@
-#![feature(test)]
 #![no_std]
 #![no_main]
 #![test_runner(common::test_case_runner)]

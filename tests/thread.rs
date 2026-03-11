@@ -1,4 +1,3 @@
-#![feature(test)]
 #![feature(thread_local)]
 #![no_std]
 #![no_main]
