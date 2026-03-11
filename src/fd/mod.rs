@@ -340,7 +340,32 @@ pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	block_on(async { obj.read().await.read(buf).await }, None)
+
+	// block_on(
+	// 	future::poll_fn(|cx| {
+	// 		dbg!(fd);
+	// 		let read = pin!(obj.write());
+	// 		let Ready(read) = read.poll(cx) else {
+	// 			return Pending;
+	// 		};
+	// 		dbg!(fd);
+
+	// 		let read = pin!(read.read(buf));
+	// 		read.poll(cx)
+	// 	}),
+	// 	None,
+	// )
+	block_on(
+		async {
+			dbg!(fd);
+			let guard = obj.write().await;
+			dbg!(fd);
+			let ret = guard.read(buf).await;
+			dbg!(fd);
+			ret
+		},
+		None,
+	)
 }
 
 pub(crate) fn lseek(fd: RawFd, offset: isize, whence: SeekWhence) -> io::Result<isize> {
@@ -362,7 +387,17 @@ pub(crate) fn write(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
 		return Ok(0);
 	}
 
-	block_on(async { obj.read().await.write(buf).await }, None)
+	block_on(
+		async {
+			dbg!(fd);
+			let guard = obj.read().await;
+			dbg!(fd);
+			let ret = guard.write(buf).await;
+			dbg!(fd);
+			ret
+		},
+		None,
+	)
 }
 
 pub(crate) fn truncate(fd: RawFd, length: usize) -> io::Result<()> {

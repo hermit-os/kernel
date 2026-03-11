@@ -606,9 +606,9 @@ pub fn map<S: PageSize>(
 	mut count: usize,
 	flags: PageTableEntryFlags,
 ) {
-	trace!(
-		"Mapping virtual address {virtual_address:p} to physical address {physical_address:p} ({count} pages)"
-	);
+	// trace!(
+	// 	"Mapping virtual address {virtual_address:p} to physical address {physical_address:p} ({count} pages)"
+	// );
 
 	if count < GROUP_SIZE {
 		let range = get_page_range::<S>(virtual_address, count);

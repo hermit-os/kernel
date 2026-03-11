@@ -461,11 +461,15 @@ impl PerCoreScheduler {
 		&self,
 		fd: RawFd,
 	) -> io::Result<Arc<async_lock::RwLock<dyn ObjectInterface>>> {
-		without_interrupts(|| {
+		let ret = without_interrupts(|| {
 			let current_task = self.current_task.borrow();
 			let object_map = current_task.object_map.read();
 			object_map.get(&fd).cloned().ok_or(Errno::Badf)
-		})
+		})?;
+
+		println!("fd = {fd}, fd = {ret:p}");
+
+		Ok(ret)
 	}
 
 	/// Creates a new map between file descriptor and their IO interface and
