@@ -46,7 +46,13 @@
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![feature(linkage)]
+#![cfg_attr(
+	all(
+		not(any(feature = "common-os", feature = "nostd")),
+		not(target_arch = "riscv64"),
+	),
+	feature(linkage)
+)]
 #![feature(linked_list_cursors)]
 #![feature(never_type)]
 #![feature(slice_from_ptr_range)]
@@ -54,7 +60,13 @@
 	any(target_arch = "aarch64", target_arch = "riscv64"),
 	feature(specialization)
 )]
-#![feature(thread_local)]
+#![cfg_attr(
+	all(
+		not(any(feature = "common-os", feature = "nostd")),
+		not(target_arch = "riscv64"),
+	),
+	feature(thread_local)
+)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
 #![cfg_attr(all(target_os = "none", test), test_runner(crate::test_runner))]
