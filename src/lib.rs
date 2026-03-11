@@ -48,7 +48,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![feature(linkage)]
 #![feature(linked_list_cursors)]
-#![feature(maybe_uninit_as_bytes)]
 #![feature(never_type)]
 #![feature(slice_from_ptr_range)]
 #![feature(slice_ptr_get)]
