@@ -76,6 +76,10 @@
 #![cfg_attr(all(target_os = "none", test), no_main)]
 // FIXME: move this to `Cargo.toml` once stable
 #![feature(strict_provenance_lints)]
+#![cfg_attr(
+	all(not(feature = "pci"), feature = "virtio"),
+	feature(type_alias_impl_trait)
+)]
 #![warn(fuzzy_provenance_casts)]
 #![warn(lossy_provenance_casts)]
 

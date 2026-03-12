@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -136,10 +135,23 @@ unsafe fn check_ptr(
 	Some(mmio)
 }
 
+trait MmioIterator: Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {}
+
+impl<
+	I: Iterator,
+	U: IntoIterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)>,
+	F: FnMut(I::Item) -> U,
+> MmioIterator for core::iter::FlatMap<I, U, F>
+{
+}
+
+type LinuxArgsMmioIterator = impl MmioIterator;
+
+#[define_opaque(LinuxArgsMmioIterator)]
 fn check_linux_args(
 	linux_mmio: &'static [String],
 	virtual_address: VirtAddr,
-) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+) -> LinuxArgsMmioIterator {
 	linux_mmio
 		.iter()
 		.inspect(|arg| trace!("check linux parameter: {arg}"))
@@ -157,9 +169,17 @@ fn check_linux_args(
 		})
 }
 
-fn guess_device(
-	virtual_address: VirtAddr,
-) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+impl<
+	I: Iterator<Item: IntoIterator<IntoIter = U, Item = U::Item>>,
+	U: Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)>,
+> MmioIterator for core::iter::Flatten<I>
+{
+}
+
+type GuessMmioIterator = impl MmioIterator;
+
+#[define_opaque(GuessMmioIterator)]
+fn guess_device(virtual_address: VirtAddr) -> GuessMmioIterator {
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	(MMIO_START..MMIO_END)
 		.step_by(512)
@@ -182,7 +202,24 @@ fn guess_device(
 		.flatten()
 }
 
-fn detect_devices() -> Box<dyn Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)>> {
+#[enum_dispatch::enum_dispatch(MmioIterator)]
+enum MmioIteratorEnum {
+	LinuxArgsMmioIterator,
+	GuessMmioIterator,
+}
+
+impl Iterator for MmioIteratorEnum {
+	type Item = (VolatileRef<'static, DeviceRegisters>, u8);
+
+	fn next(&mut self) -> Option<Self::Item> {
+		match self {
+			MmioIteratorEnum::LinuxArgsMmioIterator(iter) => iter.next(),
+			MmioIteratorEnum::GuessMmioIterator(iter) => iter.next(),
+		}
+	}
+}
+
+fn detect_devices() -> MmioIteratorEnum {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let page_range = PageBox::new(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
@@ -190,9 +227,9 @@ fn detect_devices() -> Box<dyn Iterator<Item = (VolatileRef<'static, DeviceRegis
 	let linux_mmio = env::mmio();
 
 	if linux_mmio.is_empty() {
-		Box::new(guess_device(virtual_address))
+		MmioIteratorEnum::GuessMmioIterator(guess_device(virtual_address))
 	} else {
-		Box::new(check_linux_args(linux_mmio, virtual_address))
+		MmioIteratorEnum::LinuxArgsMmioIterator(check_linux_args(linux_mmio, virtual_address))
 	}
 }
 
