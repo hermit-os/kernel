@@ -74,6 +74,10 @@ impl CargoBuild {
 		}
 	}
 
+	pub fn features(&self) -> impl Iterator<Item = &str> {
+		self.features.iter().flat_map(|s| s.split(&[' ', ','][..]))
+	}
+
 	fn features_args(&self) -> impl Iterator<Item = &str> {
 		self.features
 			.iter()

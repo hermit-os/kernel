@@ -104,8 +104,7 @@ impl Build {
 
 		if self
 			.cargo_build
-			.features
-			.iter()
+			.features()
 			.any(|feature| feature == "instrument-mcount")
 		{
 			rustflags.push("-Zinstrument-mcount");
