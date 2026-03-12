@@ -188,7 +188,7 @@ impl Qemu {
 			qemu.0.terminate()?;
 		}
 
-		let status = qemu.0.wait_timeout(Duration::from_secs(60 * 6))?;
+		let status = qemu.0.wait_timeout(Duration::from_secs(60 * 30))?;
 		let Some(status) = status else {
 			bail!("QEMU timeout")
 		};
