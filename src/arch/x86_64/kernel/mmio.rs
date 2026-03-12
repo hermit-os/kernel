@@ -135,23 +135,10 @@ unsafe fn check_ptr(
 	Some(mmio)
 }
 
-trait MmioIterator: Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {}
-
-impl<
-	I: Iterator,
-	U: IntoIterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)>,
-	F: FnMut(I::Item) -> U,
-> MmioIterator for core::iter::FlatMap<I, U, F>
-{
-}
-
-type LinuxArgsMmioIterator = impl MmioIterator;
-
-#[define_opaque(LinuxArgsMmioIterator)]
 fn check_linux_args(
 	linux_mmio: &'static [String],
 	virtual_address: VirtAddr,
-) -> LinuxArgsMmioIterator {
+) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	linux_mmio
 		.iter()
 		.inspect(|arg| trace!("check linux parameter: {arg}"))
@@ -169,17 +156,9 @@ fn check_linux_args(
 		})
 }
 
-impl<
-	I: Iterator<Item: IntoIterator<IntoIter = U, Item = U::Item>>,
-	U: Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)>,
-> MmioIterator for core::iter::Flatten<I>
-{
-}
-
-type GuessMmioIterator = impl MmioIterator;
-
-#[define_opaque(GuessMmioIterator)]
-fn guess_device(virtual_address: VirtAddr) -> GuessMmioIterator {
+fn guess_device(
+	virtual_address: VirtAddr,
+) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	(MMIO_START..MMIO_END)
 		.step_by(512)
@@ -200,37 +179,6 @@ fn guess_device(virtual_address: VirtAddr) -> GuessMmioIterator {
 			},
 		)
 		.flatten()
-}
-
-#[enum_dispatch::enum_dispatch(MmioIterator)]
-enum MmioIteratorEnum {
-	LinuxArgsMmioIterator,
-	GuessMmioIterator,
-}
-
-impl Iterator for MmioIteratorEnum {
-	type Item = (VolatileRef<'static, DeviceRegisters>, u8);
-
-	fn next(&mut self) -> Option<Self::Item> {
-		match self {
-			MmioIteratorEnum::LinuxArgsMmioIterator(iter) => iter.next(),
-			MmioIteratorEnum::GuessMmioIterator(iter) => iter.next(),
-		}
-	}
-}
-
-fn detect_devices() -> MmioIteratorEnum {
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
-
-	let linux_mmio = env::mmio();
-
-	if linux_mmio.is_empty() {
-		MmioIteratorEnum::GuessMmioIterator(guess_device(virtual_address))
-	} else {
-		MmioIteratorEnum::LinuxArgsMmioIterator(check_linux_args(linux_mmio, virtual_address))
-	}
 }
 
 #[cfg(any(
@@ -269,29 +217,43 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
+fn register_mmio(mmio: VolatileRef<'static, DeviceRegisters>, irq: u8) {
+	match mmio_virtio::init_device(mmio, irq) {
+		#[cfg(feature = "virtio-console")]
+		Ok(VirtioDriver::Console(drv)) => {
+			register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
+		}
+		#[cfg(feature = "virtio-fs")]
+		Ok(VirtioDriver::Fs(drv)) => {
+			register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
+		}
+		#[cfg(feature = "virtio-net")]
+		Ok(VirtioDriver::Net(drv)) => {
+			*NETWORK_DEVICE.lock() = Some(*drv);
+		}
+		#[cfg(feature = "virtio-vsock")]
+		Ok(VirtioDriver::Vsock(drv)) => {
+			register_driver(MmioDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
+		}
+		Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
+	}
+}
+
 pub(crate) fn init_drivers() {
 	without_interrupts(|| {
-		let devices = detect_devices();
+		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+		let page_range = PageBox::new(layout).unwrap();
+		let virtual_address = VirtAddr::from(page_range.start());
 
-		for (mmio, irq) in devices {
-			match mmio_virtio::init_device(mmio, irq) {
-				#[cfg(feature = "virtio-console")]
-				Ok(VirtioDriver::Console(drv)) => {
-					register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
-				}
-				#[cfg(feature = "virtio-fs")]
-				Ok(VirtioDriver::Fs(drv)) => {
-					register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
-				}
-				#[cfg(feature = "virtio-net")]
-				Ok(VirtioDriver::Net(drv)) => {
-					*NETWORK_DEVICE.lock() = Some(*drv);
-				}
-				#[cfg(feature = "virtio-vsock")]
-				Ok(VirtioDriver::Vsock(drv)) => {
-					register_driver(MmioDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
-				}
-				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
+		let linux_mmio = env::mmio();
+
+		if linux_mmio.is_empty() {
+			for (mmio, irq) in guess_device(virtual_address) {
+				register_mmio(mmio, irq);
+			}
+		} else {
+			for (mmio, irq) in check_linux_args(linux_mmio, virtual_address) {
+				register_mmio(mmio, irq);
 			}
 		}
 
