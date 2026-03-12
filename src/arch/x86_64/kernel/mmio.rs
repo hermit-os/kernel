@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr::NonNull;
@@ -138,61 +139,50 @@ unsafe fn check_ptr(
 fn check_linux_args(
 	linux_mmio: &'static [String],
 	virtual_address: VirtAddr,
-) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	let mut devices = vec![];
-	for arg in linux_mmio {
-		trace!("check linux parameter: {arg}");
-
-		match arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
-			Some(arg) => {
+) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+	linux_mmio
+		.iter()
+		.inspect(|arg| trace!("check linux parameter: {arg}"))
+		.flat_map(move |arg| {
+			if let Some(arg) = arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
 				let v: Vec<&str> = arg.trim().split(':').collect();
 				let without_prefix = v[0].trim_start_matches("0x");
 				let current_address = usize::from_str_radix(without_prefix, 16).unwrap();
 				let irq: u8 = v[1].parse::<u8>().unwrap();
-
-				let Some(mmio) = (unsafe { check_ptr(virtual_address, current_address) }) else {
-					continue;
-				};
-
-				devices.push((mmio, irq));
-			}
-			_ => {
+				(unsafe { check_ptr(virtual_address, current_address) }).map(|mmio| (mmio, irq))
+			} else {
 				warn!("Invalid prefix in {arg}");
+				None
 			}
-		}
-	}
-
-	devices
+		})
 }
 
-fn guess_device(virtual_address: VirtAddr) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	// Trigger page mapping in the first iteration!
-	let mut current_page = 0;
-
+fn guess_device(
+	virtual_address: VirtAddr,
+) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
-	let mut devices = vec![];
-	for current_address in (MMIO_START..MMIO_END).step_by(512) {
-		// Have we crossed a page boundary in the last iteration?
-		// info!("before the {}. paging", current_page);
-		if current_address / BasePageSize::SIZE as usize > current_page {
-			if !devices.is_empty() {
-				return devices;
-			}
-
-			current_page = current_address / BasePageSize::SIZE as usize;
-		}
-
-		let Some(mmio) = (unsafe { check_ptr(virtual_address, current_address) }) else {
-			continue;
-		};
-
-		devices.push((mmio, IRQ_NUMBER));
-	}
-
-	devices
+	(MMIO_START..MMIO_END)
+		.step_by(512)
+		.scan(
+			MMIO_END,
+			// None signals the end of the scan, while Some(None) means a device was not found at the address but the scan should continue.
+			move |end, current_address| {
+				// Have we crossed the page boundary?
+				(current_address < *end).then(|| {
+					let mmio = unsafe { check_ptr(virtual_address, current_address) };
+					// We expect all the devices to be on the same page, so once we find a device, we adjust the end of the search range.
+					if mmio.is_some() && *end == MMIO_END {
+						*end = current_address
+							.next_multiple_of(usize::try_from(BasePageSize::SIZE).unwrap());
+					}
+					mmio.map(|mmio| (mmio, IRQ_NUMBER))
+				})
+			},
+		)
+		.flatten()
 }
 
-fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
+fn detect_devices() -> Box<dyn Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)>> {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let page_range = PageBox::new(layout).unwrap();
 	let virtual_address = VirtAddr::from(page_range.start());
@@ -200,9 +190,9 @@ fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	let linux_mmio = env::mmio();
 
 	if linux_mmio.is_empty() {
-		guess_device(virtual_address)
+		Box::new(guess_device(virtual_address))
 	} else {
-		check_linux_args(linux_mmio, virtual_address)
+		Box::new(check_linux_args(linux_mmio, virtual_address))
 	}
 }
 
