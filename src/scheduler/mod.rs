@@ -360,7 +360,7 @@ impl PerCoreScheduler {
 				core_scheduler().ready_queue.push(clone_task);
 				false
 			} else {
-				panic!("Invalid core_id {}!", core_id);
+				panic!("Invalid core_id {core_id}!");
 			}
 		};
 
