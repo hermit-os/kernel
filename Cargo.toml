@@ -359,13 +359,8 @@ features = [
 	"medium-ethernet",
 	"proto-ipv4",
 	"proto-ipv6",
-	# Enable IP fragmentation
 	"proto-ipv4-fragmentation",
 	"proto-ipv6-fragmentation",
-	#
-	# Assume a MTU size of 9000
-	#"fragmentation-buffer-size-8192",
-	#"reassembly-buffer-size-8192",
 ]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
