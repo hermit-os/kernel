@@ -581,11 +581,8 @@ pub fn init() {
 		calibrate_timer();
 	}
 
-	// currently, IO-APIC isn't supported by uhyve
-	if !env::is_uhyve() {
-		// initialize IO-APIC
-		init_ioapic();
-	}
+	// initialize IO-APIC
+	init_ioapic();
 }
 
 fn init_ioapic() {
