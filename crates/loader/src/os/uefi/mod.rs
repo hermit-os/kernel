@@ -135,11 +135,14 @@ impl Esp {
 	}
 
 	pub fn read_app(&mut self) -> Vec<u8> {
-		self.read_app_at(cstr16!(r"\EFI\BOOT\hermit-app")).unwrap()
+		self.read_app_at(cstr16!(r"\EFI\hermit\hermit-app"))
+			.or_else(|| self.read_app_at(cstr16!(r"\EFI\BOOT\hermit-app")))
+			.unwrap()
 	}
 
 	pub fn read_bootargs(&mut self) -> Option<String> {
-		self.read_bootargs_at(cstr16!(r"\EFI\BOOT\hermit-bootargs"))
+		self.read_bootargs_at(cstr16!(r"\EFI\hermit\hermit-bootargs"))
+			.or_else(|| self.read_bootargs_at(cstr16!(r"\EFI\BOOT\hermit-bootargs")))
 	}
 
 	fn read_app_at<P: AsRef<Path>>(&mut self, path: P) -> Option<Vec<u8>> {
