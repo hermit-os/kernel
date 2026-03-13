@@ -22,7 +22,7 @@ pub const PIC1_OFFSET: u8 = 32;
 ///
 /// Each PIC handles 8 interrupts.
 /// We set up the two PICs to be contiguous.
-const PIC2_OFFSET: u8 = 40;
+const PIC2_OFFSET: u8 = PIC1_OFFSET + 8;
 
 const SPURIOUS_IRQ_NUMBER: u8 = 7;
 
@@ -114,8 +114,16 @@ extern "x86-interrupt" fn spurious_interrupt_on_slave(stack_frame: ExceptionStac
 }
 
 fn edit_mask(int_no: u8, insert: bool) {
-	let mut port = if int_no >= 40 { PIC2_DATA } else { PIC1_DATA };
-	let offset = if int_no >= 40 { 40 } else { 32 };
+	let mut port = if int_no >= PIC2_OFFSET {
+		PIC2_DATA
+	} else {
+		PIC1_DATA
+	};
+	let offset = if int_no >= PIC2_OFFSET {
+		PIC2_OFFSET
+	} else {
+		PIC1_OFFSET
+	};
 
 	unsafe {
 		let mask = port.read();
