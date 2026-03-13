@@ -751,9 +751,9 @@ dependencies = [
 
 [[package]]
 name = "linux-boot-params"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55b0ee4b3d02e882f3c742d872f718ae24fae18e411e49aa6624a5d64ff32080"
+checksum = "99b1c97969de6412212406b5e79207675a396988d213355bdca79606bc1b1c10"
 
 [[package]]
 name = "linux-raw-sys"
