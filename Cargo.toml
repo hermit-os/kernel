@@ -1,6 +1,6 @@
 [package]
 name = "hermit-kernel"
-version = "0.13.1"
+version = "0.13.2"
 authors = ["The Hermit Project Developers"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
