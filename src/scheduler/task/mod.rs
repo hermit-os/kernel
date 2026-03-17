@@ -516,7 +516,7 @@ impl BlockedTaskQueue {
 
 	fn mark_ready(task: &RefCell<Task>) {
 		let mut borrowed = task.borrow_mut();
-		debug!(
+		error!(
 			"Waking up task {} on core {}",
 			borrowed.id, borrowed.core_id
 		);
