@@ -313,7 +313,7 @@ virtio = { package = "virtio-spec", version = "0.3", optional = true, features =
 ahash = { version = "0.8", default-features = false }
 align-address = "0.4"
 anstyle = { version = "1", default-features = false }
-async-executor = { git = "https://github.com/hermit-os/async-executor.git", branch = "no_std", default-features = false, features = ["static"] }
+async-executor = { git = "https://github.com/hermit-os/async-executor.git", branch = "v1.14.x", default-features = false, features = ["static"] }
 async-lock = { version = "3.4.2", default-features = false }
 bit_field = "0.10"
 bitflags = "2"
