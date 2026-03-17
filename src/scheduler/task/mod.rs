@@ -542,7 +542,7 @@ impl BlockedTaskQueue {
 		{
 			// Set the task status to Blocked.
 			let mut borrowed = task.borrow_mut();
-			debug!("Blocking task {}", borrowed.id);
+			error!("Blocking task {}", borrowed.id);
 
 			assert_eq!(
 				borrowed.status,
