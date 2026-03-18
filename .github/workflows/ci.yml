@@ -31,7 +31,7 @@ jobs:
             hermit-careful: 1
           - arch: x86_64
             packages: qemu-system-x86 uftrace
-            qemu_flags: --accel --sudo
+            qemu_flags:
 
     steps:
       - name: Checkout hermit-rs
