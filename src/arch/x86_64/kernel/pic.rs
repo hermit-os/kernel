@@ -10,8 +10,20 @@ const PIC1_DATA: Port<u8> = Port::new(0x21);
 const PIC2_COMMAND: Port<u8> = Port::new(0xa0);
 const PIC2_DATA: Port<u8> = Port::new(0xa1);
 
-pub const PIC1_INTERRUPT_OFFSET: u8 = 32;
-const PIC2_INTERRUPT_OFFSET: u8 = 40;
+/// PIC1 interrupt offset.
+///
+/// Vectors 0 through 31 in the IDT are defined or reserved by the
+/// architecture. Thus, user-defined interrupts are vectors 32 through 255. We
+/// choose to map the 16 interrupts by the two PICs at the beginning of the
+/// user-defined interrupts.
+pub const PIC1_OFFSET: u8 = 32;
+
+/// PIC2 interrupt offset.
+///
+/// Each PIC handles 8 interrupts.
+/// We set up the two PICs to be contiguous.
+const PIC2_OFFSET: u8 = PIC1_OFFSET + 8;
+
 const SPURIOUS_IRQ_NUMBER: u8 = 7;
 
 /// End-Of-Interrupt Command for an Intel 8259 Programmable Interrupt Controller (PIC).
@@ -42,10 +54,10 @@ pub fn init() {
 	// This is especially true for real hardware. So provide a handler for them.
 	unsafe {
 		let mut idt = IDT.lock();
-		idt[PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER]
+		idt[PIC1_OFFSET + SPURIOUS_IRQ_NUMBER]
 			.set_handler_fn(spurious_interrupt_on_master)
 			.set_stack_index(0);
-		idt[PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER]
+		idt[PIC2_OFFSET + SPURIOUS_IRQ_NUMBER]
 			.set_handler_fn(spurious_interrupt_on_slave)
 			.set_stack_index(0);
 
@@ -65,8 +77,8 @@ pub fn init() {
 		pic2_command.write(0x11);
 
 		// Map PIC1 to interrupt numbers >= 32 and PIC2 to interrupt numbers >= 40.
-		pic1_data.write(PIC1_INTERRUPT_OFFSET);
-		pic2_data.write(PIC2_INTERRUPT_OFFSET);
+		pic1_data.write(PIC1_OFFSET);
+		pic2_data.write(PIC2_OFFSET);
 
 		// Configure PIC1 as master and PIC2 as slave.
 		pic1_data.write(0x04);
@@ -102,8 +114,16 @@ extern "x86-interrupt" fn spurious_interrupt_on_slave(stack_frame: ExceptionStac
 }
 
 fn edit_mask(int_no: u8, insert: bool) {
-	let mut port = if int_no >= 40 { PIC2_DATA } else { PIC1_DATA };
-	let offset = if int_no >= 40 { 40 } else { 32 };
+	let mut port = if int_no >= PIC2_OFFSET {
+		PIC2_DATA
+	} else {
+		PIC1_DATA
+	};
+	let offset = if int_no >= PIC2_OFFSET {
+		PIC2_OFFSET
+	} else {
+		PIC1_OFFSET
+	};
 
 	unsafe {
 		let mask = port.read();

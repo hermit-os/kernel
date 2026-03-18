@@ -5,7 +5,7 @@ use x86_64::instructions::port::Port;
 use crate::arch::x86_64::kernel::pic;
 
 const PIT_CLOCK: u64 = 1_193_182;
-pub const PIT_INTERRUPT_NUMBER: u8 = pic::PIC1_INTERRUPT_OFFSET;
+pub const PIT_INTERRUPT_NUMBER: u8 = pic::PIC1_OFFSET;
 
 const PIT_CHANNEL0_DATA: Port<u8> = Port::new(0x40);
 const PIT_CHANNEL1_DATA: Port<u8> = Port::new(0x41);

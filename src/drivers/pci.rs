@@ -172,7 +172,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 				None
 			}
 			1..=4 => {
-				// PCI specification v3 footnote 43
+				// PCI specification v3: Section 6.2.4 - footnote 43
 				#[cfg(target_arch = "x86_64")]
 				if matches!(line, 16..254) {
 					error!("Reserved IRQ number");
