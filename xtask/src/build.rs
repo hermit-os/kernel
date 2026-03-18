@@ -112,7 +112,7 @@ impl Build {
 		}
 
 		if self.randomize_layout {
-			rustflags.push("-Zrandomize-layout")
+			rustflags.push("-Zrandomize-layout");
 		}
 
 		rustflags.extend(self.cargo_build.artifact.arch.rustflags());

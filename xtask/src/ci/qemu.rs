@@ -159,7 +159,7 @@ impl Qemu {
 
 		match image_name {
 			"axum-example" | "http_server" | "http_server_poll" | "http_server_select" => {
-				test_http_server(guest_ip)?
+				test_http_server(guest_ip)?;
 			}
 			"httpd" => test_httpd(guest_ip)?,
 			"testudp" => test_testudp(guest_ip)?,
@@ -172,7 +172,7 @@ impl Qemu {
 					.iter()
 					.flat_map(|s| s.split(&[' ', ','][..]))
 					.any(|feature| feature == "client");
-				test_vsock(has_client)?
+				test_vsock(has_client)?;
 			}
 			_ => {}
 		}
