@@ -41,7 +41,9 @@ impl Rs {
 		match self.action {
 			Action::Build => Ok(()),
 			Action::Firecracker(firecracker) => firecracker.run(&image, self.smp),
-			Action::Qemu(qemu) => qemu.run(&image, self.smp, arch, small),
+			Action::Qemu(qemu) => {
+				qemu.run(&image, &self.cargo_build.features, self.smp, arch, small)
+			}
 			Action::Uhyve(uhyve) => uhyve.run(&image, self.smp),
 		}
 	}

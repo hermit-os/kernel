@@ -9,7 +9,7 @@ use std::{env, fs, io, thread};
 use anyhow::{Context, Result, bail, ensure};
 use clap::{Args, ValueEnum};
 use sysinfo::{CpuRefreshKind, System};
-use vsock::VsockStream;
+use vsock::{VsockListener, VsockStream};
 use wait_timeout::ChildExt as _;
 use xshell::cmd;
 
@@ -89,7 +89,14 @@ pub enum Device {
 }
 
 impl Qemu {
-	pub fn run(self, image: &Path, smp: usize, arch: Arch, small: bool) -> Result<()> {
+	pub fn run(
+		self,
+		image: &Path,
+		features: &[String],
+		smp: usize,
+		arch: Arch,
+		small: bool,
+	) -> Result<()> {
 		let sh = crate::sh()?;
 
 		let virtiofsd = self
@@ -160,7 +167,13 @@ impl Qemu {
 			"mioudp" => test_mioudp(guest_ip)?,
 			"poll" => test_poll(guest_ip)?,
 			"stdin" => test_stdin(&mut qemu.0)?,
-			"vsock" => test_vsock()?,
+			"vsock" => {
+				let has_client = features
+					.iter()
+					.flat_map(|s| s.split(&[' ', ','][..]))
+					.any(|feature| feature == "client");
+				test_vsock(has_client)?
+			}
 			_ => {}
 		}
 
@@ -580,11 +593,17 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 	Ok(())
 }
 
-fn test_vsock() -> Result<()> {
-	thread::sleep(Duration::from_secs(10));
-	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+fn test_vsock(has_client: bool) -> Result<()> {
+	let mut stream = if has_client {
+		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, 9975)?;
+		let (stream, _addr) = listener.accept()?;
+		stream
+	} else {
+		thread::sleep(Duration::from_secs(10));
+		VsockStream::connect_with_cid_port(3, 9975)?
+	};
 
-	let mut stream = VsockStream::connect_with_cid_port(3, 9975)?;
+	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
 	for message in messages {
 		writeln!(&mut stream, "{message}")?;
 		thread::sleep(Duration::from_secs(1));

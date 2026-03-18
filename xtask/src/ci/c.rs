@@ -45,7 +45,7 @@ impl C {
 		match self.action {
 			Action::Build => Ok(()),
 			Action::Firecracker(firecracker) => firecracker.run(&image, self.smp),
-			Action::Qemu(qemu) => qemu.run(&image, self.smp, self.arch, false),
+			Action::Qemu(qemu) => qemu.run(&image, &[], self.smp, self.arch, false),
 			Action::Uhyve(uhyve) => uhyve.run(&image, self.smp),
 		}
 	}
