@@ -290,6 +290,12 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
         if: matrix.arch != 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --features client qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
+        if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features client,hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio --microvm
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features client,hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
+        if: matrix.arch != 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
       # FIXME: this is broken on QEMU 8.2.2
