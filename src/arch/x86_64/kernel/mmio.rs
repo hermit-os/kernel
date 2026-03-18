@@ -50,6 +50,7 @@ const IRQ_NUMBER: u8 = 44 - 32;
 
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
@@ -62,22 +63,28 @@ pub(crate) enum MmioDriver {
 impl MmioDriver {
 	#[cfg(feature = "virtio-console")]
 	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
+		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+			_ => None,
 		}
 	}
 
 	#[cfg(feature = "virtio-fs")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
+		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
+			_ => None,
 		}
 	}
 
 	#[cfg(feature = "virtio-vsock")]
 	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
+		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioVsock(drv) => Some(drv),
+			_ => None,
 		}
 	}
 }
