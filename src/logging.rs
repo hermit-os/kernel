@@ -6,6 +6,9 @@ use log::{Level, LevelFilter, Metadata, Record};
 
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 
+const TIME_SEC_WIDTH: usize = 5;
+const TIME_SUBSEC_WIDTH: usize = 6;
+
 /// Data structure to filter kernel messages
 pub struct KernelLogger {
 	time: AtomicBool,
@@ -47,7 +50,7 @@ impl log::Log for KernelLogger {
 			time = Microseconds(crate::processor::get_timer_ticks());
 			format_args!("[{time}]")
 		} else {
-			format_args!("[            ]")
+			format_args!("[{:1$}]", "", TIME_SEC_WIDTH + 1 + TIME_SUBSEC_WIDTH)
 		};
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
@@ -73,7 +76,10 @@ impl fmt::Display for Microseconds {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let seconds = self.0 / 1_000_000;
 		let microseconds = self.0 % 1_000_000;
-		write!(f, "{seconds:5}.{microseconds:06}")
+		write!(
+			f,
+			"{seconds:TIME_SEC_WIDTH$}.{microseconds:0TIME_SUBSEC_WIDTH$}"
+		)
 	}
 }
 
