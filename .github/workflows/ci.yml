@@ -42,6 +42,8 @@ jobs:
       - run: rustup component add clippy
       - name: cargo hack clippy (x86_64)
         run: |
+          cargo clippy --package hermit-kernel --target x86_64-unknown-none --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
+          cargo clippy --package hermit-kernel --target x86_64-unknown-none --no-default-features --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features tcp,virtio-net
@@ -50,6 +52,8 @@ jobs:
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
       - name: cargo hack clippy (aarch64)
         run: |
+          cargo clippy --package hermit-kernel --target aarch64-unknown-none-softfloat --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
+          cargo clippy --package hermit-kernel --target aarch64-unknown-none-softfloat --no-default-features --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features tcp,virtio-net
@@ -58,6 +62,8 @@ jobs:
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
       - name: cargo hack clippy (riscv64)
         run: |
+          cargo clippy --package hermit-kernel --target riscv64gc-unknown-none-elf --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
+          cargo clippy --package hermit-kernel --target riscv64gc-unknown-none-elf --no-default-features --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
           cargo hack clippy --package hermit-kernel --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features tcp,virtio-net
