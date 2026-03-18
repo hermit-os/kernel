@@ -428,10 +428,10 @@ impl Qemu {
 						Device::VirtioFsPci => "vhost-user-fs-pci",
 						_ => unreachable!(),
 					};
-					let default_virtio_features = if !self.no_default_virtio_features {
-						",packed=on"
-					} else {
+					let default_virtio_features = if self.no_default_virtio_features {
 						""
+					} else {
+						",packed=on"
 					};
 					vec![
 						"-chardev".to_owned(),
