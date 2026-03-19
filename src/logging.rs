@@ -3,6 +3,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
 use anstyle::AnsiColor;
+use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
@@ -13,12 +14,14 @@ const TIME_SUBSEC_WIDTH: usize = 6;
 /// Data structure to filter kernel messages
 pub struct KernelLogger {
 	time: AtomicBool,
+	filter: OnceCell<env_filter::Filter>,
 }
 
 impl KernelLogger {
 	pub const fn new() -> Self {
 		Self {
 			time: AtomicBool::new(false),
+			filter: OnceCell::new(),
 		}
 	}
 
@@ -45,6 +48,23 @@ impl log::Log for KernelLogger {
 			return;
 		}
 
+		let target = record.target();
+		let (crate_, modules) = target.split_once("::").unwrap_or((target, ""));
+		let (_modules, module) = modules.rsplit_once("::").unwrap_or(("", modules));
+		let target = if !module.is_empty() && crate_ == "hermit" {
+			module
+		} else {
+			crate_
+		};
+
+		if self.filter.get().is_some_and(|filter| {
+			// We want the target that we match against to match the target we display.
+			let record = record.to_builder().target(target).build();
+			!filter.matches(&record)
+		}) {
+			return;
+		}
+
 		let format_time = if self.time() {
 			let time = Duration::from_micros(crate::processor::get_timer_ticks());
 			format_args!(
@@ -58,14 +78,6 @@ impl log::Log for KernelLogger {
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
 
-		let target = record.target();
-		let (crate_, modules) = target.split_once("::").unwrap_or((target, ""));
-		let (_modules, module) = modules.rsplit_once("::").unwrap_or(("", modules));
-		let target = if !module.is_empty() && crate_ == "hermit" {
-			module
-		} else {
-			crate_
-		};
 		let format_target = format_args!(" {target:<10}");
 
 		let args = record.args();
@@ -116,6 +128,20 @@ pub unsafe fn init() {
 		.unwrap_or(LevelFilter::Info);
 
 	log::set_max_level(max_level);
+}
+
+pub(crate) fn init_module_filter() {
+	// We use a separate environment variable in order to avoid unnecessary cost when the basic filter is sufficient.
+	let Some(log_level) = option_env!("HERMIT_LOG_EXTENDED_FILTER") else {
+		return;
+	};
+	let filter = env_filter::Builder::new()
+		// What was set via `HERMIT_LOG_LEVEL_FILTER` or the default. It may get overwritten by the parsed filter if it has a global level.
+		.filter_level(log::max_level())
+		.parse(log_level)
+		.build();
+	log::set_max_level(filter.filter());
+	KERNEL_LOGGER.filter.set(filter).unwrap();
 }
 
 #[cfg_attr(target_arch = "riscv64", allow(unused))]

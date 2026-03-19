@@ -273,6 +273,9 @@ fn boot_processor_main() -> ! {
 	info!("tls_info = {:#x?}", env::boot_info().load_info.tls_info);
 	arch::boot_processor_init();
 
+	// We can't initialize the module filter during logger initialization as the allocations fail at that point.
+	logging::init_module_filter();
+
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 	interrupts::enable();

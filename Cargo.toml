@@ -332,7 +332,7 @@ heapless = "0.9"
 hermit-entry = { version = "0.10.9", features = ["kernel"] }
 hermit-sync = "0.1"
 lock_api = "0.4"
-log = { version = "0.4", default-features = false }
+log = { version = "0.4", default-features = false, features = ["kv"] }
 mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
 pci-ids = { version = "0.2", optional = true }
@@ -391,6 +391,11 @@ trapframe = "0.10"
 memory_addresses = { version = "0.3", default-features = false, features = [
 	"riscv64",
 ] }
+env_filter = { version = "1.0.0", default-features = false }
+
+# regex breaks linking for riscv64 on debug builds
+[target.'cfg(not(target_arch = "riscv64"))'.dependencies]
+env_filter = { version = "1.0.0", default-features = false, features = ["regex"] }
 
 [dev-dependencies]
 float-cmp = "0.10"
@@ -412,6 +417,7 @@ exclude = [
 
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "be" }
+env_filter = { git = "https://github.com/cagatay-y/env_logger", branch = "feat-no_std-alloc" }
 
 [profile.profiling]
 inherits = "release"

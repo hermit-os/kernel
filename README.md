@@ -46,6 +46,20 @@ If the variable is not set, or the name doesn't match, then `LevelFilter::Info` 
 $ HERMIT_LOG_LEVEL_FILTER=Debug cargo xtask build --arch x86_64
 ```
 
+Additionally, logging level can be adjusted by module and regex using the `HERMIT_LOG_EXTENDED_FILTER` environment
+variable. The format is `[target][=level][,...]`. If the target is omitted, the level is set as the global level. If the
+level is omitted, logs of all levels are printed for the target. A regular expression that will in be effect for all
+modules can be provided at the end after a `/`. If a new global level is not provided, `HERMIT_LOG_LEVEL_FILTER` (or its
+default) will be the global level.
+
+```sh
+HERMIT_LOG_LEVEL_FILTER=warn HERMIT_LOG_EXTENDED_FILTER='smoltcp,virtio=info/feature|send' cargo xtask build --arch x86_64
+```
+
+Note that `HERMIT_LOG_EXTENDED_FILTER` is activated relatively late in the boot process due to its dynamic allocation
+requirement. Early boot logging can only be influenced with `HERMIT_LOG_LEVEL_FILTER`.
+
+
 ## Credits
 
 This kernel is derived from following tutorials and software distributions:
