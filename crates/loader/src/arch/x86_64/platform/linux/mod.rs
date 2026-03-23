@@ -11,11 +11,11 @@ use hermit_entry::boot_info::{
 use hermit_entry::elf::LoadedKernel;
 use linux_boot_params::{BootE820Entry, BootParams};
 use log::{error, info};
-use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
+use x86_64::structures::paging::{PageSize, Size2MiB, Size4KiB};
 
 use crate::BootInfoExt;
 use crate::arch::x86_64::physicalmem::PhysAlloc;
-use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, paging};
+use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables};
 use crate::fdt::Fdt;
 
 unsafe extern "C" {
@@ -40,20 +40,6 @@ static BOOT_PARAMS: AtomicPtr<BootParams> = AtomicPtr::new(ptr::null_mut());
 unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
 	crate::log::init();
 	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
-	unsafe {
-		crate::os::loader_main();
-	}
-}
-
-pub fn find_kernel() -> &'static [u8] {
-	paging::clean_up();
-
-	unsafe {
-		BootParams::map();
-	}
-	let boot_params_ref = unsafe { BootParams::get() };
-
-	assert!(boot_params_ref.supported());
 
 	let free_addr = ptr::addr_of!(loader_end)
 		.addr()
@@ -61,6 +47,31 @@ pub fn find_kernel() -> &'static [u8] {
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	info!("Intializing PhysAlloc with {free_addr:#x}");
 	PhysAlloc::init(free_addr);
+
+	let boot_params_ref = unsafe { BootParams::get() };
+	let e820_entries = boot_params_ref.e820_entries();
+	let max_phys_addr = e820_entries
+		.iter()
+		.copied()
+		.map(|entry| entry.addr + entry.size)
+		.max()
+		.unwrap();
+	unsafe {
+		page_tables::init(max_phys_addr.try_into().unwrap());
+	}
+
+	unsafe {
+		crate::os::loader_main();
+	}
+}
+
+pub fn find_kernel() -> &'static [u8] {
+	unsafe {
+		BootParams::map();
+	}
+	let boot_params_ref = unsafe { BootParams::get() };
+
+	assert!(boot_params_ref.supported());
 
 	boot_params_ref.map_ramdisk().unwrap()
 }
@@ -76,12 +87,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	// determine boot stack address
 	let stack = (ptr::addr_of!(loader_end).addr() + Size4KiB::SIZE as usize)
 		.align_up(Size4KiB::SIZE as usize);
-	paging::map::<Size4KiB>(
-		stack,
-		stack,
-		KERNEL_STACK_SIZE as usize / Size4KiB::SIZE as usize,
-		PageTableFlags::WRITABLE,
-	);
 	let stack = ptr::addr_of_mut!(loader_end).with_addr(stack);
 	// clear stack
 	unsafe {
@@ -165,9 +170,6 @@ impl BootParamsExt for BootParams {
 		let addr = ptr.expose_provenance();
 		assert!(addr.is_aligned_to(Size4KiB::SIZE as usize));
 		assert_ne!(addr, 0);
-
-		// Identity-map the boot parameters.
-		paging::map::<Size4KiB>(addr, addr, 1, PageTableFlags::empty());
 	}
 
 	unsafe fn get() -> &'static Self {
@@ -207,21 +209,6 @@ impl BootParamsExt for BootParams {
 		}
 		assert!(ramdisk_image.is_aligned_to(Size4KiB::SIZE as usize));
 
-		// Map the start of the image in 4KiB steps.
-		let count = (ramdisk_image.align_up(Size2MiB::SIZE as usize) - ramdisk_image)
-			/ Size4KiB::SIZE as usize;
-		if count > 0 {
-			paging::map::<Size4KiB>(ramdisk_image, ramdisk_image, count, PageTableFlags::empty());
-		}
-
-		// Map the rest of the image in 2MiB steps.
-		let addr = ramdisk_image.align_up(Size2MiB::SIZE as usize);
-		let count = ((ramdisk_image + ramdisk_size).align_up(Size2MiB::SIZE as usize) - addr)
-			/ Size2MiB::SIZE as usize;
-		if count > 0 {
-			paging::map::<Size2MiB>(addr, addr, count, PageTableFlags::empty());
-		}
-
 		let ramdisk_ptr = ptr::with_exposed_provenance(ramdisk_image);
 		let ramdisk = unsafe { slice::from_raw_parts(ramdisk_ptr, ramdisk_size) };
 		Some(ramdisk)
@@ -234,8 +221,6 @@ impl BootParamsExt for BootParams {
 		info!("cmdline_size = {cmdline_size:#x}");
 		assert_ne!(cmd_line_ptr, 0, "boot protocol is older than 2.02");
 		assert!(cmd_line_ptr.is_aligned_to(Size4KiB::SIZE as usize));
-
-		paging::map::<Size4KiB>(cmd_line_ptr, cmd_line_ptr, 1, PageTableFlags::empty());
 
 		let ptr = ptr::with_exposed_provenance(cmd_line_ptr);
 		let bytes = unsafe { core::slice::from_raw_parts(ptr, cmdline_size) };
