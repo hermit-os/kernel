@@ -11,11 +11,11 @@ use hermit_entry::elf::LoadedKernel;
 use log::info;
 use multiboot::information::{MemoryManagement, MemoryType, Multiboot, MultibootInfo, PAddr};
 use vm_fdt::FdtWriterResult;
-use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
+use x86_64::structures::paging::{PageSize, Size2MiB, Size4KiB};
 
 use crate::BootInfoExt;
 use crate::arch::x86_64::physicalmem::PhysAlloc;
-use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables, paging};
+use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables};
 use crate::fdt::Fdt;
 
 unsafe extern "C" {
@@ -110,17 +110,10 @@ impl DeviceTree {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	paging::clean_up();
 	// Identity-map the Multiboot information.
 	let mb_info = MB_INFO.load(Ordering::Relaxed);
 	assert!(!mb_info.is_null(), "Could not find Multiboot information");
 	info!("Found Multiboot information at {mb_info:p}");
-	paging::map::<Size4KiB>(
-		mb_info.expose_provenance(),
-		mb_info.expose_provenance(),
-		1,
-		PageTableFlags::empty(),
-	);
 
 	let mut mem = Mem;
 	// Load the Multiboot information and identity-map the modules information.
@@ -142,28 +135,6 @@ pub fn find_kernel() -> &'static [u8] {
 	let elf_start = first_module.start as usize;
 	let elf_len = (first_module.end - first_module.start) as usize;
 	info!("Module length: {elf_len:#x}");
-
-	let highest_address = multiboot.find_highest_address().align_up(Size2MiB::SIZE) as usize;
-
-	// Identity-map the ELF header of the first module and until the 2 MiB
-	// mapping starts. We cannot start the 2 MiB mapping right from
-	// `first_module.end` because when it is aligned down, the
-	// resulting mapping range may overlap with the 4 KiB mapping.
-	let first_module_mapping_end = first_module.start.align_up(Size2MiB::SIZE) as usize;
-	paging::map_range::<Size4KiB>(
-		first_module.start as usize,
-		first_module.start as usize,
-		first_module_mapping_end,
-		PageTableFlags::empty(),
-	);
-
-	// map also the rest of the modules
-	paging::map_range::<Size2MiB>(
-		first_module_mapping_end,
-		first_module_mapping_end,
-		highest_address,
-		PageTableFlags::empty(),
-	);
 
 	unsafe { slice::from_raw_parts(ptr::with_exposed_provenance(elf_start), elf_len) }
 }
@@ -196,14 +167,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			new_stack = (cmdline + cmdsize).align_up(Size4KiB::SIZE as usize);
 		}
 	}
-
-	// map stack in the address space
-	paging::map::<Size4KiB>(
-		new_stack,
-		new_stack,
-		KERNEL_STACK_SIZE as usize / Size4KiB::SIZE as usize,
-		PageTableFlags::WRITABLE,
-	);
 
 	let stack = ptr::addr_of_mut!(loader_end).with_addr(new_stack);
 
