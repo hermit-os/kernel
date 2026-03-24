@@ -17,11 +17,12 @@ cfg_select! {
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::{ManuallyDrop, MaybeUninit};
+use core::num::NonZeroUsize;
 use core::str::FromStr;
 use core::{mem, slice};
 
 use smallvec::SmallVec;
-use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities};
+use smoltcp::phy::{Checksum, ChecksumCapabilities, DeviceCapabilities, PacketMeta};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, EthernetFrame, Ipv4Packet, Ipv6Packet};
 use virtio::DeviceConfigSpace;
 use virtio::net::{ConfigVolatileFieldAccess, Hdr, HdrF};
@@ -180,12 +181,23 @@ pub struct TxQueues {
 	buf_size: u32,
 }
 
+#[expect(
+	clippy::decimal_literal_representation,
+	reason = "In the VIRTIO specification the size limit is provided in decimal."
+)]
+const MAX_BUFFER_SIZE: usize = 65550;
+
 impl TxQueues {
 	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
-		Self {
-			vqs,
-			buf_size: determine_mtu(dev_cfg).into(),
-		}
+		let buf_size = if dev_cfg
+			.features
+			.intersects(virtio::net::F::HOST_TSO4 | virtio::net::F::HOST_TSO6)
+		{
+			MAX_BUFFER_SIZE.try_into().unwrap()
+		} else {
+			determine_mtu(dev_cfg).into()
+		};
+		Self { vqs, buf_size }
 	}
 
 	#[allow(dead_code)]
@@ -253,6 +265,7 @@ pub struct TxToken<'a> {
 	send_vqs: &'a mut TxQueues,
 	checksums: ChecksumCapabilities,
 	send_capacity: &'a mut u32,
+	meta: PacketMeta,
 }
 
 impl Drop for TxToken<'_> {
@@ -280,15 +293,32 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 
 		let mut header = Box::new_in(<Hdr as Default>::default(), DeviceAlloc);
 
+		let is_large_send = cfg_select! {
+			feature = "tcp" => token.meta.segmentation_offload_size.is_some(),
+			_ => false,
+		};
+
 		// If a checksum calculation by the host is necessary, we have to inform the host within the header
 		// see Virtio specification 5.1.6.2
 		if let Some((ip_header_len, csum_offset)) =
-			VirtioNetDriver::should_request_checksum(&token.checksums, &mut packet)
+			VirtioNetDriver::should_request_checksum(&token.checksums, &mut packet, is_large_send)
 		{
 			header.flags = HdrF::NEEDS_CSUM;
 			header.csum_start =
 				(u16::try_from(ETHERNET_HEADER_LEN).unwrap() + ip_header_len).into();
 			header.csum_offset = csum_offset.into();
+		}
+
+		#[cfg(feature = "tcp")]
+		if let Some(gso_size) = token.meta.segmentation_offload_size {
+			header.gso_type = match EthernetFrame::new_unchecked(&packet).ethertype() {
+				smoltcp::wire::EthernetProtocol::Ipv4 => virtio::net::HdrGso::Tcpv4.into(),
+				smoltcp::wire::EthernetProtocol::Ipv6 => virtio::net::HdrGso::Tcpv6.into(),
+				_ => unreachable!(
+					"We don't advertise segmentation offload support for any other protocol."
+				),
+			};
+			header.gso_size = gso_size.get().into();
 		}
 
 		let buff_tkn = AvailBufferToken::new(
@@ -302,6 +332,10 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 			.unwrap();
 
 		result
+	}
+
+	fn set_meta(&mut self, meta: PacketMeta) {
+		self.meta = meta;
 	}
 }
 
@@ -436,6 +470,22 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 		device_capabilities.max_burst_size =
 			Some(usize::try_from(self.inner.send_capacity).unwrap() / usize::from(BUFF_PER_PACKET));
 		device_capabilities.checksum = self.checksums.clone();
+
+		// We only support segmentation offload on and enable the corresponding feature of smoltcp for TCP.
+		#[cfg(feature = "tcp")]
+		{
+			device_capabilities.segmentation.tcpv4 = self
+				.dev_cfg
+				.features
+				.contains(virtio::net::F::HOST_TSO4)
+				.then_some(NonZeroUsize::new(MAX_BUFFER_SIZE).unwrap());
+			device_capabilities.segmentation.tcpv6 = self
+				.dev_cfg
+				.features
+				.contains(virtio::net::F::HOST_TSO6)
+				.then_some(NonZeroUsize::new(MAX_BUFFER_SIZE).unwrap());
+		}
+
 		device_capabilities
 	}
 
@@ -463,6 +513,7 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 				send_vqs: &mut self.inner.send_vqs,
 				checksums: self.checksums.clone(),
 				send_capacity: &mut self.inner.send_capacity,
+				meta: PacketMeta::default(),
 			},
 		))
 	}
@@ -479,6 +530,7 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 			send_vqs: &mut self.inner.send_vqs,
 			checksums: self.checksums.clone(),
 			send_capacity: &mut self.inner.send_capacity,
+			meta: PacketMeta::default(),
 		})
 	}
 }
@@ -578,34 +630,40 @@ impl VirtioNetDriver<Init> {
 	fn should_request_checksum<T: AsRef<[u8]> + AsMut<[u8]>>(
 		checksums: &ChecksumCapabilities,
 		frame: T,
+		is_large_send: bool,
 	) -> Option<(u16, u16)> {
 		if checksums.tcp.tx() && checksums.udp.tx() {
 			return None;
 		}
 
 		let ip_header_len: u16;
-		let ip_packet_len: usize;
 		let protocol;
 		let pseudo_header_checksum;
 		let mut ethernet_frame = EthernetFrame::new_unchecked(frame);
+		// We cannot use the `total_len` methods of the packet structures as they read the length
+		// fields in the headers, which may be set to 0 when the frame is to be segmented and the
+		// actual length does not fit into the 16 bits of the field.
+		let ip_packet_len = ethernet_frame.payload_mut().len();
 		match ethernet_frame.ethertype() {
 			smoltcp::wire::EthernetProtocol::Ipv4 => {
 				let ip_packet = Ipv4Packet::new_unchecked(&*ethernet_frame.payload_mut());
 				ip_header_len = ip_packet.header_len().into();
-				ip_packet_len = ip_packet.total_len().into();
 				protocol = ip_packet.next_header();
-				pseudo_header_checksum =
-					partial_checksum::ipv4_pseudo_header_partial_checksum(&ip_packet);
+				pseudo_header_checksum = partial_checksum::ipv4_pseudo_header_partial_checksum(
+					&ip_packet,
+					is_large_send,
+				);
 			}
 			smoltcp::wire::EthernetProtocol::Ipv6 => {
 				let ip_packet = Ipv6Packet::new_unchecked(&*ethernet_frame.payload_mut());
 				ip_header_len = ip_packet.header_len().try_into().expect(
 					"VIRTIO does not support IP headers that are longer than u16::MAX bytes.",
 				);
-				ip_packet_len = ip_packet.total_len();
 				protocol = ip_packet.next_header();
-				pseudo_header_checksum =
-					partial_checksum::ipv6_pseudo_header_partial_checksum(&ip_packet);
+				pseudo_header_checksum = partial_checksum::ipv6_pseudo_header_partial_checksum(
+					&ip_packet,
+					is_large_send,
+				);
 			}
 			// If the Ethernet protocol is not one of these two above, for which we know there may be a checksum field,
 			// we default to not asking for checksum, as otherwise the frame will be corrupted by the device trying
@@ -673,7 +731,9 @@ impl VirtioNetDriver<Uninit> {
 			// Multiqueue support
 			| virtio::net::F::MQ
 			// Checksum calculation can partially be offloaded to the device
-			| virtio::net::F::CSUM;
+			| virtio::net::F::CSUM
+			| virtio::net::F::HOST_TSO4
+			| virtio::net::F::HOST_TSO6;
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
@@ -949,27 +1009,40 @@ mod partial_checksum {
 	/// [RFC 9293 subsection 3.1](https://www.rfc-editor.org/rfc/rfc9293.html#section-3.1-6.18.1) WITHOUT the final inversion.
 	pub(super) fn ipv4_pseudo_header_partial_checksum<T: AsRef<[u8]>>(
 		packet: &Ipv4Packet<T>,
+		is_large_send: bool,
 	) -> u16 {
 		let padded_protocol = u16::from(u8::from(packet.next_header()));
-		let payload_len = packet.total_len() - u16::from(packet.header_len());
-
 		let mut sum = addr_sum(&packet.src_addr().octets());
 		sum = ones_complement_add(sum, addr_sum(&packet.dst_addr().octets()));
 		sum = ones_complement_add(sum, padded_protocol);
-		ones_complement_add(sum, payload_len)
+		if is_large_send {
+			// We don't know the packet's length, which will be determined by the device during segmentation.
+			// The VIRTIO specification does not specify how partial checksums should be handled for large
+			// sends, but excluding the length field is consistent with how
+			// [Windows](https://learn.microsoft.com/en-us/windows-hardware/drivers/network/offloading-the-segmentation-of-large-tcp-packets)
+			// and [Intel NICs](https://www.intel.com/content/dam/doc/manual/pci-pci-x-family-gbe-controllers-software-dev-manual.pdf)
+			// handle this case.
+			sum
+		} else {
+			ones_complement_add(sum, packet.total_len() - u16::from(packet.header_len()))
+		}
 	}
 
 	/// Calculates the checksum for the IPv6 pseudo-header as described in
 	/// [RFC 8200 subsection 8.1](https://www.rfc-editor.org/rfc/rfc8200.html#section-8.1) WITHOUT the final inversion.
 	pub(super) fn ipv6_pseudo_header_partial_checksum<T: AsRef<[u8]>>(
 		packet: &Ipv6Packet<T>,
+		is_large_send: bool,
 	) -> u16 {
 		warn!("The IPv6 partial checksum implementation is untested!");
 		let padded_protocol = u16::from(u8::from(packet.next_header()));
 
 		let mut sum = addr_sum(&packet.src_addr().octets());
 		sum = ones_complement_add(sum, addr_sum(&packet.dst_addr().octets()));
-		sum = ones_complement_add(sum, packet.payload_len());
+		// Refer to the comment related to `is_large_send` in `ipv4_pseudo_header_partial_checksum`.
+		if !is_large_send {
+			sum = ones_complement_add(sum, packet.payload_len());
+		}
 		ones_complement_add(sum, padded_protocol)
 	}
 
