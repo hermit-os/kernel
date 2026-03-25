@@ -13,7 +13,6 @@ fn set_linker_script() {
 	let linker_script = match cfg_target_arch.as_str() {
 		"aarch64" if cfg_feature.contains("elf") => "link.ld",
 		"riscv64" if cfg_feature.contains("sbi") => "link.ld",
-		"x86_64" if cfg_feature.contains("linux") => "platform/linux/link.ld",
 		"x86_64" if cfg_feature.contains("multiboot") => "platform/multiboot/link.ld",
 		_ => return,
 	};
