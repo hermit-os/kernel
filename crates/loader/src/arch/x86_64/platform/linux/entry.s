@@ -3,9 +3,6 @@
 
 .code64
 
-.extern __executable_start		# defined in linker script
-.extern _end
-
 # Move entry point at the beginning of the elf file
 .section .mboot, "a"
 .align 8
