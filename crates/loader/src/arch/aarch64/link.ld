@@ -45,5 +45,5 @@ SECTIONS
   . += 16K;                            /*   | growth      */
                                        /*   | direction   */
   __boot_core_stack_end_exclusive = .; /*   |             */
-  loader_end = .;
+  _end = .;
 }

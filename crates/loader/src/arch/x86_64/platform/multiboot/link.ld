@@ -25,5 +25,5 @@ SECTIONS
     *(.bss)
     *(.bss.*)
   }
-  loader_end = .;
+  _end = .;
 }
