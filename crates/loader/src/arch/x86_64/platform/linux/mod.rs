@@ -19,7 +19,7 @@ use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables};
 use crate::fdt::Fdt;
 
 unsafe extern "C" {
-	static mut loader_end: u8;
+	static mut _end: u8;
 }
 
 mod entry {
@@ -41,9 +41,7 @@ unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
 	crate::log::init();
 	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
 
-	let free_addr = ptr::addr_of!(loader_end)
-		.addr()
-		.align_up(Size2MiB::SIZE as usize);
+	let free_addr = ptr::addr_of!(_end).addr().align_up(Size2MiB::SIZE as usize);
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	info!("Intializing PhysAlloc with {free_addr:#x}");
 	PhysAlloc::init(free_addr);
@@ -85,9 +83,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let boot_params_ref = unsafe { BootParams::get() };
 
 	// determine boot stack address
-	let stack = (ptr::addr_of!(loader_end).addr() + Size4KiB::SIZE as usize)
-		.align_up(Size4KiB::SIZE as usize);
-	let stack = ptr::addr_of_mut!(loader_end).with_addr(stack);
+	let stack =
+		(ptr::addr_of!(_end).addr() + Size4KiB::SIZE as usize).align_up(Size4KiB::SIZE as usize);
+	let stack = ptr::addr_of_mut!(_end).with_addr(stack);
 	// clear stack
 	unsafe {
 		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());

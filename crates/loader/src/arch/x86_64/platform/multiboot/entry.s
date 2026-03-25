@@ -5,8 +5,8 @@
 
 .code32
 
-.extern loader_start		# defined in linker script
-.extern loader_end
+.extern __executable_start		# defined in linker script
+.extern _end
 
 # We use a special name to map this section at the begin of our kernel
 # =>  Multiboot expects its magic number at the beginning of the kernel.

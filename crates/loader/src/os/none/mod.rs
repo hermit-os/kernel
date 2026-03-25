@@ -12,15 +12,15 @@ pub use self::console::CONSOLE;
 use crate::arch;
 
 unsafe extern "C" {
-	static loader_end: u8;
-	static loader_start: u8;
+	static _end: u8;
+	static __executable_start: u8;
 }
 
 /// Entry Point of the BIOS Loader
 /// (called from entry.asm or entry.rs)
 pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	unsafe {
-		info!("Loader: [{:p} - {:p}]", &loader_start, &loader_end);
+		info!("Loader: [{:p} - {:p}]", &__executable_start, &_end);
 	}
 
 	let kernel = arch::find_kernel();

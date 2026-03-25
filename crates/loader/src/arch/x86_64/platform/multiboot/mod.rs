@@ -19,7 +19,7 @@ use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables};
 use crate::fdt::Fdt;
 
 unsafe extern "C" {
-	static mut loader_end: u8;
+	static mut _end: u8;
 }
 
 #[allow(bad_asm_style)]
@@ -148,9 +148,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
-	let mut new_stack = ptr::addr_of!(loader_end)
-		.addr()
-		.align_up(Size4KiB::SIZE as usize);
+	let mut new_stack = ptr::addr_of!(_end).addr().align_up(Size4KiB::SIZE as usize);
 
 	if new_stack + KERNEL_STACK_SIZE as usize > mb_info.addr() {
 		new_stack = (mb_info.addr() + mem::size_of::<Multiboot<'_, '_>>())
@@ -166,7 +164,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		}
 	}
 
-	let stack = ptr::addr_of_mut!(loader_end).with_addr(new_stack);
+	let stack = ptr::addr_of_mut!(_end).with_addr(new_stack);
 
 	// clear stack
 	unsafe {
