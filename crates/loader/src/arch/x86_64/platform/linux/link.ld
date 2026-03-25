@@ -4,7 +4,7 @@ phys = 0x000000100000;
 
 SECTIONS
 {
-  loader_start = phys;
+  __executable_start = phys;
   .mboot phys : AT(ADDR(.mboot)) {
     *(.mboot)
   }

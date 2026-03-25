@@ -15,7 +15,7 @@ PHDRS
 SECTIONS
 {
   . = phys;
-  loader_start = .;
+  __executable_start = .;
   .text : {
     *(.text)
     *(.text.*)

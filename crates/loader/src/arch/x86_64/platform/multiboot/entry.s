@@ -5,7 +5,7 @@
 
 .code32
 
-.extern loader_start		# defined in linker script
+.extern __executable_start		# defined in linker script
 .extern loader_end
 
 # We use a special name to map this section at the begin of our kernel

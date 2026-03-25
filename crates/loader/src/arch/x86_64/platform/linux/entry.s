@@ -3,7 +3,7 @@
 
 .code64
 
-.extern loader_start		# defined in linker script
+.extern __executable_start		# defined in linker script
 .extern loader_end
 
 # Move entry point at the beginning of the elf file

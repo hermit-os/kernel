@@ -148,7 +148,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	}
 	pgt_slice[1] = uart_address as u64 + PT_MEM_CD;
 
-	// map kernel to loader_start and stack below the kernel
+	// map kernel to __executable_start and stack below the kernel
 	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2k_pgtable), 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;

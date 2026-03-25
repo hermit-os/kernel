@@ -1,5 +1,5 @@
 SECTIONS {
-  loader_start = ADDR (.text.start);
+  __executable_start = ADDR (.text.start);
   
   .text.start 0x80200000 : { *(.text._start) }
   .text : { *(.text.*) }
