@@ -110,13 +110,11 @@ impl DeviceTree {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	// Identity-map the Multiboot information.
 	let mb_info = MB_INFO.load(Ordering::Relaxed);
 	assert!(!mb_info.is_null(), "Could not find Multiboot information");
 	info!("Found Multiboot information at {mb_info:p}");
 
 	let mut mem = Mem;
-	// Load the Multiboot information and identity-map the modules information.
 	let multiboot = unsafe { Multiboot::from_ref(&mut *mb_info, &mut mem) };
 
 	// Iterate through all modules.
