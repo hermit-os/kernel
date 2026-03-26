@@ -52,7 +52,10 @@ use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use hermit_sync::{Lazy, RawInterruptTicketMutex};
 pub use memory_addresses::{PhysAddr, VirtAddr};
-use talc::{ErrOnOom, Span, Talc, Talck};
+#[cfg(target_os = "none")]
+use talc::TalcLock;
+#[cfg(target_os = "none")]
+use talc::source::Manual;
 
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
 pub use self::physicalmem::{FrameAlloc, FrameBox};
@@ -65,7 +68,7 @@ use crate::{arch, env};
 
 #[cfg(target_os = "none")]
 #[global_allocator]
-pub(crate) static ALLOCATOR: Talck<RawInterruptTicketMutex, ErrOnOom> = Talc::new(ErrOnOom).lock();
+pub(crate) static ALLOCATOR: TalcLock<RawInterruptTicketMutex, Manual> = TalcLock::new(Manual);
 
 /// Physical and virtual address range of the 2 MiB pages that map the kernel.
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
@@ -277,9 +280,12 @@ pub(crate) fn init() {
 
 	let heap_end_addr = map_addr;
 
-	let arena = Span::new(heap_start_addr.as_mut_ptr(), heap_end_addr.as_mut_ptr());
+	let size = heap_end_addr.as_usize() - heap_start_addr.as_usize();
 	unsafe {
-		ALLOCATOR.lock().claim(arena).unwrap();
+		ALLOCATOR
+			.lock()
+			.claim(heap_start_addr.as_mut_ptr(), size)
+			.unwrap();
 	}
 
 	info!("Heap is located at {heap_start_addr:p}..{heap_end_addr:p} ({map_size} Bytes unmapped)");
