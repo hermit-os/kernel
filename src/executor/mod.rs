@@ -148,19 +148,19 @@ where
 		// check future
 		let result = future.as_mut().poll(&mut cx);
 
-		// run background all tasks, which poll also the network device
-		run();
-
-		let now = crate::arch::kernel::systemtime::now_micros();
 		if let Poll::Ready(t) = result {
 			return t;
 		}
 
+		let now = crate::arch::kernel::systemtime::now_micros();
 		if let Some(duration) = timeout
 			&& Duration::from_micros(now - start) >= duration
 		{
 			return Err(Errno::Time);
 		}
+
+		// run background all tasks, which poll also the network device
+		run();
 
 		if backoff.is_completed() {
 			let wakeup_time =
