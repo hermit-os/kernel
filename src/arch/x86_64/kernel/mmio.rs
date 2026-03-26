@@ -121,8 +121,8 @@ fn check_linux_args(
 	linux_mmio: &'static [String],
 ) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
+	let mut page_range = PageBox::new(layout).unwrap();
+	let mut virtual_address = VirtAddr::from(page_range.start());
 
 	let mut devices = vec![];
 	for arg in linux_mmio {
@@ -160,6 +160,12 @@ fn check_linux_args(
 
 					FrameAlloc::allocate_at(frame_range).unwrap_err();
 				}
+
+				// Don't return the VA to the free list: the driver holds a VolatileRef into this mapping.
+				PageBox::into_raw(page_range);
+				// Pick a fresh VA for subsequent iterations.
+				page_range = PageBox::new(layout).unwrap();
+				virtual_address = VirtAddr::from(page_range.start());
 
 				devices.push((mmio, irq));
 			}
