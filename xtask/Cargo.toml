@@ -19,3 +19,6 @@ ureq = { version = "3", default-features = false, features = ["rustls"], optiona
 vsock = { version = "0.5", optional = true }
 wait-timeout = { version = "0.2", optional = true }
 xshell = "0.2"
+
+[lints]
+workspace = true

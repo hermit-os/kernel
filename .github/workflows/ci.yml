@@ -40,6 +40,7 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64gc-unknown-none-elf
       - run: rustup component add clippy
+      - run: cargo clippy --package xtask
       - name: cargo hack clippy (x86_64)
         run: |
           cargo clippy --package hermit-kernel --target x86_64-unknown-none --features tcp,virtio-console,virtio-fs,virtio-net,virtio-vsock
