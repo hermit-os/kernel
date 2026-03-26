@@ -1,5 +1,7 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
+#[cfg(feature = "virtio-balloon")]
+pub mod balloon;
 #[cfg(feature = "virtio-console")]
 pub mod console;
 #[cfg(feature = "virtio-fs")]

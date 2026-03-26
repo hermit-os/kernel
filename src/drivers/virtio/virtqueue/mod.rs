@@ -101,6 +101,9 @@ pub trait Virtq: Send {
 	/// Disables interrupts for this virtqueue upon receiving a transfer
 	fn disable_notifs(&mut self);
 
+	/// Check if there are no more descriptors left in the queue.
+	fn is_empty(&self) -> bool;
+
 	/// Checks if new used descriptors have been written by the device.
 	/// This activates the queue and polls the descriptor ring of the queue.
 	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError>;
@@ -539,6 +542,7 @@ mod index_alloc {
 	pub struct IndexAlloc {
 		/// Zero bits are available.
 		bits: Box<[usize]>,
+		extra_bits: usize,
 	}
 
 	const USIZE_BITS: usize = usize::BITS as usize;
@@ -555,7 +559,7 @@ mod index_alloc {
 				*bits.last_mut().unwrap() = usize::MAX >> extra_bits;
 			}
 
-			Self { bits }
+			Self { bits, extra_bits }
 		}
 
 		#[inline]
@@ -586,6 +590,20 @@ mod index_alloc {
 			unsafe {
 				*self.bits.get_unchecked_mut(word_index) &= !mask;
 			}
+		}
+
+		pub fn all_used(&self) -> bool {
+			// all words all ones
+			self.bits.iter().all(|word| !*word == 0)
+		}
+
+		pub fn all_available(&self) -> bool {
+			// all words all zeros, except for the extra bits in the last one
+			self.bits.iter().rev().skip(1).all(|word| *word == 0)
+				&& self
+					.bits
+					.last()
+					.map_or(false, |word| *word & !(usize::MAX >> self.extra_bits) == 0)
 		}
 	}
 
