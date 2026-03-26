@@ -1,20 +1,27 @@
 use core::fmt;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 
 use anstyle::AnsiColor;
+use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 
+const TIME_SEC_WIDTH: usize = 5;
+const TIME_SUBSEC_WIDTH: usize = 6;
+
 /// Data structure to filter kernel messages
 pub struct KernelLogger {
 	time: AtomicBool,
+	filter: OnceCell<env_filter::Filter>,
 }
 
 impl KernelLogger {
 	pub const fn new() -> Self {
 		Self {
 			time: AtomicBool::new(false),
+			filter: OnceCell::new(),
 		}
 	}
 
@@ -41,17 +48,6 @@ impl log::Log for KernelLogger {
 			return;
 		}
 
-		// FIXME: Use `super let` once stable
-		let time;
-		let format_time = if self.time() {
-			time = Microseconds(crate::processor::get_timer_ticks());
-			format_args!("[{time}]")
-		} else {
-			format_args!("[            ]")
-		};
-		let core_id = crate::arch::core_local::core_id();
-		let level = ColorLevel(record.level());
-
 		let target = record.target();
 		let (crate_, modules) = target.split_once("::").unwrap_or((target, ""));
 		let (_modules, module) = modules.rsplit_once("::").unwrap_or(("", modules));
@@ -60,20 +56,32 @@ impl log::Log for KernelLogger {
 		} else {
 			crate_
 		};
+
+		if self.filter.get().is_some_and(|filter| {
+			// We want the target that we match against to match the target we display.
+			let record = record.to_builder().target(target).build();
+			!filter.matches(&record)
+		}) {
+			return;
+		}
+
+		let format_time = if self.time() {
+			let time = Duration::from_micros(crate::processor::get_timer_ticks());
+			format_args!(
+				"{:TIME_SEC_WIDTH$}.{:0TIME_SUBSEC_WIDTH$}",
+				time.as_secs(),
+				time.subsec_micros()
+			)
+		} else {
+			format_args!("{:1$}", "", TIME_SEC_WIDTH + 1 + TIME_SUBSEC_WIDTH)
+		};
+		let core_id = crate::arch::core_local::core_id();
+		let level = ColorLevel(record.level());
+
 		let format_target = format_args!(" {target:<10}");
 
 		let args = record.args();
-		println!("{format_time}[{core_id}][{level}{format_target}] {args}");
-	}
-}
-
-struct Microseconds(u64);
-
-impl fmt::Display for Microseconds {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let seconds = self.0 / 1_000_000;
-		let microseconds = self.0 % 1_000_000;
-		write!(f, "{seconds:5}.{microseconds:06}")
+		println!("[{format_time}][{core_id}][{level}{format_target}] {args}");
 	}
 }
 
@@ -108,28 +116,32 @@ pub unsafe fn init() {
 	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
-	let mut max_level = LevelFilter::Info;
-
-	if let Some(log_level) = log_level {
-		max_level = if log_level.eq_ignore_ascii_case("off") {
-			LevelFilter::Off
-		} else if log_level.eq_ignore_ascii_case("error") {
-			LevelFilter::Error
-		} else if log_level.eq_ignore_ascii_case("warn") {
-			LevelFilter::Warn
-		} else if log_level.eq_ignore_ascii_case("info") {
-			LevelFilter::Info
-		} else if log_level.eq_ignore_ascii_case("debug") {
-			LevelFilter::Debug
-		} else if log_level.eq_ignore_ascii_case("trace") {
-			LevelFilter::Trace
-		} else {
-			error!("Could not parse HERMIT_LOG_LEVEL_FILTER, falling back to `info`.");
-			LevelFilter::Info
-		};
-	}
+	let max_level = log_level
+		.and_then(|log_level| {
+			log_level
+				.parse()
+				.inspect_err(|_| {
+					error!("Could not parse HERMIT_LOG_LEVEL_FILTER, falling back to `info`.");
+				})
+				.ok()
+		})
+		.unwrap_or(LevelFilter::Info);
 
 	log::set_max_level(max_level);
+}
+
+pub(crate) fn init_module_filter() {
+	// We use a separate environment variable in order to avoid unnecessary cost when the basic filter is sufficient.
+	let Some(log_level) = option_env!("HERMIT_LOG_EXTENDED_FILTER") else {
+		return;
+	};
+	let filter = env_filter::Builder::new()
+		// What was set via `HERMIT_LOG_LEVEL_FILTER` or the default. It may get overwritten by the parsed filter if it has a global level.
+		.filter_level(log::max_level())
+		.parse(log_level)
+		.build();
+	log::set_max_level(filter.filter());
+	KERNEL_LOGGER.filter.set(filter).unwrap();
 }
 
 #[cfg_attr(target_arch = "riscv64", allow(unused))]
