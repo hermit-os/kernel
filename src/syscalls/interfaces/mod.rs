@@ -17,7 +17,7 @@ pub trait SyscallInterface: Send + Sync {
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
 		let mut argv = Vec::new();
 
-		let name = Box::leak(Box::new("bin\0")).as_ptr();
+		let name = Box::leak(Box::new("hermit-app\0")).as_ptr();
 		argv.push(name);
 
 		let args = env::args();
