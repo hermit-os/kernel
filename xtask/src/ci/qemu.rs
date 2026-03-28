@@ -15,6 +15,8 @@ use xshell::cmd;
 
 use crate::arch::Arch;
 
+const DEFAULT_GUEST_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 3));
+
 /// Run image on QEMU.
 #[derive(Args)]
 pub struct Qemu {
@@ -497,12 +499,15 @@ impl Qemu {
 	}
 
 	fn kernel_args(&self) -> Vec<String> {
+		let mut args = vec![];
 		if self.microvm {
 			let frequency = get_frequency();
-			vec!["-freq".to_owned(), frequency.to_string()]
-		} else {
-			vec![]
+			args.extend(["-freq".to_owned(), frequency.to_string()].into_iter());
 		}
+		if self.tap {
+			args.extend(["-ip".to_owned(), DEFAULT_GUEST_IP.to_string()].into_iter());
+		}
+		args
 	}
 
 	fn app_args(&self, image_name: &str) -> Vec<String> {
@@ -529,7 +534,7 @@ impl Qemu {
 			if let Ok(ip) = env::var("HERMIT_IP") {
 				ip.parse().unwrap()
 			} else {
-				Ipv4Addr::new(10, 0, 5, 3).into()
+				DEFAULT_GUEST_IP
 			}
 		} else {
 			Ipv4Addr::LOCALHOST.into()
