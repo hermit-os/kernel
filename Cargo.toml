@@ -319,7 +319,6 @@ talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
-zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.4"
 
 [dependencies.smoltcp]
