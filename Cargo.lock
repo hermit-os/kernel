@@ -855,7 +855,6 @@ dependencies = [
  "hermit-macro",
  "hermit-sync",
  "llvm-tools",
- "lock_api",
  "log",
  "mem-barrier",
  "memory_addresses 0.3.0",

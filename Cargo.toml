@@ -305,7 +305,6 @@ hashbrown = { version = "0.16", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10.9", features = ["kernel"] }
 hermit-sync = "0.1"
-lock_api = "0.4"
 log = { version = "0.4", default-features = false }
 mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
