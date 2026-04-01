@@ -92,6 +92,17 @@ jobs:
       - run: cargo update -w --locked
       - run: cargo update -w --locked --manifest-path hermit-builtins/Cargo.toml
 
+  machete:
+    name: Machete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: mkroening/rust-toolchain-toml@main
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-machete
+      - run: cargo machete
+
   typos:
     name: Typos
     runs-on: ubuntu-latest

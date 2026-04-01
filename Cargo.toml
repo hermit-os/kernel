@@ -305,7 +305,6 @@ hashbrown = { version = "0.16", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10.9", features = ["kernel"] }
 hermit-sync = "0.1"
-lock_api = "0.4"
 log = { version = "0.4", default-features = false }
 mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
@@ -320,7 +319,6 @@ talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
-zerocopy = { version = "0.8", default-features = false }
 uhyve-interface = "0.1.4"
 
 [dependencies.smoltcp]
