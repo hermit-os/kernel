@@ -347,7 +347,7 @@ memory_addresses = { version = "0.3", default-features = false, features = [
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
-arm-gic = { version = "0.6" }
+arm-gic = { version = "0.8" }
 arm-pl011-uart = { version = "0.4", default-features = false }
 semihosting = { version = "0.1", optional = true }
 memory_addresses = { version = "0.3", default-features = false, features = [
@@ -413,6 +413,7 @@ unreadable_literal = "warn"
 
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "be" }
+safe-mmio-0_3 = { git = "https://github.com/hermit-os/safe-mmio", package = "safe-mmio", branch = "0.3.x" }
 
 [profile.profiling]
 inherits = "release"

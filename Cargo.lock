@@ -134,12 +134,13 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "arm-gic"
-version = "0.6.1"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bfdb03424c95b58315a4cb0ff4ca919568a5a28ae5ba960a1ad92c9ccaf49b9"
+checksum = "84372c6068152f635a04870779f0fa0d1b0273dd09dbe1c6747688693d061f06"
 dependencies = [
+ "arm-sysregs",
  "bitflags 2.11.0",
- "safe-mmio",
+ "safe-mmio 0.3.0",
  "thiserror",
  "zerocopy",
 ]
@@ -151,9 +152,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b62040eef329ede76c8b2af149362b0fd42ec9d8c436d9eb9d47db35b71cb300"
 dependencies = [
  "bitflags 2.11.0",
- "safe-mmio",
+ "safe-mmio 0.2.5",
  "thiserror",
  "zerocopy",
+]
+
+[[package]]
+name = "arm-sysregs"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7df3fc5d821089c553fa32966bbe7defbd23d857756a5091ecb094de5e18d1ac"
+dependencies = [
+ "bitflags 2.11.0",
+ "num_enum",
+ "paste",
 ]
 
 [[package]]
@@ -1700,6 +1712,14 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 name = "safe-mmio"
 version = "0.2.5"
 source = "git+https://github.com/hermit-os/safe-mmio?branch=be#9ba84bf7af075d81769f142f2ea74e4a2b5a621f"
+dependencies = [
+ "zerocopy",
+]
+
+[[package]]
+name = "safe-mmio"
+version = "0.3.0"
+source = "git+https://github.com/hermit-os/safe-mmio?branch=0.3.x#161ce2de85c96f00e8ed9eaa0eb1b78c490220b2"
 dependencies = [
  "zerocopy",
 ]
