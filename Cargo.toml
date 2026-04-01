@@ -322,7 +322,7 @@ volatile = "0.6"
 uhyve-interface = "0.1.4"
 
 [dependencies.smoltcp]
-version = "0.12"
+version = "0.13"
 optional = true
 default-features = false
 features = [
