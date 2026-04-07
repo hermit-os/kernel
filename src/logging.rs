@@ -6,6 +6,8 @@ use anstyle::AnsiColor;
 use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
+use crate::env;
+
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 const ARENA_SIZE: usize = 4096;
 static mut ARENA: [u8; ARENA_SIZE] = [0; _];
@@ -112,6 +114,10 @@ fn no_color() -> bool {
 }
 
 pub unsafe fn init() {
+	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
+	// To get logs until we determine the actual log level
+	log::set_max_level(LevelFilter::Info);
+
 	#[cfg(target_os = "none")]
 	unsafe {
 		crate::mm::ALLOCATOR
@@ -119,24 +125,27 @@ pub unsafe fn init() {
 			.claim((&raw mut ARENA).cast(), ARENA_SIZE)
 			.unwrap()
 	};
+	env::init();
 
-	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
-	// Determines LevelFilter at compile time
-	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
-	let max_level = if let Some(log_level) = log_level {
-		let filter = env_filter::Builder::new()
-			// The default. It may get overwritten by the parsed filter if it has a global level.
-			.filter_level(LevelFilter::Info)
-			.parse(log_level)
-			.build();
-		let max_level = filter.filter();
-		KERNEL_LOGGER.filter.set(filter).unwrap();
-		max_level
-	} else {
-		LevelFilter::Info
-	};
+	let mut filter_builder = env_filter::Builder::new();
+	// The default. It may get overwritten by the parsed filter if it has a global level.
+	filter_builder.filter_level(LevelFilter::Info);
 
-	log::set_max_level(max_level);
+	if let Some(compile_time_filter) = option_env!("HERMIT_LOG_DEFAULT").or_else(|| {
+		option_env!("HERMIT_LOG_LEVEL_FILTER").inspect(|_| {
+			warn!("HERMIT_LOG_LEVEL_FILTER is deprecated in favor of HERMIT_LOG_DEFAULT");
+		})
+	}) {
+		filter_builder.parse(compile_time_filter);
+	}
+
+	if let Some(runtime_filter) = env::var("HERMIT_LOG") {
+		filter_builder.parse(runtime_filter);
+	}
+
+	let filter = filter_builder.build();
+	log::set_max_level(filter.filter());
+	KERNEL_LOGGER.filter.set(filter).unwrap();
 }
 
 #[cfg_attr(target_arch = "riscv64", allow(unused))]

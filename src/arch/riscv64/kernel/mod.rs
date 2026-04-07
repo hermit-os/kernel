@@ -108,7 +108,6 @@ pub fn boot_processor_init() {
 	devicetree::init();
 	crate::mm::init();
 	crate::mm::print_information();
-	env::init();
 	interrupts::install();
 
 	finish_processor_init();

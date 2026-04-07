@@ -38,17 +38,20 @@ If you want to build the kernel for riscv64, please use `riscv64`.
 ### Control the kernel messages verbosity
 
 This kernel uses the lightweight logging crate [log](https://github.com/rust-lang/log) to print kernel messages. The
-environment variable `HERMIT_LOG_LEVEL_FILTER` controls the verbosity and follows [the env_logger
-format](https://docs.rs/env_logger/latest/env_logger/) but without the regex support. You can change it per module by
-setting it at compile time to a string in the format `[target][=level][,...]`, where the level is a string matching the
-name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html). If the target is omitted, the level is set
-as the global level. If the level is omitted, logs of all levels are printed for the target. A simple search pattern 
-that will filter all modules can be provided after the target-level pairs with `/<pattern>`.
+compile time environment variable `HERMIT_LOG_DEFAULT` and the runtime environment variable `HERMIT_LOG` control the
+verbosity and follow [the env_logger format](https://docs.rs/env_logger/latest/env_logger/) but without the regex
+support.
+
+The logging level can be changed per module by setting it to a string in the format `[target][=level][,...]`, where the
+level is a string matching the name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html). If the
+target is omitted, the level is set as the global level. If the level is omitted, logs of all levels are printed for the
+target. A simple search pattern that will filter all modules can be provided after the target-level pairs with 
+`/<pattern>`.
 
 > [!NOTE]
 > For the modules that are part of the kernel, the `hermit::` prefix needs to be provided before the module name.
 
-If the variable is not set, or it does not provide a global level, then `LevelFilter::Info` is used as the global level
+If the variables are not set, or they do not provide a global level, then `LevelFilter::Info` is used as the global level
 by default.
 
 ```sh
