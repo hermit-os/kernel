@@ -129,12 +129,14 @@ impl TaskStacks {
 			flags,
 		);
 
-		// map user stack into the address space
+		// map user stack into the address space (must be user-accessible)
+		let mut user_flags = PageTableEntryFlags::empty();
+		user_flags.normal().writable().user().execute_disable();
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
-			flags,
+			user_flags,
 		);
 
 		// clear user stack
@@ -170,6 +172,24 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => 0,
 			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE - IST_SIZE,
+		}
+	}
+
+	/// Returns the start address of the stack region (virt_addr of CommonStack)
+	#[cfg(feature = "common-os")]
+	pub fn get_stack_virt_addr(&self) -> VirtAddr {
+		match self {
+			TaskStacks::Boot(stacks) => stacks.stack,
+			TaskStacks::Common(stacks) => stacks.virt_addr,
+		}
+	}
+
+	/// Returns total size of all stacks combined
+	#[cfg(feature = "common-os")]
+	pub fn get_total_stack_size(&self) -> usize {
+		match self {
+			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
+			TaskStacks::Common(stacks) => stacks.total_size,
 		}
 	}
 

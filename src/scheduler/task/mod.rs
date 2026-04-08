@@ -355,6 +355,30 @@ impl PriorityTaskQueue {
 	}
 }
 
+/// Tracks the heap region of a user process for demand-paging.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub(crate) struct Heap {
+	pub start: VirtAddr,
+	pub end: VirtAddr,
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+impl Heap {
+	pub fn new_empty() -> Self {
+		Heap {
+			start: VirtAddr::zero(),
+			end: VirtAddr::zero(),
+		}
+	}
+
+	pub fn contains(&self, addr: VirtAddr) -> bool {
+		if self.start == VirtAddr::zero() || self.end == VirtAddr::zero() {
+			return false;
+		}
+		addr >= self.start && addr < self.end
+	}
+}
+
 /// A task control block, which identifies either a process or a thread
 #[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
 #[cfg_attr(
@@ -386,6 +410,9 @@ pub(crate) struct Task {
 	// Physical address of the 1st level page table
 	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 	pub root_page_table: usize,
+	/// Heap region tracked for demand-paging
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	pub heap: Arc<Heap>,
 }
 
 pub(crate) trait TaskFrame {
@@ -417,7 +444,9 @@ impl Task {
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: crate::arch::mm::create_new_root_page_table(),
+			root_page_table: arch::create_new_root_page_table(),
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			heap: Arc::new(Heap::new_empty()),
 		}
 	}
 
@@ -466,6 +495,42 @@ impl Task {
 			tls,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			heap: Arc::new(Heap::new_empty()),
+		}
+	}
+
+	/// Create a forked task that starts at the point where the parent called fork.
+	/// `last_stack_pointer` is set to the child's pre-computed stack pointer.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[allow(clippy::too_many_arguments)]
+	pub fn new_fork(
+		tid: TaskId,
+		core_id: CoreId,
+		task_status: TaskStatus,
+		task_prio: Priority,
+		stacks: TaskStacks,
+		last_stack_pointer: VirtAddr,
+		user_stack_pointer: VirtAddr,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+		root_page_table: usize,
+		parent_heap: Arc<Heap>,
+	) -> Task {
+		debug!("Creating forked task {tid} on core {core_id}");
+		Task {
+			id: tid,
+			status: task_status,
+			prio: task_prio,
+			last_stack_pointer,
+			user_stack_pointer,
+			last_fpu_state: arch::processor::FPUState::new(),
+			core_id,
+			stacks,
+			object_map,
+			#[cfg(not(feature = "common-os"))]
+			tls: None,
+			root_page_table,
+			heap: parent_heap,
 		}
 	}
 }

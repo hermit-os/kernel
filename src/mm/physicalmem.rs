@@ -57,6 +57,46 @@ impl fmt::Display for FrameAlloc {
 
 pub type FrameBox = PageRangeBox<FrameAlloc>;
 
+/// Copy the physical page at `src_phys` into a freshly allocated page and return its address.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub fn copy_page(src_phys: PhysAddr) -> PhysAddr {
+	use free_list::PageLayout;
+
+	use crate::arch::mm::paging::{
+		BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
+	};
+	use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
+
+	let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).expect("Failed to allocate page");
+	let dst_phys = PhysAddr::new(frame_range.start().try_into().unwrap());
+
+	let page_layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
+	let page_box = PageBox::new(page_layout).unwrap();
+	let virt = VirtAddr::from(page_box.start());
+
+	let flags = {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable();
+		flags
+	};
+	crate::arch::mm::paging::map::<BasePageSize>(virt, src_phys, 1, flags);
+	crate::arch::mm::paging::map::<BasePageSize>(virt + BasePageSize::SIZE, dst_phys, 1, flags);
+
+	unsafe {
+		core::ptr::copy_nonoverlapping(
+			virt.as_ptr::<u8>(),
+			(virt + BasePageSize::SIZE).as_mut_ptr::<u8>(),
+			BasePageSize::SIZE as usize,
+		);
+	}
+
+	crate::arch::mm::paging::unmap::<BasePageSize>(virt, 2);
+	// page_box is dropped here, freeing the virtual memory
+
+	dst_phys
+}
+
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
