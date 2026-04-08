@@ -6,13 +6,14 @@ use align_address::Align;
 use free_list::{FreeList, PageLayout, PageRange, PageRangeError};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
+use pvh::start_info::MemmapType;
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
+use crate::{env, kernel};
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -180,6 +181,62 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	Ok(())
 }
 
+unsafe fn detect_from_pvh() -> Result<(), ()> {
+	for memmap_table_entry in kernel::pvh::start_info().memmap() {
+		if memmap_table_entry.ty() != MemmapType::Ram {
+			continue;
+		}
+
+		let start_address = memmap_table_entry.addr;
+		let size = memmap_table_entry.size;
+		let end_address = start_address + size;
+
+		if end_address <= super::kernel_end_address().as_u64() && !env::is_uefi() {
+			continue;
+		}
+
+		let start_address =
+			if start_address <= super::kernel_start_address().as_u64() && !env::is_uefi() {
+				super::kernel_end_address()
+			} else {
+				VirtAddr::new(start_address)
+			};
+
+		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
+		unsafe {
+			FrameAlloc::deallocate(range);
+			map_frame_range(range);
+		}
+		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
+		debug!("Claimed physical memory: {range:#x?}");
+	}
+
+	let reserve = |reservation: PageRange| {
+		debug!("Memory reservation: {reservation:#x?}");
+		// While there are still overlaps between this reservation and any available ranges,
+		// allocate that overlap to mark it as not available.
+		while let Ok(reserved) = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate_with(|range| reservation.and(range))
+		{
+			debug!("Reserved {reserved:#x?}");
+		}
+	};
+
+	let kernel_start = if env::is_uefi() {
+		super::kernel_start_address().as_usize()
+	} else {
+		// FIXME: Memory before the kernel causes trouble on non-uefi systems.
+		// It is unclear, which exact regions cause problems.
+		0
+	};
+	let kernel_end = super::kernel_end_address().as_usize();
+	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
+	reserve(kernel_region);
+
+	Ok(())
+}
+
 // FIXME: upstream these
 trait PageRangeExt: Sized {
 	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError>;
@@ -242,7 +299,8 @@ unsafe fn init() {
 			unsafe { detect_from_limits().unwrap(); }
 		}
 		_ => {
-			panic!("Could not detect physical memory from FDT");
+			unsafe { detect_from_pvh().unwrap(); }
+			// panic!("Could not detect physical memory from FDT");
 		}
 	}
 }

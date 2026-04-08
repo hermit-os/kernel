@@ -338,6 +338,7 @@ features = [
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 free-list = { version = "0.3", features = ["x86_64"] }
+pvh = "0.1"
 raw-cpuid = "11"
 uart_16550 = { version = "0.6", features = ["embedded-io"] }
 x86_64 = "0.15"

@@ -104,7 +104,11 @@ impl Arch {
 
 	pub fn cargo_args(&self) -> &'static [&'static str] {
 		match self {
-			Self::X86_64 => &["--target=x86_64-unknown-none"],
+			Self::X86_64 => &[
+				"--target=x86_64-unknown-none",
+				"-Zbuild-std=core,alloc",
+				"-Zbuild-std-features=compiler-builtins-mem",
+			],
 			Self::Aarch64 => &[
 				"--target=aarch64-unknown-none-softfloat",
 				// We can't use prebuilt std here because it is built with
