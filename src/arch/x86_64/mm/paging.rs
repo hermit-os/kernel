@@ -296,8 +296,7 @@ pub fn mark_user_pages_copy_on_write() {
 	// we can dereference physical addresses directly as page table pointers.
 	let (frame, _) = Cr3::read();
 	let pml4 = unsafe {
-		&mut *(ptr::with_exposed_provenance_mut(frame.start_address().as_u64() as usize)
-			as *mut PageTable)
+		&mut *ptr::with_exposed_provenance_mut::<PageTable>(frame.start_address().as_u64() as usize)
 	};
 
 	// Walk PML4 entries 1..511 (user-space entries).
@@ -308,8 +307,7 @@ pub fn mark_user_pages_copy_on_write() {
 			continue;
 		}
 		let pdpt = unsafe {
-			&mut *(ptr::with_exposed_provenance_mut(pml4_entry.addr().as_u64() as usize)
-				as *mut PageTable)
+			&mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_entry.addr().as_u64() as usize)
 		};
 		for pdpt_idx in 0..512usize {
 			let pdpt_entry = &mut pdpt[pdpt_idx];
@@ -494,7 +492,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 			flags.normal().user().writable().execute_disable();
 			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
 			unsafe {
-				core::ptr::write_bytes(virtaddr.as_mut_ptr::<u8>(), 0, BasePageSize::SIZE as usize);
+				virtaddr.as_mut_ptr::<u8>().write_bytes(0, BasePageSize::SIZE as usize);
 			}
 
 			if swapped_gs {

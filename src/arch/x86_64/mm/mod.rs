@@ -169,13 +169,7 @@ pub fn copy_current_root_page_table() -> usize {
 				};
 
 				// Copy PT entries verbatim — data pages are shared (already COW-marked)
-				unsafe {
-					core::ptr::copy_nonoverlapping(
-						core::ptr::from_ref::<PageTable>(cur_pt),
-						core::ptr::from_mut::<PageTable>(new_pt),
-						1,
-					);
-				}
+				*new_pt = cur_pt.clone();
 			}
 		}
 	}

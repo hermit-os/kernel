@@ -84,11 +84,12 @@ pub fn copy_page(src_phys: PhysAddr) -> PhysAddr {
 	crate::arch::mm::paging::map::<BasePageSize>(virt + BasePageSize::SIZE, dst_phys, 1, flags);
 
 	unsafe {
-		core::ptr::copy_nonoverlapping(
-			virt.as_ptr::<u8>(),
+		let src = core::slice::from_raw_parts(virt.as_ptr::<u8>(), BasePageSize::SIZE as usize);
+		let dst = core::slice::from_raw_parts_mut(
 			(virt + BasePageSize::SIZE).as_mut_ptr::<u8>(),
 			BasePageSize::SIZE as usize,
 		);
+		dst.copy_from_slice(src);
 	}
 
 	crate::arch::mm::paging::unmap::<BasePageSize>(virt, 2);
