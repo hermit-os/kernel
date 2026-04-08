@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 
+use crate::arch::Arch;
 use crate::cargo_build::CargoBuild;
 
 /// Work with hermit-rs images
@@ -68,10 +69,16 @@ impl Rs {
 
 		cargo
 			.current_dir(super::parent_root())
-			.arg("build")
+			.arg("rustc")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.args(self.cargo_build.cargo_build_args())
 			.args(["--package", self.package.as_str()]);
+
+		if self.cargo_build.artifact.arch == Arch::X86_64 && matches!(self.action, Action::Qemu(_))
+		{
+			cargo.arg("--");
+			cargo.arg("-Crelocation-model=static");
+		}
 
 		eprintln!("$ {cargo:?}");
 		let status = cargo.status()?;

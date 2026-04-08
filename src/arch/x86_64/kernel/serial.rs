@@ -13,7 +13,7 @@ use crate::errno::Errno;
 #[cfg(feature = "pci")]
 const SERIAL_IRQ: u8 = 4;
 
-static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
+pub static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
 	Lazy::new(|| unsafe { InterruptTicketMutex::new(UartDevice::new()) });
 
 struct UartDevice {

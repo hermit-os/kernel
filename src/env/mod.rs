@@ -16,10 +16,16 @@ use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
 
+use crate::kernel::pvh;
+
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
 pub fn boot_info() -> &'static BootInfo {
 	BOOT_INFO.get().unwrap()
+}
+
+pub fn setboot_info2(boot_info: BootInfo) {
+	BOOT_INFO.set(boot_info).unwrap();
 }
 
 pub fn set_boot_info(raw_boot_info: RawBootInfo) {
@@ -141,7 +147,10 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = fdt_args().unwrap_or_default();
+		let args = pvh::start_info()
+			.cmdline()
+			.map(|s| s.to_str().unwrap())
+			.unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 
