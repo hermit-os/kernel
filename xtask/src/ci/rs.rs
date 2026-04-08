@@ -40,7 +40,9 @@ impl Rs {
 		let small = self.cargo_build.artifact.profile() == "release";
 		match self.action {
 			Action::Build => Ok(()),
-			Action::Firecracker(firecracker) => firecracker.run(&image, self.smp),
+			Action::Firecracker(firecracker) => {
+				firecracker.run(&image, &self.cargo_build.features, self.smp)
+			}
 			Action::Qemu(qemu) => {
 				qemu.run(&image, &self.cargo_build.features, self.smp, arch, small)
 			}
@@ -63,6 +65,14 @@ impl Rs {
 			rustflags.push("-Zinstrument-mcount");
 			rustflags.push("-Cpasses=ee-instrument<post-inline>");
 		};
+
+		if self
+			.cargo_build
+			.features()
+			.any(|feature| feature == "hermit/pvh")
+		{
+			rustflags.push("-Crelocation-model=static");
+		}
 
 		let mut cargo = crate::cargo();
 

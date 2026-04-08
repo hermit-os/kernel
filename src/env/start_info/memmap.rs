@@ -1,3 +1,5 @@
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 /// A memory map entry.
 ///
 /// This entry is part of the start info's memory map that describes physical memory.
@@ -17,9 +19,9 @@ pub struct MemmapEntry {
 /// For details, see [15. System Address Map Interfaces — ACPI Specification 6.6 documentation].
 ///
 /// [15. System Address Map Interfaces — ACPI Specification 6.6 documentation]: https://uefi.org/specs/ACPI/6.6/15_System_Address_Map_Interfaces.html
-#[expect(dead_code)]
-#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+#[derive(IntoPrimitive, TryFromPrimitive, Hash, PartialEq, Eq, Clone, Copy, Debug)]
 #[non_exhaustive]
+#[repr(u8)]
 pub enum MemmapType {
 	Ram = 1,
 	Reserved = 2,

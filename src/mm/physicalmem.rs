@@ -121,10 +121,7 @@ unsafe fn detect_from_start_info() {
 		// Don't use the zero page.
 		start_addr = start_addr.max(0x1000);
 
-		#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
-		if paging::is_recursive() {
-			start_addr = start_addr.max(elf_symbols::executable_end().addr());
-		}
+		start_addr = start_addr.max(elf_symbols::executable_end().addr());
 
 		if cfg!(target_arch = "aarch64") || cfg!(target_arch = "riscv64") {
 			start_addr = start_addr.max(elf_symbols::executable_end().addr());
