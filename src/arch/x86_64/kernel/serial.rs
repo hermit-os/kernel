@@ -14,7 +14,7 @@ use crate::errno::Errno;
 #[cfg(feature = "pci")]
 const SERIAL_IRQ: u8 = 4;
 
-static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
+pub static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
 	Lazy::new(|| unsafe { InterruptTicketMutex::new(UartDevice::new()) });
 
 struct UartDevice {
@@ -24,11 +24,12 @@ struct UartDevice {
 
 impl UartDevice {
 	pub unsafe fn new() -> Self {
-		let base = crate::env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.unwrap()
-			.get();
+		// let base = crate::env::boot_info()
+		// 	.hardware_info
+		// 	.serial_port_base
+		// 	.unwrap()
+		// 	.get();
+		let base = 0x3f8;
 		let mut uart = unsafe { Uart16550::new_port(base).unwrap() };
 		uart.init(Config::default()).ok();
 		// Once we have a fallback destination for output,
