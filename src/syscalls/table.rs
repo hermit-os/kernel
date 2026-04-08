@@ -30,6 +30,12 @@ const SYSNO_OPEN: usize = 11;
 const SYSNO_WRITEV: usize = 12;
 /// Number of the system call `readv`
 const SYSNO_READV: usize = 13;
+/// number of the system call `fork`
+#[cfg(target_arch = "x86_64")]
+const SYSNO_FORK: usize = 14;
+/// number of the system call `waitpid`
+#[cfg(target_arch = "x86_64")]
+const SYSNO_WAITPID: usize = 15;
 
 /// Total number of system calls
 const NO_SYSCALLS: usize = 32;
@@ -76,6 +82,11 @@ impl SyscallTable {
 		table.handle[SYSNO_OPEN] = sys_open as *const _;
 		table.handle[SYSNO_READV] = sys_readv as *const _;
 		table.handle[SYSNO_WRITEV] = sys_writev as *const _;
+		#[cfg(target_arch = "x86_64")]
+		{
+			table.handle[SYSNO_FORK] = sys_fork as *const _;
+			table.handle[SYSNO_WAITPID] = sys_waitpid as *const _;
+		}
 
 		table
 	}
