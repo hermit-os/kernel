@@ -205,6 +205,34 @@ where
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
+	use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+	use crate::fd::stdio::*;
+
+	// each process has to provide its own object_map
+	// => create a new one
+	let mut object_map = HashMap::<
+			RawFd,
+			Arc<async_lock::RwLock<Fd>>,
+			RandomState,
+		>::with_hasher(
+			RandomState::with_seeds(0, 0, 0, 0),
+		);
+	if env::is_uhyve() {
+		let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new().into()));
+		let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new().into()));
+		let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new().into()));
+		object_map.insert(STDIN_FILENO, stdin);
+		object_map.insert(STDOUT_FILENO, stdout);
+		object_map.insert(STDERR_FILENO, stderr);
+	} else {
+		let stdin = Arc::new(async_lock::RwLock::new(GenericStdin::new().into()));
+		let stdout = Arc::new(async_lock::RwLock::new(GenericStdout::new().into()));
+		let stderr = Arc::new(async_lock::RwLock::new(GenericStderr::new().into()));
+		object_map.insert(STDIN_FILENO, stdin);
+		object_map.insert(STDOUT_FILENO, stdout);
+		object_map.insert(STDERR_FILENO, stderr);
+	}
+	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
 
 	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
