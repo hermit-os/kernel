@@ -454,6 +454,15 @@ impl PerCoreScheduler {
 		self.current_task.clone()
 	}
 
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[inline]
+	pub fn set_current_task_object_map(
+		&mut self,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>
+	) {
+		without_interrupts(|| self.current_task.borrow_mut().object_map = object_map)
+	}
+
 	#[inline]
 	pub fn get_current_task_object_map(
 		&self,
@@ -1004,7 +1013,16 @@ pub unsafe fn fork() -> TaskId {
 		.borrow()
 		.user_stack_pointer;
 	let parent_prio = core_scheduler().get_current_task().borrow().prio;
-	let parent_object_map = core_scheduler().get_current_task_object_map();
+	let parent_object_map = Arc::new(RwSpinLock::new(HashMap::<
+		RawFd,
+		Arc<async_lock::RwLock<Fd>>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(
+		0, 0, 0, 0,
+	))));
+	for (key, val) in core_scheduler().get_current_task_object_map().read().iter() {
+		parent_object_map.write().insert(*key, val.clone());
+	}
 	let parent_heap = core_scheduler().get_current_task().borrow().heap.clone();
 
 	let child_task = Task::new_fork(
