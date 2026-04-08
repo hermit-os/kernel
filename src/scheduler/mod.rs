@@ -458,9 +458,9 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn set_current_task_object_map(
 		&mut self,
-		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 	) {
-		without_interrupts(|| self.current_task.borrow_mut().object_map = object_map)
+		without_interrupts(|| self.current_task.borrow_mut().object_map = object_map);
 	}
 
 	#[inline]
