@@ -3,9 +3,12 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
 use anstyle::AnsiColor;
+use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
+const ARENA_SIZE: usize = 4096;
+static mut ARENA: [u8; ARENA_SIZE] = [0; _];
 
 const TIME_SEC_WIDTH: usize = 5;
 const TIME_SUBSEC_WIDTH: usize = 6;
@@ -13,12 +16,14 @@ const TIME_SUBSEC_WIDTH: usize = 6;
 /// Data structure to filter kernel messages
 pub struct KernelLogger {
 	time: AtomicBool,
+	filter: OnceCell<env_filter::Filter>,
 }
 
 impl KernelLogger {
 	pub const fn new() -> Self {
 		Self {
 			time: AtomicBool::new(false),
+			filter: OnceCell::new(),
 		}
 	}
 
@@ -42,6 +47,12 @@ impl log::Log for KernelLogger {
 
 	fn log(&self, record: &Record<'_>) {
 		if !self.enabled(record.metadata()) {
+			return;
+		}
+
+		if let Some(filter) = self.filter.get()
+			&& !filter.matches(record)
+		{
 			return;
 		}
 
@@ -101,29 +112,29 @@ fn no_color() -> bool {
 }
 
 pub unsafe fn init() {
+	#[cfg(target_os = "none")]
+	unsafe {
+		crate::mm::ALLOCATOR
+			.lock()
+			.claim((&raw mut ARENA).cast(), ARENA_SIZE)
+			.unwrap()
+	};
+
 	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
-	let mut max_level = LevelFilter::Info;
-
-	if let Some(log_level) = log_level {
-		max_level = if log_level.eq_ignore_ascii_case("off") {
-			LevelFilter::Off
-		} else if log_level.eq_ignore_ascii_case("error") {
-			LevelFilter::Error
-		} else if log_level.eq_ignore_ascii_case("warn") {
-			LevelFilter::Warn
-		} else if log_level.eq_ignore_ascii_case("info") {
-			LevelFilter::Info
-		} else if log_level.eq_ignore_ascii_case("debug") {
-			LevelFilter::Debug
-		} else if log_level.eq_ignore_ascii_case("trace") {
-			LevelFilter::Trace
-		} else {
-			error!("Could not parse HERMIT_LOG_LEVEL_FILTER, falling back to `info`.");
-			LevelFilter::Info
-		};
-	}
+	let max_level = if let Some(log_level) = log_level {
+		let filter = env_filter::Builder::new()
+			// The default. It may get overwritten by the parsed filter if it has a global level.
+			.filter_level(LevelFilter::Info)
+			.parse(log_level)
+			.build();
+		let max_level = filter.filter();
+		KERNEL_LOGGER.filter.set(filter).unwrap();
+		max_level
+	} else {
+		LevelFilter::Info
+	};
 
 	log::set_max_level(max_level);
 }

@@ -571,6 +571,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_filter"
+version = "1.0.1"
+source = "git+https://github.com/cagatay-y/env_logger?branch=feature%2Ffilter-no_std#364726a16347dfdff2ce11e6faab11e5fa2bd8d2"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -835,6 +843,7 @@ dependencies = [
  "embedded-io",
  "endian-num",
  "enum_dispatch",
+ "env_filter",
  "fdt",
  "float-cmp",
  "free-list",
