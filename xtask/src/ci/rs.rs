@@ -65,6 +65,11 @@ impl Rs {
 				"-Zinstrument-mcount -Cpasses=ee-instrument<post-inline>",
 			);
 		};
+			cargo.env(
+				"RUSTFLAGS",
+				"-Crelocation-model=static -Csymbol-mangling-version=legacy -Zunstable-options -Clink-arg=-Map=output.map",
+			);
+		
 
 		cargo
 			.current_dir(super::parent_root())

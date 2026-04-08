@@ -852,6 +852,7 @@ dependencies = [
  "num_enum",
  "pci-ids",
  "pci_types",
+ "pvh",
  "rand_chacha",
  "raw-cpuid",
  "riscv",
@@ -1532,6 +1533,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "pvh"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.11.0",
+ "num_enum",
 ]
 
 [[package]]

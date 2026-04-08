@@ -238,11 +238,9 @@ impl Qemu {
 				"format=raw,file=fat:rw:target/esp".to_owned(),
 			]
 		} else {
-			let mut image_args = vec!["-kernel".to_owned(), loader];
+			let mut image_args = vec!["-kernel".to_owned(), image.to_str().unwrap().to_owned()];
 			match arch {
 				Arch::X86_64 | Arch::Riscv64 => {
-					image_args.push("-initrd".to_owned());
-					image_args.push(image.to_str().unwrap().to_owned());
 				}
 				Arch::Aarch64 | Arch::Aarch64Be => {
 					image_args.push("-device".to_owned());
