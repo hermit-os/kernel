@@ -59,6 +59,8 @@ use talc::TalcLock;
 use talc::source::Manual;
 
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub use self::physicalmem::copy_page;
 pub use self::physicalmem::{FrameAlloc, FrameBox};
 pub use self::virtualmem::{PageAlloc, PageBox};
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]

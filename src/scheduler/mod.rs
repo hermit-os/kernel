@@ -45,6 +45,8 @@ static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>
 /// Map between Task ID and TaskHandle
 static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
+/// Count the number of spawned tasks
+static SPAWN_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -443,6 +445,13 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
 		without_interrupts(|| self.current_task.borrow().id)
+	}
+
+	/// Returns the Rc<RefCell<Task>> for the currently running task.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[inline]
+	pub fn get_current_task(&self) -> Rc<RefCell<task::Task>> {
+		self.current_task.clone()
 	}
 
 	#[inline]
@@ -906,11 +915,9 @@ pub unsafe fn spawn(
 	stack_size: usize,
 	selector: isize,
 ) -> TaskId {
-	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
-
 	let core_id = if selector < 0 {
 		// use Round Robin to schedule the cores
-		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+		SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
 	} else {
 		selector as u32
 	};
@@ -942,6 +949,118 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 		drop(waiting_tasks_guard);
 		core_scheduler.reschedule();
 	}
+}
+
+/// Fork the current task.
+///
+/// Marks user pages as Copy-On-Write, duplicates the page table hierarchy,
+/// copies the kernel stack, and enqueues a new child task that will resume
+/// execution right after the `prepare_fork_child_stack` call returning 1.
+///
+/// Returns the child's `TaskId` in the parent; the child itself sees `TaskId(0)`.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub unsafe fn fork() -> TaskId {
+	use memory_addresses::VirtAddr;
+
+	use crate::arch::{prepare_fork_child_stack, prepare_mem_copy_on_write};
+
+	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
+
+	// Mark user pages COW before copying the page table.
+	prepare_mem_copy_on_write();
+
+	let stack_size = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_user_stack_size();
+	let stacks = TaskStacks::new(stack_size);
+
+	let mut child_stack_pointer: usize = 0;
+	let mut child_root_page_table: usize = 0;
+
+	// Copy the kernel stack and duplicate the page table; returns false in parent.
+	let is_child = unsafe {
+		prepare_fork_child_stack(
+			&raw mut child_stack_pointer,
+			&raw mut child_root_page_table,
+			stacks.get_stack_virt_addr().as_usize(),
+		)
+	};
+
+	if is_child {
+		// We are in the child context (stack is already switched).
+		// Prevent the newly-allocated stacks from being dropped here —
+		// they are owned by the child task created in the parent.
+		core::mem::forget(stacks);
+		return TaskId::from(0);
+	}
+
+	// Parent path: register the child task.
+	let tid = get_tid();
+	let child_last_sp = VirtAddr::new(child_stack_pointer.try_into().unwrap());
+	let parent_user_sp = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.user_stack_pointer;
+	let parent_prio = core_scheduler().get_current_task().borrow().prio;
+	let parent_object_map = core_scheduler().get_current_task_object_map();
+	let parent_heap = core_scheduler().get_current_task().borrow().heap.clone();
+
+	let child_task = Task::new_fork(
+		tid,
+		core_id,
+		TaskStatus::Ready,
+		parent_prio,
+		stacks,
+		child_last_sp,
+		parent_user_sp,
+		parent_object_map,
+		child_root_page_table,
+		parent_heap,
+	);
+
+	let wakeup = {
+		#[cfg(feature = "smp")]
+		let _input_locked = get_scheduler_input(core_id).lock();
+		WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+		TASKS.lock().insert(
+			tid,
+			TaskHandle::new(
+				tid,
+				parent_prio,
+				#[cfg(feature = "smp")]
+				core_id,
+			),
+		);
+		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+		#[cfg(feature = "smp")]
+		if core_id == core_scheduler().core_id {
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		} else {
+			// For SMP we'd need to send to the target core; for now push locally.
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		}
+		#[cfg(not(feature = "smp"))]
+		{
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		}
+	};
+
+	if wakeup {
+		arch::wakeup_core(core_id);
+	}
+
+	debug!("Child was created and has the id {tid}");
+
+	tid
 }
 
 pub fn shutdown(arg: i32) -> ! {

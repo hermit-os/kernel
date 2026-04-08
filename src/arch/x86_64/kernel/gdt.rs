@@ -86,6 +86,7 @@ pub extern "C" fn set_current_kernel_stack() {
 		let (current_frame, val) = Cr3::read_raw();
 
 		if current_frame != new_frame {
+			debug!("Change Cr3 from {current_frame:?} to {new_frame:?}");
 			unsafe {
 				Cr3::write_raw(new_frame, val);
 			}
