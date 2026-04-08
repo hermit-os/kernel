@@ -15,10 +15,59 @@ use crate::{arch, scheduler};
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = i32;
 
+/// Fork the current process.
+/// Returns the child's PID to the parent, and 0 to the child.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fork() -> i32 {
+	unsafe { scheduler::fork().into() }
+}
+
+/// Fork the current process.
+/// In case of a unikernel, this system call always fail.
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fork() -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
+/// Waitpid block the current process until termination of process `pid`.
+/// Returns 0 is the process terminates
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
+	match scheduler::join(TaskId::from(pid)) {
+		Ok(()) => 0,
+		_ => -i32::from(Errno::Inval),
+	}
+}
+
+/// Waitpid block the current process until termination of process `pid`.
+/// In case of a unikernel, this system call always fail.
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_getpid() -> Tid {
-	0
+	#[cfg(not(feature = "common-os"))]
+	{
+		// an unikernel doesn't have a pid => return always 0
+		0
+	}
+
+	#[cfg(feature = "common-os")]
+	{
+		// return the current task id
+		core_scheduler().get_current_task_handle().get_id().into()
+	}
 }
 
 #[cfg(feature = "newlib")]
@@ -132,7 +181,7 @@ pub unsafe extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg
 	0
 }
 
-#[hermit_macro::system(errno)]
+#[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_yield() {
 	core_scheduler().reschedule();
