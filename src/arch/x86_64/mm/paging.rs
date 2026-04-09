@@ -345,6 +345,8 @@ pub fn mark_user_pages_copy_on_write() {
 					{
 						let new_flags = *pt_entry.flags().copy_on_write();
 						pt_entry.set_addr(pt_entry.addr(), new_flags);
+						// This task now holds a COW reference to the frame.
+						crate::mm::frame_ref_inc(pt_entry.addr().as_u64() as usize);
 					}
 				}
 			}
@@ -456,11 +458,18 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 		{
 			// COW fault: allocate a new page, copy old contents, map as writable.
 			if let Some(src_phys) = virtual_to_physical(virtaddr.into()) {
-				let new_phys = crate::mm::copy_page(src_phys);
 				let mut new_flags = flags;
 				new_flags.insert(PageTableEntryFlags::WRITABLE);
 				new_flags.remove(PageTableEntryFlags::BIT_9);
-				map::<BasePageSize>(virtaddr.into(), new_phys, 1, new_flags);
+				// Drop this task's COW reference
+				let ref_is_zero = crate::mm::frame_ref_dec_and_free(src_phys.as_u64() as usize);
+
+				if ref_is_zero {
+					map::<BasePageSize>(virtaddr.into(), src_phys, 1, new_flags);
+				} else {
+					let new_phys = crate::mm::copy_page(src_phys);
+					map::<BasePageSize>(virtaddr.into(), new_phys, 1, new_flags);
+				}
 
 				if swapped_gs {
 					unsafe {
