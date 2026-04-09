@@ -427,8 +427,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 ) {
 	use core::arch::asm;
 
-	use crate::arch::core_local::core_scheduler;
-
+	use crate::arch::core_local::{core_scheduler, increment_irq_counter};
 	let swapped_gs = unsafe {
 		if stack_frame.as_mut().read().code_segment == SegmentSelector(0x08) {
 			false
@@ -437,6 +436,8 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 			true
 		}
 	};
+	
+	increment_irq_counter(14);
 
 	let faulting_addr = Cr2::read().unwrap();
 	let virtaddr = faulting_addr.align_down(BasePageSize::SIZE);
