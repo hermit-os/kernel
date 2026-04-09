@@ -301,7 +301,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 
 	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
 
-	info!("Create new file descriptor table");
+	debug!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();
 
 	let entry_point: usize = LOADER_START | entry_point;
