@@ -81,7 +81,13 @@
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(not(any(feature = "common-os", feature = "nostd")), feature(linkage))]
+#![cfg_attr(
+	any(
+		not(any(feature = "common-os", feature = "nostd")),
+		all(not(feature = "nostd"), not(target_arch = "riscv64")),
+	),
+	feature(linkage)
+)]
 #![feature(linked_list_cursors)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
