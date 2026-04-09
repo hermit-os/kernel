@@ -36,6 +36,8 @@ const SYSNO_FORK: usize = 14;
 /// number of the system call `waitpid`
 #[cfg(target_arch = "x86_64")]
 const SYSNO_WAITPID: usize = 15;
+/// number of the system call `spawn_process`
+const SYSNO_SPAWN_PROCESS: usize = 16;
 
 /// Total number of system calls
 const NO_SYSCALLS: usize = 32;
@@ -43,6 +45,13 @@ const NO_SYSCALLS: usize = 32;
 extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 	error!("Invalid syscall {sys_no}");
 	sys_exit(1);
+}
+
+/// loader will replace this function
+#[linkage = "weak"]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_spawn_process(_name: *const core::ffi::c_char) -> i32 {
+	-i32::from(Errno::Nosys)
 }
 
 #[allow(unused_assignments)]
@@ -87,6 +96,7 @@ impl SyscallTable {
 			table.handle[SYSNO_FORK] = sys_fork as *const _;
 			table.handle[SYSNO_WAITPID] = sys_waitpid as *const _;
 		}
+		table.handle[SYSNO_SPAWN_PROCESS] = sys_spawn_process as *const _;
 
 		table
 	}
