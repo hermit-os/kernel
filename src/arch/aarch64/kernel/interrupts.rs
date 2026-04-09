@@ -440,7 +440,8 @@ pub fn init_cpu() {
 
 	debug!("Mark cpu {cpu_id} as awake");
 
-	gic.setup(cpu_id);
+	gic.init_cpu(cpu_id);
+	GicV3::enable_group1(true);
 	GicV3::set_priority_mask(0xff);
 
 	let fdt = env::fdt().unwrap();
