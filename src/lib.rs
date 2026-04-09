@@ -47,10 +47,7 @@
 #![feature(allocator_api)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(
-	all(
-		not(any(feature = "common-os", feature = "nostd")),
-		not(target_arch = "riscv64"),
-	),
+	all(not(feature = "nostd"), not(target_arch = "riscv64"),),
 	feature(linkage)
 )]
 #![feature(linked_list_cursors)]
