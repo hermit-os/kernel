@@ -1,3 +1,5 @@
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+use alloc::collections::BTreeMap;
 use core::alloc::AllocError;
 use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +19,47 @@ use crate::mm::{PageRangeAllocator, PageRangeBox};
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+/// Sparse per-frame COW reference counts.
+/// Only frames that are actively COW-shared have an entry; exclusively-owned
+/// frames are absent (equivalent to refcount 0).  Stored in a `BTreeMap` so
+/// that memory use scales with the number of *shared* frames, not with total
+/// physical memory.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+static PAGE_REFCOUNTS: InterruptTicketMutex<BTreeMap<usize, u32>> =
+	InterruptTicketMutex::new(BTreeMap::new());
+
+/// Increment the COW reference count for `phys_addr` (4 KiB-aligned frame).
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub fn frame_ref_inc(phys_addr: usize) {
+	let frame = phys_addr >> 12;
+	*PAGE_REFCOUNTS.lock().entry(frame).or_insert(0) += 1;
+}
+
+/// Decrement the COW reference count for `phys_addr`.
+/// If the count reaches zero the the function returned true.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub fn frame_ref_dec_and_free(phys_addr: usize) -> bool {
+	let frame = phys_addr >> 12;
+	let mut map = PAGE_REFCOUNTS.lock();
+	match map.get_mut(&frame) {
+		None => {
+			warn!("frame_ref_dec_and_free: no refcount entry for frame {phys_addr:#x}");
+			false
+		}
+		Some(count) if *count <= 1 => {
+			map.remove(&frame);
+			/*drop(map); // release lock before deallocating
+			let range = PageRange::new(phys_addr, phys_addr + free_list::PAGE_SIZE).unwrap();
+			unsafe { FrameAlloc::deallocate(range) };*/
+			true
+		}
+		Some(count) => {
+			*count -= 1;
+			false
+		}
+	}
+}
 
 pub struct FrameAlloc;
 
