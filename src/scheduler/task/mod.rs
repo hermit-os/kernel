@@ -13,16 +13,23 @@ use core::{cmp, fmt};
 use ahash::RandomState;
 use crossbeam_utils::CachePadded;
 use hashbrown::HashMap;
-use hermit_sync::{OnceCell, RwSpinLock};
+#[cfg(not(feature = "common-os"))]
+use hermit_sync::OnceCell;
+use hermit_sync::RwSpinLock;
 use memory_addresses::VirtAddr;
 
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
-use crate::arch::kernel::core_local::*;
+use crate::arch;
+use crate::arch::core_local::*;
 use crate::arch::kernel::processor::{self, FPUState};
-use crate::arch::kernel::scheduler::TaskStacks;
+use crate::arch::scheduler::TaskStacks;
+#[cfg(not(feature = "common-os"))]
+use crate::env;
 use crate::fd::{Fd, RawFd, stdio};
+#[cfg(not(feature = "common-os"))]
+use crate::fd::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
 
 /// Returns the most significant bit.
@@ -453,11 +460,16 @@ impl Task {
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
 		debug!("Creating idle task {tid}");
 
-		/// All cores use the same mapping between file descriptor and the referenced object
+		/// In the unikernel case all cores share the same mapping between
+		/// file descriptor and the referenced object. Under `common-os`,
+		/// each process gets its own `object_map` when the application is
+		/// loaded, so the idle task only needs an empty placeholder.
+		#[cfg(not(feature = "common-os"))]
 		static OBJECT_MAP: OnceCell<
 			Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		> = OnceCell::new();
 
+		#[cfg(not(feature = "common-os"))]
 		if core_id == 0 {
 			OBJECT_MAP
 				.set(Arc::new(RwSpinLock::new(HashMap::<
@@ -490,7 +502,16 @@ impl Task {
 			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
+			#[cfg(not(feature = "common-os"))]
 			object_map: OBJECT_MAP.get().unwrap().clone(),
+			#[cfg(feature = "common-os")]
+			object_map: Arc::new(RwSpinLock::new(HashMap::<
+				RawFd,
+				Arc<async_lock::RwLock<Fd>>,
+				RandomState,
+			>::with_hasher(RandomState::with_seeds(
+				0, 0, 0, 0,
+			)))),
 			#[cfg(not(feature = "common-os"))]
 			tls,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
