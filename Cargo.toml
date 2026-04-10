@@ -298,6 +298,7 @@ document-features = { version = "0.2", optional = true }
 embedded-io = { version = "0.7", features = ["alloc"] }
 endian-num = { version = "0.2", optional = true, features = ["linux-types"] }
 enum_dispatch = "0.3"
+env_filter = { version = "1.0.0", default-features = false }
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
@@ -305,7 +306,7 @@ hashbrown = { version = "0.16", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10.9", features = ["kernel"] }
 hermit-sync = "0.1"
-log = { version = "0.4", default-features = false }
+log = { version = "0.4", default-features = false, features = ["kv"] }
 mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
 pci-ids = { version = "0.2", optional = true }
@@ -413,6 +414,7 @@ unreadable_literal = "warn"
 
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "be" }
+env_filter = { git = "https://github.com/cagatay-y/env_logger", branch = "feature/filter-no_std" }
 
 [profile.profiling]
 inherits = "release"

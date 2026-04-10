@@ -1,20 +1,31 @@
 use core::fmt;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 
 use anstyle::AnsiColor;
+use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
+use crate::env;
+
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
+const ARENA_SIZE: usize = 4096;
+static mut ARENA: [u8; ARENA_SIZE] = [0; _];
+
+const TIME_SEC_WIDTH: usize = 5;
+const TIME_SUBSEC_WIDTH: usize = 6;
 
 /// Data structure to filter kernel messages
 pub struct KernelLogger {
 	time: AtomicBool,
+	filter: OnceCell<env_filter::Filter>,
 }
 
 impl KernelLogger {
 	pub const fn new() -> Self {
 		Self {
 			time: AtomicBool::new(false),
+			filter: OnceCell::new(),
 		}
 	}
 
@@ -41,13 +52,21 @@ impl log::Log for KernelLogger {
 			return;
 		}
 
-		// FIXME: Use `super let` once stable
-		let time;
+		if let Some(filter) = self.filter.get()
+			&& !filter.matches(record)
+		{
+			return;
+		}
+
 		let format_time = if self.time() {
-			time = Microseconds(crate::processor::get_timer_ticks());
-			format_args!("[{time}]")
+			let time = Duration::from_micros(crate::processor::get_timer_ticks());
+			format_args!(
+				"{:TIME_SEC_WIDTH$}.{:0TIME_SUBSEC_WIDTH$}",
+				time.as_secs(),
+				time.subsec_micros()
+			)
 		} else {
-			format_args!("[            ]")
+			format_args!("{:1$}", "", TIME_SEC_WIDTH + 1 + TIME_SUBSEC_WIDTH)
 		};
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
@@ -63,17 +82,7 @@ impl log::Log for KernelLogger {
 		let format_target = format_args!(" {target:<10}");
 
 		let args = record.args();
-		println!("{format_time}[{core_id}][{level}{format_target}] {args}");
-	}
-}
-
-struct Microseconds(u64);
-
-impl fmt::Display for Microseconds {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let seconds = self.0 / 1_000_000;
-		let microseconds = self.0 % 1_000_000;
-		write!(f, "{seconds:5}.{microseconds:06}")
+		println!("[{format_time}][{core_id}][{level}{format_target}] {args}");
 	}
 }
 
@@ -106,30 +115,37 @@ fn no_color() -> bool {
 
 pub unsafe fn init() {
 	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
-	// Determines LevelFilter at compile time
-	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
-	let mut max_level = LevelFilter::Info;
+	// To get logs until we determine the actual log level
+	log::set_max_level(LevelFilter::Info);
 
-	if let Some(log_level) = log_level {
-		max_level = if log_level.eq_ignore_ascii_case("off") {
-			LevelFilter::Off
-		} else if log_level.eq_ignore_ascii_case("error") {
-			LevelFilter::Error
-		} else if log_level.eq_ignore_ascii_case("warn") {
-			LevelFilter::Warn
-		} else if log_level.eq_ignore_ascii_case("info") {
-			LevelFilter::Info
-		} else if log_level.eq_ignore_ascii_case("debug") {
-			LevelFilter::Debug
-		} else if log_level.eq_ignore_ascii_case("trace") {
-			LevelFilter::Trace
-		} else {
-			error!("Could not parse HERMIT_LOG_LEVEL_FILTER, falling back to `info`.");
-			LevelFilter::Info
-		};
+	#[cfg(target_os = "none")]
+	unsafe {
+		crate::mm::ALLOCATOR
+			.lock()
+			.claim((&raw mut ARENA).cast(), ARENA_SIZE)
+			.unwrap()
+	};
+	env::init();
+
+	let mut filter_builder = env_filter::Builder::new();
+	// The default. It may get overwritten by the parsed filter if it has a global level.
+	filter_builder.filter_level(LevelFilter::Info);
+
+	if let Some(compile_time_filter) = option_env!("HERMIT_LOG_DEFAULT").or_else(|| {
+		option_env!("HERMIT_LOG_LEVEL_FILTER").inspect(|_| {
+			warn!("HERMIT_LOG_LEVEL_FILTER is deprecated in favor of HERMIT_LOG_DEFAULT");
+		})
+	}) {
+		filter_builder.parse(compile_time_filter);
 	}
 
-	log::set_max_level(max_level);
+	if let Some(runtime_filter) = env::var("HERMIT_LOG") {
+		filter_builder.parse(runtime_filter);
+	}
+
+	let filter = filter_builder.build();
+	log::set_max_level(filter.filter());
+	KERNEL_LOGGER.filter.set(filter).unwrap();
 }
 
 #[cfg_attr(target_arch = "riscv64", allow(unused))]
