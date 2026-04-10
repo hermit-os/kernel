@@ -301,7 +301,7 @@ enum_dispatch = "0.3"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
-hashbrown = { version = "0.16", default-features = false }
+hashbrown = { version = "0.17", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10.9", features = ["kernel"] }
 hermit-sync = "0.1"
