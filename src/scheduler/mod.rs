@@ -138,7 +138,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	fn reschedule(self) {
 		use aarch64_cpu::asm::barrier::{NSH, SY, dsb, isb};
 		use arm_gic::IntId;
-		use arm_gic::gicv3::{GicV3, SgiTarget, SgiTargetGroup};
+		use arm_gic::gicv3::{GicCpuInterface, SgiTarget, SgiTargetGroup};
 
 		use crate::interrupts::SGI_RESCHED;
 
@@ -151,7 +151,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		#[cfg(not(feature = "smp"))]
 		let core_id = 0;
 
-		GicV3::send_sgi(
+		GicCpuInterface::send_sgi(
 			reschedid,
 			SgiTarget::List {
 				affinity3: 0,
@@ -160,7 +160,8 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 				target_list: 1 << core_id,
 			},
 			SgiTargetGroup::CurrentGroup1,
-		);
+		)
+		.unwrap();
 
 		interrupts::enable();
 	}

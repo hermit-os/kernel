@@ -209,15 +209,15 @@ pub fn init_drivers() {
 					} else {
 						panic!("Invalid interrupt type");
 					};
-					gic.set_interrupt_priority(virtio_irqid, Some(cpu_id), 0x00);
+					gic.set_interrupt_priority(virtio_irqid, Some(cpu_id), 0x00).unwrap();
 					if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Level);
+						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Level).unwrap();
 					} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Edge);
+						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Edge).unwrap();
 					} else {
 						panic!("Invalid interrupt level!");
 					}
-					gic.enable_interrupt(virtio_irqid, Some(cpu_id), true);
+					gic.enable_interrupt(virtio_irqid, Some(cpu_id), true).unwrap();
 
 					match drv {
 						#[cfg(feature = "virtio-console")]
