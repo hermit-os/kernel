@@ -113,6 +113,7 @@ pub(crate) fn now() -> Instant {
 
 #[cfg(feature = "dhcpv4")]
 async fn dhcpv4_run() {
+	let mut was_ever_configured = false;
 	future::poll_fn(|cx| {
 		let Some(mut guard) = NIC.try_lock() else {
 			// FIXME: only wake when progress can be made
@@ -130,13 +131,14 @@ async fn dhcpv4_run() {
 			None => {}
 			Some(dhcpv4::Event::Configured(config)) => {
 				info!("DHCP config acquired!");
-				info!("IP address:   {}", config.address);
 				nic.iface.update_ip_addrs(|addrs| {
 					if let Some(dest) = addrs.iter_mut().next() {
+						warn!("Overwriting the default network interface configuration.");
 						*dest = IpCidr::Ipv4(config.address);
 					} else if addrs.push(IpCidr::Ipv4(config.address)).is_err() {
 						info!("Unable to update IP address");
 					}
+					info!("IP address:   {}", config.address);
 				});
 				if let Some(router) = config.router {
 					info!("Gateway:      {router}");
@@ -162,8 +164,15 @@ async fn dhcpv4_run() {
 					let dns_socket = dns::Socket::new(dns_servers.as_slice(), vec![]);
 					nic.dns_handle = Some(nic.sockets.add(dns_socket));
 				}
+
+				was_ever_configured = true;
 			}
 			Some(dhcpv4::Event::Deconfigured) => {
+				if !was_ever_configured {
+					// If there is a default configuration, we do not want to reset it. If there is not, there is not a need to reset it.
+					return Poll::Pending;
+				}
+
 				info!("DHCP lost config!");
 				let cidr = Ipv4Cidr::new(Ipv4Address::UNSPECIFIED, 0);
 				nic.iface.update_ip_addrs(|addrs| {
