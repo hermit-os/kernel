@@ -5,6 +5,10 @@ use memory_addresses::arch::x86_64::PhysAddr;
 #[cfg(feature = "common-os")]
 use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
+/// Copy the kernel stack pages of the current task to a new base address.
+#[cfg(feature = "common-os")]
+pub use paging::{copy_kernel_stack_to, drop_user_space};
+
 /// Returns the physical address of the current task's root page table (PML4).
 #[cfg(feature = "common-os")]
 pub fn get_current_root_page_table() -> usize {
@@ -124,7 +128,7 @@ pub fn copy_current_root_page_table() -> usize {
 					if entry.flags().contains(PageTableFlags::PRESENT)
 						&& entry.flags().contains(PageTableFlags::BIT_9)
 					{
-						crate::mm::frame_ref_inc(entry.addr().as_u64() as usize);
+						crate::mm::frame_ref_inc(entry.addr().into());
 					}
 				}
 			}
@@ -151,10 +155,4 @@ pub fn copy_current_root_page_table() -> usize {
 #[cfg(feature = "common-os")]
 pub fn prepare_mem_copy_on_write() {
 	paging::mark_user_pages_copy_on_write();
-}
-
-/// Copy the kernel stack pages of the current task to a new base address.
-#[cfg(feature = "common-os")]
-pub fn copy_kernel_stack_to(stack_address: usize) {
-	paging::copy_kernel_stack_to(stack_address);
 }
