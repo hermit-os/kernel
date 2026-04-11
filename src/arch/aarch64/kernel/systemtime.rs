@@ -1,8 +1,4 @@
-#![allow(unused)]
-
-use alloc::vec::Vec;
 use core::arch::asm;
-use core::str;
 
 use free_list::PageLayout;
 use hermit_entry::boot_info::PlatformInfo;
@@ -17,18 +13,21 @@ use crate::mm::{PageAlloc, PageRangeAllocator};
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
 
-const RTC_DR: usize = 0x00;
-const RTC_MR: usize = 0x04;
-const RTC_LR: usize = 0x08;
-const RTC_CR: usize = 0x0c;
-/// Interrupt mask and set register
-const RTC_IRQ_MASK: usize = 0x10;
-/// Raw interrupt status
-const RTC_RAW_IRQ_STATUS: usize = 0x14;
-/// Masked interrupt status
-const RTC_MASK_IRQ_STATUS: usize = 0x18;
-/// Interrupt clear register
-const RTC_IRQ_CLEAR: usize = 0x1c;
+#[expect(dead_code)]
+mod reg {
+	pub const RTC_DR: usize = 0x00;
+	pub const RTC_MR: usize = 0x04;
+	pub const RTC_LR: usize = 0x08;
+	pub const RTC_CR: usize = 0x0c;
+	/// Interrupt mask and set register
+	pub const RTC_IRQ_MASK: usize = 0x10;
+	/// Raw interrupt status
+	pub const RTC_RAW_IRQ_STATUS: usize = 0x14;
+	/// Masked interrupt status
+	pub const RTC_MASK_IRQ_STATUS: usize = 0x18;
+	/// Interrupt clear register
+	pub const RTC_IRQ_CLEAR: usize = 0x1c;
+}
 
 #[inline]
 fn rtc_read(off: usize) -> u32 {
@@ -50,7 +49,9 @@ pub fn init() {
 	match env::boot_info().platform_info {
 		PlatformInfo::Uhyve { boot_time, .. } => {
 			PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
-			BOOT_TIME.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap());
+			BOOT_TIME
+				.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap())
+				.unwrap();
 			info!("Hermit booted on {boot_time}");
 
 			return;
@@ -80,7 +81,7 @@ pub fn init() {
 				);
 
 				let boot_time =
-					OffsetDateTime::from_unix_timestamp(rtc_read(RTC_DR).into()).unwrap();
+					OffsetDateTime::from_unix_timestamp(rtc_read(reg::RTC_DR).into()).unwrap();
 				info!("Hermit booted on {boot_time}");
 
 				BOOT_TIME

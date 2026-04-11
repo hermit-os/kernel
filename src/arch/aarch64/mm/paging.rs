@@ -1,8 +1,6 @@
-#![allow(unused)]
-
 use core::arch::asm;
 use core::marker::PhantomData;
-use core::{fmt, mem, ptr};
+use core::ptr;
 
 use aarch64_cpu::asm::barrier::{ISH, ISHST, SY, dsb, isb};
 use aarch64_cpu::registers::{ID_AA64MMFR0_EL1, Readable};
@@ -10,10 +8,8 @@ use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::aarch64::kernel::{get_base_address, get_image_size, get_ram_address, processor};
-use crate::env::is_uhyve;
+use crate::arch::aarch64::kernel::get_ram_address;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
-use crate::{KERNEL_STACK_SIZE, mm, scheduler};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.
@@ -148,6 +144,7 @@ impl PageTableEntry {
 	}
 
 	/// Return whether this entry is a 4KiB page.
+	#[expect(dead_code)]
 	fn is_table_or_4kib_page(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::TABLE_OR_4KIB_PAGE.bits()) != 0
 	}
@@ -229,6 +226,7 @@ struct Page<S: PageSize> {
 
 impl<S: PageSize> Page<S> {
 	/// Return the stored virtual address.
+	#[expect(dead_code)]
 	fn address(&self) -> VirtAddr {
 		self.virtual_address
 	}
@@ -575,6 +573,7 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 	Page::range(first_page, last_page)
 }
 
+#[expect(dead_code)]
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
 	trace!("Looking up Page Table Entry for {virtual_address:p}");
 
@@ -708,11 +707,6 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
-}
-
-#[inline]
-pub fn get_application_page_size() -> usize {
-	BasePageSize::SIZE as usize
 }
 
 pub unsafe fn init() {
