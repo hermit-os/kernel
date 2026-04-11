@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(nonstandard_style)]
 
-mod addrinfo;
+pub(crate) mod addrinfo;
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
