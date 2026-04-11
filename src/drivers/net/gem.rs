@@ -3,38 +3,25 @@
 //! The driver is derived from the Zynq 7000 Gigabit Ethernet Controller (GEM) reference manual.
 //! See the [Zynq 7000 SoC Technical Reference Manual (UG585)](https://docs.xilinx.com/r/en-US/ug585-zynq-7000-SoC-TRM) for more details.
 
-#![allow(unused)]
-
 use alloc::alloc::Allocator;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::alloc::Layout;
 use core::convert::TryInto;
 use core::ptr::NonNull;
-use core::{mem, ptr, slice};
+use core::{ptr, slice};
 
-use align_address::Align;
-use memory_addresses::{PhysAddr, VirtAddr};
-use riscv::register::*;
+use memory_addresses::VirtAddr;
 use smoltcp::phy::{ChecksumCapabilities, DeviceCapabilities};
 use thiserror::Error;
 use tock_registers::interfaces::*;
 use tock_registers::registers::*;
 use tock_registers::{register_bitfields, register_structs};
 
-use crate::arch::kernel::core_local::core_scheduler;
-use crate::arch::kernel::interrupts::*;
-#[cfg(not(feature = "pci"))]
-use crate::arch::kernel::mmio as hardware;
-use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
-#[cfg(feature = "pci")]
-use crate::drivers::pci as hardware;
 use crate::drivers::{Driver, InterruptLine};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
-use crate::{BasePageSize, PageSize};
 
 //Base address of the control registers
 //const GEM: *mut Registers = 0x1009_0000 as *mut Registers; //For Sifive FU540
@@ -151,6 +138,7 @@ register_bitfields! [
 ];
 
 ///  PHY reg index
+#[expect(dead_code)]
 enum PhyReg {
 	Control = 0,
 	Status = 1,
@@ -165,6 +153,7 @@ enum PhyReg {
 }
 
 ///  PHY Status reg mask and offset
+#[expect(dead_code)]
 #[allow(clippy::enum_variant_names)]
 enum PhyStatus {
 	ANCompleteOffset = 5,
@@ -173,11 +162,13 @@ enum PhyStatus {
 	ANCapMask = 0x4,
 }
 
+#[expect(dead_code)]
 enum PhyControl {
 	ANEnableOffset = 12,
 	ANEnableMask = 0x1000,
 }
 
+#[expect(dead_code)]
 enum PhyPartnerAbility {
 	ANEnableOffset = 12,
 	ANEnableMask = 0x1000,
@@ -205,10 +196,6 @@ const TX_DESC_USED: u32 = 1 << 31;
 
 #[derive(Error, Debug)]
 pub enum GEMError {
-	#[error("initialization failed")]
-	InitFailed,
-	#[error("reset failed")]
-	ResetFailed,
 	#[error("PHY not found")]
 	NoPhyFound,
 	#[error("unknown GEM error")]
@@ -344,7 +331,7 @@ impl RxToken<'_> {
 	fn rx_buffer_consumed(&mut self) {
 		debug!("rx_buffer_consumed: handle: {}", self.buffer_index);
 
-		let word0_addr = (self.rx_fields.rxbuffer_list + u64::from(self.buffer_index * 8));
+		let word0_addr = self.rx_fields.rxbuffer_list + u64::from(self.buffer_index * 8);
 		let word1_addr = word0_addr + 4u64;
 
 		unsafe {
@@ -366,7 +353,7 @@ impl GEMDriver {
 
 		for i in 0..RX_BUF_NUM {
 			let index = (i + self.rx_counter) % RX_BUF_NUM;
-			let word0_addr = (self.rx_fields.rxbuffer_list + u64::from(index * 8));
+			let word0_addr = self.rx_fields.rxbuffer_list + u64::from(index * 8);
 			let word0_entry = unsafe { word0_addr.as_mut_ptr::<u32>().read_volatile() };
 			// Is buffer owned by GEM?
 			if (word0_entry & 0x1) != 0 {
@@ -422,7 +409,7 @@ impl smoltcp::phy::Device for GEMDriver {
 
 	fn receive(
 		&mut self,
-		timestamp: smoltcp::time::Instant,
+		_timestamp: smoltcp::time::Instant,
 	) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
 		let rx_index = self.next_rx_index()?;
 		let tx_index = self.next_tx_index()?;
@@ -443,7 +430,8 @@ impl smoltcp::phy::Device for GEMDriver {
 		};
 		Some((rx_token, tx_token))
 	}
-	fn transmit(&mut self, timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
+
+	fn transmit(&mut self, _timestamp: smoltcp::time::Instant) -> Option<Self::TxToken<'_>> {
 		self.handle_interrupt();
 		self.next_tx_index()
 			.inspect(|index| self.reserve_tx_index(*index))
@@ -452,6 +440,7 @@ impl smoltcp::phy::Device for GEMDriver {
 				tx_fields: &mut self.tx_fields,
 			})
 	}
+
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
 		cap.max_transmission_unit = usize::from(self.mtu);
@@ -783,7 +772,7 @@ pub fn init_device(
 
 			// This can fail if address of buffers is > 32 bit
 			// TODO: 64-bit addresses
-			let mut word0_entry: u32 = buffer.as_u64().try_into().unwrap();
+			let word0_entry: u32 = buffer.as_u64().try_into().unwrap();
 			let mut word1_entry: u32 = TX_DESC_USED;
 			// Mark the last descriptor in the buffer descriptor list with the wrap bit
 			if i == TX_BUF_NUM - 1 {
@@ -881,7 +870,7 @@ unsafe fn wait_for_mdio(gem: *mut Registers) {
 
 // FIXME: boxify buffers and remove these functions
 /// Soft-deprecated in favor of `DeviceAlloc`
-fn allocate(size: usize, no_execution: bool) -> VirtAddr {
+fn allocate(size: usize, _no_execution: bool) -> VirtAddr {
 	let layout = Layout::from_size_align(size, 8).unwrap();
 	let allocation = DeviceAlloc.allocate(layout).unwrap();
 	VirtAddr::from_ptr(allocation.as_ptr())
