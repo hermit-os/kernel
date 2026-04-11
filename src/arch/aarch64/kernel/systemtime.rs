@@ -1,8 +1,4 @@
-#![allow(unused)]
-
-use alloc::vec::Vec;
 use core::arch::asm;
-use core::str;
 
 use free_list::PageLayout;
 use hermit_entry::boot_info::PlatformInfo;
@@ -17,6 +13,7 @@ use crate::mm::{PageAlloc, PageRangeAllocator};
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
 
+#[expect(dead_code)]
 mod reg {
 	pub const RTC_DR: usize = 0x00;
 	pub const RTC_MR: usize = 0x04;
@@ -52,7 +49,9 @@ pub fn init() {
 	match env::boot_info().platform_info {
 		PlatformInfo::Uhyve { boot_time, .. } => {
 			PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
-			BOOT_TIME.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap());
+			BOOT_TIME
+				.set(u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap())
+				.unwrap();
 			info!("Hermit booted on {boot_time}");
 
 			return;
