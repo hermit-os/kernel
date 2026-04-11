@@ -92,7 +92,11 @@ pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 fn exit(arg: i32) -> ! {
 	debug!("Exit program with error code {arg}!");
-	super::shutdown(arg)
+	if cfg!(not(feature = "common-os")) {
+		super::shutdown(arg)
+	} else {
+		core_scheduler().exit(arg)
+	}
 }
 
 #[hermit_macro::system]

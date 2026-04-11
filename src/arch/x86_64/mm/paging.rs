@@ -336,17 +336,11 @@ pub fn mark_user_pages_copy_on_write() {
 				};
 				for pt_idx in 0..512usize {
 					let pt_entry = &mut pt[pt_idx];
-					if pt_entry.flags().contains(PageTableEntryFlags::PRESENT)
-						&& pt_entry.flags().contains(PageTableEntryFlags::WRITABLE)
-						&& pt_entry
-							.flags()
-							.contains(PageTableEntryFlags::USER_ACCESSIBLE)
+					if pt_entry.flags().contains(PageTableEntryFlags::PRESENT|PageTableEntryFlags::WRITABLE|PageTableEntryFlags::USER_ACCESSIBLE)
 						&& !pt_entry.flags().contains(PageTableEntryFlags::BIT_9)
 					{
 						let new_flags = *pt_entry.flags().copy_on_write();
 						pt_entry.set_addr(pt_entry.addr(), new_flags);
-						// This task now holds a COW reference to the frame.
-						crate::mm::frame_ref_inc(pt_entry.addr().as_u64() as usize);
 					}
 				}
 			}
@@ -358,12 +352,94 @@ pub fn mark_user_pages_copy_on_write() {
 	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
 }
 
-/// Copy all kernel stack pages of the current task to a new virtual base address.
-/// Used by fork to give the child its own copy of the kernel stack.
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(pml4_phys: usize) {
+	debug!("Drop the user space at PML4 {pml4_phys:#x}");
+
+	// Free a 4 KiB physical frame back to the frame allocator.
+	fn free_frame(phys: usize) {
+		let range = free_list::PageRange::new(phys, phys + free_list::PAGE_SIZE).unwrap();
+		unsafe { FrameAlloc::deallocate(range) };
+	}
+
+	// Task::drop is usually called from another task's context (e.g. the
+	// idle task running `cleanup_tasks`), so `Cr3::read()` would return the
+	// page table of the cleaning task — not of the one being destroyed.
+	// Walk the stored PML4 directly through the kernel identity map.
+	let pml4 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_phys) };
+
+	// Walk PML4 entries 1..511 (user-space entries).
+	// Entry 0 is for the low kernel mapping; entry 511 is the self-reference.
+	for pml4_idx in 1..511usize {
+		let pml4_entry = &mut pml4[pml4_idx];
+		if !pml4_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+			continue;
+		}
+		let pdpt_phys = pml4_entry.addr().as_u64() as usize;
+		let pdpt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pdpt_phys) };
+
+		for pdpt_idx in 0..512usize {
+			let pdpt_entry = &mut pdpt[pdpt_idx];
+			if !pdpt_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+				continue;
+			}
+			let pd_phys = pdpt_entry.addr().as_u64() as usize;
+			let pd = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pd_phys) };
+
+			for pd_idx in 0..512usize {
+				let pd_entry = &mut pd[pd_idx];
+				if !pd_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+					continue;
+				}
+				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
+					// Skip huge pages (2 MiB) - not handled as COW here
+					warn!("User space isn't able to use huge pages");
+					continue;
+				}
+				let pt_phys = pd_entry.addr().as_u64() as usize;
+				let pt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pt_phys) };
+
+				for pt_idx in 0..512usize {
+					let pt_entry = &mut pt[pt_idx];
+					if pt_entry
+						.flags()
+						.contains(PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE)
+					{
+						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
+						if crate::mm::frame_ref_dec(phys_addr) {
+							free_frame(phys_addr.as_u64() as usize);
+						}
+						pt_entry.set_unused();
+					}
+				}
+
+				// PT emptied → free the PT frame and clear the PD entry.
+				free_frame(pt_phys);
+				pd_entry.set_unused();
+			}
+
+			// PD emptied → free the PD frame and clear the PDPT entry.
+			free_frame(pd_phys);
+			pdpt_entry.set_unused();
+		}
+
+		// PDPT emptied → free the PDPT frame and clear the PML4 entry.
+		free_frame(pdpt_phys);
+		pml4_entry.set_unused();
+	}
+
+	// Finally free the PML4 itself. No TLB flush needed: the dropped page
+	// table is not loaded on any core.
+	free_frame(pml4_phys);
+}
+
+/// Copy the contents of the current task's kernel stack to a new virtual
+/// base address. Used by fork: the child's `TaskStacks::new` has already
+/// allocated and mapped fresh physical frames at `stack_address`, so we
+/// simply `memcpy` the parent's stack pages into the child's mapping.
 #[cfg(feature = "common-os")]
 pub fn copy_kernel_stack_to(stack_address: usize) {
 	use crate::arch::core_local::core_scheduler;
-	use crate::mm::copy_page;
 
 	let virt_addr = core_scheduler()
 		.get_current_task()
@@ -380,19 +456,21 @@ pub fn copy_kernel_stack_to(stack_address: usize) {
 
 	let page_table = unsafe { identity_mapped_page_table() };
 
-	// The virtual layout has 4 guard pages (unmapped) interspersed; iterate the
-	// full range including those so no mapped pages are missed.
+	// The virtual layout has 4 guard pages (unmapped) interspersed; iterate
+	// the full range including those so no mapped pages are missed.
 	let full_virt_size = total_size as u64 + 4 * BasePageSize::SIZE;
 	for i in (virt_addr.as_u64()..(virt_addr.as_u64() + full_virt_size))
 		.step_by(BasePageSize::SIZE as usize)
 	{
 		let virt = x86_64::VirtAddr::new(i);
 		match page_table.translate(virt) {
-			TranslateResult::Mapped { flags, .. } => {
-				if let Some(src_phys) = virtual_to_physical(VirtAddr::new(i)) {
-					let new_phys = copy_page(src_phys);
-					let new_virt = VirtAddr::new(i + addr_diff);
-					map::<BasePageSize>(new_virt, new_phys, 1, flags);
+			TranslateResult::Mapped { .. } => {
+				// Both src and dst are already mapped in the current page
+				// table (dst via TaskStacks::new), so a plain memcpy suffices.
+				let src = ptr::with_exposed_provenance::<u8>(i as usize);
+				let dst = ptr::with_exposed_provenance_mut::<u8>((i + addr_diff) as usize);
+				unsafe {
+					dst.copy_from_nonoverlapping(src, BasePageSize::SIZE as usize);
 				}
 			}
 			TranslateResult::NotMapped => {}
@@ -463,12 +541,14 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 				new_flags.insert(PageTableEntryFlags::WRITABLE);
 				new_flags.remove(PageTableEntryFlags::BIT_9);
 				// Drop this task's COW reference
-				let ref_is_zero = crate::mm::frame_ref_dec_and_free(src_phys.as_u64() as usize);
+				let ref_is_zero = crate::mm::frame_ref_dec(src_phys);
 
 				if ref_is_zero {
+					crate::mm::frame_ref_inc(src_phys);
 					map::<BasePageSize>(virtaddr.into(), src_phys, 1, new_flags);
 				} else {
 					let new_phys = crate::mm::copy_page(src_phys);
+					crate::mm::frame_ref_inc(new_phys);
 					map::<BasePageSize>(virtaddr.into(), new_phys, 1, new_flags);
 				}
 
@@ -501,6 +581,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 			let mut flags = PageTableEntryFlags::empty();
 			flags.normal().user().writable().execute_disable();
 			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
+			crate::mm::frame_ref_inc(physaddr);
 			unsafe {
 				virtaddr.as_mut_ptr::<u8>().write_bytes(0, BasePageSize::SIZE as usize);
 			}

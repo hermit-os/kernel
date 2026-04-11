@@ -685,7 +685,15 @@ impl PerCoreScheduler {
 	fn cleanup_tasks(&mut self) {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		while let Some(finished_task) = self.finished_tasks.pop_front() {
-			debug!("Cleaning up task {}", finished_task.borrow().id);
+			let id = finished_task.borrow().id;
+			drop(finished_task);
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			trace!(
+				"Cleaned up task {id} — free frames: {} KiB",
+				crate::mm::FrameAlloc::free_space() >> 10
+			);
+			#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+			debug!("Cleaned up task {}", id);
 		}
 	}
 
