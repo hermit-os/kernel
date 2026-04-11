@@ -48,11 +48,6 @@ pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
-pub fn get_image_size() -> usize {
-	(env::boot_info().load_info.kernel_image_addr_range.end
-		- env::boot_info().load_info.kernel_image_addr_range.start) as usize
-}
-
 pub fn get_limit() -> usize {
 	(env::boot_info().hardware_info.phys_addr_range.end
 		- env::boot_info().hardware_info.phys_addr_range.start) as usize

@@ -42,11 +42,6 @@ pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
-pub fn get_image_size() -> usize {
-	let range = &env::boot_info().load_info.kernel_image_addr_range;
-	(range.end - range.start) as usize
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
