@@ -8,7 +8,7 @@ use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::aarch64::kernel::get_ram_address;
+use crate::env::get_ram_address;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
