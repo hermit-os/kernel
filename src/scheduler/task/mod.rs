@@ -556,11 +556,13 @@ impl Task {
 	}
 }
 
-/*impl Drop for Task {
+impl Drop for Task {
 	fn drop(&mut self) {
-		debug!("Drop task {}", self.id);
+		//debug!("Drop task {}", self.id);
+		#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+		arch::drop_user_space(self.root_page_table);
 	}
-}*/
+}
 
 struct BlockedTask {
 	task: Rc<RefCell<Task>>,
