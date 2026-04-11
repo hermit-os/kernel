@@ -1,11 +1,7 @@
 use core::ops::Range;
-use core::ptr;
 
 pub fn executable_ptr_range() -> Range<*mut ()> {
-	let load_info = loader_executable_ptr_range();
-	let linker = executable_start()..executable_end();
-	assert_eq!(linker, load_info);
-	linker
+	executable_start()..executable_end()
 }
 
 fn executable_start() -> *mut () {
@@ -56,11 +52,4 @@ fn executable_end() -> *mut () {
 	}
 
 	(&raw mut _end).cast::<()>()
-}
-
-fn loader_executable_ptr_range() -> Range<*mut ()> {
-	let Range { start, end } = super::boot_info().load_info.kernel_image_addr_range;
-	let start = ptr::with_exposed_provenance_mut(start as usize);
-	let end = ptr::with_exposed_provenance_mut(end as usize);
-	start..end
 }
