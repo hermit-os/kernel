@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::{mem, slice};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
-use memory_addresses::{PhysAddr, VirtAddr};
+use memory_addresses::PhysAddr;
 use x86_64::registers::control::{Cr0, Cr4};
 
 use crate::arch::x86_64::kernel::core_local::*;
@@ -40,10 +40,6 @@ pub mod vga;
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
-
-pub fn get_base_address() -> VirtAddr {
-	VirtAddr::new(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
@@ -235,6 +231,7 @@ where
 
 	use align_address::Align;
 	use free_list::PageLayout;
+	use memory_addresses::VirtAddr;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};

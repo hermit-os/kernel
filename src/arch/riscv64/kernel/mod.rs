@@ -16,7 +16,7 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use free_list::PageLayout;
-use memory_addresses::{PhysAddr, VirtAddr};
+use memory_addresses::PhysAddr;
 use riscv::register::sstatus;
 
 use crate::arch::riscv64::kernel::core_local::core_id;
@@ -71,10 +71,6 @@ pub fn get_processor_count() -> u32 {
 #[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
-}
-
-pub fn get_base_address() -> VirtAddr {
-	VirtAddr::new(env::boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn args() -> Option<&'static str> {
