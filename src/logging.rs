@@ -132,7 +132,7 @@ pub unsafe fn init() {
 	log::set_max_level(max_level);
 }
 
-#[cfg_attr(target_arch = "riscv64", allow(unused))]
+#[cfg_attr(target_arch = "riscv64", allow(unused_macros))]
 macro_rules! infoheader {
 	// This should work on paper, but it's currently not supported :(
 	// Refer to https://github.com/rust-lang/rust/issues/46569
@@ -146,13 +146,13 @@ macro_rules! infoheader {
 	}};
 }
 
-#[cfg_attr(target_arch = "riscv64", allow(unused))]
+#[cfg_attr(target_arch = "riscv64", allow(unused_macros))]
 #[clippy::format_args]
 macro_rules! infoentry {
 	($str:expr, $($arg:tt)+) => (::log::info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));
 }
 
-#[cfg_attr(target_arch = "riscv64", allow(unused))]
+#[cfg_attr(target_arch = "riscv64", allow(unused_macros))]
 macro_rules! infofooter {
 	() => {{
 		::log::info!("{:=^70}", '=');
