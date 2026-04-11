@@ -63,7 +63,7 @@ pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
 pub use self::physicalmem::copy_page;
 pub use self::physicalmem::{FrameAlloc, FrameBox};
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-pub use self::physicalmem::{frame_ref_dec_and_free, frame_ref_inc};
+pub use self::physicalmem::{frame_ref_dec, frame_ref_inc};
 pub use self::virtualmem::{PageAlloc, PageBox};
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;

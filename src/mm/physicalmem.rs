@@ -31,27 +31,24 @@ static PAGE_REFCOUNTS: InterruptTicketMutex<BTreeMap<usize, u32>> =
 
 /// Increment the COW reference count for `phys_addr` (4 KiB-aligned frame).
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-pub fn frame_ref_inc(phys_addr: usize) {
-	let frame = phys_addr >> 12;
+pub fn frame_ref_inc(phys_addr: PhysAddr) {
+	let frame = (phys_addr.as_u64() as usize) >> 12;
 	*PAGE_REFCOUNTS.lock().entry(frame).or_insert(0) += 1;
 }
 
 /// Decrement the COW reference count for `phys_addr`.
 /// If the count reaches zero the the function returned true.
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-pub fn frame_ref_dec_and_free(phys_addr: usize) -> bool {
-	let frame = phys_addr >> 12;
+pub fn frame_ref_dec(phys_addr: PhysAddr) -> bool {
+	let frame = (phys_addr.as_u64() as usize) >> 12;
 	let mut map = PAGE_REFCOUNTS.lock();
 	match map.get_mut(&frame) {
 		None => {
-			warn!("frame_ref_dec_and_free: no refcount entry for frame {phys_addr:#x}");
+			warn!("frame_ref_dec: no refcount entry for frame {phys_addr:p}");
 			false
 		}
 		Some(count) if *count <= 1 => {
 			map.remove(&frame);
-			/*drop(map); // release lock before deallocating
-			let range = PageRange::new(phys_addr, phys_addr + free_list::PAGE_SIZE).unwrap();
-			unsafe { FrameAlloc::deallocate(range) };*/
 			true
 		}
 		Some(count) => {
@@ -88,6 +85,12 @@ impl PageRangeAllocator for FrameAlloc {
 		unsafe {
 			PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
 		}
+	}
+}
+
+impl FrameAlloc {
+	pub fn free_space() -> usize {
+		PHYSICAL_FREE_LIST.lock().free_space()
 	}
 }
 
