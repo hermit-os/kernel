@@ -1,12 +1,9 @@
 use core::ops::Range;
+use core::ptr;
 
-use memory_addresses::VirtAddr;
-
-pub fn get_base_address() -> VirtAddr {
-	VirtAddr::new(super::boot_info().load_info.kernel_image_addr_range.start)
-}
-
-pub fn get_image_size() -> usize {
+pub fn executable_ptr_range() -> Range<*mut ()> {
 	let Range { start, end } = super::boot_info().load_info.kernel_image_addr_range;
-	(end - start) as usize
+	let start = ptr::with_exposed_provenance_mut(start as usize);
+	let end = ptr::with_exposed_provenance_mut(end as usize);
+	start..end
 }

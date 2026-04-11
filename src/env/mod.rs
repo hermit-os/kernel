@@ -14,7 +14,7 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
-pub(crate) use self::executable::{get_base_address, get_image_size};
+pub(crate) use self::executable::executable_ptr_range;
 use crate::arch::kernel;
 pub(crate) use crate::arch::kernel::get_ram_address;
 

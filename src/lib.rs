@@ -259,7 +259,7 @@ fn boot_processor_main() -> ! {
 	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
 	info!("Built on {}", built_info::BUILT_TIME_UTC);
 
-	info!("Kernel starts at {:p}", env::get_base_address());
+	info!("Executable: {:?}", env::executable_ptr_range());
 
 	if let Some(fdt) = env::fdt() {
 		info!("FDT:\n{fdt:#?}");
