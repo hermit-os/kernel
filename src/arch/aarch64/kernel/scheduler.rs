@@ -8,7 +8,7 @@ use aarch64_cpu::asm::barrier::{SY, isb};
 use aarch64_cpu::registers::*;
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
-use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::kernel::core_local::core_scheduler;

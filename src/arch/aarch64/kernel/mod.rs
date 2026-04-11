@@ -18,7 +18,7 @@ use core::arch::global_asm;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::{ptr, str};
 
-use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
