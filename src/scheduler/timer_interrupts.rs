@@ -21,7 +21,7 @@ pub struct Slot {
 	source: Source,
 	/// Point in time at which to wake up (in microsecond precision).
 	/// A value of [`u64::MAX`] means the timer is not set.
-	/// This is done to
+	/// This is done to 
 	wakeup_time: u64,
 }
 
