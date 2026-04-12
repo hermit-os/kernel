@@ -4,6 +4,14 @@ pub fn executable_ptr_range() -> Range<*mut ()> {
 	executable_start()..executable_end()
 }
 
+pub fn log_segments() {
+	info!("Executable start:  {:p}", executable_start());
+	info!("Text segment end:  {:p}", text_end());
+	info!("Data segment end:  {:p}", data_end());
+	info!("BSS segment start: {:p}", bss_start());
+	info!("Executable end:    {:p}", executable_end());
+}
+
 fn executable_start() -> *mut () {
 	unsafe extern "C" {
 		/// Start of the executable.
@@ -52,6 +60,42 @@ fn executable_end() -> *mut () {
 	}
 
 	(&raw mut _end).cast::<()>()
+}
+
+fn text_end() -> *mut () {
+	unsafe extern "C" {
+		/// End of the text segment.
+		///
+		/// The address of `_etext` is the first location after the last read-only
+		/// loadable segment. For details, see [etext(3C)].
+		///
+		/// [etext(3C)]: https://docs.oracle.com/cd/E86824_01/html/E54766/etext-3c.html
+		static mut _etext: u8;
+	}
+
+	(&raw mut _etext).cast::<()>()
+}
+
+fn data_end() -> *mut () {
+	unsafe extern "C" {
+		/// End of the data segment.
+		///
+		/// The address of `_edata` is the first location after the last read-write
+		/// loadable segment. For details, see [etext(3C)].
+		///
+		/// [etext(3C)]: https://docs.oracle.com/cd/E86824_01/html/E54766/etext-3c.html
+		static mut _edata: u8;
+	}
+
+	(&raw mut _edata).cast::<()>()
+}
+
+fn bss_start() -> *mut () {
+	unsafe extern "C" {
+		static mut __bss_start: u8;
+	}
+
+	(&raw mut __bss_start).cast::<()>()
 }
 
 #[cfg(not(feature = "common-os"))]
