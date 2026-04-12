@@ -38,7 +38,7 @@ x86_64 = { version = "0.15", default-features = false, features = ["instructions
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 anyhow = { version = "1", default-features = false }
-uefi = { version = "0.36", features = ["alloc", "panic_handler", "qemu"] }
+uefi = { version = "0.37", features = ["alloc", "panic_handler", "qemu"] }
 
 [build-dependencies]
 built = { version = "0.8", features = ["git2", "chrono"] }
