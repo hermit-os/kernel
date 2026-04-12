@@ -16,7 +16,7 @@ use hermit_sync::OnceCell;
 
 pub(crate) use self::executable::executable_ptr_range;
 #[cfg(not(feature = "common-os"))]
-pub(crate) use self::executable::tls::tls_info;
+pub(crate) use self::executable::tls::TlsInfo;
 use crate::arch::kernel;
 pub(crate) use crate::arch::kernel::get_ram_address;
 

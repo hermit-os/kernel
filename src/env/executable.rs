@@ -56,31 +56,44 @@ fn executable_end() -> *mut () {
 
 #[cfg(not(feature = "common-os"))]
 pub mod tls {
+	use core::alloc::Layout;
 	use core::{ptr, slice};
 
 	use elf::abi;
 	use elf::file::Elf64_Ehdr;
 	use elf::segment::Elf64_Phdr;
-	use hermit_entry::boot_info::TlsInfo;
 
 	use crate::env;
 
-	pub fn tls_info() -> Option<TlsInfo> {
-		let ehdr = ehdr();
-		ehdr.sanity_check_ident();
+	#[derive(Debug)]
+	pub struct TlsInfo<'a> {
+		pub image: &'a [u8],
+		pub layout: Layout,
+	}
 
-		let phdrs = unsafe { ehdr.phdrs() };
-		let tls_phdr = phdrs.iter().find(|phdr| phdr.p_type == abi::PT_TLS)?;
-		let executable_start = env::executable_ptr_range().start.expose_provenance() as u64;
+	impl TlsInfo<'_> {
+		pub fn from_env() -> Option<Self> {
+			let ehdr = ehdr();
+			ehdr.sanity_check_ident();
 
-		let tls_info = TlsInfo {
-			start: executable_start + tls_phdr.p_vaddr,
-			filesz: tls_phdr.p_filesz,
-			memsz: tls_phdr.p_memsz,
-			align: tls_phdr.p_align,
-		};
+			let phdrs = unsafe { ehdr.phdrs() };
+			let tls_phdr = phdrs.iter().find(|phdr| phdr.p_type == abi::PT_TLS)?;
+			let executable_start = env::executable_ptr_range().start.expose_provenance() as u64;
 
-		Some(tls_info)
+			let start = usize::try_from(executable_start + tls_phdr.p_vaddr).unwrap();
+			let filesz = usize::try_from(tls_phdr.p_filesz).unwrap();
+			let memsz = usize::try_from(tls_phdr.p_memsz).unwrap();
+			let align = usize::try_from(tls_phdr.p_align).unwrap();
+
+			let start = ptr::with_exposed_provenance(start);
+			let image = unsafe { slice::from_raw_parts(start, filesz) };
+
+			let layout = Layout::from_size_align(memsz, align)
+				.unwrap()
+				.pad_to_align();
+
+			Some(Self { image, layout })
+		}
 	}
 
 	fn ehdr() -> &'static Elf64_Ehdr {
