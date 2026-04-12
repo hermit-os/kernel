@@ -18,7 +18,7 @@ use core::arch::global_asm;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::{ptr, str};
 
-use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
+use memory_addresses::PhysAddr;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
@@ -44,15 +44,6 @@ pub fn is_uhyve_with_pci() -> bool {
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
-
-pub fn get_base_address() -> VirtAddr {
-	VirtAddr::new(env::boot_info().load_info.kernel_image_addr_range.start)
-}
-
-pub fn get_image_size() -> usize {
-	let range = &env::boot_info().load_info.kernel_image_addr_range;
-	(range.end - range.start) as usize
 }
 
 pub fn get_limit() -> usize {
@@ -130,6 +121,8 @@ pub fn boot_next_processor() {
 	if !env::is_uhyve() && get_possible_cpus() > 1 {
 		use core::arch::asm;
 		use core::hint::spin_loop;
+
+		use memory_addresses::VirtAddr;
 
 		use crate::kernel::start::{TTBR0, smp_start};
 		use crate::mm::virtual_to_physical;

@@ -295,6 +295,7 @@ build-time = "0.1.3"
 crossbeam-utils = { version = "0.8", default-features = false }
 delegate = "0.13"
 document-features = { version = "0.2", optional = true }
+elf = { version = "0.8", default-features = false }
 embedded-io = { version = "0.7", features = ["alloc"] }
 endian-num = { version = "0.2", optional = true, features = ["linux-types"] }
 enum_dispatch = "0.3"

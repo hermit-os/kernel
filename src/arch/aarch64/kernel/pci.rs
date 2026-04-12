@@ -5,7 +5,7 @@ use bit_field::BitField;
 use fdt::Fdt;
 use fdt::node::FdtNode;
 use free_list::PageLayout;
-use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
+use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::{
 	Bar, CommandRegister, ConfigRegionAccess, InterruptLine, InterruptPin, MAX_BARS, PciAddress,
 	PciHeader,

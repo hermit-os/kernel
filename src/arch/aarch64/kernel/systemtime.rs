@@ -3,7 +3,7 @@ use core::arch::asm;
 use free_list::PageLayout;
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
-use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
+use memory_addresses::{PhysAddr, VirtAddr};
 use time::OffsetDateTime;
 
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};

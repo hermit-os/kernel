@@ -259,18 +259,12 @@ fn boot_processor_main() -> ! {
 	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
 	info!("Built on {}", built_info::BUILT_TIME_UTC);
 
-	info!("Kernel starts at {:p}", env::get_base_address());
+	env::log_segments();
 
 	if let Some(fdt) = env::fdt() {
 		info!("FDT:\n{fdt:#?}");
 	}
 
-	unsafe extern "C" {
-		static mut __bss_start: u8;
-	}
-	let bss_ptr = &raw mut __bss_start;
-	info!("BSS starts at {bss_ptr:p}");
-	info!("tls_info = {:#x?}", env::boot_info().load_info.tls_info);
 	arch::boot_processor_init();
 
 	#[cfg(not(target_arch = "riscv64"))]

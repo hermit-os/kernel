@@ -14,7 +14,7 @@ use free_list::PageLayout;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
 use memory_addresses::VirtAddr;
-use memory_addresses::arch::aarch64::PhysAddr;
+use memory_addresses::PhysAddr;
 
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;

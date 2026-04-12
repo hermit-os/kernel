@@ -1,4 +1,6 @@
-//! Central parsing of the command-line parameters.
+//! Inspection and manipulation of the kernel's environment.
+
+mod executable;
 
 use alloc::borrow::ToOwned;
 use alloc::string::String;
@@ -12,7 +14,11 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
-pub(crate) use crate::arch::kernel::{self, get_base_address, get_image_size, get_ram_address};
+#[cfg(not(feature = "common-os"))]
+pub(crate) use self::executable::tls::TlsInfo;
+pub(crate) use self::executable::{executable_ptr_range, log_segments};
+use crate::arch::kernel;
+pub(crate) use crate::arch::kernel::get_ram_address;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 

@@ -20,11 +20,10 @@
 
 use core::alloc::Layout;
 use core::mem::{self, MaybeUninit};
-use core::{ptr, slice};
-
-use hermit_entry::boot_info::TlsInfo;
+use core::ptr;
 
 use self::allocation::Allocation;
+use crate::env::TlsInfo;
 
 /// Thread-local storage data structures.
 pub struct Tls {
@@ -51,22 +50,8 @@ struct Tcb {
 }
 
 impl Tls {
-	unsafe fn new(tls_info: TlsInfo) -> Self {
-		let start = usize::try_from(tls_info.start).unwrap();
-		let filesz = usize::try_from(tls_info.filesz).unwrap();
-		let memsz = usize::try_from(tls_info.memsz).unwrap();
-		let align = usize::try_from(tls_info.align).unwrap();
-
-		// Get TLS initialization image
-		let tls_init_image = {
-			let start = ptr::with_exposed_provenance(start);
-			unsafe { slice::from_raw_parts(start, filesz) }
-		};
-
+	unsafe fn new(tls_info: TlsInfo<'_>) -> Self {
 		let tcb_layout = Layout::new::<Tcb>().pad_to_align();
-		let data_layout = Layout::from_size_align(memsz, align)
-			.unwrap()
-			.pad_to_align();
 
 		let (layout, tls_offset, tcb_offset) =
 			if cfg!(any(target_arch = "aarch64", target_arch = "riscv64")) {
@@ -79,7 +64,7 @@ impl Tls {
 				assert_eq!(mem::offset_of!(Tcb, dtv), 0);
 
 				// In variant I, the TLS data comes after the TCB.
-				let (tls_layout, data_offset) = tcb_layout.extend(data_layout).unwrap();
+				let (tls_layout, data_offset) = tcb_layout.extend(tls_info.layout).unwrap();
 				(tls_layout.pad_to_align(), data_offset, 0)
 			} else if cfg!(target_arch = "x86_64") {
 				// x86-64 uses TLS data structures variant II.
@@ -92,7 +77,7 @@ impl Tls {
 				assert_eq!(mem::offset_of!(Tcb, thread_ptr), 0);
 
 				// In Variant II, the TCB comes after the TLS data.
-				let (tls_layout, tcb_offset) = data_layout.extend(tcb_layout).unwrap();
+				let (tls_layout, tcb_offset) = tls_info.layout.extend(tcb_layout).unwrap();
 				(tls_layout.pad_to_align(), 0, tcb_offset)
 			} else {
 				unimplemented!()
@@ -101,10 +86,12 @@ impl Tls {
 		let mut block = Allocation::new(layout).unwrap();
 
 		// Initialize the beginning of the TLS block with the TLS initialization image.
-		block.as_mut_slice()[tls_offset..][..tls_init_image.len()].copy_from_slice(tls_init_image);
+		let image =
+			unsafe { &*(ptr::from_ref(tls_info.image) as *const [core::mem::MaybeUninit<u8>]) };
+		block.as_mut_slice()[tls_offset..][..tls_info.image.len()].copy_from_slice(image);
 
 		// Fill the rest of the TLS block with zeros.
-		block.as_mut_slice()[tls_offset..][tls_init_image.len()..data_layout.size()]
+		block.as_mut_slice()[tls_offset..][tls_info.image.len()..tls_info.layout.size()]
 			.fill(MaybeUninit::new(0));
 
 		let thread_ptr = if cfg!(target_arch = "riscv64") {
@@ -138,7 +125,7 @@ impl Tls {
 	}
 
 	pub fn from_env() -> Option<Self> {
-		let tls_info = crate::env::boot_info().load_info.tls_info?;
+		let tls_info = TlsInfo::from_env()?;
 		let this = unsafe { Self::new(tls_info) };
 		Some(this)
 	}
