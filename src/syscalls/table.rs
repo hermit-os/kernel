@@ -132,6 +132,8 @@ const SYSNO_FREEADDRINFO: usize = 53;
 const SYSNO_AVAILABLE_PARALLELISM: usize = 54;
 /// number of the system call `getdents64`
 const SYSNO_GET_DENTS64: usize = 55;
+/// number of the system call `exec`
+const SYSNO_EXEC: usize = 56;
 
 /// Total number of system calls
 const NO_SYSCALLS: usize = 64;
@@ -144,7 +146,14 @@ extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 /// loader will replace this function
 #[linkage = "weak"]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_spawn_process(_name: *const core::ffi::c_char) -> i32 {
+pub extern "C" fn sys_spawn_process(_path: *const core::ffi::c_char) -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
+/// loader will replace this function
+#[linkage = "weak"]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_exec(_path: *const c_char) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
@@ -236,6 +245,7 @@ impl SyscallTable {
 		}
 		table.handle[SYSNO_AVAILABLE_PARALLELISM] = sys_available_parallelism as *const _;
 		table.handle[SYSNO_GET_DENTS64] = sys_getdents64 as *const _;
+		table.handle[SYSNO_EXEC] = sys_exec as *const _;
 
 		table
 	}

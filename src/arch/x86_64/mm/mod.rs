@@ -12,7 +12,7 @@ use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 /// Copy the kernel stack pages of the current task to a new base address.
 #[cfg(feature = "common-os")]
-pub use paging::{drop_user_space, copy_kernel_stack_to};
+pub use paging::{drop_user_space, clear_user_space, copy_kernel_stack_to};
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
