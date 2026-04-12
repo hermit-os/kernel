@@ -13,7 +13,11 @@ pub use paging::{copy_kernel_stack_to, drop_user_space};
 #[cfg(feature = "common-os")]
 pub fn get_current_root_page_table() -> usize {
 	use crate::arch::core_local::core_scheduler;
-	core_scheduler().get_current_task().borrow().root_page_table
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.root_page_table
+		.as_usize()
 }
 
 /// Copy the current task's PML4 into a new page table, sharing data pages (COW).
