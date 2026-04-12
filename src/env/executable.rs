@@ -1,3 +1,8 @@
+//! Information about the executable.
+//!
+//! This module provides information about the currently running loaded
+//! executable image through different reserved linker symbols.
+
 use core::ops::Range;
 
 pub fn executable_ptr_range() -> Range<*mut ()> {

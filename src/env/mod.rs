@@ -1,4 +1,4 @@
-//! Central parsing of the command-line parameters.
+//! Inspection and manipulation of the kernel's environment.
 
 mod executable;
 
