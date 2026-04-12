@@ -50,7 +50,7 @@ pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
 #[cfg(not(feature = "common-os"))]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
+pub extern "C" fn sys_waitpid(_pid: Tid) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
@@ -216,7 +216,16 @@ pub unsafe extern "C" fn sys_spawn2(
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	{
+		unsafe {
+			scheduler::spawn_thread(func, arg, Priority::from(prio), stack_size, selector).into()
+		}
+	}
+	#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+	{
+		unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
+	}
 }
 
 #[hermit_macro::system]
@@ -228,8 +237,16 @@ pub unsafe extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	let new_id = unsafe {
-		scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+	let new_id = {
+		#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+		unsafe {
+			scheduler::spawn_thread(func, arg, Priority::from(prio), USER_STACK_SIZE, selector)
+				.into()
+		}
+		#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+		unsafe {
+			scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+		}
 	};
 
 	if !id.is_null() {

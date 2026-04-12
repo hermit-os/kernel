@@ -194,9 +194,12 @@ const LOADER_START: usize = 0x0100_0000_0000;
 const LOADER_STACK_SIZE: usize = 0x8000;
 
 #[cfg(feature = "common-os")]
-pub fn load_application<F, T>(code_size: u64, tls_size: u64, func: F) -> T
+pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
 where
-	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> T,
+	F: FnOnce(
+		&'static mut [u8],
+		Option<&'static mut [u8]>,
+	) -> Result<Option<alloc::vec::Vec<u8>>, ()>,
 {
 	use align_address::Align;
 	use free_list::PageLayout;
@@ -293,9 +296,28 @@ where
 		}
 		processor::writefs(thread_ptr.expose_provenance());
 
-		func(code_slice, Some(block))
+		// Run the ELF loader, which copies the binary's `PT_TLS` initial
+		// image into `block` and returns the pristine PT_TLS image
+		// directly from the ELF buffer.
+		let tls_init = func(code_slice, Some(block))?;
+
+		if let Some(init) = tls_init {
+			let template = alloc::sync::Arc::new(
+				crate::scheduler::task::TlsTemplate {
+					size: tls_offset,
+					init,
+				},
+			);
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.tls_template = Some(template);
+		}
+
+		Ok(())
 	} else {
-		func(code_slice, None)
+		func(code_slice, None)?;
+		Ok(())
 	}
 }
 

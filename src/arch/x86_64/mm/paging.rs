@@ -1,6 +1,7 @@
 use core::{fmt, ptr};
 
 use free_list::PageLayout;
+#[cfg(feature = "common-os")]
 use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
@@ -564,6 +565,29 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 				scheduler::abort();
 			}
 		}
+	}
+
+	// A spawned user thread whose entry function returns comes back here
+	// with RIP=0: the `thread_start` wrapper in std's hermit pal just
+	// returns, and the kernel-crafted return slot at the top of the user
+	// stack was zero-initialised. Treat an instruction-fetch fault at 0
+	// in ring 3 as a clean thread exit.
+	if error_code.contains(PageFaultErrorCode::USER_MODE)
+		&& error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+		&& faulting_addr.as_u64() == 0
+	{
+		debug!(
+			"User thread {} returned from entry; exiting cleanly.",
+			core_scheduler().get_current_task_id()
+		);
+		// Do not swap GS back here. `exit` will context-switch to another
+		// task, so the current kernel GS must remain in place for the
+		// scheduler bookkeeping. `swapped_gs` is a no-op at this point:
+		// the handler never returns, and the next task's GS is restored
+		// by the context switch.
+		let _ = swapped_gs;
+		use crate::scheduler::PerCoreSchedulerExt;
+		core_scheduler().exit(0);
 	}
 
 	// Heap demand-paging: user-mode fault on an unmapped heap page.

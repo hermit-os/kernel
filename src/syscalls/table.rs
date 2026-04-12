@@ -128,6 +128,11 @@ const SYSNO_GETADDRINFO: usize = 52;
 /// number of the system call `freeaddrinfo`
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 const SYSNO_FREEADDRINFO: usize = 53;
+/// number of the system call `availale_parallelism`
+const SYSNO_AVAILABLE_PARALLELISM: usize = 54;
+/// number of the system call `getdents64`
+const SYSNO_GET_DENTS64: usize = 55;
+
 /// Total number of system calls
 const NO_SYSCALLS: usize = 64;
 
@@ -229,6 +234,8 @@ impl SyscallTable {
 			table.handle[SYSNO_FREEADDRINFO] =
 				crate::syscalls::socket::addrinfo::sys_freeaddrinfo as *const _;
 		}
+		table.handle[SYSNO_AVAILABLE_PARALLELISM] = sys_available_parallelism as *const _;
+		table.handle[SYSNO_GET_DENTS64] = sys_getdents64 as *const _;
 
 		table
 	}
