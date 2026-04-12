@@ -56,11 +56,120 @@ fn executable_end() -> *mut () {
 
 #[cfg(not(feature = "common-os"))]
 pub mod tls {
+	use core::{ptr, slice};
+
+	use elf::abi;
+	use elf::file::Elf64_Ehdr;
+	use elf::segment::Elf64_Phdr;
 	use hermit_entry::boot_info::TlsInfo;
 
 	use crate::env;
 
 	pub fn tls_info() -> Option<TlsInfo> {
-		env::boot_info().load_info.tls_info
+		let ehdr = ehdr();
+		ehdr.sanity_check_ident();
+
+		let phdrs = unsafe { ehdr.phdrs() };
+		let tls_phdr = phdrs.iter().find(|phdr| phdr.p_type == abi::PT_TLS)?;
+		let executable_start = env::executable_ptr_range().start.expose_provenance() as u64;
+
+		let tls_info = TlsInfo {
+			start: executable_start + tls_phdr.p_vaddr,
+			filesz: tls_phdr.p_filesz,
+			memsz: tls_phdr.p_memsz,
+			align: tls_phdr.p_align,
+		};
+
+		assert!(tls_info_eq(
+			&tls_info,
+			&env::boot_info().load_info.tls_info.unwrap()
+		));
+
+		Some(tls_info)
+	}
+
+	fn ehdr() -> &'static Elf64_Ehdr {
+		unsafe extern "C" {
+			/// ELF file header.
+			///
+			/// Apart from changelogs, it is not documented, but defined by:
+			///
+			/// - ld: [binutils-gdb@`62655c7`]
+			/// - gold: [binutils-gdb@`eabc84f`]
+			/// - lld: [llvm/llvm-project@`4f7a5c3`]
+			/// - mold: [rui314/mold@`ccc7f83`]
+			/// - Wild: [wild-linker/wild@`fb7da78`]
+			///
+			/// [binutils-gdb@`62655c7`]: https://sourceware.org/git/?p=binutils-gdb.git;a=commit;h=62655c7b8bfc33e6c12694f439ff8f7e8da3005a
+			/// [binutils-gdb@`eabc84f`]: https://sourceware.org/git/?p=binutils-gdb.git;a=commit;h=eabc84f4848311a68f65df04e428c8b53a92f1c0
+			/// [llvm/llvm-project@`4f7a5c3`]: https://github.com/llvm/llvm-project/commit/4f7a5c3bb429c945ff4e456478b5532f828d1143
+			/// [rui314/mold@`ccc7f83`]: https://github.com/rui314/mold/commit/ccc7f83cde954048424fa488464be41f210e60d1
+			/// [wild-linker/wild@`fb7da78`]: https://github.com/wild-linker/wild/commit/fb7da7841ad9e64e2cd1128a62d23d488dae921d
+			static __ehdr_start: Elf64_Ehdr;
+		}
+
+		unsafe { &__ehdr_start }
+	}
+
+	#[expect(non_camel_case_types)]
+	trait Elf64_EhdrExt {
+		fn sanity_check_ident(&self);
+
+		unsafe fn phdrs(&self) -> &[Elf64_Phdr];
+	}
+
+	impl Elf64_EhdrExt for Elf64_Ehdr {
+		fn sanity_check_ident(&self) {
+			let ident = &self.e_ident;
+
+			let magic = &ident[..abi::EI_CLASS];
+			assert_eq!(magic, abi::ELFMAGIC);
+
+			let version = ident[abi::EI_VERSION];
+			assert_eq!(version, abi::EV_CURRENT);
+
+			let class = ident[abi::EI_CLASS];
+			assert_eq!(class, abi::ELFCLASS64);
+
+			/// 2's complement values, with native endianness.
+			pub const ELFDATA2NATIVE: u8 = if cfg!(target_endian = "little") {
+				abi::ELFDATA2LSB
+			} else if cfg!(target_endian = "big") {
+				abi::ELFDATA2MSB
+			} else {
+				unreachable!()
+			};
+
+			let data = ident[abi::EI_DATA];
+			assert_eq!(data, ELFDATA2NATIVE);
+
+			/// Stand-alone (embedded) ABI
+			pub const ELFOSABI_STANDALONE: u8 = 255;
+
+			let osabi = ident[abi::EI_OSABI];
+			// For some reason `x86_64-unknown-none` uses `ELFOSABI_GNU`.
+			// We need to allow this for `no_std` applications such as our integration tests.
+			assert!(osabi == ELFOSABI_STANDALONE || osabi == abi::ELFOSABI_GNU);
+
+			let abiversion = ident[abi::EI_ABIVERSION];
+			assert_eq!(abiversion, 0);
+		}
+
+		unsafe fn phdrs(&self) -> &[Elf64_Phdr] {
+			let ptr = unsafe {
+				ptr::from_ref(self)
+					.byte_add(self.e_phoff as usize)
+					.cast::<Elf64_Phdr>()
+			};
+			let len = self.e_phnum as usize;
+			unsafe { slice::from_raw_parts(ptr, len) }
+		}
+	}
+
+	fn tls_info_eq(this: &TlsInfo, other: &TlsInfo) -> bool {
+		this.start == other.start
+			&& this.filesz == other.filesz
+			&& this.memsz == other.memsz
+			&& this.align == other.align
 	}
 }
