@@ -129,9 +129,15 @@ impl TaskStacks {
 			flags,
 		);
 
-		// map user stack into the address space (must be user-accessible)
-		let mut user_flags = PageTableEntryFlags::empty();
-		user_flags.normal().writable().user().execute_disable();
+		// map user stack into the address space (must be user-accessible under common-os)
+		#[cfg(feature = "common-os")]
+		let user_flags = {
+			let mut f = PageTableEntryFlags::empty();
+			f.normal().writable().user().execute_disable();
+			f
+		};
+		#[cfg(not(feature = "common-os"))]
+		let user_flags = flags;
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
@@ -287,6 +293,77 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Exit task
 	debug!("Exit thread with error code 0!");
 	core_scheduler().exit(0)
+}
+
+/// Entry trampoline for a new user-space thread (common-os).
+///
+/// Called in kernel mode the first time the task is scheduled. It crafts
+/// an `iretq` frame that transfers control to `func(arg)` in ring 3 on
+/// the new user stack. Matches the descriptor layout used by
+/// `jump_to_user_land`: user CS=0x2b, user SS=0x23, RFLAGS=0x1202.
+#[cfg(feature = "common-os")]
+#[unsafe(naked)]
+extern "C" fn task_start_user(
+	_f: extern "C" fn(usize),
+	_arg: usize,
+	_user_stack: u64,
+) -> ! {
+	// rdi = func (user entry)
+	// rsi = arg  (forwarded as first argument to `func`)
+	// rdx = user stack pointer
+	naked_asm!(
+		"swapgs",
+		"push 0x23",    // user SS
+		"push rdx",     // user RSP
+		"push 0x1202",  // RFLAGS (IF=1)
+		"push 0x2b",    // user CS
+		"push rdi",     // RIP = user func
+		"mov rdi, rsi", // first argument for user func
+		"iretq",
+	)
+}
+
+#[cfg(feature = "common-os")]
+impl Task {
+	/// Build the initial kernel-stack context for a new user-space thread.
+	///
+	/// When this task is first scheduled, `switch_to_task` restores the
+	/// saved registers and `ret`s into `task_start_user`, which then
+	/// `iretq`s to `func(arg)` in ring 3 on the freshly allocated user
+	/// stack.
+	pub(crate) fn create_user_stack_frame(
+		&mut self,
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		tls_fs_base: u64,
+	) {
+		unsafe {
+			// Debug marker at the very top of the kernel stack.
+			let mut stack = self.stacks.get_kernel_stack()
+				+ self.stacks.get_kernel_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			stack -= mem::size_of::<State>();
+			let state = stack.as_mut_ptr::<State>();
+			state.cast::<u8>().write_bytes(0, mem::size_of::<State>());
+
+			(*state).rip = task_start_user;
+			(*state).rdi = func as usize as u64;
+			(*state).rsi = arg as u64;
+			(*state).rflags = 0x1202u64;
+			// FS.Base for the new user-space thread (its private TLS area).
+			(*state).fs = tls_fs_base;
+
+			self.last_stack_pointer = stack;
+			self.user_stack_pointer = self.stacks.get_user_stack()
+				+ self.stacks.get_user_stack_size()
+				- TaskStacks::MARKER_SIZE;
+
+			// rdx is used by task_start_user as the new user-mode RSP
+			(*state).rdx = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
+		}
+	}
 }
 
 impl TaskFrame for Task {

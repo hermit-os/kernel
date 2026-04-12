@@ -6,6 +6,8 @@ pub(crate) mod tls;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
 use core::{cmp, fmt};
@@ -31,6 +33,51 @@ use crate::fd::{Fd, RawFd, stdio};
 #[cfg(not(feature = "common-os"))]
 use crate::fd::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 use crate::scheduler::CoreId;
+
+/// A reference-counted handle to a process's root page table.
+///
+/// Threads of the same process share the same `Arc<RootPageTable>`. When
+/// the last owning task is dropped, the physical page-table hierarchy and
+/// the user-space mappings are released.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub struct RootPageTable {
+	pml4_phys: usize,
+	/// `false` for the boot page table, which must never be released.
+	owned: bool,
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+impl RootPageTable {
+	/// Wraps a freshly allocated PML4 that this process owns.
+	pub fn new(pml4_phys: usize) -> Self {
+		Self {
+			pml4_phys,
+			owned: true,
+		}
+	}
+
+	/// Wraps the boot page table, shared by all idle tasks. Dropping this
+	/// instance is a no-op.
+	pub fn new_boot(pml4_phys: usize) -> Self {
+		Self {
+			pml4_phys,
+			owned: false,
+		}
+	}
+
+	pub fn as_usize(&self) -> usize {
+		self.pml4_phys
+	}
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+impl Drop for RootPageTable {
+	fn drop(&mut self) {
+		if self.owned {
+			arch::drop_user_space(self.pml4_phys);
+		}
+	}
+}
 
 /// Returns the most significant bit.
 ///
@@ -362,6 +409,21 @@ impl PriorityTaskQueue {
 	}
 }
 
+/// Per-process TLS template used to initialise newly spawned threads.
+///
+/// `size` is the byte size of the TLS data block (the offset at which the
+/// TCB / thread pointer lives, also the value that the parent's main thread
+/// uses for its own block). `init` is a snapshot of the freshly-loaded TLS
+/// image taken right after the user binary's `PT_TLS` segment was copied
+/// into place by `load_application`. Each new thread starts with a verbatim
+/// copy of `init`, so it sees pristine `#[thread_local]` defaults rather
+/// than mutated state from another thread.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub(crate) struct TlsTemplate {
+	pub size: usize,
+	pub init: Vec<u8>,
+}
+
 /// Tracks the heap region of a user process for demand-paging.
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 pub(crate) struct Heap {
@@ -414,12 +476,19 @@ pub(crate) struct Task {
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Tls>,
-	// Physical address of the 1st level page table
+	// Physical address of the 1st level page table, shared between all
+	// threads of the same process via `Arc`. The address space is freed when
+	// the last thread referencing this `RootPageTable` is dropped.
 	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-	pub root_page_table: usize,
+	pub root_page_table: Arc<RootPageTable>,
 	/// Heap region tracked for demand-paging
 	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 	pub heap: Arc<Heap>,
+	/// Per-process TLS template used to allocate fresh TLS regions for new
+	/// threads. `None` for kernel-only tasks; set by `load_application`
+	/// when the user binary has a `PT_TLS` segment.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	pub tls_template: Option<Arc<TlsTemplate>>,
 }
 
 pub(crate) trait TaskFrame {
@@ -451,9 +520,11 @@ impl Task {
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: arch::create_new_root_page_table(),
+			root_page_table: Arc::new(RootPageTable::new(arch::create_new_root_page_table())),
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			heap: Arc::new(Heap::new_empty()),
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_template: None,
 		}
 	}
 
@@ -515,9 +586,47 @@ impl Task {
 			#[cfg(not(feature = "common-os"))]
 			tls,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			root_page_table: Arc::new(RootPageTable::new_boot(
+				*crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			)),
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			heap: Arc::new(Heap::new_empty()),
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_template: None,
+		}
+	}
+
+	/// Create a new user-space thread that shares its parent's address space.
+	///
+	/// The `root_page_table` `Arc` is cloned from the parent, so all threads
+	/// of the same process drop together when the last one exits.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[allow(clippy::too_many_arguments)]
+	pub fn new_thread(
+		tid: TaskId,
+		core_id: CoreId,
+		task_status: TaskStatus,
+		task_prio: Priority,
+		stacks: TaskStacks,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+		root_page_table: Arc<RootPageTable>,
+		heap: Arc<Heap>,
+		tls_template: Option<Arc<TlsTemplate>>,
+	) -> Task {
+		debug!("Creating user thread {tid} on core {core_id}");
+		Task {
+			id: tid,
+			status: task_status,
+			prio: task_prio,
+			last_stack_pointer: VirtAddr::zero(),
+			user_stack_pointer: VirtAddr::zero(),
+			last_fpu_state: arch::processor::FPUState::new(),
+			core_id,
+			stacks,
+			object_map,
+			root_page_table,
+			heap,
+			tls_template,
 		}
 	}
 
@@ -534,8 +643,9 @@ impl Task {
 		last_stack_pointer: VirtAddr,
 		user_stack_pointer: VirtAddr,
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
-		root_page_table: usize,
+		root_page_table: Arc<RootPageTable>,
 		parent_heap: Arc<Heap>,
+		tls_template: Option<Arc<TlsTemplate>>,
 	) -> Task {
 		debug!("Creating forked task {tid} on core {core_id}");
 		Task {
@@ -552,6 +662,7 @@ impl Task {
 			tls: None,
 			root_page_table,
 			heap: parent_heap,
+			tls_template,
 		}
 	}
 }
@@ -559,8 +670,6 @@ impl Task {
 impl Drop for Task {
 	fn drop(&mut self) {
 		//debug!("Drop task {}", self.id);
-		#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-		arch::drop_user_space(self.root_page_table);
 	}
 }
 

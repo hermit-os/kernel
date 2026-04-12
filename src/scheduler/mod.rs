@@ -206,6 +206,64 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	}
 }
 
+/// Allocate and initialize a private TLS region for a new user-space thread.
+///
+/// Maps a fresh user-accessible page range through the currently active
+/// (shared) root page table, copies the per-process `TlsTemplate` into it,
+/// sets up the trailing 8-byte TCB self-pointer, and returns the new
+/// FS.Base value (the thread pointer) for the child thread.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+fn allocate_thread_tls(template: &task::TlsTemplate) -> u64 {
+	use align_address::Align;
+	use free_list::PageLayout;
+	use memory_addresses::{PhysAddr, VirtAddr};
+	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+
+	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
+	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator, frame_ref_inc};
+
+	let tcb_size = core::mem::size_of::<*mut ()>();
+	let total = (template.size + tcb_size).align_up(BasePageSize::SIZE as usize);
+
+	let virt_layout = PageLayout::from_size(total).unwrap();
+	let virt_range = PageAlloc::allocate(virt_layout).unwrap();
+	let virt_addr = VirtAddr::from(virt_range.start());
+
+	let frame_layout = PageLayout::from_size(total).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	for i in 0..total / BasePageSize::SIZE as usize {
+		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
+	}
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable().user().execute_disable();
+	paging::map::<BasePageSize>(
+		virt_addr,
+		phys_addr,
+		total / BasePageSize::SIZE as usize,
+		flags,
+	);
+
+	unsafe {
+		// Copy the pristine PT_TLS image into the new block.
+		virt_addr
+			.as_mut_ptr::<u8>()
+			.copy_from_nonoverlapping(template.init.as_ptr(), template.init.len());
+		// Zero the rest of the TLS BSS area and the trailing TCB.
+		virt_addr
+			.as_mut_ptr::<u8>()
+			.add(template.init.len())
+			.write_bytes(0, total - template.init.len());
+		// Variant II (x86_64): the thread pointer is at the start of the TCB
+		// (right after the TLS data block) and stores its own address.
+		let thread_ptr = virt_addr.as_u64() + template.size as u64;
+		let tcb_ptr: *mut u64 = core::ptr::with_exposed_provenance_mut(thread_ptr as usize);
+		tcb_ptr.write(thread_ptr);
+		thread_ptr
+	}
+}
+
 struct NewTask {
 	tid: TaskId,
 	func: unsafe extern "C" fn(usize),
@@ -214,6 +272,22 @@ struct NewTask {
 	core_id: CoreId,
 	stacks: TaskStacks,
 	object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+	/// When `Some`, the new task is a user-space thread that shares the
+	/// given root page table (and heap) with its parent process. When
+	/// `None`, the task is a regular kernel-mode task with a fresh
+	/// address space.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	thread_of: Option<(Arc<crate::scheduler::task::RootPageTable>, Arc<Heap>)>,
+	/// Per-process TLS template, cloned from the spawning thread. Used by
+	/// `From<NewTask>` to propagate the template into the new task so that
+	/// any threads it spawns in turn can allocate their own TLS regions.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	tls_template: Option<Arc<task::TlsTemplate>>,
+	/// FS.Base of the new user thread, already prepared by `spawn_thread`
+	/// (a freshly allocated user-space TLS area initialised from the
+	/// per-process TLS template). Zero means "do not touch FS".
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	tls_fs_base: u64,
 }
 
 impl From<NewTask> for Task {
@@ -226,7 +300,31 @@ impl From<NewTask> for Task {
 			core_id,
 			stacks,
 			object_map,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			thread_of,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_template,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_fs_base,
 		} = value;
+
+		#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+		if let Some((root_page_table, heap)) = thread_of {
+			let mut task = Self::new_thread(
+				tid,
+				core_id,
+				TaskStatus::Ready,
+				prio,
+				stacks,
+				object_map,
+				root_page_table,
+				heap,
+				tls_template,
+			);
+			task.create_user_stack_frame(func, arg, tls_fs_base);
+			return task;
+		}
+
 		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks, object_map);
 		task.create_stack_frame(func, arg);
 		task
@@ -253,6 +351,12 @@ impl PerCoreScheduler {
 			core_id,
 			stacks,
 			object_map: core_scheduler().get_current_task_object_map(),
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			thread_of: None,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_template: None,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_fs_base: 0,
 		};
 
 		// Add it to the task lists.
@@ -299,6 +403,105 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	/// Spawn a new user-space thread that shares the current task's
+	/// address space (root page table) and heap.
+	///
+	/// `func` must be a valid ring-3 entry point mapped in the shared
+	/// address space. The new thread receives its own kernel/interrupt
+	/// stacks and a fresh user stack, all mapped into the shared PT via
+	/// the regular `TaskStacks::new` path.
+	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	pub unsafe fn spawn_thread(
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		prio: Priority,
+		core_id: CoreId,
+		stack_size: usize,
+	) -> TaskId {
+		let tid = get_tid();
+		// TaskStacks::new maps into the current address space — which *is*
+		// the shared PT of the calling thread — so the new stacks are
+		// immediately visible to every thread in this process.
+		let stacks = TaskStacks::new(stack_size);
+
+		let (root_page_table, heap, object_map, tls_template) = {
+			let current = core_scheduler().get_current_task();
+			let borrowed = current.borrow();
+			(
+				borrowed.root_page_table.clone(),
+				borrowed.heap.clone(),
+				borrowed.object_map.clone(),
+				borrowed.tls_template.clone(),
+			)
+		};
+
+		// Allocate a private TLS region for the new thread from the pristine
+		// per-process TLS template captured at `load_application` time. Must
+		// run in the parent's address space (still active here in the syscall
+		// path) so that the new user-accessible pages get mapped into the
+		// shared root page table.
+		let tls_fs_base = if let Some(ref template) = tls_template {
+			crate::scheduler::allocate_thread_tls(template)
+		} else {
+			0
+		};
+
+		let new_task = NewTask {
+			tid,
+			func,
+			arg,
+			prio,
+			core_id,
+			stacks,
+			object_map,
+			thread_of: Some((root_page_table, heap)),
+			tls_template,
+			tls_fs_base,
+		};
+
+		let wakeup = {
+			#[cfg(feature = "smp")]
+			let mut input_locked = get_scheduler_input(core_id).lock();
+			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(
+				tid,
+				TaskHandle::new(
+					tid,
+					prio,
+					#[cfg(feature = "smp")]
+					core_id,
+				),
+			);
+			NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+			#[cfg(feature = "smp")]
+			if core_id == core_scheduler().core_id {
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				input_locked.new_tasks.push_back(new_task);
+				true
+			}
+			#[cfg(not(feature = "smp"))]
+			if core_id == 0 {
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				panic!("Invalid core_id {core_id}!")
+			}
+		};
+
+		debug!("Creating user thread {tid} with priority {prio} on core {core_id}");
+
+		if wakeup {
+			arch::wakeup_core(core_id);
+		}
+
+		tid
+	}
+
 	#[cfg(feature = "newlib")]
 	fn clone_impl(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
@@ -330,6 +533,8 @@ impl PerCoreScheduler {
 			core_id,
 			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
 			object_map: current_task_borrowed.object_map.clone(),
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			thread_of: None,
 		};
 
 		// Add it to the task lists.
@@ -942,6 +1147,29 @@ pub unsafe fn spawn(
 	unsafe { PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size) }
 }
 
+/// Spawn a user-space thread that shares the current task's address space.
+///
+/// Used by `sys_spawn`/`sys_spawn2` under the `common-os` feature to
+/// implement POSIX-style threads: the entry point `func` lives in user
+/// space and the new thread executes in ring 3 against the parent
+/// process's root page table.
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub unsafe fn spawn_thread(
+	func: unsafe extern "C" fn(usize),
+	arg: usize,
+	prio: Priority,
+	stack_size: usize,
+	selector: isize,
+) -> TaskId {
+	let core_id = if selector < 0 {
+		SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+	} else {
+		selector as u32
+	};
+
+	unsafe { PerCoreScheduler::spawn_thread(func, arg, prio, core_id, stack_size) }
+}
+
 #[allow(clippy::result_unit_err)]
 pub fn join(id: TaskId) -> Result<(), ()> {
 	let core_scheduler = core_scheduler();
@@ -1032,6 +1260,11 @@ pub unsafe fn fork() -> TaskId {
 		parent_object_map.write().insert(*key, val.clone());
 	}
 	let parent_heap = core_scheduler().get_current_task().borrow().heap.clone();
+	let parent_tls_template = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.tls_template
+		.clone();
 
 	let child_task = Task::new_fork(
 		tid,
@@ -1042,8 +1275,11 @@ pub unsafe fn fork() -> TaskId {
 		child_last_sp,
 		parent_user_sp,
 		parent_object_map,
-		child_root_page_table,
+		Arc::new(crate::scheduler::task::RootPageTable::new(
+			child_root_page_table,
+		)),
 		parent_heap,
+		parent_tls_template,
 	);
 
 	let wakeup = {
@@ -1103,5 +1339,5 @@ pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 pub(crate) fn get_root_page_table() -> usize {
 	let current_task_borrowed = core_scheduler().current_task.borrow_mut();
-	current_task_borrowed.root_page_table
+	current_task_borrowed.root_page_table.as_usize()
 }
