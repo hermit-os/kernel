@@ -354,9 +354,7 @@ pub fn mark_user_pages_copy_on_write() {
 }
 
 #[cfg(feature = "common-os")]
-pub fn drop_user_space(pml4_phys: usize) {
-	debug!("Drop the user space at PML4 {pml4_phys:#x}");
-
+fn clear_pml4(pml4_phys: usize) {
 	// Free a 4 KiB physical frame back to the frame allocator.
 	fn free_frame(phys: usize) {
 		let range = free_list::PageRange::new(phys, phys + free_list::PAGE_SIZE).unwrap();
@@ -428,10 +426,32 @@ pub fn drop_user_space(pml4_phys: usize) {
 		free_frame(pdpt_phys);
 		pml4_entry.set_unused();
 	}
+}
+
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(pml4_phys: usize) {
+	debug!("Drop the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
 
 	// Finally free the PML4 itself. No TLB flush needed: the dropped page
 	// table is not loaded on any core.
-	free_frame(pml4_phys);
+	let range = free_list::PageRange::new(pml4_phys, pml4_phys + free_list::PAGE_SIZE).unwrap();
+	unsafe { FrameAlloc::deallocate(range) };
+}
+
+#[cfg(feature = "common-os")]
+pub fn clear_user_space() {
+	let (p4_frame, _) = Cr3::read_raw();
+	let pml4_phys = p4_frame.start_address().as_u64() as usize;
+
+	debug!("Clear the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	tlb::flush_all();
+	#[cfg(feature = "smp")]
+	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
 }
 
 /// Copy the contents of the current task's kernel stack to a new virtual
