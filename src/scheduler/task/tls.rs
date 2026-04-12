@@ -138,7 +138,7 @@ impl Tls {
 	}
 
 	pub fn from_env() -> Option<Self> {
-		let tls_info = crate::env::boot_info().load_info.tls_info?;
+		let tls_info = crate::env::tls_info()?;
 		let this = unsafe { Self::new(tls_info) };
 		Some(this)
 	}

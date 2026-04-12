@@ -53,3 +53,14 @@ fn executable_end() -> *mut () {
 
 	(&raw mut _end).cast::<()>()
 }
+
+#[cfg(not(feature = "common-os"))]
+pub mod tls {
+	use hermit_entry::boot_info::TlsInfo;
+
+	use crate::env;
+
+	pub fn tls_info() -> Option<TlsInfo> {
+		env::boot_info().load_info.tls_info
+	}
+}
