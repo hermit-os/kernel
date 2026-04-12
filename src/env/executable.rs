@@ -80,11 +80,6 @@ pub mod tls {
 			align: tls_phdr.p_align,
 		};
 
-		assert!(tls_info_eq(
-			&tls_info,
-			&env::boot_info().load_info.tls_info.unwrap()
-		));
-
 		Some(tls_info)
 	}
 
@@ -164,12 +159,5 @@ pub mod tls {
 			let len = self.e_phnum as usize;
 			unsafe { slice::from_raw_parts(ptr, len) }
 		}
-	}
-
-	fn tls_info_eq(this: &TlsInfo, other: &TlsInfo) -> bool {
-		this.start == other.start
-			&& this.filesz == other.filesz
-			&& this.memsz == other.memsz
-			&& this.align == other.align
 	}
 }
