@@ -164,6 +164,15 @@ dns = ["net", "smoltcp", "smoltcp/socket-dns"]
 ## Enables pretty-printing the network traffic to the serial device.
 net-trace = ["smoltcp?/log", "smoltcp?/verbose"]
 
+## Enables the generation of packet capture files.
+##
+## The guest path is specified via the `HERMIT_PCAP_PATH` *runtime* environment variable. If a
+## complete path is not provided, values without a `/` are interpreted as file names and ones that
+## end with a `/` as directories. The default directory is `/root/` and the default file name is the
+## network device name. If a file already exists at the path, the file name is suffixed with
+## successive numbers.
+write-pcap-file = []
+
 #! ### Network Drivers
 #!
 #! Currently, Hermit does not support multiple network drivers at the same time.
