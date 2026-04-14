@@ -44,10 +44,6 @@ use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
-pub const MMIO_START: usize = 0x0000_0000_feb0_0000;
-pub const MMIO_END: usize = 0x0000_0000_feb0_ffff;
-const IRQ_NUMBER: u8 = 44 - 32;
-
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 #[allow(clippy::enum_variant_names)]
@@ -178,30 +174,20 @@ fn check_linux_args(
 }
 
 fn guess_device(virtual_address: VirtAddr) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	// Trigger page mapping in the first iteration!
-	let mut current_page = 0;
+	// From https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/include/hw/i386/microvm.h#L53.
+	const VIRTIO_MMIO_BASE: usize = 0xfeb0_0000;
+	// Although these values are not constants in reality, those are the values
+	// that we have for our configuration at the time of writing, based on
+	// https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/i386/microvm.c#L188-204.
+	const VIRTIO_IRQ_BASE: u8 = 5;
+	const VIRTIO_NUM_TRANSPORTS: u8 = 8;
 
-	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
-	let mut devices = vec![];
-	for current_address in (MMIO_START..MMIO_END).step_by(512) {
-		// Have we crossed a page boundary in the last iteration?
-		// info!("before the {}. paging", current_page);
-		if current_address / BasePageSize::SIZE as usize > current_page {
-			if !devices.is_empty() {
-				return devices;
-			}
-
-			current_page = current_address / BasePageSize::SIZE as usize;
-		}
-
-		let Some(mmio) = detect_device(virtual_address, current_address) else {
-			continue;
-		};
-
-		devices.push((mmio, IRQ_NUMBER));
-	}
-
-	devices
+	(0..VIRTIO_NUM_TRANSPORTS)
+		.flat_map(move |i| {
+			detect_device(virtual_address, VIRTIO_MMIO_BASE + usize::from(i) * 512)
+				.map(|mmio| (mmio, VIRTIO_IRQ_BASE + i))
+		})
+		.collect()
 }
 
 fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
