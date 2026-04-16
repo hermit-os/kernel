@@ -44,10 +44,6 @@ use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
-pub const MMIO_START: usize = 0x0000_0000_feb0_0000;
-pub const MMIO_END: usize = 0x0000_0000_feb0_ffff;
-const IRQ_NUMBER: u8 = 44 - 32;
-
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 #[allow(clippy::enum_variant_names)]
@@ -113,124 +109,76 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 	}
 
 	info!("Found Virtio {id:?} device: {mmio:p}");
+	Some(mmio)
+}
+
+fn detect_device(
+	virtual_address: VirtAddr,
+	current_address: usize,
+) -> Option<VolatileRef<'static, DeviceRegisters>> {
+	trace!("try to detect MMIO device at physical address {current_address:#X}");
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	paging::map::<BasePageSize>(
+		virtual_address,
+		PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
+		1,
+		flags,
+	);
+
+	let addr = virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1));
+	let ptr = ptr::with_exposed_provenance_mut::<u8>(addr);
+
+	let mmio = unsafe { check_ptr(ptr) }?;
+
+	if cfg!(debug_assertions) {
+		let len = usize::try_from(BasePageSize::SIZE).unwrap();
+		let start = current_address.align_down(len);
+		let frame_range = PageRange::from_start_len(start, len).unwrap();
+
+		FrameAlloc::allocate_at(frame_range).unwrap_err();
+	}
 
 	Some(mmio)
 }
 
 fn check_linux_args(
 	linux_mmio: &'static [String],
-) -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
-
-	let mut devices = vec![];
-	for arg in linux_mmio {
-		trace!("check linux parameter: {arg}");
-
-		match arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
-			Some(arg) => {
+	virtual_address: VirtAddr,
+) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+	linux_mmio
+		.iter()
+		.inspect(|arg| trace!("check linux parameter: {arg}"))
+		.flat_map(move |arg| {
+			if let Some(arg) = arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
 				let v: Vec<&str> = arg.trim().split(':').collect();
 				let without_prefix = v[0].trim_start_matches("0x");
 				let current_address = usize::from_str_radix(without_prefix, 16).unwrap();
 				let irq: u8 = v[1].parse::<u8>().unwrap();
-
-				trace!("try to detect MMIO device at physical address {current_address:#X}");
-
-				let mut flags = PageTableEntryFlags::empty();
-				flags.normal().writable();
-				paging::map::<BasePageSize>(
-					virtual_address,
-					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-					1,
-					flags,
-				);
-
-				let addr = virtual_address.as_usize()
-					| (current_address & (BasePageSize::SIZE as usize - 1));
-				let ptr = ptr::with_exposed_provenance_mut(addr);
-				let Some(mmio) = (unsafe { check_ptr(ptr) }) else {
-					continue;
-				};
-
-				if cfg!(debug_assertions) {
-					let len = usize::try_from(BasePageSize::SIZE).unwrap();
-					let start = current_address.align_down(len);
-					let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-					FrameAlloc::allocate_at(frame_range).unwrap_err();
-				}
-
-				devices.push((mmio, irq));
-			}
-			_ => {
+				detect_device(virtual_address, current_address).map(|mmio| (mmio, irq))
+			} else {
 				warn!("Invalid prefix in {arg}");
+				None
 			}
-		}
-	}
-
-	devices
+		})
 }
 
-fn guess_device() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	// Trigger page mapping in the first iteration!
-	let mut current_page = 0;
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
+fn guess_device(
+	virtual_address: VirtAddr,
+) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+	// From https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/include/hw/i386/microvm.h#L53.
+	const VIRTIO_MMIO_BASE: usize = 0xfeb0_0000;
+	// Although these values are not constants in reality, those are the values
+	// that we have for our configuration at the time of writing, based on
+	// https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/i386/microvm.c#L188-204.
+	const VIRTIO_IRQ_BASE: u8 = 5;
+	const VIRTIO_NUM_TRANSPORTS: u8 = 8;
 
-	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
-	let mut devices = vec![];
-	for current_address in (MMIO_START..MMIO_END).step_by(512) {
-		trace!("try to detect MMIO device at physical address {current_address:#X}");
-		// Have we crossed a page boundary in the last iteration?
-		// info!("before the {}. paging", current_page);
-		if current_address / BasePageSize::SIZE as usize > current_page {
-			if !devices.is_empty() {
-				return devices;
-			}
-
-			let mut flags = PageTableEntryFlags::empty();
-			flags.normal().writable();
-			paging::map::<BasePageSize>(
-				virtual_address,
-				PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
-				1,
-				flags,
-			);
-
-			current_page = current_address / BasePageSize::SIZE as usize;
-		}
-
-		let addr =
-			virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1));
-		let ptr = ptr::with_exposed_provenance_mut(addr);
-		let Some(mmio) = (unsafe { check_ptr(ptr) }) else {
-			continue;
-		};
-
-		if cfg!(debug_assertions) {
-			let len = usize::try_from(BasePageSize::SIZE).unwrap();
-			let start = current_address.align_down(len);
-			let frame_range = PageRange::from_start_len(start, len).unwrap();
-
-			FrameAlloc::allocate_at(frame_range).unwrap_err();
-		}
-
-		devices.push((mmio, IRQ_NUMBER));
-	}
-
-	devices
-}
-
-fn detect_devices() -> Vec<(VolatileRef<'static, DeviceRegisters>, u8)> {
-	let linux_mmio = env::mmio();
-
-	if linux_mmio.is_empty() {
-		guess_device()
-	} else {
-		check_linux_args(linux_mmio)
-	}
+	(0..VIRTIO_NUM_TRANSPORTS).flat_map(move |i| {
+		detect_device(virtual_address, VIRTIO_MMIO_BASE + usize::from(i) * 512)
+			.map(|mmio| (mmio, VIRTIO_IRQ_BASE + i))
+	})
 }
 
 #[cfg(any(
@@ -269,29 +217,43 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
+fn register_mmio(mmio: VolatileRef<'static, DeviceRegisters>, irq: u8) {
+	match mmio_virtio::init_device(mmio, irq) {
+		#[cfg(feature = "virtio-console")]
+		Ok(VirtioDriver::Console(drv)) => {
+			register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
+		}
+		#[cfg(feature = "virtio-fs")]
+		Ok(VirtioDriver::Fs(drv)) => {
+			register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
+		}
+		#[cfg(feature = "virtio-net")]
+		Ok(VirtioDriver::Net(drv)) => {
+			*NETWORK_DEVICE.lock() = Some(*drv);
+		}
+		#[cfg(feature = "virtio-vsock")]
+		Ok(VirtioDriver::Vsock(drv)) => {
+			register_driver(MmioDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
+		}
+		Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
+	}
+}
+
 pub(crate) fn init_drivers() {
 	without_interrupts(|| {
-		let devices = detect_devices();
+		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+		let page_range = PageBox::new(layout).unwrap();
+		let virtual_address = VirtAddr::from(page_range.start());
 
-		for (mmio, irq) in devices {
-			match mmio_virtio::init_device(mmio, irq) {
-				#[cfg(feature = "virtio-console")]
-				Ok(VirtioDriver::Console(drv)) => {
-					register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
-				}
-				#[cfg(feature = "virtio-fs")]
-				Ok(VirtioDriver::Fs(drv)) => {
-					register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
-				}
-				#[cfg(feature = "virtio-net")]
-				Ok(VirtioDriver::Net(drv)) => {
-					*NETWORK_DEVICE.lock() = Some(*drv);
-				}
-				#[cfg(feature = "virtio-vsock")]
-				Ok(VirtioDriver::Vsock(drv)) => {
-					register_driver(MmioDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
-				}
-				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
+		let linux_mmio = env::mmio();
+
+		if linux_mmio.is_empty() {
+			for (mmio, irq) in guess_device(virtual_address) {
+				register_mmio(mmio, irq);
+			}
+		} else {
+			for (mmio, irq) in check_linux_args(linux_mmio, virtual_address) {
+				register_mmio(mmio, irq);
 			}
 		}
 
