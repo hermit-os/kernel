@@ -31,7 +31,7 @@ use crate::fd::{
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
-use crate::syscalls::interfaces::SyscallInterface;
+use crate::syscalls::interfaces::{SyscallInterface, uhyve};
 
 mod condvar;
 mod entropy;
@@ -281,7 +281,14 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
-	SYS.shutdown(arg)
+	if env::is_uhyve() {
+		uhyve::shutdown(arg);
+	}
+
+	// This is a stable message used for detecting exit codes for different hypervisors.
+	panic_println!("exit status {arg}");
+
+	crate::arch::processor::shutdown(arg)
 }
 
 #[hermit_macro::system(errno)]

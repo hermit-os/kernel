@@ -81,13 +81,13 @@ pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
 
 pub struct Uhyve;
 
-impl SyscallInterface for Uhyve {
-	fn shutdown(&self, error_code: i32) -> ! {
-		let sysexit = ExitParams { arg: error_code };
-		uhyve_hypercall(Hypercall::Exit(&sysexit));
+impl SyscallInterface for Uhyve {}
 
-		loop {
-			arch::processor::halt();
-		}
+pub fn shutdown(error_code: i32) -> ! {
+	let sysexit = ExitParams { arg: error_code };
+	uhyve_hypercall(Hypercall::Exit(&sysexit));
+
+	loop {
+		arch::processor::halt();
 	}
 }
