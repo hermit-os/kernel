@@ -26,6 +26,10 @@ pub fn boot_info() -> &'static BootInfo {
 	BOOT_INFO.get().unwrap()
 }
 
+pub fn setboot_info2(boot_info: BootInfo) {
+	BOOT_INFO.set(boot_info).unwrap();
+}
+
 pub fn set_boot_info(raw_boot_info: RawBootInfo) {
 	let boot_info = BootInfo::from(raw_boot_info);
 	BOOT_INFO.set(boot_info).unwrap();
@@ -51,7 +55,8 @@ struct Cli {
 
 /// Whether Hermit is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+	false
+	// matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
 pub fn is_uefi() -> bool {
