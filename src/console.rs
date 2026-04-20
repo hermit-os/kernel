@@ -12,7 +12,7 @@ use crate::drivers::console::VirtioUART;
 use crate::errno::Errno;
 use crate::executor::WakerRegistration;
 #[cfg(not(target_arch = "riscv64"))]
-use crate::syscalls::interfaces::serial_buf_hypercall;
+use crate::syscalls::interfaces::uhyve::serial_buf_hypercall;
 
 const SERIAL_BUFFER_SIZE: usize = 256;
 
