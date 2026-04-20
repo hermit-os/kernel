@@ -21,7 +21,7 @@ use crate::fs::{
 	create_dir_recursive,
 };
 use crate::io;
-use crate::syscalls::interfaces::uhyve::uhyve_hypercall;
+use crate::uhyve::uhyve_hypercall;
 
 #[derive(Debug)]
 struct UhyveFileHandleInner(i32);

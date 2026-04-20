@@ -8,7 +8,6 @@ use core::marker::PhantomData;
 use core::{ptr, slice};
 
 use dirent_display::Dirent64Display;
-use hermit_sync::Lazy;
 
 pub use self::condvar::*;
 pub use self::entropy::*;
@@ -21,7 +20,6 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
-use crate::env;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
@@ -31,12 +29,11 @@ use crate::fd::{
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
-use crate::syscalls::interfaces::SyscallInterface;
+use crate::{env, uhyve};
 
 mod condvar;
 mod entropy;
 mod futex;
-pub(crate) mod interfaces;
 #[cfg(feature = "mman")]
 pub mod mman;
 mod processor;
@@ -52,14 +49,6 @@ pub(crate) mod table;
 mod tasks;
 mod timer;
 
-pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
-	if env::is_uhyve() {
-		&self::interfaces::Uhyve
-	} else {
-		&self::interfaces::Generic
-	}
-});
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 /// Describes  a  region  of  memory, beginning at `iov_base` address and with the size of `iov_len` bytes.
@@ -73,11 +62,6 @@ struct iovec {
 const IOV_MAX: usize = 1024;
 
 pub(crate) fn init() {
-	Lazy::force(&SYS);
-
-	// Perform interface-specific initialization steps.
-	SYS.init();
-
 	init_entropy();
 }
 
@@ -239,14 +223,56 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 }
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
-	SYS.get_application_parameters()
+	use alloc::boxed::Box;
+	use alloc::vec::Vec;
+	use core::ptr;
+
+	let mut argv = Vec::new();
+
+	let name = Box::leak(Box::new("bin\0")).as_ptr();
+	argv.push(name);
+
+	let args = env::args();
+	debug!("Setting argv as: {args:?}");
+	for arg in args {
+		let ptr = Box::leak(format!("{arg}\0").into_boxed_str()).as_ptr();
+		argv.push(ptr);
+	}
+
+	let mut envv = Vec::new();
+
+	let envs = env::vars();
+	debug!("Setting envv as: {envs:?}");
+	for (key, value) in envs {
+		let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();
+		envv.push(ptr);
+	}
+	envv.push(ptr::null::<u8>());
+
+	let argc = argv.len() as i32;
+	let argv = argv.leak().as_ptr();
+	// do we have more than a end marker? If not, return as null pointer
+	let envv = if envv.len() == 1 {
+		ptr::null::<*const u8>()
+	} else {
+		envv.leak().as_ptr()
+	};
+
+	(argc, argv, envv)
 }
 
 pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
-	SYS.shutdown(arg)
+	if env::is_uhyve() {
+		uhyve::shutdown(arg);
+	}
+
+	// This is a stable message used for detecting exit codes for different hypervisors.
+	panic_println!("exit status {arg}");
+
+	crate::arch::processor::shutdown(arg)
 }
 
 #[hermit_macro::system(errno)]

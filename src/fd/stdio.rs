@@ -10,7 +10,7 @@ use crate::fd::{
 	AccessPermission, FileAttr, ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO,
 };
 use crate::io;
-use crate::syscalls::interfaces::uhyve_hypercall;
+use crate::uhyve::uhyve_hypercall;
 
 pub struct GenericStdin;
 
