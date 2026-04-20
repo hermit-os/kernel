@@ -405,6 +405,7 @@ single_use_lifetimes = "warn"
 trivial_casts = "warn"
 trivial_numeric_casts = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
+unit_bindings = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
 
