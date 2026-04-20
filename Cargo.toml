@@ -408,6 +408,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
 unit_bindings = "warn"
 unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
+unused_lifetimes = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
