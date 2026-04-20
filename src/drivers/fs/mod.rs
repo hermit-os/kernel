@@ -180,7 +180,7 @@ impl VirtioFsInterface for VirtioFsDriver {
 		&mut self,
 		cmd: virtio_fs::Cmd<O>,
 		rsp_payload_len: u32,
-	) -> Result<virtio_fs::Rsp<O>, VirtioFsError>
+	) -> Result<Rsp<O>, VirtioFsError>
 	where
 		<O as virtio_fs::ops::Op>::InStruct: Send,
 		<O as virtio_fs::ops::Op>::OutStruct: Send,

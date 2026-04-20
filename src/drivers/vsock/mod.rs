@@ -11,7 +11,6 @@ cfg_select! {
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem;
 
 use pci_types::InterruptLine;
 use smallvec::SmallVec;
@@ -139,7 +138,7 @@ impl TxQueue {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
-			packet_length: crate::VSOCK_PACKET_SIZE + mem::size_of::<Hdr>() as u32,
+			packet_length: crate::VSOCK_PACKET_SIZE + size_of::<Hdr>() as u32,
 		}
 	}
 

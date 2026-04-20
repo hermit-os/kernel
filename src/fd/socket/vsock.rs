@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::future;
 use core::task::Poll;
-use core::{future, mem};
 
 use virtio::vsock::{Hdr, Op, Type};
 use virtio::{le16, le32, le64};
@@ -154,7 +154,7 @@ impl ObjectInterface for Socket {
 	async fn connect(&mut self, endpoint: Endpoint) -> io::Result<()> {
 		match endpoint {
 			Endpoint::Vsock(ep) => {
-				const HEADER_SIZE: usize = mem::size_of::<Hdr>();
+				const HEADER_SIZE: usize = size_of::<Hdr>();
 				let port = VSOCK_MAP.lock().connect(ep.port, ep.cid)?;
 				self.port = port;
 				self.cid = ep.cid;
@@ -252,7 +252,7 @@ impl ObjectInterface for Socket {
 				}
 				VsockState::ReceiveRequest => {
 					let result = {
-						const HEADER_SIZE: usize = mem::size_of::<Hdr>();
+						const HEADER_SIZE: usize = size_of::<Hdr>();
 						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
 						let local_cid = driver_guard.get_cid();
 
@@ -373,7 +373,7 @@ impl ObjectInterface for Socket {
 							Poll::Pending
 						}
 					} else {
-						const HEADER_SIZE: usize = mem::size_of::<Hdr>();
+						const HEADER_SIZE: usize = size_of::<Hdr>();
 						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
 						let local_cid = driver_guard.get_cid();
 						let len = core::cmp::min(

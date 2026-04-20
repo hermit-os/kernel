@@ -40,7 +40,7 @@ use crate::{arch, io};
 const MAX_READ_LEN: usize = 1024 * 64;
 const MAX_WRITE_LEN: usize = 1024 * 64;
 
-const U64_SIZE: usize = mem::size_of::<u64>();
+const U64_SIZE: usize = size_of::<u64>();
 
 const S_IFLNK: u32 = 0o120_000;
 const S_IFMT: u32 = 0o170_000;
@@ -64,7 +64,6 @@ pub(crate) mod ops {
 	use alloc::ffi::CString;
 	use core::fmt;
 
-	use fuse_abi::linux;
 	use fuse_abi::linux::*;
 
 	use super::Cmd;
@@ -286,18 +285,18 @@ pub(crate) mod ops {
 	bitflags! {
 		#[derive(Debug, Copy, Clone, Default)]
 		pub struct SetAttrValidFields: u32 {
-			const FATTR_MODE = linux::FATTR_MODE;
-			const FATTR_UID = linux::FATTR_UID;
-			const FATTR_GID = linux::FATTR_GID;
-			const FATTR_SIZE = linux::FATTR_SIZE;
-			const FATTR_ATIME = linux::FATTR_ATIME;
-			const FATTR_MTIME = linux::FATTR_MTIME;
-			const FATTR_FH = linux::FATTR_FH;
-			const FATTR_ATIME_NOW = linux::FATTR_ATIME_NOW;
-			const FATTR_MTIME_NOW = linux::FATTR_MTIME_NOW;
-			const FATTR_LOCKOWNER = linux::FATTR_LOCKOWNER;
-			const FATTR_CTIME = linux::FATTR_CTIME;
-			const FATTR_KILL_SUIDGID = linux::FATTR_KILL_SUIDGID;
+			const FATTR_MODE = FATTR_MODE;
+			const FATTR_UID = FATTR_UID;
+			const FATTR_GID = FATTR_GID;
+			const FATTR_SIZE = FATTR_SIZE;
+			const FATTR_ATIME = FATTR_ATIME;
+			const FATTR_MTIME = FATTR_MTIME;
+			const FATTR_FH = FATTR_FH;
+			const FATTR_ATIME_NOW = FATTR_ATIME_NOW;
+			const FATTR_MTIME_NOW = FATTR_MTIME_NOW;
+			const FATTR_LOCKOWNER = FATTR_LOCKOWNER;
+			const FATTR_CTIME = FATTR_CTIME;
+			const FATTR_KILL_SUIDGID = FATTR_KILL_SUIDGID;
 		}
 	}
 
@@ -540,7 +539,7 @@ impl<O: ops::Op> CmdHeader<O> {
 		CmdHeader {
 			in_header: fuse_in_header {
 				// The length we need the provide in the header is not the same as the size of the struct because of padding, so we need to calculate it manually.
-				len: (mem::size_of::<fuse_in_header>() + mem::size_of::<O::InStruct>() + len)
+				len: (size_of::<fuse_in_header>() + size_of::<O::InStruct>() + len)
 					.try_into()
 					.expect("The command is too large"),
 				opcode: O::OP_CODE.into(),
@@ -658,12 +657,12 @@ fn readlink(nid: u64) -> io::Result<String> {
 		.unwrap()
 		.lock()
 		.send_command(cmd, rsp_payload_len)?;
-	let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
+	let len: usize = if rsp.headers.out_header.len as usize - size_of::<fuse_out_header>()
 		>= usize::try_from(len).unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
-		(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
+		(rsp.headers.out_header.len as usize) - size_of::<fuse_out_header>()
 	};
 
 	Ok(String::from_utf8(rsp.payload.unwrap()[..len].to_vec()).unwrap())
@@ -826,10 +825,10 @@ impl Read for VirtioFsFileHandleInner {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 		let len: usize =
-			if (rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>() >= len {
+			if (rsp.headers.out_header.len as usize) - size_of::<fuse_out_header>() >= len {
 				len
 			} else {
-				(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
+				(rsp.headers.out_header.len as usize) - size_of::<fuse_out_header>()
 			};
 		self.offset += len;
 
@@ -1017,17 +1016,17 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 
 		let len = usize::min(
 			MAX_READ_LEN,
-			rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>(),
+			rsp.headers.out_header.len as usize - size_of::<fuse_out_header>(),
 		);
 
-		if len <= mem::size_of::<fuse_dirent>() {
+		if len <= size_of::<fuse_dirent>() {
 			debug!("virtio-fs no new dirs");
 			return Err(Errno::Noent);
 		}
 
 		let mut ret = 0;
 
-		while (rsp.headers.out_header.len as usize) - *rsp_offset > mem::size_of::<fuse_dirent>() {
+		while (rsp.headers.out_header.len as usize) - *rsp_offset > size_of::<fuse_dirent>() {
 			let dirent = unsafe {
 				&*rsp
 					.payload
@@ -1039,7 +1038,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 			};
 
 			let dirent_len = mem::offset_of!(Dirent64, d_name) + dirent.namelen as usize + 1;
-			let next_dirent = (buf_offset + dirent_len).align_up(mem::align_of::<Dirent64>());
+			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
 
 			if next_dirent > buf.len() {
 				// target buffer full -> we return the nr. of bytes written (like linux does)
@@ -1052,7 +1051,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 				target_dirent.write(Dirent64 {
 					d_ino: dirent.ino,
 					d_off: 0,
-					d_reclen: (dirent_len.align_up(mem::align_of::<Dirent64>()))
+					d_reclen: (dirent_len.align_up(align_of::<Dirent64>()))
 						.try_into()
 						.unwrap(),
 					d_type: (dirent.type_ as u8).try_into().unwrap(),
@@ -1066,7 +1065,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 				nameptr.add(dirent.namelen as usize).write(0); // zero termination
 			}
 
-			*rsp_offset += mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+			*rsp_offset += size_of::<fuse_dirent>() + dirent.namelen as usize;
 			// Align to dirent struct
 			*rsp_offset = ((*rsp_offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 			buf_offset = next_dirent;
@@ -1178,21 +1177,21 @@ impl VfsNode for VirtioFsDirectory {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
+		let len: usize = if rsp.headers.out_header.len as usize - size_of::<fuse_out_header>()
 			>= usize::try_from(len).unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
-			(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
+			(rsp.headers.out_header.len as usize) - size_of::<fuse_out_header>()
 		};
 
-		if len <= mem::size_of::<fuse_dirent>() {
+		if len <= size_of::<fuse_dirent>() {
 			debug!("virtio-fs no new dirs");
 			return Err(Errno::Noent);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while (rsp.headers.out_header.len as usize) - offset > mem::size_of::<fuse_dirent>() {
+		while (rsp.headers.out_header.len as usize) - offset > size_of::<fuse_dirent>() {
 			let dirent = unsafe {
 				&*rsp
 					.payload
@@ -1203,7 +1202,7 @@ impl VfsNode for VirtioFsDirectory {
 					.cast::<fuse_dirent>()
 			};
 
-			offset += mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+			offset += size_of::<fuse_dirent>() + dirent.namelen as usize;
 			// Align to dirent struct
 			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
@@ -1443,18 +1442,18 @@ pub(crate) fn init() {
 		.send_command(cmd, rsp_payload_len)
 		.unwrap();
 
-	let len: usize = if rsp.headers.out_header.len as usize - mem::size_of::<fuse_out_header>()
+	let len: usize = if rsp.headers.out_header.len as usize - size_of::<fuse_out_header>()
 		>= usize::try_from(len).unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
-		(rsp.headers.out_header.len as usize) - mem::size_of::<fuse_out_header>()
+		(rsp.headers.out_header.len as usize) - size_of::<fuse_out_header>()
 	};
 
-	assert!(len > mem::size_of::<fuse_dirent>(), "virtio-fs no new dirs");
+	assert!(len > size_of::<fuse_dirent>(), "virtio-fs no new dirs");
 
 	let mut entries: Vec<String> = Vec::new();
-	while (rsp.headers.out_header.len as usize) - offset > mem::size_of::<fuse_dirent>() {
+	while (rsp.headers.out_header.len as usize) - offset > size_of::<fuse_dirent>() {
 		let dirent = unsafe {
 			&*rsp
 				.payload
@@ -1465,7 +1464,7 @@ pub(crate) fn init() {
 				.cast::<fuse_dirent>()
 		};
 
-		offset += mem::size_of::<fuse_dirent>() + dirent.namelen as usize;
+		offset += size_of::<fuse_dirent>() + dirent.namelen as usize;
 		// Align to dirent struct
 		offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 

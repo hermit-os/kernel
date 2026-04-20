@@ -120,7 +120,7 @@ impl RxQueues {
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
 	fn add(&mut self, mut vq: VirtQueue) {
-		let num_bufs = vq.size() / constants::BUFF_PER_PACKET;
+		let num_bufs = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
 	}
@@ -334,7 +334,7 @@ impl RxToken<'_> {
 		// We are receiving a frame that was sent by another virtio-net driver on the same host.
 		// Normally, the device should have filled in the checksum but passed the buffers right along
 		// instead as checksumming is not necessary for two guests on the same host.
-		if hdr.flags.contains(virtio::net::HdrF::NEEDS_CSUM) {
+		if hdr.flags.contains(HdrF::NEEDS_CSUM) {
 			return true;
 		}
 
@@ -350,7 +350,7 @@ impl RxToken<'_> {
 				// which is IPv4 in this case. Thus, it does not save us from validating the TCP, UDP, etc.
 				// packet inside the IP packet. The outermost checksum is not the Ethernet FCS, as that part
 				// seems to be handled by the device and not handed over to us.
-				if !hdr.flags.contains(virtio::net::HdrF::DATA_VALID) && !ip_packet.verify_checksum() {
+				if !hdr.flags.contains(HdrF::DATA_VALID) && !ip_packet.verify_checksum() {
 				    return false;
 				}
 
@@ -368,7 +368,7 @@ impl RxToken<'_> {
 				};
 				// One level of checksum has been validated and IPv6 headers don't have their own checksums,
 				// so the validation from the device must have been for the IP protocol.
-				hdr.flags.contains(virtio::net::HdrF::DATA_VALID) || Self::is_ip_packet_passable(
+				hdr.flags.contains(HdrF::DATA_VALID) || Self::is_ip_packet_passable(
 					ip_packet.next_header(),
 					ip_packet.payload(),
 					IpAddress::Ipv6(ip_packet.src_addr()),
@@ -394,7 +394,7 @@ impl RxToken<'_> {
 		checksum_capabilities: &ChecksumCapabilities,
 	) -> bool {
 		match next_header {
-			smoltcp::wire::IpProtocol::Tcp => {
+			IpProtocol::Tcp => {
 				if checksum_capabilities.tcp.rx() {
 					return true;
 				}
@@ -403,7 +403,7 @@ impl RxToken<'_> {
 				};
 				packet.verify_checksum(&src_addr, &dst_addr)
 			}
-			smoltcp::wire::IpProtocol::Udp => {
+			IpProtocol::Udp => {
 				if checksum_capabilities.udp.rx() {
 					return true;
 				}
@@ -730,12 +730,12 @@ impl VirtioNetDriver<Init> {
 		let csum_offset;
 		let ip_payload = &mut ethernet_frame.payload_mut()[ip_header_len.into()..ip_packet_len];
 		// Like the Ethernet protocol check, we check for IP protocols for which we know the location of the checksum field.
-		if protocol == smoltcp::wire::IpProtocol::Tcp && !checksums.tcp.tx() {
-			let mut tcp_packet = smoltcp::wire::TcpPacket::new_unchecked(ip_payload);
+		if protocol == IpProtocol::Tcp && !checksums.tcp.tx() {
+			let mut tcp_packet = TcpPacket::new_unchecked(ip_payload);
 			tcp_packet.set_checksum(pseudo_header_checksum);
 			csum_offset = 16;
-		} else if protocol == smoltcp::wire::IpProtocol::Udp && !checksums.udp.tx() {
-			let mut udp_packet = smoltcp::wire::UdpPacket::new_unchecked(ip_payload);
+		} else if protocol == IpProtocol::Udp && !checksums.udp.tx() {
+			let mut udp_packet = UdpPacket::new_unchecked(ip_payload);
 			udp_packet.set_checksum(pseudo_header_checksum);
 			csum_offset = 6;
 		} else {

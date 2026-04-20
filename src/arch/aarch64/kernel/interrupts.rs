@@ -1,8 +1,7 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use core::arch::asm;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 use core::sync::atomic::{AtomicU64, Ordering};
-use core::{mem, ptr};
 
 use aarch64_cpu::asm::barrier::{ISH, SY, dmb, isb};
 use aarch64_cpu::registers::*;
@@ -13,8 +12,7 @@ use fdt::standard_nodes::Compatible;
 use free_list::PageLayout;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
-use memory_addresses::VirtAddr;
-use memory_addresses::PhysAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
@@ -344,13 +342,13 @@ pub(crate) fn init() {
 		let irq_slice = timer_node.property("interrupts").unwrap().value;
 
 		/* Secure Phys IRQ */
-		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		/* Non-secure Phys IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
 		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 		let irq = u32::from_be_bytes(irq.try_into().unwrap());
 		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
@@ -389,9 +387,9 @@ pub(crate) fn init() {
 
 	if let Some(uart_node) = fdt.find_compatible(&["arm,pl011"]) {
 		let irq_slice = uart_node.property("interrupts").unwrap().value;
-		let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irqflags, _) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irqflags, _) = irq_slice.split_at(size_of::<u32>());
 		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 		let irq = u32::from_be_bytes(irq.try_into().unwrap());
 		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
@@ -458,13 +456,13 @@ pub fn init_cpu() {
 	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
 		let irq_slice = timer_node.property("interrupts").unwrap().value;
 		/* Secure Phys IRQ */
-		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		/* Non-secure Phys IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
 		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 		let irq = u32::from_be_bytes(irq.try_into().unwrap());
 		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());

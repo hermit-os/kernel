@@ -64,13 +64,13 @@ pub fn total_memory_size() -> usize {
 pub unsafe fn map_frame_range(frame_range: PageRange) {
 	cfg_select! {
 		target_arch = "aarch64" => {
-			type IdentityPageSize = crate::arch::mm::paging::BasePageSize;
+			type IdentityPageSize = paging::BasePageSize;
 		}
 		target_arch = "riscv64" => {
-			type IdentityPageSize = crate::arch::mm::paging::HugePageSize;
+			type IdentityPageSize = HugePageSize;
 		}
 		target_arch = "x86_64" => {
-			type IdentityPageSize = crate::arch::mm::paging::LargePageSize;
+			type IdentityPageSize = paging::LargePageSize;
 		}
 	}
 

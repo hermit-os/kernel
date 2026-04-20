@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use core::future::{self, Future};
+use core::future;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
@@ -440,7 +440,7 @@ pub fn fstat(fd: RawFd) -> io::Result<FileAttr> {
 /// `EFD_SEMAPHORE`: Provide semaphore-like semantics for reads
 /// from the new file descriptor.
 pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<RawFd> {
-	let obj = self::eventfd::EventFd::new(initval, flags);
+	let obj = eventfd::EventFd::new(initval, flags);
 
 	let fd = core_scheduler().insert_object(Arc::new(async_lock::RwLock::new(obj.into())))?;
 

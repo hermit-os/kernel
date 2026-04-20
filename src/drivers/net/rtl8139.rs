@@ -5,7 +5,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::hint::spin_loop;
-use core::mem::{self, ManuallyDrop};
+use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 
 use endian_num::{le16, le32, le64};
@@ -426,7 +426,7 @@ struct RxFields {
 impl RxFields {
 	fn rx_peek_u16(&self) -> u16 {
 		u16::from_le_bytes(
-			self.rxbuffer[self.rxpos..][..mem::size_of::<u16>()]
+			self.rxbuffer[self.rxpos..][..size_of::<u16>()]
 				.try_into()
 				.unwrap(),
 		)
@@ -443,7 +443,7 @@ impl RxToken<'_> {
 	fn consume_current_buffer(&mut self) {
 		let length = self.rx_fields.rx_peek_u16();
 		self.rx_fields
-			.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
+			.advance_rxpos(usize::from(length) + size_of::<u16>());
 
 		// packets are dword aligned
 		self.rx_fields.rxpos = ((self.rx_fields.rxpos + 3) & !0x3) % RX_BUF_LEN;
@@ -496,10 +496,10 @@ impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
 	where
 		F: FnOnce(&[u8]) -> R,
 	{
-		self.rx_fields.advance_rxpos(mem::size_of::<u16>());
+		self.rx_fields.advance_rxpos(size_of::<u16>());
 
 		let length = self.rx_fields.rx_peek_u16() - 4; // copy packet (but not the CRC)
-		let pos = (self.rx_fields.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
+		let pos = (self.rx_fields.rxpos + size_of::<u16>()) % RX_BUF_LEN;
 
 		let mut vec_data = Vec::with_capacity(length as usize);
 
@@ -621,7 +621,7 @@ impl smoltcp::phy::Device for RTL8139Driver {
 		})
 	}
 
-	fn capabilities(&self) -> smoltcp::phy::DeviceCapabilities {
+	fn capabilities(&self) -> DeviceCapabilities {
 		let mut device_capabilities = DeviceCapabilities::default();
 		device_capabilities.medium = smoltcp::phy::Medium::Ethernet;
 		device_capabilities.max_transmission_unit = usize::from(self.mtu);

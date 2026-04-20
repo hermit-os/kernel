@@ -51,13 +51,13 @@ pub(crate) fn enable_and_wait() {
 	}
 
 	#[cfg(not(feature = "idle-poll"))]
-	if crate::processor::supports_mwait() {
+	if processor::supports_mwait() {
 		use core::ptr;
 
 		let addr = ptr::from_ref(core_scheduler().get_priority_bitmap()).cast::<u8>();
 
 		unsafe {
-			if crate::processor::supports_clflush() {
+			if processor::supports_clflush() {
 				core::arch::x86_64::_mm_clflush(addr);
 			}
 
@@ -170,7 +170,7 @@ pub(crate) fn install_handlers() {
 fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
 	debug!("received interrupt {index}");
 
-	crate::arch::x86_64::swapgs(&stack_frame);
+	swapgs(&stack_frame);
 	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
@@ -188,7 +188,7 @@ fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Op
 	crate::executor::run();
 
 	core_scheduler().reschedule();
-	crate::arch::x86_64::swapgs(&stack_frame);
+	swapgs(&stack_frame);
 }
 
 fn abort(stack_frame: ExceptionStackFrame, index: u8, error_code: Option<u64>) {

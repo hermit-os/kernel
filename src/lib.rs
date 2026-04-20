@@ -187,7 +187,7 @@ extern "C" fn initd(_arg: usize) {
 	drivers::init();
 	// The filesystem needs to be initialized before network to allow writing packet captures to a file.
 	fs::init();
-	crate::executor::init();
+	executor::init();
 
 	syscalls::init();
 	#[cfg(feature = "shell")]
@@ -267,32 +267,24 @@ fn boot_processor_main() -> ! {
 		info!("FDT:\n{fdt:#?}");
 	}
 
-	arch::boot_processor_init();
+	boot_processor_init();
 
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 	interrupts::enable();
 
-	arch::kernel::boot_next_processor();
+	kernel::boot_next_processor();
 
 	#[cfg(feature = "smp")]
 	synch_all_cores();
 
 	if kernel::is_uhyve_with_pci() || !env::is_uhyve() {
 		#[cfg(feature = "pci")]
-		crate::drivers::pci::print_information();
+		drivers::pci::print_information();
 	}
 
 	// Start the initd task.
-	unsafe {
-		scheduler::PerCoreScheduler::spawn(
-			initd,
-			0,
-			scheduler::task::NORMAL_PRIO,
-			0,
-			USER_STACK_SIZE,
-		)
-	};
+	unsafe { PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE) };
 
 	// Run the scheduler loop.
 	PerCoreScheduler::run();
@@ -301,16 +293,16 @@ fn boot_processor_main() -> ! {
 /// Entry Point of Hermit for an Application Processor
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
-	arch::application_processor_init();
+	application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 	interrupts::enable();
-	arch::kernel::boot_next_processor();
+	kernel::boot_next_processor();
 
 	debug!("Entering idle loop for application processor");
 
 	synch_all_cores();
-	crate::executor::init();
+	executor::init();
 
 	// Run the scheduler loop.
 	PerCoreScheduler::run();
@@ -319,8 +311,8 @@ fn application_processor_main() -> ! {
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
-	let core_id = crate::arch::core_local::core_id();
+	let core_id = core_id();
 	panic_println!("[{core_id}][PANIC] {info}\n");
 
-	crate::scheduler::shutdown(1);
+	scheduler::shutdown(1);
 }

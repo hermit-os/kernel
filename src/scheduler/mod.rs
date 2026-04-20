@@ -308,7 +308,7 @@ impl PerCoreScheduler {
 			let id = NEXT_CORE_ID.fetch_add(1, Ordering::SeqCst);
 
 			// Check for overflow.
-			if id == arch::get_processor_count() {
+			if id == get_processor_count() {
 				NEXT_CORE_ID.store(0, Ordering::SeqCst);
 				0
 			} else {

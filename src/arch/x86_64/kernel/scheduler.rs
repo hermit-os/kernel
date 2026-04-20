@@ -1,7 +1,6 @@
 //! Architecture dependent interface to initialize a task
 
 use core::arch::naked_asm;
-use core::mem;
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
@@ -287,7 +286,7 @@ impl TaskFrame for Task {
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack -= mem::size_of::<State>();
+			stack -= size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
 			#[cfg(not(feature = "common-os"))]
@@ -308,7 +307,7 @@ impl TaskFrame for Task {
 				- TaskStacks::MARKER_SIZE;
 
 			// rdx is required to initialize the stack
-			(*state).rdx = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
+			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;
 		}
 	}
 }

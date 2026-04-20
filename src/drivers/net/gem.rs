@@ -6,7 +6,6 @@
 use alloc::alloc::Allocator;
 use alloc::boxed::Box;
 use core::alloc::Layout;
-use core::convert::TryInto;
 use core::ptr::NonNull;
 use core::{ptr, slice};
 
