@@ -239,7 +239,42 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 }
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
-	SYS.get_application_parameters()
+	use alloc::boxed::Box;
+	use alloc::vec::Vec;
+	use core::ptr;
+
+	let mut argv = Vec::new();
+
+	let name = Box::leak(Box::new("bin\0")).as_ptr();
+	argv.push(name);
+
+	let args = env::args();
+	debug!("Setting argv as: {args:?}");
+	for arg in args {
+		let ptr = Box::leak(format!("{arg}\0").into_boxed_str()).as_ptr();
+		argv.push(ptr);
+	}
+
+	let mut envv = Vec::new();
+
+	let envs = env::vars();
+	debug!("Setting envv as: {envs:?}");
+	for (key, value) in envs {
+		let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();
+		envv.push(ptr);
+	}
+	envv.push(ptr::null::<u8>());
+
+	let argc = argv.len() as i32;
+	let argv = argv.leak().as_ptr();
+	// do we have more than a end marker? If not, return as null pointer
+	let envv = if envv.len() == 1 {
+		ptr::null::<*const u8>()
+	} else {
+		envv.leak().as_ptr()
+	};
+
+	(argc, argv, envv)
 }
 
 pub(crate) fn shutdown(arg: i32) -> ! {
