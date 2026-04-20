@@ -402,6 +402,7 @@ non_ascii_idents = "warn"
 redundant_imports = "warn"
 redundant_lifetimes = "warn"
 single_use_lifetimes = "warn"
+trivial_casts = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
