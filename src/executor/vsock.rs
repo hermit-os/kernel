@@ -207,7 +207,7 @@ impl VsockMap {
 	}
 
 	pub fn remove_socket(&mut self, port: u32) {
-		let _ = self.port_map.remove(&port);
+		self.port_map.remove(&port);
 	}
 }
 

@@ -512,7 +512,7 @@ impl PerCoreScheduler {
 			};
 
 			let fd = new_fd()?;
-			let _ = object_map.insert(fd, obj.clone());
+			object_map.insert(fd, obj.clone());
 			Ok(fd)
 		})
 	}
