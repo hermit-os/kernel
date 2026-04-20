@@ -775,7 +775,7 @@ mod dirent_display {
 		}
 	}
 
-	impl<'a> fmt::Debug for Dirent64Display<'a> {
+	impl fmt::Debug for Dirent64Display<'_> {
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			let cstr = unsafe { CStr::from_ptr((&raw const self.dirent.d_name).cast::<c_char>()) };
 

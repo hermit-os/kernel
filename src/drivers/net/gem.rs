@@ -449,7 +449,7 @@ impl smoltcp::phy::Device for GEMDriver {
 	}
 }
 
-impl<'a> smoltcp::phy::RxToken for RxToken<'a> {
+impl smoltcp::phy::RxToken for RxToken<'_> {
 	fn consume<R, F>(mut self, f: F) -> R
 	where
 		F: FnOnce(&[u8]) -> R,
@@ -483,7 +483,7 @@ impl Drop for RxToken<'_> {
 	}
 }
 
-impl<'a> smoltcp::phy::TxToken for TxToken<'a> {
+impl smoltcp::phy::TxToken for TxToken<'_> {
 	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,

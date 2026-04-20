@@ -399,6 +399,7 @@ rust_2018_idioms = "warn"
 
 # Lints
 redundant_imports = "warn"
+single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
