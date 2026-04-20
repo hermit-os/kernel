@@ -398,6 +398,7 @@ let_underscore = "warn"
 rust_2018_idioms = "warn"
 
 # Lints
+non_ascii_idents = "warn"
 redundant_imports = "warn"
 single_use_lifetimes = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
