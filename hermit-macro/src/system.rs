@@ -82,6 +82,11 @@ fn validate_attrs(attrs: &[Attribute]) -> Result<()> {
 			continue;
 		}
 
+		if attr.path().is_ident("no_mangle") {
+			no_mangle_found = true;
+			continue;
+		}
+
 		if !attr.path().is_ident("cfg") && !attr.path().is_ident("doc") {
 			bail!(
 				attr,
