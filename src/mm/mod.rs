@@ -54,7 +54,7 @@ use hermit_sync::{Lazy, RawInterruptTicketMutex};
 pub use memory_addresses::{PhysAddr, VirtAddr};
 #[cfg(target_os = "none")]
 use talc::TalcLock;
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "virtio-balloon")))]
 use talc::source::Manual;
 
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
@@ -64,11 +64,21 @@ pub use self::virtualmem::{PageAlloc, PageBox};
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
+#[cfg(all(target_os = "none", feature = "virtio-balloon"))]
+use crate::drivers::balloon::oom::DeflateBalloonOnOom;
 use crate::{arch, env};
 
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", not(feature = "virtio-balloon")))]
 #[global_allocator]
 pub(crate) static ALLOCATOR: TalcLock<RawInterruptTicketMutex, Manual> = TalcLock::new(Manual);
+
+#[cfg(all(target_os = "none", feature = "virtio-balloon"))]
+#[global_allocator]
+pub(crate) static ALLOCATOR: TalcLock<RawInterruptTicketMutex, DeflateBalloonOnOom> = TalcLock::new(
+	// SAFETY: We are using this Talc Source with the one and only global instance
+	//         of Talc that Hermit uses as its global allocator.
+	unsafe { DeflateBalloonOnOom::new() },
+);
 
 /// Physical and virtual address range of the 2 MiB pages that map the kernel.
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {

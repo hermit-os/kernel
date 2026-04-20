@@ -74,6 +74,10 @@
 	reexport_test_harness_main = "test_main"
 )]
 #![cfg_attr(all(target_os = "none", test), no_main)]
+#![cfg_attr(
+	feature = "virtio-balloon",
+	feature(iter_collect_into, iter_array_chunks)
+)]
 // FIXME: move this to `Cargo.toml` once stable
 #![feature(strict_provenance_lints)]
 #![warn(fuzzy_provenance_casts)]

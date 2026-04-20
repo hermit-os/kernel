@@ -20,6 +20,8 @@ use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::pci::PciConfigRegion;
+#[cfg(feature = "virtio-balloon")]
+use crate::drivers::balloon::VirtioBalloonDriver;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
@@ -717,6 +719,26 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "virtio-balloon")]
+		virtio::Id::Balloon => match VirtioBalloonDriver::from_pci_device(device) {
+			Ok(virtio_balloon_driver) => {
+				info!("Virtio traditional memory balloon driver initialized.");
+
+				let irq = device.get_irq().unwrap();
+				crate::arch::interrupts::add_irq_name(irq, "virtio-balloon");
+				info!("Virtio balloon interrupt handler at line {irq}");
+
+				Ok(VirtioDriver::Balloon(alloc::boxed::Box::new(
+					virtio_balloon_driver,
+				)))
+			}
+			Err(virtio_error) => {
+				error!(
+					"Virtio traditional memory balloon driver could not be initialized with device id {device_id:x}: {virtio_error}"
+				);
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		id => {
 			if let Some(feature) = id.as_feature() {
 				error!("Virtio driver {id:?} is currently not active.");
@@ -746,4 +768,6 @@ pub(crate) enum VirtioDriver {
 	Net(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
+	#[cfg(feature = "virtio-balloon")]
+	Balloon(alloc::boxed::Box<VirtioBalloonDriver>),
 }

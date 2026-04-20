@@ -8,7 +8,8 @@ use hashbrown::HashMap;
 #[cfg(any(
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
-	feature = "virtio-console"
+	feature = "virtio-console",
+	feature = "virtio-balloon",
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
@@ -22,6 +23,8 @@ use pci_types::{
 use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
+#[cfg(feature = "virtio-balloon")]
+use crate::drivers::balloon::VirtioBalloonDriver;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "virtio-fs")]
@@ -336,6 +339,8 @@ pub(crate) enum PciDriver {
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
+	#[cfg(feature = "virtio-balloon")]
+	VirtioBalloon(InterruptTicketMutex<VirtioBalloonDriver>),
 }
 
 impl PciDriver {
@@ -362,6 +367,15 @@ impl PciDriver {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
 			#[allow(unreachable_patterns)]
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "virtio-balloon")]
+	fn get_balloon_driver(&self) -> Option<&InterruptTicketMutex<VirtioBalloonDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioBalloon(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -409,6 +423,18 @@ impl PciDriver {
 
 				let irq_number = drv.lock().get_interrupt_number();
 				(irq_number, console_handler)
+			}
+			#[cfg(feature = "virtio-balloon")]
+			Self::VirtioBalloon(drv) => {
+				fn balloon_handler() {
+					if let Some(driver) = get_balloon_driver() {
+						driver.lock().handle_interrupt();
+					}
+				}
+
+				let irq_number = drv.lock().get_interrupt_number();
+
+				(irq_number, balloon_handler)
 			}
 			_ => todo!(),
 		}
@@ -479,6 +505,14 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.find_map(|drv| drv.get_filesystem_driver())
 }
 
+#[cfg(feature = "virtio-balloon")]
+pub(crate) fn get_balloon_driver() -> Option<&'static InterruptTicketMutex<VirtioBalloonDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_balloon_driver())
+}
+
 pub(crate) fn init() {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
@@ -513,6 +547,10 @@ pub(crate) fn init() {
 				#[cfg(feature = "virtio-vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
+				}
+				#[cfg(feature = "virtio-balloon")]
+				Ok(VirtioDriver::Balloon(drv)) => {
+					register_driver(PciDriver::VirtioBalloon(InterruptTicketMutex::new(*drv)));
 				}
 				Err(err) => error!("Could not initialize virtio-pci device: {err}"),
 			}
