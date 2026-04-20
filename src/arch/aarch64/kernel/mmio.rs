@@ -226,13 +226,13 @@ pub fn init_drivers() {
 						)),
 						#[cfg(feature = "virtio-fs")]
 						VirtioDriver::Fs(drv) => register_driver(MmioDriver::VirtioFs(
-							hermit_sync::InterruptTicketMutex::new(*drv),
+							InterruptTicketMutex::new(*drv),
 						)),
 						#[cfg(feature = "virtio-net")]
 						VirtioDriver::Net(drv) => *NETWORK_DEVICE.lock() = Some(*drv),
 						#[cfg(feature = "virtio-vsock")]
 						VirtioDriver::Vsock(drv) => register_driver(MmioDriver::VirtioVsock(
-							hermit_sync::InterruptTicketMutex::new(*drv),
+							InterruptTicketMutex::new(*drv),
 						)),
 					}
 				}

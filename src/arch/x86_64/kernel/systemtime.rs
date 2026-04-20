@@ -194,5 +194,5 @@ pub fn init() {
 
 /// Returns the current time in microseconds since UNIX epoch.
 pub fn now_micros() -> u64 {
-	*BOOT_TIME.get().unwrap() + super::processor::get_timer_ticks()
+	*BOOT_TIME.get().unwrap() + processor::get_timer_ticks()
 }

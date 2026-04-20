@@ -77,7 +77,7 @@ pub(super) fn usleep(usecs: u64) {
 		core_scheduler.reschedule();
 	} else if usecs > 0 {
 		// Not enough time to set a wakeup timer, so just do busy-waiting.
-		let end = arch::processor::get_timestamp() + u64::from(get_frequency()) * usecs;
+		let end = get_timestamp() + u64::from(get_frequency()) * usecs;
 		while get_timestamp() < end {
 			core_scheduler().reschedule();
 		}

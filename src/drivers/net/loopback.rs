@@ -41,7 +41,7 @@ pub(crate) struct TxToken<'a> {
 	queue: &'a SpinMutex<VecDeque<Vec<u8, DeviceAlloc>>>,
 }
 
-impl smoltcp::phy::TxToken for TxToken<'_> {
+impl phy::TxToken for TxToken<'_> {
 	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
@@ -59,7 +59,7 @@ pub(crate) struct RxToken<'a> {
 	reserved_receives: &'a AtomicUsize,
 }
 
-impl smoltcp::phy::RxToken for RxToken<'_> {
+impl phy::RxToken for RxToken<'_> {
 	fn consume<R, F>(self, f: F) -> R
 	where
 		F: FnOnce(&[u8]) -> R,
@@ -75,7 +75,7 @@ impl Drop for RxToken<'_> {
 	}
 }
 
-impl smoltcp::phy::Device for LoopbackDriver {
+impl phy::Device for LoopbackDriver {
 	type RxToken<'a> = RxToken<'a>;
 	type TxToken<'a> = TxToken<'a>;
 

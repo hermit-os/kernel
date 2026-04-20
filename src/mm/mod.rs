@@ -45,7 +45,6 @@ mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
 
-use core::mem;
 use core::ops::Range;
 
 use align_address::Align;
@@ -112,7 +111,7 @@ pub(crate) fn init() {
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
 	let npages = total_mem / BasePageSize::SIZE as usize;
-	let npage_div = BasePageSize::SIZE as usize / mem::align_of::<usize>();
+	let npage_div = BasePageSize::SIZE as usize / align_of::<usize>();
 	let npage_3tables = npages / npage_div + 1;
 	let npage_2tables = npage_3tables / npage_div + 1;
 	let npage_1tables = npage_2tables / npage_div + 1;
@@ -339,7 +338,7 @@ pub(crate) fn map(
 pub(crate) fn unmap(virtual_address: VirtAddr, size: usize) {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 
-	if arch::mm::paging::virtual_to_physical(virtual_address).is_some() {
+	if virtual_to_physical(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(
 			virtual_address,
 			size / BasePageSize::SIZE as usize,

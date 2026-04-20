@@ -10,8 +10,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
+use core::ops;
 use core::sync::atomic::{Ordering, fence};
-use core::{mem, ops};
 
 use align_address::Align;
 #[cfg(not(feature = "pci"))]
@@ -20,7 +20,7 @@ use virtio::mmio::NotificationData;
 use virtio::pci::NotificationData;
 use virtio::pvirtq::{EventSuppressDesc, EventSuppressFlags};
 use virtio::virtq::DescF;
-use virtio::{RingEventFlags, pvirtq, virtq};
+use virtio::{RingEventFlags, pvirtq};
 
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
@@ -238,8 +238,8 @@ impl DescriptorRing {
 	/// deferred (e.g. patched dispatches, chained buffers).
 	fn to_marked_avail(&self, mut flags: DescF) -> DescF {
 		let avail = self.write_index.desc_event_wrap() != 0;
-		flags.set(virtq::DescF::AVAIL, avail);
-		flags.set(virtq::DescF::USED, !avail);
+		flags.set(DescF::AVAIL, avail);
+		flags.set(DescF::USED, !avail);
 		flags
 	}
 
@@ -252,9 +252,9 @@ impl DescriptorRing {
 	/// wrap counter (i.e. driver wrap counter) by accident.
 	fn is_marked_used(&self, flags: DescF) -> bool {
 		if self.poll_index.desc_event_wrap() != 0 {
-			flags.contains(virtq::DescF::AVAIL | virtq::DescF::USED)
+			flags.contains(DescF::AVAIL | DescF::USED)
 		} else {
-			!flags.intersects(virtq::DescF::AVAIL | virtq::DescF::USED)
+			!flags.intersects(DescF::AVAIL | DescF::USED)
 		}
 	}
 }
@@ -683,8 +683,7 @@ impl PackedVq {
 
 		let mut descr_ring = DescriptorRing::new(vq_size);
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len =
-			mem::size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
+		let _mem_len = size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event = Box::<pvirtq::EventSuppress, _>::new_zeroed_in(DeviceAlloc);
 		let dev_event = Box::<pvirtq::EventSuppress, _>::new_zeroed_in(DeviceAlloc);

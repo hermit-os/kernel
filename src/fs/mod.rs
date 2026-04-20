@@ -590,7 +590,7 @@ impl File {
 }
 
 impl embedded_io::ErrorType for File {
-	type Error = crate::errno::Errno;
+	type Error = Errno;
 }
 
 impl Read for File {

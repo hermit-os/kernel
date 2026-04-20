@@ -5,7 +5,7 @@ use uhyve_interface::parameters::{ExitParams, SerialWriteBufferParams};
 use uhyve_interface::{Hypercall, HypercallAddress};
 
 use crate::arch;
-use crate::arch::mm::paging::{self, virtual_to_physical};
+use crate::arch::mm::paging::virtual_to_physical;
 
 /// Perform a SerialWriteBuffer hypercall with `buf` as payload.
 #[inline]
@@ -23,7 +23,7 @@ pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
 /// Calculates the physical address of the struct passed as reference.
 #[inline]
 fn data_addr<T>(data: &T) -> u64 {
-	paging::virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref(data)))
+	virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref(data)))
 		.unwrap()
 		.as_u64()
 }

@@ -1,5 +1,3 @@
-use core::mem;
-
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
@@ -292,7 +290,7 @@ impl TaskFrame for Task {
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack -= mem::size_of::<State>();
+			stack -= size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
 			#[cfg(not(feature = "common-os"))]
@@ -309,7 +307,7 @@ impl TaskFrame for Task {
 				self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10u64;
 
 			(*state).sp = self.last_stack_pointer.as_usize();
-			(*state).a2 = self.user_stack_pointer.as_usize() - mem::size_of::<u64>();
+			(*state).a2 = self.user_stack_pointer.as_usize() - size_of::<u64>();
 			// trace!("state: {:#X?}", *state);
 		}
 	}

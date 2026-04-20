@@ -7,7 +7,7 @@ use core::arch::x86_64::_mm_mfence;
 use core::fmt;
 use core::hint::spin_loop;
 use core::sync::atomic::Ordering;
-use core::{cmp, mem, ptr};
+use core::{cmp, ptr};
 
 use align_address::Align;
 #[cfg(feature = "smp")]
@@ -343,13 +343,13 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 		unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtHeader>(madt.table_start_address())) };
 
 	// Jump to the actual table entries (after the table header).
-	let mut current_address = madt.table_start_address() + mem::size_of::<AcpiMadtHeader>();
+	let mut current_address = madt.table_start_address() + size_of::<AcpiMadtHeader>();
 
 	// Loop through all table entries.
 	while current_address < madt.table_end_address() {
 		let record =
 			unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtRecordHeader>(current_address)) };
-		current_address += mem::size_of::<AcpiMadtRecordHeader>();
+		current_address += size_of::<AcpiMadtRecordHeader>();
 
 		match record.entry_type {
 			0 => {
@@ -376,7 +376,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 			}
 		}
 
-		current_address += record.length as usize - mem::size_of::<AcpiMadtRecordHeader>();
+		current_address += record.length as usize - size_of::<AcpiMadtRecordHeader>();
 	}
 
 	// Successfully derived all information from the MADT.
@@ -470,7 +470,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		init_ioapic_address(default_address);
 	} else {
 		// entries starts directly after the config table
-		addr += mem::size_of::<ApicConfigTable>();
+		addr += size_of::<ApicConfigTable>();
 		for _i in 0..mp_config.entry_count {
 			match unsafe { *(ptr::with_exposed_provenance::<u8>(addr)) } {
 				// CPU entry
@@ -480,7 +480,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 					if cpu_entry.cpu_flags & 0x01 == 0x01 {
 						add_local_apic_id(cpu_entry.id);
 					}
-					addr += mem::size_of::<ApicProcessorEntry>();
+					addr += size_of::<ApicProcessorEntry>();
 				}
 				// IO-APIC entry
 				2 => {
@@ -490,7 +490,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 
 					init_ioapic_address(ioapic);
 
-					addr += mem::size_of::<ApicIoEntry>();
+					addr += size_of::<ApicIoEntry>();
 				}
 				_ => {
 					addr += 8;
@@ -743,8 +743,6 @@ pub fn init_next_processor_variables() {
 /// This is partly confirmed by <https://wiki.osdev.org/Symmetric_Multiprocessing>
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn boot_application_processors() {
-	use core::hint;
-
 	use hermit_entry::boot_info::RawBootInfo;
 	use x86_64::structures::paging::Translate;
 
@@ -761,7 +759,7 @@ pub fn boot_application_processors() {
 
 	if env::is_uefi() {
 		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
-		let pt = unsafe { crate::arch::mm::paging::identity_mapped_page_table() };
+		let pt = unsafe { paging::identity_mapped_page_table() };
 		let virt_addr = SMP_BOOT_CODE_ADDRESS;
 		let phys_addr = pt.translate_addr(virt_addr.into()).unwrap();
 		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64());
@@ -847,7 +845,7 @@ pub fn boot_application_processors() {
 			// Wait until the application processor has finished initializing.
 			// It will indicate this by counting up cpu_online.
 			while current_processor_count == arch::get_processor_count() {
-				hint::spin_loop();
+				spin_loop();
 			}
 		}
 	}
@@ -889,8 +887,8 @@ pub fn ipi_tlb_flush() {
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
 	if core_id_to_wakeup != core_id()
-		&& !crate::processor::supports_mwait()
-		&& crate::scheduler::take_core_hlt_state(core_id_to_wakeup)
+		&& !processor::supports_mwait()
+		&& scheduler::take_core_hlt_state(core_id_to_wakeup)
 	{
 		without_interrupts(|| {
 			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
@@ -930,7 +928,7 @@ fn ioapic_write(reg: u32, value: u32) {
 			.as_mut_ptr::<u32>()
 			.write_volatile(reg);
 
-		(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>())
+		(*IOAPIC_ADDRESS.get().unwrap() + 4 * size_of::<u32>())
 			.as_mut_ptr::<u32>()
 			.write_volatile(value);
 	}
@@ -946,7 +944,7 @@ fn ioapic_read(reg: u32) -> u32 {
 			.as_mut_ptr::<u32>()
 			.write_volatile(reg);
 
-		value = (*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>())
+		value = (*IOAPIC_ADDRESS.get().unwrap() + 4 * size_of::<u32>())
 			.as_ptr::<u32>()
 			.read_volatile();
 	}

@@ -1,7 +1,6 @@
 //! Architecture dependent interface to initialize a task
 
 use core::arch::naked_asm;
-use core::mem;
 use core::sync::atomic::Ordering;
 
 use aarch64_cpu::asm::barrier::{SY, isb};
@@ -295,7 +294,7 @@ impl TaskFrame for Task {
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack -= mem::size_of::<State>();
+			stack -= size_of::<State>();
 
 			let state = stack.as_mut_ptr::<State>();
 			#[cfg(not(feature = "common-os"))]

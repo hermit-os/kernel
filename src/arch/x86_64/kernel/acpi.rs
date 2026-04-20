@@ -1,4 +1,4 @@
-use core::{mem, ptr, slice, str};
+use core::{ptr, slice, str};
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
@@ -177,7 +177,7 @@ impl AcpiTable<'_> {
 	}
 
 	pub fn table_start_address(&self) -> usize {
-		self.header_start_address() + mem::size_of::<AcpiSdtHeader>()
+		self.header_start_address() + size_of::<AcpiSdtHeader>()
 	}
 
 	pub fn table_end_address(&self) -> usize {
@@ -185,7 +185,7 @@ impl AcpiTable<'_> {
 	}
 
 	pub fn table_byte_len(&self) -> usize {
-		self.header.length as usize - mem::size_of::<AcpiSdtHeader>()
+		self.header.length as usize - size_of::<AcpiSdtHeader>()
 	}
 }
 
@@ -539,7 +539,7 @@ pub fn init() {
 			let address = unsafe {
 				PhysAddr::new(ptr::with_exposed_provenance::<u64>(current_address).read_unaligned())
 			};
-			current_address += mem::size_of::<u64>();
+			current_address += size_of::<u64>();
 			address
 		} else {
 			let address = unsafe {
@@ -549,7 +549,7 @@ pub fn init() {
 						.into(),
 				)
 			};
-			current_address += mem::size_of::<u32>();
+			current_address += size_of::<u32>();
 			address
 		};
 

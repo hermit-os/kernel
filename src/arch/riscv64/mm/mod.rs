@@ -10,6 +10,6 @@ pub unsafe fn init() {
 		PageAlloc::init();
 	}
 	unsafe {
-		self::paging::enable_page_table();
+		paging::enable_page_table();
 	}
 }

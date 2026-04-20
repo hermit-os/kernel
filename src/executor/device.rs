@@ -28,7 +28,7 @@ cfg_select! {
 		use hermit_sync::SpinMutex;
 		use crate::drivers::net::NetworkDevice;
 
-		pub(crate) static NETWORK_DEVICE: SpinMutex<Option<NetworkDevice>> = SpinMutex::new(Option::None);
+		pub(crate) static NETWORK_DEVICE: SpinMutex<Option<NetworkDevice>> = SpinMutex::new(None);
 	}
 	_ => {
 		use crate::drivers::net::loopback::LoopbackDriver;

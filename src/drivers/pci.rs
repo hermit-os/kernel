@@ -509,7 +509,7 @@ pub(crate) fn init() {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
-				Ok(VirtioDriver::Net(drv)) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(*drv),
+				Ok(VirtioDriver::Net(drv)) => *NETWORK_DEVICE.lock() = Some(*drv),
 				#[cfg(feature = "virtio-vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
 					register_driver(PciDriver::VirtioVsock(InterruptTicketMutex::new(*drv)));
@@ -530,7 +530,7 @@ pub(crate) fn init() {
 			);
 
 			match rtl8139::init_device(adapter) {
-				Ok(drv) => *crate::executor::device::NETWORK_DEVICE.lock() = Some(drv),
+				Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
 				Err(err) => error!("Could not initialize rtl8139 device: {err}"),
 			}
 		}

@@ -290,7 +290,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	crate::fs::create_dir(name, mode).map_or_else(|e| -i32::from(e), |()| 0)
+	fs::create_dir(name, mode).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
 #[hermit_macro::system(errno)]
@@ -298,7 +298,7 @@ pub unsafe extern "C" fn sys_mkdir(name: *const c_char, mode: u32) -> i32 {
 pub unsafe extern "C" fn sys_rmdir(name: *const c_char) -> i32 {
 	let name = unsafe { CStr::from_ptr(name) }.to_str().unwrap();
 
-	crate::fs::remove_dir(name).map_or_else(|e| -i32::from(e), |()| 0)
+	fs::remove_dir(name).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
 #[hermit_macro::system(errno)]
@@ -336,7 +336,7 @@ pub unsafe extern "C" fn sys_fstat(fd: RawFd, stat: *mut FileAttr) -> i32 {
 		return -i32::from(Errno::Inval);
 	}
 
-	crate::fd::fstat(fd).map_or_else(
+	fd::fstat(fd).map_or_else(
 		|e| -i32::from(e),
 		|v| unsafe {
 			*stat = v;
@@ -352,7 +352,7 @@ pub unsafe extern "C" fn sys_opendir(name: *const c_char) -> RawFd {
 		return -i32::from(Errno::Inval);
 	};
 
-	crate::fs::opendir(name).unwrap_or_else(|e| -i32::from(e))
+	fs::opendir(name).unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system(errno)]
@@ -369,7 +369,7 @@ pub unsafe extern "C" fn sys_open(name: *const c_char, flags: i32, mode: u32) ->
 		return -i32::from(Errno::Inval);
 	};
 
-	crate::fs::open(name, flags, mode).unwrap_or_else(|e| -i32::from(e))
+	fs::open(name, flags, mode).unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system]
@@ -424,7 +424,7 @@ pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	crate::fs::set_cwd(name)
+	fs::set_cwd(name)
 		.map(|()| 0)
 		.unwrap_or_else(|e| -i32::from(e))
 }
@@ -432,7 +432,7 @@ pub unsafe extern "C" fn sys_chdir(path: *mut c_char) -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_umask(umask: u32) -> u32 {
-	crate::fs::umask(AccessPermission::from_bits_truncate(umask)).bits()
+	fs::umask(AccessPermission::from_bits_truncate(umask)).bits()
 }
 
 #[hermit_macro::system(errno)]
@@ -489,7 +489,7 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	match crate::fs::read_lstat(name) {
+	match fs::read_lstat(name) {
 		Err(e) => -i32::from(e),
 		Ok(stat) if access_option.can_access(stat.st_mode) => 0,
 		Ok(_) => -i32::from(Errno::Acces),
@@ -503,7 +503,7 @@ pub unsafe extern "C" fn sys_fchmod(fd: RawFd, mode: u32) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	crate::fd::chmod(fd, access_permission)
+	fd::chmod(fd, access_permission)
 		.map(|()| 0)
 		.unwrap_or_else(|e| -i32::from(e))
 }
@@ -519,7 +519,7 @@ pub extern "C" fn sys_close(fd: RawFd) -> i32 {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read(fd: RawFd, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { slice::from_raw_parts_mut(buf.cast(), len) };
-	crate::fd::read(fd, slice).map_or_else(
+	fd::read(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| v.try_into().unwrap(),
 	)
@@ -554,7 +554,7 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 		let buf =
 			unsafe { slice::from_raw_parts_mut(iovec_buf.iov_base.cast(), iovec_buf.iov_len) };
 
-		let len = crate::fd::read(fd, buf).map_or_else(
+		let len = fd::read(fd, buf).map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
 			|v| v.try_into().unwrap(),
 		);
@@ -575,7 +575,7 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 
 unsafe fn write(fd: RawFd, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { slice::from_raw_parts(buf, len) };
-	crate::fd::write(fd, slice).map_or_else(
+	fd::write(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| v.try_into().unwrap(),
 	)
@@ -631,7 +631,7 @@ pub unsafe extern "C" fn sys_writev(fd: RawFd, iov: *const iovec, iovcnt: usize)
 	for iovec_buf in iovec_buffers {
 		let buf = unsafe { slice::from_raw_parts(iovec_buf.iov_base, iovec_buf.iov_len) };
 
-		let len = crate::fd::write(fd, buf).map_or_else(
+		let len = fd::write(fd, buf).map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
 			|v| v.try_into().unwrap(),
 		);
@@ -726,7 +726,7 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 pub extern "C" fn sys_lseek(fd: RawFd, offset: isize, whence: i32) -> isize {
 	let whence = u8::try_from(whence).unwrap();
 	let whence = SeekWhence::try_from(whence).unwrap();
-	crate::fd::lseek(fd, offset, whence).unwrap_or_else(|e| isize::try_from(-i32::from(e)).unwrap())
+	fd::lseek(fd, offset, whence).unwrap_or_else(|e| isize::try_from(-i32::from(e)).unwrap())
 }
 
 #[repr(C)]
@@ -865,7 +865,7 @@ pub unsafe extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -
 		None
 	};
 
-	crate::fd::poll(slice, timeout).map_or_else(
+	fd::poll(slice, timeout).map_or_else(
 		|e| {
 			if e == Errno::Time { 0 } else { -i32::from(e) }
 		},
@@ -880,7 +880,7 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	crate::fd::eventfd(initval, flags).unwrap_or_else(|e| -i32::from(e))
+	fd::eventfd(initval, flags).unwrap_or_else(|e| -i32::from(e))
 }
 
 #[hermit_macro::system]
@@ -896,7 +896,7 @@ mod tests {
 	#[cfg(target_os = "none")]
 	#[test_case]
 	fn test_get_application_parameters() {
-		crate::env::init();
+		env::init();
 		let (argc, argv, _envp) = get_application_parameters();
 		assert_ne!(argc, 0);
 		assert_ne!(argv, ptr::null());

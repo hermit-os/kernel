@@ -86,8 +86,7 @@ impl Tls {
 		let mut block = Allocation::new(layout).unwrap();
 
 		// Initialize the beginning of the TLS block with the TLS initialization image.
-		let image =
-			unsafe { &*(ptr::from_ref(tls_info.image) as *const [core::mem::MaybeUninit<u8>]) };
+		let image = unsafe { &*(ptr::from_ref(tls_info.image) as *const [MaybeUninit<u8>]) };
 		block.as_mut_slice()[tls_offset..][..tls_info.image.len()].copy_from_slice(image);
 
 		// Fill the rest of the TLS block with zeros.

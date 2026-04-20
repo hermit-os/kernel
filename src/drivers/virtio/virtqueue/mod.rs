@@ -14,7 +14,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::mem::MaybeUninit;
-use core::{mem, ptr};
+use core::ptr;
 
 use enum_dispatch::enum_dispatch;
 use mem_barrier::{BarrierKind, BarrierType};
@@ -166,7 +166,7 @@ trait VirtqPrivate {
 				.phys_addr_from(table.as_ptr().cast_mut())
 				.as_u64()
 				.into(),
-			(mem::size_of_val(table) as u32).into(),
+			(size_of_val(table) as u32).into(),
 			virtq::DescF::INDIRECT,
 		)
 	}
@@ -234,7 +234,7 @@ pub(crate) enum VirtQueue {
 trait VirtqDescriptor {
 	fn flags_mut(&mut self) -> &mut virtq::DescF;
 
-	fn incomplete_desc(addr: virtio::le64, len: virtio::le32, flags: virtq::DescF) -> Self;
+	fn incomplete_desc(addr: le64, len: le32, flags: virtq::DescF) -> Self;
 }
 
 impl VirtqDescriptor for virtq::Desc {
@@ -308,7 +308,7 @@ impl BufferElem {
 	// is more appropriate.
 	pub fn len(&self) -> u32 {
 		match self {
-			BufferElem::Sized(sized) => mem::size_of_val(sized.as_ref()),
+			BufferElem::Sized(sized) => size_of_val(sized.as_ref()),
 			BufferElem::Vector(vec) => vec.len(),
 		}
 		.try_into()
@@ -317,7 +317,7 @@ impl BufferElem {
 
 	pub fn capacity(&self) -> u32 {
 		match self {
-			BufferElem::Sized(sized) => mem::size_of_val(sized.as_ref()),
+			BufferElem::Sized(sized) => size_of_val(sized.as_ref()),
 			BufferElem::Vector(vec) => vec.capacity(),
 		}
 		.try_into()
@@ -702,7 +702,7 @@ pub mod error {
 		NoNewUsed,
 	}
 
-	impl core::convert::From<VirtqError> for Errno {
+	impl From<VirtqError> for Errno {
 		fn from(_: VirtqError) -> Self {
 			Errno::Io
 		}

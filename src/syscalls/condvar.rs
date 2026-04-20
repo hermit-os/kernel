@@ -2,8 +2,8 @@
 // "Implementing Condition Variables with Semaphores"
 
 use alloc::boxed::Box;
+use core::ptr;
 use core::sync::atomic::{AtomicIsize, Ordering};
-use core::{mem, ptr};
 
 use crate::synch::semaphore::Semaphore;
 
@@ -35,7 +35,7 @@ pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 
 		if *id != 0 {
 			let cond = Box::from_raw(ptr::with_exposed_provenance_mut::<CondQueue>(*id));
-			mem::drop(cond);
+			drop(cond);
 		}
 
 		0

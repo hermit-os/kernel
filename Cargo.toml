@@ -400,6 +400,7 @@ rust_2018_idioms = "warn"
 redundant_imports = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
 unsafe_op_in_unsafe_fn = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
 borrow_as_ptr = "warn"

@@ -9,7 +9,7 @@ use core::ffi::{c_char, c_void};
 use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 #[allow(unused_imports)]
 use core::ops::DerefMut;
-use core::{mem, slice};
+use core::slice;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 #[cfg(feature = "net")]
@@ -288,7 +288,7 @@ impl From<sockaddr_vm> for VsockEndpoint {
 impl From<VsockEndpoint> for sockaddr_vm {
 	fn from(endpoint: VsockEndpoint) -> Self {
 		Self {
-			svm_len: mem::size_of::<sockaddr_vm>().try_into().unwrap(),
+			svm_len: size_of::<sockaddr_vm>().try_into().unwrap(),
 			svm_family: Af::Vsock.into(),
 			svm_port: endpoint.port,
 			svm_cid: endpoint.cid,
@@ -344,7 +344,7 @@ impl From<IpEndpoint> for sockaddr_in {
 				};
 
 				Self {
-					sin_len: mem::size_of::<sockaddr_in>().try_into().unwrap(),
+					sin_len: size_of::<sockaddr_in>().try_into().unwrap(),
 					sin_port: endpoint.port.to_be(),
 					sin_family: Af::Inet.into(),
 					sin_addr,
@@ -359,7 +359,7 @@ impl From<IpEndpoint> for sockaddr_in {
 impl From<SocketAddrV4> for sockaddr_in {
 	fn from(value: SocketAddrV4) -> Self {
 		Self {
-			sin_len: mem::size_of::<Self>().try_into().unwrap(),
+			sin_len: size_of::<Self>().try_into().unwrap(),
 			sin_family: Af::Inet.into(),
 			sin_port: value.port().to_be(),
 			sin_addr: (*value.ip()).into(),
@@ -430,7 +430,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 				in6_addr.s6_addr.copy_from_slice(&ip.octets());
 
 				Self {
-					sin6_len: mem::size_of::<sockaddr_in6>().try_into().unwrap(),
+					sin6_len: size_of::<sockaddr_in6>().try_into().unwrap(),
 					sin6_port: endpoint.port.to_be(),
 					sin6_family: Af::Inet6.into(),
 					sin6_addr: in6_addr,
@@ -445,7 +445,7 @@ impl From<IpEndpoint> for sockaddr_in6 {
 impl From<SocketAddrV6> for sockaddr_in6 {
 	fn from(value: SocketAddrV6) -> Self {
 		Self {
-			sin6_len: mem::size_of::<Self>().try_into().unwrap(),
+			sin6_len: size_of::<Self>().try_into().unwrap(),
 			sin6_family: Af::Inet6.into(),
 			sin6_port: value.port().to_be(),
 			sin6_flowinfo: Default::default(),
@@ -510,7 +510,7 @@ pub unsafe extern "C" fn sys_getaddrbyname(
 ///         hermit_abi::getaddrbyname(
 ///                 name,
 ///                 &mut inaddr as *mut _ as *mut u8,
-///                 std::mem::size_of::<in_addr>(),
+///                 std::size_of::<in_addr>(),
 ///         )
 /// };
 ///
@@ -1002,7 +1002,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 						} else {
 							*optval = 0;
 						}
-						*optlen = mem::size_of::<i32>().try_into().unwrap();
+						*optlen = size_of::<i32>().try_into().unwrap();
 
 						0
 					},

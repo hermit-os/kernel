@@ -1,9 +1,9 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
 use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 #[cfg(feature = "common-os")]
-use core::{mem, slice};
+use core::slice;
+use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::PhysAddr;
@@ -87,7 +87,7 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && !env::is_uhyve() {
+	if cfg!(feature = "vga") && !is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
@@ -108,7 +108,7 @@ pub fn boot_processor_init() {
 	interrupts::install();
 	systemtime::init();
 
-	if !env::is_uhyve() {
+	if !is_uhyve() {
 		#[cfg(feature = "acpi")]
 		acpi::init();
 	}
@@ -139,7 +139,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	if env::is_uhyve() {
+	if is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
 		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.
@@ -157,7 +157,7 @@ pub fn boot_next_processor() {
 	// to initialize the next processor.
 	let cpu_online = CPU_ONLINE.fetch_add(1, Ordering::Release);
 
-	if !env::is_uhyve() {
+	if !is_uhyve() {
 		if cpu_online == 0 {
 			#[cfg(all(target_os = "none", feature = "smp"))]
 			apic::boot_application_processors();
@@ -254,7 +254,7 @@ where
 		// So the thread pointer needs to be `block_ptr + tls_offset`.
 		// GNU style TLS requires `fs:0` to represent the same address as the thread pointer.
 		// Since the thread pointer points to the end of the TLS blocks, we need to store it there.
-		let tcb_size = mem::size_of::<*mut ()>();
+		let tcb_size = size_of::<*mut ()>();
 		let tls_offset = tls_size as usize;
 
 		let tls_memsz = (tls_offset + tcb_size).align_up(BasePageSize::SIZE as usize);
@@ -282,7 +282,7 @@ where
 		unsafe {
 			thread_ptr.cast::<*mut ()>().write(thread_ptr);
 		}
-		crate::arch::x86_64::kernel::processor::writefs(thread_ptr.expose_provenance());
+		processor::writefs(thread_ptr.expose_provenance());
 
 		func(code_slice, Some(block))
 	} else {
@@ -307,12 +307,12 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 		+ (code_size + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE.try_into().unwrap())
 		- 8;
 
-	let stack_pointer = stack_pointer - 128 /* red zone */ - arg.len() * mem::size_of::<*mut u8>();
+	let stack_pointer = stack_pointer - 128 /* red zone */ - arg.len() * size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
 	let argv = unsafe { slice::from_raw_parts_mut(stack_ptr, arg.len()) };
 	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
 	// align stack pointer to fulfill the requirements of the x86_64 ABI
-	let stack_pointer = (stack_pointer - len).align_down(16) - mem::size_of::<usize>();
+	let stack_pointer = (stack_pointer - len).align_down(16) - size_of::<usize>();
 
 	let mut pos: usize = 0;
 	for (i, s) in arg.iter().enumerate() {

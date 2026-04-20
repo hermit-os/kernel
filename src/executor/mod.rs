@@ -124,11 +124,11 @@ where
 
 pub fn init() {
 	#[cfg(feature = "net")]
-	crate::executor::network::init();
+	network::init();
 	#[cfg(feature = "virtio-vsock")]
-	crate::executor::vsock::init();
+	vsock::init();
 	#[cfg(feature = "alloc-stats")]
-	crate::executor::alloc_stats::init();
+	alloc_stats::init();
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.

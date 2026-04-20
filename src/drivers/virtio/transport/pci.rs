@@ -6,8 +6,7 @@
 //! [Virtio Over PCI Bus]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1150001
 
 use alloc::vec::Vec;
-use core::ptr::NonNull;
-use core::{mem, ptr};
+use core::ptr::{self, NonNull};
 
 use memory_addresses::PhysAddr;
 use pci_types::capability::PciCapability;
@@ -56,7 +55,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	}
 
 	// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-	if cap.len() < u64::try_from(mem::size_of::<T>()).unwrap() {
+	if cap.len() < u64::try_from(size_of::<T>()).unwrap() {
 		error!(
 			"Device specific config from device {:x}, does not represent actual structure specified by the standard!",
 			cap.dev_id()
@@ -125,7 +124,7 @@ impl PciCap {
 		}
 
 		// `CommonCfg::queue_notify_data` and `CommonCfg::queue_reset` are optional.
-		const MIN_SIZE: usize = mem::size_of::<CommonCfg>() - mem::size_of::<[le16; 2]>();
+		const MIN_SIZE: usize = size_of::<CommonCfg>() - size_of::<[le16; 2]>();
 		if self.len() < u64::try_from(MIN_SIZE).unwrap() {
 			error!("Common config does not represent actual structure specified by the standard!");
 			return None;

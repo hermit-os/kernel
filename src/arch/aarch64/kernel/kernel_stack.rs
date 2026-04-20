@@ -44,9 +44,9 @@ macro_rules! kernel_function_impl {
 		pub unsafe extern "C" fn $kernel_function<R, $($A),*>($($arg: $A,)* f: unsafe extern "C" fn($($A),*) -> R) -> R {
 			unsafe {
 				$(
-					assert!(mem::size_of::<$A>() <= mem::size_of::<Reg>());
+					assert!(size_of::<$A>() <= size_of::<Reg>());
 				)*
-				assert!(mem::size_of::<R>() <= mem::size_of::<Reg>());
+				assert!(size_of::<R>() <= size_of::<Reg>());
 
 				let call_with_kernel_stack = mem::transmute::<*const (), unsafe extern "C" fn(
 					$($arg: $A,)*

@@ -119,7 +119,7 @@ mod control_registers_access {
 	}
 }
 
-pub trait ControlRegisters<'a>: self::control_registers_access::ControlRegistersAccess<'a> {
+pub trait ControlRegisters<'a>: control_registers_access::ControlRegistersAccess<'a> {
 	fn negotiate_features<DF>(self, driver_features: DF) -> DF
 	where
 		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
@@ -128,7 +128,7 @@ pub trait ControlRegisters<'a>: self::control_registers_access::ControlRegisters
 
 impl<'a, T> ControlRegisters<'a> for T
 where
-	T: self::control_registers_access::ControlRegistersAccess<'a>,
+	T: control_registers_access::ControlRegistersAccess<'a>,
 {
 	fn negotiate_features<DF>(self, driver_features: DF) -> DF
 	where
