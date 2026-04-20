@@ -604,7 +604,7 @@ pub mod mapped_page_table_iter {
 		}
 	}
 
-	impl<'a, P: PageTableFrameMapping> Iterator for MappedPageTableRangeInclusiveIter<'a, P> {
+	impl<P: PageTableFrameMapping> Iterator for MappedPageTableRangeInclusiveIter<'_, P> {
 		type Item = MappedPageRangeInclusiveItem;
 
 		fn next(&mut self) -> Option<Self::Item> {
@@ -753,7 +753,7 @@ pub mod mapped_page_table_iter {
 		}
 	}
 
-	impl<'a, P: PageTableFrameMapping> MappedPageTableIter<'a, P> {
+	impl<P: PageTableFrameMapping> MappedPageTableIter<'_, P> {
 		fn p4_index(&self) -> Option<PageTableIndex> {
 			if self.p4_index >= 512 {
 				return None;
@@ -918,7 +918,7 @@ pub mod mapped_page_table_iter {
 		}
 	}
 
-	impl<'a, P: PageTableFrameMapping> Iterator for MappedPageTableIter<'a, P> {
+	impl<P: PageTableFrameMapping> Iterator for MappedPageTableIter<'_, P> {
 		type Item = MappedPageItem;
 
 		fn next(&mut self) -> Option<Self::Item> {
