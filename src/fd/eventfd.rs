@@ -1,8 +1,7 @@
 use alloc::collections::vec_deque::VecDeque;
-use core::future::{self, Future};
-use core::mem;
 use core::pin::pin;
 use core::task::{Poll, Waker, ready};
+use core::{future, mem};
 
 use async_lock::Mutex;
 

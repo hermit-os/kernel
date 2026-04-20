@@ -1,5 +1,5 @@
 use alloc::sync::Arc;
-use core::future::{self, Future};
+use core::future;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 use core::task::Poll::{Pending, Ready};

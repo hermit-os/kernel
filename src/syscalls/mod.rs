@@ -225,7 +225,6 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	use alloc::boxed::Box;
 	use alloc::vec::Vec;
-	use core::ptr;
 
 	let mut argv = Vec::new();
 

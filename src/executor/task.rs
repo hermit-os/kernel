@@ -2,7 +2,6 @@
 
 use alloc::boxed::Box;
 use core::fmt;
-use core::future::Future;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll};

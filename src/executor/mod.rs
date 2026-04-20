@@ -10,7 +10,6 @@ pub(crate) mod vsock;
 
 use alloc::sync::Arc;
 use alloc::task::Wake;
-use core::future::Future;
 use core::pin::pin;
 use core::sync::atomic::AtomicU32;
 use core::task::{Context, Poll, Waker};
