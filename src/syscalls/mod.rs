@@ -8,7 +8,6 @@ use core::marker::PhantomData;
 use core::{ptr, slice};
 
 use dirent_display::Dirent64Display;
-use hermit_sync::Lazy;
 
 pub use self::condvar::*;
 pub use self::entropy::*;
@@ -31,7 +30,7 @@ use crate::fd::{
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
-use crate::syscalls::interfaces::{SyscallInterface, uhyve};
+use crate::syscalls::interfaces::uhyve;
 
 mod condvar;
 mod entropy;
@@ -52,14 +51,6 @@ pub(crate) mod table;
 mod tasks;
 mod timer;
 
-pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
-	if env::is_uhyve() {
-		&self::interfaces::Uhyve
-	} else {
-		&self::interfaces::Generic
-	}
-});
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 /// Describes  a  region  of  memory, beginning at `iov_base` address and with the size of `iov_len` bytes.
@@ -73,11 +64,6 @@ struct iovec {
 const IOV_MAX: usize = 1024;
 
 pub(crate) fn init() {
-	Lazy::force(&SYS);
-
-	// Perform interface-specific initialization steps.
-	SYS.init();
-
 	init_entropy();
 }
 
