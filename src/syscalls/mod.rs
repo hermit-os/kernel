@@ -20,7 +20,6 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
-use crate::env;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
@@ -30,12 +29,11 @@ use crate::fd::{
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
-use crate::syscalls::interfaces::uhyve;
+use crate::{env, uhyve};
 
 mod condvar;
 mod entropy;
 mod futex;
-pub(crate) mod interfaces;
 #[cfg(feature = "mman")]
 pub mod mman;
 mod processor;

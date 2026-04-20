@@ -127,6 +127,7 @@ mod shell;
 mod synch;
 pub mod syscalls;
 pub mod time;
+mod uhyve;
 
 mod built_info {
 	include!(concat!(env!("OUT_DIR"), "/built.rs"));
