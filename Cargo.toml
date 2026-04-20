@@ -394,6 +394,7 @@ exclude = [
 
 [workspace.lints.rust]
 # Lint groups
+let_underscore = "warn"
 rust_2018_idioms = "warn"
 
 # Lints

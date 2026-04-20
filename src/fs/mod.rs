@@ -612,6 +612,8 @@ impl Write for File {
 
 impl Drop for File {
 	fn drop(&mut self) {
-		let _ = remove_object(self.fd);
+		if let Err(err) = remove_object(self.fd) {
+			error!("File::drop failed: {err}");
+		}
 	}
 }
