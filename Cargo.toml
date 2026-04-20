@@ -156,7 +156,12 @@ tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 
 ## Enables DHCPv4 support.
-dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
+dhcpv4 = [
+	"net",
+	"smoltcp",
+	"smoltcp/proto-dhcpv4",
+	"smoltcp/socket-dhcpv4",
+]
 
 ## Enables DNS support.
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
@@ -351,8 +356,8 @@ raw-cpuid = "11"
 uart_16550 = { version = "0.6", features = ["embedded-io"] }
 x86_64 = "0.15"
 memory_addresses = { version = "0.3", default-features = false, features = [
-	"x86_64",
-	"conv-x86_64",
+		"x86_64",
+		"conv-x86_64",
 ] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
@@ -361,7 +366,7 @@ arm-gic = { version = "0.8" }
 arm-pl011-uart = { version = "0.5", default-features = false }
 semihosting = { version = "0.1", optional = true }
 memory_addresses = { version = "0.3", default-features = false, features = [
-	"aarch64",
+		"aarch64",
 ] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
@@ -371,7 +376,7 @@ semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
 trapframe = "0.10"
 memory_addresses = { version = "0.3", default-features = false, features = [
-	"riscv64",
+		"riscv64",
 ] }
 
 [dev-dependencies]
@@ -384,17 +389,12 @@ built = { version = "0.8", features = ["git2", "chrono"] }
 llvm-tools = "0.1"
 
 [workspace]
-members = [
-	"hermit-macro",
-	"xtask",
-]
-exclude = [
-	"hermit-builtins",
-]
+members = ["hermit-macro", "xtask"]
+exclude = ["hermit-builtins"]
 
 [workspace.lints.rust]
 rust_2018_idioms = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(careful)"] }
 unsafe_op_in_unsafe_fn = "warn"
 
 [workspace.lints.clippy]
