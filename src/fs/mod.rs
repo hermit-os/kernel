@@ -304,7 +304,46 @@ pub(crate) fn init() {
 	const VERSION: &str = env!("CARGO_PKG_VERSION");
 	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
-	let root_filesystem = Filesystem::new();
+	let mut root_filesystem = Filesystem::new();
+
+	// Handle optional Hermit Image specified in FDT.
+	if let Some(fdt) = crate::env::fdt() {
+		let mut tar_image: Option<&'static [u8]> = None;
+
+		// per FDT specification, /chosen always exists.
+		let chosen = fdt.find_node("/chosen").unwrap();
+		if let Some(fdt::node::NodeProperty {
+			value: image_reg, ..
+		}) = chosen.property("image_reg")
+		{
+			let cell_sizes = fdt.root().cell_sizes();
+			let split_point = cell_sizes.address_cells * 4;
+			let end_point = split_point + cell_sizes.size_cells * 4;
+			if image_reg.len() == end_point {
+				let (addr, len) = image_reg.split_at(split_point);
+				if addr.len() == size_of::<*const u8>() && len.len() == size_of::<usize>() {
+					let addr = usize::from_be_bytes(addr.try_into().unwrap());
+					let len = usize::from_be_bytes(len.try_into().unwrap());
+					info!("Hermit image at {addr:x} with length {len:x}");
+					// technically, the following is UB, because the kernel might be contained within...
+					tar_image = Some(unsafe {
+						slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(addr), len)
+					});
+				} else {
+					error!(
+						"Hermit image supplied with invalid address range (#addr = {}, #len = {})",
+						addr.len(),
+						len.len(),
+					);
+				}
+			}
+		}
+
+		if let Some(tar_image) = tar_image {
+			root_filesystem.root =
+				MemDirectory::try_from_image(tar_image).expect("Unable to parse Hermit Image");
+		}
+	}
 
 	root_filesystem
 		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
