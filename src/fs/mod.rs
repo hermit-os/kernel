@@ -304,7 +304,13 @@ pub(crate) fn init() {
 	const VERSION: &str = env!("CARGO_PKG_VERSION");
 	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
-	let root_filesystem = Filesystem::new();
+	let mut root_filesystem = Filesystem::new();
+
+	// Handle optional Hermit Image specified in FDT.
+	if let Some(tar_image) = crate::mm::hermit_tar_image() {
+		root_filesystem.root =
+			MemDirectory::try_from_image(tar_image).expect("Unable to parse Hermit Image");
+	}
 
 	root_filesystem
 		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())

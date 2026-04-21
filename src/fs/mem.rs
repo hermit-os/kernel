@@ -459,13 +459,8 @@ impl MemDirectory {
 		}
 	}
 
-	#[allow(unused)]
 	pub fn try_from_image(image: &'static [u8]) -> io::Result<Self> {
 		let this = Self::new(AccessPermission::S_IRUSR);
-
-		for i in image.chunks(1024) {
-			debug!("[DUMP] {}", hex::encode(i));
-		}
 
 		let taref = tar_no_std::TarArchiveRef::new(image).map_err(|e| {
 			error!("[Hermit image] Tar file has invalid format: {e:?}");
