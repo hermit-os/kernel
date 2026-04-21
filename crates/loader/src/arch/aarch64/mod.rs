@@ -8,7 +8,8 @@ pub mod paging;
 use core::arch::asm;
 use core::ptr;
 
-use aarch64_cpu::asm::barrier::{NSH, SY, dmb, dsb, isb};
+use aarch64_cpu::asm::barrier::{self, NSH, SY, dmb, dsb, isb};
+use aarch64_cpu::registers::{ReadWriteable, SCTLR_EL1, TTBR0_EL1, TTBR1_EL1, Writeable};
 use align_address::Align;
 use fdt::Fdt;
 use goblin::elf::header::header64::{EI_DATA, ELFDATA2LSB, ELFMAG, Header, SELFMAG};
@@ -163,29 +164,14 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	CONSOLE.lock().get().set_stdout(0x1000);
 
 	// Load TTBRx
-	unsafe {
-		asm!(
-				"msr ttbr1_el1, xzr",
-				"msr ttbr0_el1, {}",
-				"dsb sy",
-				"isb",
-				in(reg) ptr::addr_of_mut!(l0_pgtable),
-				options(nostack),
-		)
-	};
+	TTBR1_EL1.set(0);
+	TTBR0_EL1.set(&raw mut l0_pgtable as u64);
+	barrier::dsb(barrier::SY);
+	barrier::isb(barrier::SY);
 
 	// Enable paging
-	unsafe {
-		asm!(
-				"mrs x0, sctlr_el1",
-				"orr x0, x0, #1",
-				"msr sctlr_el1, x0",
-				"bl 0f",
-				"0:",
-				out("x0") _,
-				options(nostack),
-		);
-	}
+	SCTLR_EL1.modify(SCTLR_EL1::M::Enable);
+	barrier::isb(barrier::SY);
 
 	info!("Successfully set up paging.");
 
