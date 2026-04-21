@@ -459,21 +459,17 @@ impl MemDirectory {
 		}
 	}
 
-	#[allow(unused)]
+	#[cfg(feature = "hermit-image")]
 	pub fn try_from_image(image: &'static [u8]) -> io::Result<Self> {
 		let this = Self::new(AccessPermission::S_IRUSR);
 
-		for i in image.chunks(1024) {
-			debug!("[DUMP] {}", hex::encode(i));
-		}
-
-		let taref = tar_no_std::TarArchiveRef::new(image).map_err(|e| {
+		let tar_archive_ref = tar_no_std::TarArchiveRef::new(image).map_err(|e| {
 			error!("[Hermit image] Tar file has invalid format: {e:?}");
 			Errno::Inval
 		})?;
 
-		for i in taref.entries() {
-			let filename = i.filename();
+		for entry in tar_archive_ref.entries() {
+			let filename = entry.filename();
 			let filename = filename.as_str().map_err(|e| {
 				error!(
 					"[Hermit image] Tar entry has not supported filename (non UTF-8): {filename:?}; {e}",
@@ -485,10 +481,10 @@ impl MemDirectory {
 			}
 			debug!("[Hermit image] Processing tar entry: {filename}");
 
-			let mode = i.posix_header().mode.to_flags().map_err(|e| {
+			let mode = entry.posix_header().mode.to_flags().map_err(|e| {
 				error!(
 					"[Hermit image] Tar entry {filename:?} has invalid mode: {:?}; {e}",
-					i.posix_header().mode,
+					entry.posix_header().mode,
 				);
 				Errno::Inval
 			})?;
@@ -512,7 +508,7 @@ impl MemDirectory {
 				}
 			}
 
-			this.traverse_create_file(filename, i.data(), mode)
+			this.traverse_create_file(filename, entry.data(), mode)
 				.inspect_err(|e| {
 					error!("[Hermit image] Unable to write entry {filename:?}: {e}");
 				})?;
