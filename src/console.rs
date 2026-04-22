@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use core::{fmt, mem};
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
