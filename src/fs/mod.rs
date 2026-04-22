@@ -304,17 +304,16 @@ pub(crate) fn init() {
 	const VERSION: &str = env!("CARGO_PKG_VERSION");
 	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
-	FILESYSTEM.set(Filesystem::new()).unwrap();
-	FILESYSTEM
-		.get()
-		.unwrap()
+	let root_filesystem = Filesystem::new();
+
+	root_filesystem
 		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /tmp");
-	FILESYSTEM
-		.get()
-		.unwrap()
+	root_filesystem
 		.mkdir("/proc", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /proc");
+
+	FILESYSTEM.set(root_filesystem).unwrap();
 
 	if let Ok(mut file) = File::create("/proc/version") {
 		if write!(file, "Hermit version {VERSION} # UTC {UTC_BUILT_TIME}").is_err() {
@@ -324,12 +323,11 @@ pub(crate) fn init() {
 		error!("Unable to create /proc/version");
 	}
 
-	let mut cwd = WORKING_DIRECTORY.lock();
-	*cwd = Some("/tmp".to_owned());
-	drop(cwd);
+	*WORKING_DIRECTORY.lock() = Some("/tmp".to_owned());
 
 	#[cfg(feature = "virtio-fs")]
 	virtio_fs::init();
+
 	if crate::env::is_uhyve() {
 		uhyve::init();
 	}
