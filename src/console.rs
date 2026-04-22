@@ -185,10 +185,10 @@ pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 	crate::CoreLocal::install();
 
 	if crate::env::is_uhyve() {
-		InterruptTicketMutex::new(Console::new(IoDevice::Uhyve(UhyveSerial::new())))
-	} else {
-		InterruptTicketMutex::new(Console::new(IoDevice::Uart(SerialDevice::new())))
+		return InterruptTicketMutex::new(Console::new(IoDevice::Uhyve(UhyveSerial::new())));
 	}
+
+	InterruptTicketMutex::new(Console::new(IoDevice::Uart(SerialDevice::new())))
 });
 
 #[doc(hidden)]
