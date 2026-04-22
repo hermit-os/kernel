@@ -86,7 +86,7 @@ newlib = []
 ## Uhyve is a Hermit-specific _virtual machine monitor_ (VMM).
 ##
 ## [Uhyve]: https://github.com/hermit-os/uhyve
-uhyve = []
+uhyve = ["dep:uhyve-interface"]
 
 #! ### Hardware Features
 #!
@@ -338,7 +338,7 @@ talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
-uhyve-interface = "0.1.4"
+uhyve-interface = { version = "0.1.4", optional = true }
 
 [dependencies.smoltcp]
 version = "0.13"
