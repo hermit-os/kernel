@@ -90,6 +90,52 @@ pub(crate) fn kernel_end_address() -> VirtAddr {
 	KERNEL_ADDR_RANGE.end
 }
 
+/// Physical and virtual address range of the Hermit image, in case it is present
+/// (indicated via FDT).
+static HERMIT_IMAGE_START_AND_LEN: Lazy<Option<(VirtAddr, usize)>> = Lazy::new(|| {
+	let fdt = env::fdt()?;
+
+	// per FDT specification, /chosen always exists
+	let chosen = fdt.find_node("/chosen").unwrap();
+
+	let fdt::node::NodeProperty {
+		value: image_reg, ..
+	} = chosen.property("image_reg")?;
+
+	let cell_sizes = fdt.root().cell_sizes();
+	let split_point = cell_sizes.address_cells * 4;
+	let end_point = split_point + cell_sizes.size_cells * 4;
+
+	if image_reg.len() != end_point {
+		return None;
+	}
+
+	let (addr, len) = image_reg.split_at(split_point);
+
+	if addr.len() == size_of::<*const u8>() && len.len() == size_of::<usize>() {
+		let addr = usize::from_be_bytes(addr.try_into().unwrap());
+		let len = usize::from_be_bytes(len.try_into().unwrap());
+		info!("Hermit image at {addr:x} with length {len:x}");
+		Some((
+			VirtAddr::from_ptr(core::ptr::with_exposed_provenance::<u8>(addr)),
+			len,
+		))
+	} else {
+		error!(
+			"Hermit image supplied with invalid address range (#addr = {}, #len = {})",
+			addr.len(),
+			len.len(),
+		);
+		None
+	}
+});
+
+pub(crate) fn hermit_tar_image() -> Option<&'static [u8]> {
+	// technically, the following is UB, because the kernel might be contained within...
+	HERMIT_IMAGE_START_AND_LEN
+		.map(|(addr, len)| unsafe { core::slice::from_raw_parts(addr.as_ptr(), len) })
+}
+
 #[cfg(target_os = "none")]
 pub(crate) fn init() {
 	use crate::arch::mm::paging;
@@ -100,13 +146,24 @@ pub(crate) fn init() {
 		arch::mm::init();
 	}
 
+	Lazy::force(&HERMIT_IMAGE_START_AND_LEN);
+
 	let total_mem = physicalmem::total_memory_size();
 	let kernel_addr_range = KERNEL_ADDR_RANGE.clone();
+	let protect_addr_max = if let Some(hisnl) = HERMIT_IMAGE_START_AND_LEN.clone() {
+		core::cmp::max(
+			kernel_addr_range.end,
+			(hisnl.0 + hisnl.1).align_up(LargePageSize::SIZE),
+		)
+	} else {
+		kernel_addr_range.end
+	};
 	info!("Total memory size: {} MiB", total_mem >> 20);
 	info!(
 		"Kernel region: {:p}..{:p}",
 		kernel_addr_range.start, kernel_addr_range.end
 	);
+	info!("Maximum protected address: {:p}", protect_addr_max);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
@@ -126,7 +183,7 @@ pub(crate) fn init() {
 		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
 		reserved_space
 	} else {
-		(kernel_addr_range.end.as_u64() - env::get_ram_address().as_u64() + reserved_space as u64)
+		(protect_addr_max.as_u64() - env::get_ram_address().as_u64() + reserved_space as u64)
 			as usize
 	};
 	info!("Minimum memory size: {} MiB", min_mem >> 20);
