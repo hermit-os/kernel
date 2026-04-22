@@ -1,16 +1,12 @@
-#![allow(dead_code)]
-
 use core::arch::{asm, global_asm};
 
-use aarch64_cpu::asm::{barrier, wfe};
+use aarch64_cpu::asm::barrier;
 use aarch64_cpu::registers::{
 	CPACR_EL1, ID_AA64MMFR0_EL1, MAIR_EL1, MDSCR_EL1, ReadWriteable, Readable, SCTLR_EL1, TCR_EL1,
 	TPIDR_EL0, TPIDR_EL1, Writeable,
 };
 use log::info;
 use tock_registers::fields::{FieldValue, TryFromValue};
-
-const BOOT_CORE_ID: u64 = 0; // ID of CPU for booting on SMP systems - this might be board specific in the future
 
 /// Number of virtual address bits for 4KB page
 const VA_BITS: u64 = 48;
@@ -146,11 +142,5 @@ unsafe fn pre_init() -> ! {
 	// Enter loader
 	unsafe {
 		crate::os::loader_main();
-	}
-}
-
-pub fn wait_forever() -> ! {
-	loop {
-		wfe();
 	}
 }
