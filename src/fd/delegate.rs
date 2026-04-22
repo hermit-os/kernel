@@ -12,7 +12,7 @@ use crate::fd::socket::udp;
 #[cfg(feature = "virtio-vsock")]
 use crate::fd::socket::vsock;
 use crate::fd::stdio::{
-	GenericStderr, GenericStdin, GenericStdout, UhyveStderr, UhyveStdin, UhyveStdout,
+	ConsoleStderr, ConsoleStdin, ConsoleStdout, UhyveStderr, UhyveStdin, UhyveStdout,
 };
 use crate::fd::{AccessPermission, ObjectInterface, PollEvent, StatusFlags};
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
@@ -25,9 +25,9 @@ use crate::fs::{DirectoryReader, FileAttr, SeekWhence};
 use crate::io;
 
 pub(crate) enum Fd {
-	GenericStdin(GenericStdin),
-	GenericStdout(GenericStdout),
-	GenericStderr(GenericStderr),
+	ConsoleStdin(ConsoleStdin),
+	ConsoleStdout(ConsoleStdout),
+	ConsoleStderr(ConsoleStderr),
 	UhyveStdin(UhyveStdin),
 	UhyveStdout(UhyveStdout),
 	UhyveStderr(UhyveStderr),
@@ -70,9 +70,9 @@ macro_rules! fd_from {
 }
 
 fd_from! {
-	GenericStdin(GenericStdin),
-	GenericStdout(GenericStdout),
-	GenericStderr(GenericStderr),
+	ConsoleStdin(ConsoleStdin),
+	ConsoleStdout(ConsoleStdout),
+	ConsoleStderr(ConsoleStderr),
 	UhyveStdin(UhyveStdin),
 	UhyveStdout(UhyveStdout),
 	UhyveStderr(UhyveStderr),
@@ -99,9 +99,9 @@ fd_from! {
 impl ObjectInterface for Fd {
 	delegate! {
 		to match self {
-			Self::GenericStdin(fd) => fd,
-			Self::GenericStdout(fd) => fd,
-			Self::GenericStderr(fd) => fd,
+			Self::ConsoleStdin(fd) => fd,
+			Self::ConsoleStdout(fd) => fd,
+			Self::ConsoleStderr(fd) => fd,
 			Self::UhyveStdin(fd) => fd,
 			Self::UhyveStdout(fd) => fd,
 			Self::UhyveStderr(fd) => fd,
