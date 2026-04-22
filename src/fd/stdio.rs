@@ -14,9 +14,9 @@ use crate::fd::{
 use crate::io;
 use crate::uhyve::uhyve_hypercall;
 
-pub struct GenericStdin;
+pub struct ConsoleStdin;
 
-impl ObjectInterface for GenericStdin {
+impl ObjectInterface for ConsoleStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = if CONSOLE.lock().read_ready()? {
 			PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND
@@ -55,15 +55,15 @@ impl ObjectInterface for GenericStdin {
 	}
 }
 
-impl GenericStdin {
+impl ConsoleStdin {
 	pub const fn new() -> Self {
 		Self {}
 	}
 }
 
-pub struct GenericStdout;
+pub struct ConsoleStdout;
 
-impl ObjectInterface for GenericStdout {
+impl ObjectInterface for ConsoleStdout {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
 		Ok(event & available)
@@ -86,15 +86,15 @@ impl ObjectInterface for GenericStdout {
 	}
 }
 
-impl GenericStdout {
+impl ConsoleStdout {
 	pub const fn new() -> Self {
 		Self {}
 	}
 }
 
-pub struct GenericStderr;
+pub struct ConsoleStderr;
 
-impl ObjectInterface for GenericStderr {
+impl ObjectInterface for ConsoleStderr {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		let available = PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND;
 		Ok(event & available)
@@ -117,7 +117,7 @@ impl ObjectInterface for GenericStderr {
 	}
 }
 
-impl GenericStderr {
+impl ConsoleStderr {
 	pub const fn new() -> Self {
 		Self {}
 	}

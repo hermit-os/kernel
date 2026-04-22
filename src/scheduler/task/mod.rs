@@ -452,9 +452,9 @@ impl Task {
 				guard.insert(STDOUT_FILENO, stdout);
 				guard.insert(STDERR_FILENO, stderr);
 			} else {
-				let stdin = Arc::new(async_lock::RwLock::new(GenericStdin::new().into()));
-				let stdout = Arc::new(async_lock::RwLock::new(GenericStdout::new().into()));
-				let stderr = Arc::new(async_lock::RwLock::new(GenericStderr::new().into()));
+				let stdin = Arc::new(async_lock::RwLock::new(ConsoleStdin::new().into()));
+				let stdout = Arc::new(async_lock::RwLock::new(ConsoleStdout::new().into()));
+				let stderr = Arc::new(async_lock::RwLock::new(ConsoleStderr::new().into()));
 				guard.insert(STDIN_FILENO, stdin);
 				guard.insert(STDOUT_FILENO, stdout);
 				guard.insert(STDERR_FILENO, stderr);
