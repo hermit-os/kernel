@@ -200,6 +200,7 @@ pub fn seed_entropy() -> Option<[u8; 32]> {
 }
 
 /// The halt function stops the processor until the next interrupt arrives
+#[allow(dead_code)]
 pub fn halt() {
 	aarch64_cpu::asm::wfi();
 }

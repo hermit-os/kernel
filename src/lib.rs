@@ -127,6 +127,7 @@ mod shell;
 mod synch;
 pub mod syscalls;
 pub mod time;
+#[cfg(feature = "uhyve")]
 mod uhyve;
 
 mod built_info {
