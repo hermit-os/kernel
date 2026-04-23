@@ -19,12 +19,11 @@ use memory_addresses::VirtAddr;
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
+use crate::arch;
 use crate::arch::core_local::*;
 use crate::arch::scheduler::TaskStacks;
-use crate::fd::stdio::*;
-use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+use crate::fd::{Fd, RawFd, stdio};
 use crate::scheduler::CoreId;
-use crate::{arch, env};
 
 /// Returns the most significant bit.
 ///
@@ -443,22 +442,7 @@ impl Task {
 				// Thus, this is the only place where we set OBJECT_MAP.
 				.unwrap_or_else(|_| unreachable!());
 			let objmap = OBJECT_MAP.get().unwrap().clone();
-			let mut guard = objmap.write();
-			if env::is_uhyve() {
-				let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new().into()));
-				let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new().into()));
-				let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new().into()));
-				guard.insert(STDIN_FILENO, stdin);
-				guard.insert(STDOUT_FILENO, stdout);
-				guard.insert(STDERR_FILENO, stderr);
-			} else {
-				let stdin = Arc::new(async_lock::RwLock::new(ConsoleStdin::new().into()));
-				let stdout = Arc::new(async_lock::RwLock::new(ConsoleStdout::new().into()));
-				let stderr = Arc::new(async_lock::RwLock::new(ConsoleStderr::new().into()));
-				guard.insert(STDIN_FILENO, stdin);
-				guard.insert(STDOUT_FILENO, stdout);
-				guard.insert(STDERR_FILENO, stderr);
-			}
+			stdio::setup(&mut objmap.write());
 		}
 
 		#[cfg(not(feature = "common-os"))]
