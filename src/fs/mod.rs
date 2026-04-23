@@ -1,9 +1,11 @@
 pub(crate) mod mem;
+#[cfg(feature = "uhyve")]
 pub(crate) mod uhyve;
 #[cfg(feature = "virtio-fs")]
 pub(crate) mod virtio_fs;
 
 use alloc::borrow::ToOwned;
+#[cfg(any(feature = "uhyve", feature = "virtio-fs"))]
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -96,6 +98,7 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	}
 
 	/// Mounts a file system
+	#[cfg(any(feature = "uhyve", feature = "virtio-fs"))]
 	fn traverse_mount(&self, _path: &str, _obj: Box<dyn VfsNode>) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
@@ -225,6 +228,7 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
+	#[cfg(any(feature = "uhyve", feature = "virtio-fs"))]
 	pub fn mount(&self, path: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		debug!("Mounting {path}");
 
@@ -328,6 +332,7 @@ pub(crate) fn init() {
 	#[cfg(feature = "virtio-fs")]
 	virtio_fs::init();
 
+	#[cfg(feature = "uhyve")]
 	if crate::env::is_uhyve() {
 		uhyve::init();
 	}

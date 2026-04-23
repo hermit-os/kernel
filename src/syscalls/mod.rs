@@ -264,6 +264,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
+	#[cfg(feature = "uhyve")]
 	if env::is_uhyve() {
 		crate::uhyve::shutdown(arg);
 	}
