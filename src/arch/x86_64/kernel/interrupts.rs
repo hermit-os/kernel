@@ -13,6 +13,7 @@ use x86_64::structures::idt::InterruptDescriptorTable;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 
 use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_counter};
+use crate::arch::x86_64::kernel::pic::PIC1_OFFSET;
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, page_fault_handler};
 use crate::arch::x86_64::swapgs;
@@ -91,11 +92,12 @@ pub(crate) fn enable_and_wait() {
 pub(crate) fn install() {
 	let mut idt = IDT.lock();
 
-	set_general_handler!(&mut *idt, abort, 0..32);
-	set_general_handler!(&mut *idt, handle_interrupt, 32..);
+	set_general_handler!(&mut *idt, abort, 0..PIC1_OFFSET);
+	set_general_handler!(&mut *idt, handle_interrupt, PIC1_OFFSET..PIC1_OFFSET + 16);
+	set_general_handler!(&mut *idt, abort, PIC1_OFFSET + 16..);
 
 	unsafe {
-		for i in 32..=255 {
+		for i in PIC1_OFFSET..PIC1_OFFSET + 16 {
 			let addr = idt[i].handler_addr();
 			idt[i].set_handler_addr(addr).set_stack_index(0);
 		}
@@ -175,7 +177,7 @@ fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Op
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	if let Some(handlers) = IRQ_HANDLERS.get()
-		&& let Some(map) = handlers.get(&(index - 32))
+		&& let Some(map) = handlers.get(&(index - PIC1_OFFSET))
 	{
 		for handler in map.iter() {
 			handler();
@@ -336,7 +338,7 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{name}\" for interrupt {irq_number}");
-	IRQ_NAMES.lock().insert(32 + irq_number, name);
+	IRQ_NAMES.lock().insert(PIC1_OFFSET + irq_number, name);
 }
 
 fn get_irq_name(irq_number: u8) -> Option<&'static str> {
