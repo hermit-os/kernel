@@ -331,6 +331,7 @@ thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
 uhyve-interface = "0.1.4"
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [dependencies.smoltcp]
 version = "0.13"
