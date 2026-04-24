@@ -11,13 +11,14 @@ use crate::fd::socket::tcp;
 use crate::fd::socket::udp;
 #[cfg(feature = "virtio-vsock")]
 use crate::fd::socket::vsock;
-use crate::fd::stdio::{
-	GenericStderr, GenericStdin, GenericStdout, UhyveStderr, UhyveStdin, UhyveStdout,
-};
+use crate::fd::stdio::{ConsoleStderr, ConsoleStdin, ConsoleStdout};
+#[cfg(feature = "uhyve")]
+use crate::fd::stdio::{UhyveStderr, UhyveStdin, UhyveStdout};
 use crate::fd::{AccessPermission, ObjectInterface, PollEvent, StatusFlags};
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use crate::fd::{Endpoint, ListenEndpoint, SocketOption};
 use crate::fs::mem::{MemDirectoryInterface, RamFileInterface, RomFileInterface};
+#[cfg(feature = "uhyve")]
 use crate::fs::uhyve::UhyveFileHandle;
 #[cfg(feature = "virtio-fs")]
 use crate::fs::virtio_fs::{VirtioFsDirectoryHandle, VirtioFsFileHandle};
@@ -25,11 +26,14 @@ use crate::fs::{DirectoryReader, FileAttr, SeekWhence};
 use crate::io;
 
 pub(crate) enum Fd {
-	GenericStdin(GenericStdin),
-	GenericStdout(GenericStdout),
-	GenericStderr(GenericStderr),
+	ConsoleStdin(ConsoleStdin),
+	ConsoleStdout(ConsoleStdout),
+	ConsoleStderr(ConsoleStderr),
+	#[cfg(feature = "uhyve")]
 	UhyveStdin(UhyveStdin),
+	#[cfg(feature = "uhyve")]
 	UhyveStdout(UhyveStdout),
+	#[cfg(feature = "uhyve")]
 	UhyveStderr(UhyveStderr),
 	EventFd(EventFd),
 	#[cfg(feature = "tcp")]
@@ -48,6 +52,7 @@ pub(crate) enum Fd {
 	RamFileInterface(RamFileInterface),
 	MemDirectoryInterface(MemDirectoryInterface),
 	DirectoryReader(DirectoryReader),
+	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
 }
 
@@ -70,11 +75,14 @@ macro_rules! fd_from {
 }
 
 fd_from! {
-	GenericStdin(GenericStdin),
-	GenericStdout(GenericStdout),
-	GenericStderr(GenericStderr),
+	ConsoleStdin(ConsoleStdin),
+	ConsoleStdout(ConsoleStdout),
+	ConsoleStderr(ConsoleStderr),
+	#[cfg(feature = "uhyve")]
 	UhyveStdin(UhyveStdin),
+	#[cfg(feature = "uhyve")]
 	UhyveStdout(UhyveStdout),
+	#[cfg(feature = "uhyve")]
 	UhyveStderr(UhyveStderr),
 	EventFd(EventFd),
 	#[cfg(feature = "tcp")]
@@ -93,17 +101,21 @@ fd_from! {
 	RamFileInterface(RamFileInterface),
 	MemDirectoryInterface(MemDirectoryInterface),
 	DirectoryReader(DirectoryReader),
+	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
 }
 
 impl ObjectInterface for Fd {
 	delegate! {
 		to match self {
-			Self::GenericStdin(fd) => fd,
-			Self::GenericStdout(fd) => fd,
-			Self::GenericStderr(fd) => fd,
+			Self::ConsoleStdin(fd) => fd,
+			Self::ConsoleStdout(fd) => fd,
+			Self::ConsoleStderr(fd) => fd,
+			#[cfg(feature = "uhyve")]
 			Self::UhyveStdin(fd) => fd,
+			#[cfg(feature = "uhyve")]
 			Self::UhyveStdout(fd) => fd,
+			#[cfg(feature = "uhyve")]
 			Self::UhyveStderr(fd) => fd,
 			Self::EventFd(fd) => fd,
 			#[cfg(feature = "tcp")]
@@ -122,6 +134,7 @@ impl ObjectInterface for Fd {
 			Self::RamFileInterface(fd) => fd,
 			Self::MemDirectoryInterface(fd) => fd,
 			Self::DirectoryReader(fd) => fd,
+			#[cfg(feature = "uhyve")]
 			Self::UhyveFileHandle(fd) => fd,
 		} {
 			async fn poll(&self, event: PollEvent) -> io::Result<PollEvent>;

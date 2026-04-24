@@ -648,6 +648,7 @@ impl VfsNode for MemDirectory {
 		)
 	}
 
+	#[cfg(any(feature = "uhyve", feature = "virtio-fs"))]
 	fn traverse_mount(&self, path: &str, obj: Box<dyn VfsNode>) -> io::Result<()> {
 		block_on(
 			async {

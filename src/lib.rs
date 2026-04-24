@@ -127,6 +127,7 @@ mod shell;
 mod synch;
 pub mod syscalls;
 pub mod time;
+#[cfg(feature = "uhyve")]
 mod uhyve;
 
 mod built_info {
@@ -137,9 +138,6 @@ hermit_entry::define_abi_tag!();
 
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
-
-#[cfg(target_os = "none")]
-hermit_entry::define_uhyve_interface_version!(uhyve_interface::UHYVE_INTERFACE_VERSION);
 
 #[cfg(test)]
 #[cfg(target_os = "none")]

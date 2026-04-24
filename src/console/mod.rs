@@ -1,4 +1,5 @@
-#![allow(dead_code)]
+#[cfg(feature = "uhyve")]
+mod uhyve;
 
 use core::{fmt, mem};
 
@@ -11,14 +12,12 @@ use crate::arch::SerialDevice;
 use crate::drivers::console::VirtioUART;
 use crate::errno::Errno;
 use crate::executor::WakerRegistration;
-#[cfg(not(target_arch = "riscv64"))]
-use crate::uhyve::serial_buf_hypercall;
 
 const SERIAL_BUFFER_SIZE: usize = 256;
 
 pub(crate) enum IoDevice {
-	#[cfg(not(target_arch = "riscv64"))]
-	Uhyve(UhyveSerial),
+	#[cfg(feature = "uhyve")]
+	Uhyve(uhyve::UhyveSerial),
 	Uart(SerialDevice),
 	#[cfg(feature = "virtio-console")]
 	Virtio(VirtioUART),
@@ -31,7 +30,7 @@ impl ErrorType for IoDevice {
 impl Read for IoDevice {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		match self {
-			#[cfg(not(target_arch = "riscv64"))]
+			#[cfg(feature = "uhyve")]
 			IoDevice::Uhyve(s) => s.read(buf),
 			IoDevice::Uart(s) => s.read(buf),
 			#[cfg(feature = "virtio-console")]
@@ -43,7 +42,7 @@ impl Read for IoDevice {
 impl ReadReady for IoDevice {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
 		match self {
-			#[cfg(not(target_arch = "riscv64"))]
+			#[cfg(feature = "uhyve")]
 			IoDevice::Uhyve(s) => s.read_ready(),
 			IoDevice::Uart(s) => s.read_ready(),
 			#[cfg(feature = "virtio-console")]
@@ -55,7 +54,7 @@ impl ReadReady for IoDevice {
 impl Write for IoDevice {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		match self {
-			#[cfg(not(target_arch = "riscv64"))]
+			#[cfg(feature = "uhyve")]
 			IoDevice::Uhyve(s) => s.write_all(buf)?,
 			IoDevice::Uart(s) => s.write_all(buf)?,
 			#[cfg(feature = "virtio-console")]
@@ -69,48 +68,6 @@ impl Write for IoDevice {
 			crate::arch::kernel::vga::write_byte(byte);
 		}
 
-		Ok(buf.len())
-	}
-
-	fn flush(&mut self) -> Result<(), Self::Error> {
-		Ok(())
-	}
-}
-
-#[cfg(not(target_arch = "riscv64"))]
-pub(crate) struct UhyveSerial;
-
-#[cfg(not(target_arch = "riscv64"))]
-impl UhyveSerial {
-	pub const fn new() -> Self {
-		Self {}
-	}
-}
-
-#[cfg(not(target_arch = "riscv64"))]
-impl ErrorType for UhyveSerial {
-	type Error = Errno;
-}
-
-#[cfg(not(target_arch = "riscv64"))]
-impl Read for UhyveSerial {
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let _ = buf;
-		Ok(0)
-	}
-}
-
-#[cfg(not(target_arch = "riscv64"))]
-impl ReadReady for UhyveSerial {
-	fn read_ready(&mut self) -> Result<bool, Self::Error> {
-		Ok(false)
-	}
-}
-
-#[cfg(not(target_arch = "riscv64"))]
-impl Write for UhyveSerial {
-	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		serial_buf_hypercall(buf);
 		Ok(buf.len())
 	}
 
@@ -197,13 +154,11 @@ pub(crate) static CONSOLE_WAKER: InterruptTicketMutex<WakerRegistration> =
 pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 	crate::CoreLocal::install();
 
-	#[cfg(not(target_arch = "riscv64"))]
+	#[cfg(feature = "uhyve")]
 	if crate::env::is_uhyve() {
-		InterruptTicketMutex::new(Console::new(IoDevice::Uhyve(UhyveSerial::new())))
-	} else {
-		InterruptTicketMutex::new(Console::new(IoDevice::Uart(SerialDevice::new())))
+		return InterruptTicketMutex::new(Console::new(IoDevice::Uhyve(uhyve::UhyveSerial::new())));
 	}
-	#[cfg(target_arch = "riscv64")]
+
 	InterruptTicketMutex::new(Console::new(IoDevice::Uart(SerialDevice::new())))
 });
 
