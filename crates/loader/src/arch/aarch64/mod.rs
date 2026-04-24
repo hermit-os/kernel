@@ -83,17 +83,12 @@ pub fn find_kernel() -> &'static [u8] {
 		panic!("Didn't find valid ELF file!");
 	}
 
-	#[cfg(target_endian = "little")]
 	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
-		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
+		u64::from_le(header.e_shoff)
+			+ (u16::from_le(header.e_shentsize) as u64 * u16::from_le(header.e_shnum) as u64)
 	} else {
-		header.e_shoff.to_le() + (header.e_shentsize.to_le() as u64 * header.e_shnum.to_le() as u64)
-	};
-	#[cfg(target_endian = "big")]
-	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
-		header.e_shoff.to_be() + (header.e_shentsize.to_be() as u64 * header.e_shnum.to_be() as u64)
-	} else {
-		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
+		u64::from_be(header.e_shoff)
+			+ (u16::from_be(header.e_shentsize) as u64 * u16::from_be(header.e_shnum) as u64)
 	};
 
 	info!("Found ELF file with size {file_size}");
