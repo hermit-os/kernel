@@ -122,15 +122,6 @@ pub(crate) struct RamFileInner {
 	pub attr: FileAttr,
 }
 
-impl RamFileInner {
-	pub fn new(attr: FileAttr) -> Self {
-		Self {
-			data: Vec::new(),
-			attr,
-		}
-	}
-}
-
 pub struct RamFileInterface {
 	/// Position within the file
 	pos: Mutex<usize>,
@@ -354,6 +345,10 @@ impl VfsNode for RamFile {
 
 impl RamFile {
 	pub fn new(mode: AccessPermission) -> Self {
+		Self::new_with_data(Vec::new(), mode)
+	}
+
+	fn new_with_data(data: Vec<u8>, mode: AccessPermission) -> Self {
 		let microseconds = arch::kernel::systemtime::now_micros();
 		let t = timespec::from_usec(microseconds as i64);
 		let attr = FileAttr {
@@ -365,7 +360,7 @@ impl RamFile {
 		};
 
 		Self {
-			data: Arc::new(RwLock::new(RamFileInner::new(attr))),
+			data: Arc::new(RwLock::new(RamFileInner { data, attr })),
 		}
 	}
 }
@@ -462,6 +457,68 @@ impl MemDirectory {
 				..Default::default()
 			},
 		}
+	}
+
+	#[allow(unused)]
+	pub fn try_from_image(image: &'static [u8]) -> io::Result<Self> {
+		let this = Self::new(AccessPermission::S_IRUSR);
+
+		for i in image.chunks(1024) {
+			debug!("[DUMP] {}", hex::encode(i));
+		}
+
+		let taref = tar_no_std::TarArchiveRef::new(image).map_err(|e| {
+			error!("[Hermit image] Tar file has invalid format: {e:?}");
+			Errno::Inval
+		})?;
+
+		for i in taref.entries() {
+			let filename = i.filename();
+			let filename = filename.as_str().map_err(|e| {
+				error!(
+					"[Hermit image] Tar entry has not supported filename (non UTF-8): {filename:?}; {e}",
+				);
+				Errno::Inval
+			})?;
+			if filename.is_empty() {
+				continue;
+			}
+			debug!("[Hermit image] Processing tar entry: {filename}");
+
+			let mode = i.posix_header().mode.to_flags().map_err(|e| {
+				error!(
+					"[Hermit image] Tar entry {filename:?} has invalid mode: {:?}; {e}",
+					i.posix_header().mode,
+				);
+				Errno::Inval
+			})?;
+			let mode = AccessPermission::from_bits(mode.bits() as u32).ok_or_else(|| {
+				error!("[Hermit image] Tar entry {filename:?} has invalid mode: {mode:?}");
+				Errno::Inval
+			})?;
+
+			for (i, _) in filename.match_indices("/") {
+				let part = &filename[..i];
+				if this.traverse_lstat(part).is_err() {
+					this.traverse_mkdir(
+						part,
+						AccessPermission::S_IRUSR
+							| AccessPermission::S_IWUSR
+							| AccessPermission::S_IRGRP,
+					)
+					.inspect_err(|e| {
+						error!("[Hermit image] Unable to mkdir {part:?}: {e}");
+					})?;
+				}
+			}
+
+			this.traverse_create_file(filename, i.data(), mode)
+				.inspect_err(|e| {
+					error!("[Hermit image] Unable to write entry {filename:?}: {e}");
+				})?;
+		}
+
+		Ok(this)
 	}
 
 	async fn async_traverse_open(
@@ -693,11 +750,16 @@ impl VfsNode for MemDirectory {
 					return directory.traverse_create_file(rest, data, mode);
 				}
 
-				let file = RomFile::new(data, mode);
-				self.inner
-					.write()
-					.await
-					.insert(component.to_owned(), Box::new(file));
+				let file: Box<dyn VfsNode> = if mode.contains(AccessPermission::S_IWUSR)
+					|| mode.contains(AccessPermission::S_IWGRP)
+					|| mode.contains(AccessPermission::S_IWOTH)
+				{
+					Box::new(RamFile::new_with_data(data.to_vec(), mode))
+				} else {
+					Box::new(RomFile::new(data, mode))
+				};
+
+				self.inner.write().await.insert(component.to_owned(), file);
 				Ok(())
 			},
 			None,

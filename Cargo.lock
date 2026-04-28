@@ -863,6 +863,7 @@ dependencies = [
  "hermit-entry",
  "hermit-macro",
  "hermit-sync",
+ "hex",
  "llvm-tools",
  "log",
  "mem-barrier",
@@ -882,6 +883,7 @@ dependencies = [
  "smoltcp",
  "take-static",
  "talc",
+ "tar-no-std",
  "thiserror",
  "time",
  "tock-registers 0.10.1",
@@ -916,6 +918,12 @@ dependencies = [
  "one-shot-mutex",
  "spinning_top",
 ]
+
+[[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "home"
@@ -1952,6 +1960,17 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "tar-no-std"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "715f9a4586706a61c571cb5ee1c3ac2bbb2cf63e15bce772307b95befef5f5ee"
+dependencies = [
+ "bitflags 2.11.1",
+ "log",
+ "num-traits",
 ]
 
 [[package]]
