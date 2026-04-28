@@ -156,6 +156,13 @@ semihosting = ["dep:semihosting"]
 ## _application processor_s (AP) from the _boot-strap processor_ (BSP).
 smp = ["acpi"]
 
+## Enables (internal) hermit image support.
+##
+## This allows packaging a kernel together with all its static environment files into a .tar.gz archive,
+## whose decompressed version gets handled by the kernel
+## (the decompression gets handled by the bootloader / hypervisor).
+hermit-image = ["dep:tar-no-std"]
+
 #! ### Network Features
 
 ## Enables TCP support.
@@ -346,6 +353,7 @@ simple-shell = { version = "0.0.1", optional = true }
 smallvec = { version = "1", features = ["const_new"] }
 take-static = "0.1"
 talc = { version = "5" }
+tar-no-std = { version = "0.4", optional = true, features = ["alloc"] }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
