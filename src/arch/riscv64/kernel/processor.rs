@@ -220,6 +220,7 @@ pub fn lsb(value: u64) -> Option<u32> {
 }
 
 /// The halt function stops the processor until the next interrupt arrives
+#[allow(dead_code)]
 pub fn halt() {
 	riscv::asm::wfi();
 }

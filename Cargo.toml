@@ -46,6 +46,7 @@ default = [
 	"pci",
 	"smp",
 	"tcp",
+	"uhyve",
 	"virtio-fs",
 	"virtio-net",
 	"virtio-vsock",
@@ -78,10 +79,18 @@ mman = []
 ## [hermit-c]: https://github.com/hermit-os/hermit-c
 newlib = []
 
+#! ### Platform Features
+
+## Enables [Uhyve] support.
+##
+## Uhyve is a Hermit-specific _virtual machine monitor_ (VMM).
+##
+## [Uhyve]: https://github.com/hermit-os/uhyve
+uhyve = ["dep:uhyve-interface"]
+
 #! ### Hardware Features
 #!
 #! [microvm]: https://www.qemu.org/docs/master/system/i386/microvm.html
-#! [Uhyve]: https://github.com/hermit-os/uhyve
 
 ## Enables _Advanced Configuration and Power Interface_ ([ACPI]) support.
 ##
@@ -329,7 +338,7 @@ talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 volatile = "0.6"
-uhyve-interface = "0.1.4"
+uhyve-interface = { version = "0.1.4", optional = true }
 
 [dependencies.smoltcp]
 version = "0.13"

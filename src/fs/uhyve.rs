@@ -18,7 +18,6 @@ use crate::errno::Errno;
 use crate::fd::Fd;
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
-	create_dir_recursive,
 };
 use crate::io;
 use crate::uhyve::uhyve_hypercall;
@@ -264,4 +263,17 @@ pub(crate) fn init() {
 			.mount(mount_point, obj)
 			.unwrap();
 	}
+}
+
+/// Creates a directory and creates all missing parent directories as well.
+fn create_dir_recursive(path: &str, mode: AccessPermission) -> io::Result<()> {
+	trace!("create_dir_recursive: {path}");
+	fs::create_dir(path, mode).or_else(|errno| {
+		if errno != Errno::Badf {
+			return Err(errno);
+		}
+		let (parent_path, _file_name) = path.rsplit_once('/').unwrap();
+		create_dir_recursive(parent_path, mode)?;
+		fs::create_dir(path, mode)
+	})
 }

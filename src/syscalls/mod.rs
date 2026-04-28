@@ -20,6 +20,7 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+use crate::env;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
@@ -29,7 +30,6 @@ use crate::fd::{
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
-use crate::{env, uhyve};
 
 mod condvar;
 mod entropy;
@@ -264,8 +264,9 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
+	#[cfg(feature = "uhyve")]
 	if env::is_uhyve() {
-		uhyve::shutdown(arg);
+		crate::uhyve::shutdown(arg);
 	}
 
 	// This is a stable message used for detecting exit codes for different hypervisors.
