@@ -2,12 +2,14 @@ use core::future;
 use core::task::Poll;
 
 use embedded_io::{Read, ReadReady, Write};
-use uhyve_interface::parameters::WriteParams;
+use uhyve_interface::parameters::{ReadParams, WriteParams};
 use uhyve_interface::{GuestVirtAddr, Hypercall};
 
 use crate::console::{CONSOLE, CONSOLE_WAKER};
+use crate::errno::Errno;
 use crate::fd::{
-	AccessPermission, FileAttr, ObjectInterface, PollEvent, STDERR_FILENO, STDOUT_FILENO,
+	AccessPermission, FileAttr, ObjectInterface, PollEvent, STDERR_FILENO, STDIN_FILENO,
+	STDOUT_FILENO,
 };
 use crate::io;
 use crate::uhyve::uhyve_hypercall;
@@ -124,6 +126,22 @@ impl GenericStderr {
 pub struct UhyveStdin;
 
 impl ObjectInterface for UhyveStdin {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+		let mut read_params = ReadParams {
+			fd: STDIN_FILENO,
+			buf: GuestVirtAddr::from_ptr(buf.as_ptr()),
+			len: buf.len(),
+			ret: 0,
+		};
+		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
+
+		if read_params.ret < 0 {
+			Err(Errno::Io)
+		} else {
+			Ok(read_params.ret as usize)
+		}
+	}
+
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(true)
 	}
