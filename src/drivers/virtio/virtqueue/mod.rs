@@ -454,7 +454,7 @@ impl UsedDeviceWritableBuffer {
 }
 
 pub(crate) struct UsedBufferToken {
-	#[expect(dead_code)]
+	#[allow(dead_code)]
 	pub send_buff: SmallVec<[BufferElem; 2]>,
 	pub used_recv_buff: UsedDeviceWritableBuffer,
 }
@@ -526,7 +526,7 @@ pub enum BufferType {
 	/// //                                                                          ++++++++++++++++++++++++++
 	/// ```
 	/// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
-	#[expect(dead_code)]
+	#[allow(dead_code)]
 	Indirect,
 }
 
