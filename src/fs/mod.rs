@@ -19,6 +19,7 @@ use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+use crate::env::{self, StartInfo as _};
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption, insert_object, remove_object};
@@ -309,6 +310,22 @@ pub(crate) fn init() {
 
 	let root_filesystem = Filesystem::new();
 
+	// Handle optional Initramfs specified in start info modules.
+	#[cfg(feature = "initramfs")]
+	for i in env::start_info().modules() {
+		root_filesystem
+			.root
+			.try_extend_from_image(i.as_slice())
+			.expect("Unable to parse initramfs");
+	}
+
+	#[cfg(not(feature = "initramfs"))]
+	if env::start_info().modules().next().is_some() {
+		error!(
+			"Kernel built without Hermit image support, but a Hermit image was supplied: ignoring"
+		);
+	}
+
 	root_filesystem
 		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /tmp");
@@ -335,7 +352,7 @@ pub(crate) fn init() {
 	use crate::env::UhyveStartInfo;
 
 	#[cfg(feature = "uhyve")]
-	if crate::env::start_info().is_uhyve() {
+	if env::start_info().is_uhyve() {
 		uhyve::init();
 	}
 
