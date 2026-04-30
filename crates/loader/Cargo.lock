@@ -526,6 +526,7 @@ dependencies = [
  "one-shot-mutex",
  "sbi-rt",
  "take-static",
+ "tock-registers",
  "uart_16550",
  "uefi",
  "vm-fdt",
