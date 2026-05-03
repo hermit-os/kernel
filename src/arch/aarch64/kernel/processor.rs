@@ -214,7 +214,22 @@ pub fn halt() {
 	aarch64_cpu::asm::wfi();
 }
 
-/// Shutdown the system
+/// Shutdown the system.
+///
+/// We try PSCI first, with semihosting as a fallback. Rationale:
+///
+/// * **PSCI `SYSTEM_OFF`** is implemented by QEMU's `virt` machine for
+///   both `accel=tcg` and `accel=hvf`/`accel=kvm`, and by real-hardware
+///   firmware. It is the most portable shutdown primitive on AArch64.
+///
+/// * **AArch64 semihosting** uses `HLT #0xf000`. On `accel=tcg`, QEMU
+///   intercepts that instruction and exits with the supplied code.
+///   Under `accel=hvf`/`accel=kvm` the HLT goes straight to the guest
+///   as an UNDEF exception (`EC=0x0`) because hardware virtualisation
+///   does not trap it — so semihosting is *not* a viable shutdown
+///   primitive in a virtualised guest. We therefore use it only as a
+///   fallback for the `_exit(error_code)` semantic when PSCI declines
+///   to terminate (e.g. on platforms without a PSCI dispatcher).
 #[allow(unused_variables)]
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
@@ -226,11 +241,11 @@ pub fn shutdown(error_code: i32) -> ! {
 				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
 				// call hypervisor to shut down the system
 				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+			}
 
-				// we should never reach this point
-				loop {
-					aarch64_cpu::asm::wfe();
-				}
+			// Last resort: park the CPU forever.
+			loop {
+				aarch64_cpu::asm::wfe();
 			}
 		}
 	}
