@@ -30,6 +30,14 @@ const PPI_START: u8 = 16;
 const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
+/// Synthetic IRQ slot used for page-fault accounting. The number does not
+/// correspond to any GIC interrupt — it is purely a bookkeeping ID for
+/// `IrqStatistics` so the page-fault count shows up in `print_statistics`
+/// alongside the real interrupts.  Picked at 14 to mirror the x86_64
+/// CPU exception vector for #PF, which keeps the two architectures
+/// consistent in the diagnostic output.
+#[cfg(feature = "common-os")]
+pub(crate) const PAGE_FAULT_IRQ: u8 = 14;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
@@ -170,43 +178,71 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 }
 
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn do_sync(state: &State) {
+pub(crate) extern "C" fn do_sync(state: &mut State) {
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
 	let iss = ESR_EL1.read(ESR_EL1::ISS);
 	let pc = ELR_EL1.get();
 
-	/* data abort from lower or current level */
-	if (ec == ESR_EL1::EC::Value::DataAbortCurrentEL)
-		|| (ec == ESR_EL1::EC::Value::DataAbortLowerEL)
+	// SVC64 — user-space syscall (ESR_EL1.EC = 0x15). Dispatched here
+	// before any of the other branches so we can return early without
+	// touching debug/breakpoint/FPU paths.
+	#[cfg(feature = "common-os")]
+	if ec_raw == 0x15 {
+		dispatch_svc64(state);
+		return;
+	}
+
+	/* Data Abort from current or lower EL — the primary path is a COW
+	 * write fault from EL0 (EC=0x25). EC=0x24 covers a kernel write to a
+	 * COW-marked page, which can happen e.g. when the kernel writes
+	 * argv/envp into the freshly-mapped user page during the loader path.
+	 */
+	if ec == ESR_EL1::EC::Value::DataAbortCurrentEL
+		|| ec == ESR_EL1::EC::Value::DataAbortLowerEL
 	{
-		/* check if value in far_el1 is valid */
-		if (iss & (1 << 10)) == 0 {
-			/* read far_el1 register, which holds the faulting virtual address */
-			let far = FAR_EL1.get();
+		#[cfg(feature = "common-os")]
+		increment_irq_counter(PAGE_FAULT_IRQ);
 
-			// add page fault handler
+		let far = FAR_EL1.get();
+		// ESR_EL1.ISS layout for Data Abort (ARM ARM D24.2.45):
+		//   bits  5:0 = DFSC (Data Fault Status Code)
+		//   bit     6 = WnR (1 = write, 0 = read)
+		// Permission fault DFSC values are 0b001100..0b001111 (level 0..3).
+		let dfsc = iss & 0b11_1111;
+		let is_write = (iss & (1 << 6)) != 0;
+		let is_permission_fault = (0b00_1100..=0b00_1111).contains(&dfsc);
 
-			error!("Current stack pointer {state:p}");
-			error!("Unable to handle page fault at {far:#x}");
-			error!("Exception return address {:#x}", ELR_EL1.get());
-			error!("Thread ID register {:#x}", TPIDR_EL0.get());
-			error!("Table Base Register {:#x}", TTBR0_EL1.get());
-			error!("Exception Syndrome Register {esr:#x}");
-
-			if let Some(irqid) =
-				GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
-			{
-				GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
-			} else {
-				error!("Unable to acknowledge interrupt!");
-			}
-
-			scheduler::abort()
-		} else {
-			error!("Unknown exception");
+		#[cfg(feature = "common-os")]
+		if is_write
+			&& is_permission_fault
+			&& crate::arch::aarch64::mm::paging::do_cow_fault(VirtAddr::new(far))
+		{
+			// Faulting instruction is retried on `eret` from the trap.
+			return;
 		}
+
+		let kind = dfsc_kind(dfsc);
+		let access = if is_write { "write" } else { "read" };
+		error!("Current stack pointer {state:p}");
+		error!(
+			"Unhandled data abort: {kind} on {access} of {far:#x} (DFSC={dfsc:#x})"
+		);
+		error!("Exception return address {:#x}", ELR_EL1.get());
+		error!("Thread ID register {:#x}", TPIDR_EL0.get());
+		error!("Table Base Register {:#x}", TTBR0_EL1.get());
+		error!("Exception Syndrome Register {esr:#x}");
+
+		if let Some(irqid) =
+			GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
+		{
+			GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
+		} else {
+			error!("Unable to acknowledge interrupt!");
+		}
+
+		scheduler::abort()
 	} else if ec == ESR_EL1::EC::Value::Brk64 {
 		error!("Trap to debugger, PC={pc:#x}");
 		loop {
@@ -230,6 +266,64 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			core::hint::spin_loop();
 		}
 	}
+}
+
+/// Convert the 6-bit DFSC (Data Fault Status Code) of `ESR_EL1.ISS` into
+/// a short human-readable label for diagnostics. Mapping per ARM ARM
+/// D24.2.45 (ESR_EL1, Data Abort).
+fn dfsc_kind(dfsc: u64) -> &'static str {
+	match dfsc {
+		0b00_0000..=0b00_0011 => "address size fault",
+		0b00_0100..=0b00_0111 => "translation fault",
+		0b00_1000..=0b00_1011 => "access flag fault",
+		0b00_1100..=0b00_1111 => "permission fault",
+		0b01_0000 => "synchronous external abort",
+		0b01_0001 => "synchronous tag check fail",
+		0b01_0100..=0b01_0111 => "external abort on translation table walk",
+		0b01_1000 => "synchronous parity/ECC error",
+		0b01_1100..=0b01_1111 => "parity/ECC error on translation table walk",
+		0b10_0001 => "alignment fault",
+		0b11_0000 => "TLB conflict abort",
+		0b11_0001 => "unsupported atomic hardware-update fault",
+		_ => "unknown data fault",
+	}
+}
+
+/// Dispatch an EL0-issued AArch64 syscall (`svc #0`).
+///
+/// Hermit's user-space follows the Linux-like AArch64 convention:
+///   - syscall number in `x8`
+///   - up to 6 arguments in `x0`..`x5`
+///   - return value in `x0`
+///
+/// The handler entries in `SYSHANDLER_TABLE` are typed for the SystemV
+/// x86_64 ABI but are reachable just as well via the AAPCS64 ABI: in both
+/// cases the first six 64-bit args land in the first six argument
+/// registers and the return value goes into the first return register.
+/// Registers in `state` were saved by `trap_entry` and are restored by
+/// `trap_exit` — writing back `state.x0` is what propagates the return
+/// value to user-space.
+#[cfg(feature = "common-os")]
+fn dispatch_svc64(state: &mut State) {
+	use crate::errno::Errno;
+	use crate::syscalls::table::{NO_SYSCALLS, SYSHANDLER_TABLE, invalid_syscall, sys_invalid};
+
+	let nr = state.x8 as usize;
+
+	if nr >= NO_SYSCALLS {
+		error!("Invalid syscall number {nr}");
+		state.x0 = (-i32::from(Errno::Nosys)) as u32 as u64;
+		return;
+	}
+
+	let handler_ptr = SYSHANDLER_TABLE.handler(nr);
+	if handler_ptr == sys_invalid as *const usize {
+		invalid_syscall(state.x8);
+	}
+
+	let f: extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 =
+		unsafe { core::mem::transmute(handler_ptr) };
+	state.x0 = f(state.x0, state.x1, state.x2, state.x3, state.x4, state.x5);
 }
 
 #[unsafe(no_mangle)]
@@ -335,14 +429,29 @@ pub(crate) fn init() {
 	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
 		let irq_slice = timer_node.property("interrupts").unwrap().value;
 
-		/* Secure Phys IRQ */
-		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		/* Non-secure Phys IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
+		// The "arm,armv8-timer" interrupts property lists four (type, irq,
+		// flags) triplets in this exact order:
+		//     1. Secure Phys
+		//     2. Non-secure Phys
+		//     3. Virtual           ← we want this one
+		//     4. Hypervisor Phys
+		// We program the Virtual Timer (CNTV_*) instead of the Physical
+		// Timer because virtualised guests (e.g. macOS HVF) hide the
+		// physical timer from EL1, and CNTV_* works identically on bare
+		// metal where CNTVOFF_EL2 defaults to 0.
+
+		/* Secure Phys IRQ — skip */
+		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		/* Non-secure Phys IRQ — skip */
+		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		/* Virtual Timer IRQ */
+		let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irqflags, _irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
 		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 		let irq = u32::from_be_bytes(irq.try_into().unwrap());
 		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
@@ -426,6 +535,8 @@ pub(crate) fn init() {
 		.unwrap();
 	gic.enable_interrupt(reschedid, Some(cpu_id), true).unwrap();
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
+	#[cfg(feature = "common-os")]
+	IRQ_NAMES.lock().insert(PAGE_FAULT_IRQ, "Page Fault");
 
 	*GIC.lock() = Some(gic);
 }
