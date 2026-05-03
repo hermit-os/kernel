@@ -32,9 +32,9 @@ const SYSNO_WRITEV: usize = 12;
 const SYSNO_READV: usize = 13;
 
 /// Total number of system calls
-const NO_SYSCALLS: usize = 32;
+pub(crate) const NO_SYSCALLS: usize = 32;
 
-extern "C" fn invalid_syscall(sys_no: u64) -> ! {
+pub(crate) extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 	error!("Invalid syscall {sys_no}");
 	sys_exit(1);
 }
@@ -78,6 +78,12 @@ impl SyscallTable {
 		table.handle[SYSNO_WRITEV] = sys_writev as *const _;
 
 		table
+	}
+
+	#[cfg(target_arch = "aarch64")]
+	#[inline]
+	pub(crate) fn handler(&self, nr: usize) -> *const usize {
+		self.handle[nr]
 	}
 }
 
