@@ -737,4 +737,12 @@ pub unsafe fn init() {
 	assert!(t_gran4);
 
 	// page tables are already initialized, we have just to remove obsolete entries
+
+	#[cfg(feature = "common-os")]
+	{
+		use aarch64_cpu::registers::TTBR0_EL1;
+		crate::scheduler::BOOT_ROOT_PAGE_TABLE
+			.set(TTBR0_EL1.get_baddr() as usize)
+			.unwrap();
+	}
 }
