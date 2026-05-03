@@ -6,7 +6,7 @@ pub(crate) mod tls;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
@@ -39,14 +39,14 @@ use crate::scheduler::CoreId;
 /// Threads of the same process share the same `Arc<RootPageTable>`. When
 /// the last owning task is dropped, the physical page-table hierarchy and
 /// the user-space mappings are released.
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 pub struct RootPageTable {
 	pml4_phys: usize,
 	/// `false` for the boot page table, which must never be released.
 	owned: bool,
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 impl RootPageTable {
 	/// Wraps a freshly allocated PML4 that this process owns.
 	pub fn new(pml4_phys: usize) -> Self {
@@ -70,7 +70,7 @@ impl RootPageTable {
 	}
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 impl Drop for RootPageTable {
 	fn drop(&mut self) {
 		if self.owned {
@@ -418,20 +418,20 @@ impl PriorityTaskQueue {
 /// into place by `load_application`. Each new thread starts with a verbatim
 /// copy of `init`, so it sees pristine `#[thread_local]` defaults rather
 /// than mutated state from another thread.
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 pub(crate) struct TlsTemplate {
 	pub size: usize,
 	pub init: Vec<u8>,
 }
 
 /// Tracks the heap region of a user process for demand-paging.
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 pub(crate) struct Heap {
 	pub start: VirtAddr,
 	pub end: VirtAddr,
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 impl Heap {
 	pub fn new_empty() -> Self {
 		Heap {
@@ -479,15 +479,15 @@ pub(crate) struct Task {
 	// Physical address of the 1st level page table, shared between all
 	// threads of the same process via `Arc`. The address space is freed when
 	// the last thread referencing this `RootPageTable` is dropped.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	pub root_page_table: Arc<RootPageTable>,
 	/// Heap region tracked for demand-paging
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	pub heap: Arc<Heap>,
 	/// Per-process TLS template used to allocate fresh TLS regions for new
 	/// threads. `None` for kernel-only tasks; set by `load_application`
 	/// when the user binary has a `PT_TLS` segment.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	pub tls_template: Option<Arc<TlsTemplate>>,
 }
 
@@ -519,11 +519,11 @@ impl Task {
 			object_map,
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			root_page_table: Arc::new(RootPageTable::new(arch::create_new_root_page_table())),
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			heap: Arc::new(Heap::new_empty()),
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			tls_template: None,
 		}
 	}
@@ -585,13 +585,13 @@ impl Task {
 			)))),
 			#[cfg(not(feature = "common-os"))]
 			tls,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			root_page_table: Arc::new(RootPageTable::new_boot(
 				*crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 			)),
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			heap: Arc::new(Heap::new_empty()),
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			tls_template: None,
 		}
 	}
@@ -600,7 +600,7 @@ impl Task {
 	///
 	/// The `root_page_table` `Arc` is cloned from the parent, so all threads
 	/// of the same process drop together when the last one exits.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	#[allow(clippy::too_many_arguments)]
 	pub fn new_thread(
 		tid: TaskId,
@@ -632,7 +632,7 @@ impl Task {
 
 	/// Create a forked task that starts at the point where the parent called fork.
 	/// `last_stack_pointer` is set to the child's pre-computed stack pointer.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	#[allow(clippy::too_many_arguments)]
 	pub fn new_fork(
 		tid: TaskId,
