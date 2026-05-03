@@ -1,3 +1,4 @@
+#[cfg(target_arch = "x86_64")]
 use core::arch::naked_asm;
 
 use crate::syscalls::*;
@@ -31,10 +32,10 @@ const SYSNO_WRITEV: usize = 12;
 /// Number of the system call `readv`
 const SYSNO_READV: usize = 13;
 /// number of the system call `fork`
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const SYSNO_FORK: usize = 14;
 /// number of the system call `waitpid`
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const SYSNO_WAITPID: usize = 15;
 /// number of the system call `spawn_process`
 const SYSNO_SPAWN_PROCESS: usize = 16;
@@ -136,9 +137,9 @@ const SYSNO_GET_DENTS64: usize = 55;
 const SYSNO_EXEC: usize = 56;
 
 /// Total number of system calls
-const NO_SYSCALLS: usize = 64;
+pub(crate) const NO_SYSCALLS: usize = 64;
 
-extern "C" fn invalid_syscall(sys_no: u64) -> ! {
+pub(crate) extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 	error!("Invalid syscall {sys_no}");
 	sys_exit(1);
 }
@@ -157,6 +158,7 @@ pub extern "C" fn sys_exec(_path: *const c_char) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
+#[cfg(target_arch = "x86_64")]
 #[allow(unused_assignments)]
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
@@ -167,6 +169,17 @@ pub(crate) unsafe extern "C" fn sys_invalid() {
 		sym invalid_syscall,
 	);
 }
+
+/// Sentinel placeholder for unregistered syscall slots on aarch64.
+///
+/// The aarch64 dispatcher in `do_sync` compares the table entry against
+/// this function pointer before invoking; if it matches, it bails out
+/// with `invalid_syscall(nr)` — the body here is therefore never executed.
+/// The empty `extern "C"` body still gives us a stable, no_mangle symbol
+/// whose address we can compare against.
+#[cfg(target_arch = "aarch64")]
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn sys_invalid() {}
 
 #[repr(align(64))]
 #[repr(C)]
@@ -194,7 +207,7 @@ impl SyscallTable {
 		table.handle[SYSNO_OPEN] = sys_open as *const _;
 		table.handle[SYSNO_READV] = sys_readv as *const _;
 		table.handle[SYSNO_WRITEV] = sys_writev as *const _;
-		#[cfg(target_arch = "x86_64")]
+		#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 		{
 			table.handle[SYSNO_FORK] = sys_fork as *const _;
 			table.handle[SYSNO_WAITPID] = sys_waitpid as *const _;
@@ -248,6 +261,14 @@ impl SyscallTable {
 		table.handle[SYSNO_EXEC] = sys_exec as *const _;
 
 		table
+	}
+}
+
+impl SyscallTable {
+	#[cfg(target_arch = "aarch64")]
+	#[inline]
+	pub(crate) fn handler(&self, nr: usize) -> *const usize {
+		self.handle[nr]
 	}
 }
 
