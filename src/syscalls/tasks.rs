@@ -17,7 +17,10 @@ pub type Tid = i32;
 
 /// Fork the current process.
 /// Returns the child's PID to the parent, and 0 to the child.
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(all(
+	any(target_arch = "x86_64", target_arch = "aarch64"),
+	feature = "common-os"
+))]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fork() -> i32 {
@@ -35,7 +38,10 @@ pub extern "C" fn sys_fork() -> i32 {
 
 /// Waitpid block the current process until termination of process `pid`.
 /// Returns 0 is the process terminates
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(all(
+	any(target_arch = "x86_64", target_arch = "aarch64"),
+	feature = "common-os"
+))]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
