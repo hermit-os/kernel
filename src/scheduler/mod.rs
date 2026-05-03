@@ -276,12 +276,12 @@ struct NewTask {
 	/// given root page table (and heap) with its parent process. When
 	/// `None`, the task is a regular kernel-mode task with a fresh
 	/// address space.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	thread_of: Option<(Arc<crate::scheduler::task::RootPageTable>, Arc<Heap>)>,
 	/// Per-process TLS template, cloned from the spawning thread. Used by
 	/// `From<NewTask>` to propagate the template into the new task so that
 	/// any threads it spawns in turn can allocate their own TLS regions.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	tls_template: Option<Arc<task::TlsTemplate>>,
 	/// FS.Base of the new user thread, already prepared by `spawn_thread`
 	/// (a freshly allocated user-space TLS area initialised from the
@@ -300,9 +300,11 @@ impl From<NewTask> for Task {
 			core_id,
 			stacks,
 			object_map,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
+			#[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
 			thread_of,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
+			#[cfg_attr(not(target_arch = "x86_64"), allow(unused_variables))]
 			tls_template,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			tls_fs_base,
@@ -351,9 +353,9 @@ impl PerCoreScheduler {
 			core_id,
 			stacks,
 			object_map: core_scheduler().get_current_task_object_map(),
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			thread_of: None,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			tls_template: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 			tls_fs_base: 0,
@@ -533,8 +535,12 @@ impl PerCoreScheduler {
 			core_id,
 			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
 			object_map: current_task_borrowed.object_map.clone(),
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			thread_of: None,
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			tls_fs_base: 0,
 		};
 
 		// Add it to the task lists.
@@ -653,13 +659,13 @@ impl PerCoreScheduler {
 	}
 
 	/// Returns the Rc<RefCell<Task>> for the currently running task.
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	#[inline]
 	pub fn get_current_task(&self) -> Rc<RefCell<task::Task>> {
 		self.current_task.clone()
 	}
 
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(feature = "common-os")]
 	#[inline]
 	pub fn set_current_task_object_map(
 		&mut self,
@@ -892,7 +898,7 @@ impl PerCoreScheduler {
 		while let Some(finished_task) = self.finished_tasks.pop_front() {
 			let id = finished_task.borrow().id;
 			drop(finished_task);
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+			#[cfg(feature = "common-os")]
 			trace!(
 				"Cleaned up task {id} — free frames: {} KiB",
 				crate::mm::FrameAlloc::free_space() >> 10
@@ -1203,7 +1209,10 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 /// execution right after the `prepare_fork_child_stack` call returning 1.
 ///
 /// Returns the child's `TaskId` in the parent; the child itself sees `TaskId(0)`.
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(all(
+	any(target_arch = "x86_64", target_arch = "aarch64"),
+	feature = "common-os"
+))]
 pub unsafe fn fork() -> TaskId {
 	use memory_addresses::VirtAddr;
 
@@ -1333,7 +1342,7 @@ fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
 	TASKS.lock().get(&id).copied()
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
 
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
