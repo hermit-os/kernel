@@ -7,7 +7,9 @@ use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 /// Copy the kernel stack pages of the current task to a new base address.
 #[cfg(feature = "common-os")]
-pub use paging::{clear_user_space, copy_kernel_stack_to, drop_user_space};
+pub use paging::{
+	clear_user_space, copy_kernel_stack_to, create_new_root_page_table, drop_user_space,
+};
 
 /// Returns the physical address of the current task's root page table (PML4).
 #[cfg(feature = "common-os")]
