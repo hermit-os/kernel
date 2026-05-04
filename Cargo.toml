@@ -434,3 +434,6 @@ safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "0.3.x" }
 [profile.profiling]
 inherits = "release"
 debug = "line-tables-only"
+
+[profile.release]
+lto = "thin"

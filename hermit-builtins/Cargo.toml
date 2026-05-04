@@ -9,4 +9,7 @@ libm = "0.2"
 crate-type = ["staticlib"]
 harness = false
 
+[profile.release]
+lto = "thin"
+
 [workspace]
