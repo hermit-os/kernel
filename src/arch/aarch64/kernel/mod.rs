@@ -2,6 +2,7 @@ pub mod core_local;
 pub mod interrupts;
 #[cfg(feature = "kernel-stack")]
 pub mod kernel_stack;
+mod lscpu;
 #[cfg(all(not(feature = "pci"), feature = "virtio"))]
 pub mod mmio;
 #[cfg(feature = "pci")]
