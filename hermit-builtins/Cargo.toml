@@ -9,4 +9,8 @@ libm = "0.2"
 crate-type = ["staticlib"]
 harness = false
 
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
 [workspace]
