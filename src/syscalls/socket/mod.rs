@@ -625,8 +625,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	}
 
 	#[cfg(feature = "net")]
-	if (domain == Af::Inet || domain == Af::Inet6) && (sock == Sock::Stream || sock == Sock::Dgram)
-	{
+	if domain == Af::Inet && matches!(sock, Sock::Stream | Sock::Dgram) {
 		let mut guard = NIC.lock();
 
 		let NetworkState::Initialized(nic) = &mut *guard else {
