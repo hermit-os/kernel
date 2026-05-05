@@ -176,6 +176,7 @@ where
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 	use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 	use crate::fd::stdio::*;
+	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 
 	// each process has to provide its own object_map
@@ -208,6 +209,7 @@ where
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
+	#[cfg(feature = "fork")]
 	for i in 0..code_size / BasePageSize::SIZE as usize {
 		frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
 	}
@@ -236,6 +238,7 @@ where
 		let layout = PageLayout::from_size(tls_memsz).unwrap();
 		let frame_range = FrameAlloc::allocate(layout).unwrap();
 		let physaddr = PhysAddr::from(frame_range.start());
+		#[cfg(feature = "fork")]
 		for i in 0..tls_memsz / BasePageSize::SIZE as usize {
 			frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
 		}

@@ -61,7 +61,7 @@ pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
 #[cfg(feature = "common-os")]
 pub use self::physicalmem::copy_page;
 pub use self::physicalmem::{FrameAlloc, FrameBox};
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub use self::physicalmem::{frame_ref_dec, frame_ref_inc};
 pub use self::virtualmem::{PageAlloc, PageBox};
 use crate::arch;
