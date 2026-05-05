@@ -520,6 +520,7 @@ dependencies = [
  "goblin",
  "hermit-entry",
  "linux-boot-params",
+ "lock_api",
  "log",
  "multiboot",
  "naked-function",

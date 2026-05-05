@@ -23,6 +23,8 @@ aarch64-cpu = "11"
 enum_dispatch = "0.3"
 fdt = { version = "0.1" }
 goblin = { version = "0.10", default-features = false, features = ["elf64"] }
+# FIXME: remove this once we have early page tables on ARM.
+lock_api = "0.4"
 tock-registers = "0.10"
 volatile = { version = "0.6", features = ["derive"] }
 

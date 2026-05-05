@@ -1,5 +1,7 @@
 mod allocator;
 mod console;
+#[cfg(target_arch = "aarch64")]
+mod unsound_mutex;
 
 use core::fmt::Write;
 use core::mem::MaybeUninit;
