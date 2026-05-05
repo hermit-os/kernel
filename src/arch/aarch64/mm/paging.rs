@@ -1155,7 +1155,7 @@ pub fn create_new_root_page_table() -> usize {
 	//
 	// Sharing the kernel L0 entries means we share the L1/L2/L3 tables
 	// underneath. That is intentional: kernel mappings (kernel image,
-	// heap at 0x80_0000_0000_00, per-CPU stacks, …) are global and must
+	// heap, per-CPU stacks, …) are global and must
 	// stay in sync across every common-os task. Without sharing, the
 	// kernel would lose access to its own heap as soon as the scheduler
 	// switches TTBR0_EL1 to this task's PT.

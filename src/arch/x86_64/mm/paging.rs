@@ -611,36 +611,6 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 		core_scheduler().exit(0);
 	}
 
-	// Heap demand-paging: user-mode fault on an unmapped heap page.
-	if error_code.contains(PageFaultErrorCode::USER_MODE) {
-		let heap = core_scheduler().get_current_task().borrow().heap.clone();
-		if heap.contains(virtaddr.into()) {
-			let physaddr = {
-				use free_list::PageLayout;
-
-				use crate::mm::{FrameAlloc, PageRangeAllocator};
-				let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-				let frame = FrameAlloc::allocate(layout).unwrap();
-				PhysAddr::new(frame.start().try_into().unwrap())
-			};
-			let mut flags = PageTableEntryFlags::empty();
-			flags.normal().user().writable().execute_disable();
-			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
-			crate::mm::frame_ref_inc(physaddr);
-			unsafe {
-				virtaddr.as_mut_ptr::<u8>().write_bytes(0, BasePageSize::SIZE as usize);
-			}
-
-			if swapped_gs {
-				unsafe {
-					asm!("swapgs", options(nostack));
-				}
-			}
-
-			return;
-		}
-	}
-
 	error!("Page fault (#PF)!");
 	error!("page_fault_linear_address = {faulting_addr:p}");
 	error!("error_code = {error_code:?}");
