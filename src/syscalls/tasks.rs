@@ -222,13 +222,19 @@ pub unsafe extern "C" fn sys_spawn2(
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+	#[cfg(all(
+		any(target_arch = "x86_64", target_arch = "aarch64"),
+		feature = "common-os"
+	))]
 	{
 		unsafe {
 			scheduler::spawn_thread(func, arg, Priority::from(prio), stack_size, selector).into()
 		}
 	}
-	#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+	#[cfg(not(all(
+		any(target_arch = "x86_64", target_arch = "aarch64"),
+		feature = "common-os"
+	)))]
 	{
 		unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
 	}
@@ -244,12 +250,18 @@ pub unsafe extern "C" fn sys_spawn(
 	selector: isize,
 ) -> i32 {
 	let new_id = {
-		#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+		#[cfg(all(
+			any(target_arch = "x86_64", target_arch = "aarch64"),
+			feature = "common-os"
+		))]
 		unsafe {
 			scheduler::spawn_thread(func, arg, Priority::from(prio), USER_STACK_SIZE, selector)
 				.into()
 		}
-		#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+		#[cfg(not(all(
+			any(target_arch = "x86_64", target_arch = "aarch64"),
+			feature = "common-os"
+		)))]
 		unsafe {
 			scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
 		}
