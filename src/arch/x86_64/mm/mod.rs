@@ -12,7 +12,9 @@ use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 /// Copy the kernel stack pages of the current task to a new base address.
 #[cfg(feature = "common-os")]
-pub use paging::{drop_user_space, clear_user_space, copy_kernel_stack_to};
+pub use paging::{drop_user_space, clear_user_space};
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use paging::copy_kernel_stack_to;
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
@@ -74,7 +76,7 @@ pub fn get_current_root_page_table() -> usize {
 
 /// Copy the current task's PML4 into a new page table, sharing data pages (COW).
 /// Returns the physical address of the new PML4.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn copy_current_root_page_table() -> usize {
 	use core::ptr;
 
@@ -208,7 +210,7 @@ pub fn copy_current_root_page_table() -> usize {
 }
 
 /// Mark all writable user pages in the current page table as Copy-On-Write.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn prepare_mem_copy_on_write() {
 	paging::mark_user_pages_copy_on_write();
 }
@@ -227,7 +229,9 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
-	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator, frame_ref_inc};
+	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+	#[cfg(feature = "fork")]
+	use crate::mm::frame_ref_inc;
 
 	let tcb_size = core::mem::size_of::<*mut ()>();
 	let total = (template.size + tcb_size).align_up(BasePageSize::SIZE as usize);
@@ -239,6 +243,7 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	let frame_layout = PageLayout::from_size(total).unwrap();
 	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
 	let phys_addr = PhysAddr::from(frame_range.start());
+	#[cfg(feature = "fork")]
 	for i in 0..total / BasePageSize::SIZE as usize {
 		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
 	}

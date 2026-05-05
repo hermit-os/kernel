@@ -835,7 +835,7 @@ fn flush_tlb_one(virt: VirtAddr) {
 /// branch: drop this task's COW reference, then either flip the existing
 /// frame back to writable if we were the last sharer, or allocate a new
 /// frame and copy the contents.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
 
@@ -920,7 +920,7 @@ pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 
 /// Walk user pages in the currently active L0 table and mark all writable user pages as
 /// Copy-On-Write. This must be called before duplicating the page table for a fork.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn mark_user_pages_copy_on_write() {
 	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
 
@@ -1071,7 +1071,13 @@ fn clear_l0(l0_phys: usize) {
 						&& flags.contains(PageTableEntryFlags::USER_ACCESSIBLE)
 					{
 						let phys_addr = l3_entry.address();
+
+						#[cfg(feature = "fork")]
 						if crate::mm::frame_ref_dec(phys_addr) {
+							free_frame(phys_addr.as_usize());
+						}
+						#[cfg(not(feature = "fork"))]
+						{
 							free_frame(phys_addr.as_usize());
 						}
 						*l3_entry = PageTableEntry::default();
@@ -1191,7 +1197,7 @@ pub fn get_current_root_page_table() -> usize {
 
 /// Deep-copy the current task's L0 into a new page table, sharing data pages (COW).
 /// Returns the physical address of the new L0.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn copy_current_root_page_table() -> usize {
 	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
 
@@ -1317,7 +1323,7 @@ pub fn copy_current_root_page_table() -> usize {
 }
 
 /// Mark all writable user pages in the current page table as Copy-On-Write.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn prepare_mem_copy_on_write() {
 	mark_user_pages_copy_on_write();
 }

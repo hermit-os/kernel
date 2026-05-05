@@ -230,9 +230,10 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		// Permission fault DFSC values are 0b001100..0b001111 (level 0..3).
 		let dfsc = iss & 0b11_1111;
 		let is_write = (iss & (1 << 6)) != 0;
+		#[cfg(all(feature = "common-os", feature = "fork"))]
 		let is_permission_fault = (0b00_1100..=0b00_1111).contains(&dfsc);
 
-		#[cfg(feature = "common-os")]
+		#[cfg(all(feature = "common-os", feature = "fork"))]
 		if is_write
 			&& is_permission_fault
 			&& crate::arch::aarch64::mm::paging::do_cow_fault(VirtAddr::new(far))

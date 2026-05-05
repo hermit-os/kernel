@@ -182,7 +182,7 @@ impl TaskStacks {
 	}
 
 	/// Returns the start address of the stack region (virt_addr of CommonStack)
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	pub fn get_stack_virt_addr(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
@@ -191,7 +191,7 @@ impl TaskStacks {
 	}
 
 	/// Returns total size of all stacks combined
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	pub fn get_total_stack_size(&self) -> usize {
 		match self {
 			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,

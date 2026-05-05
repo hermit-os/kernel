@@ -1152,7 +1152,7 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 /// Returns the child's `TaskId` in the parent; the child itself sees `TaskId(0)`.
 #[cfg(all(
 	any(target_arch = "x86_64", target_arch = "aarch64"),
-	feature = "common-os"
+	all(feature = "common-os", feature = "fork")
 ))]
 pub unsafe fn fork() -> TaskId {
 	use memory_addresses::VirtAddr;

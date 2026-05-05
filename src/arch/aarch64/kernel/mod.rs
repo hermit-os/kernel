@@ -199,7 +199,9 @@ where
 	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
 	use crate::fd::stdio::*;
 	use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-	use crate::mm::{FrameAlloc, PageRangeAllocator, frame_ref_inc};
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
+	#[cfg(feature = "fork")]
+	use crate::mm::frame_ref_inc;
 
 	// Each process has its own object map.
 	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
@@ -226,6 +228,7 @@ where
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
+	#[cfg(feature = "fork")]
 	for i in 0..code_size / BasePageSize::SIZE as usize {
 		frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
 	}
@@ -255,6 +258,7 @@ where
 		let layout = PageLayout::from_size(tls_memsz).unwrap();
 		let frame_range = FrameAlloc::allocate(layout).unwrap();
 		let physaddr = PhysAddr::from(frame_range.start());
+		#[cfg(feature = "fork")]
 		for i in 0..tls_memsz / BasePageSize::SIZE as usize {
 			frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
 		}

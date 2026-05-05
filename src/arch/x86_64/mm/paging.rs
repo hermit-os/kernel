@@ -56,7 +56,7 @@ pub trait PageTableEntryFlagsExt {
 	fn kernel(&mut self) -> &mut Self;
 
 	/// Mark a page as Copy-On-Write: remove WRITABLE, remove DIRTY, set BIT_9 as COW marker.
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	fn copy_on_write(&mut self) -> &mut Self;
 }
 
@@ -106,7 +106,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 		self
 	}
 
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]	
 	fn copy_on_write(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::WRITABLE);
 		self.remove(PageTableEntryFlags::DIRTY);
@@ -292,7 +292,7 @@ where
 
 /// Walk user pages in the current PML4 and mark all writable user pages as Copy-On-Write.
 /// This must be called before duplicating the page table for a fork.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn mark_user_pages_copy_on_write() {
 	// Since the kernel identity-maps all physical memory (phys addr == virt addr),
 	// we can dereference physical addresses directly as page table pointers.
@@ -406,7 +406,12 @@ fn clear_pml4(pml4_phys: usize) {
 						.contains(PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE)
 					{
 						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
+						#[cfg(feature = "fork")]
 						if crate::mm::frame_ref_dec(phys_addr) {
+							free_frame(phys_addr.as_u64() as usize);
+						}
+						#[cfg(not(feature = "fork"))]
+						{
 							free_frame(phys_addr.as_u64() as usize);
 						}
 						pt_entry.set_unused();
@@ -459,7 +464,7 @@ pub fn clear_user_space() {
 /// base address. Used by fork: the child's `TaskStacks::new` has already
 /// allocated and mapped fresh physical frames at `stack_address`, so we
 /// simply `memcpy` the parent's stack pages into the child's mapping.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn copy_kernel_stack_to(stack_address: usize) {
 	use crate::arch::core_local::core_scheduler;
 
@@ -540,6 +545,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	increment_irq_counter(14);
 
 	let faulting_addr = Cr2::read().unwrap();
+	#[cfg(feature = "fork")]
 	let virtaddr = faulting_addr.align_down(BasePageSize::SIZE);
 
 	debug!(
@@ -549,6 +555,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	);
 
 	// Handle Copy-On-Write faults: write fault on a read-only page with BIT_9 set.
+	#[cfg(feature = "fork")]
 	if error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
 		&& !error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
 	{
