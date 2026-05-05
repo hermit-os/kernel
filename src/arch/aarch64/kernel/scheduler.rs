@@ -141,23 +141,40 @@ impl TaskStacks {
 			total_size >> 10
 		);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
+		let mut kernel_flags = PageTableEntryFlags::empty();
+		kernel_flags.normal().writable().execute_disable();
 
-		// map kernel stack into the address space
+		// map kernel stack into the address space (kernel-only access)
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
-			flags,
+			kernel_flags,
 		);
+
+		// User-stack flags differ between unikernel and common-os builds:
+		// in common-os the same VA is reachable from both EL1 (the kernel
+		// crafting argv during jump_to_user_land) and EL0 (the running
+		// thread), so it must carry USER_ACCESSIBLE. Without this, a
+		// freshly spawned user thread (`scheduler::spawn_thread`) faults
+		// as soon as it touches its own stack — TaskStacks::new is the
+		// only path that allocates a user stack outside the LOADER_START
+		// region, so the bug only manifests on the thread-spawn path.
+		#[cfg(feature = "common-os")]
+		let user_flags = {
+			let mut f = PageTableEntryFlags::empty();
+			f.normal().writable().user().execute_disable();
+			f
+		};
+		#[cfg(not(feature = "common-os"))]
+		let user_flags = kernel_flags;
 
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE,
 			phys_addr + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
-			flags,
+			user_flags,
 		);
 
 		// clear user stack
@@ -294,6 +311,69 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 		l0 = const 0,
 		exit = sym thread_exit,
 	)
+}
+
+#[cfg(feature = "common-os")]
+impl Task {
+	/// Build the initial trap frame for a freshly spawned user-space
+	/// thread. Mirrors the role of the x86_64 sibling: when the scheduler
+	/// first picks this task, the standard `trap_exit` machinery pops the
+	/// `State` we craft here and `eret`s straight into ring 3 at
+	/// `func(arg)` on the new user stack — so no naked-asm "task_start_user"
+	/// trampoline is needed on AArch64.
+	///
+	/// `tls_thread_ptr` is the value that should be installed in
+	/// `TPIDR_EL0` for the new thread (the per-thread TLS thread pointer
+	/// allocated by `scheduler::allocate_thread_tls`); zero leaves the
+	/// register as installed by the loader.
+	pub(crate) fn create_user_stack_frame(
+		&mut self,
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		tls_thread_ptr: u64,
+	) {
+		unsafe {
+			// Debug marker at the very top of the kernel stack.
+			let mut stack = self.stacks.get_kernel_stack()
+				+ self.stacks.get_kernel_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			// Allocate space for the trap frame and zero it. Anything we
+			// don't touch below stays zero on entry to user space, which
+			// keeps any leftover kernel state out of EL0's general-purpose
+			// register file.
+			stack -= mem::size_of::<State>();
+			let state = stack.as_mut_ptr::<State>();
+			ptr::write_bytes(state.cast::<u8>(), 0, mem::size_of::<State>());
+
+			// Initial user stack: top of the user-stack region with the
+			// usual debug marker. AAPCS64 doesn't require any extra slop
+			// (no red zone, no shadow space), so the user starts at SP
+			// pointing at the byte immediately above the marker.
+			self.user_stack_pointer = self.stacks.get_user_stack()
+				+ self.stacks.get_user_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*self.user_stack_pointer.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			(*state).elr_el1 = mem::transmute::<
+				unsafe extern "C" fn(usize),
+				extern "C" fn(extern "C" fn(usize), usize) -> !,
+			>(func);
+			// SPSR_EL1 = 0 ⇒ M[4:0] = 0b00000 (EL0t / AArch64), DAIF = 0
+			// (interrupts unmasked once the thread is running).
+			(*state).spsr_el1 = 0;
+			(*state).sp_el0 = self.user_stack_pointer.as_u64();
+			(*state).tpidr_el0 = tls_thread_ptr;
+			// AAPCS64 first argument register.
+			(*state).x0 = arg as u64;
+			// SPSEL is consumed by trap_exit but does not affect the
+			// post-eret EL0 SP selection (SPSR_EL1 alone determines it).
+			(*state).spsel = 1;
+
+			self.last_stack_pointer = stack;
+		}
+	}
 }
 
 impl TaskFrame for Task {
