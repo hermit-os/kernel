@@ -599,7 +599,7 @@ impl Task {
 
 	/// Create a forked task that starts at the point where the parent called fork.
 	/// `last_stack_pointer` is set to the child's pre-computed stack pointer.
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	#[allow(clippy::too_many_arguments)]
 	pub fn new_fork(
 		tid: TaskId,

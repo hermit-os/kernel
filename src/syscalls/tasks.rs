@@ -24,7 +24,15 @@ pub type Tid = i32;
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fork() -> i32 {
-	unsafe { scheduler::fork().into() }
+	#[cfg(feature = "fork")]
+	unsafe {
+		scheduler::fork().into()
+	}
+
+	#[cfg(not(feature = "fork"))]
+	{
+		-i32::from(Errno::Nosys)
+	}
 }
 
 /// Fork the current process.

@@ -228,7 +228,7 @@ pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new
 /// When the child is scheduled it restores context and `ret`s here, returning 1 (true).
 /// Returns the child's kernel-stack top minus the marker size.
 /// Used by `fork_child_start` to locate the saved user RSP.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 extern "C" fn get_kernel_stack_top() -> usize {
 	use crate::arch::x86_64::kernel::core_local::core_scheduler;
 	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
@@ -251,7 +251,7 @@ extern "C" fn get_kernel_stack_top() -> usize {
 ///     stack that `syscall_handler` prepared before the fork syscall.
 ///   • swapgs restores the user GS base.
 ///   • sysretq returns to user space.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 #[unsafe(naked)]
 extern "C" fn fork_child_start() {
 	use core::arch::naked_asm;
@@ -289,7 +289,7 @@ extern "C" fn fork_child_start() {
 
 /// Returns the base virtual address of the current task's stack allocation.
 /// Used to calculate the offset for the child's stack pointer.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 extern "C" fn get_current_stack_addr() -> usize {
 	use crate::arch::x86_64::kernel::core_local::core_scheduler;
 	core_scheduler()
@@ -301,13 +301,13 @@ extern "C" fn get_current_stack_addr() -> usize {
 }
 
 /// C-callable wrapper: copy the current root page table and return the new PML4 physical address.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 extern "C" fn copy_current_root_page_table() -> usize {
 	crate::arch::x86_64::mm::copy_current_root_page_table()
 }
 
 /// C-callable wrapper: copy the current kernel stack to `stack_addr`.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 extern "C" fn copy_kernel_stack_to(stack_addr: usize) {
 	crate::arch::x86_64::mm::copy_kernel_stack_to(stack_addr);
 }
@@ -321,7 +321,7 @@ extern "C" fn copy_kernel_stack_to(stack_addr: usize) {
 ///
 /// Returns `false` in the parent; the child task's saved context will `ret` to
 /// `fork_child_start` which jumps directly back to user space via `sysretq`.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 #[unsafe(naked)]
 pub unsafe extern "C" fn prepare_fork_child_stack(
 	_stack_pointer: *mut usize,
