@@ -495,7 +495,7 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 /// Returns `false` (the parent path); the child path becomes reachable
 /// once the scheduler context-switches to the new task and the existing
 /// IRQ trap-exit pops the child's `State` and `eret`s.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub unsafe fn prepare_fork_child_stack(
 	stack_pointer: *mut usize,
 	root_page_table: *mut usize,

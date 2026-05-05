@@ -1,4 +1,4 @@
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 use alloc::collections::BTreeMap;
 use core::alloc::AllocError;
 use core::fmt;
@@ -25,12 +25,12 @@ pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 /// frames are absent (equivalent to refcount 0).  Stored in a `BTreeMap` so
 /// that memory use scales with the number of *shared* frames, not with total
 /// physical memory.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 static PAGE_REFCOUNTS: InterruptTicketMutex<BTreeMap<usize, u32>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 
 /// Increment the COW reference count for `phys_addr` (4 KiB-aligned frame).
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn frame_ref_inc(phys_addr: PhysAddr) {
 	let frame = (phys_addr.as_u64() as usize) >> 12;
 	*PAGE_REFCOUNTS.lock().entry(frame).or_insert(0) += 1;
@@ -38,7 +38,7 @@ pub fn frame_ref_inc(phys_addr: PhysAddr) {
 
 /// Decrement the COW reference count for `phys_addr`.
 /// If the count reaches zero the the function returned true.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn frame_ref_dec(phys_addr: PhysAddr) -> bool {
 	let frame = (phys_addr.as_u64() as usize) >> 12;
 	let mut map = PAGE_REFCOUNTS.lock();
