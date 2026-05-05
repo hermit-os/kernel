@@ -424,30 +424,6 @@ pub(crate) struct TlsTemplate {
 	pub init: Vec<u8>,
 }
 
-/// Tracks the heap region of a user process for demand-paging.
-#[cfg(feature = "common-os")]
-pub(crate) struct Heap {
-	pub start: VirtAddr,
-	pub end: VirtAddr,
-}
-
-#[cfg(feature = "common-os")]
-impl Heap {
-	pub fn new_empty() -> Self {
-		Heap {
-			start: VirtAddr::zero(),
-			end: VirtAddr::zero(),
-		}
-	}
-
-	pub fn contains(&self, addr: VirtAddr) -> bool {
-		if self.start == VirtAddr::zero() || self.end == VirtAddr::zero() {
-			return false;
-		}
-		addr >= self.start && addr < self.end
-	}
-}
-
 /// A task control block, which identifies either a process or a thread
 #[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
 #[cfg_attr(
@@ -481,9 +457,6 @@ pub(crate) struct Task {
 	// the last thread referencing this `RootPageTable` is dropped.
 	#[cfg(feature = "common-os")]
 	pub root_page_table: Arc<RootPageTable>,
-	/// Heap region tracked for demand-paging
-	#[cfg(feature = "common-os")]
-	pub heap: Arc<Heap>,
 	/// Per-process TLS template used to allocate fresh TLS regions for new
 	/// threads. `None` for kernel-only tasks; set by `load_application`
 	/// when the user binary has a `PT_TLS` segment.
@@ -521,8 +494,6 @@ impl Task {
 			tls: None,
 			#[cfg(feature = "common-os")]
 			root_page_table: Arc::new(RootPageTable::new(arch::create_new_root_page_table())),
-			#[cfg(feature = "common-os")]
-			heap: Arc::new(Heap::new_empty()),
 			#[cfg(feature = "common-os")]
 			tls_template: None,
 		}
@@ -590,8 +561,6 @@ impl Task {
 				*crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 			)),
 			#[cfg(feature = "common-os")]
-			heap: Arc::new(Heap::new_empty()),
-			#[cfg(feature = "common-os")]
 			tls_template: None,
 		}
 	}
@@ -610,7 +579,6 @@ impl Task {
 		stacks: TaskStacks,
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		root_page_table: Arc<RootPageTable>,
-		heap: Arc<Heap>,
 		tls_template: Option<Arc<TlsTemplate>>,
 	) -> Task {
 		debug!("Creating user thread {tid} on core {core_id}");
@@ -625,7 +593,6 @@ impl Task {
 			stacks,
 			object_map,
 			root_page_table,
-			heap,
 			tls_template,
 		}
 	}
@@ -644,7 +611,6 @@ impl Task {
 		user_stack_pointer: VirtAddr,
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		root_page_table: Arc<RootPageTable>,
-		parent_heap: Arc<Heap>,
 		tls_template: Option<Arc<TlsTemplate>>,
 	) -> Task {
 		debug!("Creating forked task {tid} on core {core_id}");
@@ -661,7 +627,6 @@ impl Task {
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			root_page_table,
-			heap: parent_heap,
 			tls_template,
 		}
 	}
