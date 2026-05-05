@@ -102,6 +102,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
+		self.insert(PageTableEntryFlags::GLOBAL);
 		self
 	}
 
