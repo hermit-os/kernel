@@ -194,6 +194,24 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		return;
 	}
 
+	// User-mode instruction-fetch fault at PC=0: the entry wrapper of a
+	// freshly spawned user thread (`std::sys::thread::hermit::Thread::
+	// new_with_coreid::thread_start`) returns with `ret`, popping LR
+	// from the user stack. The trap frame we crafted in
+	// `Task::create_user_stack_frame` zeroed every register, so LR=0
+	// and the implicit branch lands at PC 0 — there is no code there.
+	// Mirror the x86_64 page-fault handler and treat this as a clean
+	// thread exit instead of crashing the whole process.
+	#[cfg(feature = "common-os")]
+	if ec == ESR_EL1::EC::Value::InstrAbortLowerEL && ELR_EL1.get() == 0 {
+		use crate::scheduler::PerCoreSchedulerExt;
+		debug!(
+			"User thread {} returned from entry; exiting cleanly.",
+			core_scheduler().get_current_task_id()
+		);
+		core_scheduler().exit(0);
+	}
+
 	/* Data Abort from current or lower EL — the primary path is a COW
 	 * write fault from EL0 (EC=0x25). EC=0x24 covers a kernel write to a
 	 * COW-marked page, which can happen e.g. when the kernel writes

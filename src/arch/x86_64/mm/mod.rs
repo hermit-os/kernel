@@ -213,6 +213,64 @@ pub fn prepare_mem_copy_on_write() {
 	paging::mark_user_pages_copy_on_write();
 }
 
+// Allocate and initialize a private TLS region for a new user-space thread.
+///
+/// Maps a fresh user-accessible page range through the currently active
+/// (shared) root page table, copies the per-process `TlsTemplate` into it,
+/// sets up the trailing 8-byte TCB self-pointer, and returns the new
+/// FS.Base value (the thread pointer) for the child thread.
+#[cfg(feature = "common-os")]
+pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u64 {
+	use align_address::Align;
+	use free_list::PageLayout;
+	use memory_addresses::{PhysAddr, VirtAddr};
+	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+
+	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
+	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator, frame_ref_inc};
+
+	let tcb_size = core::mem::size_of::<*mut ()>();
+	let total = (template.size + tcb_size).align_up(BasePageSize::SIZE as usize);
+
+	let virt_layout = PageLayout::from_size(total).unwrap();
+	let virt_range = PageAlloc::allocate(virt_layout).unwrap();
+	let virt_addr = VirtAddr::from(virt_range.start());
+
+	let frame_layout = PageLayout::from_size(total).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	for i in 0..total / BasePageSize::SIZE as usize {
+		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
+	}
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable().user().execute_disable();
+	paging::map::<BasePageSize>(
+		virt_addr,
+		phys_addr,
+		total / BasePageSize::SIZE as usize,
+		flags,
+	);
+
+	unsafe {
+		// Copy the pristine PT_TLS image into the new block.
+		virt_addr
+			.as_mut_ptr::<u8>()
+			.copy_from_nonoverlapping(template.init.as_ptr(), template.init.len());
+		// Zero the rest of the TLS BSS area and the trailing TCB.
+		virt_addr
+			.as_mut_ptr::<u8>()
+			.add(template.init.len())
+			.write_bytes(0, total - template.init.len());
+		// Variant II (x86_64): the thread pointer is at the start of the TCB
+		// (right after the TLS data block) and stores its own address.
+		let thread_ptr = virt_addr.as_u64() + template.size as u64;
+		let tcb_ptr: *mut u64 = core::ptr::with_exposed_provenance_mut(thread_ptr as usize);
+		tcb_ptr.write(thread_ptr);
+		thread_ptr
+	}
+}
+
 pub unsafe fn init() {
 	paging::init();
 	unsafe {

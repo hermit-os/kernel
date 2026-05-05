@@ -196,7 +196,7 @@ where
 	use hashbrown::HashMap;
 	use hermit_sync::RwSpinLock;
 
-	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
+	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
 	use crate::fd::stdio::*;
 	use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 	use crate::mm::{FrameAlloc, PageRangeAllocator, frame_ref_inc};
