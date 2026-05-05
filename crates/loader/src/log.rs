@@ -5,7 +5,13 @@ use log::{Level, LevelFilter, Metadata, Record, info};
 
 pub fn init() {
 	static LOGGER: Logger = Logger;
-	log::set_logger(&LOGGER).unwrap();
+	cfg_select! {
+		target_arch = "aarch64" => unsafe {
+			// FIXME: remove this once we have early page tables on ARM.
+			log::set_logger_racy(&LOGGER).unwrap();
+		}
+		_ => log::set_logger(&LOGGER).unwrap(),
+	}
 	let level_filter = option_env!("LOADER_LOG")
 		.map(|var| var.parse().unwrap())
 		.unwrap_or(LevelFilter::Info);
