@@ -180,12 +180,10 @@ pub fn copy_current_root_page_table() -> usize {
 				// Copy PT entries verbatim — data pages are shared (already COW-marked)
 				*new_pt = cur_pt.clone();
 
-				// The child now holds an additional COW reference to every
-				// COW-marked frame in this page table.
+				// The child now holds an additional user reference to every
+				// frame in this page table.
 				for entry in new_pt.iter() {
-					if entry.flags().contains(PageTableFlags::PRESENT)
-						&& entry.flags().contains(PageTableFlags::BIT_9)
-					{
+					if entry.flags().contains(PageTableFlags::PRESENT|PageTableFlags::USER_ACCESSIBLE) {
 						crate::mm::frame_ref_inc(entry.addr().into());
 					}
 				}
