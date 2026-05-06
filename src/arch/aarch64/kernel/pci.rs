@@ -246,7 +246,7 @@ pub fn init() {
 
 		let (mut io_start, mut mem32_start, mut mem64_start) = detect_pci_regions(pci_node);
 
-		debug!("IO address space starts at{io_start:#X}");
+		debug!("IO address space starts at {io_start:#X}");
 		debug!("Memory32 address space starts at {mem32_start:#X}");
 		debug!("Memory64 address space starts {mem64_start:#X}");
 		assert!(io_start > 0);
