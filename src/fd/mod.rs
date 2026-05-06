@@ -1,10 +1,14 @@
 use alloc::sync::Arc;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use core::ffi::c_int;
 use core::future;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use num_enum::TryFromPrimitive;
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
@@ -14,6 +18,8 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fs::{FileAttr, SeekWhence};
 use crate::io;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use crate::syscalls::socket::{SO_RCVBUF, SO_SNDBUF, TCP_NODELAY};
 
 mod delegate;
 mod eventfd;
@@ -44,9 +50,13 @@ pub(crate) enum ListenEndpoint {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, TryFromPrimitive)]
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+#[repr(i32)]
 pub(crate) enum SocketOption {
-	TcpNoDelay,
+	TcpNoDelay = TCP_NODELAY,
+	SoRcvBuf = SO_RCVBUF,
+	SoSndBuf = SO_SNDBUF,
 }
 
 pub(crate) type RawFd = i32;
@@ -263,7 +273,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
+	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<c_int> {
 		Err(Errno::Notsock)
 	}
 

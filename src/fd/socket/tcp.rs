@@ -1,5 +1,6 @@
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
+use core::ffi::c_int;
 use core::future;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
@@ -433,16 +434,16 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		if opt == SocketOption::TcpNoDelay {
-			let mut guard = NIC.lock();
-			let nic = guard.as_nic_mut().unwrap();
-			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+	async fn getsockopt(&self, opt: SocketOption) -> io::Result<c_int> {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 
-			Ok(socket.nagle_enabled())
-		} else {
-			Err(Errno::Inval)
-		}
+		Ok(match opt {
+			SocketOption::TcpNoDelay => i32::from(socket.nagle_enabled()),
+			SocketOption::SoSndBuf => i32::try_from(socket.send_capacity()).unwrap(),
+			SocketOption::SoRcvBuf => i32::try_from(socket.recv_capacity()).unwrap(),
+		})
 	}
 
 	async fn shutdown(&self, how: i32) -> io::Result<()> {
