@@ -1291,15 +1291,13 @@ pub fn copy_current_root_page_table() -> usize {
 				// (already COW-marked by mark_user_pages_copy_on_write).
 				new_l3.entries = cur_l3.entries;
 
-				// The child holds an additional COW reference to every
-				// COW-marked frame in this page table.
+				// The child holds an additional reference to every
+				// user-space frame in this page table.
 				for entry in new_l3.entries.iter() {
 					let flags = PageTableEntryFlags::from_bits_truncate(
 						entry.physical_address_and_flags,
 					);
-					if flags.contains(PageTableEntryFlags::PRESENT)
-						&& flags.contains(PageTableEntryFlags::COW_MARKER)
-					{
+					if flags.contains(PageTableEntryFlags::PRESENT|PageTableEntryFlags::USER_ACCESSIBLE) {
 						crate::mm::frame_ref_inc(entry.address());
 					}
 				}
