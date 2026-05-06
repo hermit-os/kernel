@@ -9,6 +9,7 @@ use rand_chacha::rand_core::{Rng, SeedableRng};
 
 use crate::arch::kernel::processor::{get_timer_ticks, seed_entropy};
 use crate::errno::Errno;
+use crate::io;
 
 // Reseed every second for increased security while maintaining the performance of
 // the PRNG.
@@ -29,14 +30,14 @@ static POOL: InterruptTicketMutex<Option<Pool>> = InterruptTicketMutex::new(None
 ///
 /// Returns the number of bytes written or `-ENOSYS` if the system does not support
 /// random data generation.
-pub fn read(buf: &mut [u8], _flags: Flags) -> isize {
+pub fn read(buf: &mut [u8], _flags: Flags) -> io::Result<usize> {
 	let pool = &mut *POOL.lock();
 	let now = get_timer_ticks();
 	let pool = match pool {
 		Some(pool) if now.saturating_sub(pool.last_reseed) <= RESEED_INTERVAL => pool,
 		pool => {
 			let Some(seed) = seed_entropy() else {
-				return -i32::from(Errno::Nosys) as isize;
+				return Err(Errno::Nosys);
 			};
 
 			pool.insert(Pool {
@@ -49,5 +50,5 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> isize {
 	pool.rng.fill_bytes(buf);
 	// Slice lengths are always <= isize::MAX so this return value cannot conflict
 	// with error numbers.
-	buf.len() as isize
+	Ok(buf.len())
 }

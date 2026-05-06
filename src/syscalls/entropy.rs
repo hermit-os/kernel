@@ -29,18 +29,18 @@ unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 		slice::from_raw_parts_mut(buf, len)
 	};
 
-	let ret = entropy::read(buf, flags);
-	if ret < 0 {
-		warn!("Unable to read entropy! Fallback to a naive implementation!");
-		for byte in &mut *buf {
-			*byte = (generate_park_miller_lehmer_random_number() & 0xff)
-				.try_into()
-				.unwrap();
-		}
-		buf.len().try_into().unwrap()
-	} else {
-		ret
-	}
+	entropy::read(buf, flags)
+		.unwrap_or_else(|_| {
+			warn!("Unable to read entropy! Fallback to a naive implementation!");
+			for byte in &mut *buf {
+				*byte = (generate_park_miller_lehmer_random_number() & 0xff)
+					.try_into()
+					.unwrap();
+			}
+			buf.len()
+		})
+		.try_into()
+		.unwrap()
 }
 
 /// Fill `len` bytes in `buf` with cryptographically secure random data.
