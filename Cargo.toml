@@ -235,6 +235,15 @@ instrument-mcount = []
 ## This only implemented for x86-64 and AArch64 CPUs.
 kernel-stack = []
 
+## Randomizes the layout of `repr(Rust)` types.
+##
+## This enables the `-Z randomize-layout` flag.
+##
+## For details see [randomize_layout - The Rust Unstable Book].
+##
+## [randomize_layout - The Rust Unstable Book]: https://doc.rust-lang.org/stable/unstable-book/compiler-flags/randomize-layout.html
+randomize-layout = []
+
 ## Enables a kernel shell.
 ##
 ## The shell can be used for displaying the current number of received interrupts and for shutting

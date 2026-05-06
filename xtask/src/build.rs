@@ -16,7 +16,7 @@ pub struct Build {
 	#[arg(long)]
 	pub instrument_mcount: bool,
 
-	/// Enable the `-Z randomize-layout` flag.
+	/// Deprecated: use `--features randomize-layout` instead.
 	#[arg(long)]
 	pub randomize_layout: bool,
 }
@@ -29,6 +29,12 @@ impl Build {
 			self.cargo_build
 				.features
 				.push("instrument-mcount".to_owned());
+		}
+
+		if self.randomize_layout {
+			self.cargo_build
+				.features
+				.push("randomize-layout".to_owned());
 		}
 
 		self.cargo_build.artifact.arch.install_for_build()?;
@@ -111,7 +117,11 @@ impl Build {
 			rustflags.push("-Cpasses=ee-instrument<post-inline>");
 		}
 
-		if self.randomize_layout {
+		if self
+			.cargo_build
+			.features()
+			.any(|feature| feature == "randomize-layout")
+		{
 			rustflags.push("-Zrandomize-layout");
 		}
 
