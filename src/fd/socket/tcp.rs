@@ -25,6 +25,9 @@ pub const SHUT_WR: i32 = 1;
 pub const SHUT_RDWR: i32 = 2;
 /// The default queue size for incoming connections
 pub const DEFAULT_BACKLOG: i32 = 128;
+/// The maximum queue size for incoming connections,
+/// based on the default maximum used by modern Linux.
+pub const SOMAXCONN: i32 = 4096;
 
 fn get_ephemeral_port() -> u16 {
 	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
@@ -405,7 +408,7 @@ impl ObjectInterface for Socket {
 
 		self.is_listen = true;
 
-		for _ in 1..backlog {
+		for _ in 1..backlog.min(SOMAXCONN) {
 			let handle = nic.create_tcp_handle().unwrap();
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
