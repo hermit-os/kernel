@@ -7,9 +7,11 @@ use uhyve_interface::{Hypercall, HypercallAddress};
 use crate::arch;
 use crate::arch::mm::paging::virtual_to_physical;
 
+#[cfg(target_os = "none")]
+hermit_entry::define_uhyve_interface_version!(uhyve_interface::UHYVE_INTERFACE_VERSION);
+
 /// Perform a SerialWriteBuffer hypercall with `buf` as payload.
 #[inline]
-#[cfg_attr(target_arch = "riscv64", expect(dead_code))]
 pub(crate) fn serial_buf_hypercall(buf: &[u8]) {
 	let len = buf.len();
 	let buf = virtual_to_physical(VirtAddr::from_ptr(ptr::from_ref::<[u8]>(buf)))
