@@ -14,7 +14,7 @@ use crate::executor::WakerRegistration;
 #[cfg(not(target_arch = "riscv64"))]
 use crate::uhyve::serial_buf_hypercall;
 
-const SERIAL_BUFFER_SIZE: usize = 256;
+const SERIAL_BUFFER_SIZE: usize = 2048;
 
 pub(crate) enum IoDevice {
 	#[cfg(not(target_arch = "riscv64"))]
@@ -162,6 +162,7 @@ impl Write for Console {
 		if SERIAL_BUFFER_SIZE - self.buffer.len() >= buf.len() {
 			// unwrap: we checked that buf fits in self.buffer
 			self.buffer.extend_from_slice(buf).unwrap();
+			#[cfg(debug_assertions)]
 			if buf.contains(&b'\n') {
 				self.flush()?;
 			}
@@ -173,6 +174,7 @@ impl Write for Console {
 			} else {
 				// unwrap: we checked that buf fits in self.buffer
 				self.buffer.extend_from_slice(buf).unwrap();
+				#[cfg(debug_assertions)]
 				if buf.contains(&b'\n') {
 					self.flush()?;
 				}
@@ -209,13 +211,16 @@ pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments<'_>) {
-	CONSOLE.lock().write_fmt(args).unwrap();
+	let mut console = CONSOLE.lock();
+	console.write_fmt(args).unwrap();
+	console.flush().unwrap();
 }
 
 #[doc(hidden)]
 pub fn _panic_print(args: fmt::Arguments<'_>) {
 	let mut console = unsafe { CONSOLE.make_guard_unchecked() };
 	console.write_fmt(args).ok();
+	console.flush().ok();
 	mem::forget(console);
 }
 
