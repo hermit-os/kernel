@@ -52,6 +52,8 @@ pub(crate) enum ListenEndpoint {
 #[repr(i32)]
 pub(crate) enum SocketOption {
 	TcpNodelay = 1,
+	SoSndbuf = 0x1001,
+	SoRcvbuf = 0x1002,
 }
 
 pub(crate) type RawFd = i32;

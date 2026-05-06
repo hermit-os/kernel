@@ -73,8 +73,6 @@ pub const SO_REUSEADDR: i32 = 0x0004;
 pub const SO_KEEPALIVE: i32 = 0x0008;
 pub const SO_BROADCAST: i32 = 0x0020;
 pub const SO_LINGER: i32 = 0x0080;
-pub const SO_SNDBUF: i32 = 0x1001;
-pub const SO_RCVBUF: i32 = 0x1002;
 pub const SO_SNDTIMEO: i32 = 0x1005;
 pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
@@ -971,17 +969,16 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
-		return -i32::from(Errno::Inval);
-	};
-
 	let Ok(optname) = SocketOption::try_from(optname) else {
 		return -i32::from(Errno::Inval);
 	};
 
-	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname:?}");
+	debug!("sys_getsockopt: {fd}, level {level}, optname {optname:?}");
 
-	if level == Ipproto::Tcp && optname == SocketOption::TcpNodelay {
+	if level == Ipproto::Tcp as i32 && optname == SocketOption::TcpNodelay
+		|| level == SOL_SOCKET
+			&& (optname == SocketOption::SoSndbuf || optname == SocketOption::SoRcvbuf)
+	{
 		if optval.is_null() || optlen.is_null() {
 			return -i32::from(Errno::Inval);
 		}

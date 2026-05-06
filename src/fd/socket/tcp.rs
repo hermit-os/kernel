@@ -441,6 +441,8 @@ impl ObjectInterface for Socket {
 
 		match opt {
 			SocketOption::TcpNodelay => Ok(socket.nagle_enabled().into()),
+			SocketOption::SoSndbuf => Ok(c_int::try_from(socket.send_capacity()).unwrap()),
+			SocketOption::SoRcvbuf => Ok(c_int::try_from(socket.recv_capacity()).unwrap()),
 		}
 	}
 
