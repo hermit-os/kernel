@@ -325,7 +325,7 @@ where
 }
 
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&str]) -> ! {
+pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: alloc::vec::Vec<&str>) -> ! {
 	use alloc::ffi::CString;
 
 	use align_address::Align;
@@ -359,6 +359,8 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
 		}
 	}
+
+	drop(arg);
 
 	debug!("Jump to user space at 0x{entry_point:x}, stack pointer 0x{stack_pointer:x}");
 

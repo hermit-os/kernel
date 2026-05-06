@@ -356,7 +356,7 @@ fn set_user_tpidr_el0(value: u64) {
 /// new PC, SPSR_EL1 the new PSTATE (mode bits select EL0t), and SP_EL0 the
 /// user stack. Per AAPCS64, `argc` lives in `x0` and `argv` in `x1`.
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&str]) -> ! {
+pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: alloc::vec::Vec<&str>) -> ! {
 	use alloc::ffi::CString;
 
 	use align_address::Align;
@@ -390,6 +390,8 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
 		}
 	}
+
+	drop(arg);
 
 	debug!("Jump to user space at 0x{entry_point:x}, stack pointer 0x{stack_pointer:x}");
 
