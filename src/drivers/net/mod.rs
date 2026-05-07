@@ -42,19 +42,10 @@ pub(crate) trait NetworkDriver: Driver + smoltcp::phy::Device {
 pub(crate) fn mtu() -> u16 {
 	use core::str::FromStr;
 
-	// Default IP level MTU to use.
-	const DEFAULT_IP_MTU: u16 = 1500;
+	let ip_mtu = u16::from_str(hermit_var_or!("HERMIT_MTU", "1500")).unwrap();
 
-	/// Default MTU to use.
-	///
-	/// This is 1500 IP MTU and a 14-byte ethernet header.
-	const DEFAULT_MTU: u16 = DEFAULT_IP_MTU + 14;
-
-	let Some(my_mtu) = hermit_var!("HERMIT_MTU") else {
-		return DEFAULT_MTU;
-	};
-
-	u16::from_str(&my_mtu).unwrap()
+	// Add 14-byte ethernet header size.
+	ip_mtu + 14
 }
 
 cfg_select! {
