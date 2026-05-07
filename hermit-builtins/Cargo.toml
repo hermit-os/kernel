@@ -15,7 +15,7 @@ lto = "thin"
 codegen-units = 1
 
 [profile.profiling]
-inherits = "release"
+inherits = "dist"
 debug = "line-tables-only"
 
 [workspace]
