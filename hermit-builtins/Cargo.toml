@@ -9,6 +9,11 @@ libm = "0.2"
 crate-type = ["staticlib"]
 harness = false
 
+[profile.dist]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+
 [profile.profiling]
 inherits = "release"
 debug = "line-tables-only"
