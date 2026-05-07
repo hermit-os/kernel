@@ -42,6 +42,14 @@ impl Artifact {
 		}
 	}
 
+	pub fn builtins_profile_path_component(&self) -> &str {
+		if self.profile_path_component() == "profiling" {
+			self.profile_path_component()
+		} else {
+			"release"
+		}
+	}
+
 	pub fn target_dir(&self) -> PathBuf {
 		if let Some(target_dir) = &self.target_dir {
 			return path::absolute(target_dir).unwrap();
@@ -58,7 +66,7 @@ impl Artifact {
 		[
 			self.builtins_target_dir().as_path(),
 			self.arch.hermit_triple().as_ref(),
-			"release".as_ref(),
+			self.builtins_profile_path_component().as_ref(),
 			"libhermit_builtins.a".as_ref(),
 		]
 		.iter()
