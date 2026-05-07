@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  push:
   pull_request:
   merge_group:
 
@@ -188,6 +189,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: hermit-os/hermit-rs
+          ref: kernel-default
       - name: Checkout hermit-kernel
         uses: actions/checkout@v6
         with:

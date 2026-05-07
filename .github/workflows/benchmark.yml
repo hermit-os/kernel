@@ -3,8 +3,6 @@ name: Benchmark
 on:
   pull_request:
   push:
-    branches:
-      - main
 
 env:
   GH_TOKEN: ${{ github.token }}
