@@ -45,6 +45,8 @@ mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
 
+use core::alloc::Layout;
+use core::mem::MaybeUninit;
 use core::ops::Range;
 
 use align_address::Align;
@@ -88,6 +90,25 @@ pub(crate) fn kernel_start_address() -> VirtAddr {
 
 pub(crate) fn kernel_end_address() -> VirtAddr {
 	KERNEL_ADDR_RANGE.end
+}
+
+#[cfg(target_os = "none")]
+pub(crate) fn claim_initial_heap() {
+	#[repr(C, align(0x1000))]
+	struct InitialHeap([MaybeUninit<u8>; 0x1000]);
+
+	debug_assert_eq!(
+		Layout::new::<InitialHeap>(),
+		Layout::from_size_align(0x1000, 0x1000).unwrap()
+	);
+
+	static mut INITIAL_HEAP: InitialHeap = InitialHeap([MaybeUninit::uninit(); _]);
+
+	let base = (&raw mut INITIAL_HEAP).cast::<u8>();
+	let size = size_of::<InitialHeap>();
+	unsafe {
+		ALLOCATOR.lock().claim(base, size).unwrap();
+	}
 }
 
 #[cfg(target_os = "none")]
