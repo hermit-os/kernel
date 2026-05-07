@@ -232,6 +232,7 @@ fn synch_all_cores() {
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
+	mm::claim_initial_heap();
 	hermit_sync::Lazy::force(&console::CONSOLE);
 	unsafe {
 		logging::init();
