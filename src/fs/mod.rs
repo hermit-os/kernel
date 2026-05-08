@@ -1,3 +1,4 @@
+pub(crate) mod dev_directory;
 pub(crate) mod mem;
 pub(crate) mod uhyve;
 #[cfg(feature = "virtio-fs")]
@@ -331,6 +332,8 @@ pub(crate) fn init() {
 	if crate::env::is_uhyve() {
 		uhyve::init();
 	}
+
+	dev_directory::init();
 }
 
 pub fn create_file(name: &str, data: &'static [u8], mode: AccessPermission) -> io::Result<()> {

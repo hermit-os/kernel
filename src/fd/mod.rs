@@ -23,6 +23,7 @@ use crate::syscalls::socket::{SO_RCVBUF, SO_SNDBUF, TCP_NODELAY};
 
 mod delegate;
 mod eventfd;
+pub(crate) mod random_file;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 pub(crate) mod socket;
 pub(crate) mod stdio;
