@@ -101,13 +101,13 @@ impl fmt::Display for ColorLevel {
 }
 
 fn no_color() -> bool {
-	option_env!("NO_COLOR").is_some_and(|val| !val.is_empty())
+	hermit_var!("NO_COLOR").is_some_and(|val| !val.is_empty())
 }
 
 pub unsafe fn init() {
 	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
-	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
+	let log_level = hermit_var!("HERMIT_LOG_LEVEL_FILTER");
 	let mut max_level = LevelFilter::Info;
 
 	if let Some(log_level) = log_level {
