@@ -46,7 +46,7 @@ impl Artifact {
 		if self.profile_path_component() == "profiling" {
 			self.profile_path_component()
 		} else {
-			"release"
+			"dist"
 		}
 	}
 
