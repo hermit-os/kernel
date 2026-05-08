@@ -17,6 +17,7 @@ use crate::io;
 
 mod delegate;
 mod eventfd;
+pub(crate) mod random_file;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 pub(crate) mod socket;
 pub(crate) mod stdio;
