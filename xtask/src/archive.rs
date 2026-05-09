@@ -61,10 +61,16 @@ impl Archive {
 					return output;
 				}
 
-				if let Some(symbol) = symbol.strip_prefix("_ZN") {
+				if symbol.starts_with("_R") {
+					// -Csymbol-mangling-version=v0
+					// Set prefix as vendor-specific suffix
+					let _ = writeln!(output, "{symbol} {symbol}.{prefix}");
+				} else if let Some(symbol) = symbol.strip_prefix("_ZN") {
+					// -Csymbol-mangling-version=legacy
 					let prefix_len = prefix.len();
 					let _ = writeln!(output, "_ZN{symbol} _ZN{prefix_len}{prefix}{symbol}");
 				} else {
+					// plain symbols
 					let _ = writeln!(output, "{symbol} {prefix}_{symbol}");
 				}
 				output
