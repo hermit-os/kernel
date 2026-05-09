@@ -4,6 +4,7 @@ use core::{fmt, mem};
 use aarch64_cpu::registers::*;
 use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
+use super::lscpu;
 use crate::env;
 
 /// Current FPU state. Saved at context switch when changed.
@@ -329,13 +330,21 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn print_information() {
-	let fdt = env::fdt().unwrap();
-	let cpu0 = fdt.cpus().next().unwrap();
-	let cpu0_compatible = cpu0.property("compatible").unwrap().as_str().unwrap();
+	// Implementer is 8 bits wide, so this cannot fail
+	let implementer_raw = u8::try_from(MIDR_EL1.read(MIDR_EL1::Implementer)).unwrap();
+	// PartNum is 12 bits wide, so this cannot fail
+	let part_raw = u16::try_from(MIDR_EL1.read(MIDR_EL1::PartNum)).unwrap();
+
+	let (implementer, part) = match lscpu::pretty_implementer_and_part(implementer_raw, part_raw) {
+		Some((implementer, Some(part))) => (implementer, part),
+		Some((implementer, None)) => (implementer, "Unknown part"),
+		None => ("Unknown implementer", "Unknown part"),
+	};
+
 	let cpu_freq = &*CPU_FREQUENCY;
 
 	infoheader!(" CPU INFORMATION ");
-	infoentry!("Processor compatibility", "{cpu0_compatible}");
+	infoentry!("Processor", "{implementer} {part}");
 	infoentry!("Counter frequency", "{cpu_freq}");
 	infofooter!();
 }
