@@ -1,3 +1,4 @@
+#[cfg(feature = "uhyve")]
 mod uhyve;
 
 use core::{fmt, mem};
@@ -15,6 +16,7 @@ use crate::executor::WakerRegistration;
 const SERIAL_BUFFER_SIZE: usize = 256;
 
 pub(crate) enum IoDevice {
+	#[cfg(feature = "uhyve")]
 	Uhyve(uhyve::UhyveSerial),
 	Uart(SerialDevice),
 	#[cfg(feature = "virtio-console")]
@@ -28,6 +30,7 @@ impl ErrorType for IoDevice {
 impl Read for IoDevice {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		match self {
+			#[cfg(feature = "uhyve")]
 			IoDevice::Uhyve(s) => s.read(buf),
 			IoDevice::Uart(s) => s.read(buf),
 			#[cfg(feature = "virtio-console")]
@@ -39,6 +42,7 @@ impl Read for IoDevice {
 impl ReadReady for IoDevice {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
 		match self {
+			#[cfg(feature = "uhyve")]
 			IoDevice::Uhyve(s) => s.read_ready(),
 			IoDevice::Uart(s) => s.read_ready(),
 			#[cfg(feature = "virtio-console")]
@@ -50,6 +54,7 @@ impl ReadReady for IoDevice {
 impl Write for IoDevice {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		match self {
+			#[cfg(feature = "uhyve")]
 			IoDevice::Uhyve(s) => s.write_all(buf)?,
 			IoDevice::Uart(s) => s.write_all(buf)?,
 			#[cfg(feature = "virtio-console")]
@@ -149,6 +154,7 @@ pub(crate) static CONSOLE_WAKER: InterruptTicketMutex<WakerRegistration> =
 pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 	crate::CoreLocal::install();
 
+	#[cfg(feature = "uhyve")]
 	if crate::env::is_uhyve() {
 		return InterruptTicketMutex::new(Console::new(IoDevice::Uhyve(uhyve::UhyveSerial::new())));
 	}
