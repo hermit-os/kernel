@@ -127,6 +127,9 @@ impl Build {
 			rustflags.push("-Zrandomize-layout");
 		}
 
+		rustflags.push("-Csymbol-mangling-version=legacy");
+		rustflags.push("-Zunstable-options");
+
 		rustflags.extend(self.cargo_build.artifact.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
