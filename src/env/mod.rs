@@ -1,5 +1,7 @@
 //! Inspection and manipulation of the kernel's environment.
 
+mod start_info;
+
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
