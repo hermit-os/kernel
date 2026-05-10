@@ -209,7 +209,7 @@ unsafe fn detect_from_limits() -> Result<(), ()> {
 	}
 
 	#[cfg(target_arch = "riscv64")]
-	let ram_address = crate::arch::kernel::get_ram_address().as_usize();
+	let ram_address = env::get_ram_address().as_usize();
 	#[cfg(target_arch = "aarch64")]
 	let ram_address = 0;
 
