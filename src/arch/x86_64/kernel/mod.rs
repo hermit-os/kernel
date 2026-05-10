@@ -68,14 +68,6 @@ pub fn is_uhyve_with_pci() -> bool {
 	)
 }
 
-pub fn args() -> Option<&'static str> {
-	match env::boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. }
-		| PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
-		_ => None,
-	}
-}
-
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {

@@ -58,10 +58,6 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-pub fn args() -> Option<&'static str> {
-	None
-}
-
 pub fn get_hart_mask() -> u64 {
 	HART_MASK.load(Ordering::Relaxed)
 }
