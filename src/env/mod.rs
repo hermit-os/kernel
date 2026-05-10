@@ -65,8 +65,11 @@ pub fn fdt() -> Option<Fdt<'static>> {
 	})
 }
 
-pub(crate) fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(boot_info().hardware_info.phys_addr_range.start)
+pub(crate) fn get_ram_address() -> Option<PhysAddr> {
+	let fdt = fdt()?;
+	let memory = fdt.memory();
+	let ptr = memory.regions().next()?.starting_address;
+	Some(ptr.expose_provenance().into())
 }
 
 /// Returns the RSDP physical address if available.
