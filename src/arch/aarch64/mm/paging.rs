@@ -8,7 +8,6 @@ use align_address::Align;
 use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::env;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
@@ -710,9 +709,6 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 }
 
 pub unsafe fn init() {
-	let ram_start = env::get_ram_address();
-	info!("RAM starts at physical address {ram_start:p}");
-
 	// determine physical address size
 	let id_aa64mmfr0_el1 = ID_AA64MMFR0_EL1.extract();
 
