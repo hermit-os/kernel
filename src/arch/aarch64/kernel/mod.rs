@@ -43,10 +43,6 @@ pub fn is_uhyve_with_pci() -> bool {
 	false
 }
 
-pub fn get_limit() -> usize {
-	env::boot_info().hardware_info.phys_addr_range.end as usize
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	let fdt = env::fdt().unwrap();
