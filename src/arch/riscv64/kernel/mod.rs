@@ -16,7 +16,6 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use free_list::PageLayout;
-use memory_addresses::PhysAddr;
 use riscv::register::sstatus;
 
 use crate::arch::riscv64::kernel::core_local::core_id;
@@ -42,10 +41,6 @@ static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
 
 pub fn is_uhyve_with_pci() -> bool {
 	false
-}
-
-pub fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_limit() -> usize {

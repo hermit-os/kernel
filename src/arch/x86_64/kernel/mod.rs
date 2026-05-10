@@ -6,7 +6,6 @@ use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
-use memory_addresses::PhysAddr;
 use x86_64::registers::control::{Cr0, Cr4};
 
 use crate::arch::x86_64::kernel::core_local::*;
@@ -37,10 +36,6 @@ mod syscall;
 pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 pub mod vga;
-
-pub fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
@@ -225,7 +220,7 @@ where
 
 	use align_address::Align;
 	use free_list::PageLayout;
-	use memory_addresses::VirtAddr;
+	use memory_addresses::{PhysAddr, VirtAddr};
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
