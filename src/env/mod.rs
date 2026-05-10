@@ -95,7 +95,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = kernel::args().or_else(fdt_args).unwrap_or_default();
+		let args = fdt_args().unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 
