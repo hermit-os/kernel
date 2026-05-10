@@ -17,8 +17,8 @@ pub mod systemtime;
 use alloc::alloc::alloc;
 use core::alloc::Layout;
 use core::arch::global_asm;
+use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
-use core::{ptr, str};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
@@ -59,10 +59,6 @@ pub fn get_processor_count() -> u32 {
 #[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
-}
-
-pub fn args() -> Option<&'static str> {
-	None
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
