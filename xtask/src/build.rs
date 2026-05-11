@@ -42,6 +42,18 @@ impl Build {
 		sh.remove_path(&dist_archive)?;
 		dist_archive.create()?;
 
+		self.build_kernel()?;
+
+		self.build_builtins()?;
+
+		eprintln!("Setting OSABI");
+		dist_archive.set_osabi()?;
+
+		eprintln!("Kernel available at {}", dist_archive.as_ref().display());
+		Ok(())
+	}
+
+	fn build_kernel(&self) -> Result<()> {
 		let careful = match env::var_os("HERMIT_CAREFUL") {
 			Some(val) if val == "1" => &["careful"][..],
 			_ => &[],
@@ -62,10 +74,15 @@ impl Build {
 		assert!(status.success());
 
 		let build_archive = self.cargo_build.artifact.build_archive();
+		let dist_archive = self.cargo_build.artifact.dist_archive();
+
+		build_archive.retain_kernel_symbols()?;
 		dist_archive.append(&build_archive)?;
 
-		self.cargo_build.artifact.dist_archive().retain_kernel_symbols()?;
+		Ok(())
+	}
 
+	fn build_builtins(&self) -> Result<()> {
 		eprintln!("Building hermit-builtins");
 		let mut cargo = crate::cargo();
 		cargo
@@ -80,14 +97,12 @@ impl Build {
 		let status = cargo.status()?;
 		assert!(status.success());
 
-		let builtins = self.cargo_build.artifact.builtins_archive();
-		builtins.retain_builtin_symbols()?;
-		dist_archive.append(&builtins)?;
+		let builtins_archive = self.cargo_build.artifact.builtins_archive();
+		let dist_archive = self.cargo_build.artifact.dist_archive();
 
-		eprintln!("Setting OSABI");
-		dist_archive.set_osabi()?;
+		builtins_archive.retain_builtin_symbols()?;
+		dist_archive.append(&builtins_archive)?;
 
-		eprintln!("Kernel available at {}", dist_archive.as_ref().display());
 		Ok(())
 	}
 
