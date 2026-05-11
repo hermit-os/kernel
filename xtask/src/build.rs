@@ -37,6 +37,10 @@ impl Build {
 		}
 
 		self.cargo_build.artifact.arch.install_for_build()?;
+		let dist_archive = self.cargo_build.artifact.dist_archive();
+		sh.create_dir(dist_archive.as_ref().parent().unwrap())?;
+		sh.remove_path(&dist_archive)?;
+		dist_archive.create()?;
 
 		let careful = match env::var_os("HERMIT_CAREFUL") {
 			Some(val) if val == "1" => &["careful"][..],
@@ -58,14 +62,7 @@ impl Build {
 		assert!(status.success());
 
 		let build_archive = self.cargo_build.artifact.build_archive();
-		let dist_archive = self.cargo_build.artifact.dist_archive();
-		eprintln!(
-			"Copying {} to {}",
-			build_archive.as_ref().display(),
-			dist_archive.as_ref().display()
-		);
-		sh.create_dir(dist_archive.as_ref().parent().unwrap())?;
-		sh.copy_file(&build_archive, &dist_archive)?;
+		dist_archive.append(&build_archive)?;
 
 		self.cargo_build.artifact.dist_archive().retain_kernel_symbols()?;
 
