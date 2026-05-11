@@ -31,7 +31,7 @@ impl Archive {
 		let symbols = archive
 			.summarize()
 			.into_iter()
-			.filter(|(member_name, _, _)| member_name.starts_with("hermit-"))
+			.filter(|(member_name, _, _)| member_name.starts_with("hermit"))
 			.flat_map(|(_, _, symbols)| symbols)
 			.filter(|symbol| symbol.starts_with("sys_"))
 			.map(String::from)
