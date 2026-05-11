@@ -117,6 +117,16 @@ impl Archive {
 		Ok(())
 	}
 
+	pub fn create(&self) -> Result<()> {
+		let sh = crate::sh()?;
+		let archive = self.as_ref();
+
+		let ar = crate::binutil("ar").unwrap();
+		cmd!(sh, "{ar} qc {archive}").run()?;
+
+		Ok(())
+	}
+
 	pub fn append(&self, file: &Self) -> Result<()> {
 		let sh = crate::sh()?;
 		let archive = self.as_ref();
