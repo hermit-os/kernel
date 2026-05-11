@@ -42,9 +42,17 @@ impl Build {
 		sh.remove_path(&dist_archive)?;
 		dist_archive.create()?;
 
-		self.build_kernel()?;
+		if self
+			.cargo_build
+			.features()
+			.any(|feature| feature == "masos")
+		{
+			self.build_builtins(true)?;
+		} else {
+			self.build_kernel()?;
 
-		self.build_builtins()?;
+			self.build_builtins(false)?;
+		}
 
 		eprintln!("Setting OSABI");
 		dist_archive.set_osabi()?;
@@ -82,7 +90,7 @@ impl Build {
 		Ok(())
 	}
 
-	fn build_builtins(&self) -> Result<()> {
+	fn build_builtins(&self, masos: bool) -> Result<()> {
 		eprintln!("Building hermit-builtins");
 		let mut cargo = crate::cargo();
 		cargo
@@ -92,6 +100,9 @@ impl Build {
 			.arg(self.cargo_build.artifact.builtins_profile_path_component())
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
 			.args(self.cargo_build.builtins_target_dir_arg());
+		if masos {
+			cargo.arg("--features=masos");
+		}
 
 		eprintln!("$ {cargo:?}");
 		let status = cargo.status()?;
@@ -100,7 +111,11 @@ impl Build {
 		let builtins_archive = self.cargo_build.artifact.builtins_archive();
 		let dist_archive = self.cargo_build.artifact.dist_archive();
 
-		builtins_archive.retain_builtin_symbols()?;
+		if masos {
+			builtins_archive.retain_masos_symbols()?;
+		} else {
+			builtins_archive.retain_builtin_symbols()?;
+		}
 		dist_archive.append(&builtins_archive)?;
 
 		Ok(())
