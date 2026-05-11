@@ -48,6 +48,25 @@ impl Archive {
 		Ok(())
 	}
 
+	pub fn retain_masos_symbols(&self) -> Result<()> {
+		eprintln!("Retaining MASOS symbols");
+		let sh = crate::sh()?;
+
+		let explicit_symbols = self.explicit_symbols().iter().copied();
+		let syscall_symbols = self.syscall_symbols()?;
+		let syscall_symbols = syscall_symbols.iter().map(String::as_str);
+		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
+		let builtin_symbols = builtin_symbols.lines();
+
+		let symbols = explicit_symbols
+			.chain(syscall_symbols)
+			.chain(builtin_symbols)
+			.collect();
+		self.retain_symbols(symbols)?;
+
+		Ok(())
+	}
+
 	fn explicit_symbols(&self) -> &[&str] {
 		&["_start", "__bss_start", "mcount", "runtime_entry"]
 	}
