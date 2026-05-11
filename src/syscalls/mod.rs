@@ -1,6 +1,8 @@
 #![allow(clippy::result_unit_err)]
 
+use alloc::boxed::Box;
 use alloc::ffi::CString;
+use alloc::vec::Vec;
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
@@ -223,9 +225,6 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 }
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
-	use alloc::boxed::Box;
-	use alloc::vec::Vec;
-
 	let mut argv = Vec::new();
 
 	let name = Box::leak(Box::new("bin\0")).as_ptr();
