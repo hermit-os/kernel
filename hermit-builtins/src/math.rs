@@ -7,7 +7,7 @@ macro_rules! export {
         $(
 			#[linkage = "weak_odr"]
             #[unsafe(no_mangle)]
-            pub extern "C" fn $fn($($arg: $argty),+) -> $retty {
+            extern "C" fn $fn($($arg: $argty),+) -> $retty {
                 ::libm::$fn($($arg),+)
             }
         )+
@@ -146,7 +146,7 @@ macro_rules! export_out_param {
         $(
 			#[linkage = "weak_odr"]
             #[unsafe(no_mangle)]
-            pub extern "C" fn $fn($($arg: $argty),+, $out: $outty) -> $retty {
+            extern "C" fn $fn($($arg: $argty),+, $out: $outty) -> $retty {
                 let (ret, out) = ::libm::$fn($($arg),+);
                 *$out = out;
                 ret
@@ -168,13 +168,13 @@ export_out_param! {
 
 #[linkage = "weak_odr"]
 #[unsafe(no_mangle)]
-pub extern "C" fn sincos(x: f64, s: &mut f64, c: &mut f64) {
+extern "C" fn sincos(x: f64, s: &mut f64, c: &mut f64) {
 	(*s, *c) = libm::sincos(x);
 }
 
 #[linkage = "weak_odr"]
 #[unsafe(no_mangle)]
-pub extern "C" fn sincosf(x: f32, s: &mut f32, c: &mut f32) {
+extern "C" fn sincosf(x: f32, s: &mut f32, c: &mut f32) {
 	(*s, *c) = libm::sincosf(x);
 }
 
@@ -187,7 +187,7 @@ pub extern "C" fn sincosf(x: f32, s: &mut f32, c: &mut f32) {
 /// [`CStr`]: core::ffi::CStr
 #[linkage = "weak_odr"]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nan(arg: *const core::ffi::c_char) -> f64 {
+unsafe extern "C" fn nan(arg: *const core::ffi::c_char) -> f64 {
 	let _arg = arg;
 	f64::NAN
 }
@@ -201,7 +201,7 @@ pub unsafe extern "C" fn nan(arg: *const core::ffi::c_char) -> f64 {
 /// [`CStr`]: core::ffi::CStr
 #[linkage = "weak_odr"]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nanf(arg: *const core::ffi::c_char) -> f32 {
+unsafe extern "C" fn nanf(arg: *const core::ffi::c_char) -> f32 {
 	let _arg = arg;
 	f32::NAN
 }
