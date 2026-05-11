@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::env::{self, VarError};
 
 use anyhow::Result;
@@ -68,8 +67,7 @@ impl Build {
 		sh.create_dir(dist_archive.as_ref().parent().unwrap())?;
 		sh.copy_file(&build_archive, &dist_archive)?;
 
-		eprintln!("Exporting symbols");
-		self.export_syms()?;
+		self.cargo_build.artifact.dist_archive().retain_kernel_symbols()?;
 
 		eprintln!("Building hermit-builtins");
 		let mut cargo = crate::cargo();
@@ -85,11 +83,8 @@ impl Build {
 		let status = cargo.status()?;
 		assert!(status.success());
 
-		eprintln!("Exporting hermit-builtins symbols");
 		let builtins = self.cargo_build.artifact.builtins_archive();
-		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
-		builtins.retain_symbols(builtin_symbols.lines().collect::<HashSet<_>>())?;
-
+		builtins.retain_builtin_symbols()?;
 		dist_archive.append(&builtins)?;
 
 		eprintln!("Setting OSABI");
@@ -130,18 +125,5 @@ impl Build {
 		rustflags.extend(self.cargo_build.artifact.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
-	}
-
-	fn export_syms(&self) -> Result<()> {
-		let archive = self.cargo_build.artifact.dist_archive();
-
-		let syscall_symbols = archive.syscall_symbols()?;
-		let explicit_exports = ["_start", "__bss_start", "mcount", "runtime_entry"].into_iter();
-
-		let symbols = explicit_exports.chain(syscall_symbols.iter().map(String::as_str));
-
-		archive.retain_symbols(symbols.collect::<HashSet<_>>())?;
-
-		Ok(())
 	}
 }
