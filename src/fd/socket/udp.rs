@@ -1,3 +1,4 @@
+use core::ffi::c_int;
 use core::future;
 use core::mem::MaybeUninit;
 use core::task::Poll;
@@ -9,7 +10,7 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC, wake_network_waker};
-use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent};
+use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::io;
 use crate::syscalls::socket::Af;
 
@@ -241,6 +242,20 @@ impl ObjectInterface for Socket {
 
 	async fn getsockname(&self) -> io::Result<Option<Endpoint>> {
 		Ok(Some(Endpoint::Ip(self.local_endpoint)))
+	}
+
+	async fn getsockopt(&self, opt: SocketOption) -> io::Result<c_int> {
+		let mut guard = NIC.lock();
+		let socket = guard
+			.as_nic_mut()
+			.unwrap()
+			.get_mut_socket::<udp::Socket<'_>>(self.handle);
+
+		match opt {
+			SocketOption::SoSndBuf => Ok(i32::try_from(socket.payload_send_capacity()).unwrap()),
+			SocketOption::SoRcvBuf => Ok(i32::try_from(socket.payload_recv_capacity()).unwrap()),
+			SocketOption::TcpNoDelay => Err(Errno::Inval),
+		}
 	}
 }
 

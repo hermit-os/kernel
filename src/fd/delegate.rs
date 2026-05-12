@@ -1,10 +1,13 @@
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use alloc::sync::Arc;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use core::ffi::c_int;
 use core::mem::MaybeUninit;
 
 use delegate::delegate;
 
 use crate::fd::eventfd::EventFd;
+use crate::fd::random_file::RandomFile;
 #[cfg(feature = "tcp")]
 use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
@@ -54,6 +57,7 @@ pub(crate) enum Fd {
 	DirectoryReader(DirectoryReader),
 	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
+	RandomFile(RandomFile),
 }
 
 macro_rules! fd_from {
@@ -103,6 +107,7 @@ fd_from! {
 	DirectoryReader(DirectoryReader),
 	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
+	RandomFile(RandomFile),
 }
 
 impl ObjectInterface for Fd {
@@ -136,6 +141,7 @@ impl ObjectInterface for Fd {
 			Self::DirectoryReader(fd) => fd,
 			#[cfg(feature = "uhyve")]
 			Self::UhyveFileHandle(fd) => fd,
+			Self::RandomFile(fd) => fd,
 		} {
 			async fn poll(&self, event: PollEvent) -> io::Result<PollEvent>;
 			async fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
@@ -154,7 +160,7 @@ impl ObjectInterface for Fd {
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-			async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool>;
+			async fn getsockopt(&self, _opt: SocketOption) -> io::Result<c_int>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn getsockname(&self) -> io::Result<Option<Endpoint>>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]

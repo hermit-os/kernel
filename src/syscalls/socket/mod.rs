@@ -625,8 +625,7 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	}
 
 	#[cfg(feature = "net")]
-	if (domain == Af::Inet || domain == Af::Inet6) && (sock == Sock::Stream || sock == Sock::Dgram)
-	{
+	if domain == Af::Inet && matches!(sock, Sock::Stream | Sock::Dgram) {
 		let mut guard = NIC.lock();
 
 		let NetworkState::Initialized(nic) = &mut *guard else {
@@ -973,13 +972,19 @@ pub unsafe extern "C" fn sys_getsockopt(
 	optval: *mut c_void,
 	optlen: *mut socklen_t,
 ) -> i32 {
-	let Ok(Ok(level)) = u8::try_from(level).map(Ipproto::try_from) else {
+	debug!("sys_getsockopt: {fd}, level {level}, optname {optname}");
+
+	let Ok(optname) = SocketOption::try_from(optname) else {
 		return -i32::from(Errno::Inval);
 	};
 
-	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname}");
-
-	if level == Ipproto::Tcp && optname == TCP_NODELAY {
+	const IPPROTO_TCP: i32 = 6;
+	if matches!(
+		(level, optname),
+		(IPPROTO_TCP, SocketOption::TcpNoDelay)
+			| (SOL_SOCKET, SocketOption::SoSndBuf)
+			| (SOL_SOCKET, SocketOption::SoRcvBuf)
+	) {
 		if optval.is_null() || optlen.is_null() {
 			return -i32::from(Errno::Inval);
 		}
@@ -990,18 +995,10 @@ pub unsafe extern "C" fn sys_getsockopt(
 		obj.map_or_else(
 			|e| -i32::from(e),
 			|v| {
-				block_on(
-					async { v.read().await.getsockopt(SocketOption::TcpNoDelay).await },
-					None,
-				)
-				.map_or_else(
+				block_on(async { v.read().await.getsockopt(optname).await }, None).map_or_else(
 					|e| -i32::from(e),
 					|value| {
-						if value {
-							*optval = 1;
-						} else {
-							*optval = 0;
-						}
+						*optval = value;
 						*optlen = size_of::<i32>().try_into().unwrap();
 
 						0
