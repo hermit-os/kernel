@@ -35,6 +35,40 @@
 )]
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 //!
+//! # Compile-time environment variables
+//!
+//! Compile-time environment variables are read from the build environment.
+//!
+//! - **`HERMIT_CAREFUL`** — Compiles the kernel with [`cargo careful`].
+//!
+//! [`cargo careful`]: https://github.com/RalfJung/cargo-careful
+//!
+//! # Run-time environment variables
+//!
+//! Run-time environment variables can be set via `env=KEY=VALUE` kernel args.
+//!
+//! ## Network environment variables
+//!
+//! - **`HERMIT_MTU`** — Sets the *maximum transmission unit* (MTU). Defaults to `1500`.
+//! - **`HERMIT_MRG_RXBUF_SIZE`** — Sets the receive buffer size. Useful for testing receive buffer merging. Defaults to unset.
+//! - **`HERMIT_IP`** — Sets the IPv4 address. Defaults to `10.0.5.3`.
+//! - **`HERMIT_GATEWAY`** — Sets the gateway IPv4 address. Defaults to `10.0.5.1`.
+//! - **`HERMIT_MASK`** — Sets the network mask. Defaults to `255.255.255.0`.
+//! - **`HERMIT_DNS1`** — Sets the first DNS server. Defaults to `9.9.9.9`.
+//! - **`HERMIT_DNS2`** — Sets the second DNS server. Defaults to `1.1.1.1`.
+//! - **`HERMIT_PCAP_PATH`** — Sets the packet capture file path. Defaults to `/root/`. See the `write-pcap-file` feature for details.
+//!
+//! ## Output environment variables
+//!
+//! - **`NO_COLOR`** — Prevents the addition of ANSI colors to the kernel output. Defaults to unset. For details, see [`NO_COLOR`].
+//! - **`HERMIT_LOG_LEVEL_FILTER`** — Sets the lowest log level to print. Defaults to `info`.
+//!
+//! [`NO_COLOR`]: https://no-color.org/
+//!
+//! ## Deprecated environment variables
+//!
+//! - **`UHYVE_MOUNT`** — Sets the Uhyve mount point. Defaults to `/root`.
+//!
 //! [hermit-rs]: https://github.com/hermit-os/hermit-rs
 //! [hermit-c]: https://github.com/hermit-os/hermit-c
 
