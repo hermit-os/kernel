@@ -13,12 +13,11 @@ use hashbrown::HashMap;
 use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
+use memory_addresses::PhysAddr;
 
 #[cfg(not(feature = "common-os"))]
 pub(crate) use self::executable::tls::TlsInfo;
 pub(crate) use self::executable::{executable_ptr_range, log_segments};
-use crate::arch::kernel;
-pub(crate) use crate::arch::kernel::get_ram_address;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -65,6 +64,13 @@ pub fn fdt() -> Option<Fdt<'static>> {
 	})
 }
 
+pub(crate) fn get_ram_address() -> Option<PhysAddr> {
+	let fdt = fdt()?;
+	let memory = fdt.memory();
+	let ptr = memory.regions().next()?.starting_address;
+	Some(ptr.expose_provenance().into())
+}
+
 /// Returns the RSDP physical address if available.
 #[cfg(all(target_arch = "x86_64", feature = "acpi"))]
 pub fn rsdp() -> Option<core::num::NonZero<usize>> {
@@ -90,7 +96,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = kernel::args().or_else(fdt_args).unwrap_or_default();
+		let args = fdt_args().unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 

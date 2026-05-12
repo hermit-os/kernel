@@ -16,7 +16,6 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use free_list::PageLayout;
-use memory_addresses::PhysAddr;
 use riscv::register::sstatus;
 
 use crate::arch::riscv64::kernel::core_local::core_id;
@@ -44,15 +43,6 @@ pub fn is_uhyve_with_pci() -> bool {
 	false
 }
 
-pub fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
-
-pub fn get_limit() -> usize {
-	(env::boot_info().hardware_info.phys_addr_range.end
-		- env::boot_info().hardware_info.phys_addr_range.start) as usize
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	NUM_CPUS.load(Ordering::Relaxed)
@@ -66,10 +56,6 @@ pub fn get_processor_count() -> u32 {
 #[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
-}
-
-pub fn args() -> Option<&'static str> {
-	None
 }
 
 pub fn get_hart_mask() -> u64 {
