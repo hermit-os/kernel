@@ -1,4 +1,5 @@
 use alloc::collections::VecDeque;
+use core::hint;
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
@@ -70,8 +71,28 @@ impl ReadReady for SerialDevice {
 impl Write for SerialDevice {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let mut guard = UART_DEVICE.lock();
-		let n = guard.uart.write(buf)?;
-		Ok(n)
+		let uart = &mut guard.uart;
+
+		for byte in buf.iter().copied() {
+			match byte {
+				// backspace or delete
+				8 | 0x7f => {
+					uart.try_send_byte(8).unwrap();
+					uart.try_send_byte(b' ').unwrap();
+					uart.try_send_byte(8).unwrap();
+				}
+				// Normal Rust newlines to terminal-compatible newlines.
+				b'\n' => {
+					uart.try_send_byte(b'\r').unwrap();
+					uart.try_send_byte(b'\n').unwrap();
+				}
+				data => {
+					uart.try_send_byte(data).unwrap();
+				}
+			}
+		}
+
+		Ok(buf.len())
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {
