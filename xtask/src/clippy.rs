@@ -21,7 +21,7 @@ impl Clippy {
 			clippy().run()?;
 			clippy().arg("--features=common-os").run()?;
 			clippy()
-				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga")
+				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga,hermit-image")
 				.run()?;
 			clippy().arg("--no-default-features").run()?;
 			clippy().arg("--all-features").run()?;

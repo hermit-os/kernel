@@ -46,6 +46,7 @@ mod physicalmem;
 mod virtualmem;
 
 use core::alloc::Layout;
+use core::cmp;
 use core::mem::MaybeUninit;
 use core::ops::Range;
 
@@ -111,9 +112,56 @@ pub(crate) fn claim_initial_heap() {
 	}
 }
 
+/// Physical and virtual address range of the Hermit image, in case it is present
+/// (indicated via FDT).
+static HERMIT_IMAGE_START_AND_LEN: Lazy<Option<(VirtAddr, usize)>> = Lazy::new(|| {
+	let fdt = env::fdt()?;
+
+	// per FDT specification, /chosen always exists
+	let chosen = fdt.find_node("/chosen").unwrap();
+
+	let fdt::node::NodeProperty { value: addr, .. } = chosen.property("linux,initrd-start")?;
+
+	let fdt::node::NodeProperty {
+		value: addr_end, ..
+	} = chosen.property("linux,initrd-end")?;
+
+	let (addr_, addr_end_) = (addr.try_into(), addr_end.try_into());
+
+	let ret = if let (Ok(addr), Ok(addr_end)) = (addr_, addr_end_) {
+		let addr = usize::from_be_bytes(addr);
+		let addr_end = usize::from_be_bytes(addr_end);
+		info!("Hermit image at {addr:x} - {addr_end:x}");
+		addr_end.checked_sub(addr).map(|len| {
+			(
+				VirtAddr::from_ptr(core::ptr::with_exposed_provenance::<u8>(addr)),
+				len,
+			)
+		})
+	} else {
+		None
+	};
+
+	if ret.is_none() {
+		error!(
+			"Hermit image supplied with invalid address range (#addr = {}, #addr_end = {})",
+			addr.len(),
+			addr_end.len(),
+		);
+	}
+
+	ret
+});
+
+pub(crate) fn hermit_tar_image() -> Option<&'static [u8]> {
+	// technically, the following is UB, because the kernel might be contained within...
+	HERMIT_IMAGE_START_AND_LEN
+		.map(|(addr, len)| unsafe { core::slice::from_raw_parts(addr.as_ptr(), len) })
+}
+
 #[cfg(target_os = "none")]
 pub(crate) fn init() {
-	use crate::arch::mm::paging;
+	use arch::mm::paging;
 
 	Lazy::force(&KERNEL_ADDR_RANGE);
 
@@ -121,12 +169,30 @@ pub(crate) fn init() {
 		arch::mm::init();
 	}
 
+	Lazy::force(&HERMIT_IMAGE_START_AND_LEN);
+
 	let total_mem = physicalmem::total_memory_size();
 	let kernel_addr_range = KERNEL_ADDR_RANGE.clone();
+	let reserved_addr_range = if let Some((image_start, image_len)) = *HERMIT_IMAGE_START_AND_LEN {
+		cmp::min(
+			kernel_addr_range.start,
+			image_start.align_down(LargePageSize::SIZE),
+		)
+			..cmp::max(
+				kernel_addr_range.end,
+				(image_start + image_len).align_up(LargePageSize::SIZE),
+			)
+	} else {
+		kernel_addr_range.clone()
+	};
 	info!("Total memory size: {} MiB", total_mem >> 20);
 	info!(
 		"Kernel region: {:p}..{:p}",
-		kernel_addr_range.start, kernel_addr_range.end
+		kernel_addr_range.start, kernel_addr_range.end,
+	);
+	info!(
+		"Locally reserved region: {:p}..{:p}",
+		reserved_addr_range.start, reserved_addr_range.end,
 	);
 
 	// we reserve physical memory for the required page tables
@@ -147,7 +213,7 @@ pub(crate) fn init() {
 		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
 		reserved_space
 	} else {
-		(kernel_addr_range.end.as_u64() - env::get_ram_address().as_u64() + reserved_space as u64)
+		(reserved_addr_range.end.as_u64() - env::get_ram_address().as_u64() + reserved_space as u64)
 			as usize
 	};
 	info!("Minimum memory size: {} MiB", min_mem >> 20);
@@ -167,7 +233,7 @@ pub(crate) fn init() {
 		// we reserve at least 75% of the memory for the user space
 		let reserve: usize = (avail_mem * 75) / 100;
 		// 64 MB is enough as kernel heap
-		let reserve = core::cmp::min(reserve, 0x0400_0000);
+		let reserve = cmp::min(reserve, 0x0400_0000);
 
 		let virt_size: usize = reserve.align_down(LargePageSize::SIZE as usize);
 		let layout = PageLayout::from_size_align(virt_size, LargePageSize::SIZE as usize).unwrap();
