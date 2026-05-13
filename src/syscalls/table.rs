@@ -1,6 +1,7 @@
 #[cfg(target_arch = "x86_64")]
 use core::arch::naked_asm;
 
+use crate::mm::vma::sys_mmap;
 use crate::syscalls::*;
 
 /// Number of the system call `exit`
@@ -135,6 +136,8 @@ const SYSNO_AVAILABLE_PARALLELISM: usize = 54;
 const SYSNO_GET_DENTS64: usize = 55;
 /// number of the system call `exec`
 const SYSNO_EXEC: usize = 56;
+/// number of the system call `mmap`
+const SYSNO_MMAP: usize = 57;
 
 /// Total number of system calls
 pub(crate) const NO_SYSCALLS: usize = 64;
@@ -259,6 +262,7 @@ impl SyscallTable {
 		table.handle[SYSNO_AVAILABLE_PARALLELISM] = sys_available_parallelism as *const _;
 		table.handle[SYSNO_GET_DENTS64] = sys_getdents64 as *const _;
 		table.handle[SYSNO_EXEC] = sys_exec as *const _;
+		table.handle[SYSNO_MMAP] = sys_mmap as *const _;
 
 		table
 	}

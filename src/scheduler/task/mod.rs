@@ -3,6 +3,8 @@
 #[cfg(not(feature = "common-os"))]
 pub(crate) mod tls;
 
+#[cfg(feature = "common-os")]
+use alloc::collections::BTreeMap;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
@@ -18,7 +20,10 @@ use hashbrown::HashMap;
 #[cfg(not(feature = "common-os"))]
 use hermit_sync::OnceCell;
 use hermit_sync::RwSpinLock;
+#[cfg(not(target_arch = "x86_64"))]
 use memory_addresses::VirtAddr;
+#[cfg(target_arch = "x86_64")]
+use x86_64::VirtAddr;
 
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
@@ -32,6 +37,8 @@ use crate::env;
 use crate::fd::{Fd, RawFd, stdio};
 #[cfg(not(feature = "common-os"))]
 use crate::fd::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+#[cfg(feature = "common-os")]
+use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::CoreId;
 
 /// A reference-counted handle to a process's root page table.
@@ -462,6 +469,8 @@ pub(crate) struct Task {
 	/// when the user binary has a `PT_TLS` segment.
 	#[cfg(feature = "common-os")]
 	pub tls_template: Option<Arc<TlsTemplate>>,
+	#[cfg(feature = "common-os")]
+	pub vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 }
 
 pub(crate) trait TaskFrame {
@@ -496,6 +505,8 @@ impl Task {
 			root_page_table: Arc::new(RootPageTable::new(arch::create_new_root_page_table())),
 			#[cfg(feature = "common-os")]
 			tls_template: None,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		}
 	}
 
@@ -562,6 +573,8 @@ impl Task {
 			)),
 			#[cfg(feature = "common-os")]
 			tls_template: None,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		}
 	}
 
@@ -580,6 +593,7 @@ impl Task {
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		root_page_table: Arc<RootPageTable>,
 		tls_template: Option<Arc<TlsTemplate>>,
+		vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 	) -> Task {
 		debug!("Creating user thread {tid} on core {core_id}");
 		Task {
@@ -594,6 +608,7 @@ impl Task {
 			object_map,
 			root_page_table,
 			tls_template,
+			vmas,
 		}
 	}
 
@@ -612,6 +627,7 @@ impl Task {
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		root_page_table: Arc<RootPageTable>,
 		tls_template: Option<Arc<TlsTemplate>>,
+		vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 	) -> Task {
 		debug!("Creating forked task {tid} on core {core_id}");
 		Task {
@@ -628,6 +644,7 @@ impl Task {
 			tls: None,
 			root_page_table,
 			tls_template,
+			vmas,
 		}
 	}
 }
