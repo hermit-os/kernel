@@ -355,10 +355,14 @@ impl Task {
 			// FS.Base for the new user-space thread (its private TLS area).
 			(*state).fs = tls_fs_base;
 
-			self.last_stack_pointer = stack;
-			self.user_stack_pointer = self.stacks.get_user_stack()
+			// `stack` / `get_user_stack()` produce `memory_addresses::VirtAddr`,
+			// while `Task::{last,user}_stack_pointer` is `x86_64::VirtAddr` —
+			// convert at the assignment boundary.
+			self.last_stack_pointer = stack.into();
+			self.user_stack_pointer = (self.stacks.get_user_stack()
 				+ self.stacks.get_user_stack_size()
-				- TaskStacks::MARKER_SIZE;
+				- TaskStacks::MARKER_SIZE)
+				.into();
 
 			// rdx is used by task_start_user as the new user-mode RSP
 			(*state).rdx = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
@@ -398,10 +402,11 @@ impl TaskFrame for Task {
 			(*state).rflags = 0x1202u64;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
-			self.last_stack_pointer = stack;
-			self.user_stack_pointer = self.stacks.get_user_stack()
+			self.last_stack_pointer = stack.into();
+			self.user_stack_pointer = (self.stacks.get_user_stack()
 				+ self.stacks.get_user_stack_size()
-				- TaskStacks::MARKER_SIZE;
+				- TaskStacks::MARKER_SIZE)
+				.into();
 
 			// rdx is required to initialize the stack
 			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;

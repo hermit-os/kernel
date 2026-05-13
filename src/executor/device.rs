@@ -14,8 +14,8 @@ use smoltcp::socket::dns;
 use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
-use crate::arch::kernel::systemtime;
 use crate::arch;
+use crate::arch::kernel::systemtime;
 #[cfg(feature = "write-pcap-file")]
 use crate::drivers::Driver;
 use crate::drivers::net::NetworkDriver;

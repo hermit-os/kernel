@@ -14,9 +14,13 @@ use ahash::RandomState;
 use crossbeam_utils::Backoff;
 use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
+#[cfg(all(feature = "common-os", not(target_arch = "x86_64")))]
+use memory_addresses::VirtAddr;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
+#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+use x86_64::VirtAddr;
 
 use crate::arch::kernel;
 use crate::arch::kernel::core_local::*;
@@ -29,6 +33,9 @@ use crate::arch::kernel::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::io;
+use crate::kernel::scheduler::TaskStacks;
+#[cfg(feature = "common-os")]
+use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::task::*;
 
 pub mod task;
@@ -230,6 +237,8 @@ struct NewTask {
 	/// `TlsTemplate`. Zero means "do not install a thread pointer".
 	#[cfg(feature = "common-os")]
 	tls_base: u64,
+	#[cfg(feature = "common-os")]
+	vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 }
 
 impl From<NewTask> for Task {
@@ -248,6 +257,8 @@ impl From<NewTask> for Task {
 			tls_template,
 			#[cfg(feature = "common-os")]
 			tls_base,
+			#[cfg(feature = "common-os")]
+			vmas,
 		} = value;
 
 		#[cfg(feature = "common-os")]
@@ -261,6 +272,7 @@ impl From<NewTask> for Task {
 				object_map,
 				root_page_table,
 				tls_template,
+				vmas,
 			);
 			task.create_user_stack_frame(func, arg, tls_base);
 			return task;
@@ -298,6 +310,8 @@ impl PerCoreScheduler {
 			tls_template: None,
 			#[cfg(feature = "common-os")]
 			tls_base: 0,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		};
 
 		// Add it to the task lists.
@@ -365,13 +379,14 @@ impl PerCoreScheduler {
 		// immediately visible to every thread in this process.
 		let stacks = TaskStacks::new(stack_size);
 
-		let (root_page_table, object_map, tls_template) = {
+		let (root_page_table, object_map, tls_template, vmas) = {
 			let current = core_scheduler().get_current_task();
 			let borrowed = current.borrow();
 			(
 				borrowed.root_page_table.clone(),
 				borrowed.object_map.clone(),
 				borrowed.tls_template.clone(),
+				borrowed.vmas.clone(),
 			)
 		};
 
@@ -397,6 +412,7 @@ impl PerCoreScheduler {
 			thread_of: Some(root_page_table),
 			tls_template,
 			tls_base,
+			vmas,
 		};
 
 		let wakeup = {
@@ -1155,7 +1171,10 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	all(feature = "common-os", feature = "fork")
 ))]
 pub unsafe fn fork() -> TaskId {
+	#[cfg(not(target_arch = "x86_64"))]
 	use memory_addresses::VirtAddr;
+	#[cfg(target_arch = "x86_64")]
+	use x86_64::VirtAddr;
 
 	use crate::arch::{prepare_fork_child_stack, prepare_mem_copy_on_write};
 
@@ -1214,6 +1233,14 @@ pub unsafe fn fork() -> TaskId {
 		.borrow()
 		.tls_template
 		.clone();
+	let parent_vmas = Arc::new(RwSpinLock::new(
+		core_scheduler()
+			.get_current_task()
+			.borrow()
+			.vmas
+			.read()
+			.clone(),
+	));
 
 	let child_task = Task::new_fork(
 		tid,
@@ -1228,6 +1255,7 @@ pub unsafe fn fork() -> TaskId {
 			child_root_page_table,
 		)),
 		parent_tls_template,
+		parent_vmas,
 	);
 
 	let wakeup = {
