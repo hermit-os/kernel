@@ -1,11 +1,12 @@
 use core::ops::Bound;
 
-use crate::core_local::core_scheduler;
-use crate::errno::Errno;
 #[cfg(not(target_arch = "x86_64"))]
 use memory_addresses::VirtAddr;
 #[cfg(target_arch = "x86_64")]
 use x86_64::VirtAddr;
+
+use crate::core_local::core_scheduler;
+use crate::errno::Errno;
 
 /// A contiguous range of virtual addresses with uniform protection
 /// and backing semantics, owned by one address space.
@@ -77,7 +78,7 @@ pub extern "C" fn sys_mmap(
 			} else {
 				error!("Unable to create heap");
 
-                return -i32::from(Errno::Nomems);
+				return -i32::from(Errno::Nomems);
 			}
 		}
 	} else {
@@ -110,8 +111,7 @@ pub extern "C" fn sys_mmap(
 		// 2. The extension must not run into the next VMA's start.
 		//    `VirtAddr::new(u64::MAX)` panics on x86_64 (non-canonical),
 		//    so model "no successor" with `Option` instead of a sentinel.
-		if let Some((&next_start, _)) =
-			guard.range((Bound::Excluded(key), Bound::Unbounded)).next()
+		if let Some((&next_start, _)) = guard.range((Bound::Excluded(key), Bound::Unbounded)).next()
 			&& new_end > next_start
 		{
 			return -i32::from(Errno::Nomem);
