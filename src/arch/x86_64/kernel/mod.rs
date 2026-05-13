@@ -212,6 +212,7 @@ where
 	use crate::fd::stdio::*;
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
+	use crate::mm::vma::*;
 
 	// each process has to provide its own object_map
 	// => create a new one
@@ -256,6 +257,22 @@ where
 		code_size / BasePageSize::SIZE as usize,
 		flags,
 	);
+	// VirtAddr's defined in vma.rs is `x86_64::VirtAddr` on x86_64 but
+	// this file's local `use` brings in `memory_addresses::VirtAddr`.
+	// Convert at the boundary so the BTreeMap-keyed insert type-checks.
+	{
+		let start: x86_64::VirtAddr = VirtAddr::from(LOADER_START).into();
+		let end: x86_64::VirtAddr =
+			VirtAddr::from(LOADER_START + code_size).align_up(BasePageSize::SIZE).into();
+		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(
+			start,
+			VirtualMemoryArea::new(
+				start,
+				end,
+				VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE | VirtualMemoryAreaProt::EXECUTE,
+			),
+		);
+	}
 
 	let loader_start_ptr = ptr::with_exposed_provenance_mut(LOADER_START);
 	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
@@ -286,6 +303,19 @@ where
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
+		{
+			let start: x86_64::VirtAddr = tls_virt.into();
+			let end: x86_64::VirtAddr =
+				(tls_virt + tls_memsz).align_up(BasePageSize::SIZE).into();
+			core_scheduler().get_current_task().borrow_mut().vmas.write().insert(
+				start,
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+				),
+			);
+		}
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
 		for elem in block.iter_mut() {
