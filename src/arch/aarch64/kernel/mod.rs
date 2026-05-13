@@ -202,6 +202,7 @@ where
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
+	use crate::mm::vma::*;
 
 	// Each process has its own object map.
 	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
@@ -241,6 +242,7 @@ where
 		code_size / BasePageSize::SIZE as usize,
 		flags,
 	);
+	core_scheduler().get_current_task().borrow_mut().vmas.write().insert(VirtAddr::from(LOADER_START), VirtualMemoryArea::new(VirtAddr::from(LOADER_START), VirtAddr::from(LOADER_START + code_size).align_up(BasePageSize::SIZE), VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE|VirtualMemoryAreaProt::EXECUTE));
 
 	let loader_start_ptr = ptr::with_exposed_provenance_mut(LOADER_START);
 	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
@@ -272,6 +274,7 @@ where
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
+		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(tls_virt, VirtualMemoryArea::new(tls_virt, (tls_virt + tls_memsz).align_up(BasePageSize::SIZE), VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE));
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tls_size as usize) };
 		for elem in block.iter_mut() {
