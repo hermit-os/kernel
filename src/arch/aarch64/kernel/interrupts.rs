@@ -242,6 +242,44 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 			return;
 		}
 
+		#[cfg(feature = "common-os")]
+		{
+			use align_address::Align;
+			use core::ops::Bound;
+			use crate::mm::FrameAlloc;
+			use crate::mm::vma::VirtualMemoryAreaProt;
+
+			let addr = VirtAddr::new(far).align_down(BasePageSize::SIZE);
+			let current_task = core_scheduler().get_current_task();
+        	let current_task_borrowed = current_task.borrow();
+        	let guard = current_task_borrowed.vmas.read();
+
+			if let Some((_, vma)) = guard.range((Bound::Unbounded, Bound::Included(addr))).next_back() {
+				if addr >= vma.start && addr < vma.end {
+					let layout = PageLayout::from_size_align(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
+					let frame_range = FrameAlloc::allocate(layout).unwrap();
+					let physaddr = PhysAddr::from(frame_range.start());
+					let mut flags = PageTableEntryFlags::empty();
+					flags.normal().user();
+					if vma.prot.contains(VirtualMemoryAreaProt::WRITE) {
+						flags.writable();
+					}
+					if vma.prot.contains(VirtualMemoryAreaProt::EXECUTE) {
+						flags.execute_disable();
+					}
+
+					paging::map::<BasePageSize>(
+						addr,
+						physaddr,
+						1,
+						flags,
+					);
+
+					return;
+				}
+			}
+		}
+
 		let kind = dfsc_kind(dfsc);
 		let access = if is_write { "write" } else { "read" };
 		error!("Current stack pointer {state:p}");
