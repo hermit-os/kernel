@@ -120,36 +120,37 @@ static HERMIT_IMAGE_START_AND_LEN: Lazy<Option<(VirtAddr, usize)>> = Lazy::new(|
 	// per FDT specification, /chosen always exists
 	let chosen = fdt.find_node("/chosen").unwrap();
 
+	let fdt::node::NodeProperty { value: addr, .. } = chosen.property("linux,initrd-start")?;
+
 	let fdt::node::NodeProperty {
-		value: image_reg, ..
-	} = chosen.property("image_reg")?;
+		value: addr_end, ..
+	} = chosen.property("linux,initrd-end")?;
 
-	let cell_sizes = fdt.root().cell_sizes();
-	let split_point = cell_sizes.address_cells * 4;
-	let end_point = split_point + cell_sizes.size_cells * 4;
+	let (addr_, addr_end_) = (addr.try_into(), addr_end.try_into());
 
-	if image_reg.len() != end_point {
-		return None;
-	}
-
-	let (addr, len) = image_reg.split_at(split_point);
-
-	if addr.len() == size_of::<*const u8>() && len.len() == size_of::<usize>() {
-		let addr = usize::from_be_bytes(addr.try_into().unwrap());
-		let len = usize::from_be_bytes(len.try_into().unwrap());
-		info!("Hermit image at {addr:x} with length {len:x}");
-		Some((
-			VirtAddr::from_ptr(core::ptr::with_exposed_provenance::<u8>(addr)),
-			len,
-		))
+	let ret = if let (Ok(addr), Ok(addr_end)) = (addr_, addr_end_) {
+		let addr = usize::from_be_bytes(addr);
+		let addr_end = usize::from_be_bytes(addr_end);
+		info!("Hermit image at {addr:x} - {addr_end:x}");
+		addr_end.checked_sub(addr).map(|len| {
+			(
+				VirtAddr::from_ptr(core::ptr::with_exposed_provenance::<u8>(addr)),
+				len,
+			)
+		})
 	} else {
-		error!(
-			"Hermit image supplied with invalid address range (#addr = {}, #len = {})",
-			addr.len(),
-			len.len(),
-		);
 		None
+	};
+
+	if ret.is_none() {
+		error!(
+			"Hermit image supplied with invalid address range (#addr = {}, #addr_end = {})",
+			addr.len(),
+			addr_end.len(),
+		);
 	}
+
+	ret
 });
 
 pub(crate) fn hermit_tar_image() -> Option<&'static [u8]> {
