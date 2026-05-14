@@ -41,11 +41,20 @@ bitflags! {
 	}
 }
 
-// Bit 47 must equal bits 48..63 for an x86_64 *canonical* address;
-// 0xf100_0000_0000 had bit 47 = 1 with the high bits all zero and
-// triggered a const-eval panic in `VirtAddr::new`. Drop bit 47 so the
-// constant is canonical on both architectures.
-const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x7100_0000_0000);
+// Place the user heap inside the L0 slot that covers LOADER_START
+// (`USER_L0_INDEX = LOADER_START >> 39 = 2`). On aarch64 only that
+// slot is COW-marked at fork and deep-copied by
+// `copy_current_root_page_table`; everything else is treated as a
+// shared kernel mapping. Putting the heap outside L0[2] leaves it
+// shared between parent and child forks, which manifests as the
+// child overwriting the parent's heap on its first user-space write.
+//
+// LOADER_START is 0x0100_0000_0000; binaries currently take well
+// under 256 GiB, so 0x0140_0000_0000 sits comfortably above any
+// loaded image while still falling inside L0[2] (which ends at
+// 0x0180_0000_0000). The address is canonical on x86_64 as well
+// (bit 47 = 0).
+const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x0140_0000_0000);
 
 /// Creates a new virtual memory mapping of the `size` specified with
 /// protection bits specified in `prot_flags`.
@@ -78,7 +87,7 @@ pub extern "C" fn sys_mmap(
 			} else {
 				error!("Unable to create heap");
 
-				return -i32::from(Errno::Nomems);
+				return -i32::from(Errno::Nomem);
 			}
 		}
 	} else {
