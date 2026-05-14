@@ -930,7 +930,7 @@ pub fn mark_user_pages_copy_on_write() {
 	let l0_phys = TTBR0_EL1.get_baddr() as usize;
 	let l0 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(l0_phys) };
 
-	// User pages live exclusively in the L0 slot covering LOADER_START.
+	// User pages live exclusively in the L0 slot covering USER_START.
 	// All other L0 entries (kernel image, heap, per-task stacks…) are
 	// shared kernel mappings and must not be touched here.
 	for l0_idx in [USER_L0_INDEX].iter().copied() {
@@ -1149,9 +1149,9 @@ pub fn clear_user_space() {
 /// (entry 0) and installs a self-reference at entry 511. User-space entries
 /// (1..511) are left empty.
 /// Index of the L0 entry that backs the user-space load area
-/// (`LOADER_START = 0x0100_0000_0000`, bits 47..39 = 2).
+/// (`USER_START = 0x0100_0000_0000`, bits 47..39 = 2).
 #[cfg(feature = "common-os")]
-const USER_L0_INDEX: usize = (crate::arch::aarch64::kernel::LOADER_START >> 39) & 0x1ff;
+const USER_L0_INDEX: usize = (crate::arch::aarch64::kernel::USER_START.as_usize() >> 39) & 0x1ff;
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {

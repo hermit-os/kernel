@@ -189,9 +189,11 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 }
 
 #[cfg(feature = "common-os")]
-const LOADER_START: usize = 0x0100_0000_0000;
+pub(crate) const USER_START: VirtAddr = VirtAddr::new(0x0100_0000_0000);
 #[cfg(feature = "common-os")]
-const LOADER_STACK_SIZE: usize = 0x8000;
+const USER_STACK: VirtAddr = VirtAddr::new(0x0180_0000_0000 - USER_STACK_SIZE as u64);
+#[cfg(feature = "common-os")]
+const USER_STACK_SIZE: usize = 0x8000;
 
 #[cfg(feature = "common-os")]
 pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
@@ -240,7 +242,7 @@ where
 	}
 	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
 
-	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
+	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
@@ -252,7 +254,7 @@ where
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
 	paging::map::<BasePageSize>(
-		VirtAddr::from(LOADER_START),
+		VirtAddr::from(USER_START),
 		physaddr,
 		code_size / BasePageSize::SIZE as usize,
 		flags,
@@ -261,20 +263,21 @@ where
 	// this file's local `use` brings in `memory_addresses::VirtAddr`.
 	// Convert at the boundary so the BTreeMap-keyed insert type-checks.
 	{
-		let start: x86_64::VirtAddr = VirtAddr::from(LOADER_START).into();
+		let start: x86_64::VirtAddr = VirtAddr::from(USER_START).into();
 		let end: x86_64::VirtAddr =
-			VirtAddr::from(LOADER_START + code_size).align_up(BasePageSize::SIZE).into();
+			VirtAddr::from(USER_START + code_size).align_up(BasePageSize::SIZE).into();
 		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(
 			start,
 			VirtualMemoryArea::new(
 				start,
 				end,
 				VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE | VirtualMemoryAreaProt::EXECUTE,
+				MemoryType::CODE,
 			),
 		);
 	}
 
-	let loader_start_ptr = ptr::with_exposed_provenance_mut(LOADER_START);
+	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
 	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
 
 	if tls_size > 0 {
@@ -296,13 +299,14 @@ where
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
-		let tls_virt = VirtAddr::from(LOADER_START + code_size + BasePageSize::SIZE as usize);
+		let tls_virt = VirtAddr::from(USER_START.as_usize() + code_size + BasePageSize::SIZE as usize);
 		paging::map::<BasePageSize>(
 			tls_virt,
 			physaddr,
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
+	
 		{
 			let start: x86_64::VirtAddr = tls_virt.into();
 			let end: x86_64::VirtAddr =
@@ -313,9 +317,11 @@ where
 					start,
 					end,
 					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+					MemoryType::TLS
 				),
 			);
 		}
+	
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
 		for elem in block.iter_mut() {
@@ -355,21 +361,48 @@ where
 }
 
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: alloc::vec::Vec<&str>) -> ! {
+pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) -> ! {
 	use alloc::ffi::CString;
 
 	use align_address::Align;
+	use free_list::PageLayout;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+	use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 
+	use crate::arch::x86_64::mm::paging::PageTableEntryFlagsExt;
 	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
+	use crate::arch::mm::paging;
+	#[cfg(feature = "fork")]
+	use crate::mm::frame_ref_inc;
+	use crate::mm::vma::*;
 
 	debug!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();
 
-	let entry_point: usize = LOADER_START | entry_point;
-	let stack_pointer: usize = LOADER_START
-		+ (code_size + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE.try_into().unwrap())
-		- 8;
+	let entry_point: usize = USER_START.as_usize() | entry_point;
+	let stack_pointer: usize = USER_STACK.as_usize() + USER_STACK_SIZE - 8;
+
+	let layout = PageLayout::from_size(USER_STACK_SIZE).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable().user();
+	paging::map::<BasePageSize>(
+		USER_STACK,
+		phys_addr,
+		USER_STACK_SIZE / BasePageSize::SIZE as usize,
+		flags,
+	);
+	{
+		let start: x86_64::VirtAddr = USER_STACK.into();
+		let end: x86_64::VirtAddr = (USER_STACK+USER_STACK_SIZE).into();
+		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(start, VirtualMemoryArea::new(start, end, VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE, MemoryType::STACK));
+	}
+	#[cfg(feature = "fork")]
+	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
+		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
+	}
 
 	let stack_pointer = stack_pointer - 128 /* red zone */ - arg.len() * size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
