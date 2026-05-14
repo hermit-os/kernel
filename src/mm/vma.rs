@@ -18,12 +18,33 @@ pub struct VirtualMemoryArea {
 	pub end: VirtAddr,
 	/// Protection bits the kernel must install when faulting in a page.
 	pub prot: VirtualMemoryAreaProt,
+	/// Description of the memory type
+	#[allow(unused)]
+	pub mem_type: MemoryType,
 }
 
 impl VirtualMemoryArea {
-	pub fn new(start: VirtAddr, end: VirtAddr, prot: VirtualMemoryAreaProt) -> Self {
-		Self { start, end, prot }
+	pub fn new(
+		start: VirtAddr,
+		end: VirtAddr,
+		prot: VirtualMemoryAreaProt,
+		mem_type: MemoryType,
+	) -> Self {
+		Self {
+			start,
+			end,
+			prot,
+			mem_type,
+		}
 	}
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum MemoryType {
+	HEAP,
+	STACK,
+	CODE,
+	TLS,
 }
 
 bitflags! {
@@ -79,6 +100,7 @@ pub extern "C" fn sys_mmap(
 					HEAP_START_ADDR,
 					HEAP_START_ADDR + size as u64,
 					prot_flags,
+					MemoryType::HEAP,
 				);
 				guard.insert(HEAP_START_ADDR, new_vma);
 				*ret = HEAP_START_ADDR.as_mut_ptr();
