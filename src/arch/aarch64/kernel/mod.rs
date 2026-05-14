@@ -173,9 +173,18 @@ pub fn print_statistics() {
 }
 
 #[cfg(feature = "common-os")]
-pub(crate) const LOADER_START: usize = 0x0100_0000_0000;
+pub(crate) const USER_START: VirtAddr = VirtAddr::new(0x0100_0000_0000);
+// Place the user stack at the top of the L0 slot that backs USER_START
+// (L0[USER_L0_INDEX] = L0[2], spanning 0x0100_0000_0000..0x0180_0000_0000).
+// Only this slot is deep-copied by `create_new_root_page_table`; every
+// other L0 entry is inherited verbatim from the parent, so a stack
+// outside L0[2] would share its L1/L2/L3 tables with the spawning
+// process and the first `paging::map` call from the child would
+// silently overwrite the parent's stack mapping.
 #[cfg(feature = "common-os")]
-const LOADER_STACK_SIZE: usize = 0x8000;
+const USER_STACK: VirtAddr = VirtAddr::new(0x0180_0000_0000 - USER_STACK_SIZE as u64);
+#[cfg(feature = "common-os")]
+const USER_STACK_SIZE: usize = 0x8000;
 
 /// Map the user-mode binary into the address space and run the ELF-loader
 /// closure against the freshly-mapped pages. Mirrors the x86_64 sibling
@@ -225,7 +234,7 @@ where
 	}
 	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
 
-	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
+	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
@@ -237,14 +246,14 @@ where
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
 	paging::map::<BasePageSize>(
-		VirtAddr::from(LOADER_START),
+		USER_START,
 		physaddr,
 		code_size / BasePageSize::SIZE as usize,
 		flags,
 	);
-	core_scheduler().get_current_task().borrow_mut().vmas.write().insert(VirtAddr::from(LOADER_START), VirtualMemoryArea::new(VirtAddr::from(LOADER_START), VirtAddr::from(LOADER_START + code_size).align_up(BasePageSize::SIZE), VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE|VirtualMemoryAreaProt::EXECUTE));
+	core_scheduler().get_current_task().borrow_mut().vmas.write().insert(VirtAddr::from(USER_START), VirtualMemoryArea::new(VirtAddr::from(USER_START), VirtAddr::from(USER_START + code_size).align_up(BasePageSize::SIZE), VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE|VirtualMemoryAreaProt::EXECUTE, MemoryType::CODE));
 
-	let loader_start_ptr = ptr::with_exposed_provenance_mut(LOADER_START);
+	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
 	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
 
 	if tls_size > 0 {
@@ -267,14 +276,15 @@ where
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
-		let tls_virt = VirtAddr::from(LOADER_START + code_size + BasePageSize::SIZE as usize);
+		let tls_virt = VirtAddr::from(USER_START + code_size + BasePageSize::SIZE as usize);
 		paging::map::<BasePageSize>(
 			tls_virt,
 			physaddr,
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
-		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(tls_virt, VirtualMemoryArea::new(tls_virt, (tls_virt + tls_memsz).align_up(BasePageSize::SIZE), VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE));
+		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(tls_virt, VirtualMemoryArea::new(tls_virt, (tls_virt + tls_memsz).align_up(BasePageSize::SIZE), VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE, MemoryType::TLS));
+
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tls_size as usize) };
 		for elem in block.iter_mut() {
@@ -359,20 +369,41 @@ fn set_user_tpidr_el0(value: u64) {
 /// new PC, SPSR_EL1 the new PSTATE (mode bits select EL0t), and SP_EL0 the
 /// user stack. Per AAPCS64, `argc` lives in `x0` and `argv` in `x1`.
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: alloc::vec::Vec<&str>) -> ! {
+pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) -> ! {
 	use alloc::ffi::CString;
 
 	use align_address::Align;
+	use free_list::PageLayout;
 
 	use crate::arch::aarch64::kernel::scheduler::TaskStacks;
+	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
+	#[cfg(feature = "fork")]
+	use crate::mm::frame_ref_inc;
+	use crate::mm::vma::*;
 
 	debug!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();
 
-	let entry_point: usize = LOADER_START | entry_point;
-	let stack_top: usize = LOADER_START
-		+ (code_size + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE.try_into().unwrap())
-		- TaskStacks::MARKER_SIZE;
+	let entry_point: usize = USER_START.as_usize() | entry_point;
+	let stack_top: usize = USER_STACK.as_usize() + USER_STACK_SIZE - TaskStacks::MARKER_SIZE;
+
+	let layout = PageLayout::from_size(USER_STACK_SIZE).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable().user();
+	paging::map::<BasePageSize>(
+		USER_STACK,
+		phys_addr,
+		USER_STACK_SIZE / BasePageSize::SIZE as usize,
+		flags,
+	);
+	core_scheduler().get_current_task().borrow_mut().vmas.write().insert(USER_STACK, VirtualMemoryArea::new(USER_STACK, USER_STACK+USER_STACK_SIZE, VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE, MemoryType::STACK));
+	#[cfg(feature = "fork")]
+	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
+		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
+	}
 
 	// Place the argv pointer array on the user stack.
 	let stack_pointer = stack_top - arg.len() * mem::size_of::<*mut u8>();
