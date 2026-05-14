@@ -1120,7 +1120,20 @@ pub fn drop_user_space(l0_phys: usize) {
 /// Clear the user-space portion of the currently active address space.
 #[cfg(feature = "common-os")]
 pub fn clear_user_space() {
+	use crate::fd::STDERR_FILENO;
+	use crate::core_scheduler;
 	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+
+	core_scheduler()
+        .get_current_task()
+        .borrow()       
+        .vmas                   
+        .write()
+		.clear();
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&k, _| k <= STDERR_FILENO);
 
 	let l0_phys = TTBR0_EL1.get_baddr() as usize;
 	debug!("Clear the user space at L0 {l0_phys:#x}");
