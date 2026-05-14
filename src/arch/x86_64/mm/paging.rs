@@ -448,6 +448,20 @@ pub fn drop_user_space(pml4_phys: usize) {
 
 #[cfg(feature = "common-os")]
 pub fn clear_user_space() {
+	use crate::fd::STDERR_FILENO;
+	use crate::core_scheduler;
+
+	core_scheduler()
+        .get_current_task()
+        .borrow()       
+        .vmas                   
+        .write()
+		.clear();
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&k, _| k <= STDERR_FILENO);
+
 	let (p4_frame, _) = Cr3::read_raw();
 	let pml4_phys = p4_frame.start_address().as_u64() as usize;
 
@@ -625,6 +639,13 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 					1,
 					flags,
 				);
+
+				// clear page
+				let slice = unsafe { core::slice::from_raw_parts_mut(virtaddr.as_mut_ptr() as *mut u8, BasePageSize::SIZE as usize) };
+				slice.fill(0);
+
+				#[cfg(feature = "fork")]
+				crate::mm::frame_ref_inc(physaddr);
 
 				// Restore user GS before returning to ring 3; the COW path
 				// above does the same. Without this, iret leaves the kernel

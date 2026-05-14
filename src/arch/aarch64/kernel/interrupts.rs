@@ -275,6 +275,13 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 						flags,
 					);
 
+					// clear page
+					let slice = unsafe { core::slice::from_raw_parts_mut(addr.as_mut_ptr() as *mut u8, BasePageSize::SIZE as usize) };
+					slice.fill(0);
+
+					#[cfg(feature = "fork")]
+					crate::mm::frame_ref_inc(physaddr);
+
 					return;
 				}
 			}
