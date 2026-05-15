@@ -12,7 +12,6 @@ use aarch64_cpu::asm::barrier::{self, NSH, SY, dmb, dsb, isb};
 use aarch64_cpu::registers::{ReadWriteable, SCTLR_EL1, TTBR0_EL1, TTBR1_EL1, Writeable};
 use align_address::Align;
 use fdt::Fdt;
-use goblin::elf::header::header64::{EI_DATA, ELFDATA2LSB, ELFMAG, Header, SELFMAG};
 use hermit_entry::Entry;
 use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
 use hermit_entry::elf::LoadedKernel;
@@ -20,6 +19,7 @@ use log::info;
 
 use crate::BootInfoExt;
 use crate::arch::paging::*;
+use crate::fdt_ext::FdtExt;
 use crate::os::CONSOLE;
 
 unsafe extern "C" {
@@ -57,49 +57,8 @@ pub fn find_kernel() -> &'static [u8] {
 		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
 			.expect(".fdt file has invalid header")
 	};
-	let module_start = fdt
-		.find_node("/chosen")
-		.unwrap()
-		.children()
-		.find(|node| node.name.starts_with("module@"))
-		.map(|node| {
-			let value = node.name.strip_prefix("module@").unwrap();
-			if let Some(value) = value.strip_prefix("0x") {
-				usize::from_str_radix(value, 16).unwrap()
-			} else if let Some(value) = value.strip_prefix("0X") {
-				usize::from_str_radix(value, 16).unwrap()
-			} else {
-				value.parse().unwrap()
-			}
-		})
-		.unwrap();
 
-	let header = unsafe {
-		&*core::mem::transmute::<*const u8, *const Header>(ptr::with_exposed_provenance(
-			module_start,
-		))
-	};
-
-	if header.e_ident[0..SELFMAG] != ELFMAG[..] {
-		panic!("Didn't find valid ELF file!");
-	}
-
-	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
-		u64::from_le(header.e_shoff)
-			+ (u16::from_le(header.e_shentsize) as u64 * u16::from_le(header.e_shnum) as u64)
-	} else {
-		u64::from_be(header.e_shoff)
-			+ (u16::from_be(header.e_shentsize) as u64 * u16::from_be(header.e_shnum) as u64)
-	};
-
-	info!("Found ELF file with size {file_size}");
-
-	unsafe {
-		core::slice::from_raw_parts(
-			ptr::with_exposed_provenance(module_start),
-			file_size.try_into().unwrap(),
-		)
-	}
+	fdt.find_kernel().unwrap()
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {

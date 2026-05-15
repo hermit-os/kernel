@@ -15,6 +15,8 @@ mod arch;
 mod bump_allocator;
 #[cfg(any(target_os = "uefi", target_arch = "x86_64"))]
 mod fdt;
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
+mod fdt_ext;
 mod log;
 mod os;
 

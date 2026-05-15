@@ -30,6 +30,7 @@ volatile = { version = "0.6", features = ["derive"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 fdt = "0.1"
+goblin = { version = "0.10", default-features = false, features = ["elf64"] }
 naked-function = "0.1"
 sbi-rt = "0.0.3"
 
