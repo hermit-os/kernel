@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "align-address"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cee078b3ed87e2621e0389729e2f032cc0408a4548768ced01678c9451c62237"
+
+[[package]]
 name = "allocator-api2"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18,6 +24,7 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 name = "hermit-builtins"
 version = "0.0.0"
 dependencies = [
+ "align-address",
  "hermit-abi",
  "libm",
  "spinning_top",

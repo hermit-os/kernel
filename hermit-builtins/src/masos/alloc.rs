@@ -1,23 +1,58 @@
 use alloc::alloc::{alloc, alloc_zeroed, dealloc, realloc};
 use core::alloc::Layout;
-use core::mem::MaybeUninit;
+use core::ptr::NonNull;
 
+use align_address::Align;
 use spinning_top::RawSpinlock;
 use talc::TalcLock;
-use talc::source::Claim;
+use talc::base::Talc;
+use talc::base::binning::Binning;
+use talc::source::Source;
 
 #[global_allocator]
-static TALC: TalcLock<RawSpinlock, Claim> = TalcLock::new(unsafe {
-	/// 16 MiB of statically allocated Heap memory.
-	#[repr(C, align(0x1000))]
-	struct Heap([MaybeUninit<u8>; 0x100_0000]);
+static TALC: TalcLock<RawSpinlock, Malloc> = TalcLock::new(Malloc::new());
 
-	static mut HEAP: Heap = Heap([MaybeUninit::uninit(); _]);
+#[derive(Debug)]
+struct Malloc {
+	heap_end: Option<NonNull<u8>>,
+}
 
-	let base = (&raw mut HEAP).cast::<u8>();
-	let size = size_of::<Heap>();
-	Claim::new(base, size)
-});
+impl Malloc {
+	// Adapted from dlmalloc-rs.
+	const GRANULARITY: usize = 64 * 1024;
+
+	const fn new() -> Self {
+		Self { heap_end: None }
+	}
+}
+
+unsafe impl Send for Malloc {}
+
+unsafe impl Source for Malloc {
+	fn acquire<B: Binning>(talc: &mut Talc<Self, B>, layout: Layout) -> Result<(), ()> {
+		let size = layout.size().align_up(Self::GRANULARITY);
+		let mut base = talc
+			.source
+			.heap_end
+			.map(NonNull::as_ptr)
+			.unwrap_or_default();
+
+		let ret = unsafe { super::sys_mmap(size, libc::PROT_READ | libc::PROT_WRITE, &mut base) };
+		if ret != 0 {
+			return Err(());
+		}
+
+		let top = unsafe { base.add(size) };
+		let new_end = match talc.source.heap_end {
+			None => unsafe { talc.claim(base, size) },
+			Some(heap_end) => unsafe { Some(talc.extend(heap_end, top)) },
+		};
+		assert_eq!(new_end, unsafe { NonNull::new(top) });
+		talc.source.heap_end = new_end;
+
+		Ok(())
+	}
+}
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
