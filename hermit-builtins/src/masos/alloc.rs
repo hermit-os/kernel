@@ -18,7 +18,7 @@ struct Malloc {
 }
 
 impl Malloc {
-	// Adapted from dlmalloc-rs.
+	// From dlmalloc-rs. Also the size of a Wasm page.
 	const GRANULARITY: usize = 64 * 1024;
 
 	const fn new() -> Self {
