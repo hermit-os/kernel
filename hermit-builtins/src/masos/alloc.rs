@@ -47,7 +47,7 @@ unsafe impl Source for Malloc {
 			None => unsafe { talc.claim(base, size) },
 			Some(heap_end) => unsafe { Some(talc.extend(heap_end, top)) },
 		};
-		assert_eq!(new_end, unsafe { NonNull::new(top) });
+		assert_eq!(new_end, NonNull::new(top));
 		talc.source.heap_end = new_end;
 
 		Ok(())
