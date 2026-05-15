@@ -151,6 +151,7 @@ export! {
 	#[no_errno] fn available_parallelism() -> usize;
 	fn getdents64(fd: i32, dirp: *mut libc::dirent64, count: usize) -> i64;
 	fn exec(path: *const c_char) -> i32;
+	fn mmap(size: usize, prot_flags: u32, ret: *mut *mut u8) -> i32;
 }
 
 #[unsafe(no_mangle)]
@@ -225,4 +226,5 @@ enum SyscallNo {
 	available_parallelism = 54,
 	getdents64 = 55,
 	exec = 56,
+	mmap = 57,
 }
