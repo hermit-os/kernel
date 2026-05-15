@@ -8,7 +8,6 @@ use core::ptr;
 
 use ::alloc::borrow::ToOwned;
 use ::alloc::vec;
-use hermit_abi as libc;
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn _start(_argc: c_int, _argv: *mut *mut c_char) -> ! {
