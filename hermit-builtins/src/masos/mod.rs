@@ -11,7 +11,9 @@ use ::alloc::vec;
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn _start(_argc: c_int, _argv: *mut *mut c_char) -> ! {
-	let (argv, argc, _args_cap) = vec![c"dummy".to_owned().into_raw()].into_raw_parts();
+	let (argv, argv_len, _args_cap) =
+		vec![c"dummy".to_owned().into_raw(), ptr::null_mut()].into_raw_parts();
+	let argc = argv_len - 1;
 	let argc = i32::try_from(argc).unwrap();
 
 	let envp = ptr::null_mut();
