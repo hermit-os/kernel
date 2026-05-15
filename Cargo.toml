@@ -95,6 +95,12 @@ loader = ["hermit-entry"]
 ## [Uhyve]: https://github.com/hermit-os/uhyve
 uhyve = ["hermit-entry", "dep:uhyve-interface"]
 
+## Enables taking and restoring [Uhyve's](Uhyve) VM snapshots.
+##
+## This feature is incompatible with `write-pcap-file`.
+## [Uhyve]: https://github.com/hermit-os/uhyve
+snapshot = ["uhyve"]
+
 #! ### Hardware Features
 #!
 #! [microvm]: https://www.qemu.org/docs/master/system/i386/microvm.html

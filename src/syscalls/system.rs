@@ -32,3 +32,54 @@ pub unsafe extern "C" fn sys_read_keyboard(buffer: *mut u8, size: usize, nonbloc
 		result as isize
 	}
 }
+/// Returns the number of bytes written to the resume_params buffer.
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+#[cfg(all(feature = "snapshot", feature = "uhyve"))]
+pub unsafe extern "C" fn sys_snapshot(resume_params: *mut u8, len: u64) -> u64 {
+	use core::ffi::CStr;
+	#[cfg(feature = "net")]
+	use core::str::FromStr;
+
+	use uhyve_interface::GuestPhysAddr;
+	use uhyve_interface::v2::Hypercall;
+	use uhyve_interface::v2::parameters::SnapshotParams;
+
+	use crate::alloc::string::ToString;
+	use crate::env::{self, UhyveStartInfo, insert_var};
+	#[cfg(feature = "net")]
+	use crate::executor::network;
+	use crate::uhyve::uhyve_hypercall;
+
+	assert!(env::start_info().is_uhyve());
+	let new_args = if resume_params.is_null() {
+		GuestPhysAddr::zero()
+	} else {
+		GuestPhysAddr::new(
+			crate::arch::mm::paging::virtual_to_physical(crate::mm::VirtAddr::from_ptr(
+				resume_params,
+			))
+			.unwrap()
+			.as_u64(),
+		)
+	};
+	let mut snapshot_params = SnapshotParams {
+		new_args,
+		new_args_len: len,
+		..Default::default()
+	};
+	uhyve_hypercall(Hypercall::Snapshot(&mut snapshot_params));
+
+	if snapshot_params.restored {
+		if let Some(ip) = snapshot_params.new_hermit_ip {
+			let ip = CStr::from_bytes_until_nul(&ip)
+				.expect("The hypervisor supplied an unterminated HERMIT_IP")
+				.to_str()
+				.expect("The hypervisor supplied a non-UTF-8 HERMIT_IP");
+			insert_var("HERMIT_IP", ip.to_string());
+		};
+		#[cfg(feature = "net")]
+		network::reinit();
+	}
+	snapshot_params.new_args_len
+}
