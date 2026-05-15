@@ -47,13 +47,13 @@ unsafe extern "C" fn sys_realloc(
 /// Deprecated
 #[unsafe(no_mangle)]
 unsafe extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
-	unsafe { sys_alloc(size, align) }
+	unsafe { alloc(layout_from_size_align(size, align)) }
 }
 
 /// Deprecated
 #[unsafe(no_mangle)]
 unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-	unsafe { sys_dealloc(ptr, size, align) }
+	unsafe { dealloc(ptr, layout_from_size_align(size, align)) }
 }
 
 unsafe fn layout_from_size_align(size: usize, align: usize) -> Layout {
