@@ -313,19 +313,15 @@ impl ObjectInterface for Socket {
 		let connection_handle = future::poll_fn(|cx| {
 			let mut guard = NIC.lock();
 			let nic = guard.as_nic_mut().unwrap();
-			let mut socket_handle = None;
 
-			for handle in self.handle.iter() {
-				let s = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
-
-				if s.is_active() {
-					socket_handle = Some(*handle);
-					break;
-				}
-			}
+			let socket_handle = self
+				.handle
+				.extract_if(.., |handle| {
+					nic.get_mut_socket::<tcp::Socket<'_>>(*handle).is_active()
+				})
+				.next();
 
 			if let Some(handle) = socket_handle {
-				self.handle.remove(&handle);
 				Poll::Ready(Ok(handle))
 			} else if self.is_nonblocking {
 				Poll::Ready(Err(Errno::Again))
