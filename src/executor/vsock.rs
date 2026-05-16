@@ -33,6 +33,9 @@ pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;
 pub(crate) struct RawSocket {
 	pub remote_cid: u32,
 	pub remote_port: u32,
+	/// The listen port this connection was accepted on. Zero for listener and
+	/// outbound-connect sockets.
+	pub listen_port: u32,
 	pub fwd_cnt: u32,
 	pub peer_fwd_cnt: u32,
 	pub peer_buf_alloc: u32,
@@ -48,6 +51,7 @@ impl RawSocket {
 		Self {
 			remote_cid: 0,
 			remote_port: 0,
+			listen_port: 0,
 			fwd_cnt: 0,
 			peer_fwd_cnt: 0,
 			peer_buf_alloc: 0,
@@ -78,7 +82,22 @@ async fn vsock_run() {
 			let mut vsock_guard = VSOCK_MAP.lock();
 			let header_cid: u32 = header.src_cid.to_ne().try_into().unwrap();
 
-			let Some(raw) = vsock_guard.get_mut_socket(port) else {
+			// For data/shutdown packets, prefer a connected socket that was
+			// accepted on this port over the listener entry itself.
+			let header_cid_inner: u32 = header_cid;
+			let raw_port = header.src_port.to_ne();
+			let raw = if matches!(op, Op::Rw | Op::Shutdown | Op::CreditUpdate | Op::Response) {
+				if let Some(conn) = vsock_guard.get_mut_connected(port, header_cid_inner, raw_port)
+				{
+					conn
+				} else if let Some(s) = vsock_guard.get_mut_socket(port) {
+					s
+				} else {
+					return;
+				}
+			} else if let Some(s) = vsock_guard.get_mut_socket(port) {
+				s
+			} else {
 				return;
 			};
 
@@ -206,8 +225,47 @@ impl VsockMap {
 		self.port_map.get_mut(&port)
 	}
 
+	/// Look up a connected socket by its original listen port and the remote
+	/// endpoint. Used to route data packets after a connection has been moved
+	/// to an ephemeral port by `move_to_ephemeral`.
+	pub fn get_mut_connected(
+		&mut self,
+		listen_port: u32,
+		remote_cid: u32,
+		remote_port: u32,
+	) -> Option<&mut RawSocket> {
+		self.port_map.values_mut().find(|raw| {
+			raw.state == VsockState::Connected
+				&& raw.listen_port == listen_port
+				&& raw.remote_cid == remote_cid
+				&& raw.remote_port == remote_port
+		})
+	}
+
 	pub fn remove_socket(&mut self, port: u32) {
 		self.port_map.remove(&port);
+	}
+
+	/// Move the socket at `listen_port` to a fresh ephemeral port, reset the
+	/// listener entry to `Listen`, and return the ephemeral port.
+	pub fn move_to_ephemeral(&mut self, listen_port: u32) -> io::Result<u32> {
+		let mut conn = self.port_map.remove(&listen_port).ok_or(Errno::Inval)?;
+		conn.state = VsockState::Connected;
+		conn.listen_port = listen_port;
+
+		for ep in u32::MAX / 4..u32::MAX {
+			if let btree_map::Entry::Vacant(v) = self.port_map.entry(ep) {
+				v.insert(conn);
+				self.port_map
+					.insert(listen_port, RawSocket::new(VsockState::Listen));
+				return Ok(ep);
+			}
+		}
+
+		// No ephemeral port available; restore the entry to avoid losing it.
+		self.port_map
+			.insert(listen_port, RawSocket::new(VsockState::Listen));
+		Err(Errno::Badf)
 	}
 }
 
