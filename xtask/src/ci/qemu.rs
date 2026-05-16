@@ -185,10 +185,10 @@ impl Qemu {
 		if matches!(
 			image_name,
 			"axum-example"
-				| "http_server" | "http_server_poll"
+				| "http_server"
+				| "http_server_poll"
 				| "http_server_select"
-				| "vsock"
-				| "vsock_server"
+				| "vsock" | "vsock_server"
 		) || self.devices.contains(&Device::CadenceGem)
 		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to terminate the machine ourselves.
 		{

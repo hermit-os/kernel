@@ -256,42 +256,37 @@ impl ObjectInterface for Socket {
 					}
 				}
 				VsockState::ReceiveRequest => {
-					let result = {
-						const HEADER_SIZE: usize = size_of::<Hdr>();
-						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
-						let local_cid = driver_guard.get_cid();
+					const HEADER_SIZE: usize = size_of::<Hdr>();
+					let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
+					let local_cid = driver_guard.get_cid();
 
-						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
+					driver_guard.send_packet(HEADER_SIZE, |buffer| {
+						let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
-							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid.into());
-							response.src_port = le32::from_ne(port);
-							response.dst_port = le32::from_ne(raw.remote_port);
-							response.len = le32::from_ne(0);
-							response.type_ = le16::from_ne(Type::Stream.into());
-							if local_cid != u64::from(cid) && cid != u32::MAX {
-								response.op = le16::from_ne(Op::Rst.into());
-							} else {
-								response.op = le16::from_ne(Op::Response.into());
-							}
-							response.flags = le32::from_ne(0);
-							response.buf_alloc = le32::from_ne(
-								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
-							);
-							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
-						});
+						response.src_cid = le64::from_ne(local_cid);
+						response.dst_cid = le64::from_ne(raw.remote_cid.into());
+						response.src_port = le32::from_ne(port);
+						response.dst_port = le32::from_ne(raw.remote_port);
+						response.len = le32::from_ne(0);
+						response.type_ = le16::from_ne(Type::Stream.into());
+						if local_cid != u64::from(cid) && cid != u32::MAX {
+							response.op = le16::from_ne(Op::Rst.into());
+						} else {
+							response.op = le16::from_ne(Op::Response.into());
+						}
+						response.flags = le32::from_ne(0);
+						response.buf_alloc =
+							le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+						response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
+					});
 
-						let endpoint = VsockEndpoint::new(raw.remote_port, raw.remote_cid);
+					let endpoint = VsockEndpoint::new(raw.remote_port, raw.remote_cid);
 
-						// Move the accepted connection to an ephemeral port so the
-						// listener entry can be reset to Listen for the next accept.
-						let conn_port = guard.move_to_ephemeral(port)?;
+					// Move the accepted connection to an ephemeral port so the
+					// listener entry can be reset to Listen for the next accept.
+					let conn_port = guard.move_to_ephemeral(port)?;
 
-						Poll::Ready(Ok((conn_port, endpoint)))
-					};
-
-					result
+					Poll::Ready(Ok((conn_port, endpoint)))
 				}
 				_ => Poll::Ready(Err(Errno::Badf)),
 			}

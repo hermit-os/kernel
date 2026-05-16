@@ -87,8 +87,7 @@ async fn vsock_run() {
 			let header_cid_inner: u32 = header_cid;
 			let raw_port = header.src_port.to_ne();
 			let raw = if matches!(op, Op::Rw | Op::Shutdown | Op::CreditUpdate | Op::Response) {
-				if let Some(conn) =
-					vsock_guard.get_mut_connected(port, header_cid_inner, raw_port)
+				if let Some(conn) = vsock_guard.get_mut_connected(port, header_cid_inner, raw_port)
 				{
 					conn
 				} else if let Some(s) = vsock_guard.get_mut_socket(port) {
