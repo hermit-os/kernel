@@ -51,6 +51,9 @@ impl ObjectInterface for NullSocket {}
 
 pub struct Socket {
 	port: u32,
+	/// The port this socket is bound/listening on. Stays fixed across accepts
+	/// while `port` is updated to the ephemeral connection port after each accept.
+	listen_port: u32,
 	cid: u32,
 	is_nonblocking: bool,
 }
@@ -59,6 +62,7 @@ impl Socket {
 	pub fn new() -> Self {
 		Self {
 			port: 0,
+			listen_port: 0,
 			cid: u32::MAX,
 			is_nonblocking: false,
 		}
@@ -139,6 +143,7 @@ impl ObjectInterface for Socket {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
 				self.port = ep.port;
+				self.listen_port = ep.port;
 				if let Some(cid) = ep.cid {
 					self.cid = cid;
 				} else {
@@ -234,10 +239,10 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
-		let port = self.port;
+		let port = self.listen_port;
 		let cid = self.cid;
 
-		let endpoint = future::poll_fn(|cx| {
+		let (conn_port, endpoint) = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
@@ -277,17 +282,24 @@ impl ObjectInterface for Socket {
 							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
 						});
 
-						raw.state = VsockState::Connected;
+						let endpoint = VsockEndpoint::new(raw.remote_port, raw.remote_cid);
 
-						Ok(VsockEndpoint::new(raw.remote_port, raw.remote_cid))
+						// Move the accepted connection to an ephemeral port so the
+						// listener entry can be reset to Listen for the next accept.
+						let conn_port = guard.move_to_ephemeral(port)?;
+
+						Poll::Ready(Ok((conn_port, endpoint)))
 					};
 
-					Poll::Ready(result)
+					result
 				}
 				_ => Poll::Ready(Err(Errno::Badf)),
 			}
 		})
 		.await?;
+
+		// This Socket now tracks the accepted connection, not the listener.
+		self.port = conn_port;
 
 		Ok((
 			Arc::new(async_lock::RwLock::new(NullSocket::new().into())),

@@ -176,12 +176,19 @@ impl Qemu {
 					.any(|feature| feature == "client");
 				test_vsock(has_client)?;
 			}
+			"vsock_server" => {
+				test_vsock_server()?;
+			}
 			_ => {}
 		}
 
 		if matches!(
 			image_name,
-			"axum-example" | "http_server" | "http_server_poll" | "http_server_select" | "vsock"
+			"axum-example"
+				| "http_server" | "http_server_poll"
+				| "http_server_select"
+				| "vsock"
+				| "vsock_server"
 		) || self.devices.contains(&Device::CadenceGem)
 		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to terminate the machine ourselves.
 		{
@@ -620,6 +627,30 @@ fn test_vsock(has_client: bool) -> Result<()> {
 	let s = str::from_utf8(&buf[0..n])?;
 	let received_messages = s.trim().split('\n').collect::<Vec<_>>();
 	assert_eq!(received_messages, messages);
+
+	Ok(())
+}
+
+fn test_vsock_server() -> Result<()> {
+	const PORT: u32 = 9975;
+	const CONNECTIONS: usize = 2;
+
+	thread::sleep(Duration::from_secs(10));
+	let first_stream = VsockStream::connect_with_cid_port(3, PORT)?;
+
+	let mut do_ping_pong = |mut stream: VsockStream| -> Result<()> {
+		stream.write_all(b"ping")?;
+		let mut buf = [0u8; 64];
+		let n = stream.read(&mut buf)?;
+		let msg = from_utf8(&buf[..n])?;
+		ensure!(msg == "pong", "expected 'pong', got {msg:?}");
+		Ok(())
+	};
+
+	do_ping_pong(first_stream)?;
+	for _ in 1..CONNECTIONS {
+		do_ping_pong(VsockStream::connect_with_cid_port(3, PORT)?)?;
+	}
 
 	Ok(())
 }
