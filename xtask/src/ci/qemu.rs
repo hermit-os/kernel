@@ -638,7 +638,7 @@ fn test_vsock_server() -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
 	let first_stream = VsockStream::connect_with_cid_port(3, PORT)?;
 
-	let mut do_ping_pong = |mut stream: VsockStream| -> Result<()> {
+	let do_ping_pong = |mut stream: VsockStream| -> Result<()> {
 		stream.write_all(b"ping")?;
 		let mut buf = [0u8; 64];
 		let n = stream.read(&mut buf)?;
