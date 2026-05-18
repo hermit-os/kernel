@@ -14,6 +14,7 @@ use crate::{arch, scheduler};
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = i32;
+pub type Pid = i32;
 
 /// Fork the current process.
 /// Returns the child's PID to the parent, and 0 to the child.
@@ -52,7 +53,7 @@ pub extern "C" fn sys_fork() -> i32 {
 ))]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
+pub extern "C" fn sys_waitpid(pid: Pid) -> i32 {
 	match scheduler::join(TaskId::from(pid)) {
 		Ok(()) => 0,
 		_ => -i32::from(Errno::Inval),
@@ -64,13 +65,13 @@ pub extern "C" fn sys_waitpid(pid: Tid) -> i32 {
 #[cfg(not(feature = "common-os"))]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_waitpid(_pid: Tid) -> i32 {
+pub extern "C" fn sys_waitpid(_pid: Pid) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_getpid() -> Tid {
+pub extern "C" fn sys_getpid() -> Pid {
 	#[cfg(not(feature = "common-os"))]
 	{
 		// an unikernel doesn't have a pid => return always 0
@@ -79,8 +80,10 @@ pub extern "C" fn sys_getpid() -> Tid {
 
 	#[cfg(feature = "common-os")]
 	{
-		// return the current task id
-		core_scheduler().get_current_task_handle().get_id().into()
+		// Return the process ID — equal for every thread of the same
+		// process, set by `Task::new_thread` from the spawning thread's
+		// `pid` and reset to the new `tid` on fork.
+		core_scheduler().get_current_task().borrow().pid.into()
 	}
 }
 
