@@ -865,7 +865,7 @@ dependencies = [
 
 [[package]]
 name = "hermit-kernel"
-version = "0.13.0"
+version = "0.13.2"
 dependencies = [
  "aarch64-cpu 11.2.0",
  "ahash",
@@ -1958,8 +1958,7 @@ dependencies = [
 [[package]]
 name = "uhyve-interface"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce486c1c8e5506851de5f819968b80b22fce3cf1246c3a75bf52439448ba9d51"
+source = "git+https://github.com/hermit-os/uhyve.git?branch=uhyve-if-snapshot#86bfff8613a4f1cf308bfebcf613dbe5411dc93d"
 dependencies = [
  "aarch64",
  "hermit-abi",
