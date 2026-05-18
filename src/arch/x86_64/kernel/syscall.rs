@@ -39,9 +39,9 @@ pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 		// restore user stack pointer
 		"pop rcx",
 		"mov rsp, rcx",
-		"swapgs",
-		"mfence",
 		"cli",
+		"mfence",
+		"swapgs",
 		// restore context (without rax)
 		"pop r15",
 		"pop r14",
