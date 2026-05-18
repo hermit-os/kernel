@@ -222,11 +222,11 @@ struct NewTask {
 	stacks: TaskStacks,
 	object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 	/// When `Some`, the new task is a user-space thread that shares the
-	/// given root page table with its parent process. When
-	/// `None`, the task is a regular kernel-mode task with a fresh
-	/// address space.
+	/// given root page table with its parent process and inherits the
+	/// parent's `pid`. When `None`, the task is a regular kernel-mode
+	/// task with a fresh address space; its `pid` equals its `tid`.
 	#[cfg(feature = "common-os")]
-	thread_of: Option<Arc<crate::scheduler::task::RootPageTable>>,
+	thread_of: Option<(Arc<crate::scheduler::task::RootPageTable>, task::ProcessId)>,
 	/// Per-process TLS template, cloned from the spawning thread. Used by
 	/// `From<NewTask>` to propagate the template into the new task so that
 	/// any threads it spawns in turn can allocate their own TLS regions.
@@ -262,9 +262,10 @@ impl From<NewTask> for Task {
 		} = value;
 
 		#[cfg(feature = "common-os")]
-		if let Some(root_page_table) = thread_of {
+		if let Some((root_page_table, parent_pid)) = thread_of {
 			let mut task = Self::new_thread(
 				tid,
+				parent_pid,
 				core_id,
 				TaskStatus::Ready,
 				prio,
@@ -379,7 +380,7 @@ impl PerCoreScheduler {
 		// immediately visible to every thread in this process.
 		let stacks = TaskStacks::new(stack_size);
 
-		let (root_page_table, object_map, tls_template, vmas) = {
+		let (root_page_table, object_map, tls_template, vmas, parent_pid) = {
 			let current = core_scheduler().get_current_task();
 			let borrowed = current.borrow();
 			(
@@ -387,6 +388,7 @@ impl PerCoreScheduler {
 				borrowed.object_map.clone(),
 				borrowed.tls_template.clone(),
 				borrowed.vmas.clone(),
+				borrowed.pid,
 			)
 		};
 
@@ -409,7 +411,7 @@ impl PerCoreScheduler {
 			core_id,
 			stacks,
 			object_map,
-			thread_of: Some(root_page_table),
+			thread_of: Some((root_page_table, parent_pid)),
 			tls_template,
 			tls_base,
 			vmas,

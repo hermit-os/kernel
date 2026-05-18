@@ -111,21 +111,62 @@ pub(crate) enum TaskStatus {
 	Idle,
 }
 
-/// Unique identifier for a task (i.e. `pid`).
+/// Unique identifier for a task (i.e. `tid`).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct TaskId(i32);
 
 impl TaskId {
-	pub const fn into(self) -> i32 {
-		self.0
-	}
-
 	pub const fn from(x: i32) -> Self {
 		TaskId(x)
 	}
 }
 
+impl From<TaskId> for i32 {
+	fn from(tid: TaskId) -> Self {
+		tid.0
+	}
+}
+
 impl fmt::Display for TaskId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+/// Process ID — shared between every thread of the same process.
+///
+/// For the main thread of a process it carries the same numeric value
+/// as the thread's [`TaskId`]; additional threads inherit it from the
+/// spawning thread. A [`TaskId`] converts into a `ProcessId` via
+/// [`From`] / [`Into`] (used by `Task::new` / `Task::new_fork` to seed
+/// `pid = tid` for a newly created main thread).
+#[cfg(feature = "common-os")]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct ProcessId(i32);
+
+#[cfg(feature = "common-os")]
+impl ProcessId {
+	pub const fn from(x: i32) -> Self {
+		ProcessId(x)
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl From<ProcessId> for i32 {
+	fn from(pid: ProcessId) -> Self {
+		pid.0
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl From<TaskId> for ProcessId {
+	fn from(tid: TaskId) -> Self {
+		ProcessId(tid.0)
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl fmt::Display for ProcessId {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
@@ -440,6 +481,12 @@ pub(crate) struct TlsTemplate {
 pub(crate) struct Task {
 	/// The ID of this context
 	pub id: TaskId,
+	/// Process ID — equal to `id` for the main thread of a process, and
+	/// inherited from the spawning thread for every additional thread of
+	/// the same process. After `fork()` the child's `pid` equals the
+	/// child's `id` (it becomes its own process).
+	#[cfg(feature = "common-os")]
+	pub pid: ProcessId,
 	/// Status of a task, e.g. if the task is ready or blocked
 	pub status: TaskStatus,
 	/// Task priority,
@@ -491,6 +538,8 @@ impl Task {
 
 		Task {
 			id: tid,
+			#[cfg(feature = "common-os")]
+			pid: tid.into(),
 			status: task_status,
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
@@ -548,6 +597,8 @@ impl Task {
 
 		Task {
 			id: tid,
+			#[cfg(feature = "common-os")]
+			pid: tid.into(),
 			status: TaskStatus::Idle,
 			prio: IDLE_PRIO,
 			last_stack_pointer: VirtAddr::zero(),
@@ -582,10 +633,13 @@ impl Task {
 	///
 	/// The `root_page_table` `Arc` is cloned from the parent, so all threads
 	/// of the same process drop together when the last one exits.
+	/// `parent_pid` is the spawning thread's `pid`; the new thread joins
+	/// the same process and reports the same `pid` value.
 	#[cfg(feature = "common-os")]
 	#[allow(clippy::too_many_arguments)]
 	pub fn new_thread(
 		tid: TaskId,
+		parent_pid: ProcessId,
 		core_id: CoreId,
 		task_status: TaskStatus,
 		task_prio: Priority,
@@ -595,9 +649,10 @@ impl Task {
 		tls_template: Option<Arc<TlsTemplate>>,
 		vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 	) -> Task {
-		debug!("Creating user thread {tid} on core {core_id}");
+		debug!("Creating user thread {tid} (pid {parent_pid}) on core {core_id}");
 		Task {
 			id: tid,
+			pid: parent_pid,
 			status: task_status,
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
@@ -632,6 +687,8 @@ impl Task {
 		debug!("Creating forked task {tid} on core {core_id}");
 		Task {
 			id: tid,
+			// A forked child becomes the main thread of a new process.
+			pid: tid.into(),
 			status: task_status,
 			prio: task_prio,
 			last_stack_pointer,
