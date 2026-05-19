@@ -24,7 +24,7 @@
       -accel kvm \
       -cpu host,migratable=no,+invtsc \
       -smp 1 \
-      -m 7.5G \
+      -m 7G \
       -display none \
       -serial stdio \
       -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
