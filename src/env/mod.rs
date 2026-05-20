@@ -20,6 +20,7 @@ pub(crate) use self::executable::tls::TlsInfo;
 pub(crate) use self::executable::{executable_ptr_range, log_segments};
 use crate::arch::kernel;
 pub(crate) use crate::arch::kernel::get_ram_address;
+use crate::kernel::pvh;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -96,7 +97,10 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = fdt_args().unwrap_or_default();
+		let args = pvh::start_info()
+			.cmdline()
+			.map(|s| s.to_str().unwrap())
+			.unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 
