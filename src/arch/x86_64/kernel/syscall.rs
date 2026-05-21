@@ -24,7 +24,7 @@ pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 		"push r14",
 		"push r15",
 		"swapgs",
-		"mfence",
+		// "mfence",
 		// switch to kernel stack
 		"mov rcx, rsp",
 		"mov rsp, gs:{core_local_kernel_stack}",
@@ -40,7 +40,7 @@ pub(crate) unsafe extern "C" fn syscall_handler() -> ! {
 		"pop rcx",
 		"mov rsp, rcx",
 		"cli",
-		"mfence",
+		// "mfence",
 		"swapgs",
 		// restore context (without rax)
 		"pop r15",
