@@ -3,7 +3,7 @@
 */
 
 ENTRY(_start)
-phys = 0x40200000;
+phys = 0x40400000;
 
 PHDRS
 {
