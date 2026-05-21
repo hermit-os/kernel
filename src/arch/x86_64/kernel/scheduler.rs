@@ -12,6 +12,7 @@ use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
+use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::env;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
@@ -303,11 +304,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 /// `jump_to_user_land`: user CS=0x2b, user SS=0x23, RFLAGS=0x1202.
 #[cfg(feature = "common-os")]
 #[unsafe(naked)]
-extern "C" fn task_start_user(
-	_f: extern "C" fn(usize),
-	_arg: usize,
-	_user_stack: u64,
-) -> ! {
+extern "C" fn task_start_user(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	// rdi = func (user entry)
 	// rsi = arg  (forwarded as first argument to `func`)
 	// rdx = user stack pointer
@@ -339,8 +336,7 @@ impl Task {
 	) {
 		unsafe {
 			// Debug marker at the very top of the kernel stack.
-			let mut stack = self.stacks.get_kernel_stack()
-				+ self.stacks.get_kernel_stack_size()
+			let mut stack = self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
 				- TaskStacks::MARKER_SIZE;
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
@@ -414,7 +410,8 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStackFrame) {
+extern "x86-interrupt" fn timer_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
 
 	debug!("Handle timer interrupt");
@@ -423,6 +420,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().reschedule();
+	swapgs(&stack_frame);
 }
 
 pub fn install_timer_handler() {
