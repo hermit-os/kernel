@@ -246,19 +246,16 @@ async fn network_run() {
 
 		let now = now();
 
-		match nic.poll_common(now) {
-			PollResult::SocketStateChanged => {
-				// Progress was made
-				cx.waker().wake_by_ref();
-			}
-			PollResult::None => {
-				// Very likely no progress can be made, so set up a timer interrupt to wake the waker
-				NETWORK_WAKER.lock().register(cx.waker());
-				nic.set_polling_mode(false);
-				if let Some(wakeup_time) = nic.poll_delay(now).map(|d| d.total_micros()) {
-					create_timer(Source::Network, wakeup_time);
-					trace!("Configured an interrupt for {wakeup_time:?}");
-				}
+		if nic.poll_common(now) == PollResult::SocketStateChanged || cfg!(feature = "idle-poll") {
+			// Progress was made or we want to poll when idle.
+			cx.waker().wake_by_ref();
+		} else {
+			// Very likely no progress can be made, so set up a timer interrupt to wake the waker
+			NETWORK_WAKER.lock().register(cx.waker());
+			nic.set_polling_mode(false);
+			if let Some(wakeup_time) = nic.poll_delay(now).map(|d| d.total_micros()) {
+				create_timer(Source::Network, wakeup_time);
+				trace!("Configured an interrupt for {wakeup_time:?}");
 			}
 		}
 
