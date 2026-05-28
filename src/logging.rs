@@ -1,5 +1,6 @@
 use core::fmt;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
@@ -41,14 +42,10 @@ impl log::Log for KernelLogger {
 			return;
 		}
 
-		// FIXME: Use `super let` once stable
-		let time;
-		let format_time = if self.time() {
-			time = Microseconds(crate::processor::get_timer_ticks());
-			format_args!("[{time}]")
-		} else {
-			format_args!("[            ]")
-		};
+		let time = self
+			.time()
+			.then(|| Duration::from_micros(crate::processor::get_timer_ticks()));
+		let format_time = LogTime(time);
 		let core_id = crate::arch::core_local::core_id();
 		let level = ColorLevel(record.level());
 
@@ -63,17 +60,27 @@ impl log::Log for KernelLogger {
 		let format_target = format_args!(" {target:<10}");
 
 		let args = record.args();
-		println!("{format_time}[{core_id}][{level}{format_target}] {args}");
+		println!("[{format_time}][{core_id}][{level}{format_target}] {args}");
 	}
 }
 
-struct Microseconds(u64);
+struct LogTime(Option<Duration>);
 
-impl fmt::Display for Microseconds {
+impl fmt::Display for LogTime {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let seconds = self.0 / 1_000_000;
-		let microseconds = self.0 % 1_000_000;
-		write!(f, "{seconds:5}.{microseconds:06}")
+		const TIME_SEC_WIDTH: usize = 5;
+		const TIME_SUBSEC_WIDTH: usize = 6;
+
+		if let Some(time) = self.0 {
+			let seconds = time.as_secs();
+			let microseconds = time.subsec_micros();
+			write!(
+				f,
+				"{seconds:TIME_SEC_WIDTH$}.{microseconds:0TIME_SUBSEC_WIDTH$}"
+			)
+		} else {
+			write!(f, "{:1$}", "", TIME_SEC_WIDTH + 1 + TIME_SUBSEC_WIDTH)
+		}
 	}
 }
 
