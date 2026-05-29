@@ -224,52 +224,41 @@ pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new
 // ── Fork support ─────────────────────────────────────────────────────────────
 
 /// Entry point for the child task after a fork.
-/// The child's saved context has this function as its "return address".
-/// When the child is scheduled it restores context and `ret`s here, returning 1 (true).
-/// Returns the child's kernel-stack top minus the marker size.
-/// Used by `fork_child_start` to locate the saved user RSP.
-#[cfg(all(feature = "common-os", feature = "fork"))]
-extern "C" fn get_kernel_stack_top() -> usize {
-	use crate::arch::x86_64::kernel::core_local::core_scheduler;
-	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
-
-	let task = core_scheduler().get_current_task();
-	let borrowed = task.borrow();
-	(borrowed.stacks.get_kernel_stack()
-		+ borrowed.stacks.get_kernel_stack_size() as u64
-		- TaskStacks::MARKER_SIZE as u64)
-		.as_usize()
-}
-
-/// Entry point for the child task after a fork.
 ///
-/// `switch_to_task` restores the saved context and `ret`s here.  Instead of
-/// unwinding the whole kernel call-chain (which is fragile), we jump directly
-/// to user space:
-///   • rax = 0  (fork returns 0 in the child)
-///   • rsp, rcx (user RIP), r11 (user RFLAGS) are read back from the user
-///     stack that `syscall_handler` prepared before the fork syscall.
-///   • swapgs restores the user GS base.
-///   • sysretq returns to user space.
+/// `switch_to_task` restores the saved context and `ret`s here. Instead
+/// of unwinding the whole kernel call-chain (which is fragile), we jump
+/// directly to user space, mirroring `syscall_handler`'s return path:
+///   • The 14 user-side registers (`rcx`, `rdx`, `rbx`, `rbp`, `rsi`,
+///     `rdi`, `r8`..`r15`) sit at the top of the child's kernel stack
+///     because `copy_kernel_stack_to` copied them across when the
+///     parent ran `prepare_fork_child_stack`. `rcx` holds the user
+///     RIP and `r11` the user RFLAGS — the `syscall` instruction
+///     stashed them there before `syscall_handler` even started.
+///   • The user RSP for the child is in the unused MARKER_SIZE pad of
+///     the kernel stack at `kernel_top - 8`.
+///     `prepare_fork_child_stack` writes it there from the per-CPU
+///     `user_stack` slot at fork time, so we get a snapshot that
+///     survives any other syscall taking place between the parent's
+///     fork() and the child being scheduled.
+///   • `rax = 0` (fork returns 0 in the child), `swapgs` restores the
+///     user GS base, `sysretq` jumps back to user mode.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 #[unsafe(naked)]
 extern "C" fn fork_child_start() {
 	use core::arch::naked_asm;
 	naked_asm!(
-		// rsp currently points somewhere inside the copied kernel stack.
-		// The user RSP (after the 14 user-register pushes) was saved by
-		// syscall_handler via `push rcx` right at the top of the kernel stack.
-		// Retrieve it: kernel_stack_top - 8.
-		"call {get_kernel_stack_top}",    // rax = kernel_stack_top
-		"mov  rsp, [rax - 8]",           // rsp  = user_rsp (after 14 pushes on user stack)
-		// Restore the 14 user registers that syscall_handler pushed:
-		//   r15, r14, r13, r12, r11, r10, r9, r8, rdi, rsi, rbp, rbx, rdx, rcx
-		// (rcx will hold the user-space return address for sysretq)
+		// Position rsp at the top of the saved-register block.
+		// `gs:{kernel_stack}` = kernel_top - MARKER_SIZE = kernel_top - 16.
+		// After 14 register pushes by syscall_handler rsp was
+		// gs:{kernel_stack} - 14*8.
+		"mov  rsp, gs:{core_local_kernel_stack}",
+		"sub  rsp, 14 * 8",
+		// Pop the 14 saved registers (rcx = user RIP, r11 = user RFLAGS).
 		"pop  r15",
 		"pop  r14",
 		"pop  r13",
 		"pop  r12",
-		"pop  r11",   // r11 = user RFLAGS (saved by syscall instruction)
+		"pop  r11",
 		"pop  r10",
 		"pop  r9",
 		"pop  r8",
@@ -278,12 +267,20 @@ extern "C" fn fork_child_start() {
 		"pop  rbp",
 		"pop  rbx",
 		"pop  rdx",
-		"pop  rcx",   // rcx = user-space return address (saved by syscall instruction)
-		// fork() returns 0 in the child
+		"pop  rcx",
+		// fork() returns 0 in the child.
 		"xor  eax, eax",
+		// Load the per-task user_rsp from kernel_top - 8 (the unused
+		// MARKER_SIZE pad above the marker; `prepare_fork_child_stack`
+		// wrote it there). gs:{kernel_stack} holds kernel_top - 16,
+		// so the slot we want is at [kernel_stack + 8]. Go via rsp
+		// itself — we are about to overwrite it anyway and must not
+		// clobber rax (the fork return value).
+		"mov  rsp, gs:{core_local_kernel_stack}",
+		"mov  rsp, [rsp + 8]",
 		"swapgs",
 		"sysretq",
-		get_kernel_stack_top = sym get_kernel_stack_top,
+		core_local_kernel_stack = const core::mem::offset_of!(super::core_local::CoreLocal, kernel_stack),
 	);
 }
 
@@ -310,6 +307,40 @@ extern "C" fn copy_current_root_page_table() -> usize {
 #[cfg(all(feature = "common-os", feature = "fork"))]
 extern "C" fn copy_kernel_stack_to(stack_addr: usize) {
 	crate::arch::x86_64::mm::copy_kernel_stack_to(stack_addr);
+}
+
+/// Snapshot the current user RSP into the child's kernel stack so that
+/// `fork_child_start` can recover it via `sysretq` regardless of what
+/// other syscalls do to the per-CPU `user_stack` slot in the meantime.
+///
+/// The slot we use sits at `child_kernel_top - 8`, i.e. inside the
+/// `MARKER_SIZE` pad above the `0xdeadbeef` marker — see [`fork_child_start`]
+/// for the matching `mov rsp, [gs:{kernel_stack} + 8]`.
+///
+/// The parent's user RSP was stashed by `syscall_handler` into
+/// `gs:[user_stack]` at syscall entry; we just read it back here.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+extern "C" fn stash_user_rsp_in_child_stack(new_stack_addr: usize) {
+	use crate::arch::x86_64::kernel::core_local::CoreLocal;
+	use crate::arch::x86_64::kernel::interrupts::IST_SIZE;
+	use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+	use crate::config::DEFAULT_STACK_SIZE;
+
+	let user_rsp: usize;
+	unsafe {
+		core::arch::asm!(
+			"mov {0}, gs:[{1}]",
+			out(reg) user_rsp,
+			const core::mem::offset_of!(CoreLocal, user_stack),
+			options(nostack, preserves_flags),
+		);
+	}
+
+	let child_kernel_top =
+		new_stack_addr + IST_SIZE + 2 * BasePageSize::SIZE as usize + DEFAULT_STACK_SIZE;
+	unsafe {
+		core::ptr::with_exposed_provenance_mut::<usize>(child_kernel_top - 8).write(user_rsp);
+	}
 }
 
 /// Prepare the child's stack for a fork.
@@ -344,6 +375,13 @@ pub unsafe extern "C" fn prepare_fork_child_stack(
 		"mov  rdi, [rsp+8]",              // rdi = new_stack_addr
 		"call {copy_kernel_stack_to}",    // copy kernel stack pages
 
+		// 1b. Stash the user RSP into the child's kernel stack at
+		//     child_kernel_top - 8, so that fork_child_start can
+		//     restore it via sysretq without relying on the per-CPU
+		//     `user_stack` slot (which other syscalls may clobber).
+		"mov  rdi, [rsp+8]",              // rdi = new_stack_addr
+		"call {stash_user_rsp_in_child_stack}",
+
 		// 2. Duplicate the page table (COW) — snapshot now includes the copied stack.
 		"call {copy_current_root_page_table}",   // rax = new PML4 phys addr
 		"mov  rsi, [rsp]",                       // rsi = root_page_table ptr
@@ -369,6 +407,7 @@ pub unsafe extern "C" fn prepare_fork_child_stack(
 		fork_child_start          = sym fork_child_start,
 		copy_current_root_page_table = sym copy_current_root_page_table,
 		copy_kernel_stack_to      = sym copy_kernel_stack_to,
+		stash_user_rsp_in_child_stack = sym stash_user_rsp_in_child_stack,
 		get_current_stack_addr    = sym get_current_stack_addr,
 	);
 }
