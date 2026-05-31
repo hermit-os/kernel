@@ -317,7 +317,16 @@ impl ObjectInterface for Socket {
 			let socket_handle = self
 				.handle
 				.extract_if(.., |handle| {
-					nic.get_mut_socket::<tcp::Socket<'_>>(*handle).is_active()
+					let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
+
+					// We are checking not only for ESTABLISHED, but also for CLOSE-WAIT.
+					//
+					// CLOSE-WAIT may occur here when the other side connects to us and
+					// immediately closes their transmit half (our receive half),
+					// potentially sending something in between. It is still useful for
+					// the application to be able to read any received data and to send a
+					// response.
+					socket.may_send()
 				})
 				.next();
 
