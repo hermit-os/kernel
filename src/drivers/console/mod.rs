@@ -32,10 +32,7 @@ use crate::drivers::mmio::get_console_driver;
 use crate::drivers::pci::get_console_driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioConsoleError;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::{ComCfg, IsrStatus, Transport};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
@@ -44,7 +41,7 @@ use crate::drivers::{Driver, InterruptLine};
 use crate::errno::Errno;
 use crate::mm::device_alloc::DeviceAlloc;
 
-fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
+fn fill_queue<T: Transport>(vq: &mut VirtQueue<T>, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(SmallVec::new(), {
 			let mut vec = SmallVec::new();
@@ -114,12 +111,12 @@ impl Write for VirtioUART {
 	}
 }
 
-pub(crate) struct RxQueue {
-	vq: Option<VirtQueue>,
+pub(crate) struct RxQueue<T: Transport> {
+	vq: Option<VirtQueue<T>>,
 	packet_size: u32,
 }
 
-impl RxQueue {
+impl<T: Transport> RxQueue<T> {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
@@ -128,7 +125,7 @@ impl RxQueue {
 		}
 	}
 
-	pub fn add(&mut self, mut vq: VirtQueue) {
+	pub fn add(&mut self, mut vq: VirtQueue<T>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_packets, self.packet_size);
@@ -178,14 +175,14 @@ impl RxQueue {
 	}
 }
 
-pub(crate) struct TxQueue {
-	vq: Option<VirtQueue>,
+pub(crate) struct TxQueue<T: Transport> {
+	vq: Option<VirtQueue<T>>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
 	packet_length: u32,
 }
 
-impl TxQueue {
+impl<T: Transport> TxQueue<T> {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
@@ -193,7 +190,7 @@ impl TxQueue {
 		}
 	}
 
-	pub fn add(&mut self, vq: VirtQueue) {
+	pub fn add(&mut self, vq: VirtQueue<T>) {
 		self.vq = Some(vq);
 	}
 
@@ -257,18 +254,18 @@ pub(crate) struct ConsoleDevCfg {
 	pub features: virtio::console::F,
 }
 
-pub(crate) struct VirtioConsoleDriver {
+pub(crate) struct VirtioConsoleDriver<T: Transport> {
 	pub(super) dev_cfg: ConsoleDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
-	pub(super) notif_cfg: NotifCfg,
+	pub(super) com_cfg: T::ComCfg,
+	pub(super) isr_stat: T::IsrStatus,
+	pub(super) notif_cfg: T::NotifCfg,
 	pub(super) irq: InterruptLine,
 
-	pub(super) recv_vq: RxQueue,
-	pub(super) send_vq: TxQueue,
+	pub(super) recv_vq: RxQueue<T>,
+	pub(super) send_vq: TxQueue<T>,
 }
 
-impl Driver for VirtioConsoleDriver {
+impl<T: Transport> Driver for VirtioConsoleDriver<T> {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}
@@ -278,7 +275,7 @@ impl Driver for VirtioConsoleDriver {
 	}
 }
 
-impl VirtioConsoleDriver {
+impl<T: Transport> VirtioConsoleDriver<T> {
 	pub fn has_packet(&self) -> bool {
 		self.recv_vq.has_packet()
 	}
@@ -287,14 +284,9 @@ impl VirtioConsoleDriver {
 	pub fn handle_interrupt(&mut self) {
 		let status = self.isr_stat.acknowledge();
 
-		#[cfg(not(feature = "pci"))]
-		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
-		}
-
-		#[cfg(feature = "pci")]
-		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
+		if status & <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+			== <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+		{
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
@@ -379,11 +371,11 @@ impl VirtioConsoleDriver {
 	}
 }
 
-impl ErrorType for VirtioConsoleDriver {
+impl<T: Transport> ErrorType for VirtioConsoleDriver<T> {
 	type Error = Errno;
 }
 
-impl Read for VirtioConsoleDriver {
+impl<T: Transport> Read for VirtioConsoleDriver<T> {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
 		self.recv_vq
 			.process_packet(|src| {
@@ -394,7 +386,7 @@ impl Read for VirtioConsoleDriver {
 	}
 }
 
-impl Write for VirtioConsoleDriver {
+impl<T: Transport> Write for VirtioConsoleDriver<T> {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		self.send_vq.send_packet(buf);
 

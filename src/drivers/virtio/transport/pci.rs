@@ -15,8 +15,7 @@ use virtio::pci::{
 	IsrStatus as IsrStatusRaw, NotificationData,
 };
 use virtio::{DeviceStatus, le16, le32};
-use volatile::access::ReadOnly;
-use volatile::{VolatilePtr, VolatileRef};
+use volatile::VolatileRef;
 
 use crate::arch::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
@@ -212,12 +211,14 @@ impl VqCfgHandler<'_> {
 			.queue_select()
 			.write(self.vq_index.into());
 	}
+}
 
+impl super::VqCfgHandler for VqCfgHandler<'_> {
 	/// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed
 	/// size, the size is set to this maximum instead. Else size is set to the provided value.
 	///
 	/// Returns the set size in form of a `u16`.
-	pub fn set_vq_size(&mut self, max_size: u16) -> u16 {
+	fn set_vq_size(&mut self, max_size: u16) -> u16 {
 		self.select_queue();
 		let queue_size = self.raw.as_mut_ptr().queue_size();
 
@@ -231,7 +232,7 @@ impl VqCfgHandler<'_> {
 		}
 	}
 
-	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
+	fn set_ring_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
 		self.raw
 			.as_mut_ptr()
@@ -239,7 +240,7 @@ impl VqCfgHandler<'_> {
 			.write(addr.as_u64().into());
 	}
 
-	pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
+	fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
 		self.raw
 			.as_mut_ptr()
@@ -247,7 +248,7 @@ impl VqCfgHandler<'_> {
 			.write(addr.as_u64().into());
 	}
 
-	pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
+	fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
 		self.select_queue();
 		self.raw
 			.as_mut_ptr()
@@ -255,20 +256,22 @@ impl VqCfgHandler<'_> {
 			.write(addr.as_u64().into());
 	}
 
-	pub fn notif_off(&mut self) -> u16 {
-		self.select_queue();
-		self.raw.as_mut_ptr().queue_notify_off().read().to_ne()
-	}
-
-	pub fn enable_queue(&mut self) {
+	fn enable_queue(&mut self) {
 		self.select_queue();
 		self.raw.as_mut_ptr().queue_enable().write(1.into());
 	}
 }
 
+impl VqCfgHandler<'_> {
+	fn notif_off(&mut self) -> u16 {
+		self.select_queue();
+		self.raw.as_mut_ptr().queue_notify_off().read().to_ne()
+	}
+}
+
 // Public Interface of ComCfg
-impl ComCfg {
-	pub fn control_registers(&mut self) -> impl ControlRegisters<'_> {
+impl super::ComCfg<Transport> for ComCfg {
+	fn control_registers(&mut self) -> impl ControlRegisters<'_> {
 		self.com_cfg.as_mut_ptr()
 	}
 
@@ -276,7 +279,7 @@ impl ComCfg {
 	/// returns `Some(VqCfgHandler)`.
 	///
 	/// INFO: The queue size is automatically bounded by constant `src::config:VIRTIO_MAX_QUEUE_SIZE`.
-	pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler<'_>> {
+	fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler<'_>> {
 		self.com_cfg.as_mut_ptr().queue_select().write(index.into());
 
 		if self.com_cfg.as_mut_ptr().queue_size().read().to_ne() == 0 {
@@ -290,12 +293,12 @@ impl ComCfg {
 	}
 
 	#[allow(dead_code)]
-	pub fn device_config_space(&self) -> VolatilePtr<'_, CommonCfg, ReadOnly> {
+	fn device_config_space(&self) -> impl virtio::DeviceConfigSpace {
 		self.com_cfg.as_ptr()
 	}
 
 	/// Resets the device status field to zero.
-	pub fn reset_dev(&mut self) {
+	fn reset_dev(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -306,7 +309,7 @@ impl ComCfg {
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
 	#[allow(dead_code)]
-	pub fn set_failed(&mut self) {
+	fn set_failed(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -315,7 +318,7 @@ impl ComCfg {
 
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
-	pub fn ack_dev(&mut self) {
+	fn ack_dev(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -324,7 +327,7 @@ impl ComCfg {
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
-	pub fn set_drv(&mut self) {
+	fn set_drv(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -334,7 +337,7 @@ impl ComCfg {
 	/// Sets the FEATURES_OK bit in the device status field.
 	///
 	/// Drivers MUST NOT accept new features after this step.
-	pub fn features_ok(&mut self) {
+	fn features_ok(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -342,12 +345,12 @@ impl ComCfg {
 	}
 
 	/// In order to correctly check feature negotiaten, this function
-	/// MUST be called after [self.features_ok()](ComCfg::features_ok()) in order to check
+	/// MUST be called after [self.features_ok()](super::ComCfg::features_ok()) in order to check
 	/// if features have been accepted by the device after negotiation.
 	///
 	/// Re-reads device status to ensure the FEATURES_OK bit is still set:
 	/// otherwise, the device does not support our subset of features and the device is unusable.
-	pub fn check_features(&self) -> bool {
+	fn check_features(&self) -> bool {
 		let status = self.com_cfg.as_ptr().device_status().read();
 		status.contains(DeviceStatus::FEATURES_OK)
 	}
@@ -355,7 +358,7 @@ impl ComCfg {
 	/// Sets the DRIVER_OK bit in the device status field.
 	///
 	/// After this call, the device is "live"!
-	pub fn drv_ok(&mut self) {
+	fn drv_ok(&mut self) {
 		self.com_cfg
 			.as_mut_ptr()
 			.device_status()
@@ -403,8 +406,10 @@ impl NotifCfg {
 			length: cap.len(),
 		})
 	}
+}
 
-	pub fn notification_location(&self, vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
+impl super::NotifCfg<Transport> for NotifCfg {
+	fn notification_location(&self, vq_cfg_handler: &mut VqCfgHandler<'_>) -> *mut le32 {
 		let addend = u32::from(vq_cfg_handler.notif_off()) * self.notify_off_multiplier;
 
 		// TODO: This should be
@@ -431,10 +436,12 @@ pub struct NotifCtrl {
 // FIXME: make `notif_addr` implement `Send` instead
 unsafe impl Send for NotifCtrl {}
 
-impl NotifCtrl {
+impl super::NotifCtrl for NotifCtrl {
+	type NotificationData = NotificationData;
+
 	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
 	/// are disabled.
-	pub fn new(notif_addr: *mut le32) -> Self {
+	fn new(notif_addr: *mut le32) -> Self {
 		NotifCtrl {
 			f_notif_data: false,
 			notif_addr,
@@ -442,11 +449,11 @@ impl NotifCtrl {
 	}
 
 	/// Enables VIRTIO_F_NOTIFICATION_DATA. This changes which data is provided to the device. ONLY a good idea if Feature has been negotiated.
-	pub fn enable_notif_data(&mut self) {
+	fn enable_notif_data(&mut self) {
 		self.f_notif_data = true;
 	}
 
-	pub fn notify_dev(&self, data: NotificationData) {
+	fn notify_dev(&self, data: NotificationData) {
 		// See Virtio specification v.1.1. - 4.1.5.2
 		// Depending in the feature negotiation, we write either only the
 		// virtqueue index or the index and the next position inside the queue.
@@ -462,6 +469,28 @@ impl NotifCtrl {
 					.write_volatile(data.vqn().into());
 			}
 		}
+	}
+}
+
+impl super::NotificationData for NotificationData {
+	fn new() -> Self {
+		NotificationData::new()
+	}
+
+	fn with_next_idx(self, value: u16) -> Self {
+		self.with_next_idx(value)
+	}
+
+	fn with_next_off(self, value: u16) -> Self {
+		self.with_next_off(value)
+	}
+
+	fn with_next_wrap(self, value: u8) -> Self {
+		self.with_next_wrap(value)
+	}
+
+	fn with_vqn(self, value: u16) -> Self {
+		self.with_vqn(value)
 	}
 }
 
@@ -481,8 +510,13 @@ impl IsrStatus {
 	fn new(raw: VolatileRef<'static, IsrStatusRaw>) -> Self {
 		IsrStatus { isr_stat: raw }
 	}
+}
 
-	pub fn acknowledge(&mut self) -> IsrStatusRaw {
+impl super::IsrStatus for IsrStatus {
+	type Status = IsrStatusRaw;
+	const CONFIGURATION_CHANGE: IsrStatusRaw = IsrStatusRaw::DEVICE_CONFIGURATION_INTERRUPT;
+
+	fn acknowledge(&mut self) -> IsrStatusRaw {
 		self.isr_stat.as_ptr().read()
 	}
 }
@@ -642,7 +676,7 @@ pub(crate) fn init_device(
 
 	match id {
 		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
+		virtio::Id::Console => match VirtioConsoleDriver::<Transport>::init(device) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
 
@@ -663,7 +697,7 @@ pub(crate) fn init_device(
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(device) {
+			match VirtioFsDriver::<Transport>::init(device) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					let irq = device.get_irq().unwrap();
@@ -683,7 +717,7 @@ pub(crate) fn init_device(
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
-		virtio::Id::Net => match VirtioNetDriver::init(device) {
+		virtio::Id::Net => match VirtioNetDriver::<Transport, _>::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 
@@ -701,7 +735,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
-		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
+		virtio::Id::Vsock => match VirtioVsockDriver::<Transport>::init(device) {
 			Ok(virt_sock_drv) => {
 				info!("Virtio sock driver initialized.");
 
@@ -734,15 +768,25 @@ pub(crate) fn init_device(
 
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-console")]
-	Console(alloc::boxed::Box<VirtioConsoleDriver>),
+	Console(alloc::boxed::Box<VirtioConsoleDriver<Transport>>),
 	#[cfg(feature = "virtio-fs")]
-	Fs(alloc::boxed::Box<VirtioFsDriver>),
+	Fs(alloc::boxed::Box<VirtioFsDriver<Transport>>),
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]
-	Net(alloc::boxed::Box<VirtioNetDriver>),
+	Net(alloc::boxed::Box<VirtioNetDriver<Transport>>),
 	#[cfg(feature = "virtio-vsock")]
-	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
+	Vsock(alloc::boxed::Box<VirtioVsockDriver<Transport>>),
+}
+
+pub struct Transport {}
+
+impl super::Transport for Transport {
+	type ComCfg = ComCfg;
+	type IsrStatus = IsrStatus;
+	type NotifCfg = NotifCfg;
+	type NotifCtrl = NotifCtrl;
+	type VqCfgHandler<'a> = VqCfgHandler<'a>;
 }

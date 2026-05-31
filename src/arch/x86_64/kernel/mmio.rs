@@ -33,7 +33,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 	feature = "virtio-net",
 	feature = "virtio-vsock",
 ))]
-use crate::drivers::virtio::transport::mmio::VirtioDriver;
+use crate::drivers::virtio::transport::mmio::{Transport, VirtioDriver};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 use crate::env;
@@ -49,16 +49,16 @@ static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 #[allow(clippy::enum_variant_names)]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-console")]
-	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
+	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver<Transport>>),
 	#[cfg(feature = "virtio-fs")]
-	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
+	VirtioFs(InterruptTicketMutex<VirtioFsDriver<Transport>>),
 	#[cfg(feature = "virtio-vsock")]
-	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
+	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver<Transport>>),
 }
 
 impl MmioDriver {
 	#[cfg(feature = "virtio-console")]
-	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
+	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver<Transport>>> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
@@ -67,7 +67,7 @@ impl MmioDriver {
 	}
 
 	#[cfg(feature = "virtio-fs")]
-	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
+	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver<Transport>>> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
@@ -76,7 +76,7 @@ impl MmioDriver {
 	}
 
 	#[cfg(feature = "virtio-vsock")]
-	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
+	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver<Transport>>> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioVsock(drv) => Some(drv),
@@ -191,10 +191,11 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 }
 
 #[cfg(feature = "virtio-net")]
-pub(crate) type NetworkDevice = VirtioNetDriver;
+pub(crate) type NetworkDevice = VirtioNetDriver<Transport>;
 
 #[cfg(feature = "virtio-console")]
-pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
+pub(crate) fn get_console_driver()
+-> Option<&'static InterruptTicketMutex<VirtioConsoleDriver<Transport>>> {
 	MMIO_DRIVERS
 		.get()?
 		.iter()
@@ -202,7 +203,8 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 }
 
 #[cfg(feature = "virtio-fs")]
-pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
+pub(crate) fn get_filesystem_driver()
+-> Option<&'static InterruptTicketMutex<VirtioFsDriver<Transport>>> {
 	MMIO_DRIVERS
 		.get()?
 		.iter()
@@ -210,7 +212,8 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 }
 
 #[cfg(feature = "virtio-vsock")]
-pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
+pub(crate) fn get_vsock_driver()
+-> Option<&'static InterruptTicketMutex<VirtioVsockDriver<Transport>>> {
 	MMIO_DRIVERS
 		.get()?
 		.iter()

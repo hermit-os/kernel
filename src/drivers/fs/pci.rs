@@ -7,9 +7,9 @@ use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::pci::{PciCap, Transport, UniCapsColl};
 
-impl VirtioFsDriver {
+impl VirtioFsDriver<Transport> {
 	fn map_cfg(cap: &PciCap) -> Option<FsDevCfg> {
 		let dev_cfg = pci::map_dev_cfg::<virtio::fs::Config>(cap)?;
 
@@ -54,7 +54,9 @@ impl VirtioFsDriver {
 	}
 
 	/// Initializes virtio filesystem device
-	pub fn init(device: &PciDevice<PciConfigRegion>) -> Result<VirtioFsDriver, VirtioError> {
+	pub fn init(
+		device: &PciDevice<PciConfigRegion>,
+	) -> Result<VirtioFsDriver<Transport>, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioFsDriver::new(caps, device) {
 				Ok(driver) => driver,

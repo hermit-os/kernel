@@ -5,11 +5,11 @@ use volatile::VolatileRef;
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::pci::{self, PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::pci::{self, PciCap, Transport, UniCapsColl};
 use crate::pci::PciConfigRegion;
 
 // Backend-dependent interface for Virtio console driver
-impl VirtioConsoleDriver {
+impl VirtioConsoleDriver<Transport> {
 	fn map_cfg(cap: &PciCap) -> Option<ConsoleDevCfg> {
 		let dev_cfg = pci::map_dev_cfg::<Config>(cap)?;
 		let dev_cfg = VolatileRef::from_ref(dev_cfg);
@@ -56,9 +56,7 @@ impl VirtioConsoleDriver {
 	/// Initializes virtio console device
 	///
 	/// Returns a driver instance of VirtioConsoleDriver.
-	pub(crate) fn init(
-		device: &PciDevice<PciConfigRegion>,
-	) -> Result<VirtioConsoleDriver, VirtioError> {
+	pub(crate) fn init(device: &PciDevice<PciConfigRegion>) -> Result<Self, VirtioError> {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
