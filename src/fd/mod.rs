@@ -46,7 +46,7 @@ pub(crate) enum ListenEndpoint {
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 #[derive(Debug, PartialEq)]
 pub(crate) enum SocketOption {
-	TcpNoDelay,
+	TcpNodelay,
 }
 
 pub(crate) type RawFd = i32;

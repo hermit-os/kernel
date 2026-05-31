@@ -418,7 +418,7 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
-		if opt == SocketOption::TcpNoDelay {
+		if opt == SocketOption::TcpNodelay {
 			let mut guard = NIC.lock();
 			let nic = guard.as_nic_mut().unwrap();
 
@@ -434,7 +434,7 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		if opt == SocketOption::TcpNoDelay {
+		if opt == SocketOption::TcpNodelay {
 			let mut guard = NIC.lock();
 			let nic = guard.as_nic_mut().unwrap();
 			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());

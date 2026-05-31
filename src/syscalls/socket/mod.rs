@@ -951,7 +951,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 					async {
 						v.read()
 							.await
-							.setsockopt(SocketOption::TcpNoDelay, value != 0)
+							.setsockopt(SocketOption::TcpNodelay, value != 0)
 							.await
 					},
 					None,
@@ -991,7 +991,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 			|e| -i32::from(e),
 			|v| {
 				block_on(
-					async { v.read().await.getsockopt(SocketOption::TcpNoDelay).await },
+					async { v.read().await.getsockopt(SocketOption::TcpNodelay).await },
 					None,
 				)
 				.map_or_else(
