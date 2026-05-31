@@ -5,6 +5,8 @@ use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use num_enum::TryFromPrimitive;
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
@@ -44,9 +46,10 @@ pub(crate) enum ListenEndpoint {
 }
 
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
-#[derive(Debug, PartialEq)]
+#[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
 pub(crate) enum SocketOption {
-	TcpNodelay,
+	TcpNodelay = 1,
 }
 
 pub(crate) type RawFd = i32;

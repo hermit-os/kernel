@@ -78,7 +78,6 @@ pub const SO_RCVBUF: i32 = 0x1002;
 pub const SO_SNDTIMEO: i32 = 0x1005;
 pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
-pub const TCP_NODELAY: i32 = 1;
 pub const MSG_PEEK: i32 = 1;
 pub type sa_family_t = u8;
 pub type socklen_t = u32;
@@ -932,10 +931,14 @@ pub unsafe extern "C" fn sys_setsockopt(
 		return -i32::from(Errno::Inval);
 	};
 
-	debug!("sys_setsockopt: {fd}, level {level:?}, optname {optname}");
+	let Ok(optname) = SocketOption::try_from(optname) else {
+		return -i32::from(Errno::Inval);
+	};
+
+	debug!("sys_setsockopt: {fd}, level {level:?}, optname {optname:?}");
 
 	if level == Ipproto::Tcp
-		&& optname == TCP_NODELAY
+		&& optname == SocketOption::TcpNodelay
 		&& optlen == u32::try_from(size_of::<i32>()).unwrap()
 	{
 		if optval.is_null() {
@@ -948,12 +951,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 			|e| -i32::from(e),
 			|v| {
 				block_on(
-					async {
-						v.read()
-							.await
-							.setsockopt(SocketOption::TcpNodelay, value != 0)
-							.await
-					},
+					async { v.read().await.setsockopt(optname, value != 0).await },
 					None,
 				)
 				.map_or_else(|e| -i32::from(e), |()| 0)
@@ -977,9 +975,13 @@ pub unsafe extern "C" fn sys_getsockopt(
 		return -i32::from(Errno::Inval);
 	};
 
-	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname}");
+	let Ok(optname) = SocketOption::try_from(optname) else {
+		return -i32::from(Errno::Inval);
+	};
 
-	if level == Ipproto::Tcp && optname == TCP_NODELAY {
+	debug!("sys_getsockopt: {fd}, level {level:?}, optname {optname:?}");
+
+	if level == Ipproto::Tcp && optname == SocketOption::TcpNodelay {
 		if optval.is_null() || optlen.is_null() {
 			return -i32::from(Errno::Inval);
 		}
@@ -990,11 +992,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 		obj.map_or_else(
 			|e| -i32::from(e),
 			|v| {
-				block_on(
-					async { v.read().await.getsockopt(SocketOption::TcpNodelay).await },
-					None,
-				)
-				.map_or_else(
+				block_on(async { v.read().await.getsockopt(optname).await }, None).map_or_else(
 					|e| -i32::from(e),
 					|value| {
 						if value {
