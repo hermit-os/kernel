@@ -434,14 +434,12 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		if opt == SocketOption::TcpNodelay {
-			let mut guard = NIC.lock();
-			let nic = guard.as_nic_mut().unwrap();
-			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 
-			Ok(socket.nagle_enabled())
-		} else {
-			Err(Errno::Inval)
+		match opt {
+			SocketOption::TcpNodelay => Ok(socket.nagle_enabled()),
 		}
 	}
 
