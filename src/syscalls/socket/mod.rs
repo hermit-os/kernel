@@ -995,11 +995,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 				block_on(async { v.read().await.getsockopt(optname).await }, None).map_or_else(
 					|e| -i32::from(e),
 					|value| {
-						if value {
-							*optval = 1;
-						} else {
-							*optval = 0;
-						}
+						*optval = value;
 						*optlen = size_of::<i32>().try_into().unwrap();
 
 						0

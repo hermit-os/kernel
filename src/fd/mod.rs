@@ -1,4 +1,6 @@
 use alloc::sync::Arc;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use core::ffi::c_int;
 use core::future;
 use core::mem::MaybeUninit;
 use core::pin::pin;
@@ -266,7 +268,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
+	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<c_int> {
 		Err(Errno::Notsock)
 	}
 
