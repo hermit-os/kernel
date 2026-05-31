@@ -43,7 +43,7 @@ pub(crate) enum ListenEndpoint {
 	Vsock(socket::vsock::VsockListenEndpoint),
 }
 
-#[allow(dead_code)]
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 #[derive(Debug, PartialEq)]
 pub(crate) enum SocketOption {
 	TcpNoDelay,
