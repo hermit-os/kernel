@@ -2,6 +2,10 @@
 use core::arch::naked_asm;
 
 use crate::mm::vma::sys_mmap;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use crate::syscalls::socket::addrinfo::*;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use crate::syscalls::socket::*;
 use crate::syscalls::*;
 
 /// Number of the system call `exit`
@@ -150,7 +154,7 @@ pub(crate) extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 /// loader will replace this function
 #[linkage = "weak"]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_spawn_process(_path: *const core::ffi::c_char) -> i32 {
+pub extern "C" fn sys_spawn_process(_path: *const c_char) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
@@ -240,24 +244,22 @@ impl SyscallTable {
 		table.handle[SYSNO_WAKEUP_TASK] = sys_wakeup_task as *const _;
 		#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 		{
-			table.handle[SYSNO_SOCKET] = crate::syscalls::socket::sys_socket as *const _;
-			table.handle[SYSNO_BIND] = crate::syscalls::socket::sys_bind as *const _;
-			table.handle[SYSNO_LISTEN] = crate::syscalls::socket::sys_listen as *const _;
-			table.handle[SYSNO_ACCEPT] = crate::syscalls::socket::sys_accept as *const _;
-			table.handle[SYSNO_CONNECT] = crate::syscalls::socket::sys_connect as *const _;
-			table.handle[SYSNO_RECV] = crate::syscalls::socket::sys_recv as *const _;
-			table.handle[SYSNO_RECVFROM] = crate::syscalls::socket::sys_recvfrom as *const _;
-			table.handle[SYSNO_SEND] = crate::syscalls::socket::sys_send as *const _;
-			table.handle[SYSNO_SENDTO] = crate::syscalls::socket::sys_sendto as *const _;
-			table.handle[SYSNO_SHUTDOWN] = crate::syscalls::socket::sys_shutdown as *const _;
-			table.handle[SYSNO_GETPEERNAME] = crate::syscalls::socket::sys_getpeername as *const _;
-			table.handle[SYSNO_GETSOCKNAME] = crate::syscalls::socket::sys_getsockname as *const _;
-			table.handle[SYSNO_GETSOCKOPT] = crate::syscalls::socket::sys_getsockopt as *const _;
-			table.handle[SYSNO_SETSOCKOPT] = crate::syscalls::socket::sys_setsockopt as *const _;
-			table.handle[SYSNO_GETADDRINFO] =
-				crate::syscalls::socket::addrinfo::sys_getaddrinfo as *const _;
-			table.handle[SYSNO_FREEADDRINFO] =
-				crate::syscalls::socket::addrinfo::sys_freeaddrinfo as *const _;
+			table.handle[SYSNO_SOCKET] = sys_socket as *const _;
+			table.handle[SYSNO_BIND] = sys_bind as *const _;
+			table.handle[SYSNO_LISTEN] = sys_listen as *const _;
+			table.handle[SYSNO_ACCEPT] = sys_accept as *const _;
+			table.handle[SYSNO_CONNECT] = sys_connect as *const _;
+			table.handle[SYSNO_RECV] = sys_recv as *const _;
+			table.handle[SYSNO_RECVFROM] = sys_recvfrom as *const _;
+			table.handle[SYSNO_SEND] = sys_send as *const _;
+			table.handle[SYSNO_SENDTO] = sys_sendto as *const _;
+			table.handle[SYSNO_SHUTDOWN] = sys_shutdown as *const _;
+			table.handle[SYSNO_GETPEERNAME] = sys_getpeername as *const _;
+			table.handle[SYSNO_GETSOCKNAME] = sys_getsockname as *const _;
+			table.handle[SYSNO_GETSOCKOPT] = sys_getsockopt as *const _;
+			table.handle[SYSNO_SETSOCKOPT] = sys_setsockopt as *const _;
+			table.handle[SYSNO_GETADDRINFO] = sys_getaddrinfo as *const _;
+			table.handle[SYSNO_FREEADDRINFO] = sys_freeaddrinfo as *const _;
 		}
 		table.handle[SYSNO_AVAILABLE_PARALLELISM] = sys_available_parallelism as *const _;
 		table.handle[SYSNO_GET_DENTS64] = sys_getdents64 as *const _;

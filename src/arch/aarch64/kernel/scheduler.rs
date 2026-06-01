@@ -343,9 +343,9 @@ impl Task {
 			// don't touch below stays zero on entry to user space, which
 			// keeps any leftover kernel state out of EL0's general-purpose
 			// register file.
-			stack -= mem::size_of::<State>();
+			stack -= size_of::<State>();
 			let state = stack.as_mut_ptr::<State>();
-			ptr::write_bytes(state.cast::<u8>(), 0, mem::size_of::<State>());
+			ptr::write_bytes(state.cast::<u8>(), 0, size_of::<State>());
 
 			// Initial user stack: top of the user-stack region with the
 			// usual debug marker. AAPCS64 doesn't require any extra slop
@@ -519,7 +519,7 @@ pub unsafe fn prepare_fork_child_stack(
 	let parent_stack_base = task.borrow().stacks.get_stack_virt_addr().as_usize();
 	let kernel_stack_top = task.borrow().stacks.get_kernel_stack().as_usize()
 		+ task.borrow().stacks.get_kernel_stack_size();
-	let parent_state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - mem::size_of::<State>();
+	let parent_state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - size_of::<State>();
 	let offset = new_stack_addr.wrapping_sub(parent_stack_base);
 	let child_state_addr = parent_state_addr.wrapping_add(offset);
 
