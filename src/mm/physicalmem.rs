@@ -9,7 +9,7 @@ use memory_addresses::VirtAddr;
 
 #[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, HugePageSize, PageSize};
+use crate::arch::mm::paging::{self, HugePageSize, LargePageSize, PageSize};
 use crate::env::{self, MemmapType, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
@@ -76,7 +76,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 			type IdentityPageSize = HugePageSize;
 		}
 		target_arch = "x86_64" => {
-			type IdentityPageSize = paging::LargePageSize;
+			type IdentityPageSize = LargePageSize;
 		}
 	}
 
@@ -118,8 +118,13 @@ unsafe fn detect_from_start_info() {
 		let mut start_addr = memmap_entry.phys_addr;
 		let mut end_addr = start_addr + memmap_entry.len;
 
-		// Don't use the zero page.
-		start_addr = start_addr.max(0x1000);
+		// Do not free any address in the real mode addressable range.
+		//
+		// When claiming physical memory, ignore all addresses below this one. This ensures we
+		// don't accidentally clash with hardcoded low addresses, such as `SMP_BOOT_CODE_ADDRESS`
+		// in x86_64 with SMP enabled. We use a 2MIB size for now, but this is arbitrary, and could
+		// likely be lowered.
+		start_addr = start_addr.max(LargePageSize::SIZE as usize);
 
 		#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 		if paging::is_recursive() {
