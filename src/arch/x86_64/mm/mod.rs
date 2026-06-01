@@ -231,7 +231,7 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 
-	let tcb_size = core::mem::size_of::<*mut ()>();
+	let tcb_size = size_of::<*mut ()>();
 	let total = (template.size + tcb_size).align_up(BasePageSize::SIZE as usize);
 
 	let virt_layout = PageLayout::from_size(total).unwrap();

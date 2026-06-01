@@ -161,6 +161,7 @@ impl PageTableEntryFlags {
 /// the same helpers as inherent methods; this trait exists only so that
 /// architecture-independent callers can be written in terms of a single API.
 #[cfg(feature = "common-os")]
+#[allow(dead_code)]
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
 	fn normal(&mut self) -> &mut Self;
@@ -169,7 +170,6 @@ pub trait PageTableEntryFlagsExt {
 	fn execute_disable(&mut self) -> &mut Self;
 	fn execute_enable(&mut self) -> &mut Self;
 	fn user(&mut self) -> &mut Self;
-	#[expect(dead_code)]
 	fn kernel(&mut self) -> &mut Self;
 	fn copy_on_write(&mut self) -> &mut Self;
 }
@@ -226,7 +226,7 @@ impl PageTableEntry {
 	}
 
 	/// Return whether this entry is a 4KiB page.
-	#[expect(dead_code)]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	fn is_table_or_4kib_page(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::TABLE_OR_4KIB_PAGE.bits()) != 0
 	}
@@ -655,7 +655,7 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 	Page::range(first_page, last_page)
 }
 
-#[expect(dead_code)]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
 	trace!("Looking up Page Table Entry for {virtual_address:p}");
 
@@ -791,11 +791,6 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
 }
 
-#[inline]
-pub fn get_application_page_size() -> usize {
-	BasePageSize::SIZE as usize
-}
-
 /// Flush the entire (non-global) TLB on this core and broadcast to others.
 #[cfg(feature = "common-os")]
 fn flush_tlb_all() {
@@ -837,7 +832,7 @@ fn flush_tlb_one(virt: VirtAddr) {
 /// frame and copy the contents.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
-	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+	use aarch64_cpu::registers::TTBR0_EL1;
 
 	let vaddr = faulting_addr.align_down(BasePageSize::SIZE);
 	let l0_phys = TTBR0_EL1.get_baddr() as usize;
@@ -922,7 +917,7 @@ pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 /// Copy-On-Write. This must be called before duplicating the page table for a fork.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn mark_user_pages_copy_on_write() {
-	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+	use aarch64_cpu::registers::TTBR0_EL1;
 
 	// Physical memory is identity-mapped in the kernel's address space, so a
 	// physical frame address can be dereferenced directly as a page-table
@@ -1122,7 +1117,7 @@ pub fn drop_user_space(l0_phys: usize) {
 pub fn clear_user_space() {
 	use crate::fd::STDERR_FILENO;
 	use crate::core_scheduler;
-	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+	use aarch64_cpu::registers::TTBR0_EL1;
 
 	core_scheduler()
         .get_current_task()
@@ -1155,7 +1150,7 @@ const USER_L0_INDEX: usize = (crate::arch::aarch64::kernel::USER_START.as_usize(
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
-	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+	use aarch64_cpu::registers::TTBR0_EL1;
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).expect("Failed to allocate L0 table");
@@ -1212,7 +1207,7 @@ pub fn get_current_root_page_table() -> usize {
 /// Returns the physical address of the new L0.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn copy_current_root_page_table() -> usize {
-	use aarch64_cpu::registers::{Readable, TTBR0_EL1};
+	use aarch64_cpu::registers::TTBR0_EL1;
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 

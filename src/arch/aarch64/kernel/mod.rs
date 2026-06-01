@@ -206,8 +206,7 @@ where
 	use hermit_sync::RwSpinLock;
 
 	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
-	use crate::fd::stdio::*;
-	use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
+	use crate::fd::{Fd, RawFd};
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
@@ -217,21 +216,7 @@ where
 	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
 		RandomState::with_seeds(0, 0, 0, 0),
 	);
-	if env::is_uhyve() {
-		let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new().into()));
-		let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new().into()));
-		let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new().into()));
-		object_map.insert(STDIN_FILENO, stdin);
-		object_map.insert(STDOUT_FILENO, stdout);
-		object_map.insert(STDERR_FILENO, stderr);
-	} else {
-		let stdin = Arc::new(async_lock::RwLock::new(GenericStdin::new().into()));
-		let stdout = Arc::new(async_lock::RwLock::new(GenericStdout::new().into()));
-		let stderr = Arc::new(async_lock::RwLock::new(GenericStderr::new().into()));
-		object_map.insert(STDIN_FILENO, stdin);
-		object_map.insert(STDOUT_FILENO, stdout);
-		object_map.insert(STDERR_FILENO, stderr);
-	}
+	crate::fd::stdio::setup(&mut object_map);
 	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
 
 	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
@@ -262,7 +247,7 @@ where
 		// area (`tcb[0] = dtv`, `tcb[1]` reserved). We allocate the TCB plus
 		// the TLS image as one contiguous block so a single `msr tpidr_el0`
 		// suffices and the layout matches what musl/glibc expect.
-		let tcb_size = 2 * mem::size_of::<*mut ()>();
+		let tcb_size = 2 * size_of::<*mut ()>();
 		let tls_offset = tcb_size;
 
 		let tls_memsz = (tls_offset + tls_size as usize).align_up(BasePageSize::SIZE as usize);
@@ -303,7 +288,7 @@ where
 
 		if let Some(init) = tls_init {
 			let template =
-				alloc::sync::Arc::new(crate::scheduler::task::TlsTemplate {
+				Arc::new(crate::scheduler::task::TlsTemplate {
 					size: tls_size as usize,
 					init,
 				});
@@ -356,7 +341,7 @@ fn set_user_tpidr_el0(value: u64) {
 	let task = core_scheduler().get_current_task();
 	let kernel_stack_top = task.borrow().stacks.get_kernel_stack().as_usize()
 		+ task.borrow().stacks.get_kernel_stack_size();
-	let state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - mem::size_of::<State>();
+	let state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - size_of::<State>();
 	unsafe {
 		let state = ptr::with_exposed_provenance_mut::<State>(state_addr);
 		(*state).tpidr_el0 = value;
@@ -406,7 +391,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 	}
 
 	// Place the argv pointer array on the user stack.
-	let stack_pointer = stack_top - arg.len() * mem::size_of::<*mut u8>();
+	let stack_pointer = stack_top - arg.len() * size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
 	let argv = unsafe { slice::from_raw_parts_mut(stack_ptr, arg.len()) };
 	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);

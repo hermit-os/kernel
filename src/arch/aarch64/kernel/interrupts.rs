@@ -179,6 +179,8 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &mut State) {
+	use crate::arch::mm::paging::do_cow_fault;
+
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
@@ -236,7 +238,7 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		#[cfg(all(feature = "common-os", feature = "fork"))]
 		if is_write
 			&& is_permission_fault
-			&& crate::arch::aarch64::mm::paging::do_cow_fault(VirtAddr::new(far))
+			&& do_cow_fault(VirtAddr::new(far))
 		{
 			// Faulting instruction is retried on `eret` from the trap.
 			return;
@@ -505,17 +507,17 @@ pub(crate) fn init() {
 		// metal where CNTVOFF_EL2 defaults to 0.
 
 		/* Secure Phys IRQ — skip */
-		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		/* Non-secure Phys IRQ — skip */
-		let (_irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		/* Virtual Timer IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(mem::size_of::<u32>());
+		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
 		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 		let irq = u32::from_be_bytes(irq.try_into().unwrap());
 		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
