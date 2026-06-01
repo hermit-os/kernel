@@ -1,5 +1,6 @@
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
+use core::ffi::c_int;
 use core::future;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
@@ -24,6 +25,9 @@ pub const SHUT_WR: i32 = 1;
 pub const SHUT_RDWR: i32 = 2;
 /// The default queue size for incoming connections
 pub const DEFAULT_BACKLOG: i32 = 128;
+/// The maximum queue size for incoming connections,
+/// based on the default maximum used by modern Linux.
+pub const SOMAXCONN: i32 = 4096;
 
 fn get_ephemeral_port() -> u16 {
 	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
@@ -409,7 +413,7 @@ impl ObjectInterface for Socket {
 
 		self.is_listen = true;
 
-		for _ in 1..backlog {
+		for _ in 1..backlog.min(SOMAXCONN) {
 			let handle = nic.create_tcp_handle().unwrap();
 
 			let s = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
@@ -423,7 +427,7 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn setsockopt(&self, opt: SocketOption, optval: bool) -> io::Result<()> {
-		if opt == SocketOption::TcpNoDelay {
+		if opt == SocketOption::TcpNodelay {
 			let mut guard = NIC.lock();
 			let nic = guard.as_nic_mut().unwrap();
 
@@ -438,15 +442,15 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	async fn getsockopt(&self, opt: SocketOption) -> io::Result<bool> {
-		if opt == SocketOption::TcpNoDelay {
-			let mut guard = NIC.lock();
-			let nic = guard.as_nic_mut().unwrap();
-			let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
+	async fn getsockopt(&self, opt: SocketOption) -> io::Result<c_int> {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*self.handle.first().unwrap());
 
-			Ok(socket.nagle_enabled())
-		} else {
-			Err(Errno::Inval)
+		match opt {
+			SocketOption::TcpNodelay => Ok(socket.nagle_enabled().into()),
+			SocketOption::SoSndbuf => Ok(c_int::try_from(socket.send_capacity()).unwrap()),
+			SocketOption::SoRcvbuf => Ok(c_int::try_from(socket.recv_capacity()).unwrap()),
 		}
 	}
 

@@ -1,10 +1,14 @@
 use alloc::sync::Arc;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use core::ffi::c_int;
 use core::future;
 use core::mem::MaybeUninit;
 use core::pin::pin;
 use core::task::Poll::{Pending, Ready};
 use core::time::Duration;
 
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use num_enum::TryFromPrimitive;
 #[cfg(feature = "net")]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
@@ -43,10 +47,13 @@ pub(crate) enum ListenEndpoint {
 	Vsock(socket::vsock::VsockListenEndpoint),
 }
 
-#[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+#[derive(TryFromPrimitive, PartialEq, Eq, Clone, Copy, Debug)]
+#[repr(i32)]
 pub(crate) enum SocketOption {
-	TcpNoDelay,
+	TcpNodelay = 1,
+	SoSndbuf = 0x1001,
+	SoRcvbuf = 0x1002,
 }
 
 pub(crate) type RawFd = i32;
@@ -263,7 +270,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool> {
+	async fn getsockopt(&self, _opt: SocketOption) -> io::Result<c_int> {
 		Err(Errno::Notsock)
 	}
 

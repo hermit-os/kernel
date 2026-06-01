@@ -1,5 +1,7 @@
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use alloc::sync::Arc;
+#[cfg(any(feature = "net", feature = "virtio-vsock"))]
+use core::ffi::c_int;
 use core::mem::MaybeUninit;
 
 use delegate::delegate;
@@ -154,7 +156,7 @@ impl ObjectInterface for Fd {
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-			async fn getsockopt(&self, _opt: SocketOption) -> io::Result<bool>;
+			async fn getsockopt(&self, _opt: SocketOption) -> io::Result<c_int>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn getsockname(&self) -> io::Result<Option<Endpoint>>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
