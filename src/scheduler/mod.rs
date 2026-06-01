@@ -226,12 +226,12 @@ struct NewTask {
 	/// parent's `pid`. When `None`, the task is a regular kernel-mode
 	/// task with a fresh address space; its `pid` equals its `tid`.
 	#[cfg(feature = "common-os")]
-	thread_of: Option<(Arc<crate::scheduler::task::RootPageTable>, task::ProcessId)>,
+	thread_of: Option<(Arc<RootPageTable>, ProcessId)>,
 	/// Per-process TLS template, cloned from the spawning thread. Used by
 	/// `From<NewTask>` to propagate the template into the new task so that
 	/// any threads it spawns in turn can allocate their own TLS regions.
 	#[cfg(feature = "common-os")]
-	tls_template: Option<Arc<task::TlsTemplate>>,
+	tls_template: Option<Arc<TlsTemplate>>,
 	/// Per-thread TLS thread-pointer (FS.Base on x86_64, TPIDR_EL0 on
 	/// aarch64), already prepared by `spawn_thread` from the per-process
 	/// `TlsTemplate`. Zero means "do not install a thread pointer".
@@ -398,7 +398,7 @@ impl PerCoreScheduler {
 		// path) so that the new user-accessible pages get mapped into the
 		// shared root page table.
 		let tls_base = if let Some(ref template) = tls_template {
-			crate::arch::mm::allocate_thread_tls(template)
+			arch::mm::allocate_thread_tls(template)
 		} else {
 			0
 		};
@@ -617,7 +617,7 @@ impl PerCoreScheduler {
 	/// Returns the Rc<RefCell<Task>> for the currently running task.
 	#[cfg(feature = "common-os")]
 	#[inline]
-	pub fn get_current_task(&self) -> Rc<RefCell<task::Task>> {
+	pub fn get_current_task(&self) -> Rc<RefCell<Task>> {
 		self.current_task.clone()
 	}
 
@@ -918,7 +918,7 @@ impl PerCoreScheduler {
 
 	#[inline]
 	#[cfg(target_arch = "aarch64")]
-	pub fn get_last_stack_pointer(&self) -> memory_addresses::VirtAddr {
+	pub fn get_last_stack_pointer(&self) -> VirtAddr {
 		self.current_task.borrow().last_stack_pointer
 	}
 
@@ -1173,11 +1173,6 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	all(feature = "common-os", feature = "fork")
 ))]
 pub unsafe fn fork() -> TaskId {
-	#[cfg(not(target_arch = "x86_64"))]
-	use memory_addresses::VirtAddr;
-	#[cfg(target_arch = "x86_64")]
-	use x86_64::VirtAddr;
-
 	use crate::arch::{prepare_fork_child_stack, prepare_mem_copy_on_write};
 
 	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
@@ -1253,9 +1248,7 @@ pub unsafe fn fork() -> TaskId {
 		child_last_sp,
 		parent_user_sp,
 		parent_object_map,
-		Arc::new(crate::scheduler::task::RootPageTable::new(
-			child_root_page_table,
-		)),
+		Arc::new(RootPageTable::new(child_root_page_table)),
 		parent_tls_template,
 		parent_vmas,
 	);

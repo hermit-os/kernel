@@ -177,6 +177,8 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &mut State) {
+	use crate::arch::mm::paging::do_cow_fault;
+
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
@@ -232,7 +234,7 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		#[cfg(all(feature = "common-os", feature = "fork"))]
 		if is_write
 			&& is_permission_fault
-			&& crate::arch::aarch64::mm::paging::do_cow_fault(VirtAddr::new(far))
+			&& do_cow_fault(VirtAddr::new(far))
 		{
 			// Faulting instruction is retried on `eret` from the trap.
 			return;
