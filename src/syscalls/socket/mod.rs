@@ -5,7 +5,7 @@ mod addrinfo;
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use core::ffi::{c_char, c_void};
+use core::ffi::{c_char, c_int, c_void};
 use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 #[allow(unused_imports)]
 use core::ops::DerefMut;
@@ -79,7 +79,15 @@ pub const SO_SNDTIMEO: i32 = 0x1005;
 pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
 pub const TCP_NODELAY: i32 = 1;
-pub const MSG_PEEK: i32 = 1;
+pub const MSG_OOB: c_int = 0x1;
+pub const MSG_PEEK: c_int = 0x2;
+pub const MSG_DONTROUTE: c_int = 0x4;
+pub const MSG_EOR: c_int = 0x8;
+pub const MSG_TRUNC: c_int = 0x10;
+pub const MSG_CTRUNC: c_int = 0x20;
+pub const MSG_WAITALL: c_int = 0x40;
+pub const MSG_DONTWAIT: c_int = 0x80;
+pub const MSG_EOF: c_int = 0x100;
 pub type sa_family_t = u8;
 pub type socklen_t = u32;
 pub type in_addr_t = u32;
