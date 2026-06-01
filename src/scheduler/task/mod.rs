@@ -34,7 +34,9 @@ use crate::arch::kernel::processor::{self, FPUState};
 use crate::arch::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
 use crate::env;
-use crate::fd::{Fd, RawFd, stdio};
+#[cfg(not(feature = "common-os"))]
+use crate::fd::stdio;
+use crate::fd::{Fd, RawFd};
 #[cfg(not(feature = "common-os"))]
 use crate::fd::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 #[cfg(feature = "common-os")]
