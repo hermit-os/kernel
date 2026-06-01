@@ -18,7 +18,6 @@ use crate::env;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
-
 #[repr(C, packed)]
 struct State {
 	#[cfg(feature = "common-os")]
@@ -340,9 +339,9 @@ impl Task {
 				- TaskStacks::MARKER_SIZE;
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
-			stack -= mem::size_of::<State>();
+			stack -= size_of::<State>();
 			let state = stack.as_mut_ptr::<State>();
-			state.cast::<u8>().write_bytes(0, mem::size_of::<State>());
+			state.cast::<u8>().write_bytes(0, size_of::<State>());
 
 			(*state).rip = task_start_user;
 			(*state).rdi = func as usize as u64;
@@ -361,7 +360,7 @@ impl Task {
 				.into();
 
 			// rdx is used by task_start_user as the new user-mode RSP
-			(*state).rdx = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
+			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;
 		}
 	}
 }

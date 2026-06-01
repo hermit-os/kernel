@@ -210,8 +210,8 @@ where
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
-	use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
-	use crate::fd::stdio::*;
+	use crate::fd::{Fd, RawFd};
+	use crate::fd::stdio;
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 	use crate::mm::vma::*;
@@ -225,21 +225,7 @@ where
 		>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
-	if env::is_uhyve() {
-		let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new().into()));
-		let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new().into()));
-		let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new().into()));
-		object_map.insert(STDIN_FILENO, stdin);
-		object_map.insert(STDOUT_FILENO, stdout);
-		object_map.insert(STDERR_FILENO, stderr);
-	} else {
-		let stdin = Arc::new(async_lock::RwLock::new(GenericStdin::new().into()));
-		let stdout = Arc::new(async_lock::RwLock::new(GenericStdout::new().into()));
-		let stderr = Arc::new(async_lock::RwLock::new(GenericStderr::new().into()));
-		object_map.insert(STDIN_FILENO, stdin);
-		object_map.insert(STDOUT_FILENO, stdout);
-		object_map.insert(STDERR_FILENO, stderr);
-	}
+	stdio::setup(&mut object_map);
 	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
 
 	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
@@ -341,7 +327,7 @@ where
 		let tls_init = func(code_slice, Some(block))?;
 
 		if let Some(init) = tls_init {
-			let template = alloc::sync::Arc::new(
+			let template = Arc::new(
 				crate::scheduler::task::TlsTemplate {
 					size: tls_offset,
 					init,

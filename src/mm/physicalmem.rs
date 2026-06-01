@@ -106,12 +106,8 @@ pub type FrameBox = PageRangeBox<FrameAlloc>;
 /// Copy the physical page at `src_phys` into a freshly allocated page and return its address.
 #[cfg(feature = "common-os")]
 pub fn copy_page(src_phys: PhysAddr) -> PhysAddr {
-	use free_list::PageLayout;
-
-	#[cfg(target_arch = "x86_64")]
-	use crate::arch::mm::paging::PageTableEntryFlagsExt;
-	use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-	use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
+	use crate::arch::mm::paging::BasePageSize;
+	use crate::mm::PageBox;
 
 	let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(frame_layout).expect("Failed to allocate page");
@@ -126,8 +122,8 @@ pub fn copy_page(src_phys: PhysAddr) -> PhysAddr {
 		flags.normal().writable();
 		flags
 	};
-	crate::arch::mm::paging::map::<BasePageSize>(virt, src_phys, 1, flags);
-	crate::arch::mm::paging::map::<BasePageSize>(virt + BasePageSize::SIZE, dst_phys, 1, flags);
+	paging::map::<BasePageSize>(virt, src_phys, 1, flags);
+	paging::map::<BasePageSize>(virt + BasePageSize::SIZE, dst_phys, 1, flags);
 
 	unsafe {
 		let src = core::slice::from_raw_parts(virt.as_ptr::<u8>(), BasePageSize::SIZE as usize);
@@ -138,7 +134,7 @@ pub fn copy_page(src_phys: PhysAddr) -> PhysAddr {
 		dst.copy_from_slice(src);
 	}
 
-	crate::arch::mm::paging::unmap::<BasePageSize>(virt, 2);
+	paging::unmap::<BasePageSize>(virt, 2);
 	// page_box is dropped here, freeing the virtual memory
 
 	dst_phys
