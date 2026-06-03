@@ -5,7 +5,7 @@ use hermit_entry::boot_info::RawBootInfo;
 
 use crate::KERNEL_STACK_SIZE;
 use crate::kernel::pre_init;
-use crate::kernel::scheduler::TaskStacks;
+use crate::mm::stack_alloc;
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
@@ -58,7 +58,7 @@ pub unsafe extern "C" fn _start(_boot_info: Option<&'static RawBootInfo>, cpu_id
 
 		cpu_online = sym super::CPU_ONLINE,
 		current_stack_address = sym super::CURRENT_STACK_ADDRESS,
-		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+		stack_top_offset = const KERNEL_STACK_SIZE - stack_alloc::MARKER_SIZE,
 		pre_init = sym pre_init,
 	)
 }

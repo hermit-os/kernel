@@ -16,7 +16,7 @@ use x86_64::structures::paging::{
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::mm::{FrameAlloc, PageRangeAllocator};
+use crate::mm::{stack_alloc, FrameAlloc, PageRangeAllocator};
 use crate::{env, scheduler};
 
 unsafe impl FrameAllocator<Size4KiB> for FrameAlloc {
@@ -103,6 +103,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 pub use x86_64::structures::paging::{
 	PageSize, Size1GiB as HugePageSize, Size2MiB as LargePageSize, Size4KiB as BasePageSize,
 };
+use crate::arch::core_local::is_kernel_task;
 
 /// Returns a mapping of the physical memory where physical address is equal to the virtual address (no offset)
 pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
@@ -275,18 +276,43 @@ where
 	}
 }
 
-#[cfg(not(feature = "common-os"))]
-pub(crate) extern "x86-interrupt" fn page_fault_handler(
-	stack_frame: ExceptionStackFrame,
-	error_code: PageFaultErrorCode,
-) {
-	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
+fn handle_page_fault(stack_frame: ExceptionStackFrame, error_code: PageFaultErrorCode) {
+	let address = Cr2::read().unwrap();
+	let is_kernel_task = is_kernel_task();
+
+	if is_kernel_task {
+		panic_println!("page_fault_linear_address = {address:p}");
+		panic_println!("error_code = {error_code:?}");
+		panic_println!("fs = {:#X}", processor::readfs());
+		panic_println!("gs = {:#X}", processor::readgs());
+		panic_println!("stack_frame = {stack_frame:#?}");
+
+		if stack_alloc::is_in_stack_range(address) {
+			panic!("Probable Stack Overflow in kernel (#PF)!");
+		} else {
+			panic!("Page fault (#PF) in kernel!");
+		}
+	}
+
+	if stack_alloc::is_in_stack_range(address) {
+		error!("Probable Stack Overflow (#PF)!");
+	} else {
+		error!("Page fault (#PF)!");
+	}
+	error!("page_fault_linear_address = {address:p}");
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());
 	error!("stack_frame = {stack_frame:#?}");
 	scheduler::abort();
+}
+
+#[cfg(not(feature = "common-os"))]
+pub(crate) extern "x86-interrupt" fn page_fault_handler(
+	stack_frame: ExceptionStackFrame,
+	error_code: PageFaultErrorCode,
+) {
+	handle_page_fault(stack_frame, error_code);
 }
 
 #[cfg(feature = "common-os")]
@@ -299,13 +325,8 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 			core::arch::asm!("swapgs", options(nostack));
 		}
 	}
-	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
-	error!("error_code = {error_code:?}");
-	error!("fs = {:#X}", processor::readfs());
-	error!("gs = {:#X}", processor::readgs());
-	error!("stack_frame = {stack_frame:#?}");
-	scheduler::abort();
+
+	handle_page_fault(stack_frame, error_code);
 }
 
 pub fn init() {

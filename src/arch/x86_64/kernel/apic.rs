@@ -1,6 +1,4 @@
-use alloc::alloc::alloc;
 use alloc::vec::Vec;
-use core::alloc::Layout;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
 #[cfg(feature = "acpi")]
@@ -21,7 +19,7 @@ use x86_64::registers::control::Cr3;
 use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
-use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::x86_64::kernel::{CURRENT_STACK, CURRENT_STACK_ADDRESS};
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::mm::paging;
@@ -33,6 +31,7 @@ use crate::config::*;
 use crate::mm::{PageAlloc, PageBox, PageRangeAllocator};
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
+use crate::mm::stack_alloc::allocate_stack;
 
 /// APIC Location and Status (R/W) See Table 35-2. See Section 10.4.4, Local APIC  Status and Location.
 const IA32_APIC_BASE: Msr = Msr::new(0x1b);
@@ -731,10 +730,9 @@ pub fn init_x2apic() {
 /// Initialize the required _start variables for the next CPU to be booted.
 pub fn init_next_processor_variables() {
 	// Allocate stack for the CPU and pass the addresses.
-	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
-	let stack = unsafe { alloc(layout) };
-	assert!(!stack.is_null());
-	CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
+	let stack = allocate_stack(KERNEL_STACK_SIZE);
+	CURRENT_STACK_ADDRESS.store(stack.stack_start().as_mut_ptr(), Ordering::Relaxed);
+	let _ = CURRENT_STACK.lock().insert(stack);
 }
 
 /// Boot all Application Processors

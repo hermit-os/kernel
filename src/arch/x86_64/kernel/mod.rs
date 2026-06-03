@@ -1,16 +1,19 @@
 #[cfg(feature = "common-os")]
 use core::arch::asm;
-use core::ptr;
-#[cfg(feature = "common-os")]
-use core::slice;
+use core::arch::naked_asm;
+use core::{ptr, slice};
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
+use hermit_sync::InterruptTicketMutex;
 use memory_addresses::PhysAddr;
 use x86_64::registers::control::{Cr0, Cr4};
 
 use crate::arch::x86_64::kernel::core_local::*;
+use crate::config::KERNEL_STACK_SIZE;
 use crate::env::{self, is_uhyve};
+use crate::mm::stack_alloc;
+use crate::mm::stack_alloc::{allocate_stack, StackAllocation};
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -81,6 +84,55 @@ pub fn args() -> Option<&'static str> {
 	}
 }
 
+/// Allocates a new stack, copies the current stack to it
+fn allocate_copy_jump_stack() {
+	// Get top of stack
+	let top_of_stack = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed).addr();
+	let top_of_stack = top_of_stack + KERNEL_STACK_SIZE - stack_alloc::MARKER_SIZE;
+
+	// Allocate and set stack
+	let stack = allocate_stack(KERNEL_STACK_SIZE).leak();
+	let _ = CURRENT_STACK.lock().insert(stack.weak());
+	CURRENT_STACK_ADDRESS.store(stack.top_of_stack().as_mut_ptr(), Ordering::Relaxed);
+
+	unsafe {
+		clone_relocate_stack_raw(stack.top_of_stack().as_usize(), top_of_stack);
+	}
+}
+
+#[unsafe(naked)]
+unsafe extern "sysv64" fn clone_relocate_stack_raw(new_stack_top: usize, old_stack_top: usize) {
+	// Strategy: clone everything up to RSP, then set the new stack pointer (coming from RAX) and
+	// return
+	// This is dangerous
+	naked_asm!(
+		"mov rdx, rsp",
+		"call {clone_relocate_stack}",
+		// Set stack pointer to new returned stack pointer, and hope
+		"mov rsp, rax",
+		"ret",
+
+		clone_relocate_stack = sym clone_relocate_stack,
+	)
+}
+
+unsafe fn clone_relocate_stack(new_stack_top: usize, old_stack_top: usize, old_stack_base: usize) -> usize {
+	assert!(old_stack_base < old_stack_top);
+
+	let stack_len = old_stack_top - old_stack_base;
+	let old_stack = unsafe {
+		slice::from_raw_parts::<u8>(ptr::with_exposed_provenance(old_stack_base), stack_len)
+	};
+
+	let new_stack_base = new_stack_top - stack_len;
+	let new_stack = unsafe {
+		slice::from_raw_parts_mut::<u8>(ptr::with_exposed_provenance_mut(new_stack_base), stack_len)
+	};
+
+	new_stack.copy_from_slice(old_stack);
+	new_stack_base
+}
+
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {
@@ -94,6 +146,9 @@ pub fn boot_processor_init() {
 
 	crate::mm::init();
 	crate::mm::print_information();
+
+	allocate_copy_jump_stack();
+
 	CoreLocal::get().add_irq_counter();
 	gdt::add_current_core();
 	interrupts::load_idt();
@@ -177,6 +232,7 @@ pub fn print_statistics() {
 /// It also synchronizes initialization of CPU cores.
 pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 
+pub static CURRENT_STACK: InterruptTicketMutex<Option<StackAllocation>> = InterruptTicketMutex::new(None);
 pub static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "none")]
@@ -296,8 +352,6 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 	use align_address::Align;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
-	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
-
 	info!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();
 
@@ -339,7 +393,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			"mov rdi, {6}",
 			"mov rsi, {7}",
 			"iretq",
-			const u64::MAX - (TaskStacks::MARKER_SIZE as u64 - 1),
+			const u64::MAX - (stack_alloc::MARKER_SIZE as u64 - 1),
 			const 0x23usize,
 			in(reg) stack_pointer,
 			const 0x1202u64,

@@ -58,7 +58,7 @@ macro_rules! kernel_function_impl {
 					let $z = Reg::uninit();
 				)*
 
-				let kernel_stack = CoreLocal::get().kernel_stack.get().cast();
+				let kernel_stack = CoreLocal::get().kernel_stack.borrow().as_ref().unwrap().stack_end().as_mut_ptr();
 
 				call_with_stack(
 					$($arg,)*
