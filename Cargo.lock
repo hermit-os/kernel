@@ -229,6 +229,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitfield-struct"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8769c4854c5ada2852ddf6fd09d15cf43d4c2aaeccb4de6432f5402f08a6003b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -833,6 +844,7 @@ dependencies = [
  "async-executor",
  "async-lock",
  "bit_field",
+ "bitfield-struct 0.12.1",
  "bitflags 2.11.1",
  "build-time",
  "built",
@@ -2004,7 +2016,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd2f32d50a7e480738d6e43ea2048cd1c34cc33362e55d87d1eebd02bd2f563f"
 dependencies = [
  "allocator-api2 0.3.1",
- "bitfield-struct",
+ "bitfield-struct 0.11.0",
  "bitflags 2.11.1",
  "endian-num",
  "num_enum",
