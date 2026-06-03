@@ -12,19 +12,19 @@ pub mod scheduler;
 pub mod serial;
 pub mod systemtime;
 
-use alloc::alloc::alloc;
-use core::alloc::Layout;
 use core::arch::global_asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
+use hermit_sync::InterruptTicketMutex;
+
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::kernel::core_local::*;
-use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
 #[cfg(feature = "smp")]
 use crate::env::FdtStartInfo;
+use crate::mm::stack_alloc::{StackAllocation, allocate_stack};
 
 #[repr(align(8))]
 pub(crate) struct AlignedAtomicU32(AtomicU32);
@@ -34,6 +34,8 @@ pub(crate) struct AlignedAtomicU32(AtomicU32);
 /// It also synchronizes initialization of CPU cores.
 pub(crate) static CPU_ONLINE: AlignedAtomicU32 = AlignedAtomicU32(AtomicU32::new(0));
 
+pub static CURRENT_STACK: InterruptTicketMutex<Option<StackAllocation>> =
+	InterruptTicketMutex::new(None);
 pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "none")]
@@ -87,10 +89,9 @@ fn finish_processor_init() {
 	debug!("Initialized processor {}", core_id());
 
 	// Allocate stack for the CPU and pass the addresses.
-	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
-	let stack = unsafe { alloc(layout) };
-	assert!(!stack.is_null());
-	CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
+	let stack = allocate_stack(KERNEL_STACK_SIZE);
+	CURRENT_STACK_ADDRESS.store(stack.stack_start().as_mut_ptr(), Ordering::Relaxed);
+	let _ = CURRENT_STACK.lock().insert(stack.leak());
 }
 
 pub fn boot_next_processor() {
