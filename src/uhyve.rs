@@ -48,6 +48,7 @@ fn hypercall_data(hypercall: &Hypercall<'_>) -> u64 {
 		Hypercall::FileRead(data) => data_addr(*data),
 		Hypercall::FileUnlink(data) => data_addr(*data),
 		Hypercall::FileWrite(data) => data_addr(*data),
+		Hypercall::Getdents(data) => data_addr(*data),
 		Hypercall::SerialWriteBuffer(data) => data_addr(*data),
 		Hypercall::SerialWriteByte(byte) => u64::from(*byte),
 		h => todo!("unimplemented hypercall {h:?}"),

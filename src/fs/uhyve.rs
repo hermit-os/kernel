@@ -3,6 +3,7 @@ use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
+use core::mem::MaybeUninit;
 
 use async_lock::Mutex;
 use embedded_io::{ErrorType, Read, Write};
@@ -10,7 +11,8 @@ use memory_addresses::VirtAddr;
 use uhyve_interface::GuestPhysAddr;
 use uhyve_interface::v2::Hypercall;
 use uhyve_interface::v2::parameters::{
-	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
+	CloseParams, GetdentParams, GetdentResult, LseekParams, OpenParams, ReadParams, UnlinkParams,
+	WriteParams,
 };
 
 use crate::arch::mm::paging::virtual_to_physical;
@@ -146,6 +148,49 @@ impl Clone for UhyveFileHandle {
 	}
 }
 
+pub struct UhyveDirectoryHandle {
+	/// Guest fd of the directory, mapped in Uhyve's fd layer.
+	fd: i32,
+}
+
+impl UhyveDirectoryHandle {
+	pub const fn new(fd: i32) -> Self {
+		Self { fd }
+	}
+}
+
+impl Drop for UhyveDirectoryHandle {
+	fn drop(&mut self) {
+		let mut close_params = CloseParams {
+			fd: self.fd,
+			ret: 0,
+		};
+		uhyve_hypercall(Hypercall::FileClose(&mut close_params));
+	}
+}
+
+impl ObjectInterface for UhyveDirectoryHandle {
+	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+		let mut read_dir_params = GetdentParams {
+			fd: self.fd,
+			buf: GuestPhysAddr::new(
+				virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			len: buf.len().try_into().unwrap(),
+			ret: GetdentResult::None,
+		};
+		uhyve_hypercall(Hypercall::Getdents(&mut read_dir_params));
+		match read_dir_params.ret {
+			GetdentResult::None => Err(Errno::Nosys),
+			GetdentResult::Success(len) => Ok(len.try_into().unwrap()),
+			GetdentResult::EndOfDirectory => Ok(0),
+			GetdentResult::Error(errno) => Err(Errno::try_from(errno).unwrap()),
+		}
+	}
+}
+
 #[derive(Debug)]
 pub(crate) struct UhyveDirectory {
 	/// The external path of this directory.
@@ -236,6 +281,29 @@ impl VfsNode for UhyveDirectory {
 
 	fn traverse_mkdir(&self, _path: &str, _mode: AccessPermission) -> io::Result<()> {
 		Err(Errno::Nosys)
+	}
+
+	/// Determines the syscall interface
+	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
+		let path = CString::new(self.prefix.clone()).unwrap();
+		let mut open_params = OpenParams {
+			name: GuestPhysAddr::new(
+				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
+					.unwrap()
+					.as_u64(),
+			),
+			flags: (OpenOption::O_RDONLY | OpenOption::O_DIRECTORY).bits(),
+			mode: 0,
+			ret: -1,
+		};
+		uhyve_hypercall(Hypercall::FileOpen(&mut open_params));
+		let fd = open_params.ret;
+		match fd {
+			fd if fd >= 0 => Ok(Arc::new(async_lock::RwLock::new(
+				UhyveDirectoryHandle::new(fd).into(),
+			))),
+			_ => Err(fd.abs().try_into().unwrap()),
+		}
 	}
 }
 
