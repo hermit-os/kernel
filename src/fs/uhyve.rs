@@ -13,7 +13,7 @@ use uhyve_interface::v2::parameters::{
 	CloseParams, LseekParams, OpenParams, ReadParams, UnlinkParams, WriteParams,
 };
 
-use crate::arch::mm::paging;
+use crate::arch::mm::paging::virtual_to_physical;
 use crate::env::fdt;
 use crate::errno::Errno;
 use crate::fd::Fd;
@@ -60,7 +60,7 @@ impl Read for UhyveFileHandleInner {
 		let mut read_params = ReadParams {
 			fd: self.0,
 			buf: GuestPhysAddr::new(
-				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
+				virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
@@ -80,7 +80,7 @@ impl Write for UhyveFileHandleInner {
 		let mut write_params = WriteParams {
 			fd: self.0,
 			buf: GuestPhysAddr::new(
-				paging::virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
+				virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
@@ -192,7 +192,7 @@ impl VfsNode for UhyveDirectory {
 
 		let mut open_params = OpenParams {
 			name: GuestPhysAddr::new(
-				paging::virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
+				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
@@ -216,7 +216,7 @@ impl VfsNode for UhyveDirectory {
 
 		let mut unlink_params = UnlinkParams {
 			name: GuestPhysAddr::new(
-				paging::virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
+				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
