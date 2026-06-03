@@ -33,10 +33,7 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioFsInitError;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::{ComCfg, IsrStatus, Transport};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -60,17 +57,17 @@ pub(crate) struct FsDevCfg {
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
 #[allow(dead_code)]
-pub(crate) struct VirtioFsDriver {
+pub(crate) struct VirtioFsDriver<T: Transport> {
 	pub(super) dev_cfg: FsDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
-	pub(super) notif_cfg: NotifCfg,
-	pub(super) vqueues: Vec<VirtQueue>,
+	pub(super) com_cfg: T::ComCfg,
+	pub(super) isr_stat: T::IsrStatus,
+	pub(super) notif_cfg: T::NotifCfg,
+	pub(super) vqueues: Vec<VirtQueue<T>>,
 	pub(super) irq: InterruptLine,
 }
 
 // Backend-independent interface for Virtio network driver
-impl VirtioFsDriver {
+impl<T: Transport> VirtioFsDriver<T> {
 	#[cfg(feature = "pci")]
 	pub fn get_dev_id(&self) -> u16 {
 		self.dev_cfg.dev_id
@@ -161,21 +158,16 @@ impl VirtioFsDriver {
 	pub fn handle_interrupt(&mut self) {
 		let status = self.isr_stat.acknowledge();
 
-		#[cfg(not(feature = "pci"))]
-		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
-		}
-
-		#[cfg(feature = "pci")]
-		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
+		if status & <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+			== <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+		{
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
 	}
 }
 
-impl VirtioFsInterface for VirtioFsDriver {
+impl<T: Transport> VirtioFsInterface for VirtioFsDriver<T> {
 	fn send_command<O: virtio_fs::ops::Op + 'static>(
 		&mut self,
 		cmd: virtio_fs::Cmd<O>,
@@ -262,7 +254,7 @@ impl VirtioFsInterface for VirtioFsDriver {
 	}
 }
 
-impl Driver for VirtioFsDriver {
+impl<T: Transport> Driver for VirtioFsDriver<T> {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}

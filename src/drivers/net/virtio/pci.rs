@@ -2,16 +2,15 @@ use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 use volatile::VolatileRef;
 
-use super::{Init, Uninit};
+use super::Uninit;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::pci::{self, PciCap, Transport, UniCapsColl};
 
 // Backend-dependent interface for Virtio network driver
-impl VirtioNetDriver<Uninit> {
+impl VirtioNetDriver<Transport, Uninit> {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
 		let dev_cfg = pci::map_dev_cfg::<virtio::net::Config>(cap)?;
 
@@ -66,7 +65,7 @@ impl VirtioNetDriver<Uninit> {
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
-	) -> Result<VirtioNetDriver<Init>, VirtioError> {
+	) -> Result<VirtioNetDriver<Transport>, VirtioError> {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 

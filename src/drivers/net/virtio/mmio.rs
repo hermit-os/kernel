@@ -3,12 +3,12 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::drivers::InterruptLine;
-use crate::drivers::net::virtio::{Init, NetDevCfg, Uninit, VirtioNetDriver};
+use crate::drivers::net::virtio::{NetDevCfg, Uninit, VirtioNetDriver};
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg, Transport};
 
 // Backend-dependent interface for Virtio network driver
-impl VirtioNetDriver<Uninit> {
+impl VirtioNetDriver<Transport, Uninit> {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
@@ -53,7 +53,7 @@ impl VirtioNetDriver<Uninit> {
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<VirtioNetDriver<Init>, VirtioError> {
+	) -> Result<VirtioNetDriver<Transport>, VirtioError> {
 		let drv = VirtioNetDriver::new(dev_id, registers, irq)?;
 		let mut drv = drv.init_dev().map_err(VirtioError::NetDriver)?;
 		drv.print_information();
@@ -61,7 +61,7 @@ impl VirtioNetDriver<Uninit> {
 	}
 }
 
-impl VirtioNetDriver<Init> {
+impl VirtioNetDriver<Transport> {
 	pub fn print_information(&mut self) {
 		self.com_cfg.print_information();
 		if self.dev_status() == virtio::net::S::LINK_UP {

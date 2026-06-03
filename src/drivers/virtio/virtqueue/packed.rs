@@ -14,22 +14,17 @@ use core::ops;
 use core::sync::atomic::{Ordering, fence};
 
 use align_address::Align;
-#[cfg(not(feature = "pci"))]
-use virtio::mmio::NotificationData;
-#[cfg(feature = "pci")]
-use virtio::pci::NotificationData;
 use virtio::pvirtq::{EventSuppressDesc, EventSuppressFlags};
 use virtio::virtq::DescF;
 use virtio::{RingEventFlags, pvirtq};
 
-#[cfg(not(feature = "pci"))]
-use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
-#[cfg(feature = "pci")]
-use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::index_alloc::IndexAlloc;
 use super::{AvailBufferToken, BufferType, TransferToken, UsedBufferToken, Virtq, VirtqPrivate};
 use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::drivers::virtio::transport::{
+	ComCfg, NotifCfg, NotifCtrl, NotificationData, Transport, VqCfgHandler,
+};
 use crate::mm::device_alloc::DeviceAlloc;
 
 trait RingIndexRange {
@@ -92,7 +87,7 @@ impl DescriptorRing {
 
 		let poll_index = write_index;
 
-		DescriptorRing {
+		Self {
 			ring,
 			tkn_ref_ring,
 			write_index,
@@ -113,7 +108,7 @@ impl DescriptorRing {
 			.ok_or(VirtqError::NoNewUsed)
 	}
 
-	fn push_batch(
+	fn push_batch<T: Transport>(
 		&mut self,
 		tkn_lst: impl IntoIterator<Item = TransferToken<pvirtq::Desc>>,
 	) -> Result<EventSuppressDesc, VirtqError> {
@@ -126,7 +121,7 @@ impl DescriptorRing {
 			return Err(VirtqError::BufferNotSpecified);
 		};
 
-		let mut ctrl = self.push_without_making_available(&first_tkn)?;
+		let mut ctrl = self.push_without_making_available::<T>(&first_tkn)?;
 		let first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.first_flags);
 		let first_buffer = first_tkn;
 
@@ -148,11 +143,14 @@ impl DescriptorRing {
 		Ok(self.write_index)
 	}
 
-	fn push(&mut self, tkn: TransferToken<pvirtq::Desc>) -> Result<EventSuppressDesc, VirtqError> {
-		self.push_batch([tkn])
+	fn push<T: Transport>(
+		&mut self,
+		tkn: TransferToken<pvirtq::Desc>,
+	) -> Result<EventSuppressDesc, VirtqError> {
+		self.push_batch::<T>([tkn])
 	}
 
-	fn push_without_making_available(
+	fn push_without_making_available<T: Transport>(
 		&mut self,
 		tkn: &TransferToken<pvirtq::Desc>,
 	) -> Result<WriteCtrl<'_>, VirtqError> {
@@ -170,10 +168,10 @@ impl DescriptorRing {
 
 		// The buffer uses indirect descriptors if the ctrl_desc field is Some.
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
-			let desc = PackedVq::indirect_desc(ctrl_desc.as_ref());
+			let desc = PackedVq::<T>::indirect_desc(ctrl_desc.as_ref());
 			ctrl.write_desc(desc);
 		} else {
-			for incomplete_desc in PackedVq::descriptor_iter(&tkn.buff_tkn)? {
+			for incomplete_desc in PackedVq::<T>::descriptor_iter(&tkn.buff_tkn)? {
 				ctrl.write_desc(incomplete_desc);
 			}
 		}
@@ -484,7 +482,7 @@ impl DevNotif {
 
 /// Packed virtqueue which provides the functionilaty as described in the
 /// virtio specification v1.1. - 2.7
-pub struct PackedVq {
+pub struct PackedVq<T: Transport> {
 	/// Ring which allows easy access to the raw ring structure of the
 	/// specification
 	descr_ring: DescriptorRing,
@@ -493,7 +491,7 @@ pub struct PackedVq {
 	/// Allows to check, if the device wants a notification
 	dev_event: DevNotif,
 	/// Actually notify device about avail buffers
-	notif_ctrl: NotifCtrl,
+	notif_ctrl: T::NotifCtrl,
 	/// The size of the queue, equals the number of descriptors which can
 	/// be used
 	size: u16,
@@ -505,7 +503,7 @@ pub struct PackedVq {
 
 // Public interface of PackedVq
 // This interface is also public in order to allow people to use the PackedVq directly!
-impl Virtq for PackedVq {
+impl<T: Transport> Virtq for PackedVq<T> {
 	fn enable_notifs(&mut self) {
 		self.drv_event.enable_notif();
 	}
@@ -530,7 +528,7 @@ impl Virtq for PackedVq {
 			Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type)
 		});
 
-		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
+		let next_idx = self.descr_ring.push_batch::<T>(transfer_tkns)?;
 
 		if notif {
 			self.drv_event.enable_specific(next_idx);
@@ -543,7 +541,7 @@ impl Virtq for PackedVq {
 			.is_some_and(|idx| range.wrapping_contains(&idx));
 
 		if self.dev_event.is_notif() || notif_specific {
-			let notification_data = NotificationData::new()
+			let notification_data = <T::NotifCtrl as NotifCtrl>::NotificationData::new()
 				.with_vqn(self.index)
 				.with_next_off(next_idx.desc_event_off())
 				.with_next_wrap(next_idx.desc_event_wrap());
@@ -565,7 +563,7 @@ impl Virtq for PackedVq {
 			Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type)
 		});
 
-		let next_idx = self.descr_ring.push_batch(transfer_tkns)?;
+		let next_idx = self.descr_ring.push_batch::<T>(transfer_tkns)?;
 
 		if notif {
 			self.drv_event.enable_specific(next_idx);
@@ -578,7 +576,7 @@ impl Virtq for PackedVq {
 			.is_some_and(|idx| range.wrapping_contains(&idx));
 
 		if self.dev_event.is_notif() | notif_specific {
-			let notification_data = NotificationData::new()
+			let notification_data = <T::NotifCtrl as NotifCtrl>::NotificationData::new()
 				.with_vqn(self.index)
 				.with_next_off(next_idx.desc_event_off())
 				.with_next_wrap(next_idx.desc_event_wrap());
@@ -595,7 +593,7 @@ impl Virtq for PackedVq {
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
 		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type);
-		let next_idx = self.descr_ring.push(transfer_tkn)?;
+		let next_idx = self.descr_ring.push::<T>(transfer_tkn)?;
 
 		if notif {
 			self.drv_event.enable_specific(next_idx);
@@ -609,7 +607,7 @@ impl Virtq for PackedVq {
 			== Some(self.last_next.get().into_bits());
 
 		if self.dev_event.is_notif() || notif_specific {
-			let notification_data = NotificationData::new()
+			let notification_data = <T::NotifCtrl as NotifCtrl>::NotificationData::new()
 				.with_vqn(self.index)
 				.with_next_off(next_idx.desc_event_off())
 				.with_next_wrap(next_idx.desc_event_wrap());
@@ -633,7 +631,7 @@ impl Virtq for PackedVq {
 	}
 }
 
-impl VirtqPrivate for PackedVq {
+impl<T: Transport> VirtqPrivate for PackedVq<T> {
 	type Descriptor = pvirtq::Desc;
 
 	fn create_indirect_ctrl(
@@ -645,11 +643,11 @@ impl VirtqPrivate for PackedVq {
 	}
 }
 
-impl PackedVq {
+impl<T: Transport> PackedVq<T> {
 	#[allow(dead_code)]
 	pub(crate) fn new(
-		com_cfg: &mut ComCfg,
-		notif_cfg: &NotifCfg,
+		com_cfg: &mut T::ComCfg,
+		notif_cfg: &T::NotifCfg,
 		max_size: u16,
 		index: u16,
 		features: virtio::F,
@@ -709,7 +707,7 @@ impl PackedVq {
 			raw: dev_event,
 		};
 
-		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
+		let mut notif_ctrl = T::NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
 
 		if features.contains(virtio::F::NOTIFICATION_DATA) {
 			notif_ctrl.enable_notif_data();

@@ -7,15 +7,15 @@ use volatile::VolatileRef;
 use crate::drivers::InterruptLine;
 use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg, Transport};
 
 // Backend-dependent interface for Virtio fs driver
-impl VirtioFsDriver {
+impl VirtioFsDriver<Transport> {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<VirtioFsDriver, VirtioError> {
+	) -> Result<Self, VirtioError> {
 		let dev_cfg_raw: &'static Config = unsafe {
 			&*registers
 				.borrow_mut()
@@ -53,7 +53,7 @@ impl VirtioFsDriver {
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<VirtioFsDriver, VirtioError> {
+	) -> Result<Self, VirtioError> {
 		let mut drv = VirtioFsDriver::new(dev_id, registers, irq)?;
 		drv.init_dev().map_err(VirtioError::FsDriver)?;
 		drv.com_cfg.print_information();

@@ -23,17 +23,14 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioVsockError;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::{ComCfg, IsrStatus, Transport};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq,
 };
 use crate::mm::device_alloc::DeviceAlloc;
 
-fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
+fn fill_queue<T: Transport>(vq: &mut VirtQueue<T>, num_packets: u16, packet_size: u32) {
 	for _ in 0..num_packets {
 		let buff_tkn = match AvailBufferToken::new(
 			SmallVec::new(),
@@ -62,12 +59,12 @@ fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	}
 }
 
-pub(crate) struct RxQueue {
-	vq: Option<VirtQueue>,
+pub(crate) struct RxQueue<T: Transport> {
+	vq: Option<VirtQueue<T>>,
 	packet_size: u32,
 }
 
-impl RxQueue {
+impl<T: Transport> RxQueue<T> {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
@@ -76,7 +73,7 @@ impl RxQueue {
 		}
 	}
 
-	pub fn add(&mut self, mut vq: VirtQueue) {
+	pub fn add(&mut self, mut vq: VirtQueue<T>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets = vq.size() / BUFF_PER_PACKET;
 		info!("num_packets {num_packets}");
@@ -127,14 +124,14 @@ impl RxQueue {
 	}
 }
 
-pub(crate) struct TxQueue {
-	vq: Option<VirtQueue>,
+pub(crate) struct TxQueue<T: Transport> {
+	vq: Option<VirtQueue<T>>,
 	/// Indicates, whether the Driver/Device are using multiple
 	/// queues for communication.
 	packet_length: u32,
 }
 
-impl TxQueue {
+impl<T: Transport> TxQueue<T> {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
@@ -142,7 +139,7 @@ impl TxQueue {
 		}
 	}
 
-	pub fn add(&mut self, vq: VirtQueue) {
+	pub fn add(&mut self, vq: VirtQueue<T>) {
 		self.vq = Some(vq);
 	}
 
@@ -206,12 +203,12 @@ impl TxQueue {
 	}
 }
 
-pub(crate) struct EventQueue {
-	vq: Option<VirtQueue>,
+pub(crate) struct EventQueue<T: Transport> {
+	vq: Option<VirtQueue<T>>,
 	packet_size: u32,
 }
 
-impl EventQueue {
+impl<T: Transport> EventQueue<T> {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
@@ -222,7 +219,7 @@ impl EventQueue {
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, mut vq: VirtQueue) {
+	fn add(&mut self, mut vq: VirtQueue<T>) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_packets, self.packet_size);
@@ -255,19 +252,19 @@ pub(crate) struct VsockDevCfg {
 	pub features: virtio::vsock::F,
 }
 
-pub(crate) struct VirtioVsockDriver {
+pub(crate) struct VirtioVsockDriver<T: Transport> {
 	pub(super) dev_cfg: VsockDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
-	pub(super) notif_cfg: NotifCfg,
+	pub(super) com_cfg: T::ComCfg,
+	pub(super) isr_stat: T::IsrStatus,
+	pub(super) notif_cfg: T::NotifCfg,
 	pub(super) irq: InterruptLine,
 
-	pub(super) event_vq: EventQueue,
-	pub(super) recv_vq: RxQueue,
-	pub(super) send_vq: TxQueue,
+	pub(super) event_vq: EventQueue<T>,
+	pub(super) recv_vq: RxQueue<T>,
+	pub(super) send_vq: TxQueue<T>,
 }
 
-impl Driver for VirtioVsockDriver {
+impl<T: Transport> Driver for VirtioVsockDriver<T> {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}
@@ -277,7 +274,7 @@ impl Driver for VirtioVsockDriver {
 	}
 }
 
-impl VirtioVsockDriver {
+impl<T: Transport> VirtioVsockDriver<T> {
 	#[cfg(feature = "pci")]
 	pub fn get_dev_id(&self) -> u16 {
 		self.dev_cfg.dev_id
@@ -308,14 +305,9 @@ impl VirtioVsockDriver {
 	pub fn handle_interrupt(&mut self) {
 		let status = self.isr_stat.acknowledge();
 
-		#[cfg(not(feature = "pci"))]
-		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
-		}
-
-		#[cfg(feature = "pci")]
-		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
+		if status & <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+			== <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+		{
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}

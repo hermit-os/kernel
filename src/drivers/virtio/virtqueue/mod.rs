@@ -22,6 +22,7 @@ use smallvec::SmallVec;
 use virtio::{le32, le64, pvirtq, virtq};
 
 use self::error::VirtqError;
+use crate::drivers::virtio::transport::Transport;
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::mm::device_alloc::DeviceAlloc;
@@ -226,9 +227,9 @@ trait VirtqPrivate {
 }
 
 #[enum_dispatch(Virtq)]
-pub(crate) enum VirtQueue {
-	Split(SplitVq),
-	Packed(PackedVq),
+pub(crate) enum VirtQueue<T: Transport> {
+	Split(SplitVq<T>),
+	Packed(PackedVq<T>),
 }
 
 trait VirtqDescriptor {

@@ -37,10 +37,7 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::virtio::ControlRegisters;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::{ComCfg, IsrStatus, Transport};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -103,13 +100,13 @@ fn determine_rx_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 	min_buf_size
 }
 
-pub struct RxQueues {
-	vqs: Vec<VirtQueue>,
+pub struct RxQueues<T: Transport> {
+	vqs: Vec<VirtQueue<T>>,
 	buf_size: u32,
 }
 
-impl RxQueues {
-	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
+impl<T: Transport> RxQueues<T> {
+	pub fn new(vqs: Vec<VirtQueue<T>>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
 			buf_size: determine_rx_buf_size(dev_cfg),
@@ -119,7 +116,7 @@ impl RxQueues {
 	/// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
 	///
 	/// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
-	fn add(&mut self, mut vq: VirtQueue) {
+	fn add(&mut self, mut vq: VirtQueue<T>) {
 		let num_bufs = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
@@ -162,7 +159,7 @@ fn buffer_token_from_hdr(
 	.unwrap()
 }
 
-fn fill_queue(vq: &mut VirtQueue, num_bufs: u16, buf_size: u32) {
+fn fill_queue<T: Transport>(vq: &mut VirtQueue<T>, num_bufs: u16, buf_size: u32) {
 	for _ in 0..num_bufs {
 		let buff_tkn = buffer_token_from_hdr(Box::<Hdr, _>::new_uninit_in(DeviceAlloc), buf_size);
 
@@ -178,13 +175,13 @@ fn fill_queue(vq: &mut VirtQueue, num_bufs: u16, buf_size: u32) {
 
 /// Structure which handles transmission of packets and delegation
 /// to the respective queue structures.
-pub struct TxQueues {
-	vqs: Vec<VirtQueue>,
+pub struct TxQueues<T: Transport> {
+	vqs: Vec<VirtQueue<T>>,
 	buf_size: u32,
 }
 
-impl TxQueues {
-	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
+impl<T: Transport> TxQueues<T> {
+	pub fn new(vqs: Vec<VirtQueue<T>>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
 			buf_size: determine_mtu(dev_cfg).into(),
@@ -218,7 +215,7 @@ impl TxQueues {
 		released_buffers
 	}
 
-	fn add(&mut self, vq: VirtQueue) {
+	fn add(&mut self, vq: VirtQueue<T>) {
 		// Currently we are doing nothing with the additional queues. They are inactive and might be used in the
 		// future
 		self.vqs.push(vq);
@@ -226,11 +223,11 @@ impl TxQueues {
 }
 
 pub(crate) struct Uninit;
-pub(crate) struct Init {
+pub(crate) struct Init<T: Transport> {
 	pub(super) mtu: u16,
-	pub(super) ctrl_vq: Option<VirtQueue>,
-	pub(super) recv_vqs: RxQueues,
-	pub(super) send_vqs: TxQueues,
+	pub(super) ctrl_vq: Option<VirtQueue<T>>,
+	pub(super) recv_vqs: RxQueues<T>,
+	pub(super) send_vqs: TxQueues<T>,
 	/// Capacity in number of buffer descriptors, not frames.
 	pub(super) send_capacity: u32,
 }
@@ -239,11 +236,11 @@ pub(crate) struct Init {
 ///
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
-pub(crate) struct VirtioNetDriver<T = Init> {
+pub(crate) struct VirtioNetDriver<Tr: Transport, T = Init<Tr>> {
 	pub(super) dev_cfg: NetDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
-	pub(super) notif_cfg: NotifCfg,
+	pub(super) com_cfg: Tr::ComCfg,
+	pub(super) isr_stat: Tr::IsrStatus,
+	pub(super) notif_cfg: Tr::NotifCfg,
 
 	pub(super) inner: T,
 
@@ -255,19 +252,19 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) checksums: ChecksumCapabilities,
 }
 
-pub struct TxToken<'a> {
-	send_vqs: &'a mut TxQueues,
+pub struct TxToken<'a, T: Transport> {
+	send_vqs: &'a mut TxQueues<T>,
 	checksums: ChecksumCapabilities,
 	send_capacity: &'a mut u32,
 }
 
-impl Drop for TxToken<'_> {
+impl<T: Transport> Drop for TxToken<'_, T> {
 	fn drop(&mut self) {
 		*self.send_capacity += u32::from(BUFF_PER_PACKET);
 	}
 }
 
-impl smoltcp::phy::TxToken for TxToken<'_> {
+impl<T: Transport> smoltcp::phy::TxToken for TxToken<'_, T> {
 	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
@@ -289,7 +286,7 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 		// If a checksum calculation by the host is necessary, we have to inform the host within the header
 		// see Virtio specification 5.1.6.2
 		if let Some((ip_header_len, csum_offset)) =
-			VirtioNetDriver::should_request_checksum(&token.checksums, &mut packet)
+			VirtioNetDriver::<T>::should_request_checksum(&token.checksums, &mut packet)
 		{
 			header.flags = HdrF::NEEDS_CSUM;
 			header.csum_start =
@@ -311,13 +308,13 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 	}
 }
 
-pub struct RxToken<'a> {
-	recv_vqs: &'a mut RxQueues,
+pub struct RxToken<'a, T: Transport> {
+	recv_vqs: &'a mut RxQueues<T>,
 	is_mrg_rxbuf_enabled: bool,
 	checksums: ChecksumCapabilities,
 }
 
-impl RxToken<'_> {
+impl<T: Transport> RxToken<'_, T> {
 	/// If we advertised receive checksum offload to smoltcp, we need to validate the packet
 	/// either by checking its virtio-net headers or checksum. Otherwise, it's smoltcp's responsibility
 	/// to validate the frame and we can pass the frame directly.
@@ -417,7 +414,7 @@ impl RxToken<'_> {
 	}
 }
 
-impl smoltcp::phy::RxToken for RxToken<'_> {
+impl<T: Transport> smoltcp::phy::RxToken for RxToken<'_, T> {
 	fn consume<R, F>(self, f: F) -> R
 	where
 		F: FnOnce(&[u8]) -> R,
@@ -493,7 +490,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 	}
 }
 
-impl NetworkDriver for VirtioNetDriver<Init> {
+impl<T: Transport> NetworkDriver for VirtioNetDriver<T, Init<T>> {
 	/// Returns the mac address of the device.
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
@@ -522,14 +519,9 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	fn handle_interrupt(&mut self) {
 		let status = self.isr_stat.acknowledge();
 
-		#[cfg(not(feature = "pci"))]
-		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
-		}
-
-		#[cfg(feature = "pci")]
-		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
+		if status & <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+			== <T::IsrStatus as IsrStatus>::CONFIGURATION_CHANGE
+		{
 			info!("Configuration changes are not possible! Aborting");
 			todo!("Implement possibility to change config on the fly...")
 		}
@@ -538,9 +530,15 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	}
 }
 
-impl smoltcp::phy::Device for VirtioNetDriver {
-	type TxToken<'a> = TxToken<'a>;
-	type RxToken<'a> = RxToken<'a>;
+impl<T: Transport> smoltcp::phy::Device for VirtioNetDriver<T> {
+	type TxToken<'a>
+		= TxToken<'a, T>
+	where
+		T: 'a;
+	type RxToken<'a>
+		= RxToken<'a, T>
+	where
+		T: 'a;
 
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut device_capabilities = DeviceCapabilities::default();
@@ -597,7 +595,7 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 	}
 }
 
-impl Driver for VirtioNetDriver<Init> {
+impl<T: Transport> Driver for VirtioNetDriver<T, Init<T>> {
 	fn get_interrupt_number(&self) -> InterruptLine {
 		self.irq
 	}
@@ -608,7 +606,7 @@ impl Driver for VirtioNetDriver<Init> {
 }
 
 // Backend-independent interface for Virtio network driver
-impl VirtioNetDriver<Init> {
+impl<Tr: Transport> VirtioNetDriver<Tr, Init<Tr>> {
 	#[cfg(feature = "pci")]
 	pub fn get_dev_id(&self) -> u16 {
 		self.dev_cfg.dev_id
@@ -751,13 +749,13 @@ impl VirtioNetDriver<Init> {
 	}
 }
 
-impl VirtioNetDriver<Uninit> {
+impl<T: Transport> VirtioNetDriver<T, Uninit> {
 	/// Initializes the device in adherence to specification. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.1.5
-	pub fn init_dev(mut self) -> Result<VirtioNetDriver<Init>, VirtioNetError> {
+	pub fn init_dev(mut self) -> Result<VirtioNetDriver<T, Init<T>>, VirtioNetError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -824,11 +822,11 @@ impl VirtioNetDriver<Uninit> {
 			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 		}
 
-		let mut inner = Init {
+		let mut inner = Init::<T> {
 			mtu: determine_mtu(&self.dev_cfg),
 			ctrl_vq: None,
-			recv_vqs: RxQueues::new(Vec::new(), &self.dev_cfg),
-			send_vqs: TxQueues::new(Vec::new(), &self.dev_cfg),
+			recv_vqs: RxQueues::<T>::new(Vec::new(), &self.dev_cfg),
+			send_vqs: TxQueues::<T>::new(Vec::new(), &self.dev_cfg),
 			send_capacity: 0,
 		};
 
@@ -870,7 +868,7 @@ impl VirtioNetDriver<Uninit> {
 	}
 
 	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
-	fn dev_spec_init(&mut self, inner: &mut Init) -> Result<(), VirtioNetError> {
+	fn dev_spec_init(&mut self, inner: &mut Init<T>) -> Result<(), VirtioNetError> {
 		self.virtqueue_init(inner)?;
 		info!("Network driver successfully initialized virtqueues.");
 
@@ -908,7 +906,7 @@ impl VirtioNetDriver<Uninit> {
 	}
 
 	/// Initialize virtqueues via the queue interface and populates receiving queues
-	fn virtqueue_init(&mut self, inner: &mut Init) -> Result<(), VirtioNetError> {
+	fn virtqueue_init(&mut self, inner: &mut Init<T>) -> Result<(), VirtioNetError> {
 		// We are assuming here, that the device single source of truth is the
 		// device specific configuration. Hence we do NOT check if
 		//

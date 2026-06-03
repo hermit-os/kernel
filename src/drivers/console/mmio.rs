@@ -5,15 +5,15 @@ use volatile::VolatileRef;
 use crate::drivers::InterruptLine;
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg, Transport};
 
 // Backend-dependent interface for Virtio console driver
-impl VirtioConsoleDriver {
+impl VirtioConsoleDriver<Transport> {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<VirtioConsoleDriver, VirtioError> {
+	) -> Result<Self, VirtioError> {
 		let dev_cfg_raw: &'static Config = unsafe {
 			&*registers
 				.borrow_mut()
@@ -32,7 +32,7 @@ impl VirtioConsoleDriver {
 		let isr_stat = IsrStatus::new(registers.borrow_mut());
 		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
-		Ok(VirtioConsoleDriver {
+		Ok(Self {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers),
 			isr_stat,
@@ -52,7 +52,7 @@ impl VirtioConsoleDriver {
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
-	) -> Result<VirtioConsoleDriver, VirtioError> {
+	) -> Result<Self, VirtioError> {
 		let mut drv = VirtioConsoleDriver::new(dev_id, registers, irq)?;
 		drv.init_dev().map_err(VirtioError::ConsoleDriver)?;
 		drv.com_cfg.print_information();

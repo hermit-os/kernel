@@ -13,19 +13,14 @@ use core::cell::UnsafeCell;
 use core::mem::{self, MaybeUninit};
 
 use mem_barrier::BarrierType;
-#[cfg(not(feature = "pci"))]
-use virtio::mmio::NotificationData;
-#[cfg(feature = "pci")]
-use virtio::pci::NotificationData;
 use virtio::{le16, virtq};
 
-#[cfg(not(feature = "pci"))]
-use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
-#[cfg(feature = "pci")]
-use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::index_alloc::IndexAlloc;
 use super::{AvailBufferToken, BufferType, TransferToken, UsedBufferToken, Virtq, VirtqPrivate};
+use crate::drivers::virtio::transport::{
+	ComCfg, NotifCfg, NotifCtrl, NotificationData, Transport, VqCfgHandler,
+};
 use crate::mm::device_alloc::DeviceAlloc;
 
 struct DescrRing {
@@ -54,15 +49,15 @@ impl DescrRing {
 		unsafe { &*self.used_ring_cell.get() }
 	}
 
-	fn push(&mut self, tkn: TransferToken<virtq::Desc>) -> Result<u16, VirtqError> {
+	fn push<T: Transport>(&mut self, tkn: TransferToken<virtq::Desc>) -> Result<u16, VirtqError> {
 		let mut index;
 		if let Some(ctrl_desc) = tkn.ctrl_desc.as_ref() {
-			let descriptor = SplitVq::indirect_desc(ctrl_desc.as_ref());
+			let descriptor = SplitVq::<T>::indirect_desc(ctrl_desc.as_ref());
 
 			index = self.indexes.allocate().ok_or(VirtqError::NoDescrAvail)?;
 			self.descr_table_mut()[index] = MaybeUninit::new(descriptor);
 		} else {
-			let mut rev_all_desc_iter = SplitVq::descriptor_iter(&tkn.buff_tkn)?.rev();
+			let mut rev_all_desc_iter = SplitVq::<T>::descriptor_iter(&tkn.buff_tkn)?.rev();
 
 			// We need to handle the last descriptor (the first for the reversed iterator) specially to not set the next flag.
 			{
@@ -151,15 +146,15 @@ impl DescrRing {
 }
 
 /// Virtio's split virtqueue structure
-pub struct SplitVq {
+pub struct SplitVq<T: Transport> {
 	ring: DescrRing,
 	size: u16,
 	index: u16,
 
-	notif_ctrl: NotifCtrl,
+	notif_ctrl: T::NotifCtrl,
 }
 
-impl Virtq for SplitVq {
+impl<T: Transport> Virtq for SplitVq<T> {
 	fn enable_notifs(&mut self) {
 		self.ring.drv_enable_notif();
 	}
@@ -195,7 +190,7 @@ impl Virtq for SplitVq {
 		buffer_type: BufferType,
 	) -> Result<(), VirtqError> {
 		let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type);
-		let next_idx = self.ring.push(transfer_tkn)?;
+		let next_idx = self.ring.push::<T>(transfer_tkn)?;
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -204,7 +199,7 @@ impl Virtq for SplitVq {
 		}
 
 		if self.ring.dev_is_notif() {
-			let notification_data = NotificationData::new()
+			let notification_data = <T::NotifCtrl as NotifCtrl>::NotificationData::new()
 				.with_vqn(self.index)
 				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
@@ -225,7 +220,7 @@ impl Virtq for SplitVq {
 	}
 }
 
-impl VirtqPrivate for SplitVq {
+impl<T: Transport> VirtqPrivate for SplitVq<T> {
 	type Descriptor = virtq::Desc;
 	fn create_indirect_ctrl(
 		buffer_tkn: &AvailBufferToken,
@@ -241,10 +236,10 @@ impl VirtqPrivate for SplitVq {
 	}
 }
 
-impl SplitVq {
+impl<T: Transport> SplitVq<T> {
 	pub(crate) fn new(
-		com_cfg: &mut ComCfg,
-		notif_cfg: &NotifCfg,
+		com_cfg: &mut T::ComCfg,
+		notif_cfg: &T::NotifCfg,
 		max_size: u16,
 		index: u16,
 		features: virtio::F,
@@ -309,7 +304,7 @@ impl SplitVq {
 			order_platform,
 		};
 
-		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
+		let mut notif_ctrl = T::NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
 
 		if features.contains(virtio::F::NOTIFICATION_DATA) {
 			notif_ctrl.enable_notif_data();
