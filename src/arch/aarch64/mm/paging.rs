@@ -149,11 +149,6 @@ impl PageTableEntry {
 		(self.physical_address_and_flags & PageTableEntryFlags::TABLE_OR_4KIB_PAGE.bits()) != 0
 	}
 
-	/// Mark this as an invalid (not present) entry
-	fn unset(&mut self) {
-		self.physical_address_and_flags = 0;
-	}
-
 	/// Mark this as a valid (present) entry and set address translation and flags.
 	///
 	/// # Arguments
@@ -165,10 +160,6 @@ impl PageTableEntry {
 		assert!(
 			physical_address.is_aligned_to(BasePageSize::SIZE),
 			"Physical address is not on a 4 KiB page boundary (physical_address = {physical_address:p})"
-		);
-		assert!(
-			!physical_address.is_null(),
-			"Cannot set a page table entry with null address"
 		);
 
 		let mut flags_to_set = flags;
@@ -422,8 +413,8 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		}
 
 		if flags == PageTableEntryFlags::BLANK {
-			// in this case we unmap the pages
-			self.entries[index].unset()
+			// We already unmapped the page
+			return;
 		} else {
 			self.entries[index].set(physical_address, S::MAP_EXTRA_FLAG | flags);
 		}
