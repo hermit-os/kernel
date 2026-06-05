@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 use core::ptr;
-use core::sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use align_address::Align;
 use free_list::PageLayout;
 use hermit_sync::SpinMutex;
@@ -662,7 +662,6 @@ pub unsafe fn enable_page_table() {
 		asm::sfence_vma_all();
 	}
 
-	#[cfg(feature = "smp")]
 	SATP_VALUE.store(
 		((mode as usize) << 60) | (asid << 44) | ppn,
 		Ordering::Relaxed
