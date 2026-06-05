@@ -6,6 +6,7 @@ use hermit_entry::boot_info::RawBootInfo;
 
 use super::{CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::riscv64::mm::paging::SATP_VALUE;
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
 use crate::{KERNEL_STACK_SIZE, env};
@@ -30,6 +31,13 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 	}
 
 	naked_asm!(
+		// Load page table if set
+		// Required in order to be able to change the stack pointer just after
+		"ld t0, {satp_value}",
+		"beqz t0, 1f",
+		"csrrw t0, satp, t0",
+
+		"1:",
 		// Use stack pointer from `CURRENT_STACK_ADDRESS` if set
 		"ld t0, {current_stack_pointer}",
 		"beqz t0, 2f",
@@ -39,6 +47,7 @@ pub unsafe extern "C" fn _start(hart_id: usize, boot_info: Option<&'static RawBo
 		"2:",
 
 		"j {pre_init}",
+		satp_value = sym SATP_VALUE,
 		current_stack_pointer = sym CURRENT_STACK_ADDRESS,
 		top_offset = const KERNEL_STACK_SIZE,
 		pre_init = sym pre_init,
