@@ -413,8 +413,8 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		}
 
 		if flags == PageTableEntryFlags::BLANK {
-			// in this case we unmap the pages
-			self.entries[index].set(physical_address, flags);
+			// We already unmapped the page
+			return;
 		} else {
 			self.entries[index].set(physical_address, S::MAP_EXTRA_FLAG | flags);
 		}
