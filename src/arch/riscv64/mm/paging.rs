@@ -152,10 +152,6 @@ impl PageTableEntry {
 			physical_address.is_aligned_to(BasePageSize::SIZE),
 			"Physical address is not on a 4 KiB page boundary (physical_address = {physical_address:#X})"
 		);
-		assert!(
-			!physical_address.is_null(),
-			"Cannot set a page table entry with null address"
-		);
 
 		let mut flags_to_set = flags;
 		flags_to_set.insert(PageTableEntryFlags::VALID);
@@ -386,9 +382,9 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		if physical_address.is_null() {
+		if physical_address.is_null() && flags == PageTableEntryFlags::BLANK {
 			// Clear PTE
-			self.entries[index].unset()
+			self.entries[index].unset();
 		} else {
 			self.entries[index].set(
 				physical_address,
