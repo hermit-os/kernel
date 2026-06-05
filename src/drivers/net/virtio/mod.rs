@@ -527,7 +527,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 			_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
 		};
 
-		if status.contains(config_change) {
+		if status.contains(config_change) && self.com_cfg.does_device_need_reset() {
 			todo!("Device configuration change notification cannot be handled yet");
 		}
 
