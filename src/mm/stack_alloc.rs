@@ -10,15 +10,21 @@ use crate::arch::mm::paging;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{BasePageSize, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::mm::{FrameAlloc, PageRangeAllocator, virtualmem};
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator, virtualmem};
 
 static MAX_STACK_SIZE: usize = HugePageSize::SIZE as usize;
-static STACK_REGION_END: usize = virtualmem::kernel_heap_end().as_usize().div_ceil(2);
+/// End of the stack. Ideally, we'd take the heap end, but in x86_64 this causes ptr computation
+/// problems
+static STACK_REGION_END: usize = virtualmem::kernel_heap_end().as_usize() + 1 - MAX_STACK_SIZE;
 static STACK_REGION_START: usize = STACK_REGION_END - MAX_STACK_SIZE;
 static STACK_FREE_LIST: Lazy<InterruptTicketMutex<FreeList<16>>> = Lazy::new(|| {
 	// Remove all mappings in the stack region range
 	let start = VirtAddr::new(STACK_REGION_START as u64);
 	let count = MAX_STACK_SIZE / HugePageSize::SIZE as usize;
+	let range = PageRange::new(STACK_REGION_START, STACK_REGION_END).unwrap();
+
+	// Take the pages from the allocator
+	PageAlloc::allocate_at(range).expect("failed to reserve stack area");
 
 	paging::unmap::<HugePageSize>(start, count);
 
@@ -64,12 +70,9 @@ pub fn allocate_stack(requested_size: usize) -> StackAllocation {
 	let phys_addr_start = PhysAddr::new(frame_range.start() as u64);
 	let virt_addr_start = VirtAddr::new(stack_start as u64);
 
-	// Remove identity mapping if present
-	paging::unmap::<BasePageSize>(virt_addr_start, pages_with_guard);
-
 	// Map first page to a disabled page full of a marker, then unmap it
 	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
+	flags.normal().writable().execute_disable();
 	paging::map::<BasePageSize>(virt_addr_start, phys_addr_start, 1, flags);
 	unsafe {
 		let marker_pos = virt_addr_start.add(BasePageSize::SIZE as usize - size_of::<u64>());
