@@ -107,7 +107,7 @@ fn finish_processor_init() {
 	// Allocate stack for the CPU and pass the addresses.
 	let stack = allocate_stack(KERNEL_STACK_SIZE);
 	CURRENT_STACK_ADDRESS.store(stack.stack_start().as_mut_ptr(), Ordering::Relaxed);
-	let _ = CURRENT_STACK.lock().insert(stack);
+	let _ = CURRENT_STACK.lock().insert(stack.leak());
 }
 
 pub fn boot_next_processor() {
