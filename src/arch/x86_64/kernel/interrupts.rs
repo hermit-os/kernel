@@ -82,6 +82,11 @@ pub(crate) fn enable_and_wait() {
 			);
 		}
 	} else {
+		#[cfg(feature = "smp")]
+		if !scheduler::core_sleep() {
+			return;
+		}
+
 		enable_and_hlt();
 	}
 }
