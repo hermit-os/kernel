@@ -1,8 +1,6 @@
 use alloc::boxed::Box;
 use core::arch::asm;
 use core::cell::Cell;
-#[cfg(feature = "smp")]
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use core::{mem, ptr};
 
@@ -34,8 +32,6 @@ pub(crate) struct CoreLocal {
 	irq_statistics: &'static IrqStatistics,
 	/// The core-local async executor.
 	ex: StaticLocalExecutor<RawSpinMutex, RawRwSpinLock>,
-	#[cfg(feature = "smp")]
-	pub hlt: AtomicBool,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
@@ -62,8 +58,6 @@ impl CoreLocal {
 			kernel_stack: Cell::new(ptr::null_mut()),
 			irq_statistics,
 			ex: StaticLocalExecutor::new(),
-			#[cfg(feature = "smp")]
-			hlt: AtomicBool::new(false),
 			#[cfg(feature = "smp")]
 			scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 		};
