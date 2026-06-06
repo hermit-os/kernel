@@ -1,13 +1,15 @@
+use alloc::collections::LinkedList;
 use alloc::collections::linked_list::CursorMut;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering::SeqCst;
+
+use hermit_sync::{SpinMutex, SpinMutexGuard};
+
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::Errno;
-use crate::scheduler::task::{TaskHandle, TaskHandlePriorityQueue};
 use crate::scheduler::PerCoreSchedulerExt;
-use alloc::collections::LinkedList;
-use core::sync::atomic::Ordering::SeqCst;
-use core::sync::atomic::AtomicU32;
-use hermit_sync::{SpinMutex, SpinMutexGuard};
+use crate::scheduler::task::{TaskHandle, TaskHandlePriorityQueue};
 
 struct BucketElem(usize, TaskHandlePriorityQueue);
 
@@ -63,7 +65,7 @@ impl TaskListBucket {
 		let mut cursor = self.0.cursor_front_mut();
 		while let Some(elem) = cursor.current() {
 			if elem.0 == address {
-				let was_present =elem.1.remove(task);
+				let was_present = elem.1.remove(task);
 
 				if elem.1.is_empty() {
 					cursor.remove_current();
@@ -104,7 +106,7 @@ impl<const N: usize> BucketList<N> {
 
 	pub fn lock_bucket(&self, address: usize) -> SpinMutexGuard<'_, TaskListBucket> {
 		if N == 1 {
-			return self.0[0].lock()
+			return self.0[0].lock();
 		}
 		let bucket = Self::hash_key(address);
 		self.0[bucket].lock()
@@ -175,7 +177,7 @@ pub(crate) fn futex_wait(
 			} else {
 				// If we are not in the waking queue, this must have been a wakeup.
 				0
-			}
+			};
 		} else {
 			let is_in_queue = parking_lot.contains_task(address_usize, handle);
 
@@ -238,7 +240,7 @@ pub(crate) fn futex_wait_and_set(
 			} else {
 				// If we are not in the waking queue, this must have been a wakeup.
 				0
-			}
+			};
 		} else {
 			let is_in_queue = parking_lot.contains_task(address_usize, handle);
 
