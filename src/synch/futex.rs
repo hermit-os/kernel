@@ -103,12 +103,19 @@ impl<const N: usize> BucketList<N> {
 	}
 
 	pub fn lock_bucket(&self, address: usize) -> SpinMutexGuard<'_, TaskListBucket> {
+		if N == 1 {
+			return self.0[0].lock()
+		}
 		let bucket = Self::hash_key(address);
 		self.0[bucket].lock()
 	}
 }
 
+#[cfg(feature = "smp")]
 static PARKING_LOT: BucketList<64> = BucketList::new();
+
+#[cfg(not(feature = "smp"))]
+static PARKING_LOT: BucketList<1> = BucketList::new();
 
 bitflags! {
 	pub struct Flags: u32 {
