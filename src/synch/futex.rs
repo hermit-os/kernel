@@ -3,7 +3,7 @@ use alloc::collections::linked_list::CursorMut;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering::SeqCst;
 
-use hermit_sync::{SpinMutex, SpinMutexGuard};
+use hermit_sync::{InterruptSpinMutex, InterruptSpinMutexGuard};
 
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
@@ -13,7 +13,7 @@ use crate::scheduler::task::{TaskHandle, TaskHandlePriorityQueue};
 
 struct BucketElem(usize, TaskHandlePriorityQueue);
 
-type Bucket = SpinMutex<TaskListBucket>;
+type Bucket = InterruptSpinMutex<TaskListBucket>;
 
 #[repr(transparent)]
 struct TaskListBucket(LinkedList<BucketElem>);
@@ -95,7 +95,7 @@ struct BucketList<const N: usize>([Bucket; N]);
 
 impl<const N: usize> BucketList<N> {
 	pub const fn new() -> Self {
-		Self([const { SpinMutex::new(TaskListBucket(LinkedList::new())) }; N])
+		Self([const { InterruptSpinMutex::new(TaskListBucket(LinkedList::new())) }; N])
 	}
 
 	fn hash_key(v: usize) -> usize {
@@ -104,7 +104,7 @@ impl<const N: usize> BucketList<N> {
 		hashed % N
 	}
 
-	pub fn lock_bucket(&self, address: usize) -> SpinMutexGuard<'_, TaskListBucket> {
+	pub fn lock_bucket(&self, address: usize) -> InterruptSpinMutexGuard<'_, TaskListBucket> {
 		if N == 1 {
 			return self.0[0].lock();
 		}
