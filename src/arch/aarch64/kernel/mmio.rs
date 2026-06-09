@@ -17,6 +17,7 @@ use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, PageSize};
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
+use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "virtio-console")]
@@ -117,7 +118,7 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
-pub fn init_drivers() {
+pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	without_interrupts(|| {
 		let Some(fdt) = crate::env::fdt() else {
 			error!("No device tree found, cannot initialize MMIO drivers");
@@ -191,13 +192,14 @@ pub fn init_drivers() {
 						"Found {id:?} card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
 					);
 
-					let drv = match mmio_virtio::init_device(mmio, irq.try_into().unwrap()) {
-						Ok(drv) => drv,
-						Err(err) => {
-							error!("{err}");
-							continue;
-						}
-					};
+					let drv =
+						match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
+							Ok(drv) => drv,
+							Err(err) => {
+								error!("{err}");
+								continue;
+							}
+						};
 
 					let mut gic = GIC.lock();
 					let Some(gic) = gic.as_mut() else {

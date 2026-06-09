@@ -30,7 +30,10 @@ use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-use crate::drivers::Driver;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::mmio::get_filesystem_driver;
+#[cfg(feature = "pci")]
+use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioFsInitError;
 #[cfg(not(feature = "pci"))]
@@ -42,6 +45,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
 };
+use crate::drivers::{Driver, InterruptHandlerMap};
 use crate::errno::Errno;
 use crate::fs::virtio_fs::{self, Rsp, RspHeader, VirtioFsError, VirtioFsInterface};
 use crate::mm::device_alloc::DeviceAlloc;
@@ -66,7 +70,6 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
 	pub(super) vqueues: Vec<VirtQueue>,
-	pub(super) irq: InterruptLine,
 }
 
 // Backend-independent interface for Virtio network driver
@@ -86,7 +89,11 @@ impl VirtioFsDriver {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
-	pub(crate) fn init_dev(&mut self) -> Result<(), VirtioFsInitError> {
+	pub(crate) fn init_dev(
+		&mut self,
+		handlers: &mut InterruptHandlerMap,
+		irq: Option<InterruptLine>,
+	) -> Result<(), VirtioFsInitError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -151,6 +158,12 @@ impl VirtioFsDriver {
 			);
 			self.vqueues.push(vq);
 		}
+
+		handlers.entry(irq.unwrap()).or_default().push_back(|| {
+			if let Some(driver) = get_filesystem_driver() {
+				driver.lock().handle_interrupt();
+			};
+		});
 
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
@@ -260,10 +273,6 @@ impl VirtioFsInterface for VirtioFsDriver {
 }
 
 impl Driver for VirtioFsDriver {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"virtio"
 	}

@@ -9,11 +9,7 @@ use riscv::interrupt::{Exception, Interrupt, Trap};
 use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
 
-use crate::drivers::InterruptHandlerQueue;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_interrupt_handlers;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_interrupt_handlers;
+use crate::drivers::InterruptHandlerMap;
 use crate::scheduler;
 
 /// Base address of the PLIC, only one access at the same time is allowed
@@ -25,8 +21,7 @@ static PLIC_CONTEXT: SpinMutex<u16> = SpinMutex::new(0x0);
 /// PLIC context for new interrupt handlers
 static CURRENT_INTERRUPTS: SpinMutex<Vec<u32>> = SpinMutex::new(Vec::new());
 
-static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> =
-	OnceCell::new();
+static INTERRUPT_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 
 /// Init Interrupts
 pub(crate) fn install() {
@@ -119,9 +114,7 @@ pub(crate) fn disable() {
 }
 
 /// Currently not needed because we use the trapframe crate
-pub(crate) fn install_handlers() {
-	let handlers = get_interrupt_handlers();
-
+pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
 	for irq_number in handlers.keys() {
 		unsafe {
 			let base_ptr = PLIC_BASE.lock();

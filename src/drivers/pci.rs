@@ -3,8 +3,6 @@
 use alloc::vec::Vec;
 use core::fmt;
 
-use ahash::RandomState;
-use hashbrown::HashMap;
 #[cfg(any(
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
@@ -22,6 +20,9 @@ use pci_types::{
 use crate::arch::kernel::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
+#[allow(unused_imports)]
+use crate::drivers::Driver;
+use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "virtio-fs")]
@@ -37,8 +38,6 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
-#[allow(unused_imports)]
-use crate::drivers::{Driver, InterruptHandlerQueue};
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -365,88 +364,10 @@ impl PciDriver {
 			_ => None,
 		}
 	}
-
-	fn get_interrupt_handler(&self) -> (InterruptLine, fn()) {
-		#[allow(unreachable_patterns)]
-		match self {
-			#[cfg(feature = "virtio-vsock")]
-			Self::VirtioVsock(drv) => {
-				fn vsock_handler() {
-					let Some(driver) = get_vsock_driver() else {
-						return;
-					};
-
-					driver.lock().handle_interrupt();
-				}
-
-				let irq_number = drv.lock().get_interrupt_number();
-
-				(irq_number, vsock_handler)
-			}
-			#[cfg(feature = "virtio-fs")]
-			Self::VirtioFs(drv) => {
-				fn virtio_fs_handler() {
-					let Some(driver) = get_filesystem_driver() else {
-						return;
-					};
-
-					driver.lock().handle_interrupt();
-				}
-
-				let irq_number = drv.lock().get_interrupt_number();
-
-				(irq_number, virtio_fs_handler)
-			}
-			#[cfg(feature = "virtio-console")]
-			Self::VirtioConsole(drv) => {
-				fn console_handler() {
-					let Some(driver) = get_console_driver() else {
-						return;
-					};
-
-					driver.lock().handle_interrupt();
-				}
-
-				let irq_number = drv.lock().get_interrupt_number();
-				(irq_number, console_handler)
-			}
-			_ => todo!(),
-		}
-	}
 }
 
 pub(crate) fn register_driver(drv: PciDriver) {
 	PCI_DRIVERS.with(|pci_drivers| pci_drivers.unwrap().push(drv));
-}
-
-pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandlerQueue, RandomState>
-{
-	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
-		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
-
-	for drv in PCI_DRIVERS.finalize().iter() {
-		let (irq_number, handler) = drv.get_interrupt_handler();
-
-		handlers.entry(irq_number).or_default().push_back(handler);
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	{
-		use crate::arch::kernel::serial::get_serial_handler;
-		let (irq_number, handler) = get_serial_handler();
-
-		handlers.entry(irq_number).or_default().push_back(handler);
-	}
-
-	#[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
-	if let Some(device) = NETWORK_DEVICE.lock().as_ref() {
-		handlers
-			.entry(device.get_interrupt_number())
-			.or_default()
-			.push_back(crate::executor::network::network_handler);
-	}
-
-	handlers
 }
 
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
@@ -479,7 +400,11 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.find_map(|drv| drv.get_filesystem_driver())
 }
 
-pub(crate) fn init() {
+#[cfg_attr(
+	not(any(feature = "virtio", feature = "rtl8139")),
+	expect(unused_variables)
+)]
+pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
@@ -495,7 +420,7 @@ pub(crate) fn init() {
 			error!("Virtio support is disabled.");
 
 			#[cfg(feature = "virtio")]
-			match pci_virtio::init_device(adapter) {
+			match pci_virtio::init_device(adapter, handlers) {
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					register_driver(PciDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
@@ -529,11 +454,12 @@ pub(crate) fn init() {
 				adapter.device_id()
 			);
 
-			match rtl8139::init_device(adapter) {
+			match rtl8139::init_device(adapter, handlers) {
 				Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
 				Err(err) => error!("Could not initialize rtl8139 device: {err}"),
 			}
 		}
+		PCI_DRIVERS.finalize();
 	});
 }
 

@@ -6,8 +6,8 @@ use hermit_sync::SpinMutex;
 use smoltcp::phy;
 use smoltcp::time::Instant;
 
+use crate::drivers::Driver;
 use crate::drivers::net::NetworkDriver;
-use crate::drivers::{Driver, InterruptLine};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -26,12 +26,6 @@ impl LoopbackDriver {
 }
 
 impl Driver for LoopbackDriver {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		// This is called by mmio / pci specific code, this driver
-		// is using neither.
-		unimplemented!()
-	}
-
 	fn get_name(&self) -> &'static str {
 		"loopback"
 	}
