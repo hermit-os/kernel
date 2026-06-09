@@ -14,8 +14,6 @@ unsafe extern "C" {
 	static mut L0mib_pgtable: u64;
 }
 
-#[allow(dead_code)]
-const PT_DEVICE: u64 = 0x707;
 const PT_PT: u64 = 0x713;
 const PT_MEM: u64 = 0x713;
 const PT_MEM_CD: u64 = 0x70F;
