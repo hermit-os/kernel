@@ -88,6 +88,15 @@ el_1_entry:
 .global l2k_pgtable
 .global l3_pgtable
 .global L0mib_pgtable
+.global L2mib_pgtable
+.global L4mib_pgtable
+.global L6mib_pgtable
+.global L8mib_pgtable
+.global L10mib_pgtable
+.global L12mib_pgtable
+.global L14mib_pgtable
+.global L16mib_pgtable
+.global L18mib_pgtable
 
 .align 12
 l0_pgtable:

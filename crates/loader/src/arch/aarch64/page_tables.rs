@@ -12,6 +12,15 @@ unsafe extern "C" {
 	static mut l2k_pgtable: u64;
 	static mut l3_pgtable: u64;
 	static mut L0mib_pgtable: u64;
+	static mut L2mib_pgtable: u64;
+	static mut L4mib_pgtable: u64;
+	static mut L6mib_pgtable: u64;
+	static mut L8mib_pgtable: u64;
+	static mut L10mib_pgtable: u64;
+	static mut L12mib_pgtable: u64;
+	static mut L14mib_pgtable: u64;
+	static mut L16mib_pgtable: u64;
+	static mut L18mib_pgtable: u64;
 }
 
 const PT_PT: u64 = 0x713;
@@ -51,15 +60,29 @@ pub unsafe fn init(uart_address: u32) {
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice = (&raw mut L0mib_pgtable).expose_provenance() as u64
-			+ (i * BasePageSize::SIZE) as u64
-			+ PT_PT;
-	}
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut L0mib_pgtable, 10 * 512) };
-	for (i, entry) in pgt_slice.iter_mut().enumerate() {
-		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
+	let mib_pgtables = [
+		&raw mut L0mib_pgtable,
+		&raw mut L2mib_pgtable,
+		&raw mut L4mib_pgtable,
+		&raw mut L6mib_pgtable,
+		&raw mut L8mib_pgtable,
+		&raw mut L10mib_pgtable,
+		&raw mut L12mib_pgtable,
+		&raw mut L14mib_pgtable,
+		&raw mut L16mib_pgtable,
+		&raw mut L18mib_pgtable,
+	];
+
+	for (mib_i, mib_pgtable) in mib_pgtables.into_iter().enumerate() {
+		pgt_slice[mib_i] = mib_pgtable as u64 + PT_PT;
+
+		let pgt_slice = unsafe { core::slice::from_raw_parts_mut(mib_pgtable, 512) };
+
+		for (i, entry) in pgt_slice.iter_mut().enumerate() {
+			let i = mib_i * 512 + i;
+			*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
+		}
 	}
 }
 
