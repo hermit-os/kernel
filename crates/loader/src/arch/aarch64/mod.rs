@@ -86,6 +86,7 @@ pub fn find_kernel() -> &'static [u8] {
 	}
 }
 
+#[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let LoadedKernel {
 		load_info,
