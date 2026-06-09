@@ -3,13 +3,13 @@ mod console;
 pub use self::console::Console;
 pub mod drivers;
 pub mod entry;
+mod page_tables;
 pub mod paging;
 
 use core::arch::asm;
 use core::ptr;
 
-use aarch64_cpu::asm::barrier::{self, NSH, SY, dmb, dsb, isb};
-use aarch64_cpu::registers::{ReadWriteable, SCTLR_EL1, TTBR0_EL1, TTBR1_EL1, Writeable};
+use aarch64_cpu::asm::barrier::{NSH, SY, dmb, dsb, isb};
 use align_address::Align;
 use fdt::Fdt;
 use goblin::elf::header::header64::{EI_DATA, ELFDATA2LSB, ELFMAG, Header, SELFMAG};
@@ -22,15 +22,6 @@ use crate::BootInfoExt;
 use crate::arch::paging::*;
 use crate::os::CONSOLE;
 
-unsafe extern "C" {
-	static mut l0_pgtable: u64;
-	static mut l1_pgtable: u64;
-	static mut l2_pgtable: u64;
-	static mut l2k_pgtable: u64;
-	static mut l3_pgtable: u64;
-	static mut L0mib_pgtable: u64;
-}
-
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
 /// Default stack size of the kernel
@@ -39,13 +30,6 @@ const KERNEL_STACK_SIZE: usize = 32_768;
 /// start of RAM (0x4000_0000)
 /// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
 const DEVICE_TREE: u64 = RAM_START;
-
-#[allow(dead_code)]
-const PT_DEVICE: u64 = 0x707;
-const PT_PT: u64 = 0x713;
-const PT_MEM: u64 = 0x713;
-const PT_MEM_CD: u64 = 0x70F;
-const PT_SELF: u64 = 1 << 55;
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	let loader_end = crate::os::executable_end().as_ptr();
@@ -118,61 +102,15 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let uart_address: u32 = CONSOLE.lock().get().get_stdout();
 	info!("Detect UART at {uart_address:#x}");
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l0_pgtable, 512) };
-	for i in pgt_slice.iter_mut() {
-		*i = 0;
-	}
-	pgt_slice[0] = (&raw mut l1_pgtable).expose_provenance() as u64 + PT_PT;
-	pgt_slice[511] = (&raw mut l0_pgtable).expose_provenance() as u64 + PT_PT + PT_SELF;
-
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l1_pgtable, 512) };
-	for i in pgt_slice.iter_mut() {
-		*i = 0;
-	}
-	pgt_slice[0] = (&raw mut l2_pgtable).expose_provenance() as u64 + PT_PT;
-	pgt_slice[1] = (&raw mut l2k_pgtable).expose_provenance() as u64 + PT_PT;
-
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l2_pgtable, 512) };
-	for i in pgt_slice.iter_mut() {
-		*i = 0;
-	}
-	pgt_slice[0] = (&raw mut l3_pgtable).expose_provenance() as u64 + PT_PT;
-
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l3_pgtable, 512) };
-	for i in pgt_slice.iter_mut() {
-		*i = 0;
-	}
-	pgt_slice[1] = uart_address as u64 + PT_MEM_CD;
-
-	// map kernel to __executable_start and stack below the kernel
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l2k_pgtable, 512) };
-	for i in pgt_slice.iter_mut() {
-		*i = 0;
-	}
-	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice = (&raw mut L0mib_pgtable).expose_provenance() as u64
-			+ (i * BasePageSize::SIZE) as u64
-			+ PT_PT;
-	}
-
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut L0mib_pgtable, 10 * 512) };
-	for (i, entry) in pgt_slice.iter_mut().enumerate() {
-		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
+	unsafe {
+		page_tables::init(uart_address);
 	}
 
 	CONSOLE.lock().get().set_stdout(0x1000);
 
-	// Load TTBRx
-	TTBR1_EL1.set(0);
-	TTBR0_EL1.set(&raw mut l0_pgtable as u64);
-	barrier::dsb(barrier::SY);
-	barrier::isb(barrier::SY);
-
-	// Enable paging
-	SCTLR_EL1.modify(SCTLR_EL1::M::Enable);
-	barrier::isb(barrier::SY);
-
-	info!("Successfully set up paging.");
+	unsafe {
+		page_tables::enable();
+	}
 
 	let fdt = unsafe {
 		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
