@@ -1,8 +1,10 @@
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 
+use ahash::RandomState;
 use align_address::Align;
 use arm_gic::{IntId, Trigger};
+use hashbrown::HashMap;
 #[cfg(any(
 	feature = "virtio-console",
 	feature = "virtio-fs",
@@ -35,6 +37,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 #[cfg(feature = "virtio-net")]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -81,7 +84,11 @@ impl MmioDriver {
 	}
 }
 
-#[cfg(any(feature = "virtio-console", feature = "virtio-fs", feature = "virtio-vsock"))]
+#[cfg(any(
+	feature = "virtio-console",
+	feature = "virtio-fs",
+	feature = "virtio-vsock"
+))]
 pub(crate) fn register_driver(drv: MmioDriver) {
 	MMIO_DRIVERS.with(|mmio_drivers| mmio_drivers.unwrap().push(drv));
 }
@@ -113,7 +120,7 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
-pub fn init_drivers() {
+pub fn init_drivers(handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>) {
 	without_interrupts(|| {
 		let Some(fdt) = crate::env::fdt() else {
 			error!("No device tree found, cannot initialize MMIO drivers");
@@ -187,13 +194,14 @@ pub fn init_drivers() {
 						"Found {id:?} card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
 					);
 
-					let drv = match mmio_virtio::init_device(mmio, irq.try_into().unwrap()) {
-						Ok(drv) => drv,
-						Err(err) => {
-							error!("{err}");
-							continue;
-						}
-					};
+					let drv =
+						match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
+							Ok(drv) => drv,
+							Err(err) => {
+								error!("{err}");
+								continue;
+							}
+						};
 
 					let mut gic = GIC.lock();
 					let Some(gic) = gic.as_mut() else {
@@ -209,15 +217,19 @@ pub fn init_drivers() {
 					} else {
 						panic!("Invalid interrupt type");
 					};
-					gic.set_interrupt_priority(virtio_irqid, Some(cpu_id), 0x00).unwrap();
+					gic.set_interrupt_priority(virtio_irqid, Some(cpu_id), 0x00)
+						.unwrap();
 					if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Level).unwrap();
+						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Level)
+							.unwrap();
 					} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Edge).unwrap();
+						gic.set_trigger(virtio_irqid, Some(cpu_id), Trigger::Edge)
+							.unwrap();
 					} else {
 						panic!("Invalid interrupt level!");
 					}
-					gic.enable_interrupt(virtio_irqid, Some(cpu_id), true).unwrap();
+					gic.enable_interrupt(virtio_irqid, Some(cpu_id), true)
+						.unwrap();
 
 					match drv {
 						#[cfg(feature = "virtio-console")]
@@ -225,9 +237,9 @@ pub fn init_drivers() {
 							InterruptTicketMutex::new(*drv),
 						)),
 						#[cfg(feature = "virtio-fs")]
-						VirtioDriver::Fs(drv) => register_driver(MmioDriver::VirtioFs(
-							InterruptTicketMutex::new(*drv),
-						)),
+						VirtioDriver::Fs(drv) => {
+							register_driver(MmioDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
+						}
 						#[cfg(feature = "virtio-net")]
 						VirtioDriver::Net(drv) => *NETWORK_DEVICE.lock() = Some(*drv),
 						#[cfg(feature = "virtio-vsock")]

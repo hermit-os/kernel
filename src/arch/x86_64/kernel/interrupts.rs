@@ -16,11 +16,7 @@ use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_coun
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, page_fault_handler};
 use crate::arch::x86_64::swapgs;
-use crate::drivers::InterruptHandlerQueue;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_interrupt_handlers;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_interrupt_handlers;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::scheduler::{self, CoreId};
 
 static IRQ_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> = OnceCell::new();
@@ -163,8 +159,24 @@ pub(crate) fn install() {
 	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
-pub(crate) fn install_handlers() {
-	IRQ_HANDLERS.set(get_interrupt_handlers()).unwrap();
+pub(crate) fn install_handlers(
+	#[cfg_attr(not(feature = "pci"), expect(unused_mut))] mut handlers: HashMap<
+		InterruptLine,
+		InterruptHandlerQueue,
+		RandomState,
+	>,
+) {
+	#[cfg(feature = "pci")]
+	{
+		use crate::kernel::serial;
+		add_irq_name(serial::SERIAL_IRQ, "COM1");
+		handlers
+			.entry(serial::SERIAL_IRQ)
+			.or_default()
+			.push_back(serial::handle_interrupt);
+	}
+
+	IRQ_HANDLERS.set(handlers).unwrap();
 }
 
 fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {

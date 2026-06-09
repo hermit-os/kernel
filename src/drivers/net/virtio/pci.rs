@@ -1,3 +1,5 @@
+use ahash::RandomState;
+use hashbrown::HashMap;
 use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 use volatile::VolatileRef;
@@ -9,6 +11,7 @@ use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver<Uninit> {
@@ -51,7 +54,6 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			inner: Uninit,
 			num_vqs: 0,
-			irq: device.get_irq().unwrap(),
 			checksums: ChecksumCapabilities::default(),
 		})
 	}
@@ -66,6 +68,7 @@ impl VirtioNetDriver<Uninit> {
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
+		handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
 	) -> Result<VirtioNetDriver<Init>, VirtioError> {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
@@ -84,7 +87,7 @@ impl VirtioNetDriver<Uninit> {
 			}
 		};
 
-		let initialized_drv = match drv.init_dev() {
+		let initialized_drv = match drv.init_dev(handlers, device.get_irq()) {
 			Ok(initialized_drv) => {
 				info!(
 					"Network device with id {:x}, has been initialized by driver!",

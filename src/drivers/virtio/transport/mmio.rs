@@ -4,9 +4,10 @@
 //! For details on the Rust definitions, see [`virtio::mmio`].
 //!
 //! [Virtio Over MMIO]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1650002
-
 use core::mem;
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use memory_addresses::PhysAddr;
 use virtio::mmio::{
 	DeviceRegisters, DeviceRegistersVolatileFieldAccess, DeviceRegistersVolatileWideFieldAccess,
@@ -16,7 +17,6 @@ use virtio::{DeviceStatus, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
-use crate::drivers::InterruptLine;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
@@ -28,6 +28,7 @@ use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
 pub struct VqCfgHandler<'a> {
 	vq_index: u16,
@@ -327,6 +328,7 @@ pub(crate) enum VirtioDriver {
 pub(crate) fn init_device(
 	registers: VolatileRef<'static, DeviceRegisters>,
 	irq_no: InterruptLine,
+	handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
 ) -> Result<VirtioDriver, DriverError> {
 	let dev_id: u16 = 0;
 
@@ -340,7 +342,7 @@ pub(crate) fn init_device(
 	// Verify the device-ID to find the network card
 	match registers.as_ptr().device_id().read() {
 		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no) {
+		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no, handlers) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
 
@@ -360,7 +362,7 @@ pub(crate) fn init_device(
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(dev_id, registers, irq_no) {
+			match VirtioFsDriver::init(dev_id, registers, irq_no, handlers) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					crate::arch::interrupts::add_irq_name(irq_no, "virtio");
@@ -373,7 +375,7 @@ pub(crate) fn init_device(
 			}
 		}
 		#[cfg(feature = "virtio-net")]
-		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no) {
+		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no, handlers) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 
@@ -388,7 +390,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
-		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no) {
+		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no, handlers) {
 			Ok(virt_vsock_drv) => {
 				info!("Virtio sock driver initialized.");
 

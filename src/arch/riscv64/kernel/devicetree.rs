@@ -1,6 +1,8 @@
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use core::ptr::NonNull;
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use memory_addresses::PhysAddr;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
@@ -42,6 +44,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 	not(feature = "pci"),
 ))]
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
@@ -99,7 +102,9 @@ pub fn init() {
 
 /// Inits drivers based on the device tree
 /// This function should only be called once
-pub fn init_drivers() {
+pub fn init_drivers(
+	#[allow(unused)] handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
+) {
 	// TODO: Implement devicetree correctly
 	if let Some(fdt) = env::fdt() {
 		debug!("Init drivers using devicetree");
@@ -184,6 +189,7 @@ pub fn init_drivers() {
 					irq.try_into().unwrap(),
 					phy_addr,
 					<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
+					handlers,
 				) {
 					Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
 					Err(err) => error!("Could not initialize GEM driver: {err}"),
@@ -252,7 +258,7 @@ pub fn init_drivers() {
 
 				debug!("Found virtio {id:?} at {mmio:p}");
 
-				match mmio_virtio::init_device(mmio, irq.try_into().unwrap()) {
+				match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
 					#[cfg(feature = "virtio-console")]
 					Ok(VirtioDriver::Console(drv)) => {
 						register_driver(MmioDriver::VirtioConsole(

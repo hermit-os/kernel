@@ -8,6 +8,8 @@
 use alloc::vec::Vec;
 use core::ptr::{self, NonNull};
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use memory_addresses::PhysAddr;
 use pci_types::capability::PciCapability;
 use virtio::pci::{
@@ -37,6 +39,7 @@ use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
 /// Maps a given device specific pci configuration structure and
 /// returns a static reference to it.
@@ -624,6 +627,11 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 /// list of the given device through [map_caps].
 pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
+	#[allow(unused_variables)] handlers: &mut HashMap<
+		InterruptLine,
+		InterruptHandlerQueue,
+		RandomState,
+	>,
 ) -> Result<VirtioDriver, DriverError> {
 	let device_id = device.device_id();
 
@@ -642,7 +650,7 @@ pub(crate) fn init_device(
 
 	match id {
 		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(device) {
+		virtio::Id::Console => match VirtioConsoleDriver::init(device, handlers) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
 
@@ -663,7 +671,7 @@ pub(crate) fn init_device(
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(device) {
+			match VirtioFsDriver::init(device, handlers) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					let irq = device.get_irq().unwrap();
@@ -683,7 +691,7 @@ pub(crate) fn init_device(
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
-		virtio::Id::Net => match VirtioNetDriver::init(device) {
+		virtio::Id::Net => match VirtioNetDriver::init(device, handlers) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 
@@ -701,7 +709,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
-		virtio::Id::Vsock => match VirtioVsockDriver::init(device) {
+		virtio::Id::Vsock => match VirtioVsockDriver::init(device, handlers) {
 			Ok(virt_sock_drv) => {
 				info!("Virtio sock driver initialized.");
 

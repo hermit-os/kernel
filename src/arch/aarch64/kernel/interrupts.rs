@@ -17,10 +17,6 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_interrupt_handlers;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::kernel::serial::handle_uart_interrupt;
 use crate::mm::{PageAlloc, PageRangeAllocator};
@@ -87,16 +83,17 @@ pub fn disable() {
 	dmb(ISH);
 }
 
-pub(crate) fn install_handlers() {
+pub(crate) fn install_handlers(
+	old_handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
+) {
 	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
-
 	fn timer_handler() {
 		debug!("Handle timer interrupt");
 		timer_interrupts::clear_active_and_set_next();
 	}
 
-	for (key, value) in get_interrupt_handlers().into_iter() {
+	for (key, value) in old_handlers.into_iter() {
 		handlers.insert(key + SPI_START, value);
 	}
 

@@ -3,8 +3,10 @@ use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::{ptr, str};
 
+use ahash::RandomState;
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
+use hashbrown::HashMap;
 #[cfg(any(
 	feature = "virtio-console",
 	feature = "virtio-fs",
@@ -36,6 +38,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
@@ -217,8 +220,12 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
-fn register_mmio(mmio: VolatileRef<'static, DeviceRegisters>, irq: u8) {
-	match mmio_virtio::init_device(mmio, irq) {
+fn register_mmio(
+	mmio: VolatileRef<'static, DeviceRegisters>,
+	irq: u8,
+	handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
+) {
+	match mmio_virtio::init_device(mmio, irq, handlers) {
 		#[cfg(feature = "virtio-console")]
 		Ok(VirtioDriver::Console(drv)) => {
 			register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
@@ -239,7 +246,9 @@ fn register_mmio(mmio: VolatileRef<'static, DeviceRegisters>, irq: u8) {
 	}
 }
 
-pub(crate) fn init_drivers() {
+pub(crate) fn init_drivers(
+	handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
+) {
 	without_interrupts(|| {
 		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 		let page_range = PageBox::new(layout).unwrap();
@@ -249,11 +258,11 @@ pub(crate) fn init_drivers() {
 
 		if linux_mmio.is_empty() {
 			for (mmio, irq) in guess_device(virtual_address) {
-				register_mmio(mmio, irq);
+				register_mmio(mmio, irq, handlers);
 			}
 		} else {
 			for (mmio, irq) in check_linux_args(linux_mmio, virtual_address) {
-				register_mmio(mmio, irq);
+				register_mmio(mmio, irq, handlers);
 			}
 		}
 
