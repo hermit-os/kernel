@@ -3,6 +3,7 @@ use virtio::console::Config;
 use volatile::VolatileRef;
 
 use crate::arch::kernel::pci::PciConfigRegion;
+use crate::drivers::InterruptHandlerMap;
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
@@ -47,7 +48,6 @@ impl VirtioConsoleDriver {
 			com_cfg,
 			isr_stat: isr_cfg,
 			notif_cfg,
-			irq: device.get_irq().unwrap(),
 			recv_vq: RxQueue::new(),
 			send_vq: TxQueue::new(),
 		})
@@ -58,6 +58,7 @@ impl VirtioConsoleDriver {
 	/// Returns a driver instance of VirtioConsoleDriver.
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
+		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioConsoleDriver, VirtioError> {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
@@ -76,7 +77,7 @@ impl VirtioConsoleDriver {
 			}
 		};
 
-		match drv.init_dev() {
+		match drv.init_dev(handlers, device.get_irq()) {
 			Ok(()) => {
 				info!(
 					"Console device with id {:x}, has been initialized by driver!",

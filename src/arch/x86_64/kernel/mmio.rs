@@ -20,6 +20,7 @@ use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
+use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "virtio-fs")]
@@ -217,8 +218,12 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 		.find_map(|drv| drv.get_vsock_driver())
 }
 
-fn register_mmio(mmio: VolatileRef<'static, DeviceRegisters>, irq: u8) {
-	match mmio_virtio::init_device(mmio, irq) {
+fn register_mmio(
+	mmio: VolatileRef<'static, DeviceRegisters>,
+	irq: u8,
+	handlers: &mut InterruptHandlerMap,
+) {
+	match mmio_virtio::init_device(mmio, irq, handlers) {
 		#[cfg(feature = "virtio-console")]
 		Ok(VirtioDriver::Console(drv)) => {
 			register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
@@ -239,7 +244,7 @@ fn register_mmio(mmio: VolatileRef<'static, DeviceRegisters>, irq: u8) {
 	}
 }
 
-pub(crate) fn init_drivers() {
+pub(crate) fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	without_interrupts(|| {
 		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 		let page_range = PageBox::new(layout).unwrap();
@@ -249,11 +254,11 @@ pub(crate) fn init_drivers() {
 
 		if linux_mmio.is_empty() {
 			for (mmio, irq) in guess_device(virtual_address) {
-				register_mmio(mmio, irq);
+				register_mmio(mmio, irq, handlers);
 			}
 		} else {
 			for (mmio, irq) in check_linux_args(linux_mmio, virtual_address) {
-				register_mmio(mmio, irq);
+				register_mmio(mmio, irq, handlers);
 			}
 		}
 

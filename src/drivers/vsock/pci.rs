@@ -1,6 +1,7 @@
 use volatile::VolatileRef;
 
 use crate::arch::kernel::pci::PciConfigRegion;
+use crate::drivers::InterruptHandlerMap;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
@@ -46,7 +47,6 @@ impl VirtioVsockDriver {
 			com_cfg,
 			isr_stat: isr_cfg,
 			notif_cfg,
-			irq: device.get_irq().unwrap(),
 			event_vq: EventQueue::new(),
 			recv_vq: RxQueue::new(),
 			send_vq: TxQueue::new(),
@@ -58,6 +58,7 @@ impl VirtioVsockDriver {
 	/// Returns a driver instance of VirtioVsockDriver.
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
+		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioVsockDriver, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioVsockDriver::new(caps, device) {
@@ -73,7 +74,7 @@ impl VirtioVsockDriver {
 			}
 		};
 
-		match drv.init_dev() {
+		match drv.init_dev(handlers, device.get_irq()) {
 			Ok(()) => {
 				let cid = drv.get_cid();
 				info!("Socket device with cid {cid:x}, has been initialized by driver!");
