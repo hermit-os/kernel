@@ -118,45 +118,44 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let uart_address: u32 = CONSOLE.lock().get().get_stdout();
 	info!("Detect UART at {uart_address:#x}");
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l0_pgtable), 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l0_pgtable, 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of_mut!(l1_pgtable).expose_provenance() as u64 + PT_PT;
-	pgt_slice[511] = ptr::addr_of_mut!(l0_pgtable).expose_provenance() as u64 + PT_PT + PT_SELF;
+	pgt_slice[0] = (&raw mut l1_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt_slice[511] = (&raw mut l0_pgtable).expose_provenance() as u64 + PT_PT + PT_SELF;
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l1_pgtable), 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l1_pgtable, 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of_mut!(l2_pgtable).expose_provenance() as u64 + PT_PT;
-	pgt_slice[1] = ptr::addr_of_mut!(l2k_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt_slice[0] = (&raw mut l2_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt_slice[1] = (&raw mut l2k_pgtable).expose_provenance() as u64 + PT_PT;
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2_pgtable), 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l2_pgtable, 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[0] = ptr::addr_of_mut!(l3_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt_slice[0] = (&raw mut l3_pgtable).expose_provenance() as u64 + PT_PT;
 
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l3_pgtable), 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l3_pgtable, 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
 	pgt_slice[1] = uart_address as u64 + PT_MEM_CD;
 
 	// map kernel to __executable_start and stack below the kernel
-	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(l2k_pgtable), 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut l2k_pgtable, 512) };
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
 	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
-		*pgt_slice = ptr::addr_of_mut!(L0mib_pgtable).expose_provenance() as u64
+		*pgt_slice = (&raw mut L0mib_pgtable).expose_provenance() as u64
 			+ (i * BasePageSize::SIZE) as u64
 			+ PT_PT;
 	}
 
-	let pgt_slice =
-		unsafe { core::slice::from_raw_parts_mut(ptr::addr_of_mut!(L0mib_pgtable), 10 * 512) };
+	let pgt_slice = unsafe { core::slice::from_raw_parts_mut(&raw mut L0mib_pgtable, 10 * 512) };
 	for (i, entry) in pgt_slice.iter_mut().enumerate() {
 		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
 	}
