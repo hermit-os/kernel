@@ -483,6 +483,8 @@ impl IsrStatus {
 	}
 
 	pub fn acknowledge(&mut self) -> IsrStatusRaw {
+		// Driver read of ISR status causes the device to de-assert an interrupt.
+		// VIRTIO spec. v1.4 sec. 4.1.4.5
 		self.isr_stat.as_ptr().read()
 	}
 }
