@@ -8,60 +8,64 @@ use super::RAM_START;
 use super::paging::{BasePageSize, PageSize};
 
 unsafe extern "C" {
-	static mut l0_pgtable: [u64; 512];
-	static mut l1_pgtable: [u64; 512];
-	static mut l2_pgtable: [u64; 512];
-	static mut l2k_pgtable: [u64; 512];
-	static mut l3_pgtable: [u64; 512];
-	static mut L0mib_pgtable: [u64; 512];
-	static mut L2mib_pgtable: [u64; 512];
-	static mut L4mib_pgtable: [u64; 512];
-	static mut L6mib_pgtable: [u64; 512];
-	static mut L8mib_pgtable: [u64; 512];
-	static mut L10mib_pgtable: [u64; 512];
-	static mut L12mib_pgtable: [u64; 512];
-	static mut L14mib_pgtable: [u64; 512];
-	static mut L16mib_pgtable: [u64; 512];
-	static mut L18mib_pgtable: [u64; 512];
+	static mut l0_pgtable: [*mut (); 512];
+	static mut l1_pgtable: [*mut (); 512];
+	static mut l2_pgtable: [*mut (); 512];
+	static mut l2k_pgtable: [*mut (); 512];
+	static mut l3_pgtable: [*mut (); 512];
+	static mut L0mib_pgtable: [*mut (); 512];
+	static mut L2mib_pgtable: [*mut (); 512];
+	static mut L4mib_pgtable: [*mut (); 512];
+	static mut L6mib_pgtable: [*mut (); 512];
+	static mut L8mib_pgtable: [*mut (); 512];
+	static mut L10mib_pgtable: [*mut (); 512];
+	static mut L12mib_pgtable: [*mut (); 512];
+	static mut L14mib_pgtable: [*mut (); 512];
+	static mut L16mib_pgtable: [*mut (); 512];
+	static mut L18mib_pgtable: [*mut (); 512];
 }
 
-const PT_PT: u64 = 0x713;
-const PT_MEM: u64 = 0x713;
-const PT_MEM_CD: u64 = 0x70F;
-const PT_SELF: u64 = 1 << 55;
+const PT_PT: usize = 0x713;
+const PT_MEM: usize = 0x713;
+const PT_MEM_CD: usize = 0x70F;
+const PT_SELF: usize = 1 << 55;
 
 #[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn init(uart_address: u32) {
 	let pgt = unsafe { &mut l0_pgtable };
 	for i in pgt.iter_mut() {
-		*i = 0;
+		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l1_pgtable).expose_provenance() as u64 + PT_PT;
-	pgt[511] = (&raw mut l0_pgtable).expose_provenance() as u64 + PT_PT + PT_SELF;
+	pgt[0] = (&raw mut l1_pgtable).wrapping_byte_add(PT_PT).cast();
+	pgt[511] = (&raw mut l0_pgtable)
+		.wrapping_byte_add(PT_PT)
+		.wrapping_byte_add(PT_SELF)
+		.cast();
 
 	let pgt = unsafe { &mut l1_pgtable };
 	for i in pgt.iter_mut() {
-		*i = 0;
+		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l2_pgtable).expose_provenance() as u64 + PT_PT;
-	pgt[1] = (&raw mut l2k_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt[0] = (&raw mut l2_pgtable).wrapping_byte_add(PT_PT).cast();
+	pgt[1] = (&raw mut l2k_pgtable).wrapping_byte_add(PT_PT).cast();
 
 	let pgt = unsafe { &mut l2_pgtable };
 	for i in pgt.iter_mut() {
-		*i = 0;
+		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l3_pgtable).expose_provenance() as u64 + PT_PT;
+	pgt[0] = (&raw mut l3_pgtable).wrapping_byte_add(PT_PT).cast();
 
 	let pgt = unsafe { &mut l3_pgtable };
 	for i in pgt.iter_mut() {
-		*i = 0;
+		*i = ptr::null_mut();
 	}
-	pgt[1] = uart_address as u64 + PT_MEM_CD;
+	pgt[1] =
+		ptr::with_exposed_provenance_mut::<()>(uart_address as usize).wrapping_byte_add(PT_MEM_CD);
 
 	// map kernel to __executable_start and stack below the kernel
 	let pgt = unsafe { &mut l2k_pgtable };
 	for i in pgt.iter_mut() {
-		*i = 0;
+		*i = ptr::null_mut();
 	}
 
 	let mib_pgtables = unsafe {
@@ -79,12 +83,14 @@ pub unsafe fn init(uart_address: u32) {
 		]
 	};
 
-	for (mib_i, mib_pgt) in mib_pgtables.into_iter().enumerate() {
-		pgt[mib_i] = ptr::from_mut(mib_pgt) as u64 + PT_PT;
+	for (mib_pgt_i, mib_pgt) in mib_pgtables.into_iter().enumerate() {
+		pgt[mib_pgt_i] = ptr::from_mut(mib_pgt).wrapping_byte_add(PT_PT).cast();
 
-		for (i, entry) in mib_pgt.iter_mut().enumerate() {
-			let i = mib_i * 512 + i;
-			*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
+		for (entry_i, entry) in mib_pgt.iter_mut().enumerate() {
+			let total_entry_i = mib_pgt_i * 512 + entry_i;
+			*entry = ptr::with_exposed_provenance_mut::<()>(RAM_START as usize)
+				.wrapping_byte_add(PT_MEM)
+				.wrapping_byte_add(total_entry_i * BasePageSize::SIZE);
 		}
 	}
 }
