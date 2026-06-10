@@ -8,21 +8,21 @@ use super::RAM_START;
 use super::paging::{BasePageSize, PageSize};
 
 unsafe extern "C" {
-	static mut l0_pgtable: [*mut (); 512];
-	static mut l1_pgtable: [*mut (); 512];
-	static mut l2_pgtable: [*mut (); 512];
-	static mut l2k_pgtable: [*mut (); 512];
-	static mut l3_pgtable: [*mut (); 512];
-	static mut L0mib_pgtable: [*mut (); 512];
-	static mut L2mib_pgtable: [*mut (); 512];
-	static mut L4mib_pgtable: [*mut (); 512];
-	static mut L6mib_pgtable: [*mut (); 512];
-	static mut L8mib_pgtable: [*mut (); 512];
-	static mut L10mib_pgtable: [*mut (); 512];
-	static mut L12mib_pgtable: [*mut (); 512];
-	static mut L14mib_pgtable: [*mut (); 512];
-	static mut L16mib_pgtable: [*mut (); 512];
-	static mut L18mib_pgtable: [*mut (); 512];
+	static mut l0_pgtable: PageTable;
+	static mut l1_pgtable: PageTable;
+	static mut l2_pgtable: PageTable;
+	static mut l2k_pgtable: PageTable;
+	static mut l3_pgtable: PageTable;
+	static mut L0mib_pgtable: PageTable;
+	static mut L2mib_pgtable: PageTable;
+	static mut L4mib_pgtable: PageTable;
+	static mut L6mib_pgtable: PageTable;
+	static mut L8mib_pgtable: PageTable;
+	static mut L10mib_pgtable: PageTable;
+	static mut L12mib_pgtable: PageTable;
+	static mut L14mib_pgtable: PageTable;
+	static mut L16mib_pgtable: PageTable;
+	static mut L18mib_pgtable: PageTable;
 }
 
 const PT_PT: usize = 0x713;
@@ -32,7 +32,7 @@ const PT_SELF: usize = 1 << 55;
 
 #[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn init(uart_address: u32) {
-	let pgt = unsafe { &mut l0_pgtable };
+	let pgt = unsafe { &mut l0_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
@@ -42,20 +42,20 @@ pub unsafe fn init(uart_address: u32) {
 		.wrapping_byte_add(PT_SELF)
 		.cast();
 
-	let pgt = unsafe { &mut l1_pgtable };
+	let pgt = unsafe { &mut l1_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
 	pgt[0] = (&raw mut l2_pgtable).wrapping_byte_add(PT_PT).cast();
 	pgt[1] = (&raw mut l2k_pgtable).wrapping_byte_add(PT_PT).cast();
 
-	let pgt = unsafe { &mut l2_pgtable };
+	let pgt = unsafe { &mut l2_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
 	pgt[0] = (&raw mut l3_pgtable).wrapping_byte_add(PT_PT).cast();
 
-	let pgt = unsafe { &mut l3_pgtable };
+	let pgt = unsafe { &mut l3_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
@@ -63,23 +63,23 @@ pub unsafe fn init(uart_address: u32) {
 		ptr::with_exposed_provenance_mut::<()>(uart_address as usize).wrapping_byte_add(PT_MEM_CD);
 
 	// map kernel to __executable_start and stack below the kernel
-	let pgt = unsafe { &mut l2k_pgtable };
+	let pgt = unsafe { &mut l2k_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
 
 	let mib_pgtables = unsafe {
 		[
-			&mut L0mib_pgtable,
-			&mut L2mib_pgtable,
-			&mut L4mib_pgtable,
-			&mut L6mib_pgtable,
-			&mut L8mib_pgtable,
-			&mut L10mib_pgtable,
-			&mut L12mib_pgtable,
-			&mut L14mib_pgtable,
-			&mut L16mib_pgtable,
-			&mut L18mib_pgtable,
+			&mut L0mib_pgtable.0,
+			&mut L2mib_pgtable.0,
+			&mut L4mib_pgtable.0,
+			&mut L6mib_pgtable.0,
+			&mut L8mib_pgtable.0,
+			&mut L10mib_pgtable.0,
+			&mut L12mib_pgtable.0,
+			&mut L14mib_pgtable.0,
+			&mut L16mib_pgtable.0,
+			&mut L18mib_pgtable.0,
 		]
 	};
 
@@ -108,3 +108,6 @@ pub unsafe fn enable() {
 
 	info!("Successfully set up paging.");
 }
+
+#[repr(C, align(0x1000))]
+struct PageTable([*mut (); 512]);
