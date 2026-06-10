@@ -25,42 +25,45 @@ static mut L14mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
 static mut L16mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
 static mut L18mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
 
-const PT_PT: usize = 0x713;
-const PT_MEM: usize = 0x713;
-const PT_MEM_CD: usize = 0x70F;
-const PT_SELF: usize = 1 << 55;
-
 #[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn init(uart_address: u32) {
 	let pgt = unsafe { &mut l0_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l1_pgtable).wrapping_byte_add(PT_PT).cast();
+	pgt[0] = (&raw mut l1_pgtable)
+		.wrapping_byte_add(descr::NORMAL)
+		.cast();
 	pgt[511] = (&raw mut l0_pgtable)
-		.wrapping_byte_add(PT_PT)
-		.wrapping_byte_add(PT_SELF)
+		.wrapping_byte_add(descr::NORMAL)
+		.wrapping_byte_add(descr::SELF)
 		.cast();
 
 	let pgt = unsafe { &mut l1_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l2_pgtable).wrapping_byte_add(PT_PT).cast();
-	pgt[1] = (&raw mut l2k_pgtable).wrapping_byte_add(PT_PT).cast();
+	pgt[0] = (&raw mut l2_pgtable)
+		.wrapping_byte_add(descr::NORMAL)
+		.cast();
+	pgt[1] = (&raw mut l2k_pgtable)
+		.wrapping_byte_add(descr::NORMAL)
+		.cast();
 
 	let pgt = unsafe { &mut l2_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l3_pgtable).wrapping_byte_add(PT_PT).cast();
+	pgt[0] = (&raw mut l3_pgtable)
+		.wrapping_byte_add(descr::NORMAL)
+		.cast();
 
 	let pgt = unsafe { &mut l3_pgtable.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[1] =
-		ptr::with_exposed_provenance_mut::<()>(uart_address as usize).wrapping_byte_add(PT_MEM_CD);
+	pgt[1] = ptr::with_exposed_provenance_mut::<()>(uart_address as usize)
+		.wrapping_byte_add(descr::NON_CACHEABLE);
 
 	// map kernel to __executable_start and stack below the kernel
 	let pgt = unsafe { &mut l2k_pgtable.0 };
@@ -84,12 +87,14 @@ pub unsafe fn init(uart_address: u32) {
 	};
 
 	for (mib_pgt_i, mib_pgt) in mib_pgtables.into_iter().enumerate() {
-		pgt[mib_pgt_i] = ptr::from_mut(mib_pgt).wrapping_byte_add(PT_PT).cast();
+		pgt[mib_pgt_i] = ptr::from_mut(mib_pgt)
+			.wrapping_byte_add(descr::NORMAL)
+			.cast();
 
 		for (entry_i, entry) in mib_pgt.iter_mut().enumerate() {
 			let total_entry_i = mib_pgt_i * 512 + entry_i;
 			*entry = ptr::with_exposed_provenance_mut::<()>(RAM_START as usize)
-				.wrapping_byte_add(PT_MEM)
+				.wrapping_byte_add(descr::NORMAL)
 				.wrapping_byte_add(total_entry_i * BasePageSize::SIZE);
 		}
 	}
@@ -111,3 +116,39 @@ pub unsafe fn enable() {
 
 #[repr(C, align(0x1000))]
 struct PageTable([*mut (); 512]);
+
+/// Descriptor values
+///
+/// For reference, see <https://developer.arm.com/documentation/ddi0487/mb/-Part-D-The-AArch64-System-Level-Architecture/-Chapter-D8-The-AArch64-Virtual-Memory-System-Architecture/-D8-3-Translation-table-descriptor-formats/-D8-3-1-VMSAv8-64-descriptor-formats>.
+mod descr {
+	pub const NORMAL: usize = AF | SH_INNER | attr_indx(4) | TABLE | VALID;
+	pub const NON_CACHEABLE: usize = AF | SH_INNER | attr_indx(3) | TABLE | VALID;
+
+	/// Valid descriptor
+	const VALID: usize = 1;
+
+	/// Table descriptor
+	const TABLE: usize = 1 << 1;
+
+	/// Attribute index
+	///
+	/// Selects the corresponding `MAIR` memory region attributes.
+	const fn attr_indx(indx: u8) -> usize {
+		assert!(indx < 1 << 5);
+		(indx as usize) << 2
+	}
+
+	/// Shareability
+	///
+	/// Inner Shareable
+	const SH_INNER: usize = 1 << 8 | 1 << 9;
+
+	/// Access flag
+	const AF: usize = 1 << 10;
+
+	/// A software-defined marker for marking a self-referential entry.
+	///
+	/// This can be used for recursive page tables by the kernel, but is currently not needed.
+	// FIXME: remove once the kernel set's up it's own page tables.
+	pub const SELF: usize = 1 << 55;
+}
