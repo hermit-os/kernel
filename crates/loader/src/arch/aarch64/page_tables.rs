@@ -1,4 +1,4 @@
-use aarch64_cpu::asm::barrier;
+use aarch64_cpu::asm::barrier::{SY, dsb, isb};
 use aarch64_cpu::registers::{ReadWriteable, SCTLR_EL1, TTBR0_EL1, TTBR1_EL1, Writeable};
 use log::info;
 
@@ -66,15 +66,15 @@ pub unsafe fn init(uart_address: u32) {
 }
 
 pub unsafe fn enable() {
-	// Load TTBRx
+	// Set Translation Table Base Registers (TTBR)
 	TTBR1_EL1.set(0);
 	TTBR0_EL1.set((&raw mut l0_pgtable).expose_provenance() as u64);
-	barrier::dsb(barrier::SY);
-	barrier::isb(barrier::SY);
+	dsb(SY);
+	isb(SY);
 
-	// Enable paging
+	// Set MMU enable in System Control Register (SCTLR)
 	SCTLR_EL1.modify(SCTLR_EL1::M::Enable);
-	barrier::isb(barrier::SY);
+	isb(SY);
 
 	info!("Successfully set up paging.");
 }
