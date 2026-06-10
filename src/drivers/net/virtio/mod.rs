@@ -528,8 +528,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 		};
 
 		if status.contains(config_change) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
+			todo!("Device configuration change notification cannot be handled yet");
 		}
 
 		wake_network_waker();
