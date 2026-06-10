@@ -1,3 +1,5 @@
+#![allow(non_upper_case_globals)]
+
 use core::ptr;
 
 use aarch64_cpu::asm::barrier::{SY, dsb, isb};
@@ -7,23 +9,21 @@ use log::info;
 use super::RAM_START;
 use super::paging::{BasePageSize, PageSize};
 
-unsafe extern "C" {
-	static mut l0_pgtable: PageTable;
-	static mut l1_pgtable: PageTable;
-	static mut l2_pgtable: PageTable;
-	static mut l2k_pgtable: PageTable;
-	static mut l3_pgtable: PageTable;
-	static mut L0mib_pgtable: PageTable;
-	static mut L2mib_pgtable: PageTable;
-	static mut L4mib_pgtable: PageTable;
-	static mut L6mib_pgtable: PageTable;
-	static mut L8mib_pgtable: PageTable;
-	static mut L10mib_pgtable: PageTable;
-	static mut L12mib_pgtable: PageTable;
-	static mut L14mib_pgtable: PageTable;
-	static mut L16mib_pgtable: PageTable;
-	static mut L18mib_pgtable: PageTable;
-}
+static mut l0_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut l1_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut l2_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut l2k_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut l3_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L0mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L2mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L4mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L6mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L8mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L10mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L12mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L14mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L16mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut L18mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
 
 const PT_PT: usize = 0x713;
 const PT_MEM: usize = 0x713;
