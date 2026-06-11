@@ -16,10 +16,8 @@ pub mod systemtime;
 
 use alloc::alloc::{Layout, alloc};
 use core::arch::global_asm;
+use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
-use core::{ptr, str};
-
-use memory_addresses::PhysAddr;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
@@ -43,14 +41,6 @@ pub fn is_uhyve_with_pci() -> bool {
 	false
 }
 
-pub fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
-
-pub fn get_limit() -> usize {
-	env::boot_info().hardware_info.phys_addr_range.end as usize
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	let fdt = env::fdt().unwrap();
@@ -66,10 +56,6 @@ pub fn get_processor_count() -> u32 {
 #[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
-}
-
-pub fn args() -> Option<&'static str> {
-	None
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.

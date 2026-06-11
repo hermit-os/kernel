@@ -6,7 +6,6 @@ use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
-use memory_addresses::PhysAddr;
 use x86_64::registers::control::{Cr0, Cr4};
 
 use crate::arch::x86_64::kernel::core_local::*;
@@ -38,10 +37,6 @@ pub(crate) mod systemtime;
 #[cfg(feature = "vga")]
 pub mod vga;
 
-pub fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
@@ -71,14 +66,6 @@ pub fn is_uhyve_with_pci() -> bool {
 		env::boot_info().platform_info,
 		PlatformInfo::Uhyve { has_pci: true, .. }
 	)
-}
-
-pub fn args() -> Option<&'static str> {
-	match env::boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. }
-		| PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
-		_ => None,
-	}
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
@@ -225,7 +212,7 @@ where
 
 	use align_address::Align;
 	use free_list::PageLayout;
-	use memory_addresses::VirtAddr;
+	use memory_addresses::{PhysAddr, VirtAddr};
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
