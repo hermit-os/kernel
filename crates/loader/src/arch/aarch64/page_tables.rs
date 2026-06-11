@@ -1,5 +1,3 @@
-#![allow(non_upper_case_globals)]
-
 use core::ptr;
 
 use aarch64_cpu::asm::barrier::{SY, dsb, isb};
@@ -9,56 +7,56 @@ use log::info;
 use super::RAM_START;
 use super::paging::{BasePageSize, PageSize};
 
-static mut l0_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut l1_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut l2_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut l2k_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut l3_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L0mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L2mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L4mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L6mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L8mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L10mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L12mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L14mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L16mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
-static mut L18mib_pgtable: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_0_TABLE: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_1_TABLE: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_2_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_2_TABLE_RAM: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_1: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_2: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_3: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_4: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_5: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_6: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_7: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_8: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_9: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLE_RAM_10: PageTable = PageTable([ptr::null_mut(); _]);
 
 #[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn init(uart_address: u32) {
-	let pgt = unsafe { &mut l0_pgtable.0 };
+	let pgt = unsafe { &mut LEVEL_0_TABLE.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l1_pgtable)
+	pgt[0] = (&raw mut LEVEL_1_TABLE)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	pgt[511] = (&raw mut l0_pgtable)
+	pgt[511] = (&raw mut LEVEL_0_TABLE)
 		.wrapping_byte_add(descr::NORMAL)
 		.wrapping_byte_add(descr::SELF)
 		.cast();
 
-	let pgt = unsafe { &mut l1_pgtable.0 };
+	let pgt = unsafe { &mut LEVEL_1_TABLE.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l2_pgtable)
+	pgt[0] = (&raw mut LEVEL_2_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	pgt[1] = (&raw mut l2k_pgtable)
+	pgt[1] = (&raw mut LEVEL_2_TABLE_RAM)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
-	let pgt = unsafe { &mut l2_pgtable.0 };
+	let pgt = unsafe { &mut LEVEL_2_TABLE_SERIAL.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
-	pgt[0] = (&raw mut l3_pgtable)
+	pgt[0] = (&raw mut LEVEL_3_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
-	let pgt = unsafe { &mut l3_pgtable.0 };
+	let pgt = unsafe { &mut LEVEL_3_TABLE_SERIAL.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
@@ -66,23 +64,23 @@ pub unsafe fn init(uart_address: u32) {
 		.wrapping_byte_add(descr::NON_CACHEABLE);
 
 	// map kernel to __executable_start and stack below the kernel
-	let pgt = unsafe { &mut l2k_pgtable.0 };
+	let pgt = unsafe { &mut LEVEL_2_TABLE_RAM.0 };
 	for i in pgt.iter_mut() {
 		*i = ptr::null_mut();
 	}
 
 	let mib_pgtables = unsafe {
 		[
-			&mut L0mib_pgtable.0,
-			&mut L2mib_pgtable.0,
-			&mut L4mib_pgtable.0,
-			&mut L6mib_pgtable.0,
-			&mut L8mib_pgtable.0,
-			&mut L10mib_pgtable.0,
-			&mut L12mib_pgtable.0,
-			&mut L14mib_pgtable.0,
-			&mut L16mib_pgtable.0,
-			&mut L18mib_pgtable.0,
+			&mut LEVEL_3_TABLE_RAM_1.0,
+			&mut LEVEL_3_TABLE_RAM_2.0,
+			&mut LEVEL_3_TABLE_RAM_3.0,
+			&mut LEVEL_3_TABLE_RAM_4.0,
+			&mut LEVEL_3_TABLE_RAM_5.0,
+			&mut LEVEL_3_TABLE_RAM_6.0,
+			&mut LEVEL_3_TABLE_RAM_7.0,
+			&mut LEVEL_3_TABLE_RAM_8.0,
+			&mut LEVEL_3_TABLE_RAM_9.0,
+			&mut LEVEL_3_TABLE_RAM_10.0,
 		]
 	};
 
@@ -103,7 +101,7 @@ pub unsafe fn init(uart_address: u32) {
 pub unsafe fn enable() {
 	// Set Translation Table Base Registers (TTBR)
 	TTBR1_EL1.set(0);
-	TTBR0_EL1.set((&raw mut l0_pgtable).expose_provenance() as u64);
+	TTBR0_EL1.set((&raw mut LEVEL_0_TABLE).expose_provenance() as u64);
 	dsb(SY);
 	isb(SY);
 
