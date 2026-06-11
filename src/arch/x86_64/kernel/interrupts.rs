@@ -82,8 +82,6 @@ pub(crate) fn enable_and_wait() {
 			);
 		}
 	} else {
-		#[cfg(feature = "smp")]
-		crate::CoreLocal::get().hlt.store(true, Ordering::Relaxed);
 		enable_and_hlt();
 	}
 }
