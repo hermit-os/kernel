@@ -7,54 +7,90 @@ use log::info;
 use super::RAM_START;
 use super::paging::{BasePageSize, PageSize};
 
-static mut LEVEL_0_TABLE: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_1_TABLE: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_2_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_2_TABLE_RAM: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLES_RAM: [PageTable; 10] = [PageTable([ptr::null_mut(); _]); 10];
+static mut LEVEL_0_TABLE: PageTable = {
+	let mut table = [ptr::null_mut(); _];
 
-#[allow(static_mut_refs)] // FIXME: disallow
-pub unsafe fn init(uart_address: u32) {
-	let level_0_table = unsafe { &mut LEVEL_0_TABLE.0 };
-	level_0_table[0] = (&raw mut LEVEL_1_TABLE)
+	table[0] = (&raw mut LEVEL_1_TABLE)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	level_0_table[511] = (&raw mut LEVEL_0_TABLE)
+	table[511] = (&raw mut LEVEL_0_TABLE)
 		.wrapping_byte_add(descr::NORMAL)
 		.wrapping_byte_add(descr::SELF)
 		.cast();
 
-	let level_1_table = unsafe { &mut LEVEL_1_TABLE.0 };
-	level_1_table[0] = (&raw mut LEVEL_2_TABLE_SERIAL)
+	PageTable(table)
+};
+
+static mut LEVEL_1_TABLE: PageTable = {
+	let mut table = [ptr::null_mut(); _];
+
+	table[0] = (&raw mut LEVEL_2_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	level_1_table[1] = (&raw mut LEVEL_2_TABLE_RAM)
+	table[1] = (&raw mut LEVEL_2_TABLE_RAM)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
-	let level_2_table_serial = unsafe { &mut LEVEL_2_TABLE_SERIAL.0 };
-	level_2_table_serial[0] = (&raw mut LEVEL_3_TABLE_SERIAL)
+	PageTable(table)
+};
+
+static mut LEVEL_2_TABLE_SERIAL: PageTable = {
+	let mut table = [ptr::null_mut(); _];
+
+	table[0] = (&raw mut LEVEL_3_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
-	let level_3_table_serial = unsafe { &mut LEVEL_3_TABLE_SERIAL.0 };
-	level_3_table_serial[1] = ptr::with_exposed_provenance_mut::<()>(uart_address as usize)
-		.wrapping_byte_add(descr::NON_CACHEABLE);
+	PageTable(table)
+};
 
-	let level_2_table_ram = unsafe { &mut LEVEL_2_TABLE_RAM.0 };
+static mut LEVEL_2_TABLE_RAM: PageTable = {
+	let mut table = [ptr::null_mut(); _];
 
-	for (i, level_3_table_ram) in unsafe { LEVEL_3_TABLES_RAM.iter_mut().enumerate() } {
-		level_2_table_ram[i] = ptr::from_mut(level_3_table_ram)
-			.wrapping_byte_add(descr::NORMAL)
-			.cast();
+	let mut entry_i = 0;
+	while entry_i < 10usize {
+		let entry = &mut table[entry_i];
 
-		for (entry_i, entry) in level_3_table_ram.0.iter_mut().enumerate() {
-			let addr = (i * 512 + entry_i) * BasePageSize::SIZE;
+		let level_3_table = unsafe { &raw mut LEVEL_3_TABLES_RAM[entry_i] };
+		*entry = level_3_table.wrapping_byte_add(descr::NORMAL).cast();
+
+		entry_i += 1;
+	}
+
+	PageTable(table)
+};
+
+static mut LEVEL_3_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
+
+static mut LEVEL_3_TABLES_RAM: [PageTable; 10] = {
+	let mut tables = [PageTable([ptr::null_mut(); _]); _];
+
+	let mut table_i = 0;
+	while table_i < tables.len() {
+		let table = &mut tables[table_i].0;
+
+		let mut entry_i = 0;
+		while entry_i < table.len() {
+			let entry = &mut table[entry_i];
+
+			let addr = (table_i * 512 + entry_i) * BasePageSize::SIZE;
 			*entry = ptr::with_exposed_provenance_mut::<()>(RAM_START as usize)
 				.wrapping_byte_add(addr)
 				.wrapping_byte_add(descr::NORMAL);
+
+			entry_i += 1;
 		}
+
+		table_i += 1;
+	}
+
+	tables
+};
+
+pub unsafe fn init(uart_address: u32) {
+	unsafe {
+		LEVEL_3_TABLE_SERIAL.0[1] = ptr::with_exposed_provenance_mut::<()>(uart_address as usize)
+			.wrapping_byte_add(descr::NON_CACHEABLE);
 	}
 }
 
