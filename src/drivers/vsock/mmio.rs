@@ -1,18 +1,19 @@
-use virtio::vsock::Config;
+use ahash::RandomState;
+use hashbrown::HashMap;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
+use virtio::vsock::Config;
 use volatile::VolatileRef;
 
-use crate::drivers::InterruptLine;
-use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
 // Backend-dependent interface for Virtio vsock driver
 impl VirtioVsockDriver {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
-		irq: InterruptLine,
 	) -> Result<VirtioVsockDriver, VirtioError> {
 		let dev_cfg_raw: &'static Config = unsafe {
 			&*registers
@@ -37,7 +38,6 @@ impl VirtioVsockDriver {
 			com_cfg: ComCfg::new(registers),
 			isr_stat,
 			notif_cfg,
-			irq,
 			event_vq: EventQueue::new(),
 			recv_vq: RxQueue::new(),
 			send_vq: TxQueue::new(),
@@ -53,9 +53,11 @@ impl VirtioVsockDriver {
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
+		handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
 	) -> Result<VirtioVsockDriver, VirtioError> {
-		let mut drv = VirtioVsockDriver::new(dev_id, registers, irq)?;
-		drv.init_dev().map_err(VirtioError::VsockDriver)?;
+		let mut drv = VirtioVsockDriver::new(dev_id, registers)?;
+		drv.init_dev(handlers, Some(irq))
+			.map_err(VirtioError::VsockDriver)?;
 		drv.com_cfg.print_information();
 		Ok(drv)
 	}

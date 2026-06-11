@@ -5,14 +5,10 @@ use hermit_sync::{InterruptTicketMutex, Lazy};
 use uart_16550::backend::PioBackend;
 use uart_16550::{Config, Uart16550};
 
-#[cfg(feature = "pci")]
-use crate::arch::x86_64::kernel::interrupts;
-#[cfg(feature = "pci")]
-use crate::drivers::InterruptLine;
 use crate::errno::Errno;
 
 #[cfg(feature = "pci")]
-const SERIAL_IRQ: u8 = 4;
+pub(crate) const SERIAL_IRQ: u8 = 4;
 
 static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
 	Lazy::new(|| unsafe { InterruptTicketMutex::new(UartDevice::new()) });
@@ -79,21 +75,15 @@ impl Write for SerialDevice {
 }
 
 #[cfg(feature = "pci")]
-pub(crate) fn get_serial_handler() -> (InterruptLine, fn()) {
-	fn serial_handler() {
-		let mut guard = UART_DEVICE.lock();
+pub(crate) fn handle_interrupt() {
+	let mut guard = UART_DEVICE.lock();
 
-		while guard.uart.read_ready().unwrap() {
-			let mut buf = [0; 256];
-			let n = guard.uart.read(&mut buf).unwrap();
-			guard.buffer.write_all(&buf[..n]).unwrap();
-		}
-
-		drop(guard);
-		crate::console::CONSOLE_WAKER.lock().wake();
+	while guard.uart.read_ready().unwrap() {
+		let mut buf = [0; 256];
+		let n = guard.uart.read(&mut buf).unwrap();
+		guard.buffer.write_all(&buf[..n]).unwrap();
 	}
 
-	interrupts::add_irq_name(SERIAL_IRQ, "COM1");
-
-	(SERIAL_IRQ, serial_handler)
+	drop(guard);
+	crate::console::CONSOLE_WAKER.lock().wake();
 }

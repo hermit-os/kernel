@@ -1,18 +1,19 @@
+use ahash::RandomState;
+use hashbrown::HashMap;
 use smoltcp::phy::ChecksumCapabilities;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
-use crate::drivers::InterruptLine;
 use crate::drivers::net::virtio::{Init, NetDevCfg, Uninit, VirtioNetDriver};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver<Uninit> {
 	pub fn new(
 		dev_id: u16,
 		mut registers: VolatileRef<'static, DeviceRegisters>,
-		irq: InterruptLine,
 	) -> Result<Self, VirtioError> {
 		let dev_cfg_raw: &'static virtio::net::Config = unsafe {
 			&*registers
@@ -39,7 +40,6 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg,
 			inner: Uninit,
 			num_vqs: 0,
-			irq,
 			checksums: ChecksumCapabilities::default(),
 		})
 	}
@@ -53,9 +53,12 @@ impl VirtioNetDriver<Uninit> {
 		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
+		handlers: &mut HashMap<InterruptLine, InterruptHandlerQueue, RandomState>,
 	) -> Result<VirtioNetDriver<Init>, VirtioError> {
-		let drv = VirtioNetDriver::new(dev_id, registers, irq)?;
-		let mut drv = drv.init_dev().map_err(VirtioError::NetDriver)?;
+		let drv = VirtioNetDriver::new(dev_id, registers)?;
+		let mut drv = drv
+			.init_dev(handlers, Some(irq))
+			.map_err(VirtioError::NetDriver)?;
 		drv.print_information();
 		Ok(drv)
 	}
