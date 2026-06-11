@@ -12,16 +12,7 @@ static mut LEVEL_1_TABLE: PageTable = PageTable([ptr::null_mut(); _]);
 static mut LEVEL_2_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
 static mut LEVEL_2_TABLE_RAM: PageTable = PageTable([ptr::null_mut(); _]);
 static mut LEVEL_3_TABLE_SERIAL: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_1: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_2: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_3: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_4: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_5: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_6: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_7: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_8: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_9: PageTable = PageTable([ptr::null_mut(); _]);
-static mut LEVEL_3_TABLE_RAM_10: PageTable = PageTable([ptr::null_mut(); _]);
+static mut LEVEL_3_TABLES_RAM: [PageTable; 10] = [PageTable([ptr::null_mut(); _]); 10];
 
 #[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn init(uart_address: u32) {
@@ -53,27 +44,12 @@ pub unsafe fn init(uart_address: u32) {
 
 	let level_2_table_ram = unsafe { &mut LEVEL_2_TABLE_RAM.0 };
 
-	let level_3_tables_ram = unsafe {
-		[
-			&mut LEVEL_3_TABLE_RAM_1.0,
-			&mut LEVEL_3_TABLE_RAM_2.0,
-			&mut LEVEL_3_TABLE_RAM_3.0,
-			&mut LEVEL_3_TABLE_RAM_4.0,
-			&mut LEVEL_3_TABLE_RAM_5.0,
-			&mut LEVEL_3_TABLE_RAM_6.0,
-			&mut LEVEL_3_TABLE_RAM_7.0,
-			&mut LEVEL_3_TABLE_RAM_8.0,
-			&mut LEVEL_3_TABLE_RAM_9.0,
-			&mut LEVEL_3_TABLE_RAM_10.0,
-		]
-	};
-
-	for (i, level_3_table_ram) in level_3_tables_ram.into_iter().enumerate() {
+	for (i, level_3_table_ram) in unsafe { LEVEL_3_TABLES_RAM.iter_mut().enumerate() } {
 		level_2_table_ram[i] = ptr::from_mut(level_3_table_ram)
 			.wrapping_byte_add(descr::NORMAL)
 			.cast();
 
-		for (entry_i, entry) in level_3_table_ram.iter_mut().enumerate() {
+		for (entry_i, entry) in level_3_table_ram.0.iter_mut().enumerate() {
 			let addr = (i * 512 + entry_i) * BasePageSize::SIZE;
 			*entry = ptr::with_exposed_provenance_mut::<()>(RAM_START as usize)
 				.wrapping_byte_add(addr)
@@ -96,6 +72,7 @@ pub unsafe fn enable() {
 	info!("Successfully set up paging.");
 }
 
+#[derive(Clone, Copy, Debug)]
 #[repr(C, align(0x1000))]
 struct PageTable([*mut (); 512]);
 
