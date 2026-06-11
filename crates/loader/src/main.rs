@@ -19,6 +19,8 @@ mod fdt;
 mod fdt_ext;
 mod log;
 mod os;
+#[cfg(target_arch = "riscv64")]
+mod stack;
 
 #[cfg(any(target_os = "uefi", all(target_arch = "x86_64", target_os = "none")))]
 extern crate alloc;

@@ -14,8 +14,8 @@ use hermit_entry::boot_info::{
 use hermit_entry::elf::LoadedKernel;
 use log::info;
 
-use crate::BootInfoExt;
 use crate::fdt_ext::FdtExt;
+use crate::{BootInfoExt, stack};
 
 pub fn find_kernel() -> &'static [u8] {
 	let fdt = start::get_fdt();
@@ -92,7 +92,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		platform_info: PlatformInfo::LinuxBoot,
 	};
 
-	let stack = start::get_stack_ptr();
+	let stack = stack::get_stack_ptr();
 	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
 	let hart_id = start::get_hart_id();
 	let raw_boot_info = boot_info.write();
