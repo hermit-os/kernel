@@ -208,6 +208,14 @@ impl ComCfg {
 			.update(|status| status | DeviceStatus::DRIVER_OK);
 	}
 
+	pub fn does_device_need_reset(&self) -> bool {
+		self.com_cfg
+			.as_ptr()
+			.status()
+			.read()
+			.contains(DeviceStatus::DEVICE_NEEDS_RESET)
+	}
+
 	pub fn print_information(&mut self) {
 		let ptr = self.com_cfg.as_ptr();
 

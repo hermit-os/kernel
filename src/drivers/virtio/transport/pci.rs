@@ -361,6 +361,11 @@ impl ComCfg {
 			.device_status()
 			.update(|s| s | DeviceStatus::DRIVER_OK);
 	}
+
+	pub fn does_device_need_reset(&self) -> bool {
+		let status = self.com_cfg.as_ptr().device_status().read();
+		status.contains(DeviceStatus::DEVICE_NEEDS_RESET)
+	}
 }
 
 /// Notification Structure to handle virtqueue notification settings.
@@ -483,6 +488,8 @@ impl IsrStatus {
 	}
 
 	pub fn acknowledge(&mut self) -> IsrStatusRaw {
+		// Driver read of ISR status causes the device to de-assert an interrupt.
+		// VIRTIO spec. v1.4 sec. 4.1.4.5
 		self.isr_stat.as_ptr().read()
 	}
 }

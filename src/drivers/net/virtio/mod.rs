@@ -522,16 +522,13 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	fn handle_interrupt(&mut self) {
 		let status = self.isr_stat.acknowledge();
 
-		#[cfg(not(feature = "pci"))]
-		if status.contains(virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
-		}
+		let config_change = cfg_select! {
+			feature = "pci" => virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT,
+			_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
+		};
 
-		#[cfg(feature = "pci")]
-		if status.contains(virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT) {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibility to change config on the fly...")
+		if status.contains(config_change) && self.com_cfg.does_device_need_reset() {
+			todo!("Device configuration change notification cannot be handled yet");
 		}
 
 		wake_network_waker();
