@@ -17,15 +17,13 @@ use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo,
 use hermit_entry::elf::LoadedKernel;
 use log::info;
 
-use crate::BootInfoExt;
 use crate::arch::paging::*;
 use crate::fdt_ext::FdtExt;
 use crate::os::CONSOLE;
+use crate::{BootInfoExt, stack};
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
-/// Default stack size of the kernel
-const KERNEL_STACK_SIZE: usize = 32_768;
 /// Qemu assumes for ELF kernel that the fdt is located at
 /// start of RAM (0x4000_0000)
 /// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
@@ -102,8 +100,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		platform_info: PlatformInfo::LinuxBoot,
 	};
 
-	let stack = boot_info.load_info.kernel_image_addr_range.start as usize - KERNEL_STACK_SIZE;
-	let stack = ptr::with_exposed_provenance_mut(stack);
+	let stack = stack::get_stack_ptr();
 	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
 	let raw_boot_info = boot_info.write();
 

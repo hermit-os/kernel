@@ -8,11 +8,14 @@ use aarch64_cpu::registers::{
 use log::info;
 use tock_registers::fields::{FieldValue, TryFromValue};
 
+use crate::stack::STACK;
+
 /// Number of virtual address bits for 4KB page
 const VA_BITS: u64 = 48;
 
 global_asm!(
 	include_str!("entry.s"),
+	BOOT_STACK = sym STACK,
 	start_rust = sym start_rust,
 );
 
