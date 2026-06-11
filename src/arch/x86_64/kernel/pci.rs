@@ -6,6 +6,7 @@ use x86_64::instructions::port::Port;
 
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
 
+const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
 
 const CONFIG_ADDRESS: Port<u32> = Port::new(0xcf8);
@@ -129,7 +130,7 @@ mod pcie {
 	use memory_addresses::{PhysAddr, VirtAddr};
 	use pci_types::{ConfigRegionAccess, PciAddress};
 
-	use super::PciConfigRegion;
+    use super::{PCI_MAX_BUS_NUMBER, PciConfigRegion};
 	use crate::arch::mm::paging::{
 		self, LargePageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 	};
@@ -150,6 +151,9 @@ mod pcie {
 		}
 
 		for entry in entries {
+            if !entry.is_base_address_valid() {
+                continue;
+            }
 			init_pcie_bus(entry);
 		}
 
@@ -179,6 +183,39 @@ mod pcie {
 						| ((u64::from(device) & 0x1f) << 15)
 						| ((u64::from(function) & 0x7) << 12)),
 			)
+		}
+
+		/// Verifies that the address provided in the PCI Bus is outside of the physical memory declared in the FDT
+		fn is_base_address_valid(&self) -> bool {
+			// Check that the address is not too big
+
+			let Some(fdt) = crate::env::fdt() else {
+				return false;
+			};
+
+			// We go through `pci_config_space_address`, which makes sure the physical addresses are valid
+			let pci_start = self.pci_config_space_address(0, 0, 0).as_u64();
+			let pci_end = self.pci_config_space_address(PCI_MAX_BUS_NUMBER, u8::MAX, u8::MAX).as_u64() + 0x1000;
+
+			let all_memory_regions = fdt
+				.find_all_nodes("/memory")
+				.map(|m| m.reg().unwrap().next().unwrap());
+
+			for mem_region in all_memory_regions {
+				let region_start = u64::try_from(mem_region.starting_address.addr()).unwrap();
+				let region_end = region_start + u64::try_from(mem_region.size.expect("found a memory region with no declared size")).unwrap();
+
+				if
+					(pci_start >= region_start && pci_start <= region_end) // PCI region starts within the memory region
+					|| (pci_end >= region_start && pci_end <= region_end) // PCI region ends within the memory region
+					|| (pci_start <= region_start && pci_end >= region_end) // PCI region contains the memory region
+				{
+					error!("The declared PCI region {pci_start:x}-{pci_end:x} may overlap with physical memory region {region_start:x}-{region_end:x}");
+					return false;
+				}
+			}
+
+			true
 		}
 	}
 
