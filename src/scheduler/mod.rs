@@ -8,8 +8,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ptr;
-#[cfg(all(target_arch = "x86_64", feature = "smp"))]
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use ahash::RandomState;
@@ -40,8 +38,6 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 #[cfg(feature = "smp")]
 static SCHEDULER_INPUTS: SpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
 	SpinMutex::new(Vec::new());
-#[cfg(all(target_arch = "x86_64", feature = "smp"))]
-static CORE_HLT_STATE: SpinMutex<Vec<&AtomicBool>> = SpinMutex::new(Vec::new());
 /// Map between Task ID and Queue of waiting tasks
 static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
@@ -891,17 +887,7 @@ pub(crate) fn add_current_core() {
 			core_id.try_into().unwrap(),
 			&CoreLocal::get().scheduler_input,
 		);
-		#[cfg(target_arch = "x86_64")]
-		CORE_HLT_STATE
-			.lock()
-			.insert(core_id.try_into().unwrap(), &CoreLocal::get().hlt);
 	}
-}
-
-#[inline]
-#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
-pub(crate) fn take_core_hlt_state(core_id: CoreId) -> bool {
-	CORE_HLT_STATE.lock()[usize::try_from(core_id).unwrap()].swap(false, Ordering::Acquire)
 }
 
 #[inline]
