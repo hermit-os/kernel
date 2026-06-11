@@ -25,51 +25,35 @@ static mut LEVEL_3_TABLE_RAM_10: PageTable = PageTable([ptr::null_mut(); _]);
 
 #[allow(static_mut_refs)] // FIXME: disallow
 pub unsafe fn init(uart_address: u32) {
-	let pgt = unsafe { &mut LEVEL_0_TABLE.0 };
-	for i in pgt.iter_mut() {
-		*i = ptr::null_mut();
-	}
-	pgt[0] = (&raw mut LEVEL_1_TABLE)
+	let level_0_table = unsafe { &mut LEVEL_0_TABLE.0 };
+	level_0_table[0] = (&raw mut LEVEL_1_TABLE)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	pgt[511] = (&raw mut LEVEL_0_TABLE)
+	level_0_table[511] = (&raw mut LEVEL_0_TABLE)
 		.wrapping_byte_add(descr::NORMAL)
 		.wrapping_byte_add(descr::SELF)
 		.cast();
 
-	let pgt = unsafe { &mut LEVEL_1_TABLE.0 };
-	for i in pgt.iter_mut() {
-		*i = ptr::null_mut();
-	}
-	pgt[0] = (&raw mut LEVEL_2_TABLE_SERIAL)
+	let level_1_table = unsafe { &mut LEVEL_1_TABLE.0 };
+	level_1_table[0] = (&raw mut LEVEL_2_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	pgt[1] = (&raw mut LEVEL_2_TABLE_RAM)
+	level_1_table[1] = (&raw mut LEVEL_2_TABLE_RAM)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
-	let pgt = unsafe { &mut LEVEL_2_TABLE_SERIAL.0 };
-	for i in pgt.iter_mut() {
-		*i = ptr::null_mut();
-	}
-	pgt[0] = (&raw mut LEVEL_3_TABLE_SERIAL)
+	let level_2_table_serial = unsafe { &mut LEVEL_2_TABLE_SERIAL.0 };
+	level_2_table_serial[0] = (&raw mut LEVEL_3_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
-	let pgt = unsafe { &mut LEVEL_3_TABLE_SERIAL.0 };
-	for i in pgt.iter_mut() {
-		*i = ptr::null_mut();
-	}
-	pgt[1] = ptr::with_exposed_provenance_mut::<()>(uart_address as usize)
+	let level_3_table_serial = unsafe { &mut LEVEL_3_TABLE_SERIAL.0 };
+	level_3_table_serial[1] = ptr::with_exposed_provenance_mut::<()>(uart_address as usize)
 		.wrapping_byte_add(descr::NON_CACHEABLE);
 
-	// map kernel to __executable_start and stack below the kernel
-	let pgt = unsafe { &mut LEVEL_2_TABLE_RAM.0 };
-	for i in pgt.iter_mut() {
-		*i = ptr::null_mut();
-	}
+	let level_2_table_ram = unsafe { &mut LEVEL_2_TABLE_RAM.0 };
 
-	let mib_pgtables = unsafe {
+	let level_3_tables_ram = unsafe {
 		[
 			&mut LEVEL_3_TABLE_RAM_1.0,
 			&mut LEVEL_3_TABLE_RAM_2.0,
@@ -84,16 +68,16 @@ pub unsafe fn init(uart_address: u32) {
 		]
 	};
 
-	for (mib_pgt_i, mib_pgt) in mib_pgtables.into_iter().enumerate() {
-		pgt[mib_pgt_i] = ptr::from_mut(mib_pgt)
+	for (i, level_3_table_ram) in level_3_tables_ram.into_iter().enumerate() {
+		level_2_table_ram[i] = ptr::from_mut(level_3_table_ram)
 			.wrapping_byte_add(descr::NORMAL)
 			.cast();
 
-		for (entry_i, entry) in mib_pgt.iter_mut().enumerate() {
-			let total_entry_i = mib_pgt_i * 512 + entry_i;
+		for (entry_i, entry) in level_3_table_ram.iter_mut().enumerate() {
+			let addr = (i * 512 + entry_i) * BasePageSize::SIZE;
 			*entry = ptr::with_exposed_provenance_mut::<()>(RAM_START as usize)
-				.wrapping_byte_add(descr::NORMAL)
-				.wrapping_byte_add(total_entry_i * BasePageSize::SIZE);
+				.wrapping_byte_add(addr)
+				.wrapping_byte_add(descr::NORMAL);
 		}
 	}
 }
