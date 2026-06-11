@@ -68,10 +68,6 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-pub fn args() -> Option<&'static str> {
-	None
-}
-
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {
