@@ -27,6 +27,7 @@ pub fn get_fdt() -> Fdt<'static> {
 // https://github.com/rust-lang/rust/issues/93332
 #[no_mangle]
 #[naked_function::naked]
+#[link_section = ".init"]
 pub unsafe extern "C" fn _start(hart_id: usize, fdt: *const u8) -> ! {
 	asm!(
 		// Initialize stack
