@@ -8,6 +8,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
+#[cfg(feature = "syscall-fake-values")]
+use core::sync::atomic::{AtomicU64, Ordering};
 use core::{mem, ptr};
 
 use align_address::Align;
@@ -35,6 +37,9 @@ impl RomFileInner {
 		}
 	}
 }
+
+#[cfg(feature = "syscall-fake-values")]
+static VFS_INO_NUM: AtomicU64 = AtomicU64::new(10_000);
 
 pub struct RomFileInterface {
 	/// Position within the file
@@ -306,6 +311,8 @@ impl RomFile {
 			st_atim: t,
 			st_mtim: t,
 			st_ctim: t,
+			#[cfg(feature = "syscall-fake-values")]
+			st_ino: VFS_INO_NUM.fetch_add(1, Ordering::AcqRel),
 			..Default::default()
 		};
 
@@ -361,6 +368,12 @@ impl RamFile {
 			st_atim: t,
 			st_mtim: t,
 			st_ctim: t,
+			#[cfg(feature = "syscall-fake-values")]
+			st_nlink: 1,
+			#[cfg(feature = "syscall-fake-values")]
+			st_blksize: 4096,
+			#[cfg(feature = "syscall-fake-values")]
+			st_ino: VFS_INO_NUM.fetch_add(1, Ordering::AcqRel),
 			..Default::default()
 		};
 
@@ -614,15 +627,17 @@ impl VfsNode for MemDirectory {
 		block_on(
 			async {
 				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
-
-				if !rest.is_empty() {
-					let inner = self.inner.read().await;
-					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_lstat(rest);
-				}
-
 				let inner = self.inner.read().await;
 				let node = inner.get(component).ok_or(Errno::Badf)?;
+
+				if !rest.is_empty() {
+					if node.get_kind() == NodeKind::File {
+						Err(Errno::Notdir)?;
+					}
+
+					return node.traverse_lstat(rest);
+				}
+
 				node.get_file_attributes()
 			},
 			None,
@@ -633,15 +648,17 @@ impl VfsNode for MemDirectory {
 		block_on(
 			async {
 				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
-
-				if !rest.is_empty() {
-					let inner = self.inner.read().await;
-					let directory = inner.get(component).ok_or(Errno::Badf)?;
-					return directory.traverse_stat(rest);
-				}
-
 				let inner = self.inner.read().await;
 				let node = inner.get(component).ok_or(Errno::Badf)?;
+
+				if !rest.is_empty() {
+					if node.get_kind() == NodeKind::File {
+						Err(Errno::Notdir)?;
+					}
+
+					return node.traverse_stat(rest);
+				}
+
 				node.get_file_attributes()
 			},
 			None,
