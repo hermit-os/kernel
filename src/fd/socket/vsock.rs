@@ -51,6 +51,9 @@ impl ObjectInterface for NullSocket {}
 
 pub struct Socket {
 	port: u32,
+	/// The port this socket is bound/listening on. Stays fixed across accepts
+	/// while `port` is updated to the ephemeral connection port after each accept.
+	listen_port: u32,
 	cid: u32,
 	is_nonblocking: bool,
 }
@@ -59,6 +62,7 @@ impl Socket {
 	pub fn new() -> Self {
 		Self {
 			port: 0,
+			listen_port: 0,
 			cid: u32::MAX,
 			is_nonblocking: false,
 		}
@@ -139,6 +143,7 @@ impl ObjectInterface for Socket {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
 				self.port = ep.port;
+				self.listen_port = ep.port;
 				if let Some(cid) = ep.cid {
 					self.cid = cid;
 				} else {
@@ -234,10 +239,10 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
-		let port = self.port;
+		let port = self.listen_port;
 		let cid = self.cid;
 
-		let endpoint = future::poll_fn(|cx| {
+		let (conn_port, endpoint) = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
@@ -251,43 +256,45 @@ impl ObjectInterface for Socket {
 					}
 				}
 				VsockState::ReceiveRequest => {
-					let result = {
-						const HEADER_SIZE: usize = size_of::<Hdr>();
-						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
-						let local_cid = driver_guard.get_cid();
+					const HEADER_SIZE: usize = size_of::<Hdr>();
+					let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
+					let local_cid = driver_guard.get_cid();
 
-						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
+					driver_guard.send_packet(HEADER_SIZE, |buffer| {
+						let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
-							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid.into());
-							response.src_port = le32::from_ne(port);
-							response.dst_port = le32::from_ne(raw.remote_port);
-							response.len = le32::from_ne(0);
-							response.type_ = le16::from_ne(Type::Stream.into());
-							if local_cid != u64::from(cid) && cid != u32::MAX {
-								response.op = le16::from_ne(Op::Rst.into());
-							} else {
-								response.op = le16::from_ne(Op::Response.into());
-							}
-							response.flags = le32::from_ne(0);
-							response.buf_alloc = le32::from_ne(
-								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
-							);
-							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
-						});
+						response.src_cid = le64::from_ne(local_cid);
+						response.dst_cid = le64::from_ne(raw.remote_cid.into());
+						response.src_port = le32::from_ne(port);
+						response.dst_port = le32::from_ne(raw.remote_port);
+						response.len = le32::from_ne(0);
+						response.type_ = le16::from_ne(Type::Stream.into());
+						if local_cid != u64::from(cid) && cid != u32::MAX {
+							response.op = le16::from_ne(Op::Rst.into());
+						} else {
+							response.op = le16::from_ne(Op::Response.into());
+						}
+						response.flags = le32::from_ne(0);
+						response.buf_alloc =
+							le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+						response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
+					});
 
-						raw.state = VsockState::Connected;
+					let endpoint = VsockEndpoint::new(raw.remote_port, raw.remote_cid);
 
-						Ok(VsockEndpoint::new(raw.remote_port, raw.remote_cid))
-					};
+					// Move the accepted connection to an ephemeral port so the
+					// listener entry can be reset to Listen for the next accept.
+					let conn_port = guard.move_to_ephemeral(port)?;
 
-					Poll::Ready(result)
+					Poll::Ready(Ok((conn_port, endpoint)))
 				}
 				_ => Poll::Ready(Err(Errno::Badf)),
 			}
 		})
 		.await?;
+
+		// This Socket now tracks the accepted connection, not the listener.
+		self.port = conn_port;
 
 		Ok((
 			Arc::new(async_lock::RwLock::new(NullSocket::new().into())),
