@@ -4,10 +4,9 @@ mod address_range;
 mod start;
 
 use core::arch::asm;
-use core::{mem, ptr, slice};
+use core::ptr;
 
 use address_range::AddressRange;
-use fdt::node::FdtNode;
 use hermit_entry::Entry;
 use hermit_entry::boot_info::{
 	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, RawBootInfo,
@@ -16,45 +15,11 @@ use hermit_entry::elf::LoadedKernel;
 use log::info;
 
 use crate::BootInfoExt;
-
-fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
-	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
-	let initrd_start = ptr::with_exposed_provenance_mut::<u8>(initrd_start);
-	let initrd_end = chosen.property("linux,initrd-end")?.as_usize()?;
-	let initrd_end = ptr::with_exposed_provenance_mut::<u8>(initrd_end);
-	// SAFETY: We trust the raw pointer from the firmware
-	let initrd_len = unsafe { initrd_end.offset_from(initrd_start).try_into().unwrap() };
-
-	// SAFETY: We trust the raw pointer from the firmware
-	Some(unsafe { slice::from_raw_parts(initrd_start, initrd_len) })
-}
-
-fn find_kernel_multiboot(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
-	let module = chosen
-		.children()
-		.filter(|child| child.name.starts_with("module@"))
-		.find(|child| {
-			child.compatible().is_some_and(|compatible| {
-				compatible
-					.all()
-					.any(|compatible| compatible == "multiboot,ramdisk")
-			})
-		})?;
-	let reg = module.property("reg").unwrap();
-	let addr = usize::from_be_bytes(reg.value[..mem::size_of::<usize>()].try_into().unwrap());
-	let len = usize::from_be_bytes(reg.value[mem::size_of::<usize>()..].try_into().unwrap());
-
-	let initrd_start = ptr::with_exposed_provenance_mut::<u8>(addr);
-	// SAFETY: We trust the raw pointer from the firmware
-	Some(unsafe { slice::from_raw_parts(initrd_start, len) })
-}
+use crate::fdt_ext::FdtExt;
 
 pub fn find_kernel() -> &'static [u8] {
 	let fdt = start::get_fdt();
-	let chosen = fdt.find_node("/chosen").unwrap();
-	find_kernel_linux(&chosen)
-		.or_else(|| find_kernel_multiboot(&chosen))
-		.expect("could not find kernel")
+	fdt.find_kernel().expect("could not find kernel")
 }
 
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
