@@ -8,8 +8,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ptr;
-#[cfg(all(target_arch = "x86_64", feature = "smp"))]
-use core::sync::atomic::AtomicBool;
+#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+use core::sync::atomic::AtomicU8;
 use core::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 
 use ahash::RandomState;
@@ -40,14 +40,135 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 #[cfg(feature = "smp")]
 static SCHEDULER_INPUTS: SpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
 	SpinMutex::new(Vec::new());
-#[cfg(all(target_arch = "x86_64", feature = "smp"))]
-static CORE_HLT_STATE: SpinMutex<Vec<&AtomicBool>> = SpinMutex::new(Vec::new());
 /// Map between Task ID and Queue of waiting tasks
 static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 /// Map between Task ID and TaskHandle
 static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
+#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+static CORE_HLT_STATE: RwSpinLock<Vec<CoreState>> = RwSpinLock::new(Vec::new());
+
+#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+struct CoreState(AtomicU8);
+
+/// # Race condition prevention
+///
+/// Two methods matter here: [arch::kernel::interrupts::enable_and_wait] and [arch::kernel::apic::wakeup_core].
+/// `enable_and_wait` checks the status, ensuring it is set to 0+setting it to 1, then sleeps.
+/// `wakeup_core` checks the status, ensuring it is set to 1+setting it to 0, then issues interrupt.
+///
+/// A race would happen if `go_to_sleep` returns true, and `wake_up` returns false.
+/// The result of these two methods must therefore be atomically determined in a single operation.
+/// No ordering should exist in which that condition can happen.
+/// Any other variant is okay:
+/// - if `go_to_sleep` is false and `wake_up` is true, we have a un-necessary core wakeup (which is okay)
+/// - if both are false, the core is not entering sleep and is therefore not woken up
+/// - if both are true, the core sleeps and is woken up
+#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+impl CoreState {
+	/// The core is currently busy and should not be interrupted for new tasks
+	const STATUS_ACTIVE: u8 = 0;
+
+	/// The core is currently halted and can be interrupted for new tasks
+	const STATUS_IDLE: u8 = 1;
+
+	/// Another core tried to wake up this core but it was already active.
+	const STATUS_DONT_SLEEP: u8 = 2;
+
+	pub fn new() -> Self {
+		Self(AtomicU8::new(CoreState::STATUS_ACTIVE))
+	}
+
+	#[inline(always)]
+	pub fn set_active(&self) {
+		self.0.store(CoreState::STATUS_ACTIVE, Ordering::SeqCst);
+	}
+
+	/// Indicates that this core will go to HLT.
+	/// This must be called *before* entering a HLT loop, and *with interrupts disabled*.
+	/// Returns a boolean indicating if the core should enter the HLT loop or not
+	#[inline(always)]
+	pub fn go_to_sleep(&self) -> bool {
+		if self
+			.0
+			.compare_exchange(
+				CoreState::STATUS_ACTIVE,
+				CoreState::STATUS_IDLE,
+				Ordering::SeqCst,
+				Ordering::Relaxed,
+			)
+			.is_err()
+		{
+			// There is a possible race condition here, because the two atomic operations can be
+			// interleaved, but this has no effect on the final result: we're not going to sleep
+			// anyway.
+			// If the state was already set to ACTIVE, this has no effect.
+			// Normally, nothing can set the state to IDLE except this method.
+			// So the race should have no effect.
+			// IN ANY CASE: as per top-level comments, returning false is the safe default here.
+			self.set_active();
+			false
+		} else {
+			// We have correctly read status ACTIVE and set STATUS_IDLE. We go to sleep. This is
+			// safe because:
+			// - Another `wake_up` could be processing, either BEFORE or AFTER the atomic `swap`.
+			//    * BEFORE:
+			//      We have set the state to STATUS_IDLE, so `swap` will read that value and
+			//      wake_up will return true ==> SAFE.
+			//    * AFTER: **We cannot be here!** Indeed, `swap` has set the status to
+			//		`STATUS_DONT_SLEEP`, so `compare_exchange` is in the `Err` case.
+			true
+		}
+	}
+
+	/// Request to wake up this core.
+	/// Returns a boolean indicating if an interrupt should be sent, or if the core is already active
+	#[inline(always)]
+	pub fn wake_up(&self) -> bool {
+		// Ask the core not to sleep.
+		// This makes sure that if the two atomic operations become interleaved, the core will
+		// not go to sleep with us assuming it was running.
+		let previous_state = self.0.swap(CoreState::STATUS_DONT_SLEEP, Ordering::SeqCst);
+
+		// If the core was idle, we can actually wake it up
+		if previous_state == CoreState::STATUS_IDLE {
+			// Again, this operation is not necessarily ordered.
+			// - Another `go_to_sleep` could be processing, either BEFORE or AFTER the atomic op.
+			//    * BEFORE:
+			//      We have set the state to STATUS_DONT_SLEEP, so the atomic op will read that value
+			//      and go_to_sleep will return false. We will send an interrupt which could have
+			//      been avoided, but that's okay.
+			//    * AFTER:
+			//      The value read at the atomic OP does not matter here, in any case we WILL send
+			//      the interrupt and wake the core up.
+			// IN ANY CASE: as per top-level comments, returning true is the safe default here.
+			self.set_active();
+			true
+		} else {
+			// We don't wake up the core. This is safe, because:
+			// - Another `go_to_sleep` could be processing, either BEFORE or AFTER the atomic op.
+			//    * BEFORE:
+			//      We have set the state to STATUS_DONT_SLEEP, so the atomic op will read that value
+			//      and go_to_sleep will return false ==> SAFE.
+			//    * AFTER: **We cannot be here!** Indeed, the atomic operation in `go_to_sleep`
+			//      also sets the state to STATUS_IDLE, so `previous_state` MUST BE STATUS_IDLE.
+			false
+		}
+	}
+}
+
+#[inline]
+#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+pub fn core_sleep() -> bool {
+	CORE_HLT_STATE.read()[usize::try_from(core_id()).unwrap()].go_to_sleep()
+}
+
+#[inline]
+#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+pub fn core_wake_up(core_id: CoreId) -> bool {
+	CORE_HLT_STATE.read()[usize::try_from(core_id).unwrap()].wake_up()
+}
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -891,17 +1012,11 @@ pub(crate) fn add_current_core() {
 			core_id.try_into().unwrap(),
 			&CoreLocal::get().scheduler_input,
 		);
-		#[cfg(target_arch = "x86_64")]
+		#[cfg(all(target_arch = "x86_64", not(feature = "idle-poll")))]
 		CORE_HLT_STATE
-			.lock()
-			.insert(core_id.try_into().unwrap(), &CoreLocal::get().hlt);
+			.write()
+			.insert(core_id.try_into().unwrap(), CoreState::new());
 	}
-}
-
-#[inline]
-#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
-pub(crate) fn take_core_hlt_state(core_id: CoreId) -> bool {
-	CORE_HLT_STATE.lock()[usize::try_from(core_id).unwrap()].swap(false, Ordering::Acquire)
 }
 
 #[inline]
