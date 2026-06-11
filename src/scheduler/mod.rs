@@ -327,7 +327,13 @@ impl PerCoreScheduler {
 			arg,
 			prio: current_task_borrowed.prio,
 			core_id,
-			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
+			stacks: TaskStacks::new(
+				current_task_borrowed
+					.stacks
+					.get_user_stack()
+					.map(|s| s.stack_size())
+					.unwrap_or_default(),
+			),
 			object_map: current_task_borrowed.object_map.clone(),
 		};
 
@@ -439,6 +445,12 @@ impl PerCoreScheduler {
 				current_task_borrowed.core_id,
 			)
 		})
+	}
+
+	/// Returns true if the current task is the idle task
+	#[allow(unused)]
+	pub fn is_idle(&self) -> bool {
+		without_interrupts(|| self.current_task.borrow().id == self.idle_task.borrow().id)
 	}
 
 	#[inline]
@@ -594,15 +606,21 @@ impl PerCoreScheduler {
 		let current_task_borrowed = self.current_task.borrow();
 		let tss = unsafe { &mut *CoreLocal::get().tss.get() };
 
-		let rsp = current_task_borrowed.stacks.get_kernel_stack()
-			+ current_task_borrowed.stacks.get_kernel_stack_size() as u64
-			- TaskStacks::MARKER_SIZE as u64;
+		let rsp = current_task_borrowed
+			.stacks
+			.get_kernel_stack()
+			.top_of_stack();
 		tss.privilege_stack_table[0] = rsp.into();
-		CoreLocal::get().kernel_stack.set(rsp.as_mut_ptr());
-		let ist_start = current_task_borrowed.stacks.get_interrupt_stack()
-			+ current_task_borrowed.stacks.get_interrupt_stack_size() as u64
-			- TaskStacks::MARKER_SIZE as u64;
-		tss.interrupt_stack_table[0] = ist_start.into();
+
+		let _ = CoreLocal::get()
+			.kernel_stack
+			.borrow_mut()
+			.insert(current_task_borrowed.stacks.get_kernel_stack().weak());
+
+		let interrupt_stacks = current_task_borrowed.stacks.get_interrupt_stacks();
+		for (i, stack) in interrupt_stacks.iter().enumerate() {
+			tss.interrupt_stack_table[i] = stack.top_of_stack().into();
+		}
 	}
 
 	pub fn set_current_task_priority(&mut self, prio: Priority) {
@@ -640,9 +658,10 @@ impl PerCoreScheduler {
 	pub fn set_current_kernel_stack(&self) {
 		let current_task_borrowed = self.current_task.borrow();
 
-		let stack = (current_task_borrowed.stacks.get_kernel_stack()
-			+ current_task_borrowed.stacks.get_kernel_stack_size() as u64
-			- TaskStacks::MARKER_SIZE as u64)
+		let stack = current_task_borrowed
+			.stacks
+			.get_kernel_stack()
+			.stack_start()
 			.as_u64();
 		CoreLocal::get().kernel_stack.set(stack);
 	}

@@ -15,7 +15,6 @@ use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
-use free_list::PageLayout;
 use memory_addresses::PhysAddr;
 use riscv::register::sstatus;
 
@@ -25,7 +24,7 @@ use crate::arch::riscv64::kernel::processor::lsb;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
 use crate::init_cell::InitCell;
-use crate::mm::{FrameAlloc, PageRangeAllocator};
+use crate::mm::stack_alloc::allocate_stack;
 
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
@@ -148,10 +147,9 @@ pub fn boot_next_processor() {
 
 	{
 		debug!("Allocating stack for hard_id {next_hart_id}");
-		let frame_layout = PageLayout::from_size(KERNEL_STACK_SIZE).unwrap();
-		let frame_range =
-			FrameAlloc::allocate(frame_layout).expect("Failed to allocate boot stack for new core");
-		let stack = ptr::with_exposed_provenance_mut(frame_range.start());
+
+        let stack = allocate_stack(KERNEL_STACK_SIZE).leak();
+		let stack = ptr::with_exposed_provenance_mut(stack.stack_start().as_usize());
 		CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
 	}
 

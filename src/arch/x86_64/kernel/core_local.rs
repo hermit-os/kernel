@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use core::arch::asm;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 #[cfg(feature = "smp")]
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
@@ -13,7 +13,8 @@ use hermit_sync::{RawRwSpinLock, RawSpinMutex};
 use x86_64::VirtAddr;
 use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
-
+use crate::arch::interrupts::IST_ENTRIES;
+use crate::mm::stack_alloc::StackAllocation;
 use super::CPU_ONLINE;
 use super::interrupts::{IRQ_COUNTERS, IrqStatistics};
 #[cfg(feature = "smp")]
@@ -29,7 +30,8 @@ pub(crate) struct CoreLocal {
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: Cell<*mut TaskStateSegment>,
 	/// Start address of the kernel stack
-	pub kernel_stack: Cell<*mut u8>,
+	pub kernel_stack: RefCell<Option<StackAllocation>>,
+	pub interrupt_stack_allocs: [RefCell<Option<StackAllocation>>; IST_ENTRIES],
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 	/// The core-local async executor.
@@ -59,7 +61,8 @@ impl CoreLocal {
 			core_id,
 			scheduler: Cell::new(ptr::null_mut()),
 			tss: Cell::new(ptr::null_mut()),
-			kernel_stack: Cell::new(ptr::null_mut()),
+			kernel_stack: RefCell::new(None),
+			interrupt_stack_allocs: [const { RefCell::new(None) }; IST_ENTRIES],
 			irq_statistics,
 			ex: StaticLocalExecutor::new(),
 			#[cfg(feature = "smp")]
@@ -108,6 +111,10 @@ pub(crate) fn core_id() -> CoreId {
 
 pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
+}
+
+pub(crate) fn is_kernel_task() -> bool {
+	unsafe { CoreLocal::get().scheduler.get().as_mut().is_none_or(|v| v.is_idle()) }
 }
 
 pub(crate) fn ex() -> &'static StaticLocalExecutor<RawSpinMutex, RawRwSpinLock> {

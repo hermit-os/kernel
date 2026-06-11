@@ -43,6 +43,7 @@
 pub(crate) mod device_alloc;
 mod page_range_alloc;
 mod physicalmem;
+pub mod stack_alloc;
 mod virtualmem;
 
 use core::alloc::Layout;

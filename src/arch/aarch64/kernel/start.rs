@@ -10,8 +10,8 @@ use aarch64_cpu::asm::barrier::{SY, dsb};
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
-use crate::arch::aarch64::kernel::scheduler::TaskStacks;
 use crate::{KERNEL_STACK_SIZE, env};
+use crate::mm::stack_alloc;
 
 /*
  * Memory types available.
@@ -102,7 +102,7 @@ pub unsafe extern "C" fn _start(boot_info: Option<&'static RawBootInfo>, cpu_id:
 		"b {pre_init}",
 
 		cpu_online = sym super::CPU_ONLINE,
-		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+		stack_top_offset = const KERNEL_STACK_SIZE - stack_alloc::MARKER_SIZE,
 		current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 		pre_init = sym pre_init,
 	)
@@ -239,7 +239,7 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 
 		mair_el1 = const mair(0x00, MT_DEVICE_nGnRnE) | mair(0x04, MT_DEVICE_nGnRE) | mair(0x0c, MT_DEVICE_GRE) | mair(0x44, MT_NORMAL_NC) | mair(0xff, MT_NORMAL),
 		tcr_bits = const tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
-		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+		stack_top_offset = const KERNEL_STACK_SIZE - stack_alloc::MARKER_SIZE,
 		current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 		sctlr_el1 = const SCTLR_EL1,
 		ttbr0 = sym TTBR0,

@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 use core::ptr;
-
+use core::sync::atomic::{AtomicUsize, Ordering};
 use align_address::Align;
 use free_list::PageLayout;
 use hermit_sync::SpinMutex;
@@ -11,6 +11,7 @@ use riscv::register::satp;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
+pub(crate) static SATP_VALUE: AtomicUsize = AtomicUsize::new(0);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -133,6 +134,11 @@ impl PageTableEntry {
 	/// Returns `true` if the page is executable
 	fn is_executable(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::EXECUTABLE.bits()) != 0
+	}
+
+	/// Mark this as an invalid (not present) entry
+	fn unset(&mut self) {
+		self.physical_address_and_flags = PhysAddr::zero();
 	}
 
 	/// Mark this as a valid (present) entry and set address translation and flags.
@@ -377,10 +383,15 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		self.entries[index].set(
-			physical_address,
-			S::MAP_EXTRA_FLAG | PageTableEntryFlags::ACCESSED | PageTableEntryFlags::DIRTY | flags,
-		);
+		if physical_address.is_null() && flags == PageTableEntryFlags::BLANK {
+			// Clear PTE
+			self.entries[index].unset();
+		} else {
+			self.entries[index].set(
+				physical_address,
+				S::MAP_EXTRA_FLAG | PageTableEntryFlags::ACCESSED | PageTableEntryFlags::DIRTY | flags,
+			);
+		}
 
 		if flush {
 			page.flush_from_tlb();
@@ -650,4 +661,9 @@ pub unsafe fn enable_page_table() {
 		satp::set(mode, asid, ppn);
 		asm::sfence_vma_all();
 	}
+
+	SATP_VALUE.store(
+		((mode as usize) << 60) | (asid << 44) | ppn,
+		Ordering::Relaxed
+	);
 }
