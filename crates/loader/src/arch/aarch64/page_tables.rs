@@ -68,7 +68,7 @@ pub unsafe fn init(uart_address: u32) {
 pub unsafe fn enable() {
 	// Load TTBRx
 	TTBR1_EL1.set(0);
-	TTBR0_EL1.set(&raw mut l0_pgtable as u64);
+	TTBR0_EL1.set((&raw mut l0_pgtable).expose_provenance() as u64);
 	barrier::dsb(barrier::SY);
 	barrier::isb(barrier::SY);
 
