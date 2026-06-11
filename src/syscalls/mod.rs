@@ -482,10 +482,6 @@ pub unsafe extern "C" fn sys_access(name: *const c_char, flags: i32) -> i32 {
 		return -i32::from(Errno::Inval);
 	};
 
-	if access_option.contains(AccessOption::F_OK) && access_option != AccessOption::F_OK {
-		return -i32::from(Errno::Inval);
-	}
-
 	let Ok(name) = unsafe { CStr::from_ptr(name) }.to_str() else {
 		return -i32::from(Errno::Inval);
 	};
@@ -684,12 +680,16 @@ pub unsafe extern "C" fn sys_ioctl(fd: RawFd, cmd: i32, argp: *mut core::ffi::c_
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
+	const F_GETFD: i32 = 1;
 	const F_SETFD: i32 = 2;
 	const F_GETFL: i32 = 3;
 	const F_SETFL: i32 = 4;
 	const FD_CLOEXEC: i32 = 1;
 
 	if cmd == F_SETFD && arg == FD_CLOEXEC {
+		0
+	} else if cmd == F_GETFD {
+		// Only the FD_CLOEXEC flag is defined, and it has no effect in hermit, so always return 0
 		0
 	} else if cmd == F_GETFL {
 		let obj = get_object(fd);
@@ -717,6 +717,9 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 				.map_or_else(|e| -i32::from(e), |()| 0)
 			},
 		)
+	} else if cfg!(feature = "syscall-fake-values") {
+		warn!("[syscall-fake-values] Unknown fcntl flag {cmd} {arg}, returning 0");
+		0
 	} else {
 		-i32::from(Errno::Inval)
 	}
