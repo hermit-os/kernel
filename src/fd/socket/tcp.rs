@@ -191,7 +191,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				let state = socket.state();
@@ -206,8 +206,8 @@ impl ObjectInterface for Socket {
 							Poll::Ready(
 								socket
 									.recv(|data| {
-										let len = core::cmp::min(buffer.len(), data.len());
-										buffer[..len].copy_from_slice(&data[..len]);
+										let len = core::cmp::min(buf.len(), data.len());
+										buf[..len].copy_from_slice(&data[..len]);
 										(len, len)
 									})
 									.map_err(|_| Errno::Io),
@@ -229,10 +229,10 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let mut pos: usize = 0;
 
-		while pos < buffer.len() {
+		while pos < buf.len() {
 			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
 					match socket.state() {
@@ -245,9 +245,7 @@ impl ObjectInterface for Socket {
 						| tcp::State::TimeWait => Poll::Ready(Err(Errno::Io)),
 						_ => {
 							if socket.can_send() {
-								Poll::Ready(
-									socket.send_slice(&buffer[pos..]).map_err(|_| Errno::Io),
-								)
+								Poll::Ready(socket.send_slice(&buf[pos..]).map_err(|_| Errno::Io))
 							} else if pos > 0 {
 								// we already send some data => return 0 as signal to stop the
 								// async write

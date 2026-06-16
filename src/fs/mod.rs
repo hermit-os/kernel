@@ -133,7 +133,8 @@ impl DirectoryReader {
 }
 
 impl ObjectInterface for DirectoryReader {
-	async fn getdents(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+		let _buf = buf;
 		let _ = &self.0; // Dummy statement to avoid warning for the moment
 		unimplemented!()
 	}
