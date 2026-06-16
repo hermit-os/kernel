@@ -293,7 +293,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// Receive a message from a socket
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn recvfrom(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		let _buf = buf;
 		Err(Errno::Nosys)
 	}
