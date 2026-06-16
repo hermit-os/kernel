@@ -1,6 +1,5 @@
 use core::ffi::c_int;
 use core::future;
-use core::mem::MaybeUninit;
 use core::task::Poll;
 
 use smoltcp::socket::udp;
@@ -155,7 +154,7 @@ impl ObjectInterface for Socket {
 		self.write_with_meta(buf, &meta).await
 	}
 
-	async fn recvfrom(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -165,7 +164,7 @@ impl ObjectInterface for Socket {
 							// fit the payload.
 							Ok((data, meta)) if data.len() <= buf.len() => {
 								if self.remote_endpoint.is_none_or(|ep| meta.endpoint == ep) {
-									buf[..data.len()].write_copy_of_slice(data);
+									buf[..data.len()].copy_from_slice(data);
 									Poll::Ready(Ok((data.len(), meta.endpoint)))
 								} else {
 									socket.register_recv_waker(cx.waker());
