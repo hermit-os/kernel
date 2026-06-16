@@ -43,6 +43,7 @@ mod semaphore;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 pub mod socket;
 mod spinlock;
+mod rhyve;
 mod system;
 #[cfg(feature = "common-os")]
 pub(crate) mod table;
