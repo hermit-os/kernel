@@ -5,6 +5,7 @@ use alloc::ffi::CString;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
+use core::mem::MaybeUninit;
 use core::{ptr, slice};
 
 use dirent_display::Dirent64Display;
@@ -20,7 +21,6 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
-use crate::env;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
@@ -30,6 +30,7 @@ use crate::fd::{
 use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(target_os = "none", not(feature = "common-os")))]
 use crate::mm::ALLOCATOR;
+use crate::{env, init_buf};
 
 mod condvar;
 mod entropy;
@@ -516,7 +517,8 @@ pub extern "C" fn sys_close(fd: RawFd) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read(fd: RawFd, buf: *mut u8, len: usize) -> isize {
-	let slice = unsafe { slice::from_raw_parts_mut(buf.cast(), len) };
+	let slice = unsafe { slice::from_raw_parts_mut(buf.cast::<MaybeUninit<u8>>(), len) };
+	let slice = init_buf::init_buf(slice);
 	fd::read(fd, slice).map_or_else(
 		|e| isize::try_from(-i32::from(e)).unwrap(),
 		|v| v.try_into().unwrap(),
