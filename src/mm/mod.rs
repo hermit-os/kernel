@@ -75,9 +75,8 @@ pub(crate) static ALLOCATOR: TalcLock<RawInterruptTicketMutex, Manual> = TalcLoc
 static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
 	if cfg!(target_os = "none") {
 		// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
-		let Range { start, end } = env::executable_ptr_range();
-		let start = VirtAddr::from_ptr(start);
-		let end = VirtAddr::from_ptr(end);
+		let start = VirtAddr::from_ptr(elf_symbols::executable_start());
+		let end = VirtAddr::from_ptr(elf_symbols::executable_end());
 		start.align_down(LargePageSize::SIZE)..end.align_up(LargePageSize::SIZE)
 	} else {
 		VirtAddr::zero()..VirtAddr::zero()
