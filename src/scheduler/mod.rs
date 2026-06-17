@@ -20,11 +20,11 @@ use timer_interrupts::TimerList;
 
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::scheduler::TaskStacks;
-use crate::arch::kernel::{get_processor_count, interrupts};
 #[cfg(target_arch = "riscv64")]
-use crate::arch::switch::switch_to_task;
+use crate::arch::kernel::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
-use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
+use crate::arch::kernel::switch::{switch_to_fpu_owner, switch_to_task};
+use crate::arch::kernel::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::scheduler::task::*;
