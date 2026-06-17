@@ -7,7 +7,7 @@ use embedded_io::{ErrorType, Read, ReadReady, Write};
 use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
-use crate::arch::SerialDevice;
+use crate::arch::kernel::serial::SerialDevice;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioUART;
 use crate::errno::Errno;
