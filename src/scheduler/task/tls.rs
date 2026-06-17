@@ -162,7 +162,7 @@ impl Tls {
 				}
 			}
 			target_arch = "x86_64" => {
-				use crate::arch::x86_64::kernel::processor;
+				use crate::arch::kernel::processor;
 
 				let addr = self.thread_ptr().expose_provenance();
 				processor::writefs(addr);
