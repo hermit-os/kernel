@@ -14,7 +14,7 @@ use smoltcp::socket::dns;
 use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address, Ipv4Cidr};
 
 use super::network::{NetworkInterface, NetworkState};
-use crate::arch;
+use crate::arch::kernel::systemtime;
 #[cfg(feature = "write-pcap-file")]
 use crate::drivers::Driver;
 use crate::drivers::net::NetworkDriver;
@@ -80,7 +80,7 @@ impl<'a> NetworkInterface<'a> {
 
 		// use the current time based on the wall-clock time as seed
 		let mut config = Config::new(hardware_addr);
-		config.random_seed = (arch::kernel::systemtime::now_micros()) / 1_000_000;
+		config.random_seed = systemtime::now_micros() / 1_000_000;
 		if capabilities.medium == Medium::Ethernet {
 			config.hardware_addr = hardware_addr;
 		}

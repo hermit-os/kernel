@@ -22,7 +22,7 @@ use smoltcp::wire::{DnsQueryType, IpAddress};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
-use crate::arch;
+use crate::arch::kernel::systemtime;
 use crate::drivers::net::{NetworkDevice, NetworkDriver};
 #[cfg(feature = "dns")]
 use crate::errno::Errno;
@@ -123,7 +123,7 @@ fn start_endpoint() -> u16 {
 
 #[inline]
 pub(crate) fn now() -> Instant {
-	Instant::from_micros_const(arch::kernel::systemtime::now_micros().try_into().unwrap())
+	Instant::from_micros_const(systemtime::now_micros().try_into().unwrap())
 }
 
 #[cfg(feature = "dhcpv4")]

@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use crate::arch;
+use crate::arch::kernel::systemtime;
 
 #[allow(non_camel_case_types)]
 pub type time_t = i64;
@@ -80,9 +80,7 @@ impl SystemTime {
 
 	/// Returns the system time corresponding to "now".
 	pub fn now() -> Self {
-		Self(timespec::from_usec(
-			arch::kernel::systemtime::now_micros() as i64
-		))
+		Self(timespec::from_usec(systemtime::now_micros() as i64))
 	}
 
 	/// Returns the amount of time elapsed from an earlier point in time.

@@ -19,8 +19,8 @@ use memory_addresses::VirtAddr;
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
-use crate::arch;
 use crate::arch::core_local::*;
+use crate::arch::processor::{self, FPUState};
 use crate::arch::scheduler::TaskStacks;
 use crate::fd::{Fd, RawFd, stdio};
 use crate::scheduler::CoreId;
@@ -373,7 +373,7 @@ pub(crate) struct Task {
 	/// Last stack pointer on the user stack before jumping to kernel space
 	pub user_stack_pointer: VirtAddr,
 	/// Last FPU state before a context switch to another task using the FPU
-	pub last_fpu_state: arch::processor::FPUState,
+	pub last_fpu_state: FPUState,
 	/// ID of the core this task is running on
 	pub core_id: CoreId,
 	/// Stack of the task
@@ -410,14 +410,14 @@ impl Task {
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
 			user_stack_pointer: VirtAddr::zero(),
-			last_fpu_state: arch::processor::FPUState::new(),
+			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks,
 			object_map,
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: arch::create_new_root_page_table(),
+			root_page_table: crate::arch::create_new_root_page_table(),
 		}
 	}
 
@@ -458,7 +458,7 @@ impl Task {
 			prio: IDLE_PRIO,
 			last_stack_pointer: VirtAddr::zero(),
 			user_stack_pointer: VirtAddr::zero(),
-			last_fpu_state: arch::processor::FPUState::new(),
+			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
 			object_map: OBJECT_MAP.get().unwrap().clone(),
@@ -602,7 +602,7 @@ impl BlockedTaskQueue {
 	/// at least one task has elapsed.
 	pub fn handle_waiting_tasks(&mut self, ready_queue: &mut PriorityTaskQueue) {
 		// Get the current time.
-		let time = arch::processor::get_timer_ticks();
+		let time = processor::get_timer_ticks();
 
 		// Get the wakeup time of this task and check if we have reached the first task
 		// that hasn't elapsed yet or waits indefinitely.

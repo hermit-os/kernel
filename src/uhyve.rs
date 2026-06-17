@@ -5,7 +5,7 @@ use uhyve_interface::GuestPhysAddr;
 use uhyve_interface::v2::parameters::SerialWriteBufferParams;
 use uhyve_interface::v2::{Hypercall, HypercallAddress};
 
-use crate::arch;
+use crate::arch::kernel::processor;
 use crate::arch::mm::paging::virtual_to_physical;
 
 #[cfg(target_os = "none")]
@@ -93,6 +93,6 @@ pub(crate) fn uhyve_hypercall(hypercall: Hypercall<'_>) {
 pub fn shutdown(error_code: i32) -> ! {
 	uhyve_hypercall(Hypercall::Exit(error_code));
 	loop {
-		arch::processor::halt();
+		processor::halt();
 	}
 }
