@@ -1,4 +1,5 @@
-use crate::arch;
+use crate::arch::kernel::systemtime;
+use crate::arch::processor;
 use crate::errno::Errno;
 use crate::syscalls::usleep;
 use crate::time::{itimerval, timespec, timeval};
@@ -63,11 +64,11 @@ pub unsafe extern "C" fn sys_clock_gettime(clock_id: clockid_t, tp: *mut timespe
 
 	match clock_id {
 		CLOCK_REALTIME => {
-			*result = timespec::from_usec(arch::kernel::systemtime::now_micros() as i64);
+			*result = timespec::from_usec(systemtime::now_micros() as i64);
 			0
 		}
 		CLOCK_MONOTONIC => {
-			*result = timespec::from_usec(arch::processor::get_timer_ticks() as i64);
+			*result = timespec::from_usec(processor::get_timer_ticks() as i64);
 			0
 		}
 		_ => {
@@ -111,9 +112,9 @@ pub unsafe extern "C" fn sys_clock_nanosleep(
 
 			if flags & TIMER_ABSTIME > 0 {
 				if clock_id == CLOCK_REALTIME {
-					microseconds -= arch::kernel::systemtime::now_micros();
+					microseconds -= systemtime::now_micros();
 				} else {
-					microseconds -= arch::processor::get_timer_ticks();
+					microseconds -= processor::get_timer_ticks();
 				}
 			}
 
@@ -144,7 +145,7 @@ pub unsafe extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
 		// Return the current time based on the wallclock time when we were booted up
 		// plus the current timer ticks.
-		let microseconds = arch::kernel::systemtime::now_micros();
+		let microseconds = systemtime::now_micros();
 		*result = timeval::from_usec(microseconds as i64);
 	}
 
