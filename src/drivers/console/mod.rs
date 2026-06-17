@@ -24,7 +24,7 @@ use virtio::console::Config;
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
-use crate::VIRTIO_MAX_QUEUE_SIZE;
+use crate::config::{CONSOLE_PACKET_SIZE, VIRTIO_MAX_QUEUE_SIZE};
 use crate::drivers::error::DriverError;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_console_driver;
@@ -124,7 +124,7 @@ impl RxQueue {
 		Self {
 			vq: None,
 
-			packet_size: crate::CONSOLE_PACKET_SIZE,
+			packet_size: CONSOLE_PACKET_SIZE,
 		}
 	}
 
@@ -189,7 +189,7 @@ impl TxQueue {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
-			packet_length: crate::CONSOLE_PACKET_SIZE,
+			packet_length: CONSOLE_PACKET_SIZE,
 		}
 	}
 

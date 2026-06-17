@@ -3,7 +3,7 @@ use core::arch::naked_asm;
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
-use crate::KERNEL_STACK_SIZE;
+use crate::config::KERNEL_STACK_SIZE;
 use crate::arch::kernel::pre_init;
 use crate::arch::kernel::scheduler::TaskStacks;
 
