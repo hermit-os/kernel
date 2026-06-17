@@ -98,7 +98,6 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use arch::core_local::*;
 
 pub(crate) use crate::arch::*;
-pub use crate::config::DEFAULT_STACK_SIZE;
 pub(crate) use crate::config::*;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
@@ -111,7 +110,7 @@ mod logging;
 pub mod arch;
 #[cfg(all(feature = "common-os", target_arch = "x86_64"))]
 pub mod common_os;
-mod config;
+pub mod config;
 pub mod console;
 mod drivers;
 mod entropy;
