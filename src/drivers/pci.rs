@@ -432,7 +432,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 
 	#[cfg(target_arch = "x86_64")]
 	{
-		use crate::kernel::serial::get_serial_handler;
+		use crate::arch::kernel::serial::get_serial_handler;
 		let (irq_number, handler) = get_serial_handler();
 
 		handlers.entry(irq_number).or_default().push_back(handler);

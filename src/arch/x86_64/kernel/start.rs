@@ -4,8 +4,8 @@ use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
 use crate::KERNEL_STACK_SIZE;
-use crate::kernel::pre_init;
-use crate::kernel::scheduler::TaskStacks;
+use crate::arch::kernel::pre_init;
+use crate::arch::kernel::scheduler::TaskStacks;
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]

@@ -2,7 +2,7 @@ use core::arch::naked_asm;
 
 use x86_64::registers::control::Cr0Flags;
 
-use crate::set_current_kernel_stack;
+use crate::arch::kernel::gdt::set_current_kernel_stack;
 
 #[cfg(not(feature = "common-os"))]
 macro_rules! push_gs {

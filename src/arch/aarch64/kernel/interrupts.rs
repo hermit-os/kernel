@@ -16,6 +16,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::aarch64::kernel::core_local::{core_id, core_scheduler, increment_irq_counter};
 use crate::arch::aarch64::kernel::scheduler::State;
+use crate::arch::aarch64::kernel::serial::handle_uart_interrupt;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_interrupt_handlers;
@@ -23,7 +24,6 @@ use crate::drivers::mmio::get_interrupt_handlers;
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
 use crate::env;
-use crate::kernel::serial::handle_uart_interrupt;
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId, timer_interrupts};
 

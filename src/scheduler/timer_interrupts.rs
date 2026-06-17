@@ -1,9 +1,9 @@
 use core::mem;
 
-use crate::core_local::core_scheduler;
+use crate::arch::kernel::core_local::core_scheduler;
+use crate::arch::set_oneshot_timer;
 #[cfg(feature = "net")]
 use crate::executor::network::wake_network_waker;
-use crate::set_oneshot_timer;
 
 /// A possible timer interrupt source (i.e. reason the timer interrupt was set
 /// up).

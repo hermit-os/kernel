@@ -19,6 +19,7 @@ use riscv::register::sstatus;
 use timer_interrupts::TimerList;
 
 use crate::arch::core_local::*;
+use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(target_arch = "riscv64")]
 use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
@@ -26,7 +27,6 @@ use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::arch::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
-use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::{arch, io};
 
@@ -136,7 +136,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		use arm_gic::IntId;
 		use arm_gic::gicv3::{GicCpuInterface, SgiTarget, SgiTargetGroup};
 
-		use crate::interrupts::SGI_RESCHED;
+		use crate::arch::kernel::interrupts::SGI_RESCHED;
 
 		dsb(NSH);
 		isb(SY);
