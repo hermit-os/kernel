@@ -50,8 +50,6 @@ cfg_select! {
 		pub use self::x86_64::mm::paging::{BasePageSize, PageSize};
 		#[cfg(feature = "common-os")]
 		pub use self::x86_64::mm::create_new_root_page_table;
-		#[cfg(feature = "common-os")]
-		pub use self::x86_64::kernel::{load_application, jump_to_user_land};
 	}
 	target_arch = "riscv64" => {
 		pub(crate) mod riscv64;

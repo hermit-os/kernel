@@ -109,6 +109,8 @@ mod macros;
 mod logging;
 
 pub mod arch;
+#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+pub mod common_os;
 mod config;
 pub mod console;
 mod drivers;
