@@ -135,6 +135,11 @@ impl PageTableEntry {
 		(self.physical_address_and_flags & PageTableEntryFlags::EXECUTABLE.bits()) != 0
 	}
 
+	/// Mark this as an invalid (not present) entry
+	fn unset(&mut self) {
+		self.physical_address_and_flags = PhysAddr::zero();
+	}
+
 	/// Mark this as a valid (present) entry and set address translation and flags.
 	///
 	/// # Arguments
@@ -377,10 +382,15 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		self.entries[index].set(
-			physical_address,
-			S::MAP_EXTRA_FLAG | PageTableEntryFlags::ACCESSED | PageTableEntryFlags::DIRTY | flags,
-		);
+		if physical_address.is_null() && flags == PageTableEntryFlags::BLANK {
+			// Clear PTE
+			self.entries[index].unset();
+		} else {
+			self.entries[index].set(
+				physical_address,
+				S::MAP_EXTRA_FLAG | PageTableEntryFlags::ACCESSED | PageTableEntryFlags::DIRTY | flags,
+			);
+		}
 
 		if flush {
 			page.flush_from_tlb();
