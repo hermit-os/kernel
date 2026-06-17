@@ -1,4 +1,4 @@
-use crate::arch::get_processor_count;
+use crate::arch::kernel::get_processor_count;
 
 /// Returns the number of processors currently online.
 #[hermit_macro::system]
