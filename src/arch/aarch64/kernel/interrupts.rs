@@ -14,7 +14,7 @@ use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
+use crate::arch::aarch64::kernel::core_local::{core_id, core_scheduler, increment_irq_counter};
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 #[cfg(not(feature = "pci"))]
@@ -22,10 +22,10 @@ use crate::drivers::mmio::get_interrupt_handlers;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_interrupt_handlers;
 use crate::drivers::{InterruptHandlerQueue, InterruptLine};
+use crate::env;
 use crate::kernel::serial::handle_uart_interrupt;
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId, timer_interrupts};
-use crate::{core_id, core_scheduler, env};
 
 /// The ID of the first Private Peripheral Interrupt.
 const PPI_START: u8 = 16;

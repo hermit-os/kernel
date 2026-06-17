@@ -107,10 +107,12 @@ pub fn boot_processor_init() {
 /// Application Processor initialization
 #[cfg(feature = "smp")]
 pub fn application_processor_init() {
+	use crate::arch::kernel::core_local::CoreLocal;
+
 	unsafe {
 		super::mm::paging::enable_page_table();
 	}
-	crate::CoreLocal::install();
+	CoreLocal::install();
 	interrupts::install();
 	finish_processor_init();
 }
