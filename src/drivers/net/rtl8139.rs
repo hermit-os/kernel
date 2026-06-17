@@ -16,7 +16,7 @@ use volatile::access::{NoAccess, ReadOnly, ReadWrite};
 use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef, map_field};
 
 use crate::arch::kernel::interrupts::*;
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};

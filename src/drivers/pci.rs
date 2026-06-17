@@ -19,7 +19,7 @@ use pci_types::{
 	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
 };
 
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
 #[cfg(feature = "virtio-console")]
