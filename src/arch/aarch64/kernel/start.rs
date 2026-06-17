@@ -11,7 +11,8 @@ use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
-use crate::{KERNEL_STACK_SIZE, env};
+use crate::config::KERNEL_STACK_SIZE;
+use crate::env;
 
 /*
  * Memory types available.

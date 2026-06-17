@@ -97,7 +97,6 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use self::arch::kernel::core_local::{core_id, core_scheduler};
 use self::arch::{interrupts, kernel};
-pub(crate) use crate::config::*;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
 #[macro_use]
@@ -232,6 +231,8 @@ fn synch_all_cores() {
 /// Entry Point of Hermit for the Boot Processor
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
+	use crate::config::USER_STACK_SIZE;
+
 	// Initialize the kernel and hardware.
 	mm::claim_initial_heap();
 	hermit_sync::Lazy::force(&console::CONSOLE);

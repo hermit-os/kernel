@@ -19,7 +19,7 @@ use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
 use super::virtio::virtqueue::VirtQueue;
-use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::config::{VIRTIO_MAX_QUEUE_SIZE, VSOCK_PACKET_SIZE};
 use crate::drivers::Driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioVsockError;
@@ -72,7 +72,7 @@ impl RxQueue {
 		Self {
 			vq: None,
 
-			packet_size: crate::VSOCK_PACKET_SIZE,
+			packet_size: VSOCK_PACKET_SIZE,
 		}
 	}
 
@@ -138,7 +138,7 @@ impl TxQueue {
 	pub fn new() -> Self {
 		Self {
 			vq: None,
-			packet_length: crate::VSOCK_PACKET_SIZE + size_of::<Hdr>() as u32,
+			packet_length: VSOCK_PACKET_SIZE + size_of::<Hdr>() as u32,
 		}
 	}
 
