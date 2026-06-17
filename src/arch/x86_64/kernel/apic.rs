@@ -815,7 +815,7 @@ pub fn boot_application_processors() {
 			init_next_processor_variables();
 
 			// Save the current number of initialized CPUs.
-			let current_processor_count = arch::get_processor_count();
+			let current_processor_count = arch::kernel::get_processor_count();
 
 			// Send an INIT IPI.
 			local_apic_write(
@@ -844,7 +844,7 @@ pub fn boot_application_processors() {
 
 			// Wait until the application processor has finished initializing.
 			// It will indicate this by counting up cpu_online.
-			while current_processor_count == arch::get_processor_count() {
+			while current_processor_count == arch::kernel::get_processor_count() {
 				spin_loop();
 			}
 		}
@@ -855,7 +855,7 @@ pub fn boot_application_processors() {
 
 #[cfg(feature = "smp")]
 pub fn ipi_tlb_flush() {
-	if arch::get_processor_count() > 1 {
+	if arch::kernel::get_processor_count() > 1 {
 		let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 		let core_id = core_id();
 
@@ -998,7 +998,7 @@ pub fn print_information() {
 		"xAPIC"
 	};
 	infoentry!("APIC in use", "{apic}");
-	let processor_count = arch::get_processor_count();
+	let processor_count = arch::kernel::get_processor_count();
 	infoentry!("Initialized CPUs", "{processor_count}");
 	infofooter!();
 }
