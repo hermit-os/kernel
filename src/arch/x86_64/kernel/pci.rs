@@ -94,7 +94,6 @@ pub(crate) fn init() {
 	}
 
 	// For Hermit, we currently limit scanning to the first 32 buses.
-	const PCI_MAX_BUS_NUMBER: u8 = 32;
 	scan_bus(
 		0..PCI_MAX_BUS_NUMBER,
 		PciConfigRegion::Pci(LegacyPciConfigRegion::new()),
@@ -205,11 +204,7 @@ mod pcie {
 				let region_start = u64::try_from(mem_region.starting_address.addr()).unwrap();
 				let region_end = region_start + u64::try_from(mem_region.size.expect("found a memory region with no declared size")).unwrap();
 
-				if
-					(pci_start >= region_start && pci_start <= region_end) // PCI region starts within the memory region
-					|| (pci_end >= region_start && pci_end <= region_end) // PCI region ends within the memory region
-					|| (pci_start <= region_start && pci_end >= region_end) // PCI region contains the memory region
-				{
+				if pci_start < region_end && pci_end > region_start {
 					error!("The declared PCI region {pci_start:x}-{pci_end:x} may overlap with physical memory region {region_start:x}-{region_end:x}");
 					return false;
 				}
