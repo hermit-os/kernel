@@ -18,7 +18,7 @@ use virtio::{DeviceStatus, le16, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;

@@ -2,7 +2,7 @@ use pci_types::CommandRegister;
 use virtio::console::Config;
 use volatile::VolatileRef;
 
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};

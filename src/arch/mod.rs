@@ -10,8 +10,6 @@ cfg_select! {
 		pub(crate) use self::aarch64::kernel::core_local;
 		pub(crate) use self::aarch64::kernel::interrupts;
 		pub(crate) use self::aarch64::kernel::interrupts::wakeup_core;
-		#[cfg(feature = "pci")]
-		pub(crate) use self::aarch64::kernel::pci;
 		pub(crate) use self::aarch64::kernel::processor;
 		pub(crate) use self::aarch64::kernel::serial::SerialDevice;
 		pub(crate) use self::aarch64::kernel::processor::set_oneshot_timer;
@@ -35,8 +33,6 @@ cfg_select! {
 		pub(crate) use self::x86_64::kernel::application_processor_init;
 		pub(crate) use self::x86_64::kernel::core_local;
 		pub(crate) use self::x86_64::kernel::interrupts;
-		#[cfg(feature = "pci")]
-		pub(crate) use self::x86_64::kernel::pci;
 		pub(crate) use self::x86_64::kernel::processor;
 		pub(crate) use self::x86_64::kernel::serial::SerialDevice;
 		pub(crate) use self::x86_64::kernel::scheduler;
@@ -56,8 +52,6 @@ cfg_select! {
 
 		#[cfg(feature = "smp")]
 		pub(crate) use self::riscv64::kernel::application_processor_init;
-		#[cfg(feature = "pci")]
-		pub(crate) use self::riscv64::kernel::pci;
 		pub(crate) use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
 		pub(crate) use self::riscv64::kernel::serial::SerialDevice;
 		pub(crate) use self::riscv64::kernel::{

@@ -3,7 +3,7 @@ use smoltcp::phy::ChecksumCapabilities;
 use volatile::VolatileRef;
 
 use super::{Init, Uninit};
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
