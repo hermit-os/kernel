@@ -19,7 +19,7 @@ use memory_addresses::VirtAddr;
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
-use crate::arch::core_local::*;
+use crate::arch::kernel::core_local::*;
 use crate::arch::processor::{self, FPUState};
 use crate::arch::scheduler::TaskStacks;
 use crate::fd::{Fd, RawFd, stdio};

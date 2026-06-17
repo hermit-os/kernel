@@ -1,6 +1,6 @@
 use hermit_sync::TicketMutex;
 
-use crate::arch::core_local::*;
+use crate::arch::kernel::core_local::*;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{TaskHandlePriorityQueue, TaskId};
 

@@ -7,7 +7,6 @@ cfg_select! {
 
 		#[cfg(target_os = "none")]
 		pub(crate) use self::aarch64::kernel::boot_processor_init;
-		pub(crate) use self::aarch64::kernel::core_local;
 		pub(crate) use self::aarch64::kernel::interrupts;
 		pub(crate) use self::aarch64::kernel::interrupts::wakeup_core;
 		pub(crate) use self::aarch64::kernel::processor;
@@ -30,7 +29,6 @@ cfg_select! {
 		};
 		#[cfg(all(target_os = "none", feature = "smp"))]
 		pub(crate) use self::x86_64::kernel::application_processor_init;
-		pub(crate) use self::x86_64::kernel::core_local;
 		pub(crate) use self::x86_64::kernel::interrupts;
 		pub(crate) use self::x86_64::kernel::processor;
 		pub(crate) use self::x86_64::kernel::scheduler;
@@ -53,7 +51,6 @@ cfg_select! {
 		pub(crate) use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
 		pub(crate) use self::riscv64::kernel::{
 			boot_processor_init,
-			core_local,
 			get_processor_count,
 			interrupts,
 			scheduler,
