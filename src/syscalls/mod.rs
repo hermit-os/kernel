@@ -718,7 +718,8 @@ pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
 			},
 		)
 	} else {
-		-i32::from(Errno::Inval)
+		warn!("[stub] Unknown fcntl flag {cmd} {arg}, returning 0");
+		0
 	}
 }
 
