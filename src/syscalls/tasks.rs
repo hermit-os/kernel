@@ -2,7 +2,7 @@ use alloc::collections::BTreeMap;
 
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::core_local::*;
+use crate::arch::kernel::core_local::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::Errno;

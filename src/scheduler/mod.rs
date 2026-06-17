@@ -18,7 +18,7 @@ use hermit_sync::*;
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
 
-use crate::arch::core_local::*;
+use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(target_arch = "riscv64")]
 use crate::arch::switch::switch_to_task;
