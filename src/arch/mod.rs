@@ -16,8 +16,6 @@ cfg_select! {
 			set_oneshot_timer,
 			wakeup_core,
 		};
-		#[cfg(feature = "common-os")]
-		pub use self::x86_64::mm::create_new_root_page_table;
 	}
 	target_arch = "riscv64" => {
 		pub(crate) mod riscv64;
