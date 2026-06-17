@@ -278,7 +278,7 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 				"{preamble} Secondary core booted, but Hermit was not built with SMP support!"
 			);
 			loop {
-				crate::arch::processor::halt();
+				crate::arch::kernel::processor::halt();
 			}
 		}
 		#[cfg(feature = "smp")]

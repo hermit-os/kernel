@@ -93,7 +93,7 @@ pub fn create_timer(source: Source, wakeup_micros: u64) {
 	create_timer_abs(
 		source,
 		// get_timer_ticks should always return a nonzero value
-		crate::arch::processor::get_timer_ticks() + wakeup_micros,
+		crate::arch::kernel::processor::get_timer_ticks() + wakeup_micros,
 	);
 }
 
@@ -137,7 +137,7 @@ pub fn clear_active_and_set_next() {
 	// Either way, this means that QEMU *thinks* the time has passed, so it
 	// probably has and knows better than we do.
 	// We can cheat a bit and adjust all timers slightly based on this
-	let timer_ticks = crate::arch::processor::get_timer_ticks();
+	let timer_ticks = crate::arch::kernel::processor::get_timer_ticks();
 	if prev_wakeup_time > timer_ticks {
 		let offset = prev_wakeup_time - timer_ticks;
 		timers.adjust_by(offset);
