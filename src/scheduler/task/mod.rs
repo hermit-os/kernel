@@ -417,7 +417,7 @@ impl Task {
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
 			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: crate::arch::create_new_root_page_table(),
+			root_page_table: crate::arch::mm::create_new_root_page_table(),
 		}
 	}
 
