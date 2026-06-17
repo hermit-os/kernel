@@ -96,7 +96,7 @@ use core::hint::spin_loop;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use self::arch::kernel::core_local::{core_id, core_scheduler};
-pub(crate) use crate::arch::*;
+use self::arch::{interrupts, kernel};
 pub(crate) use crate::config::*;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
@@ -267,7 +267,7 @@ fn boot_processor_main() -> ! {
 		info!("FDT:\n{fdt:#?}");
 	}
 
-	boot_processor_init();
+	arch::boot_processor_init();
 
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
@@ -293,7 +293,7 @@ fn boot_processor_main() -> ! {
 /// Entry Point of Hermit for an Application Processor
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
-	application_processor_init();
+	arch::application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 	interrupts::enable();

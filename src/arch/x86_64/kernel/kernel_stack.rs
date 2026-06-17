@@ -1,6 +1,6 @@
 use core::mem;
 
-use crate::core_local::CoreLocal;
+use crate::arch::kernel::core_local::CoreLocal;
 
 type Reg = mem::MaybeUninit<usize>;
 

@@ -34,7 +34,6 @@ cfg_select! {
 		#[cfg(all(target_os = "none", feature = "smp"))]
 		pub(crate) use self::x86_64::kernel::application_processor_init;
 		pub(crate) use self::x86_64::kernel::core_local;
-		pub(crate) use self::x86_64::kernel::gdt::set_current_kernel_stack;
 		pub(crate) use self::x86_64::kernel::interrupts;
 		#[cfg(feature = "pci")]
 		pub(crate) use self::x86_64::kernel::pci;

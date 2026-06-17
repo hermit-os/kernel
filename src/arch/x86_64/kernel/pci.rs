@@ -130,10 +130,10 @@ mod pcie {
 	use pci_types::{ConfigRegionAccess, PciAddress};
 
 	use super::PciConfigRegion;
+	use crate::arch::kernel::acpi;
 	use crate::arch::mm::paging::{
 		self, LargePageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 	};
-	use crate::kernel::acpi;
 	use crate::mm::device_alloc::DeviceAlloc;
 
 	pub fn init_pcie() -> bool {
