@@ -7,7 +7,6 @@ cfg_select! {
 
 		pub(crate) use self::aarch64::kernel::interrupts::wakeup_core;
 		pub(crate) use self::aarch64::kernel::processor::set_oneshot_timer;
-		pub(crate) use self::aarch64::kernel::scheduler;
 		pub(crate) use self::aarch64::kernel::{
 			get_processor_count,
 		};
@@ -21,7 +20,6 @@ cfg_select! {
 			set_oneshot_timer,
 			wakeup_core,
 		};
-		pub(crate) use self::x86_64::kernel::scheduler;
 		pub(crate) use self::x86_64::kernel::switch;
 		pub(crate) use self::x86_64::kernel::{
 			get_processor_count,
@@ -37,7 +35,6 @@ cfg_select! {
 		pub(crate) use self::riscv64::kernel::processor::{set_oneshot_timer, wakeup_core};
 		pub(crate) use self::riscv64::kernel::{
 			get_processor_count,
-			scheduler,
 			switch,
 		};
 		pub use self::riscv64::mm::paging::{BasePageSize, PageSize};

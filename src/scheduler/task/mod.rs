@@ -21,7 +21,7 @@ use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::processor::{self, FPUState};
-use crate::arch::scheduler::TaskStacks;
+use crate::arch::kernel::scheduler::TaskStacks;
 use crate::fd::{Fd, RawFd, stdio};
 use crate::scheduler::CoreId;
 
