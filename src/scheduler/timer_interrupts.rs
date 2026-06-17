@@ -1,7 +1,7 @@
 use core::mem;
 
 use crate::arch::kernel::core_local::core_scheduler;
-use crate::arch::set_oneshot_timer;
+use crate::arch::kernel::set_oneshot_timer;
 #[cfg(feature = "net")]
 use crate::executor::network::wake_network_waker;
 

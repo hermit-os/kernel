@@ -9,6 +9,7 @@ use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
 use memory_addresses::PhysAddr;
 use x86_64::registers::control::{Cr0, Cr4};
 
+pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::env::{self, is_uhyve};
 

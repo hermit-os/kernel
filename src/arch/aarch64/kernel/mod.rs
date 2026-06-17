@@ -21,6 +21,8 @@ use core::{ptr, str};
 
 use memory_addresses::PhysAddr;
 
+pub(crate) use self::interrupts::wakeup_core;
+pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
