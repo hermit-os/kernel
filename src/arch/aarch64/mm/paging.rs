@@ -80,6 +80,7 @@ bitflags! {
 }
 
 impl PageTableEntryFlags {
+	#[expect(dead_code)]
 	pub fn present(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::PRESENT);
 		self
@@ -102,6 +103,7 @@ impl PageTableEntryFlags {
 		self
 	}
 
+	#[expect(dead_code)]
 	pub fn read_only(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::READ_ONLY);
 		self

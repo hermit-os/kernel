@@ -7,7 +7,6 @@ cfg_select! {
 
 		pub(crate) use self::aarch64::kernel::interrupts::wakeup_core;
 		pub(crate) use self::aarch64::kernel::processor::set_oneshot_timer;
-		pub use self::aarch64::mm::paging::{BasePageSize, PageSize};
 	}
 	target_arch = "x86_64" => {
 		pub(crate) mod x86_64;
@@ -18,7 +17,6 @@ cfg_select! {
 			wakeup_core,
 		};
 		pub(crate) use self::x86_64::kernel::switch;
-		pub use self::x86_64::mm::paging::{BasePageSize, PageSize};
 		#[cfg(feature = "common-os")]
 		pub use self::x86_64::mm::create_new_root_page_table;
 	}
@@ -30,6 +28,5 @@ cfg_select! {
 		pub(crate) use self::riscv64::kernel::{
 			switch,
 		};
-		pub use self::riscv64::mm::paging::{BasePageSize, PageSize};
 	}
 }
