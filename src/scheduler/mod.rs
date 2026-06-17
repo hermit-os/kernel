@@ -18,13 +18,14 @@ use hermit_sync::*;
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
 
+use crate::arch::get_processor_count;
 use crate::arch::kernel::core_local::*;
+use crate::arch::kernel::interrupts;
 use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(target_arch = "riscv64")]
 use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
-use crate::arch::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::scheduler::task::*;
