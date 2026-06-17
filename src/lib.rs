@@ -269,7 +269,7 @@ fn boot_processor_main() -> ! {
 		info!("FDT:\n{fdt:#?}");
 	}
 
-	arch::boot_processor_init();
+	kernel::boot_processor_init();
 
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
@@ -295,7 +295,7 @@ fn boot_processor_main() -> ! {
 /// Entry Point of Hermit for an Application Processor
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
-	arch::application_processor_init();
+	kernel::application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 	interrupts::enable();
