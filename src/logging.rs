@@ -5,8 +5,7 @@ use core::time::Duration;
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
-use crate::arch::kernel::core_local;
-use crate::arch::processor;
+use crate::arch::kernel::{core_local, processor};
 
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 

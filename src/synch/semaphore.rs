@@ -70,7 +70,8 @@ impl Semaphore {
 		let backoff = Backoff::new();
 		let core_scheduler = core_scheduler();
 
-		let wakeup_time = time.map(|ms| crate::arch::processor::get_timer_ticks() + ms * 1000);
+		let wakeup_time =
+			time.map(|ms| crate::arch::kernel::processor::get_timer_ticks() + ms * 1000);
 
 		// Loop until we have acquired the semaphore.
 		loop {
@@ -81,7 +82,7 @@ impl Semaphore {
 				locked_state.count -= 1;
 				return true;
 			} else if let Some(t) = wakeup_time
-				&& t < crate::arch::processor::get_timer_ticks()
+				&& t < crate::arch::kernel::processor::get_timer_ticks()
 			{
 				// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
 				// Don't try again and return the failure status.

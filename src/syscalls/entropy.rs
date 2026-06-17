@@ -2,7 +2,7 @@ use core::slice;
 
 use hermit_sync::TicketMutex;
 
-use crate::arch::processor;
+use crate::arch::kernel::processor;
 use crate::entropy::{self, Flags};
 use crate::errno::Errno;
 

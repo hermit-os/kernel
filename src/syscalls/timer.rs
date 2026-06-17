@@ -1,5 +1,4 @@
-use crate::arch::kernel::systemtime;
-use crate::arch::processor;
+use crate::arch::kernel::{processor, systemtime};
 use crate::errno::Errno;
 use crate::syscalls::usleep;
 use crate::time::{itimerval, timespec, timeval};

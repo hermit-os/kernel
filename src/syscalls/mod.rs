@@ -272,7 +272,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	// This is a stable message used for detecting exit codes for different hypervisors.
 	panic_println!("exit status {arg}");
 
-	crate::arch::processor::shutdown(arg)
+	crate::arch::kernel::processor::shutdown(arg)
 }
 
 #[hermit_macro::system(errno)]
