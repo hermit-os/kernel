@@ -95,8 +95,9 @@ use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use self::arch::kernel;
 use self::arch::kernel::core_local::{core_id, core_scheduler};
-use self::arch::{interrupts, kernel};
+use self::arch::kernel::interrupts;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
 #[macro_use]

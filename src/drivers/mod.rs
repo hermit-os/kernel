@@ -85,5 +85,5 @@ pub(crate) fn init() {
 	#[cfg(target_arch = "riscv64")]
 	crate::arch::riscv64::kernel::init_drivers();
 
-	crate::arch::interrupts::install_handlers();
+	crate::arch::kernel::interrupts::install_handlers();
 }
