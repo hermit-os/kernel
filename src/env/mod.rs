@@ -14,7 +14,6 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
-pub(crate) use self::executable::log_segments;
 #[cfg(not(feature = "common-os"))]
 pub(crate) use self::executable::tls::TlsInfo;
 use crate::arch::kernel;
