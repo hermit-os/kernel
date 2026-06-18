@@ -3,14 +3,6 @@
 //! This module provides information about the currently running loaded
 //! executable image through different reserved linker symbols.
 
-pub fn log_segments() {
-	info!("Executable start: {:p}", elf_symbols::executable_start());
-	info!("ELF header:       {:p}", elf_symbols::elf_header());
-	info!("Text segment end: {:p}", elf_symbols::text_end());
-	info!("Data segment end: {:p}", elf_symbols::data_end());
-	info!("Executable end:   {:p}", elf_symbols::executable_end());
-}
-
 #[cfg(not(feature = "common-os"))]
 pub mod tls {
 	use core::alloc::Layout;
