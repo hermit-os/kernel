@@ -1,4 +1,5 @@
 use alloc::collections::VecDeque;
+use core::hint;
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
@@ -14,7 +15,7 @@ use crate::errno::Errno;
 #[cfg(feature = "pci")]
 const SERIAL_IRQ: u8 = 4;
 
-static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
+pub static UART_DEVICE: Lazy<InterruptTicketMutex<UartDevice>> =
 	Lazy::new(|| unsafe { InterruptTicketMutex::new(UartDevice::new()) });
 
 struct UartDevice {
@@ -24,11 +25,12 @@ struct UartDevice {
 
 impl UartDevice {
 	pub unsafe fn new() -> Self {
-		let base = crate::env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.unwrap()
-			.get();
+		// let base = crate::env::boot_info()
+		// 	.hardware_info
+		// 	.serial_port_base
+		// 	.unwrap()
+		// 	.get();
+		let base = 0x3f8;
 		let mut uart = unsafe { Uart16550::new_port(base).unwrap() };
 		uart.init(Config::default()).ok();
 		// Once we have a fallback destination for output,
@@ -69,8 +71,28 @@ impl ReadReady for SerialDevice {
 impl Write for SerialDevice {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
 		let mut guard = UART_DEVICE.lock();
-		let n = guard.uart.write(buf)?;
-		Ok(n)
+		let uart = &mut guard.uart;
+
+		for byte in buf.iter().copied() {
+			match byte {
+				// backspace or delete
+				8 | 0x7f => {
+					uart.try_send_byte(8).unwrap();
+					uart.try_send_byte(b' ').unwrap();
+					uart.try_send_byte(8).unwrap();
+				}
+				// Normal Rust newlines to terminal-compatible newlines.
+				b'\n' => {
+					uart.try_send_byte(b'\r').unwrap();
+					uart.try_send_byte(b'\n').unwrap();
+				}
+				data => {
+					uart.try_send_byte(data).unwrap();
+				}
+			}
+		}
+
+		Ok(buf.len())
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {

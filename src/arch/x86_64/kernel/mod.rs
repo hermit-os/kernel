@@ -12,6 +12,7 @@ use x86_64::registers::control::{Cr0, Cr4};
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::env::{self, is_uhyve};
 
+pub mod pvh;
 #[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
@@ -71,14 +72,6 @@ pub fn is_uhyve_with_pci() -> bool {
 		env::boot_info().platform_info,
 		PlatformInfo::Uhyve { has_pci: true, .. }
 	)
-}
-
-pub fn args() -> Option<&'static str> {
-	match env::boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. }
-		| PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
-		_ => None,
-	}
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
@@ -191,7 +184,8 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	}
 
 	if cpu_id == 0 {
-		env::set_boot_info(*boot_info.unwrap());
+		// env::set_boot_info(*boot_info.unwrap());
+		println!("Foo");
 
 		crate::boot_processor_main()
 	} else {

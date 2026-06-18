@@ -66,6 +66,8 @@ impl Rs {
 			);
 		};
 
+		cargo.env("RUSTFLAGS", "-Crelocation-model=static");
+
 		cargo
 			.current_dir(super::parent_root())
 			.arg("build")
