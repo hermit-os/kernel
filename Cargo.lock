@@ -562,6 +562,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55dd888a213fc57e957abf2aa305ee3e8a28dbe05687a251f33b637cd46b0070"
 
 [[package]]
+name = "elf-symbols"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1c04d6bdc16d03d4e204d6cd018db65f0947013bb4129d1f9a935ff9562af9e"
+
+[[package]]
 name = "embedded-hal"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -839,6 +845,7 @@ dependencies = [
  "delegate",
  "document-features",
  "elf",
+ "elf-symbols",
  "embedded-io",
  "endian-num",
  "enum_dispatch",
