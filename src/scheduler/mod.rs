@@ -194,6 +194,8 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 					self.custom_wakeup(task);
 				}
 			}
+
+			TASKS.lock().remove(&current_id);
 		});
 
 		self.reschedule();
