@@ -61,10 +61,6 @@ bitflags! {
 
 #[allow(dead_code)]
 impl PageTableEntryFlags {
-	/// An empty set of flags for unused/zeroed table entries.
-	/// Needed as long as empty() is no const function.
-	const BLANK: PageTableEntryFlags = PageTableEntryFlags::empty();
-
 	pub fn device(&mut self) -> &mut Self {
 		self
 	}
@@ -183,7 +179,7 @@ pub enum BasePageSize {}
 impl PageSize for BasePageSize {
 	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 0;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
+	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::empty();
 }
 
 /// A 2 MiB page mapped in the L2Table.
@@ -192,7 +188,7 @@ pub enum LargePageSize {}
 impl PageSize for LargePageSize {
 	const SIZE: u64 = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
+	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::empty();
 }
 
 /// A 1 GiB page mapped in the L1Table.
@@ -201,7 +197,7 @@ pub enum HugePageSize {}
 impl PageSize for HugePageSize {
 	const SIZE: u64 = 1024 * 1024 * 1024;
 	const MAP_LEVEL: usize = 2;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
+	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::empty();
 }
 
 /// A memory page of the size given by S.
@@ -382,7 +378,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		if physical_address.is_null() && flags == PageTableEntryFlags::BLANK {
+		if physical_address.is_null() && flags == PageTableEntryFlags::empty() {
 			// Clear PTE
 			self.entries[index].unset();
 		} else {
@@ -440,7 +436,7 @@ where
 				let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 				let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
 				let new_entry = PhysAddr::from(frame_range.start());
-				self.entries[index].set(new_entry, PageTableEntryFlags::BLANK);
+				self.entries[index].set(new_entry, PageTableEntryFlags::empty());
 
 				// trace!("new_entry {:#X}", new_entry);
 
@@ -630,7 +626,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	}; */
 	ROOT_PAGETABLE
 		.lock()
-		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
+		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
 }
 
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
