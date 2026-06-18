@@ -7,7 +7,7 @@ use embedded_io::{ErrorType, Read, ReadReady, Write};
 use heapless::Vec;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
-use crate::arch::SerialDevice;
+use crate::arch::kernel::serial::SerialDevice;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioUART;
 use crate::errno::Errno;
@@ -152,7 +152,9 @@ impl Write for Console {
 pub(crate) static CONSOLE_WAKER: InterruptTicketMutex<WakerRegistration> =
 	InterruptTicketMutex::new(WakerRegistration::new());
 pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
-	crate::CoreLocal::install();
+	use crate::arch::kernel::core_local::CoreLocal;
+
+	CoreLocal::install();
 
 	#[cfg(feature = "uhyve")]
 	if crate::env::is_uhyve() {

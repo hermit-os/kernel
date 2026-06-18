@@ -15,7 +15,7 @@ use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFla
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
-use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
 #[repr(C, packed)]

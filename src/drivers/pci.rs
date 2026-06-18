@@ -19,7 +19,7 @@ use pci_types::{
 	InterruptPin, MAX_BARS, PciAddress, PciHeader, StatusRegister, VendorId,
 };
 
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
 #[cfg(feature = "virtio-console")]
@@ -432,7 +432,7 @@ pub(crate) fn get_interrupt_handlers() -> HashMap<InterruptLine, InterruptHandle
 
 	#[cfg(target_arch = "x86_64")]
 	{
-		use crate::kernel::serial::get_serial_handler;
+		use crate::arch::kernel::serial::get_serial_handler;
 		let (irq_number, handler) = get_serial_handler();
 
 		handlers.entry(irq_number).or_default().push_back(handler);

@@ -18,7 +18,7 @@ use core::time::Duration;
 use crossbeam_utils::Backoff;
 use hermit_sync::without_interrupts;
 
-use crate::arch::core_local;
+use crate::arch::kernel::core_local;
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;

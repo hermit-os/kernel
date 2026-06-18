@@ -95,11 +95,9 @@ use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use arch::core_local::*;
-
-pub(crate) use crate::arch::*;
-pub use crate::config::DEFAULT_STACK_SIZE;
-pub(crate) use crate::config::*;
+use self::arch::kernel;
+use self::arch::kernel::core_local::{core_id, core_scheduler};
+use self::arch::kernel::interrupts;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 
 #[macro_use]
@@ -109,7 +107,9 @@ mod macros;
 mod logging;
 
 pub mod arch;
-mod config;
+#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+pub mod common_os;
+pub mod config;
 pub mod console;
 mod drivers;
 mod entropy;
@@ -232,6 +232,8 @@ fn synch_all_cores() {
 /// Entry Point of Hermit for the Boot Processor
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
+	use crate::config::USER_STACK_SIZE;
+
 	// Initialize the kernel and hardware.
 	mm::claim_initial_heap();
 	hermit_sync::Lazy::force(&console::CONSOLE);
@@ -267,7 +269,7 @@ fn boot_processor_main() -> ! {
 		info!("FDT:\n{fdt:#?}");
 	}
 
-	boot_processor_init();
+	kernel::boot_processor_init();
 
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
@@ -293,7 +295,7 @@ fn boot_processor_main() -> ! {
 /// Entry Point of Hermit for an Application Processor
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
-	application_processor_init();
+	kernel::application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 	interrupts::enable();

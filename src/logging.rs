@@ -5,6 +5,8 @@ use core::time::Duration;
 use anstyle::AnsiColor;
 use log::{Level, LevelFilter, Metadata, Record};
 
+use crate::arch::kernel::{core_local, processor};
+
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 
 /// Data structure to filter kernel messages
@@ -44,9 +46,9 @@ impl log::Log for KernelLogger {
 
 		let time = self
 			.time()
-			.then(|| Duration::from_micros(crate::processor::get_timer_ticks()));
+			.then(|| Duration::from_micros(processor::get_timer_ticks()));
 		let format_time = LogTime(time);
-		let core_id = crate::arch::core_local::core_id();
+		let core_id = core_local::core_id();
 		let level = ColorLevel(record.level());
 
 		let target = record.target();

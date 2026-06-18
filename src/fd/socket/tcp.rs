@@ -10,12 +10,13 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
+use crate::config::DEFAULT_KEEP_ALIVE_INTERVAL;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC, wake_network_waker};
 use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::io;
 use crate::syscalls::socket::Af;
-use crate::{DEFAULT_KEEP_ALIVE_INTERVAL, io};
 
 /// Further receives will be disallowed
 pub const SHUT_RD: i32 = 0;

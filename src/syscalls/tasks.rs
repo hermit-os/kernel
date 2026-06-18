@@ -2,8 +2,8 @@ use alloc::collections::BTreeMap;
 
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::core_local::*;
-use crate::arch::processor::{get_frequency, get_timestamp};
+use crate::arch::kernel::core_local::*;
+use crate::arch::kernel::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::Errno;
 use crate::scheduler::PerCoreSchedulerExt;
@@ -69,7 +69,7 @@ pub(super) fn usleep(usecs: u64) {
 	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {usecs} microseconds");
-		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
+		let wakeup_time = arch::kernel::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
 		core_scheduler.block_current_task(Some(wakeup_time));
 
@@ -202,7 +202,7 @@ static BLOCKED_TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 
 fn block_current_task(timeout: Option<u64>) {
-	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);
+	let wakeup_time = timeout.map(|t| arch::kernel::processor::get_timer_ticks() + t * 1000);
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();

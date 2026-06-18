@@ -21,6 +21,8 @@ use core::{ptr, str};
 
 use memory_addresses::PhysAddr;
 
+pub(crate) use self::interrupts::wakeup_core;
+pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
@@ -124,7 +126,7 @@ pub fn boot_next_processor() {
 
 		use memory_addresses::VirtAddr;
 
-		use crate::kernel::start::{TTBR0, smp_start};
+		use crate::arch::aarch64::kernel::start::{TTBR0, smp_start};
 		use crate::mm::virtual_to_physical;
 
 		if cpu_online == 0 {

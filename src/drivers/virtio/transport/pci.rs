@@ -18,7 +18,7 @@ use virtio::{DeviceStatus, le16, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
-use crate::arch::pci::PciConfigRegion;
+use crate::arch::kernel::pci::PciConfigRegion;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
@@ -654,7 +654,7 @@ pub(crate) fn init_device(
 				info!("Virtio console driver initialized.");
 
 				let irq = device.get_irq().unwrap();
-				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
@@ -674,7 +674,7 @@ pub(crate) fn init_device(
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					let irq = device.get_irq().unwrap();
-					crate::arch::interrupts::add_irq_name(irq, "virtio");
+					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
@@ -695,7 +695,7 @@ pub(crate) fn init_device(
 				info!("Virtio network driver initialized.");
 
 				let irq = device.get_irq().unwrap();
-				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
@@ -713,7 +713,7 @@ pub(crate) fn init_device(
 				info!("Virtio sock driver initialized.");
 
 				let irq = device.get_irq().unwrap();
-				crate::arch::interrupts::add_irq_name(irq, "virtio");
+				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 				info!("Virtio interrupt handler at line {irq}");
 
 				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_sock_drv)))

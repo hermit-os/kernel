@@ -2,11 +2,11 @@ use pci_types::CommandRegister;
 use virtio::console::Config;
 use volatile::VolatileRef;
 
+use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci::{self, PciCap, UniCapsColl};
-use crate::pci::PciConfigRegion;
 
 // Backend-dependent interface for Virtio console driver
 impl VirtioConsoleDriver {
