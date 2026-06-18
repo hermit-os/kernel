@@ -17,7 +17,7 @@ use crate::fd::socket::vsock;
 use crate::fd::stdio::{ConsoleStderr, ConsoleStdin, ConsoleStdout};
 #[cfg(feature = "uhyve")]
 use crate::fd::stdio::{UhyveStderr, UhyveStdin, UhyveStdout};
-use crate::fd::{AccessPermission, ObjectInterface, PollEvent, StatusFlags};
+use crate::fd::{AccessPermission, ObjectInterface, PollEvent, SocketOptionValue, StatusFlags};
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use crate::fd::{Endpoint, ListenEndpoint, SocketOption};
 use crate::fs::mem::{MemDirectoryInterface, RamFileInterface, RomFileInterface};
@@ -158,7 +158,7 @@ impl ObjectInterface for Fd {
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn listen(&mut self, _backlog: i32) -> io::Result<()>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-			async fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> io::Result<()>;
+			async fn setsockopt(&self, _opt: SocketOption, _optval: SocketOptionValue) -> io::Result<()>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn getsockopt(&self, _opt: SocketOption) -> io::Result<c_int>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
