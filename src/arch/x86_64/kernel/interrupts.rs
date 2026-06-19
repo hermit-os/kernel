@@ -83,7 +83,7 @@ pub(crate) fn enable_and_wait() {
 		}
 	} else {
 		#[cfg(feature = "smp")]
-		if !scheduler::sleep_state::core_sleep() {
+		if !scheduler::sleep_state::try_sleep() {
 			return;
 		}
 

@@ -12,7 +12,7 @@ struct SleepState(AtomicU8);
 
 /// # Race condition prevention
 ///
-/// Two methods matter here: [crate::arch::interrupts::enable_and_wait] and [crate::arch::wakeup_core].
+/// Two methods matter here: `crate::arch::interrupts::enable_and_wait` and `crate::arch::wakeup_core`.
 /// `enable_and_wait` checks the status, ensuring it is set to 0+setting it to 1, then sleeps.
 /// `wakeup_core` checks the status, ensuring it is set to 1+setting it to 0, then issues interrupt.
 ///
@@ -34,12 +34,12 @@ impl SleepState {
 	const STATUS_DONT_SLEEP: u8 = 2;
 
 	fn new() -> Self {
-		Self(AtomicU8::new(SleepState::STATUS_ACTIVE))
+		Self(AtomicU8::new(Self::STATUS_ACTIVE))
 	}
 
 	#[inline]
 	fn set_active(&self) {
-		self.0.store(SleepState::STATUS_ACTIVE, Ordering::SeqCst);
+		self.0.store(Self::STATUS_ACTIVE, Ordering::SeqCst);
 	}
 
 	/// Indicates that this core will go to HLT.
@@ -49,8 +49,8 @@ impl SleepState {
 		if self
 			.0
 			.compare_exchange(
-				SleepState::STATUS_ACTIVE,
-				SleepState::STATUS_IDLE,
+				Self::STATUS_ACTIVE,
+				Self::STATUS_IDLE,
 				Ordering::SeqCst,
 				Ordering::Relaxed,
 			)
@@ -84,10 +84,10 @@ impl SleepState {
 		// Ask the core not to sleep.
 		// This makes sure that if the two atomic operations become interleaved, the core will
 		// not go to sleep with us assuming it was running.
-		let previous_state = self.0.swap(SleepState::STATUS_DONT_SLEEP, Ordering::SeqCst);
+		let previous_state = self.0.swap(Self::STATUS_DONT_SLEEP, Ordering::SeqCst);
 
 		// If the core was idle, we can actually wake it up
-		if previous_state == SleepState::STATUS_IDLE {
+		if previous_state == Self::STATUS_IDLE {
 			// Again, this operation is not necessarily ordered.
 			// - Another `go_to_sleep` could be processing, either BEFORE or AFTER the atomic op.
 			//    * BEFORE:
@@ -119,12 +119,17 @@ pub(super) fn install_for_core(core_id: CoreId) {
 		.insert(core_id.try_into().unwrap(), SleepState::new());
 }
 
+/// Tries to put the core to sleep.
+/// Returns `true` if the core can safely sleep, `false` if it should continue running.
 #[inline]
-pub fn core_sleep() -> bool {
+pub fn try_sleep() -> bool {
 	CORE_HLT_STATE.read()[usize::try_from(core_id()).unwrap()].go_to_sleep()
 }
 
+/// Tries to wake up the core.
+/// Returns `true` if the core should be woken up via an interrupt, `false` if the core is already
+/// running.
 #[inline]
-pub fn core_wake_up(core_id: CoreId) -> bool {
+pub fn try_wake_up(core_id: CoreId) -> bool {
 	CORE_HLT_STATE.read()[usize::try_from(core_id).unwrap()].wake_up()
 }
