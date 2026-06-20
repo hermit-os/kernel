@@ -24,7 +24,12 @@ pub(crate) enum VsockState {
 	ReceiveRequest,
 	Connected,
 	Connecting,
+	/// The peer sent a graceful `Op::Shutdown`. Buffered data may still be
+	/// read; once drained, reads report EOF.
 	Shutdown,
+	/// The peer (or the device) sent an abortive `Op::Rst`. Buffered data may
+	/// still be read; once drained, reads report `ECONNRESET`.
+	Reset,
 }
 
 pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;
@@ -130,6 +135,16 @@ async fn vsock_run() {
 			} else if op == Op::Shutdown {
 				if raw.remote_cid == header_cid {
 					raw.state = VsockState::Shutdown;
+					raw.rx_waker.wake();
+					raw.tx_waker.wake();
+				} else {
+					trace!("Receive message from invalid source {header_cid}");
+				}
+			} else if op == Op::Rst {
+				if raw.remote_cid == header_cid {
+					raw.state = VsockState::Reset;
+					raw.rx_waker.wake();
+					raw.tx_waker.wake();
 				} else {
 					trace!("Receive message from invalid source {header_cid}");
 				}
