@@ -11,9 +11,16 @@ use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::errno::Errno;
-use crate::executor::vsock::{VSOCK_MAP, VsockState};
+use crate::executor::vsock::{ConnKey, RawSocket, VSOCK_MAP, VsockState};
 use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
+
+/// Further receives will be disallowed
+pub const SHUT_RD: i32 = 0;
+/// Further sends will be disallowed
+pub const SHUT_WR: i32 = 1;
+/// Further sends and receives will be disallowed
+pub const SHUT_RDWR: i32 = 2;
 
 #[derive(Debug)]
 pub struct VsockListenEndpoint {
@@ -39,21 +46,14 @@ impl VsockEndpoint {
 	}
 }
 
-pub struct NullSocket;
-
-impl NullSocket {
-	pub const fn new() -> Self {
-		Self {}
-	}
-}
-
-impl ObjectInterface for NullSocket {}
-
 pub struct Socket {
+	/// The local port this socket is bound/listening on, or the synthetic
+	/// ephemeral port of an outbound connection.
 	port: u32,
-	/// The port this socket is bound/listening on. Stays fixed across accepts
-	/// while `port` is updated to the ephemeral connection port after each accept.
-	listen_port: u32,
+	/// Set for sockets returned by `accept`: identifies the established
+	/// connection in the executor's connection map. `None` for listeners and
+	/// outbound-connect sockets, which are keyed by `port` instead.
+	conn: Option<ConnKey>,
 	cid: u32,
 	is_nonblocking: bool,
 }
@@ -62,9 +62,22 @@ impl Socket {
 	pub fn new() -> Self {
 		Self {
 			port: 0,
-			listen_port: 0,
+			conn: None,
 			cid: u32::MAX,
 			is_nonblocking: false,
+		}
+	}
+
+	/// Borrow this socket's `RawSocket` from the executor map, whether it is a
+	/// listener/connect socket (keyed by `port`) or an accepted connection
+	/// (keyed by `conn`).
+	fn raw_mut<'a>(
+		&self,
+		guard: &'a mut crate::executor::vsock::VsockMap,
+	) -> Option<&'a mut RawSocket> {
+		match self.conn {
+			Some(key) => guard.get_mut_connection(key),
+			None => guard.get_mut_socket(self.port),
 		}
 	}
 }
@@ -73,7 +86,7 @@ impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(self.port).ok_or(Errno::Inval)?;
+			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Shutdown | VsockState::ReceiveRequest => {
@@ -143,7 +156,6 @@ impl ObjectInterface for Socket {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
 				self.port = ep.port;
-				self.listen_port = ep.port;
 				if let Some(cid) = ep.cid {
 					self.cid = cid;
 				} else {
@@ -216,8 +228,8 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
-		let guard = VSOCK_MAP.lock();
-		let raw = guard.get_socket(self.port).ok_or(Errno::Inval)?;
+		let mut guard = VSOCK_MAP.lock();
+		let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
 			raw.remote_port,
@@ -239,10 +251,10 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
-		let port = self.listen_port;
+		let port = self.port;
 		let cid = self.cid;
 
-		let (conn_port, endpoint) = future::poll_fn(|cx| {
+		let (conn_key, endpoint) = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
@@ -282,28 +294,41 @@ impl ObjectInterface for Socket {
 
 					let endpoint = VsockEndpoint::new(raw.remote_port, raw.remote_cid);
 
-					// Move the accepted connection to an ephemeral port so the
-					// listener entry can be reset to Listen for the next accept.
-					let conn_port = guard.move_to_ephemeral(port)?;
+					// Move the pending connection into the connection map keyed by its
+					// remote endpoint and reset the listener so it keeps accepting.
+					let conn_key = guard.establish(port)?;
 
-					Poll::Ready(Ok((conn_port, endpoint)))
+					Poll::Ready(Ok((conn_key, endpoint)))
 				}
 				_ => Poll::Ready(Err(Errno::Badf)),
 			}
 		})
 		.await?;
 
-		// This Socket now tracks the accepted connection, not the listener.
-		self.port = conn_port;
+		// Return the accepted connection as a DISTINCT Socket addressing the
+		// established connection. The listener `self` is left untouched, so it
+		// keeps accepting further connections on the same port.
+		let conn = Socket {
+			port,
+			conn: Some(conn_key),
+			cid: self.cid,
+			is_nonblocking: self.is_nonblocking,
+		};
 
 		Ok((
-			Arc::new(async_lock::RwLock::new(NullSocket::new().into())),
+			Arc::new(async_lock::RwLock::new(conn.into())),
 			Endpoint::Vsock(endpoint),
 		))
 	}
 
-	async fn shutdown(&self, _how: i32) -> io::Result<()> {
-		Ok(())
+	async fn shutdown(&self, how: i32) -> io::Result<()> {
+		// Validate `how` for parity with the other socket types. This does not
+		// yet emit an `Op::Shutdown` to the peer, so a remote `read` is not
+		// woken with EOF by a local shutdown.
+		match how {
+			SHUT_RD | SHUT_WR | SHUT_RDWR => Ok(()),
+			_ => Err(Errno::Inval),
+		}
 	}
 
 	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
@@ -322,10 +347,9 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
-		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
+			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Connected => {
@@ -367,7 +391,7 @@ impl ObjectInterface for Socket {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
+			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 			let diff = raw.tx_cnt.abs_diff(raw.peer_fwd_cnt);
 
 			match raw.state {
@@ -423,6 +447,9 @@ impl ObjectInterface for Socket {
 impl Drop for Socket {
 	fn drop(&mut self) {
 		let mut guard = VSOCK_MAP.lock();
-		guard.remove_socket(self.port);
+		match self.conn {
+			Some(key) => guard.remove_connection(key),
+			None => guard.remove_socket(self.port),
+		}
 	}
 }

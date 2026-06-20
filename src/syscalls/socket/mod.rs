@@ -711,7 +711,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 					}
 					#[cfg(feature = "virtio-vsock")]
 					Endpoint::Vsock(endpoint) => {
-						let new_fd = insert_object(v.clone()).unwrap();
+						let new_fd = insert_object(obj).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
 							let addrlen = unsafe { &mut *addrlen };
