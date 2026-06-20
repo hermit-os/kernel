@@ -249,12 +249,23 @@ impl VsockMap {
 	/// reset the listener entry to `Listen` so it can accept further
 	/// connections. Returns the new connection's key.
 	pub fn establish(&mut self, listen_port: u32) -> io::Result<ConnKey> {
-		let mut conn = self.port_map.remove(&listen_port).ok_or(Errno::Inval)?;
-		conn.state = VsockState::Connected;
-		let key = (listen_port, conn.remote_cid, conn.remote_port);
+		let listener = self.port_map.get_mut(&listen_port).ok_or(Errno::Inval)?;
+		let key = (listen_port, listener.remote_cid, listener.remote_port);
 
-		self.port_map
-			.insert(listen_port, RawSocket::new(VsockState::Listen));
+		// Build the connection entry from the negotiated handshake state, then
+		// reset the listener's fields in place. Resetting in place (rather than
+		// replacing the whole struct) preserves the listener's wakers, so an
+		// `accept()` future already parked on it is not lost.
+		let mut conn = RawSocket::new(VsockState::Connected);
+		conn.remote_cid = listener.remote_cid;
+		conn.remote_port = listener.remote_port;
+		conn.peer_buf_alloc = listener.peer_buf_alloc;
+
+		listener.state = VsockState::Listen;
+		listener.remote_cid = 0;
+		listener.remote_port = 0;
+		listener.peer_buf_alloc = 0;
+
 		self.conn_map.insert(key, conn);
 		Ok(key)
 	}
