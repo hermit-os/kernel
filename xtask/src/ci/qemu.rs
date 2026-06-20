@@ -94,7 +94,7 @@ impl Qemu {
 	pub fn run(
 		self,
 		image: &Path,
-		features: &[String],
+		_features: &[String],
 		smp: usize,
 		arch: Arch,
 		small: bool,
@@ -169,13 +169,7 @@ impl Qemu {
 			"mioudp" => test_mioudp(guest_ip)?,
 			"poll" => test_poll(guest_ip)?,
 			"stdin" => test_stdin(&mut qemu.0)?,
-			"vsock" => {
-				let has_client = features
-					.iter()
-					.flat_map(|s| s.split(&[' ', ','][..]))
-					.any(|feature| feature == "client");
-				test_vsock(has_client)?;
-			}
+			"vsock" => test_vsock()?,
 			_ => {}
 		}
 
@@ -598,10 +592,20 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 	Ok(())
 }
 
-fn test_vsock(has_client: bool) -> Result<()> {
-	if has_client {
-		// The VM connects out to us; we listen, then echo back what it sends.
-		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, 9975)?;
+fn test_vsock() -> Result<()> {
+	// The VM first connects out to us; we listen, send some messages, and check
+	// the VM echoes them back (#880). Then the VM listens and we open
+	// PING_PONG_CONNECTIONS connections to it, each expecting a "pong" reply to
+	// our "ping". The VM accepting more than one connection is the regression
+	// test for hermit-os/kernel#2433.
+	const ECHO_PORT: u32 = 9975;
+	const PING_PONG_PORT: u32 = 9976;
+	const GUEST_CID: u32 = 3;
+	const PING_PONG_CONNECTIONS: usize = 2;
+
+	// Example 1: we listen, the VM connects, we verify it echoes our messages.
+	{
+		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, ECHO_PORT)?;
 		let (mut stream, _addr) = listener.accept()?;
 
 		let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
@@ -616,41 +620,17 @@ fn test_vsock(has_client: bool) -> Result<()> {
 		let s = str::from_utf8(&buf[0..n])?;
 		let received_messages = s.trim().split('\n').collect::<Vec<_>>();
 		assert_eq!(received_messages, messages);
-
-		return Ok(());
+		// Drop `stream`/`listener` here so the VM sees EOF and moves on to
+		// listening for the ping/pong phase.
 	}
 
-	// The VM listens. We first open one connection and check it echoes our
-	// messages back (#880), then open PING_PONG_CONNECTIONS further
-	// connections, each expecting a "pong" reply to our "ping". Accepting more
-	// than the first connection is the regression test for
-	// hermit-os/kernel#2433.
-	const PORT: u32 = 9975;
-	const PING_PONG_CONNECTIONS: usize = 2;
+	// Example 2: the VM listens; we connect, send "ping", expect "pong".
+	// Give the VM time to start listening on the ping/pong port before we
+	// connect.
+	thread::sleep(Duration::from_secs(1));
 
-	thread::sleep(Duration::from_secs(10));
-
-	// First connection: send messages and verify they are echoed back.
-	{
-		let mut stream = VsockStream::connect_with_cid_port(3, PORT)?;
-		let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
-		for message in messages {
-			writeln!(&mut stream, "{message}")?;
-			thread::sleep(Duration::from_secs(1));
-		}
-
-		const BUF_SIZE: usize = 8 * 1024;
-		let mut buf = vec![0; BUF_SIZE];
-		let n = stream.read(&mut buf)?;
-		let s = str::from_utf8(&buf[0..n])?;
-		let received_messages = s.trim().split('\n').collect::<Vec<_>>();
-		assert_eq!(received_messages, messages);
-		// Drop `stream` here so the VM's echo loop sees EOF and moves on.
-	}
-
-	// Further connections: send "ping", expect "pong".
 	let do_ping_pong = || -> Result<()> {
-		let mut stream = VsockStream::connect_with_cid_port(3, PORT)?;
+		let mut stream = VsockStream::connect_with_cid_port(GUEST_CID, PING_PONG_PORT)?;
 		stream.write_all(b"ping")?;
 		let mut buf = [0u8; 64];
 		let n = stream.read(&mut buf)?;
