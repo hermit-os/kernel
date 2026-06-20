@@ -105,6 +105,20 @@ impl ObjectInterface for Socket {
 						Poll::Ready(Ok(ret))
 					}
 				}
+				VsockState::Reset => {
+					// Reset is readable/writable so the next read/write
+					// observes ECONNRESET, and signals error + hangup.
+					let available = PollEvent::POLLIN
+						| PollEvent::POLLRDNORM
+						| PollEvent::POLLRDBAND
+						| PollEvent::POLLOUT
+						| PollEvent::POLLWRNORM
+						| PollEvent::POLLWRBAND;
+
+					Poll::Ready(Ok((event & available)
+						| PollEvent::POLLERR
+						| PollEvent::POLLHUP))
+				}
 				VsockState::Listen | VsockState::Connecting => {
 					raw.rx_waker.register(cx.waker());
 					raw.tx_waker.register(cx.waker());
@@ -217,6 +231,9 @@ impl ObjectInterface for Socket {
 							raw.rx_waker.register(cx.waker());
 							Poll::Pending
 						}
+						// A reset in response to our request means the peer
+						// refused the connection.
+						VsockState::Reset => Poll::Ready(Err(Errno::Connrefused)),
 						_ => Poll::Ready(Err(Errno::Badf)),
 					}
 				})
@@ -369,19 +386,29 @@ impl ObjectInterface for Socket {
 						Poll::Ready(Ok(len))
 					}
 				}
-				VsockState::Shutdown => {
+				VsockState::Shutdown | VsockState::Reset => {
 					let len = core::cmp::min(buffer.len(), raw.buffer.len());
 
-					if len == 0 {
-						Poll::Ready(Ok(0))
-					} else {
+					if len != 0 {
+						// Deliver any data buffered before the peer closed or
+						// reset the connection.
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
 						buffer[..len].copy_from_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
+					} else if raw.state == VsockState::Reset {
+						// Abortive close with no remaining data: surface
+						// ECONNRESET, matching Linux `AF_VSOCK`.
+						Poll::Ready(Err(Errno::Connreset))
+					} else {
+						// Graceful shutdown, buffer drained: report EOF.
+						Poll::Ready(Ok(0))
 					}
 				}
-				_ => Poll::Ready(Err(Errno::Io)),
+				// A connection-keyed socket only ever holds Connected, Shutdown,
+				// or Reset; the remaining states cannot occur here. Treat them
+				// as EOF defensively.
+				_ => Poll::Ready(Ok(0)),
 			}
 		})
 		.await
@@ -437,7 +464,12 @@ impl ObjectInterface for Socket {
 						Poll::Ready(Ok(len))
 					}
 				}
-				_ => Poll::Ready(Err(Errno::Io)),
+				// Peer reset the connection: writing fails with ECONNRESET.
+				VsockState::Reset => Poll::Ready(Err(Errno::Connreset)),
+				// Peer closed its receive half (graceful shutdown) or the
+				// connection is otherwise gone: writing fails with EPIPE,
+				// matching Linux `AF_VSOCK`.
+				_ => Poll::Ready(Err(Errno::Pipe)),
 			}
 		})
 		.await
