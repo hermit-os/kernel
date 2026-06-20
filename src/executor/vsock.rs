@@ -29,13 +29,15 @@ pub(crate) enum VsockState {
 
 pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;
 
+/// Identifies an established connection by its local (listen) port and the
+/// remote endpoint `(remote_cid, remote_port)`. Multiple connections may share
+/// one local port, mirroring how TCP demultiplexes by the connection 4-tuple.
+pub(crate) type ConnKey = (u32, u32, u32);
+
 #[derive(Debug)]
 pub(crate) struct RawSocket {
 	pub remote_cid: u32,
 	pub remote_port: u32,
-	/// The listen port this connection was accepted on. Zero for listener and
-	/// outbound-connect sockets.
-	pub listen_port: u32,
 	pub fwd_cnt: u32,
 	pub peer_fwd_cnt: u32,
 	pub peer_buf_alloc: u32,
@@ -51,7 +53,6 @@ impl RawSocket {
 		Self {
 			remote_cid: 0,
 			remote_port: 0,
-			listen_port: 0,
 			fwd_cnt: 0,
 			peer_fwd_cnt: 0,
 			peer_buf_alloc: 0,
@@ -81,20 +82,17 @@ async fn vsock_run() {
 			let type_ = Type::try_from(header.type_.to_ne()).unwrap();
 			let mut vsock_guard = VSOCK_MAP.lock();
 			let header_cid: u32 = header.src_cid.to_ne().try_into().unwrap();
+			let remote_port = header.src_port.to_ne();
 
-			// For data/shutdown packets, prefer a connected socket that was
-			// accepted on this port over the listener entry itself.
-			let header_cid_inner: u32 = header_cid;
-			let raw_port = header.src_port.to_ne();
-			let raw = if matches!(op, Op::Rw | Op::Shutdown | Op::CreditUpdate | Op::Response) {
-				if let Some(conn) = vsock_guard.get_mut_connected(port, header_cid_inner, raw_port)
-				{
-					conn
-				} else if let Some(s) = vsock_guard.get_mut_socket(port) {
-					s
-				} else {
-					return;
-				}
+			// Packets for an established connection address the local listen
+			// port but belong to a specific remote endpoint, so route them to
+			// the connection entry keyed by `(port, remote_cid, remote_port)`.
+			// `Op::Request` (and outbound-connect responses) have no such entry
+			// yet and fall back to the listener/connect socket in `port_map`.
+			let raw = if let Some(conn) =
+				vsock_guard.get_mut_connection((port, header_cid, remote_port))
+			{
+				conn
 			} else if let Some(s) = vsock_guard.get_mut_socket(port) {
 				s
 			} else {
@@ -142,6 +140,13 @@ async fn vsock_run() {
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
 					raw.tx_waker.wake();
 				}
+			} else if op == Op::Request {
+				// A connection request the listener cannot service right now
+				// (e.g. a previous request is still pending accept on this
+				// port). Reply with a reset so the peer fails fast instead of
+				// blocking until it times out.
+				hdr = Some(*header);
+				fwd_cnt = raw.fwd_cnt;
 			} else if raw.remote_cid == header_cid {
 				hdr = Some(*header);
 				fwd_cnt = raw.fwd_cnt;
@@ -180,13 +185,19 @@ async fn vsock_run() {
 }
 
 pub(crate) struct VsockMap {
+	/// Listeners (keyed by listen port) and outbound-connect sockets (keyed by
+	/// a synthetic ephemeral port).
 	port_map: BTreeMap<u32, RawSocket>,
+	/// Established inbound connections, keyed by `(local_port, remote_cid,
+	/// remote_port)`, so several connections can share one listen port.
+	conn_map: BTreeMap<ConnKey, RawSocket>,
 }
 
 impl VsockMap {
 	pub const fn new() -> Self {
 		Self {
 			port_map: BTreeMap::new(),
+			conn_map: BTreeMap::new(),
 		}
 	}
 
@@ -217,55 +228,35 @@ impl VsockMap {
 		Err(Errno::Badf)
 	}
 
-	pub fn get_socket(&self, port: u32) -> Option<&RawSocket> {
-		self.port_map.get(&port)
-	}
-
 	pub fn get_mut_socket(&mut self, port: u32) -> Option<&mut RawSocket> {
 		self.port_map.get_mut(&port)
 	}
 
-	/// Look up a connected socket by its original listen port and the remote
-	/// endpoint. Used to route data packets after a connection has been moved
-	/// to an ephemeral port by `move_to_ephemeral`.
-	pub fn get_mut_connected(
-		&mut self,
-		listen_port: u32,
-		remote_cid: u32,
-		remote_port: u32,
-	) -> Option<&mut RawSocket> {
-		self.port_map.values_mut().find(|raw| {
-			raw.state == VsockState::Connected
-				&& raw.listen_port == listen_port
-				&& raw.remote_cid == remote_cid
-				&& raw.remote_port == remote_port
-		})
+	pub fn get_mut_connection(&mut self, key: ConnKey) -> Option<&mut RawSocket> {
+		self.conn_map.get_mut(&key)
 	}
 
 	pub fn remove_socket(&mut self, port: u32) {
 		self.port_map.remove(&port);
 	}
 
-	/// Move the socket at `listen_port` to a fresh ephemeral port, reset the
-	/// listener entry to `Listen`, and return the ephemeral port.
-	pub fn move_to_ephemeral(&mut self, listen_port: u32) -> io::Result<u32> {
+	pub fn remove_connection(&mut self, key: ConnKey) {
+		self.conn_map.remove(&key);
+	}
+
+	/// Move the pending connection on `listen_port` (in state `ReceiveRequest`)
+	/// into `conn_map` keyed by `(listen_port, remote_cid, remote_port)`, then
+	/// reset the listener entry to `Listen` so it can accept further
+	/// connections. Returns the new connection's key.
+	pub fn establish(&mut self, listen_port: u32) -> io::Result<ConnKey> {
 		let mut conn = self.port_map.remove(&listen_port).ok_or(Errno::Inval)?;
 		conn.state = VsockState::Connected;
-		conn.listen_port = listen_port;
+		let key = (listen_port, conn.remote_cid, conn.remote_port);
 
-		for ep in u32::MAX / 4..u32::MAX {
-			if let btree_map::Entry::Vacant(v) = self.port_map.entry(ep) {
-				v.insert(conn);
-				self.port_map
-					.insert(listen_port, RawSocket::new(VsockState::Listen));
-				return Ok(ep);
-			}
-		}
-
-		// No ephemeral port available; restore the entry to avoid losing it.
 		self.port_map
 			.insert(listen_port, RawSocket::new(VsockState::Listen));
-		Err(Errno::Badf)
+		self.conn_map.insert(key, conn);
+		Ok(key)
 	}
 }
 
