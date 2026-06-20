@@ -521,6 +521,12 @@ impl BlockedTaskQueue {
 		borrowed.status = TaskStatus::Ready;
 	}
 
+	#[cfg(feature = "preemptive")]
+	#[inline(always)]
+	pub fn is_empty(&self) -> bool {
+		self.list.is_empty()
+	}
+
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
