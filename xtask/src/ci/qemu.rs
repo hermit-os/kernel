@@ -176,19 +176,12 @@ impl Qemu {
 					.any(|feature| feature == "client");
 				test_vsock(has_client)?;
 			}
-			"vsock_server" => {
-				test_vsock_server()?;
-			}
 			_ => {}
 		}
 
 		if matches!(
 			image_name,
-			"axum-example"
-				| "http_server"
-				| "http_server_poll"
-				| "http_server_select"
-				| "vsock" | "vsock_server"
+			"axum-example" | "http_server" | "http_server_poll" | "http_server_select" | "vsock"
 		) || self.devices.contains(&Device::CadenceGem)
 		// sifive_u, on which we test CadenceGem, does not support software shutdowns, so we have to terminate the machine ourselves.
 		{
@@ -606,39 +599,58 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 }
 
 fn test_vsock(has_client: bool) -> Result<()> {
-	let mut stream = if has_client {
+	if has_client {
+		// The VM connects out to us; we listen, then echo back what it sends.
 		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, 9975)?;
-		let (stream, _addr) = listener.accept()?;
-		stream
-	} else {
-		thread::sleep(Duration::from_secs(10));
-		VsockStream::connect_with_cid_port(3, 9975)?
-	};
+		let (mut stream, _addr) = listener.accept()?;
 
-	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
-	for message in messages {
-		writeln!(&mut stream, "{message}")?;
-		thread::sleep(Duration::from_secs(1));
+		let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+		for message in messages {
+			writeln!(&mut stream, "{message}")?;
+			thread::sleep(Duration::from_secs(1));
+		}
+
+		const BUF_SIZE: usize = 8 * 1024;
+		let mut buf = vec![0; BUF_SIZE];
+		let n = stream.read(&mut buf)?;
+		let s = str::from_utf8(&buf[0..n])?;
+		let received_messages = s.trim().split('\n').collect::<Vec<_>>();
+		assert_eq!(received_messages, messages);
+
+		return Ok(());
 	}
 
-	const BUF_SIZE: usize = 8 * 1024;
-	let mut buf = vec![0; BUF_SIZE];
-	let n = stream.read(&mut buf)?;
-	let s = str::from_utf8(&buf[0..n])?;
-	let received_messages = s.trim().split('\n').collect::<Vec<_>>();
-	assert_eq!(received_messages, messages);
-
-	Ok(())
-}
-
-fn test_vsock_server() -> Result<()> {
+	// The VM listens. We first open one connection and check it echoes our
+	// messages back (#880), then open PING_PONG_CONNECTIONS further
+	// connections, each expecting a "pong" reply to our "ping". Accepting more
+	// than the first connection is the regression test for
+	// hermit-os/kernel#2433.
 	const PORT: u32 = 9975;
-	const CONNECTIONS: usize = 2;
+	const PING_PONG_CONNECTIONS: usize = 2;
 
 	thread::sleep(Duration::from_secs(10));
-	let first_stream = VsockStream::connect_with_cid_port(3, PORT)?;
 
-	let do_ping_pong = |mut stream: VsockStream| -> Result<()> {
+	// First connection: send messages and verify they are echoed back.
+	{
+		let mut stream = VsockStream::connect_with_cid_port(3, PORT)?;
+		let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+		for message in messages {
+			writeln!(&mut stream, "{message}")?;
+			thread::sleep(Duration::from_secs(1));
+		}
+
+		const BUF_SIZE: usize = 8 * 1024;
+		let mut buf = vec![0; BUF_SIZE];
+		let n = stream.read(&mut buf)?;
+		let s = str::from_utf8(&buf[0..n])?;
+		let received_messages = s.trim().split('\n').collect::<Vec<_>>();
+		assert_eq!(received_messages, messages);
+		// Drop `stream` here so the VM's echo loop sees EOF and moves on.
+	}
+
+	// Further connections: send "ping", expect "pong".
+	let do_ping_pong = || -> Result<()> {
+		let mut stream = VsockStream::connect_with_cid_port(3, PORT)?;
 		stream.write_all(b"ping")?;
 		let mut buf = [0u8; 64];
 		let n = stream.read(&mut buf)?;
@@ -647,9 +659,8 @@ fn test_vsock_server() -> Result<()> {
 		Ok(())
 	};
 
-	do_ping_pong(first_stream)?;
-	for _ in 1..CONNECTIONS {
-		do_ping_pong(VsockStream::connect_with_cid_port(3, PORT)?)?;
+	for _ in 0..PING_PONG_CONNECTIONS {
+		do_ping_pong()?;
 	}
 
 	Ok(())
