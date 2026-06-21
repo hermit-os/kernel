@@ -246,6 +246,7 @@ pub fn shutdown(error_code: i32) -> ! {
 	semihosting::process::exit(error_code);
 
 	// Last resort: park the CPU forever.
+	#[cfg(not(feature = "semihosting"))]
 	#[allow(clippy::empty_loop)]
 	loop {
 		aarch64_cpu::asm::wfe();
