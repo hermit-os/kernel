@@ -167,9 +167,9 @@ impl ObjectInterface for Fd {
 			#[allow(dead_code)]
 			async fn getpeername(&self) -> io::Result<Option<Endpoint>>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-			async fn recvfrom(&self, _buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)>;
+			async fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-			async fn sendto(&self, _buffer: &[u8], _endpoint: Endpoint) -> io::Result<usize>;
+			async fn sendto(&self, buf: &[u8], _endpoint: Endpoint) -> io::Result<usize>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn shutdown(&self, _how: i32) -> io::Result<()>;
 			async fn status_flags(&self) -> io::Result<StatusFlags>;
