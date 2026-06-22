@@ -15,7 +15,7 @@ defaults:
 
 jobs:
   cargo-deny:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         checks:
@@ -31,7 +31,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: taiki-e/install-action@v2
@@ -74,7 +74,7 @@ jobs:
 
   format:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
@@ -85,7 +85,7 @@ jobs:
 
   lock-file:
     name: Lock file
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
@@ -94,7 +94,7 @@ jobs:
 
   machete:
     name: Machete
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
@@ -105,14 +105,14 @@ jobs:
 
   typos:
     name: Typos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: crate-ci/typos@master
 
   doc:
     name: Doc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
@@ -120,7 +120,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - uses: mkroening/rust-toolchain-toml@main
@@ -132,7 +132,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
       - name: Install QEMU
@@ -156,7 +156,7 @@ jobs:
 
   run-hermit:
     name: Run
-    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     env:
       HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
     defaults:
@@ -180,7 +180,7 @@ jobs:
           - arch: aarch64_be
             packages: qemu-system-arm ipxe-qemu
           - arch: riscv64
-            packages: qemu-system-misc
+            packages: qemu-system-riscv
             rs_flags: --features hermit/semihosting
 
     steps:
