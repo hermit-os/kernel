@@ -29,9 +29,9 @@ use x86_64::VirtAddr;
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
 use crate::arch;
-use crate::arch::core_local::*;
+use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::processor::{self, FPUState};
-use crate::arch::scheduler::TaskStacks;
+use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
 use crate::env;
 #[cfg(not(feature = "common-os"))]
@@ -83,7 +83,7 @@ impl RootPageTable {
 impl Drop for RootPageTable {
 	fn drop(&mut self) {
 		if self.owned {
-			arch::drop_user_space(self.pml4_phys);
+			arch::mm::drop_user_space(self.pml4_phys);
 		}
 	}
 }
@@ -659,7 +659,7 @@ impl Task {
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
 			user_stack_pointer: VirtAddr::zero(),
-			last_fpu_state: arch::processor::FPUState::new(),
+			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks,
 			object_map,
@@ -695,7 +695,7 @@ impl Task {
 			prio: task_prio,
 			last_stack_pointer,
 			user_stack_pointer,
-			last_fpu_state: arch::processor::FPUState::new(),
+			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks,
 			object_map,
