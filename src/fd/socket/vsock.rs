@@ -169,12 +169,19 @@ impl ObjectInterface for Socket {
 	async fn bind(&mut self, endpoint: ListenEndpoint) -> io::Result<()> {
 		match endpoint {
 			ListenEndpoint::Vsock(ep) => {
-				self.port = ep.port;
-				if let Some(cid) = ep.cid {
-					self.cid = cid;
-				} else {
-					self.cid = u32::MAX;
+				// A socket may only listen on `VMADDR_CID_ANY` or this guest's
+				// own CID. Binding to any other CID is rejected, mirroring Linux
+				// `AF_VSOCK` (which returns `EADDRNOTAVAIL`).
+				let cid = ep.cid.unwrap_or(u32::MAX);
+				if cid != u32::MAX {
+					let local_cid = hardware::get_vsock_driver().unwrap().lock().get_cid();
+					if u64::from(cid) != local_cid {
+						return Err(Errno::Addrnotavail);
+					}
 				}
+
+				self.port = ep.port;
+				self.cid = cid;
 				VSOCK_MAP.lock().bind(ep.port)
 			}
 			#[cfg(feature = "net")]
@@ -269,7 +276,6 @@ impl ObjectInterface for Socket {
 
 	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
 		let port = self.port;
-		let cid = self.cid;
 
 		let (conn_key, endpoint) = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -298,11 +304,7 @@ impl ObjectInterface for Socket {
 						response.dst_port = le32::from_ne(raw.remote_port);
 						response.len = le32::from_ne(0);
 						response.type_ = le16::from_ne(Type::Stream.into());
-						if local_cid != u64::from(cid) && cid != u32::MAX {
-							response.op = le16::from_ne(Op::Rst.into());
-						} else {
-							response.op = le16::from_ne(Op::Response.into());
-						}
+						response.op = le16::from_ne(Op::Response.into());
 						response.flags = le32::from_ne(0);
 						response.buf_alloc =
 							le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
