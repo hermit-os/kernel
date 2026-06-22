@@ -86,7 +86,7 @@ bitflags! {
 }
 
 impl PageTableEntryFlags {
-	#[expect(dead_code)]
+	#[allow(dead_code)]
 	pub fn present(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::PRESENT);
 		self
@@ -109,7 +109,7 @@ impl PageTableEntryFlags {
 		self
 	}
 
-	#[expect(dead_code)]
+	#[allow(dead_code)]
 	pub fn read_only(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::READ_ONLY);
 		self
@@ -1193,9 +1193,10 @@ pub fn create_new_root_page_table() -> usize {
 }
 
 /// Returns the physical address of the current task's root page table.
+#[allow(dead_code)]
 #[cfg(feature = "common-os")]
 pub fn get_current_root_page_table() -> usize {
-	use crate::arch::core_local::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 	core_scheduler()
 		.get_current_task()
 		.borrow()
@@ -1340,7 +1341,7 @@ pub fn prepare_mem_copy_on_write() {
 /// simply `memcpy` the parent's stack pages into the child's mapping.
 #[cfg(feature = "common-os")]
 pub fn copy_kernel_stack_to(stack_address: usize) {
-	use crate::arch::core_local::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 
 	let virt_addr = core_scheduler()
 		.get_current_task()

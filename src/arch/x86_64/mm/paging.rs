@@ -480,7 +480,7 @@ pub fn clear_user_space() {
 /// simply `memcpy` the parent's stack pages into the child's mapping.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn copy_kernel_stack_to(stack_address: usize) {
-	use crate::arch::core_local::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 
 	let virt_addr = core_scheduler()
 		.get_current_task()
@@ -546,7 +546,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 ) {
 	use core::arch::asm;
 
-	use crate::arch::core_local::{core_scheduler, increment_irq_counter};
+	use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
 	let swapped_gs = unsafe {
 		if stack_frame.as_mut().read().code_segment == SegmentSelector(0x08) {
 			false

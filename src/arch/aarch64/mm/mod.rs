@@ -3,7 +3,7 @@ pub(crate) mod paging;
 #[cfg(feature = "common-os")]
 pub use paging::{
 	clear_user_space, create_new_root_page_table,
-	drop_user_space, get_current_root_page_table,
+	drop_user_space,
 };
 
 #[cfg(all(feature = "common-os", feature = "fork"))]
