@@ -365,14 +365,14 @@ impl ObjectInterface for Socket {
 		Ok(())
 	}
 
-	async fn read(&self, buffer: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Connected => {
-					let len = core::cmp::min(buffer.len(), raw.buffer.len());
+					let len = core::cmp::min(buf.len(), raw.buffer.len());
 
 					if len == 0 {
 						if self.is_nonblocking {
@@ -383,19 +383,19 @@ impl ObjectInterface for Socket {
 						}
 					} else {
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
-						buffer[..len].copy_from_slice(tmp.as_slice());
+						buf[..len].copy_from_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
 					}
 				}
 				VsockState::Shutdown | VsockState::Reset => {
-					let len = core::cmp::min(buffer.len(), raw.buffer.len());
+					let len = core::cmp::min(buf.len(), raw.buffer.len());
 
 					if len != 0 {
 						// Deliver any data buffered before the peer closed or
 						// reset the connection.
 						let tmp: Vec<_> = raw.buffer.drain(..len).collect();
-						buffer[..len].copy_from_slice(tmp.as_slice());
+						buf[..len].copy_from_slice(tmp.as_slice());
 
 						Poll::Ready(Ok(len))
 					} else if raw.state == VsockState::Reset {
@@ -416,7 +416,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn write(&self, buffer: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
@@ -437,7 +437,7 @@ impl ObjectInterface for Socket {
 						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
 						let local_cid = driver_guard.get_cid();
 						let len = core::cmp::min(
-							buffer.len(),
+							buf.len(),
 							usize::try_from(raw.peer_buf_alloc - diff).unwrap(),
 						);
 
@@ -460,7 +460,7 @@ impl ObjectInterface for Socket {
 							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
 
 							virtio_buffer[HEADER_SIZE..HEADER_SIZE + len]
-								.copy_from_slice(&buffer[..len]);
+								.copy_from_slice(&buf[..len]);
 						});
 
 						Poll::Ready(Ok(len))

@@ -108,8 +108,15 @@ impl ObjectInterface for EventFd {
 
 						cx.wake_by_ref();
 					}
-				} else if let Some(cx) = guard.read_queue.pop_front() {
-					cx.wake_by_ref();
+				} else {
+					// The eventfd is now readable. Wake *all* registered pollers, not
+					// just one: a readable notification is level-triggered, and the
+					// `poll`-based fd multiplexing re-registers a fresh waker on every
+					// poll, so the queue accumulates stale wakers — waking only the
+					// oldest (`pop_front`) can wake a dead waker and miss the real one.
+					for waker in guard.read_queue.drain(..) {
+						waker.wake();
+					}
 				}
 
 				Poll::Ready(Ok(len))

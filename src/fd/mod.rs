@@ -212,13 +212,15 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// `async_read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	async fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
+	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+		let _buf = buf;
 		Err(Errno::Nosys)
 	}
 
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	async fn write(&self, _buf: &[u8]) -> io::Result<usize> {
+	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
+		let _buf = buf;
 		Err(Errno::Nosys)
 	}
 
@@ -235,7 +237,8 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	/// `getdents` fills the given buffer `_buf` with [`Dirent64`](crate::syscalls::Dirent64)
 	/// formatted entries of a directory, imitating the Linux `getdents64` syscall.
 	/// On success, the number of bytes read is returned.  On end of directory, 0 is returned.  On error, -1 is returned
-	async fn getdents(&self, _buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+		let _buf = buf;
 		Err(Errno::Inval)
 	}
 
@@ -290,7 +293,8 @@ pub(crate) trait ObjectInterface: Sync + Send {
 
 	/// Receive a message from a socket
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn recvfrom(&self, _buffer: &mut [MaybeUninit<u8>]) -> io::Result<(usize, Endpoint)> {
+	async fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)> {
+		let _buf = buf;
 		Err(Errno::Nosys)
 	}
 
@@ -302,7 +306,8 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
 	#[cfg(any(feature = "net", feature = "virtio-vsock"))]
-	async fn sendto(&self, _buffer: &[u8], _endpoint: Endpoint) -> io::Result<usize> {
+	async fn sendto(&self, buf: &[u8], _endpoint: Endpoint) -> io::Result<usize> {
+		let _buf = buf;
 		Err(Errno::Nosys)
 	}
 
