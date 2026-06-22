@@ -33,7 +33,6 @@ use crate::arch::kernel::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::io;
-use crate::kernel::scheduler::TaskStacks;
 #[cfg(feature = "common-os")]
 use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::task::*;
@@ -398,7 +397,7 @@ impl PerCoreScheduler {
 		// path) so that the new user-accessible pages get mapped into the
 		// shared root page table.
 		let tls_base = if let Some(ref template) = tls_template {
-			arch::mm::allocate_thread_tls(template)
+			crate::arch::mm::allocate_thread_tls(template)
 		} else {
 			0
 		};
@@ -454,7 +453,7 @@ impl PerCoreScheduler {
 		debug!("Creating user thread {tid} with priority {prio} on core {core_id}");
 
 		if wakeup {
-			arch::wakeup_core(core_id);
+			kernel::wakeup_core(core_id);
 		}
 
 		tid
@@ -1173,7 +1172,8 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	all(feature = "common-os", feature = "fork")
 ))]
 pub unsafe fn fork() -> TaskId {
-	use crate::arch::{prepare_fork_child_stack, prepare_mem_copy_on_write};
+	use crate::arch::kernel::prepare_fork_child_stack;
+	use crate::arch::mm::prepare_mem_copy_on_write;
 
 	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
 
@@ -1288,7 +1288,7 @@ pub unsafe fn fork() -> TaskId {
 	};
 
 	if wakeup {
-		arch::wakeup_core(core_id);
+		kernel::wakeup_core(core_id);
 	}
 
 	debug!("Child was created and has the id {tid}");

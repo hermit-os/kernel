@@ -5,7 +5,7 @@ use core::slice;
 
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
 #[cfg(feature = "common-os")]
-use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+pub use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 #[cfg(feature = "common-os")]
 use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
@@ -64,9 +64,10 @@ pub fn create_new_root_page_table() -> usize {
 }
 
 /// Returns the physical address of the current task's root page table (PML4).
+#[allow(dead_code)]
 #[cfg(feature = "common-os")]
 pub fn get_current_root_page_table() -> usize {
-	use crate::arch::core_local::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 	core_scheduler()
 		.get_current_task()
 		.borrow()

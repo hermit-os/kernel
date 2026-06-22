@@ -22,6 +22,8 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
+#[cfg(feature = "common-os")]
+pub use self::scheduler::prepare_fork_child_stack;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;

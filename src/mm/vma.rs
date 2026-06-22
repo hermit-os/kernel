@@ -5,7 +5,7 @@ use memory_addresses::VirtAddr;
 #[cfg(target_arch = "x86_64")]
 use x86_64::VirtAddr;
 
-use crate::core_local::core_scheduler;
+use crate::arch::kernel::core_local::core_scheduler;
 use crate::errno::Errno;
 
 /// A contiguous range of virtual addresses with uniform protection
