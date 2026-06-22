@@ -4,7 +4,7 @@ on:
     - cron: '0 0 * * *'
 jobs:
   security_audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: rustsec/audit-check@v2

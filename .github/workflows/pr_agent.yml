@@ -8,7 +8,7 @@ on:
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' && (github.event_name == 'pull_request_target' || github.event.issue.pull_request) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       issues: write
       pull-requests: write
