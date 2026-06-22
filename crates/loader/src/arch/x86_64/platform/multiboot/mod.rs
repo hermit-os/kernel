@@ -17,7 +17,6 @@ use crate::BootInfoExt;
 use crate::arch::x86_64::physicalmem::PhysAlloc;
 use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables};
 use crate::fdt::Fdt;
-use crate::os::executable_end;
 
 #[allow(bad_asm_style)]
 mod entry {
@@ -145,7 +144,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
 
 	// determine boot stack address
-	let loader_end = executable_end().as_ptr();
+	let loader_end = elf_symbols::executable_end();
 	let mut new_stack = loader_end.addr().align_up(Size4KiB::SIZE as usize);
 
 	if new_stack + KERNEL_STACK_SIZE as usize > mb_info.addr() {

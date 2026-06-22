@@ -37,7 +37,7 @@ unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
 	crate::log::init();
 	BOOT_PARAMS.store(boot_params, Ordering::Relaxed);
 
-	let loader_end = crate::os::executable_end().as_ptr();
+	let loader_end = elf_symbols::executable_end();
 	let free_addr = loader_end.addr().align_up(Size2MiB::SIZE as usize);
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	info!("Intializing PhysAlloc with {free_addr:#x}");
@@ -80,7 +80,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let boot_params_ref = unsafe { BootParams::get() };
 
 	// determine boot stack address
-	let loader_end = crate::os::executable_end().as_ptr();
+	let loader_end = elf_symbols::executable_end();
 	let stack = (loader_end.addr() + Size4KiB::SIZE as usize).align_up(Size4KiB::SIZE as usize);
 	let stack = loader_end.with_addr(stack).cast::<u8>();
 	// clear stack
