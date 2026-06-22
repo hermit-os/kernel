@@ -8,9 +8,11 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
-use crate::arch::kernel::core_local::*;
 #[cfg(feature = "uhyve")]
 use crate::env::{self, UhyveStartInfo};
+use crate::arch::x86_64::kernel::core_local::*;
+#[cfg(feature = "common-os")]
+pub use self::switch::prepare_fork_child_stack;
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
