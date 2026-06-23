@@ -1,3 +1,6 @@
+#[cfg(all(target_arch = "x86_64", feature = "bga"))]
+use core::ffi::c_int;
+
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 
 /// Returns the base page size, in bytes, of the current system.
@@ -31,4 +34,50 @@ pub unsafe extern "C" fn sys_read_keyboard(buffer: *mut u8, size: usize, nonbloc
 	} else {
 		result as isize
 	}
+}
+#[cfg(all(target_arch = "x86_64", feature = "bga"))]
+#[repr(C)]
+pub struct FramebufferInfo {
+	pub framebuffer: *mut u8,
+	pub width: u32,
+	pub height: u32,
+	pub bpp: u32,
+}
+
+/// Returns the framebuffer information for the video output device.
+/// Returns 0 on success, or -1 if the BGA device has not yet been initialized.
+#[cfg(all(target_arch = "x86_64", feature = "bga"))]
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_get_framebuffer_info(info: *mut FramebufferInfo) -> c_int {
+	if info.is_null() {
+		return -1;
+	};
+
+	let bga_info = crate::arch::kernel::bga::get_framebuffer_info();
+	match bga_info {
+		Some(bga_info) => {
+			let info_c = FramebufferInfo {
+				framebuffer: core::ptr::with_exposed_provenance_mut(
+					bga_info.framebuffer.as_usize(),
+				),
+				width: u32::from(bga_info.width),
+				height: u32::from(bga_info.height),
+				bpp: u32::from(bga_info.bpp),
+			};
+			unsafe {
+				info.write(info_c);
+			}
+			0
+		}
+		None => -1,
+	}
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "bga"))]
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_set_resolution(width: u16, height: u16, bpp: u16) -> c_int {
+	crate::arch::kernel::bga::set_resolution(width, height, bpp);
+	0
 }
