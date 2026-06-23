@@ -6,3 +6,17 @@ use crate::arch::mm::paging::{BasePageSize, PageSize};
 pub extern "C" fn sys_getpagesize() -> i32 {
 	BasePageSize::SIZE.try_into().unwrap()
 }
+
+#[cfg(all(target_arch = "x86_64", feature = "keyboard"))]
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_read_keyboard() -> u8 {
+	crate::kernel::keyboard::pop_scancode().unwrap_or(0)
+}
+
+#[cfg(not(all(target_arch = "x86_64", feature = "keyboard")))]
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_read_keyboard() -> u8 {
+	0
+}
