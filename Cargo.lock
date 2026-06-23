@@ -1158,17 +1158,6 @@ dependencies = [
 
 [[package]]
 name = "memory_addresses"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b0d19077c1bd58a846e275c3bb80527600ab8afbfb2768a80eb39f77cf93f1d"
-dependencies = [
- "align-address 0.4.0",
- "cfg-if",
- "x86_64",
-]
-
-[[package]]
-name = "memory_addresses"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a33ce19da78c437cf69f8c3265a77ca61e08395678b7b9eac42039add3f4f4fb"
@@ -1948,13 +1937,13 @@ dependencies = [
 
 [[package]]
 name = "uhyve-interface"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f9fe9717fe011743d97a5dc1f552656ff2dc934af940261c22fe353c55acd42"
+checksum = "ce486c1c8e5506851de5f819968b80b22fce3cf1246c3a75bf52439448ba9d51"
 dependencies = [
  "aarch64",
  "hermit-abi",
- "memory_addresses 0.3.0",
+ "memory_addresses 0.4.0",
  "num_enum",
  "x86_64",
 ]
