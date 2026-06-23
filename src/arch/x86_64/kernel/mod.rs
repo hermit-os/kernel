@@ -10,7 +10,7 @@ use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
 use crate::arch::x86_64::kernel::core_local::*;
-use crate::env::{self, is_uhyve};
+use crate::env;
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -64,7 +64,7 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && !is_uhyve() {
+	if cfg!(feature = "vga") && !env::is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
@@ -84,7 +84,7 @@ pub fn boot_processor_init() {
 	interrupts::install();
 	systemtime::init();
 
-	if !is_uhyve() {
+	if !env::is_uhyve() {
 		#[cfg(feature = "acpi")]
 		acpi::init();
 	}
@@ -114,7 +114,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	if is_uhyve() {
+	if env::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
 		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.
@@ -132,7 +132,7 @@ pub fn boot_next_processor() {
 	// to initialize the next processor.
 	let cpu_online = CPU_ONLINE.fetch_add(1, Ordering::Release);
 
-	if !is_uhyve() {
+	if !env::is_uhyve() {
 		if cpu_online == 0 {
 			#[cfg(all(target_os = "none", feature = "smp"))]
 			apic::boot_application_processors();
