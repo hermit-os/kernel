@@ -22,6 +22,8 @@ pub mod interrupts;
 pub mod kernel_stack;
 #[cfg(all(not(feature = "pci"), feature = "virtio"))]
 pub mod mmio;
+#[cfg(feature = "pc-keyboard")]
+pub mod pc_keyboard;
 #[cfg(feature = "pci")]
 pub mod pci;
 pub mod pic;
