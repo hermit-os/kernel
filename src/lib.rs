@@ -285,7 +285,7 @@ fn boot_processor_main() -> ! {
 	#[cfg(feature = "smp")]
 	synch_all_cores();
 
-	if kernel::is_uhyve_with_pci() || !env::is_uhyve() {
+	if env::is_uhyve_with_pci() || !env::is_uhyve() {
 		#[cfg(feature = "pci")]
 		drivers::pci::print_information();
 	}

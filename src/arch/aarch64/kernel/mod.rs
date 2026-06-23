@@ -39,10 +39,6 @@ pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::nul
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
-pub fn is_uhyve_with_pci() -> bool {
-	false
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	let fdt = env::fdt().unwrap();

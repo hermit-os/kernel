@@ -47,6 +47,13 @@ pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
+pub fn is_uhyve_with_pci() -> bool {
+	matches!(
+		boot_info().platform_info,
+		PlatformInfo::Uhyve { has_pci: true, .. }
+	)
+}
+
 pub fn is_uefi() -> bool {
 	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
 }
