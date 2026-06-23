@@ -37,10 +37,11 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::virtio::ControlRegisters;
+use crate::drivers::virtio::transport::InterruptCapability;
 #[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, NotifCfg};
 #[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::pci::{ComCfg, NotifCfg};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -242,7 +243,7 @@ pub(crate) struct Init {
 pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) dev_cfg: NetDevCfg,
 	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
+	pub(super) isr_stat: InterruptCapability,
 	pub(super) notif_cfg: NotifCfg,
 
 	pub(super) inner: T,
@@ -519,15 +520,22 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	}
 
 	fn handle_interrupt(&mut self) {
-		let status = self.isr_stat.acknowledge();
+		#[cfg_attr(
+			not(all(feature = "pci", target_arch = "x86_64")),
+			expect(irrefutable_let_patterns)
+		)]
+		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.isr_stat else {
+			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
+		};
+
+		let status = isr_stat.acknowledge();
 
 		let config_change = cfg_select! {
 			feature = "pci" => virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT,
 			_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
 		};
-
-		if status.contains(config_change) && self.com_cfg.does_device_need_reset() {
-			todo!("Device configuration change notification cannot be handled yet");
+		if status.contains(config_change) {
+			self.handle_device_configuration_interrupt();
 		}
 
 		wake_network_waker();
@@ -740,6 +748,12 @@ impl VirtioNetDriver<Init> {
 		// We need to poll to get the queue to remove elements from the table and open up capacity if possible.
 		self.inner.send_capacity += self.inner.send_vqs.poll() * u32::from(BUFF_PER_PACKET);
 	}
+
+	pub(crate) fn handle_device_configuration_interrupt(&self) {
+		if self.com_cfg.does_device_need_reset() {
+			todo!("Device configuration change notification cannot be handled yet");
+		}
+	}
 }
 
 impl VirtioNetDriver<Uninit> {
@@ -835,10 +849,34 @@ impl VirtioNetDriver<Uninit> {
 			self.dev_cfg.dev_id
 		);
 
-		handlers
-			.entry(irq.unwrap())
-			.or_default()
-			.push_back(crate::executor::network::network_handler);
+		match &mut self.isr_stat {
+			InterruptCapability::IsrStatus(_) => {
+				let irq = irq.unwrap();
+				handlers
+					.entry(irq)
+					.or_default()
+					.push_back(crate::executor::network::network_handler);
+				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {irq}");
+			}
+			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+			InterruptCapability::Msix(msix_table) => {
+				let recv_vqs = (0..self.num_vqs).step_by(2);
+				let send_vqs = (1..self.num_vqs).step_by(2);
+				let ctrl_vq = self
+					.dev_cfg
+					.features
+					.contains(virtio::net::F::CTRL_VQ)
+					.then_some(self.num_vqs);
+				self.com_cfg.register_msix_vectors(
+					msix_table,
+					handlers,
+					crate::executor::network::network_device_configuration_handler,
+					[(recv_vqs, wake_network_waker as fn())].into_iter(),
+					send_vqs.chain(ctrl_vq),
+				);
+			}
+		}
 
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();

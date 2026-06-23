@@ -36,10 +36,11 @@ use crate::drivers::mmio::get_filesystem_driver;
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioFsInitError;
+use crate::drivers::virtio::transport::InterruptCapability;
 #[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, NotifCfg};
 #[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::pci::{ComCfg, NotifCfg};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -67,7 +68,7 @@ pub(crate) struct FsDevCfg {
 pub(crate) struct VirtioFsDriver {
 	pub(super) dev_cfg: FsDevCfg,
 	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
+	pub(super) isr_stat: InterruptCapability,
 	pub(super) notif_cfg: NotifCfg,
 	pub(super) vqueues: Vec<VirtQueue>,
 }
@@ -159,11 +160,34 @@ impl VirtioFsDriver {
 			self.vqueues.push(vq);
 		}
 
-		handlers.entry(irq.unwrap()).or_default().push_back(|| {
-			if let Some(driver) = get_filesystem_driver() {
-				driver.lock().handle_interrupt();
-			};
-		});
+		match &mut self.isr_stat {
+			InterruptCapability::IsrStatus(_) => {
+				let irq = irq.unwrap();
+				handlers.entry(irq).or_default().push_back(|| {
+					if let Some(driver) = get_filesystem_driver() {
+						driver.lock().handle_interrupt();
+					};
+				});
+				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {irq}");
+			}
+			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+			InterruptCapability::Msix(msix_table) => {
+				use core::iter;
+
+				self.com_cfg.register_msix_vectors(
+					msix_table,
+					handlers,
+					|| {
+						if let Some(driver) = get_filesystem_driver() {
+							driver.lock().handle_device_configuration_interrupt();
+						};
+					},
+					iter::empty::<(iter::Empty<_>, _)>(),
+					0..vqnum as u16,
+				);
+			}
+		}
 
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
@@ -172,14 +196,27 @@ impl VirtioFsDriver {
 	}
 
 	pub fn handle_interrupt(&mut self) {
-		let status = self.isr_stat.acknowledge();
+		#[cfg_attr(
+			not(all(feature = "pci", target_arch = "x86_64")),
+			expect(irrefutable_let_patterns)
+		)]
+		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.isr_stat else {
+			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
+		};
+
+		let status = isr_stat.acknowledge();
 
 		let config_change = cfg_select! {
 			feature = "pci" => virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT,
 			_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
 		};
+		if status.contains(config_change) {
+			self.handle_device_configuration_interrupt();
+		}
+	}
 
-		if status.contains(config_change) && self.com_cfg.does_device_need_reset() {
+	fn handle_device_configuration_interrupt(&mut self) {
+		if self.com_cfg.does_device_need_reset() {
 			todo!("Device configuration change notification cannot be handled yet");
 		}
 	}
