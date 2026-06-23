@@ -5,7 +5,6 @@ mod unsound_mutex;
 
 use core::fmt::Write;
 use core::mem::MaybeUninit;
-use core::ptr::NonNull;
 use core::{ptr, slice};
 
 use hermit_entry::elf::KernelObject;
@@ -14,31 +13,11 @@ use log::info;
 pub use self::console::CONSOLE;
 use crate::arch;
 
-pub fn executable_start() -> NonNull<()> {
-	unsafe extern "C" {
-		static mut __executable_start: u8;
-	}
-
-	let ptr = &raw mut __executable_start;
-	let ptr = ptr.cast::<()>();
-	NonNull::new(ptr).unwrap()
-}
-
-pub fn executable_end() -> NonNull<()> {
-	unsafe extern "C" {
-		static mut _end: u8;
-	}
-
-	let ptr = &raw mut _end;
-	let ptr = ptr.cast::<()>();
-	NonNull::new(ptr).unwrap()
-}
-
 /// Entry Point of the BIOS Loader
 /// (called from entry.asm or entry.rs)
 pub(crate) unsafe extern "C" fn loader_main() -> ! {
-	let loader_start = executable_start();
-	let loader_end = executable_end();
+	let loader_start = elf_symbols::executable_start();
+	let loader_end = elf_symbols::executable_end();
 	info!("Loader: [{loader_start:p} - {loader_end:p}]");
 
 	let kernel = arch::find_kernel();

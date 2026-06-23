@@ -32,7 +32,7 @@ const KERNEL_STACK_SIZE: usize = 32_768;
 const DEVICE_TREE: u64 = RAM_START;
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	let loader_end = crate::os::executable_end().as_ptr();
+	let loader_end = elf_symbols::executable_end();
 	(loader_end.expose_provenance() as u64).align_up(LargePageSize::SIZE as u64)
 }
 

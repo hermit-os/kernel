@@ -365,6 +365,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "elf-symbols"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1c04d6bdc16d03d4e204d6cd018db65f0947013bb4129d1f9a935ff9562af9e"
+
+[[package]]
 name = "enum_dispatch"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -506,6 +512,7 @@ dependencies = [
  "anyhow",
  "built",
  "cfg-if",
+ "elf-symbols",
  "enum_dispatch",
  "fdt",
  "goblin",
