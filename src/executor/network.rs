@@ -52,6 +52,18 @@ pub(crate) fn network_handler() {
 	}
 }
 
+#[cfg(all(
+	feature = "virtio-net",
+	not(feature = "rtl8139"),
+	feature = "pci",
+	target_arch = "x86_64"
+))]
+pub(crate) fn network_device_configuration_handler() {
+	if let Ok(nic) = NIC.lock().as_nic_mut() {
+		nic.handle_device_configuration_interrupt();
+	}
+}
+
 impl<'a> NetworkState<'a> {
 	pub fn as_nic_mut(&mut self) -> Result<&mut NetworkInterface<'a>, &'static str> {
 		match self {
@@ -392,12 +404,23 @@ impl<'a> NetworkInterface<'a> {
 		self.get_inner_device().handle_interrupt();
 	}
 
+	#[cfg(all(
+		feature = "virtio-net",
+		not(feature = "rtl8139"),
+		feature = "pci",
+		target_arch = "x86_64"
+	))]
+	fn handle_device_configuration_interrupt(&mut self) {
+		self.get_inner_device()
+			.handle_device_configuration_interrupt();
+	}
+
 	pub(crate) fn set_polling_mode(&mut self, value: bool) {
 		self.get_inner_device().set_polling_mode(value);
 	}
 
 	/// Gets the device inside the [smoltcp::phy::Tracer] and [smoltcp::phy::PcapWriter] layers.
-	fn get_inner_device(&mut self) -> &mut impl NetworkDriver {
+	fn get_inner_device(&mut self) -> &mut NetworkDevice {
 		let device = &mut self.device;
 		#[cfg(feature = "net-trace")]
 		let device = device.get_mut();
