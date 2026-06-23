@@ -459,6 +459,20 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 				Err(err) => error!("Could not initialize rtl8139 device: {err}"),
 			}
 		}
+
+		#[cfg(all(target_arch = "x86_64", feature = "bga"))]
+		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
+			let (vendor_id, device_id) = x.id();
+			vendor_id == 0x1234 && device_id == 0x1111
+		}) {
+			info!(
+				"Found Bochs VGA device with device id {:#x}",
+				adapter.device_id()
+			);
+
+			crate::kernel::bga::init_device(adapter);
+		}
+
 		PCI_DRIVERS.finalize();
 	});
 }
