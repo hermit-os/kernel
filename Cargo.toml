@@ -216,6 +216,11 @@ virtio-vsock = ["virtio"]
 ## This is only useful on PCs (x86-64).
 vga = []
 
+## Enables the PS/2 keyboard driver.
+##
+## This is only useful on PCs (x86-64).
+keyboard = []   
+
 #! ### Performance Features
 
 ## Disables putting the CPU to sleep.
