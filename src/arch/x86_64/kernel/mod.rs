@@ -40,14 +40,8 @@ pub mod vga;
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	use core::cmp;
-
 	match env::boot_info().platform_info {
-		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
-		PlatformInfo::Uhyve { num_cpus, .. } => cmp::max(
-			u32::try_from(num_cpus.get()).unwrap(),
-			get_processor_count(),
-		),
+		PlatformInfo::Uhyve { num_cpus, .. } => u32::try_from(num_cpus.get()).unwrap(),
 		_ => apic::local_apic_id_count(),
 	}
 }
