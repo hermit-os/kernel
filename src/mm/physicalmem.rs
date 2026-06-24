@@ -201,29 +201,6 @@ impl PageRangeExt for PageRange {
 	}
 }
 
-#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
-unsafe fn detect_from_limits() -> Result<(), ()> {
-	let limit = crate::arch::kernel::get_limit();
-	if limit == 0 {
-		return Err(());
-	}
-
-	#[cfg(target_arch = "riscv64")]
-	let ram_address = crate::arch::kernel::get_ram_address().as_usize();
-	#[cfg(target_arch = "aarch64")]
-	let ram_address = 0;
-
-	let range =
-		PageRange::new(super::kernel_end_address().as_usize(), ram_address + limit).unwrap();
-	unsafe {
-		PHYSICAL_FREE_LIST.lock().deallocate(range).unwrap();
-		map_frame_range(range);
-	}
-	TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
-
-	Ok(())
-}
-
 unsafe fn init() {
 	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
@@ -232,17 +209,7 @@ unsafe fn init() {
 		paging::unmap::<HugePageSize>(start, count);
 	}
 
-	if unsafe { detect_from_fdt().is_ok() } {
-		return;
-	}
-
-	cfg_select! {
-		any(target_arch = "aarch64", target_arch = "riscv64") => {
-			error!("Could not detect physical memory from FDT");
-			unsafe { detect_from_limits().unwrap(); }
-		}
-		_ => {
-			panic!("Could not detect physical memory from FDT");
-		}
+	unsafe {
+		detect_from_fdt().unwrap();
 	}
 }

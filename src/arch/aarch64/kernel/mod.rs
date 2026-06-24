@@ -19,8 +19,6 @@ use core::arch::global_asm;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::{ptr, str};
 
-use memory_addresses::PhysAddr;
-
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::aarch64::kernel::core_local::*;
@@ -43,14 +41,6 @@ global_asm!(include_str!("start.s"));
 
 pub fn is_uhyve_with_pci() -> bool {
 	false
-}
-
-pub fn get_ram_address() -> PhysAddr {
-	PhysAddr::new(env::boot_info().hardware_info.phys_addr_range.start)
-}
-
-pub fn get_limit() -> usize {
-	env::boot_info().hardware_info.phys_addr_range.end as usize
 }
 
 #[cfg(feature = "smp")]
