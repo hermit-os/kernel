@@ -26,7 +26,7 @@ use crate::fd::socket::udp;
 #[cfg(feature = "virtio-vsock")]
 use crate::fd::socket::vsock::{self, VsockEndpoint, VsockListenEndpoint};
 use crate::fd::{
-	self, Endpoint, ListenEndpoint, ObjectInterface, SocketOption, get_object, insert_object,
+	self, Endpoint, ListenEndpoint, ObjectInterface, RawFd, SocketOption, get_object, insert_object,
 };
 use crate::init_buf;
 use crate::syscalls::block_on;
@@ -673,7 +673,11 @@ pub extern "C" fn sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+pub unsafe extern "C" fn sys_accept(
+	fd: RawFd,
+	addr: *mut sockaddr,
+	addrlen: *mut socklen_t,
+) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -i32::from(e),
@@ -735,7 +739,7 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
+pub extern "C" fn sys_listen(fd: RawFd, backlog: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| -i32::from(e),
@@ -748,7 +752,7 @@ pub extern "C" fn sys_listen(fd: i32, backlog: i32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
+pub unsafe extern "C" fn sys_bind(fd: RawFd, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	if name.is_null() {
 		return -i32::from(Errno::Destaddrreq);
 	}
@@ -804,7 +808,7 @@ pub unsafe extern "C" fn sys_bind(fd: i32, name: *const sockaddr, namelen: sockl
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
+pub unsafe extern "C" fn sys_connect(fd: RawFd, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	if name.is_null() {
 		return -i32::from(Errno::Inval);
 	}
@@ -853,7 +857,7 @@ pub unsafe extern "C" fn sys_connect(fd: i32, name: *const sockaddr, namelen: so
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_getsockname(
-	fd: i32,
+	fd: RawFd,
 	addr: *mut sockaddr,
 	addrlen: *mut socklen_t,
 ) -> i32 {
@@ -916,7 +920,7 @@ pub unsafe extern "C" fn sys_getsockname(
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_setsockopt(
-	fd: i32,
+	fd: RawFd,
 	level: i32,
 	optname: i32,
 	optval: *const c_void,
@@ -964,7 +968,7 @@ pub unsafe extern "C" fn sys_setsockopt(
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_getsockopt(
-	fd: i32,
+	fd: RawFd,
 	level: i32,
 	optname: i32,
 	optval: *mut c_void,
@@ -1009,7 +1013,7 @@ pub unsafe extern "C" fn sys_getsockopt(
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_getpeername(
-	fd: i32,
+	fd: RawFd,
 	addr: *mut sockaddr,
 	addrlen: *mut socklen_t,
 ) -> i32 {
@@ -1071,7 +1075,7 @@ pub unsafe extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags
 	unsafe { super::write(s, mem.cast(), len) }
 }
 
-fn shutdown(sockfd: i32, how: i32) -> i32 {
+fn shutdown(sockfd: RawFd, how: i32) -> i32 {
 	let obj = get_object(sockfd);
 	obj.map_or_else(
 		|e| -i32::from(e),
@@ -1084,19 +1088,19 @@ fn shutdown(sockfd: i32, how: i32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_shutdown(sockfd: i32, how: i32) -> i32 {
+pub extern "C" fn sys_shutdown(sockfd: RawFd, how: i32) -> i32 {
 	shutdown(sockfd, how)
 }
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_shutdown_socket(fd: i32, how: i32) -> i32 {
+pub extern "C" fn sys_shutdown_socket(fd: RawFd, how: i32) -> i32 {
 	shutdown(fd, how)
 }
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isize {
+pub unsafe extern "C" fn sys_recv(fd: RawFd, buf: *mut u8, len: usize, flags: i32) -> isize {
 	if flags == 0 {
 		let slice = unsafe { slice::from_raw_parts_mut(buf.cast::<MaybeUninit<u8>>(), len) };
 		let slice = init_buf::init_buf(slice);
@@ -1112,7 +1116,7 @@ pub unsafe extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32)
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_sendto(
-	fd: i32,
+	fd: RawFd,
 	buf: *const u8,
 	len: usize,
 	_flags: i32,
@@ -1173,7 +1177,7 @@ pub unsafe extern "C" fn sys_sendto(
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_recvfrom(
-	fd: i32,
+	fd: RawFd,
 	buf: *mut u8,
 	len: usize,
 	_flags: i32,

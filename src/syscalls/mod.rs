@@ -541,7 +541,7 @@ pub unsafe extern "C" fn sys_read(fd: RawFd, buf: *mut u8, len: usize) -> isize 
 /// before proceeding to the next.
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) -> isize {
+pub unsafe extern "C" fn sys_readv(fd: RawFd, iov: *const iovec, iovcnt: usize) -> isize {
 	if !(0..=IOV_MAX).contains(&iovcnt) {
 		return (-i32::from(Errno::Inval)).try_into().unwrap();
 	}
@@ -681,7 +681,7 @@ pub unsafe extern "C" fn sys_ioctl(fd: RawFd, cmd: i32, argp: *mut core::ffi::c_
 /// Manipulate file descriptor
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
+pub extern "C" fn sys_fcntl(fd: RawFd, cmd: i32, arg: i32) -> i32 {
 	const F_GETFD: i32 = 1;
 	const F_SETFD: i32 = 2;
 	const F_GETFL: i32 = 3;
@@ -831,7 +831,7 @@ pub unsafe extern "C" fn sys_getdents64(fd: RawFd, dirp: *mut Dirent64, count: u
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_dup(fd: i32) -> i32 {
+pub extern "C" fn sys_dup(fd: RawFd) -> i32 {
 	dup_object(fd).unwrap_or_else(|e| -i32::from(e))
 }
 
@@ -843,7 +843,7 @@ pub extern "C" fn sys_dup2(fd1: i32, fd2: i32) -> i32 {
 
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_isatty(fd: i32) -> i32 {
+pub extern "C" fn sys_isatty(fd: RawFd) -> i32 {
 	match isatty(fd) {
 		Err(e) => -i32::from(e),
 		Ok(v) => {
