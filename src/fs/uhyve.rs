@@ -16,7 +16,7 @@ use uhyve_interface::v2::parameters::{
 use crate::arch::mm::paging;
 use crate::env::fdt;
 use crate::errno::Errno;
-use crate::fd::Fd;
+use crate::fd::{Fd, RawFd};
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
@@ -27,7 +27,7 @@ use crate::uhyve::uhyve_hypercall;
 struct UhyveFileHandleInner(i32);
 
 impl UhyveFileHandleInner {
-	pub fn new(fd: i32) -> Self {
+	pub fn new(fd: RawFd) -> Self {
 		Self(fd)
 	}
 
@@ -121,7 +121,7 @@ impl Drop for UhyveFileHandleInner {
 pub struct UhyveFileHandle(Arc<Mutex<UhyveFileHandleInner>>);
 
 impl UhyveFileHandle {
-	pub fn new(fd: i32) -> Self {
+	pub fn new(fd: RawFd) -> Self {
 		Self(Arc::new(Mutex::new(UhyveFileHandleInner::new(fd))))
 	}
 }
