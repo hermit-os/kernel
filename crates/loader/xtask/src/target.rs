@@ -75,6 +75,15 @@ impl Target {
 
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
+			Self::Aarch64Elf | Self::Aarch64BeElf => &[
+				"-Crelocation-model=static",
+				"-Clink-arg=--image-base=0x40400000",
+			],
+			Self::Riscv64Sbi => &[
+				"-Crelocation-model=static",
+				"-Clink-arg=--image-base=0x801ffe00",
+				"-Clink-arg=--section-start=.init=0x80200000",
+			],
 			Self::X86_64Linux | Self::X86_64Multiboot => &["-Crelocation-model=static"],
 			_ => &[],
 		}
