@@ -10,9 +10,9 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::fmt;
 use core::mem::MaybeUninit;
 use core::ops::BitAnd;
-use core::{fmt, slice};
 
 use embedded_io::{Read, Write};
 use hermit_sync::{InterruptSpinMutex, OnceCell};
@@ -586,7 +586,6 @@ impl embedded_io::ErrorType for File {
 
 impl Read for File {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let buf = unsafe { slice::from_raw_parts_mut(buf.as_mut_ptr().cast(), buf.len()) };
 		fd::read(self.fd, buf)
 	}
 }
