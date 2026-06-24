@@ -159,13 +159,10 @@ impl ObjectInterface for Socket {
 			self.with(|socket| {
 				if socket.is_open() {
 					if socket.can_recv() {
-						match socket.recv() {
-							// Drop the packet when the provided buffer cannot
-							// fit the payload.
-							Ok((data, meta)) if data.len() <= buf.len() => {
-								if self.remote_endpoint.is_none_or(|ep| meta.endpoint == ep) {
-									buf[..data.len()].copy_from_slice(data);
-									Poll::Ready(Ok((data.len(), meta.endpoint)))
+						match socket.recv_slice(buf) {
+							Ok((len, meta)) => {
+								if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
+									Poll::Ready(Ok((len, meta.endpoint)))
 								} else {
 									socket.register_recv_waker(cx.waker());
 									Poll::Pending
@@ -191,13 +188,10 @@ impl ObjectInterface for Socket {
 			self.with(|socket| {
 				if socket.is_open() {
 					if socket.can_recv() {
-						match socket.recv() {
-							// Drop the packet when the provided buffer cannot
-							// fit the payload.
-							Ok((data, meta)) if data.len() <= buf.len() => {
-								if self.remote_endpoint.is_none_or(|ep| meta.endpoint == ep) {
-									buf[..data.len()].copy_from_slice(data);
-									Poll::Ready(Ok(data.len()))
+						match socket.recv_slice(buf) {
+							Ok((len, meta)) => {
+								if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
+									Poll::Ready(Ok(len))
 								} else {
 									socket.register_recv_waker(cx.waker());
 									Poll::Pending
