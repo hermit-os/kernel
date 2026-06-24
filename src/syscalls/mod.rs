@@ -550,8 +550,9 @@ pub unsafe extern "C" fn sys_readv(fd: i32, iov: *const iovec, iovcnt: usize) ->
 	let iovec_buffers = unsafe { slice::from_raw_parts(iov, iovcnt) };
 
 	for iovec_buf in iovec_buffers {
-		let buf =
-			unsafe { slice::from_raw_parts_mut(iovec_buf.iov_base.cast(), iovec_buf.iov_len) };
+		let iov_base = iovec_buf.iov_base.cast::<MaybeUninit<u8>>();
+		let buf = unsafe { slice::from_raw_parts_mut(iov_base, iovec_buf.iov_len) };
+		let buf = init_buf::init_buf(buf);
 
 		let len = fd::read(fd, buf).map_or_else(
 			|e| isize::try_from(-i32::from(e)).unwrap(),
