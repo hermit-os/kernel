@@ -38,12 +38,21 @@ If you want to build the kernel for riscv64, please use `riscv64`.
 ### Control the kernel messages verbosity
 
 This kernel uses the lightweight logging crate [log](https://github.com/rust-lang/log) to print kernel messages.
-The environment variable `HERMIT_LOG_LEVEL_FILTER` controls the verbosity. 
-You can change it by setting it at compile time to a string matching the name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html).
-If the variable is not set, or the name doesn't match, then `LevelFilter::Info` is used by default.
+The environment variable `HERMIT_LOG_LEVEL_FILTER` controls the verbosity and follows [the env_logger format](https://docs.rs/env_logger/latest/env_logger/) but without the regex support.
+You can change it per module (including its submodules) by setting it to a string in the format `[target][=level][,...]`, where the level is a string matching the name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html).
+If the target is omitted, the level is set as the global level. If the level is
+omitted, logs of all levels are printed for the target. A substring search
+pattern that will filter all modules can be provided after the target-level
+pairs with `/<pattern>`.
+If the variable is not set, cannot be parsed, or it does not provide a global level, then a global level `LevelFilter::Info` is used by default.
+
+> [!NOTE]
+> Although the logger only prints name of the lowest level for the kernel
+  modules, the match filter requires paths to start from the root, i.e. in the
+  format `hermit::MODULE_NAME::SUBMODULE_NAME`.
 
 ```sh
-$ HERMIT_LOG_LEVEL_FILTER=Debug cargo xtask build --arch x86_64
+$ HERMIT_LOG_LEVEL_FILTER="hermit::drivers::net=debug,smoltcp,error" cargo xtask build --arch x86_64
 ```
 
 ## Credits
