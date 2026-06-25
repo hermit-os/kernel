@@ -680,7 +680,10 @@ pub unsafe extern "C" fn sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut 
 		|v| {
 			block_on(async { v.write().await.accept().await }, None).map_or_else(
 				|e| -i32::from(e),
-				#[cfg_attr(not(feature = "net"), expect(unused_variables))]
+				#[cfg_attr(
+					not(any(feature = "net", feature = "virtio-vsock")),
+					expect(unused_variables)
+				)]
 				|(obj, endpoint)| match endpoint {
 					#[cfg(feature = "net")]
 					Endpoint::Ip(endpoint) => {
