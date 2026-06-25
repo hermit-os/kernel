@@ -7,14 +7,14 @@
 
 #![allow(dead_code)]
 
-cfg_select! {
-	feature = "pci" => {
-		mod pci;
-	}
-	_ => {
-		mod mmio;
-	}
-}
+// FIXME: use cfg_select! instead once resolved:
+// https://github.com/rust-lang/rust/issues/158371
+// https://github.com/rust-lang/rust/issues/158400
+#[cfg(feature = "pci")]
+mod pci;
+
+#[cfg(not(feature = "pci"))]
+mod mmio;
 
 use alloc::vec::Vec;
 

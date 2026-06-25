@@ -1,12 +1,10 @@
 mod console;
 
-cfg_select! {
-	feature = "uhyve" => {
-		mod uhyve;
-		pub use self::uhyve::{UhyveStderr, UhyveStdin, UhyveStdout};
-	}
-	_ => {}
-}
+// FIXME: use cfg_select! with imports instead once resolved:
+// https://github.com/rust-lang/rust/issues/158371
+// https://github.com/rust-lang/rust/issues/158400
+#[cfg(feature = "uhyve")]
+mod uhyve;
 
 use alloc::sync::Arc;
 
@@ -14,6 +12,8 @@ use ahash::RandomState;
 use hashbrown::HashMap;
 
 pub use self::console::{ConsoleStderr, ConsoleStdin, ConsoleStdout};
+#[cfg(feature = "uhyve")]
+pub use self::uhyve::{UhyveStderr, UhyveStdin, UhyveStdout};
 use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 
 pub(crate) fn setup(fds: &mut HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>) {
