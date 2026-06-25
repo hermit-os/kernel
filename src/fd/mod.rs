@@ -154,7 +154,7 @@ bitflags! {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PollFd {
 	/// File descriptor
-	pub fd: i32,
+	pub fd: RawFd,
 	/// Events to look for
 	pub events: PollEvent,
 	/// Events returned

@@ -203,15 +203,7 @@ impl ObjectInterface for Socket {
 					| tcp::State::TimeWait => Poll::Ready(Err(Errno::Io)),
 					_ => {
 						if socket.can_recv() {
-							Poll::Ready(
-								socket
-									.recv(|data| {
-										let len = core::cmp::min(buf.len(), data.len());
-										buf[..len].copy_from_slice(&data[..len]);
-										(len, len)
-									})
-									.map_err(|_| Errno::Io),
-							)
+							Poll::Ready(socket.recv_slice(buf).map_err(|_| Errno::Io))
 						} else if state == tcp::State::CloseWait {
 							// The local end-point has received a connection termination request
 							// and not data are in the receive buffer => return 0 to close the connection
