@@ -1,11 +1,11 @@
-use virtio::vsock::Config;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
+use virtio::vsock::Config;
 use volatile::VolatileRef;
 
 use crate::drivers::InterruptLine;
-use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
 
 // Backend-dependent interface for Virtio vsock driver
 impl VirtioVsockDriver {

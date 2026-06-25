@@ -12,10 +12,10 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::kernel::core_local::core_scheduler;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{Task, TaskFrame};
-use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
 #[repr(C, packed)]
