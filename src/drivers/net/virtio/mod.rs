@@ -5,14 +5,14 @@
 //!
 //! [Network Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-2170001
 
-cfg_select! {
-	feature = "pci" => {
-		mod pci;
-	}
-	_ => {
-		mod mmio;
-	}
-}
+// FIXME: use cfg_select! instead once resolved:
+// https://github.com/rust-lang/rust/issues/158371
+// https://github.com/rust-lang/rust/issues/158400
+#[cfg(feature = "pci")]
+mod pci;
+
+#[cfg(not(feature = "pci"))]
+mod mmio;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
