@@ -1,5 +1,4 @@
 use core::arch::asm;
-use core::convert::TryInto;
 use core::num::NonZeroU64;
 
 use riscv::register::{sie, sstatus, time};

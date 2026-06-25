@@ -217,8 +217,6 @@ pub fn load_application<F, T>(code_size: u64, tls_size: u64, func: F) -> T
 where
 	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> T,
 {
-	use core::slice;
-
 	use align_address::Align;
 	use free_list::PageLayout;
 	use memory_addresses::{PhysAddr, VirtAddr};

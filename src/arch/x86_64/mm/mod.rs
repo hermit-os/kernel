@@ -16,7 +16,7 @@ pub fn create_new_root_page_table() -> usize {
 	use free_list::PageLayout;
 	use x86_64::registers::control::Cr3;
 
-	use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
+	use crate::mm::PageBox;
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
