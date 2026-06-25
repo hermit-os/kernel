@@ -4,10 +4,10 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 use crate::arch::riscv64::kernel::core_local::core_scheduler;
 use crate::arch::riscv64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
-use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 /// For details, see [RISC-V Calling Conventions].
 ///
