@@ -1,5 +1,4 @@
 use alloc::fmt::Debug;
-use core::iter::IntoIterator;
 
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
 use x86_64::instructions::port::Port;
