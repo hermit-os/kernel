@@ -40,7 +40,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
-use crate::drivers::{Driver, InterruptLine};
+use crate::drivers::{Driver, InterruptHandlerMap, InterruptLine};
 use crate::errno::Errno;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -262,17 +262,12 @@ pub(crate) struct VirtioConsoleDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
-	pub(super) irq: InterruptLine,
 
 	pub(super) recv_vq: RxQueue,
 	pub(super) send_vq: TxQueue,
 }
 
 impl Driver for VirtioConsoleDriver {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"virtio"
 	}
@@ -304,7 +299,11 @@ impl VirtioConsoleDriver {
 		self.com_cfg.set_failed();
 	}
 
-	pub fn init_dev(&mut self) -> Result<(), VirtioConsoleError> {
+	pub fn init_dev(
+		&mut self,
+		handlers: &mut InterruptHandlerMap,
+		irq: Option<InterruptLine>,
+	) -> Result<(), VirtioConsoleError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -368,6 +367,12 @@ impl VirtioConsoleDriver {
 		));
 		// Interrupt for communicating that a sent packet left, is not needed
 		self.send_vq.disable_notifs();
+
+		handlers.entry(irq.unwrap()).or_default().push_back(|| {
+			if let Some(driver) = get_console_driver() {
+				driver.lock().handle_interrupt();
+			};
+		});
 
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();

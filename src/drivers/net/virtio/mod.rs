@@ -46,7 +46,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
-use crate::drivers::{Driver, InterruptLine};
+use crate::drivers::{Driver, InterruptHandlerMap, InterruptLine};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -248,7 +248,6 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) inner: T,
 
 	pub(super) num_vqs: u16,
-	pub(super) irq: InterruptLine,
 	/// Describes for what protocols and in which directions, if any, the checksum
 	/// should be calculated in software. It is the complement of what is offloaded
 	/// to the hardware.
@@ -595,10 +594,6 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 }
 
 impl Driver for VirtioNetDriver<Init> {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"virtio"
 	}
@@ -754,7 +749,11 @@ impl VirtioNetDriver<Uninit> {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.1.5
-	pub fn init_dev(mut self) -> Result<VirtioNetDriver<Init>, VirtioNetError> {
+	pub fn init_dev(
+		mut self,
+		handlers: &mut InterruptHandlerMap,
+		irq: Option<InterruptLine>,
+	) -> Result<VirtioNetDriver<Init>, VirtioNetError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -837,6 +836,11 @@ impl VirtioNetDriver<Uninit> {
 			self.dev_cfg.dev_id
 		);
 
+		handlers
+			.entry(irq.unwrap())
+			.or_default()
+			.push_back(crate::executor::network::network_handler);
+
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
@@ -861,7 +865,6 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg: self.notif_cfg,
 			inner,
 			num_vqs: self.num_vqs,
-			irq: self.irq,
 			checksums: self.checksums,
 		})
 	}

@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use volatile::VolatileRef;
 
 use crate::arch::kernel::pci::PciConfigRegion;
+use crate::drivers::InterruptHandlerMap;
 use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
@@ -49,12 +50,14 @@ impl VirtioFsDriver {
 			isr_stat: isr_cfg,
 			notif_cfg,
 			vqueues: Vec::new(),
-			irq: device.get_irq().unwrap(),
 		})
 	}
 
 	/// Initializes virtio filesystem device
-	pub fn init(device: &PciDevice<PciConfigRegion>) -> Result<VirtioFsDriver, VirtioError> {
+	pub fn init(
+		device: &PciDevice<PciConfigRegion>,
+		handlers: &mut InterruptHandlerMap,
+	) -> Result<VirtioFsDriver, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioFsDriver::new(caps, device) {
 				Ok(driver) => driver,
@@ -69,7 +72,7 @@ impl VirtioFsDriver {
 			}
 		};
 
-		match drv.init_dev() {
+		match drv.init_dev(handlers, device.get_irq()) {
 			Ok(()) => info!(
 				"Filesystem device with id {:x}, has been initialized by driver!",
 				drv.get_dev_id()

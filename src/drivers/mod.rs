@@ -17,12 +17,14 @@ pub mod vsock;
 
 use alloc::collections::VecDeque;
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 #[cfg(feature = "pci")]
 pub(crate) use pci_types::InterruptLine;
 #[cfg(not(feature = "pci"))]
 pub(crate) type InterruptLine = u8;
 
-pub(crate) type InterruptHandlerQueue = VecDeque<fn()>;
+pub(crate) type InterruptHandlerMap = HashMap<InterruptLine, VecDeque<fn()>, RandomState>;
 
 /// A common error module for drivers.
 /// [DriverError](error::DriverError) values will be
@@ -66,24 +68,34 @@ pub mod error {
 /// A trait to determine general driver information
 #[allow(dead_code)]
 pub(crate) trait Driver {
-	/// Returns the interrupt number of the device
-	fn get_interrupt_number(&self) -> InterruptLine;
-
 	/// Returns the device driver name
 	fn get_name(&self) -> &'static str;
 }
 
 pub(crate) fn init() {
+	#[cfg_attr(
+		all(
+			not(feature = "pci"),
+			not(target_arch = "riscv64"),
+			not(feature = "virtio")
+		),
+		expect(unused_mut)
+	)]
+	let mut handlers = HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
+
 	// Initialize PCI Drivers
 	#[cfg(feature = "pci")]
-	pci::init();
+	pci::init(&mut handlers);
+	#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+	crate::arch::kernel::serial::register_handler(&mut handlers);
+
 	#[cfg(all(not(feature = "pci"), feature = "virtio", target_arch = "x86_64"))]
-	crate::arch::kernel::mmio::init_drivers();
+	crate::arch::kernel::mmio::init_drivers(&mut handlers);
 	#[cfg(all(not(feature = "pci"), feature = "virtio", target_arch = "aarch64"))]
-	crate::arch::kernel::mmio::init_drivers();
+	crate::arch::kernel::mmio::init_drivers(&mut handlers);
 
 	#[cfg(target_arch = "riscv64")]
-	crate::arch::kernel::init_drivers();
+	crate::arch::kernel::init_drivers(&mut handlers);
 
-	crate::arch::kernel::interrupts::install_handlers();
+	crate::arch::kernel::interrupts::install_handlers(handlers);
 }

@@ -18,11 +18,7 @@ use crate::arch::aarch64::kernel::core_local::{core_id, core_scheduler, incremen
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::kernel::serial::handle_uart_interrupt;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_interrupt_handlers;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_interrupt_handlers;
-use crate::drivers::{InterruptHandlerQueue, InterruptLine};
+use crate::drivers::InterruptHandlerMap;
 use crate::env;
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId, timer_interrupts};
@@ -40,8 +36,7 @@ static mut TIMER_INTERRUPT: u32 = 0;
 /// Number of the UART interrupt
 static mut UART_INTERRUPT: u32 = 0;
 /// Possible interrupt handlers
-static INTERRUPT_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> =
-	OnceCell::new();
+static INTERRUPT_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 pub(crate) static GIC: SpinMutex<Option<GicV3<'_>>> = SpinMutex::new(None);
 
@@ -87,16 +82,15 @@ pub fn disable() {
 	dmb(ISH);
 }
 
-pub(crate) fn install_handlers() {
-	let mut handlers: HashMap<InterruptLine, InterruptHandlerQueue, RandomState> =
+pub(crate) fn install_handlers(old_handlers: InterruptHandlerMap) {
+	let mut handlers: InterruptHandlerMap =
 		HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0));
-
 	fn timer_handler() {
 		debug!("Handle timer interrupt");
 		timer_interrupts::clear_active_and_set_next();
 	}
 
-	for (key, value) in get_interrupt_handlers().into_iter() {
+	for (key, value) in old_handlers.into_iter() {
 		handlers.insert(key + SPI_START, value);
 	}
 
