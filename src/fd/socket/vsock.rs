@@ -332,10 +332,10 @@ impl ObjectInterface for Socket {
 					// remain queued, re-wake so a subsequent `accept()` drains
 					// them (the listener stays in ReceiveRequest).
 					let conn_key = guard.establish(port)?;
-					if let Some(listener) = guard.get_mut_socket(port) {
-						if !listener.pending.is_empty() {
-							listener.rx_waker.wake();
-						}
+					if let Some(listener) = guard.get_mut_socket(port)
+						&& !listener.pending.is_empty()
+					{
+						listener.rx_waker.wake();
 					}
 
 					Poll::Ready(Ok((conn_key, endpoint)))
