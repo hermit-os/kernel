@@ -153,6 +153,11 @@ async fn vsock_run() {
 					raw.state = VsockState::Connected;
 					raw.peer_buf_alloc = header.buf_alloc.to_ne();
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
+					// The blocking `connect()` future parks on `rx_waker` (see
+					// `Socket::connect`'s Connecting arm), so it MUST be woken
+					// here or the connect never returns. Wake `tx_waker` too:
+					// a freshly-connected socket is immediately writable.
+					raw.rx_waker.wake();
 					raw.tx_waker.wake();
 				}
 			} else if op == Op::Request {
