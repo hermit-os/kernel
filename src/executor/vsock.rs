@@ -1,4 +1,4 @@
-use alloc::collections::{BTreeMap, btree_map};
+use alloc::collections::{BTreeMap, VecDeque, btree_map};
 use alloc::vec::Vec;
 use core::future;
 use core::task::Poll;
@@ -34,6 +34,24 @@ pub(crate) enum VsockState {
 
 pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;
 
+/// Default depth of a listener's pending-connection backlog, used when
+/// `accept()` is called without an explicit `listen()`. Mirrors the TCP
+/// socket's `DEFAULT_BACKLOG`.
+pub(crate) const DEFAULT_BACKLOG: usize = 128;
+
+/// Upper bound on a listener's backlog, matching the TCP socket's `SOMAXCONN`
+/// (the default maximum used by modern Linux).
+pub(crate) const SOMAXCONN: usize = 4096;
+
+/// A pending inbound connection request waiting to be `accept()`ed, captured
+/// from an `Op::Request` packet.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PendingRequest {
+	pub remote_cid: u32,
+	pub remote_port: u32,
+	pub peer_buf_alloc: u32,
+}
+
 /// Identifies an established connection by its local (listen) port and the
 /// remote endpoint `(remote_cid, remote_port)`. Multiple connections may share
 /// one local port, mirroring how TCP demultiplexes by the connection 4-tuple.
@@ -51,6 +69,12 @@ pub(crate) struct RawSocket {
 	pub rx_waker: WakerRegistration,
 	pub tx_waker: WakerRegistration,
 	pub buffer: Vec<u8>,
+	/// Inbound connection requests queued on a listener, awaiting `accept()`.
+	/// Only used by listener sockets; empty for connections.
+	pub pending: VecDeque<PendingRequest>,
+	/// Maximum depth of `pending` for a listener (set by `listen()`, clamped to
+	/// `SOMAXCONN`). Further requests beyond this are reset.
+	pub backlog: usize,
 }
 
 impl RawSocket {
@@ -66,6 +90,8 @@ impl RawSocket {
 			rx_waker: WakerRegistration::new(),
 			tx_waker: WakerRegistration::new(),
 			buffer: Vec::with_capacity(RAW_SOCKET_BUFFER_SIZE),
+			pending: VecDeque::new(),
+			backlog: DEFAULT_BACKLOG,
 		}
 	}
 }
@@ -104,12 +130,26 @@ async fn vsock_run() {
 				return;
 			};
 
-			if op == Op::Request && raw.state == VsockState::Listen && type_ == Type::Stream {
-				raw.state = VsockState::ReceiveRequest;
-				raw.remote_cid = header_cid;
-				raw.remote_port = header.src_port.to_ne();
-				raw.peer_buf_alloc = header.buf_alloc.to_ne();
-				raw.rx_waker.wake();
+			if op == Op::Request
+				&& (raw.state == VsockState::Listen || raw.state == VsockState::ReceiveRequest)
+				&& type_ == Type::Stream
+			{
+				// Queue the inbound request on the listener's backlog so several
+				// concurrent connects on the same port can be accepted in turn.
+				// `ReceiveRequest` means "at least one request is pending accept".
+				if raw.pending.len() < raw.backlog {
+					raw.pending.push_back(PendingRequest {
+						remote_cid: header_cid,
+						remote_port: header.src_port.to_ne(),
+						peer_buf_alloc: header.buf_alloc.to_ne(),
+					});
+					raw.state = VsockState::ReceiveRequest;
+					raw.rx_waker.wake();
+				} else {
+					// Backlog full: reset so the peer backs off and retries.
+					hdr = Some(*header);
+					fwd_cnt = raw.fwd_cnt;
+				}
 			} else if (raw.state == VsockState::Connected || raw.state == VsockState::Shutdown)
 				&& type_ == Type::Stream
 				&& op == Op::Rw
@@ -161,10 +201,9 @@ async fn vsock_run() {
 					raw.tx_waker.wake();
 				}
 			} else if op == Op::Request {
-				// A connection request the listener cannot service right now
-				// (e.g. a previous request is still pending accept on this
-				// port). Reply with a reset so the peer fails fast instead of
-				// blocking until it times out.
+				// A request that did not match the listener backlog arm above
+				// (e.g. addressed to a non-listening socket). Reset so the peer
+				// fails fast instead of blocking until it times out.
 				hdr = Some(*header);
 				fwd_cnt = raw.fwd_cnt;
 			} else if raw.remote_cid == header_cid {
@@ -233,6 +272,14 @@ impl VsockMap {
 		}
 	}
 
+	/// Set the pending-connection backlog depth for the listener on `port`,
+	/// clamped to `SOMAXCONN`.
+	pub fn set_backlog(&mut self, port: u32, backlog: usize) -> io::Result<()> {
+		let listener = self.port_map.get_mut(&port).ok_or(Errno::Inval)?;
+		listener.backlog = backlog.min(SOMAXCONN);
+		Ok(())
+	}
+
 	pub fn connect(&mut self, port: u32, cid: u32) -> io::Result<u32> {
 		for i in u32::MAX / 4..u32::MAX {
 			let mut raw = RawSocket::new(VsockState::Connecting);
@@ -264,27 +311,29 @@ impl VsockMap {
 		self.conn_map.remove(&key);
 	}
 
-	/// Move the pending connection on `listen_port` (in state `ReceiveRequest`)
-	/// into `conn_map` keyed by `(listen_port, remote_cid, remote_port)`, then
-	/// reset the listener entry to `Listen` so it can accept further
-	/// connections. Returns the new connection's key.
+	/// Pop the next pending request from the listener on `listen_port`'s backlog,
+	/// move it into `conn_map` keyed by `(listen_port, remote_cid, remote_port)`,
+	/// and return the new connection's key. The listener stays in
+	/// `ReceiveRequest` while more requests remain queued, otherwise returns to
+	/// `Listen`. Resetting fields in place preserves the listener's wakers, so an
+	/// `accept()` future already parked on it is not lost.
 	pub fn establish(&mut self, listen_port: u32) -> io::Result<ConnKey> {
 		let listener = self.port_map.get_mut(&listen_port).ok_or(Errno::Inval)?;
-		let key = (listen_port, listener.remote_cid, listener.remote_port);
+		let req = listener.pending.pop_front().ok_or(Errno::Again)?;
+		let key = (listen_port, req.remote_cid, req.remote_port);
 
-		// Build the connection entry from the negotiated handshake state, then
-		// reset the listener's fields in place. Resetting in place (rather than
-		// replacing the whole struct) preserves the listener's wakers, so an
-		// `accept()` future already parked on it is not lost.
 		let mut conn = RawSocket::new(VsockState::Connected);
-		conn.remote_cid = listener.remote_cid;
-		conn.remote_port = listener.remote_port;
-		conn.peer_buf_alloc = listener.peer_buf_alloc;
+		conn.remote_cid = req.remote_cid;
+		conn.remote_port = req.remote_port;
+		conn.peer_buf_alloc = req.peer_buf_alloc;
 
-		listener.state = VsockState::Listen;
-		listener.remote_cid = 0;
-		listener.remote_port = 0;
-		listener.peer_buf_alloc = 0;
+		// Stay in ReceiveRequest if more requests are queued so `accept()` keeps
+		// draining them; otherwise go back to plain Listen.
+		listener.state = if listener.pending.is_empty() {
+			VsockState::Listen
+		} else {
+			VsockState::ReceiveRequest
+		};
 
 		self.conn_map.insert(key, conn);
 		Ok(key)

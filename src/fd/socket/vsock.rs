@@ -270,8 +270,13 @@ impl ObjectInterface for Socket {
 		))))
 	}
 
-	async fn listen(&mut self, _backlog: i32) -> io::Result<()> {
-		Ok(())
+	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
+		if backlog <= 0 {
+			return Err(Errno::Inval);
+		}
+		VSOCK_MAP
+			.lock()
+			.set_backlog(self.port, usize::try_from(backlog).unwrap())
 	}
 
 	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
@@ -291,6 +296,15 @@ impl ObjectInterface for Socket {
 					}
 				}
 				VsockState::ReceiveRequest => {
+					// Peek the head of the listener's backlog to build the
+					// handshake response for the request we're about to accept.
+					let Some(req) = raw.pending.front().copied() else {
+						// Spurious ReceiveRequest with an empty queue: wait.
+						raw.rx_waker.register(cx.waker());
+						return Poll::Pending;
+					};
+					let fwd_cnt = raw.fwd_cnt;
+
 					const HEADER_SIZE: usize = size_of::<Hdr>();
 					let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
 					let local_cid = driver_guard.get_cid();
@@ -299,23 +313,30 @@ impl ObjectInterface for Socket {
 						let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
 
 						response.src_cid = le64::from_ne(local_cid);
-						response.dst_cid = le64::from_ne(raw.remote_cid.into());
+						response.dst_cid = le64::from_ne(req.remote_cid.into());
 						response.src_port = le32::from_ne(port);
-						response.dst_port = le32::from_ne(raw.remote_port);
+						response.dst_port = le32::from_ne(req.remote_port);
 						response.len = le32::from_ne(0);
 						response.type_ = le16::from_ne(Type::Stream.into());
 						response.op = le16::from_ne(Op::Response.into());
 						response.flags = le32::from_ne(0);
 						response.buf_alloc =
 							le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
-						response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
+						response.fwd_cnt = le32::from_ne(fwd_cnt);
 					});
+					drop(driver_guard);
 
-					let endpoint = VsockEndpoint::new(raw.remote_port, raw.remote_cid);
+					let endpoint = VsockEndpoint::new(req.remote_port, req.remote_cid);
 
-					// Move the pending connection into the connection map keyed by its
-					// remote endpoint and reset the listener so it keeps accepting.
+					// Pop the request into the connection map. If more requests
+					// remain queued, re-wake so a subsequent `accept()` drains
+					// them (the listener stays in ReceiveRequest).
 					let conn_key = guard.establish(port)?;
+					if let Some(listener) = guard.get_mut_socket(port)
+						&& !listener.pending.is_empty()
+					{
+						listener.rx_waker.wake();
+					}
 
 					Poll::Ready(Ok((conn_key, endpoint)))
 				}
