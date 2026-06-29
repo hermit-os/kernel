@@ -1041,7 +1041,11 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
 
 			if next_dirent > buf.len() {
-				// target buffer full -> we return the nr. of bytes written (like linux does)
+				if ret == 0 {
+					// Buffer too small to hold even one entry
+					return Err(Errno::Inval);
+				}
+				// Buffer full -> return bytes written so far; caller retries from rsp_offset
 				break;
 			}
 
