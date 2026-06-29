@@ -327,6 +327,7 @@ elf-symbols = "0.1"
 embedded-io = { version = "0.7", features = ["alloc"] }
 endian-num = { version = "0.2", optional = true, features = ["linux-types"] }
 enum_dispatch = "0.3"
+env_filter = { version = "2.0.0", default-features = false }
 fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
