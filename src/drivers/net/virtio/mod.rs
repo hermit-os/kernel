@@ -719,17 +719,16 @@ impl VirtioNetDriver<Init> {
 			_ => return None,
 		};
 
-		let csum_offset;
 		let ip_payload = &mut ethernet_frame.payload_mut()[ip_header_len.into()..ip_packet_len];
 		// Like the Ethernet protocol check, we check for IP protocols for which we know the location of the checksum field.
-		if protocol == IpProtocol::Tcp && !checksums.tcp.tx() {
+		let csum_offset = if protocol == IpProtocol::Tcp && !checksums.tcp.tx() {
 			let mut tcp_packet = TcpPacket::new_unchecked(ip_payload);
 			tcp_packet.set_checksum(pseudo_header_checksum);
-			csum_offset = 16;
+			16
 		} else if protocol == IpProtocol::Udp && !checksums.udp.tx() {
 			let mut udp_packet = UdpPacket::new_unchecked(ip_payload);
 			udp_packet.set_checksum(pseudo_header_checksum);
-			csum_offset = 6;
+			6
 		} else {
 			return None;
 		};
