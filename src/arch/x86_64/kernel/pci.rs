@@ -1,4 +1,4 @@
-use alloc::fmt::Debug;
+use core::fmt::Debug;
 
 use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
 use x86_64::instructions::port::Port;

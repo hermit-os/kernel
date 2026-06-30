@@ -3,9 +3,8 @@
 //! The driver is derived from the Zynq 7000 Gigabit Ethernet Controller (GEM) reference manual.
 //! See the [Zynq 7000 SoC Technical Reference Manual (UG585)](https://docs.xilinx.com/r/en-US/ug585-zynq-7000-SoC-TRM) for more details.
 
-use alloc::alloc::Allocator;
 use alloc::boxed::Box;
-use core::alloc::Layout;
+use core::alloc::{Allocator, Layout};
 use core::ptr::NonNull;
 use core::{ptr, slice};
 

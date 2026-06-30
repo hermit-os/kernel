@@ -14,7 +14,8 @@ pub mod serial;
 mod start;
 pub mod systemtime;
 
-use alloc::alloc::{Layout, alloc};
+use alloc::alloc::alloc;
+use core::alloc::Layout;
 use core::arch::global_asm;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use core::{ptr, str};
