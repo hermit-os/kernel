@@ -864,15 +864,14 @@ pub(crate) fn init_device(
 	regs.as_mut_ptr().imr().write(le16::from(INT_MASK));
 
 	regs.as_mut_ptr().bmcr().write(le16::from(BMCR_ANE));
-	let speed;
 	let tmp = regs.as_ptr().bmcr().read().to_ne();
-	if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
-		speed = 1000;
+	let speed = if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
+		1000
 	} else if tmp & BMCR_SPD100 == BMCR_SPD100 {
-		speed = 100;
+		100
 	} else {
-		speed = 10;
-	}
+		10
+	};
 
 	// Enable Receive and Transmitter
 	regs.as_mut_ptr().cr().write(CR_TE | CR_RE); // Sets the RE and TE bits high
