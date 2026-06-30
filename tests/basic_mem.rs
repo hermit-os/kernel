@@ -9,6 +9,7 @@ extern crate alloc;
 mod common;
 
 use alloc::vec::Vec;
+use core::ffi::{c_int, c_void};
 use core::fmt;
 
 const PATTERN: u8 = 0xab;
@@ -22,8 +23,8 @@ where
 	T: num_traits::int::PrimInt,
 {
 	unsafe extern "C" {
-		fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8;
-		fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
+		fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void;
+		fn memcmp(lhs: *const c_void, rhs: *const c_void, count: usize) -> c_int;
 	}
 	let vec_size: u32 = 10000;
 	let pre_dest_vec_size: u32 = 1;
@@ -78,8 +79,10 @@ where
 	// Copy the actual vector
 	unsafe {
 		memcpy(
-			b.as_mut_ptr().add(pre_dest_vec_size as usize).cast::<u8>(),
-			a.as_ptr().cast::<u8>(),
+			b.as_mut_ptr()
+				.add(pre_dest_vec_size as usize)
+				.cast::<c_void>(),
+			a.as_ptr().cast::<c_void>(),
 			((size_of::<T>() as u32) * vec_size) as usize,
 		);
 	}
@@ -109,21 +112,21 @@ where
 	unsafe {
 		assert_eq!(
 			memcmp(
-				b.as_ptr().add(pre_dest_vec_size as usize).cast::<u8>(),
-				a.as_ptr().cast::<u8>(),
+				b.as_ptr().add(pre_dest_vec_size as usize).cast::<c_void>(),
+				a.as_ptr().cast::<c_void>(),
 				size_of::<T>() * vec_size as usize,
 			),
 			0
 		);
 		// pattern is larger, a[0] is 0
-		assert!(memcmp(b.as_ptr().cast::<u8>(), a.as_ptr().cast::<u8>(), 1) > 0);
-		assert!(memcmp(a.as_ptr().cast::<u8>(), b.as_ptr().cast::<u8>(), 1) < 0);
+		assert!(memcmp(b.as_ptr().cast::<c_void>(), a.as_ptr().cast::<c_void>(), 1) > 0);
+		assert!(memcmp(a.as_ptr().cast::<c_void>(), b.as_ptr().cast::<c_void>(), 1) < 0);
 		assert!(
 			memcmp(
 				b.as_ptr()
 					.add((vec_size + pre_dest_vec_size) as usize)
-					.cast::<u8>(),
-				a.as_ptr().cast::<u8>(),
+					.cast::<c_void>(),
+				a.as_ptr().cast::<c_void>(),
 				1,
 			) > 0
 		);
