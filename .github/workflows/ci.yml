@@ -40,6 +40,9 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64gc-unknown-none-elf
       - run: rustup component add clippy
+      - name: cargo clippy (hermit-builtins)
+        run: cargo clippy --target x86_64-unknown-hermit -Zbuild-std=core
+        working-directory: hermit-builtins
       - run: cargo clippy --package xtask
       - name: cargo hack clippy (x86_64)
         run: |
