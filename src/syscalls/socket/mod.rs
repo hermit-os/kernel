@@ -926,7 +926,13 @@ pub unsafe extern "C" fn sys_setsockopt(
 	optval: *const c_void,
 	optlen: socklen_t,
 ) -> i32 {
-	if level == SOL_SOCKET && optname == SO_REUSEADDR {
+	if level == SOL_SOCKET {
+		// SOL_SOCKET = 4095 cannot be represented as Ipproto (u8), so the
+		// conversion below would always return EINVAL for any SOL_SOCKET option.
+		// Return 0 for SO_REUSEADDR (no-op, already the default) and silently
+		// succeed for other common options (SO_RCVTIMEO, SO_SNDTIMEO, SO_KEEPALIVE,
+		// SO_LINGER, SO_SNDBUF, SO_RCVBUF) so that Rust std's TCP socket setup
+		// does not fail during connect/accept.
 		return 0;
 	}
 
