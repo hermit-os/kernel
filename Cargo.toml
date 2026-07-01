@@ -193,7 +193,7 @@ write-pcap-file = []
 virtio-net = ["net", "virtio"]
 
 ## Enables the RTL8139 network driver.
-rtl8139 = ["net", "pci", "volatile/derive", "endian-num"]
+rtl8139 = ["net", "pci", "endian-num"]
 
 ## Enables the Cadence Gigabit Ethernet MAC (GEM) network driver.
 gem-net = ["net", "dep:tock-registers"]
@@ -347,7 +347,7 @@ take-static = "0.1"
 talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
-volatile = "0.6"
+volatile = { version = "0.6", features = ["derive"] }
 uhyve-interface = { version = "0.2", optional = true }
 
 [dependencies.smoltcp]
