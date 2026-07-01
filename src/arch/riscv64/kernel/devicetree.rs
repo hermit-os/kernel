@@ -22,6 +22,7 @@ use crate::arch::riscv64::kernel::mmio::MmioDriver;
 use crate::arch::riscv64::mm::paging::{self, PageSize};
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
+use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioUART;
 #[cfg(all(feature = "virtio-console", not(feature = "pci")))]
@@ -97,9 +98,13 @@ pub fn init() {
 	info!("Model: {model}");
 }
 
+#[cfg_attr(
+	any(not(any(feature = "gem-net", feature = "virtio")), feature = "pci"),
+	expect(unused_variables)
+)]
 /// Inits drivers based on the device tree
 /// This function should only be called once
-pub fn init_drivers() {
+pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	// TODO: Implement devicetree correctly
 	if let Some(fdt) = env::fdt() {
 		debug!("Init drivers using devicetree");
@@ -184,6 +189,7 @@ pub fn init_drivers() {
 					irq.try_into().unwrap(),
 					phy_addr,
 					<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
+					handlers,
 				) {
 					Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
 					Err(err) => error!("Could not initialize GEM driver: {err}"),
@@ -252,7 +258,7 @@ pub fn init_drivers() {
 
 				debug!("Found virtio {id:?} at {mmio:p}");
 
-				match mmio_virtio::init_device(mmio, irq.try_into().unwrap()) {
+				match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
 					#[cfg(feature = "virtio-console")]
 					Ok(VirtioDriver::Console(drv)) => {
 						register_driver(MmioDriver::VirtioConsole(

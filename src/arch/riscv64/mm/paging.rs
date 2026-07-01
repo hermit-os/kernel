@@ -384,7 +384,10 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		} else {
 			self.entries[index].set(
 				physical_address,
-				S::MAP_EXTRA_FLAG | PageTableEntryFlags::ACCESSED | PageTableEntryFlags::DIRTY | flags,
+				S::MAP_EXTRA_FLAG
+					| PageTableEntryFlags::ACCESSED
+					| PageTableEntryFlags::DIRTY
+					| flags,
 			);
 		}
 

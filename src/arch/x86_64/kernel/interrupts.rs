@@ -16,14 +16,10 @@ use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_coun
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, page_fault_handler};
 use crate::arch::x86_64::swapgs;
-use crate::drivers::InterruptHandlerQueue;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_interrupt_handlers;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_interrupt_handlers;
+use crate::drivers::InterruptHandlerMap;
 use crate::scheduler::{self, CoreId};
 
-static IRQ_HANDLERS: OnceCell<HashMap<u8, InterruptHandlerQueue, RandomState>> = OnceCell::new();
+static IRQ_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
@@ -161,15 +157,14 @@ pub(crate) fn install() {
 	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
-pub(crate) fn install_handlers() {
-	IRQ_HANDLERS.set(get_interrupt_handlers()).unwrap();
+pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
+	IRQ_HANDLERS.set(handlers).unwrap();
 }
 
 fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
 	debug!("received interrupt {index}");
 
 	swapgs(&stack_frame);
-	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	if let Some(handlers) = IRQ_HANDLERS.get()

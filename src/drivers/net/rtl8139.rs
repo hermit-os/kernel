@@ -9,7 +9,7 @@ use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 
 use endian_num::{le16, le32, le64};
-use pci_types::{Bar, CommandRegister, InterruptLine, MAX_BARS};
+use pci_types::{Bar, CommandRegister, MAX_BARS};
 use smoltcp::phy::DeviceCapabilities;
 use thiserror::Error;
 use volatile::access::{NoAccess, ReadOnly, ReadWrite};
@@ -17,10 +17,10 @@ use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef, map_field};
 
 use crate::arch::kernel::interrupts::*;
 use crate::arch::kernel::pci::PciConfigRegion;
-use crate::drivers::Driver;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::pci::PciDevice;
+use crate::drivers::{Driver, InterruptHandlerMap};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -480,7 +480,6 @@ struct TxFields {
 pub(crate) struct RTL8139Driver {
 	regs: VolatileRef<'static, Regs>,
 	mtu: u16,
-	irq: InterruptLine,
 	mac: [u8; 6],
 	rx_fields: RxFields,
 	tx_fields: TxFields,
@@ -698,10 +697,6 @@ impl NetworkDriver for RTL8139Driver {
 }
 
 impl Driver for RTL8139Driver {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"rtl8139"
 	}
@@ -748,6 +743,7 @@ impl Drop for RTL8139Driver {
 
 pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
+	handlers: &mut InterruptHandlerMap,
 ) -> Result<RTL8139Driver, DriverError> {
 	let irq = device.get_irq().unwrap();
 	let mut regs = None;
@@ -868,15 +864,14 @@ pub(crate) fn init_device(
 	regs.as_mut_ptr().imr().write(le16::from(INT_MASK));
 
 	regs.as_mut_ptr().bmcr().write(le16::from(BMCR_ANE));
-	let speed;
 	let tmp = regs.as_ptr().bmcr().read().to_ne();
-	if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
-		speed = 1000;
+	let speed = if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
+		1000
 	} else if tmp & BMCR_SPD100 == BMCR_SPD100 {
-		speed = 100;
+		100
 	} else {
-		speed = 10;
-	}
+		10
+	};
 
 	// Enable Receive and Transmitter
 	regs.as_mut_ptr().cr().write(CR_TE | CR_RE); // Sets the RE and TE bits high
@@ -889,12 +884,15 @@ pub(crate) fn init_device(
 	);
 
 	info!("RTL8139 use interrupt line {irq}");
+	handlers
+		.entry(irq)
+		.or_default()
+		.push_back(crate::executor::network::network_handler);
 	add_irq_name(irq, "rtl8139");
 
 	Ok(RTL8139Driver {
 		regs,
 		mtu: mtu(),
-		irq,
 		mac,
 		rx_fields: RxFields {
 			rxbuffer,

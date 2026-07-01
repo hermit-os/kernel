@@ -3,9 +3,8 @@
 //! The driver is derived from the Zynq 7000 Gigabit Ethernet Controller (GEM) reference manual.
 //! See the [Zynq 7000 SoC Technical Reference Manual (UG585)](https://docs.xilinx.com/r/en-US/ug585-zynq-7000-SoC-TRM) for more details.
 
-use alloc::alloc::Allocator;
 use alloc::boxed::Box;
-use core::alloc::Layout;
+use core::alloc::{Allocator, Layout};
 use core::ptr::NonNull;
 use core::{ptr, slice};
 
@@ -18,7 +17,7 @@ use tock_registers::{register_bitfields, register_structs};
 
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{NetworkDriver, mtu};
-use crate::drivers::{Driver, InterruptLine};
+use crate::drivers::{Driver, InterruptHandlerMap};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -207,7 +206,6 @@ pub enum GEMError {
 /// the device itself.
 pub struct GEMDriver {
 	mtu: u16,
-	irq: u8,
 	mac: [u8; 6],
 	rx_counter: u32,
 	rx_fields: RxFields,
@@ -316,10 +314,6 @@ impl TxFields {
 }
 
 impl Driver for GEMDriver {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"gem"
 	}
@@ -574,6 +568,7 @@ pub fn init_device(
 	irq: u8,
 	phy_addr: u32,
 	mac: [u8; 6],
+	handlers: &mut InterruptHandlerMap,
 ) -> Result<GEMDriver, DriverError> {
 	debug!("Init GEM at {gem_base:p}");
 
@@ -806,9 +801,13 @@ pub fn init_device(
 		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
 	);
 
+	handlers
+		.entry(irq)
+		.or_default()
+		.push_back(crate::executor::network::network_handler);
+
 	Ok(GEMDriver {
 		mtu: mtu(),
-		irq,
 		mac,
 		rx_counter: 0,
 		rx_fields: RxFields {

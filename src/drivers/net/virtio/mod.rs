@@ -5,14 +5,14 @@
 //!
 //! [Network Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-2170001
 
-cfg_select! {
-	feature = "pci" => {
-		mod pci;
-	}
-	_ => {
-		mod mmio;
-	}
-}
+// FIXME: use cfg_select! instead once resolved:
+// https://github.com/rust-lang/rust/issues/158371
+// https://github.com/rust-lang/rust/issues/158400
+#[cfg(feature = "pci")]
+mod pci;
+
+#[cfg(not(feature = "pci"))]
+mod mmio;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -46,7 +46,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
-use crate::drivers::{Driver, InterruptLine};
+use crate::drivers::{Driver, InterruptHandlerMap, InterruptLine};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
@@ -248,7 +248,6 @@ pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) inner: T,
 
 	pub(super) num_vqs: u16,
-	pub(super) irq: InterruptLine,
 	/// Describes for what protocols and in which directions, if any, the checksum
 	/// should be calculated in software. It is the complement of what is offloaded
 	/// to the hardware.
@@ -595,10 +594,6 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 }
 
 impl Driver for VirtioNetDriver<Init> {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"virtio"
 	}
@@ -724,17 +719,16 @@ impl VirtioNetDriver<Init> {
 			_ => return None,
 		};
 
-		let csum_offset;
 		let ip_payload = &mut ethernet_frame.payload_mut()[ip_header_len.into()..ip_packet_len];
 		// Like the Ethernet protocol check, we check for IP protocols for which we know the location of the checksum field.
-		if protocol == IpProtocol::Tcp && !checksums.tcp.tx() {
+		let csum_offset = if protocol == IpProtocol::Tcp && !checksums.tcp.tx() {
 			let mut tcp_packet = TcpPacket::new_unchecked(ip_payload);
 			tcp_packet.set_checksum(pseudo_header_checksum);
-			csum_offset = 16;
+			16
 		} else if protocol == IpProtocol::Udp && !checksums.udp.tx() {
 			let mut udp_packet = UdpPacket::new_unchecked(ip_payload);
 			udp_packet.set_checksum(pseudo_header_checksum);
-			csum_offset = 6;
+			6
 		} else {
 			return None;
 		};
@@ -754,7 +748,11 @@ impl VirtioNetDriver<Uninit> {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.1.5
-	pub fn init_dev(mut self) -> Result<VirtioNetDriver<Init>, VirtioNetError> {
+	pub fn init_dev(
+		mut self,
+		handlers: &mut InterruptHandlerMap,
+		irq: Option<InterruptLine>,
+	) -> Result<VirtioNetDriver<Init>, VirtioNetError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -837,6 +835,11 @@ impl VirtioNetDriver<Uninit> {
 			self.dev_cfg.dev_id
 		);
 
+		handlers
+			.entry(irq.unwrap())
+			.or_default()
+			.push_back(crate::executor::network::network_handler);
+
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
@@ -861,7 +864,6 @@ impl VirtioNetDriver<Uninit> {
 			notif_cfg: self.notif_cfg,
 			inner,
 			num_vqs: self.num_vqs,
-			irq: self.irq,
 			checksums: self.checksums,
 		})
 	}

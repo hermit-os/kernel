@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-cfg_select! {
-	feature = "pci" => {
-		mod pci;
-	}
-	_ => {
-		mod mmio;
-	}
-}
+// FIXME: use cfg_select! instead once resolved:
+// https://github.com/rust-lang/rust/issues/158371
+// https://github.com/rust-lang/rust/issues/158400
+#[cfg(feature = "pci")]
+mod pci;
+
+#[cfg(not(feature = "pci"))]
+mod mmio;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
@@ -20,7 +20,10 @@ use volatile::access::ReadOnly;
 
 use super::virtio::virtqueue::VirtQueue;
 use crate::config::{VIRTIO_MAX_QUEUE_SIZE, VSOCK_PACKET_SIZE};
-use crate::drivers::Driver;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::mmio::get_vsock_driver;
+#[cfg(feature = "pci")]
+use crate::drivers::pci::get_vsock_driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioVsockError;
 #[cfg(not(feature = "pci"))]
@@ -31,6 +34,7 @@ use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq,
 };
+use crate::drivers::{Driver, InterruptHandlerMap};
 use crate::mm::device_alloc::DeviceAlloc;
 
 fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
@@ -260,7 +264,6 @@ pub(crate) struct VirtioVsockDriver {
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
-	pub(super) irq: InterruptLine,
 
 	pub(super) event_vq: EventQueue,
 	pub(super) recv_vq: RxQueue,
@@ -268,10 +271,6 @@ pub(crate) struct VirtioVsockDriver {
 }
 
 impl Driver for VirtioVsockDriver {
-	fn get_interrupt_number(&self) -> InterruptLine {
-		self.irq
-	}
-
 	fn get_name(&self) -> &'static str {
 		"virtio"
 	}
@@ -323,7 +322,11 @@ impl VirtioVsockDriver {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.10.6
-	pub fn init_dev(&mut self) -> Result<(), VirtioVsockError> {
+	pub fn init_dev(
+		&mut self,
+		handlers: &mut InterruptHandlerMap,
+		irq: Option<InterruptLine>,
+	) -> Result<(), VirtioVsockError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -399,6 +402,13 @@ impl VirtioVsockDriver {
 			)
 			.unwrap(),
 		));
+
+		handlers.entry(irq.unwrap()).or_default().push_back(|| {
+			if let Some(driver) = get_vsock_driver() {
+				driver.lock().handle_interrupt();
+			};
+		});
+
 		// Interrupt for event packets is wanted
 		self.event_vq.enable_notifs();
 

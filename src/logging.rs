@@ -1,8 +1,11 @@
+use alloc::borrow::Cow;
 use core::fmt;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
 use anstyle::AnsiColor;
+use env_filter::Builder;
+use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
 use crate::arch::kernel::{core_local, processor};
@@ -12,12 +15,14 @@ pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 /// Data structure to filter kernel messages
 pub struct KernelLogger {
 	time: AtomicBool,
+	filter: OnceCell<env_filter::Filter>,
 }
 
 impl KernelLogger {
 	pub const fn new() -> Self {
 		Self {
 			time: AtomicBool::new(false),
+			filter: OnceCell::new(),
 		}
 	}
 
@@ -31,8 +36,8 @@ impl KernelLogger {
 }
 
 impl log::Log for KernelLogger {
-	fn enabled(&self, _: &Metadata<'_>) -> bool {
-		true
+	fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+		self.filter.get().unwrap().enabled(metadata)
 	}
 
 	fn flush(&self) {
@@ -40,7 +45,7 @@ impl log::Log for KernelLogger {
 	}
 
 	fn log(&self, record: &Record<'_>) {
-		if !self.enabled(record.metadata()) {
+		if !self.filter.get().unwrap().matches(record) {
 			return;
 		}
 
@@ -114,31 +119,19 @@ fn no_color() -> bool {
 }
 
 pub unsafe fn init() {
-	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
-	// Determines LevelFilter at compile time
-	let log_level = hermit_var!("HERMIT_LOG_LEVEL_FILTER");
-	let mut max_level = LevelFilter::Info;
+	let filter = hermit_var!("HERMIT_LOG_LEVEL_FILTER").unwrap_or(Cow::from("info"));
 
-	if let Some(log_level) = log_level {
-		max_level = if log_level.eq_ignore_ascii_case("off") {
-			LevelFilter::Off
-		} else if log_level.eq_ignore_ascii_case("error") {
-			LevelFilter::Error
-		} else if log_level.eq_ignore_ascii_case("warn") {
-			LevelFilter::Warn
-		} else if log_level.eq_ignore_ascii_case("info") {
-			LevelFilter::Info
-		} else if log_level.eq_ignore_ascii_case("debug") {
-			LevelFilter::Debug
-		} else if log_level.eq_ignore_ascii_case("trace") {
-			LevelFilter::Trace
-		} else {
-			error!("Could not parse HERMIT_LOG_LEVEL_FILTER, falling back to `info`.");
-			LevelFilter::Info
-		};
+	let mut builder = Builder::new();
+	// The default. It may get overwritten by the parsed filter if it has a global level.
+	builder.filter_level(LevelFilter::Info);
+	if let Err(err) = builder.try_parse(&filter) {
+		println!("{err}");
 	}
+	let filter = builder.build();
 
-	log::set_max_level(max_level);
+	log::set_max_level(filter.filter());
+	KERNEL_LOGGER.filter.set(filter).unwrap();
+	log::set_logger(&KERNEL_LOGGER).expect("Can't initialize logger");
 }
 
 #[cfg_attr(target_arch = "riscv64", allow(unused_macros))]
