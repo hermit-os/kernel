@@ -171,8 +171,7 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
 
-	let fdt_start = env::boot_info().hardware_info.device_tree.unwrap().get();
-	let fdt_start = usize::try_from(fdt_start).unwrap();
+	let fdt_start = env::fdt_addr().unwrap().get();
 	let fdt_end = fdt_start + fdt.total_size();
 	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
 	reserve(fdt_region);
