@@ -133,12 +133,11 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				paging::identity_map::<paging::HugePageSize>(plic_region_start);
 
 				// TODO: Determine correct context via devicetree and allow more than one context
-				match PLATFORM_MODEL {
-					Model::Virt | Model::Unknown => {
-						init_plic(plic_region.starting_address.expose_provenance(), 1);
-					}
-					Model::Fux40 => init_plic(plic_region.starting_address.expose_provenance(), 2),
-				}
+				let context = match PLATFORM_MODEL {
+					Model::Virt | Model::Unknown => 1,
+					Model::Fux40 => 2,
+				};
+				init_plic(plic_region.starting_address, context);
 			}
 
 			// Init GEM
