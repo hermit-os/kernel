@@ -275,7 +275,7 @@ net = []
 ## Enables the virtio driver backend.
 ##
 ## This is automatically enabled by any virtio driver.
-virtio = ["dep:virtio", "dep:mem-barrier"]
+virtio = ["dep:virtio", "dep:mem-barrier", "volatile/derive"]
 
 ## Enables a warning that this libhermit.a was prebuilt.
 warn-prebuilt = []

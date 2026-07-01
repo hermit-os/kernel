@@ -6,6 +6,7 @@ use volatile::VolatileRef;
 
 use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::InterruptCapability;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
@@ -30,7 +31,7 @@ impl VirtioFsDriver {
 			dev_id,
 			features: virtio::fs::F::empty(),
 		};
-		let isr_stat = IsrStatus::new(registers.borrow_mut());
+		let isr_stat = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
 		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
 		Ok(VirtioFsDriver {

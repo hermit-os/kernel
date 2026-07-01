@@ -352,10 +352,6 @@ pub(crate) fn init_device(
 		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no, handlers) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
-
-				crate::arch::kernel::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {irq_no}");
-
 				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
 					virt_console_drv,
 				)))
@@ -372,7 +368,6 @@ pub(crate) fn init_device(
 			match VirtioFsDriver::init(dev_id, registers, irq_no, handlers) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
-					crate::arch::kernel::interrupts::add_irq_name(irq_no, "virtio");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
@@ -385,10 +380,6 @@ pub(crate) fn init_device(
 		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no, handlers) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
-
-				crate::arch::kernel::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {irq_no}");
-
 				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
@@ -400,10 +391,6 @@ pub(crate) fn init_device(
 		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no, handlers) {
 			Ok(virt_vsock_drv) => {
 				info!("Virtio sock driver initialized.");
-
-				crate::arch::kernel::interrupts::add_irq_name(irq_no, "virtio");
-				info!("Virtio interrupt handler at line {irq_no}");
-
 				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_vsock_drv)))
 			}
 			Err(virtio_error) => {

@@ -3,6 +3,7 @@ use virtio::vsock::Config;
 use volatile::VolatileRef;
 
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::InterruptCapability;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
@@ -28,7 +29,7 @@ impl VirtioVsockDriver {
 			dev_id,
 			features: virtio::vsock::F::empty(),
 		};
-		let isr_stat = IsrStatus::new(registers.borrow_mut());
+		let isr_stat = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
 		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
 		Ok(VirtioVsockDriver {

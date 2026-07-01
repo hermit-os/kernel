@@ -463,6 +463,70 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 	});
 }
 
+#[cfg(feature = "virtio")]
+pub(crate) mod msix {
+	// Intel 64 and IA-32 Architectures Software Developer’s Manual volume 2 section 12.11.2.1.
+	pub const VECTOR_MAX: u8 = 0xfe;
+
+	/// MSI-X Table entry.
+	#[repr(C)]
+	#[derive(volatile::VolatileFieldAccess)]
+	pub struct TableEntry {
+		/// Message Address
+		pub(crate) message_address: u32,
+
+		/// Message Upper Address
+		pub(crate) message_upper_address: u32,
+
+		/// Message Data
+		pub(crate) message_data: u32,
+
+		/// Vector Control
+		pub(crate) vector_control: u32,
+	}
+
+	pub trait MsixTableVolatileElementAccess {
+		fn configure(&mut self, index: u16, vector: u8);
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	impl MsixTableVolatileElementAccess for volatile::VolatileRef<'_, [TableEntry]> {
+		/// Configures the [TableEntry] at the given index of the MSI-X table to trigger the vector provided.
+		///
+		/// Note that unlike the IRQ numbering scheme, the first user defined vector is 32, not 0. More advanced
+		/// interrupt configurations such as destination ID, redirection hint indication, etc. (see Intel 64 and IA-32
+		/// Architectures Software Developer’s Manual volume 3 section 12.11.2 for more details) are not modified.
+		fn configure(&mut self, index: u16, vector: u8) {
+			use bit_field::BitField;
+
+			// Intel 64 and IA-32 Architectures Software Developer’s Manual volume 3 section 12.11.2.1.
+			core::assert_matches!(vector, 0x10..=VECTOR_MAX);
+
+			let msix_entry = unsafe {
+				self.as_mut_ptr()
+					.map(|table| table.cast().offset(index.try_into().unwrap()))
+			};
+
+			// Mask the entry because "[s]oftware must not modify the Address, Data, or Steering Tag fields
+			// of an entry while it is unmasked." (PCIe spec. 6.1.4.2)
+			msix_entry
+				.vector_control()
+				.update(|mut control| *control.set_bit(0, true));
+
+			// Format described in Intel 64 and IA-32 Architectures Software Developer’s Manual volume 3 section 12.11.2.
+			msix_entry
+				.message_address()
+				.update(|mut addr_low| *addr_low.set_bits(20..32, 0xfee));
+			msix_entry
+				.message_data()
+				.update(|mut data| *data.set_bits(0..8, u32::from(vector)));
+			msix_entry
+				.vector_control()
+				.update(|mut control| *control.set_bit(0, false));
+		}
+	}
+}
+
 /// A module containing PCI specific errors
 ///
 /// Errors include...

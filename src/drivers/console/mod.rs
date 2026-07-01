@@ -32,10 +32,11 @@ use crate::drivers::mmio::get_console_driver;
 use crate::drivers::pci::get_console_driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioConsoleError;
+use crate::drivers::virtio::transport::InterruptCapability;
 #[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::{ComCfg, NotifCfg};
 #[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::pci::{ComCfg, NotifCfg};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
@@ -260,7 +261,7 @@ pub(crate) struct ConsoleDevCfg {
 pub(crate) struct VirtioConsoleDriver {
 	pub(super) dev_cfg: ConsoleDevCfg,
 	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: IsrStatus,
+	pub(super) isr_stat: InterruptCapability,
 	pub(super) notif_cfg: NotifCfg,
 
 	pub(super) recv_vq: RxQueue,
@@ -280,17 +281,35 @@ impl VirtioConsoleDriver {
 
 	/// Handle interrupt and acknowledge interrupt
 	pub fn handle_interrupt(&mut self) {
-		let status = self.isr_stat.acknowledge();
+		#[cfg_attr(
+			not(all(feature = "pci", target_arch = "x86_64")),
+			expect(irrefutable_let_patterns)
+		)]
+		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.isr_stat else {
+			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
+		};
+
+		let status = isr_stat.acknowledge();
 
 		let config_change = cfg_select! {
 			feature = "pci" => virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT,
 			_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
 		};
 
-		if status.contains(config_change) && self.com_cfg.does_device_need_reset() {
-			todo!("Device configuration change notification cannot be handled yet");
+		if status.contains(config_change) {
+			self.handle_device_configuration_interrupt();
 		}
 
+		Self::handle_queue_interrupt();
+	}
+
+	fn handle_device_configuration_interrupt(&self) {
+		if self.com_cfg.does_device_need_reset() {
+			todo!("Device configuration change notification cannot be handled yet");
+		}
+	}
+
+	fn handle_queue_interrupt() {
 		crate::console::CONSOLE_WAKER.lock().wake();
 	}
 
@@ -368,11 +387,30 @@ impl VirtioConsoleDriver {
 		// Interrupt for communicating that a sent packet left, is not needed
 		self.send_vq.disable_notifs();
 
-		handlers.entry(irq.unwrap()).or_default().push_back(|| {
-			if let Some(driver) = get_console_driver() {
-				driver.lock().handle_interrupt();
-			};
-		});
+		match &mut self.isr_stat {
+			InterruptCapability::IsrStatus(_) => {
+				let irq = irq.unwrap();
+				handlers.entry(irq).or_default().push_back(|| {
+					if let Some(driver) = get_console_driver() {
+						driver.lock().handle_interrupt();
+					};
+				});
+				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+				info!("Virtio interrupt handler at line {irq}");
+			}
+			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+			InterruptCapability::Msix(msix_table) => self.com_cfg.register_msix_vectors(
+				msix_table,
+				handlers,
+				|| {
+					if let Some(driver) = get_console_driver() {
+						driver.lock().handle_device_configuration_interrupt();
+					};
+				},
+				[(0..2u16, Self::handle_queue_interrupt as fn())].into_iter(),
+				[],
+			),
+		}
 
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();

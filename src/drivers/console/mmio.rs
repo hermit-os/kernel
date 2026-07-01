@@ -4,6 +4,7 @@ use volatile::VolatileRef;
 
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::InterruptCapability;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
@@ -28,7 +29,7 @@ impl VirtioConsoleDriver {
 			dev_id,
 			features: virtio::console::F::empty(),
 		};
-		let isr_stat = IsrStatus::new(registers.borrow_mut());
+		let isr_stat = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
 		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
 		Ok(VirtioConsoleDriver {
