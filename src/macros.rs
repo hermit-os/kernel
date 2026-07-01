@@ -97,14 +97,7 @@ pub(crate) use dbg;
 #[allow(unused_macros)]
 macro_rules! hermit_var {
 	($name:expr) => {
-		match $crate::env::var($name) {
-			::core::option::Option::Some(val) => {
-				::core::option::Option::Some(::alloc::borrow::Cow::from(val))
-			}
-			::core::option::Option::None => {
-				::core::option_env!($name).map(::alloc::borrow::Cow::Borrowed)
-			}
-		}
+		$crate::env::var($name).map(|s| s.as_str())
 	};
 }
 
@@ -118,7 +111,6 @@ pub(crate) use hermit_var;
 macro_rules! hermit_var_or {
 	($name:expr, $default:expr) => {
 		$crate::macros::hermit_var!($name)
-			.as_deref()
 			.unwrap_or($default)
 	};
 }
