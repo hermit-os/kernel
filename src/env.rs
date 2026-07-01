@@ -13,6 +13,7 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
+use time::OffsetDateTime;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -46,6 +47,14 @@ struct Cli {
 /// Whether Hermit is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+}
+
+#[cfg_attr(target_arch = "riscv64", expect(dead_code))]
+pub fn uhyve_boot_time() -> Option<OffsetDateTime> {
+	match boot_info().platform_info {
+		PlatformInfo::Uhyve { boot_time, .. } => Some(boot_time),
+		_ => None,
+	}
 }
 
 pub fn is_uefi() -> bool {
