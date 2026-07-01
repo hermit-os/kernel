@@ -70,6 +70,14 @@ pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
 	}
 }
 
+#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
+pub fn uhyve_cpu_freq() -> Option<NonZero<u32>> {
+	match boot_info().platform_info {
+		PlatformInfo::Uhyve { cpu_freq, .. } => Some(NonZero::new(cpu_freq?.get()).unwrap()),
+		_ => None,
+	}
+}
+
 pub fn is_uefi() -> bool {
 	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
 }

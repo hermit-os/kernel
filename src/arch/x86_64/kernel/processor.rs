@@ -8,10 +8,9 @@ use core::arch::x86_64::{
 };
 use core::fmt;
 use core::hint::spin_loop;
-use core::num::{NonZero, NonZeroU32};
+use core::num::NonZero;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
 use raw_cpuid::*;
 use x86_64::instructions::interrupts::int3;
@@ -369,18 +368,10 @@ impl CpuFrequency {
 	}
 
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		fn detect_from_uhyve() -> Result<u16, ()> {
-			match env::boot_info().platform_info {
-				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
-					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
-				)
-				.unwrap()),
-				_ => Err(()),
-			}
-		}
-		// future implementations could add support for different hypervisors
-		// by adding or_else here
-		self.set_detected_cpu_frequency(detect_from_uhyve()?, CpuFrequencySources::Hypervisor)
+		let cpu_freq = env::uhyve_cpu_freq().ok_or(())?.get();
+		let mhz = cpu_freq / 1000;
+
+		self.set_detected_cpu_frequency(mhz.try_into().unwrap(), CpuFrequencySources::Hypervisor)
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
