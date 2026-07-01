@@ -117,7 +117,12 @@ static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	}
 	cpu_frequency
 });
-// Value of CNTPCT_EL0 at boot time
+// Value of CNTVCT_EL0 at boot time. We use the Virtual Timer (CNTV_*)
+// rather than the Physical Timer (CNTP_*): the virtual timer is always
+// available — including under hypervisors that hide CNTP_* from EL1
+// (e.g. macOS HVF on Apple Silicon, where MSR/MRS to `CNTP_CVAL_EL0`
+// faults as UNDEF) — and behaves identically on bare metal because
+// CNTVOFF_EL2 defaults to zero when no hypervisor is in play.
 static BOOT_COUNTER: OnceCell<u64> = OnceCell::new();
 
 enum CpuFrequencySources {
@@ -206,27 +211,45 @@ pub fn halt() {
 	aarch64_cpu::asm::wfi();
 }
 
-/// Shutdown the system
+/// Shutdown the system.
+///
+/// We try PSCI first, with semihosting as a fallback. Rationale:
+///
+/// * **PSCI `SYSTEM_OFF`** is implemented by QEMU's `virt` machine for
+///   both `accel=tcg` and `accel=hvf`/`accel=kvm`, and by real-hardware
+///   firmware. It is the most portable shutdown primitive on AArch64.
+///
+/// * **AArch64 semihosting** uses `HLT #0xf000`. On `accel=tcg`, QEMU
+///   intercepts that instruction and exits with the supplied code.
+///   Under `accel=hvf`/`accel=kvm` the HLT goes straight to the guest
+///   as an UNDEF exception (`EC=0x0`) because hardware virtualisation
+///   does not trap it — so semihosting is *not* a viable shutdown
+///   primitive in a virtualised guest. We therefore use it only as a
+///   fallback for the `_exit(error_code)` semantic when PSCI declines
+///   to terminate (e.g. on platforms without a PSCI dispatcher).
 #[allow(unused_variables)]
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
-	cfg_select! {
-		feature = "semihosting" => {
-			semihosting::process::exit(error_code)
-		}
-		_ => {
-			unsafe {
-				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
-				// call hypervisor to shut down the system
-				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+	unsafe {
+		const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
+		// hvc #0 with x0 = PSCI_SYSTEM_OFF: QEMU virt's PSCI dispatcher
+		// terminates the VM. On real hardware this returns to firmware
+		// which performs the shutdown.
+		asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+	}
 
-				// we should never reach this point
-				loop {
-					aarch64_cpu::asm::wfe();
-				}
-			}
-		}
+	// PSCI did not terminate (no dispatcher, or call returned). Fall back
+	// to semihosting if the feature is compiled in — useful under TCG
+	// where it correctly propagates `error_code` to the host shell.
+	#[cfg(feature = "semihosting")]
+	semihosting::process::exit(error_code);
+
+	// Last resort: park the CPU forever.
+	#[cfg(not(feature = "semihosting"))]
+	#[allow(clippy::empty_loop)]
+	loop {
+		aarch64_cpu::asm::wfe();
 	}
 }
 
@@ -247,7 +270,7 @@ pub fn get_frequency() -> u16 {
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	CNTPCT_EL0.get() - BOOT_COUNTER.get().unwrap()
+	CNTVCT_EL0.get() - BOOT_COUNTER.get().unwrap()
 }
 
 #[inline]
@@ -303,7 +326,7 @@ pub fn configure() {
 }
 
 pub fn detect_frequency() {
-	BOOT_COUNTER.set(CNTPCT_EL0.get()).unwrap();
+	BOOT_COUNTER.set(CNTVCT_EL0.get()).unwrap();
 	Lazy::force(&CPU_FREQUENCY);
 }
 
@@ -311,8 +334,8 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	let Some(wt) = wakeup_time else {
 		// disable timer
-		CNTP_CVAL_EL0.set(0);
-		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
+		CNTV_CVAL_EL0.set(0);
+		CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::CLEAR);
 		return;
 	};
 
@@ -320,8 +343,8 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
 	let deadline = (wt / 1000) * freq;
 
-	CNTP_CVAL_EL0.set(deadline);
-	CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
+	CNTV_CVAL_EL0.set(deadline);
+	CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::SET);
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
