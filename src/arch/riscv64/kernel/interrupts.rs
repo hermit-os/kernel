@@ -1,22 +1,108 @@
 use alloc::vec::Vec;
-use core::ptr;
+use core::mem::offset_of;
+use core::num::NonZeroU16;
+use core::ptr::NonNull;
 
 use ahash::RandomState;
+use bit_field::BitField;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
 use riscv::asm::wfi;
 use riscv::interrupt::{Exception, Interrupt, Trap};
 use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
+use volatile::access::{NoAccess, ReadOnly};
+use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef};
 
 use crate::drivers::InterruptHandlerMap;
 use crate::scheduler;
 
-/// Base address of the PLIC, only one access at the same time is allowed
-static PLIC_BASE: SpinMutex<usize> = SpinMutex::new(0x0);
+const NUMBER_OF_SOURCES: usize = 1024;
+const NUMBER_OF_CONTEXTS: usize = 15871;
+
+const INTERRUPT_PENDING_BITS_OFFSET: usize = 0x00_1000;
+const INTERRUPT_ENABLE_BITS_OFFSET: usize = 0x00_2000;
+const CONTEXT_BASED_REGISTERS: usize = 0x20_0000;
+
+type SourceBitArray = [u32; NUMBER_OF_SOURCES / (u32::BITS as usize)];
+
+#[repr(C, align(4096))]
+#[derive(VolatileFieldAccess)]
+struct ContextBasedRegisters {
+	priority_threshold: u32,
+	claim_or_complete: u32,
+}
+
+#[repr(C)]
+#[derive(VolatileFieldAccess)]
+struct Plic {
+	#[access(NoAccess)]
+	_reserved0: u32,
+	interrupt_priorities: [u32; NUMBER_OF_SOURCES - 1],
+	#[access(ReadOnly)]
+	interrupt_pending_bits: SourceBitArray,
+	#[access(NoAccess)]
+	_reserved3: [u32; (INTERRUPT_ENABLE_BITS_OFFSET - 0x00_1080) / size_of::<u32>()],
+	interrupt_enable_bits: [SourceBitArray; NUMBER_OF_CONTEXTS],
+	#[access(NoAccess)]
+	_reserved2: [u32; (CONTEXT_BASED_REGISTERS - 0x1f_2000) / size_of::<u32>()],
+	context_based_registers: [ContextBasedRegisters; NUMBER_OF_CONTEXTS],
+}
+
+const _: () = assert!(offset_of!(Plic, interrupt_pending_bits) == INTERRUPT_PENDING_BITS_OFFSET);
+const _: () = assert!(offset_of!(Plic, interrupt_enable_bits) == INTERRUPT_ENABLE_BITS_OFFSET);
+const _: () = assert!(offset_of!(Plic, context_based_registers) == CONTEXT_BASED_REGISTERS);
+
+trait PlicVolatileMemberAccess<'a> {
+	fn interrupt_priority(self, source: NonZeroU16) -> VolatilePtr<'a, u32>;
+	fn context_based_register(self, context: u16) -> VolatilePtr<'a, ContextBasedRegisters>;
+	fn set_enable_bit(self, context: u16, source: NonZeroU16, value: bool);
+}
+
+impl<'a> PlicVolatileMemberAccess<'a> for VolatilePtr<'a, Plic> {
+	fn interrupt_priority(self, source: NonZeroU16) -> VolatilePtr<'a, u32> {
+		unsafe {
+			self.interrupt_priorities().map(|slice| {
+				slice
+					.cast()
+					.offset(isize::try_from(source.get()).unwrap() - 1)
+			})
+		}
+	}
+
+	fn context_based_register(self, context: u16) -> VolatilePtr<'a, ContextBasedRegisters> {
+		unsafe {
+			self.context_based_registers()
+				.map(|slice| slice.cast().offset(isize::try_from(context).unwrap()))
+		}
+	}
+
+	fn set_enable_bit(self, context: u16, source: NonZeroU16, value: bool) {
+		let source = usize::from(source.get());
+		unsafe {
+			self.interrupt_enable_bits()
+				.map(|slice| {
+					slice
+						.cast::<SourceBitArray>()
+						.offset(isize::try_from(context).unwrap())
+				})
+				.map(|context_slice| {
+					context_slice
+						.cast::<u32>()
+						.offset((source / 32).try_into().unwrap())
+				})
+				.update(|mut word| {
+					word.set_bit(source % 32, value);
+					word
+				});
+		};
+	}
+}
+
+static PLIC: SpinMutex<Option<VolatileRef<'static, Plic>>> = SpinMutex::new(None);
 
 /// PLIC context for new interrupt handlers
-static PLIC_CONTEXT: SpinMutex<u16> = SpinMutex::new(0x0);
+static PLIC_CONTEXT: OnceCell<u16> = OnceCell::new();
 
 /// PLIC context for new interrupt handlers
 static CURRENT_INTERRUPTS: SpinMutex<Vec<u32>> = SpinMutex::new(Vec::new());
@@ -34,9 +120,10 @@ pub(crate) fn install() {
 }
 
 /// Init PLIC
-pub(crate) fn init_plic(base: usize, context: u16) {
-	*PLIC_BASE.lock() = base;
-	*PLIC_CONTEXT.lock() = context;
+pub(crate) fn init_plic(base: *const u8, context: u16) {
+	*PLIC.lock() =
+		Some(unsafe { VolatileRef::new(NonNull::new(base.cast::<Plic>().cast_mut()).unwrap()) });
+	PLIC_CONTEXT.set(context).unwrap();
 }
 
 /// Enable Interrupts
@@ -116,28 +203,20 @@ pub(crate) fn disable() {
 /// Currently not needed because we use the trapframe crate
 pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
 	for irq_number in handlers.keys() {
-		unsafe {
-			let base_ptr = PLIC_BASE.lock();
-			let context = PLIC_CONTEXT.lock();
+		let mut plic_guard = PLIC.lock();
+		let plic_ptr = plic_guard.as_mut().unwrap().as_mut_ptr();
+		let context = *PLIC_CONTEXT.get().unwrap();
+		let source = NonZeroU16::new(u16::from(*irq_number)).unwrap();
 
-			// Set priority to 7 (highest on FU740)
-			let prio_address = *base_ptr + *irq_number as usize * 4;
-			let prio_ptr = ptr::with_exposed_provenance_mut::<u32>(prio_address);
-			prio_ptr.write_volatile(1);
-			// Set Threshold to 0 (lowest)
-			let thresh_address = *base_ptr + 0x20_0000 + 0x1000 * (*context as usize);
-			let thresh_ptr = ptr::with_exposed_provenance_mut::<u32>(thresh_address);
-			thresh_ptr.write_volatile(0);
-			// Enable irq for context
-			const PLIC_ENABLE_OFFSET: usize = 0x0000_2000;
-			let enable_address = *base_ptr
-				+ PLIC_ENABLE_OFFSET
-				+ 0x80 * (*context as usize)
-				+ ((*irq_number / 32) * 4) as usize;
-			let enable_ptr = ptr::with_exposed_provenance_mut::<u32>(enable_address);
-			debug!("enable_address {enable_ptr:p}");
-			enable_ptr.write_volatile(1 << (irq_number % 32));
-		}
+		// Set priority to 7 (highest on FU740)
+		plic_ptr.interrupt_priority(source).write(1);
+		// Set Threshold to 0 (lowest)
+		plic_ptr
+			.context_based_register(context)
+			.priority_threshold()
+			.write(0);
+		// Enable irq for context
+		plic_ptr.set_enable_bit(context, source, true);
 	}
 
 	INTERRUPT_HANDLERS.set(handlers).unwrap();
@@ -187,11 +266,11 @@ fn external_handler() {
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	// Claim interrupt
-	let base_ptr = PLIC_BASE.lock();
-	let context = PLIC_CONTEXT.lock();
-	let claim_address = *base_ptr + 0x20_0004 + 0x1000 * (*context as usize);
-	let claim_ptr = ptr::with_exposed_provenance_mut::<u32>(claim_address);
-	let irq = unsafe { claim_ptr.read_volatile() };
+	let mut plic_guard = PLIC.lock();
+	let plic_ptr = plic_guard.as_mut().unwrap().as_mut_ptr();
+	let context = *PLIC_CONTEXT.get().unwrap();
+	let claim_ptr = plic_ptr.context_based_register(context).claim_or_complete();
+	let irq = claim_ptr.read();
 
 	if irq != 0 {
 		debug!("External INT: {irq}");
@@ -216,9 +295,7 @@ fn external_handler() {
 		core_scheduler().reschedule();
 
 		// Complete interrupt after handling
-		unsafe {
-			claim_ptr.write_volatile(irq);
-		}
+		claim_ptr.write(irq);
 
 		// Remove from active interrupts
 		let mut cur_int = CURRENT_INTERRUPTS.lock();

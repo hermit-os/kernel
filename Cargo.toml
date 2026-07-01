@@ -393,6 +393,7 @@ trapframe = "0.10"
 memory_addresses = { version = "0.4", default-features = false, features = [
 	"riscv64",
 ] }
+volatile = { version = "0.6", features = ["derive"] }
 
 [dev-dependencies]
 float-cmp = "0.10"
