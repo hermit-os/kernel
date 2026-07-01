@@ -40,12 +40,11 @@ pub mod vga;
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	use hermit_entry::boot_info::PlatformInfo;
-
-	match env::boot_info().platform_info {
-		PlatformInfo::Uhyve { num_cpus, .. } => u32::try_from(num_cpus.get()).unwrap(),
-		_ => apic::local_apic_id_count(),
+	if let Some(num_cpus) = env::uhyve_num_cpus() {
+		return num_cpus.get().try_into().unwrap();
 	}
+
+	apic::local_apic_id_count()
 }
 
 #[cfg(feature = "smp")]

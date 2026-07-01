@@ -57,6 +57,19 @@ pub fn uhyve_boot_time() -> Option<OffsetDateTime> {
 	}
 }
 
+#[cfg_attr(
+	any(not(target_arch = "x86_64"), not(feature = "smp")),
+	expect(dead_code)
+)]
+pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
+	match boot_info().platform_info {
+		PlatformInfo::Uhyve { num_cpus, .. } => {
+			Some(NonZero::new(num_cpus.get() as usize).unwrap())
+		}
+		_ => None,
+	}
+}
+
 pub fn is_uefi() -> bool {
 	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
 }
