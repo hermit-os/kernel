@@ -684,7 +684,10 @@ pub unsafe extern "C" fn sys_accept(
 		|v| {
 			block_on(async { v.write().await.accept().await }, None).map_or_else(
 				|e| -i32::from(e),
-				#[cfg_attr(not(feature = "net"), expect(unused_variables))]
+				#[cfg_attr(
+					not(any(feature = "net", feature = "virtio-vsock")),
+					expect(unused_variables)
+				)]
 				|(obj, endpoint)| match endpoint {
 					#[cfg(feature = "net")]
 					Endpoint::Ip(endpoint) => {
@@ -717,7 +720,7 @@ pub unsafe extern "C" fn sys_accept(
 					}
 					#[cfg(feature = "virtio-vsock")]
 					Endpoint::Vsock(endpoint) => {
-						let new_fd = insert_object(v.clone()).unwrap();
+						let new_fd = insert_object(obj).unwrap();
 
 						if !addr.is_null() && !addrlen.is_null() {
 							let addrlen = unsafe { &mut *addrlen };
