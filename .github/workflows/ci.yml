@@ -15,7 +15,7 @@ defaults:
 
 jobs:
   cargo-deny:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         checks:
@@ -31,7 +31,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
@@ -77,7 +77,7 @@ jobs:
 
   format:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
@@ -88,7 +88,7 @@ jobs:
 
   lock-file:
     name: Lock file
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
@@ -97,7 +97,7 @@ jobs:
 
   machete:
     name: Machete
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
@@ -108,14 +108,14 @@ jobs:
 
   typos:
     name: Typos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: crate-ci/typos@master
 
   doc:
     name: Doc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
@@ -123,7 +123,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
@@ -135,7 +135,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Install QEMU
@@ -159,7 +159,7 @@ jobs:
 
   run-hermit:
     name: Run
-    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     env:
       HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
     defaults:
@@ -183,7 +183,7 @@ jobs:
           - arch: aarch64_be
             packages: qemu-system-arm ipxe-qemu
           - arch: riscv64
-            packages: qemu-system-misc
+            packages: qemu-system-riscv
             rs_flags: --features hermit/semihosting
 
     steps:
@@ -295,13 +295,11 @@ jobs:
         if: matrix.arch != 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'
-      # FIXME: this is broken on QEMU 8.2.2
-      # Enable this once CI reaches QEMU 8.2.3 or QEMU 9.0.0
-      # - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
-      #   if: matrix.arch != 'riscv64'
-      #   env:
-      #     # The buffer is sized to be smaller than the packets received during DHCPv4 address acquisition and thus exercise the buffer merging code path.
-      #     HERMIT_MRG_RXBUF_SIZE: 200
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
+        if: matrix.arch != 'riscv64'
+        env:
+          # The buffer is sized to be smaller than the packets received during DHCPv4 address acquisition and thus exercise the buffer merging code path.
+          HERMIT_MRG_RXBUF_SIZE: 200
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-net-pci --tap
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci --no-default-virtio-features
