@@ -13,8 +13,6 @@ use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
 
-use crate::arch::kernel;
-
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
 pub fn boot_info() -> &'static BootInfo {
@@ -47,6 +45,13 @@ struct Cli {
 /// Whether Hermit is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+}
+
+pub fn is_uhyve_with_pci() -> bool {
+	matches!(
+		boot_info().platform_info,
+		PlatformInfo::Uhyve { has_pci: true, .. }
+	)
 }
 
 pub fn is_uefi() -> bool {
@@ -92,7 +97,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = kernel::args().or_else(fdt_args).unwrap_or_default();
+		let args = fdt_args().unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 

@@ -22,12 +22,8 @@ struct UartDevice {
 
 impl UartDevice {
 	pub unsafe fn new() -> Self {
-		let base = crate::env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.unwrap()
-			.get();
-		let mut uart = unsafe { Uart16550::new_port(base).unwrap() };
+		let base_port = 0x3f8;
+		let mut uart = unsafe { Uart16550::new_port(base_port).unwrap() };
 		uart.init(Config::default()).ok();
 		// Once we have a fallback destination for output,
 		// we should log any error above and run

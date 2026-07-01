@@ -10,7 +10,7 @@ use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
 use crate::arch::x86_64::kernel::core_local::*;
-use crate::env::{self, is_uhyve};
+use crate::env;
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -40,14 +40,8 @@ pub mod vga;
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	use core::cmp;
-
 	match env::boot_info().platform_info {
-		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
-		PlatformInfo::Uhyve { num_cpus, .. } => cmp::max(
-			u32::try_from(num_cpus.get()).unwrap(),
-			get_processor_count(),
-		),
+		PlatformInfo::Uhyve { num_cpus, .. } => u32::try_from(num_cpus.get()).unwrap(),
 		_ => apic::local_apic_id_count(),
 	}
 }
@@ -62,28 +56,13 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-pub fn is_uhyve_with_pci() -> bool {
-	matches!(
-		env::boot_info().platform_info,
-		PlatformInfo::Uhyve { has_pci: true, .. }
-	)
-}
-
-pub fn args() -> Option<&'static str> {
-	match env::boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. }
-		| PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
-		_ => None,
-	}
-}
-
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && !is_uhyve() {
+	if cfg!(feature = "vga") && !env::is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
@@ -103,11 +82,11 @@ pub fn boot_processor_init() {
 	interrupts::install();
 	systemtime::init();
 
-	if !is_uhyve() {
+	if !env::is_uhyve() {
 		#[cfg(feature = "acpi")]
 		acpi::init();
 	}
-	if is_uhyve_with_pci() || !is_uhyve() {
+	if env::is_uhyve_with_pci() || !env::is_uhyve() {
 		#[cfg(feature = "pci")]
 		pci::init();
 	}
@@ -134,7 +113,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	if is_uhyve() {
+	if env::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
 		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.
@@ -152,7 +131,7 @@ pub fn boot_next_processor() {
 	// to initialize the next processor.
 	let cpu_online = CPU_ONLINE.fetch_add(1, Ordering::Release);
 
-	if !is_uhyve() {
+	if !env::is_uhyve() {
 		if cpu_online == 0 {
 			#[cfg(all(target_os = "none", feature = "smp"))]
 			apic::boot_application_processors();

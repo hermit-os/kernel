@@ -17,8 +17,8 @@ pub mod systemtime;
 use alloc::alloc::alloc;
 use core::alloc::Layout;
 use core::arch::global_asm;
+use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
-use core::{ptr, str};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
@@ -40,10 +40,6 @@ pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::nul
 #[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
-pub fn is_uhyve_with_pci() -> bool {
-	false
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	let fdt = env::fdt().unwrap();
@@ -59,10 +55,6 @@ pub fn get_processor_count() -> u32 {
 #[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
-}
-
-pub fn args() -> Option<&'static str> {
-	None
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
