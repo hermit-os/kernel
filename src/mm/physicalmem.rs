@@ -9,7 +9,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
@@ -17,6 +17,13 @@ use crate::mm::{PageRangeAllocator, PageRangeBox};
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+/// When claiming physical memory, ignore all addresses below this one.
+/// This ensures we don't accidentally clash with hardcoded low addresses, such
+/// as `SMP_BOOT_CODE_ADDRESS` in x86_64 with SMP enabled.
+///
+/// We use a 2MIB size for now, but this is arbitrary, and could likely be lowered.
+const MIN_PHYSICAL_ADDRESS: u64 = LargePageSize::SIZE;
 
 pub struct FrameAlloc;
 
@@ -70,7 +77,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 			type IdentityPageSize = HugePageSize;
 		}
 		target_arch = "x86_64" => {
-			type IdentityPageSize = paging::LargePageSize;
+			type IdentityPageSize = LargePageSize;
 		}
 	}
 
@@ -131,6 +138,18 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 			} else {
 				VirtAddr::new(start_address)
 			};
+
+		let start_address = if start_address.as_u64() < MIN_PHYSICAL_ADDRESS {
+			// Do not free any address in the real mode addressable range
+			// We have hardcoded some stuff in the kernel (e.g. SMP_BOOT_CODE_ADDRESS and friends),
+			// so we don't want to accidentally overwrite them by having an allocation on top
+			if size <= MIN_PHYSICAL_ADDRESS {
+				continue;
+			}
+			VirtAddr::new(MIN_PHYSICAL_ADDRESS)
+		} else {
+			start_address
+		};
 
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		unsafe {
