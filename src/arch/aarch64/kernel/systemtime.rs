@@ -45,6 +45,7 @@ fn rtc_read(off: usize) -> u32 {
 }
 
 fn boot_time() -> OffsetDateTime {
+	#[cfg(feature = "uhyve")]
 	if let Some(boot_time) = env::uhyve_boot_time() {
 		return boot_time;
 	}
