@@ -817,13 +817,10 @@ impl VirtioNetDriver<Uninit> {
 			// Checksum calculation can partially be offloaded to the device
 			| virtio::net::F::CSUM
 			// Partially checksummed frames can be received
-			| virtio::net::F::GUEST_CSUM;
-
-		// Currently the driver does NOT support the features below.
-		// In order to provide functionality for these, the driver
-		// needs to take care of calculating checksum.
-		// | virtio::net::F::GUEST_TSO4
-		// | virtio::net::F::GUEST_TSO6
+			| virtio::net::F::GUEST_CSUM
+			// Frames with coalesced TCP segments can be received
+			| virtio::net::F::GUEST_TSO4
+			| virtio::net::F::GUEST_TSO6;
 
 		let negotiated_features = self
 			.com_cfg
@@ -900,6 +897,9 @@ impl VirtioNetDriver<Uninit> {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
+		// Not only should we offload receive checksum validation to the device for performance when possible, we MUST
+		// offload it when GUEST_TSO{4,6} are enabled, since otherwise the coalesced packets will be rejected by smoltcp
+		// because of the incorrect checksum.
 		if self.dev_cfg.features.contains(virtio::net::F::CSUM)
 			&& self.dev_cfg.features.contains(virtio::net::F::GUEST_CSUM)
 		{
