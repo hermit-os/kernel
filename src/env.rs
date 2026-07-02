@@ -13,7 +13,6 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
-use time::OffsetDateTime;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -50,7 +49,8 @@ pub fn is_uhyve() -> bool {
 }
 
 #[cfg_attr(target_arch = "riscv64", expect(dead_code))]
-pub fn uhyve_boot_time() -> Option<OffsetDateTime> {
+#[cfg(feature = "uhyve")]
+pub fn uhyve_boot_time() -> Option<time::OffsetDateTime> {
 	match boot_info().platform_info {
 		PlatformInfo::Uhyve { boot_time, .. } => Some(boot_time),
 		_ => None,
