@@ -501,10 +501,65 @@ impl ObjectInterface for Socket {
 
 impl Drop for Socket {
 	fn drop(&mut self) {
-		let mut guard = VSOCK_MAP.lock();
-		match self.conn {
-			Some(key) => guard.remove_connection(key),
-			None => guard.remove_socket(self.port),
+		// Remove our state and snapshot the peer first, releasing VSOCK_MAP
+		// before touching the driver: the RX dispatch locks driver -> VSOCK_MAP,
+		// so holding VSOCK_MAP while taking the driver lock would invert the
+		// lock order.
+		let peer = {
+			let mut guard = VSOCK_MAP.lock();
+			match self.conn {
+				Some(key) => {
+					let peer = guard
+						.get_mut_connection(key)
+						.map(|raw| (raw.state, raw.remote_cid, raw.remote_port, key.0));
+					guard.remove_connection(key);
+					peer
+				}
+				None => {
+					let peer = guard
+						.get_mut_socket(self.port)
+						.map(|raw| (raw.state, raw.remote_cid, raw.remote_port, self.port));
+					guard.remove_socket(self.port);
+					peer
+				}
+			}
+		};
+
+		// Complete the close handshake: tell the peer this connection is gone.
+		// Without this the peer never learns the socket died. A peer that
+		// closed first (half-open) sits in its close timeout (~8 s on Linux
+		// virtio-vsock) and then fires an `Op::Rst` at our local port — which
+		// the ephemeral allocator may have already handed to a NEW connection.
+		// A peer with the connection still open blocks in `read()` forever.
+		// Only states with a live peer are notified.
+		let Some((state, remote_cid, remote_port, local_port)) = peer else {
+			return;
+		};
+		if !matches!(
+			state,
+			VsockState::Connected | VsockState::Shutdown | VsockState::Connecting
+		) {
+			return;
+		}
+		if let Some(driver) = hardware::get_vsock_driver() {
+			const HEADER_SIZE: usize = size_of::<Hdr>();
+			let mut driver_guard = driver.lock();
+			let local_cid = driver_guard.get_cid();
+			driver_guard.send_packet(HEADER_SIZE, |buffer| {
+				let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
+
+				response.src_cid = le64::from_ne(local_cid);
+				response.dst_cid = le64::from_ne(remote_cid.into());
+				response.src_port = le32::from_ne(local_port);
+				response.dst_port = le32::from_ne(remote_port);
+				response.len = le32::from_ne(0);
+				response.type_ = le16::from_ne(Type::Stream.into());
+				response.op = le16::from_ne(Op::Rst.into());
+				response.flags = le32::from_ne(0);
+				response.buf_alloc =
+					le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+				response.fwd_cnt = le32::from_ne(0);
+			});
 		}
 	}
 }

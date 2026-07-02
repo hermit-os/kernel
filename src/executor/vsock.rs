@@ -106,6 +106,9 @@ async fn vsock_run() {
 		let mut driver_guard = driver.lock();
 		let mut hdr: Option<Hdr> = None;
 		let mut fwd_cnt: u32 = 0;
+		// Force the reply to be `Op::Rst` regardless of the incoming op (used
+		// for packets addressed to a socket that no longer exists).
+		let mut force_rst: bool = false;
 
 		driver_guard.process_packet(|header, data| {
 			let op = Op::try_from(header.op.to_ne()).unwrap();
@@ -127,6 +130,14 @@ async fn vsock_run() {
 			} else if let Some(s) = vsock_guard.get_mut_socket(port) {
 				s
 			} else {
+				// No socket owns this port: the connection is gone (or never
+				// existed). Reply `Op::Rst` so the peer tears its side down
+				// promptly instead of waiting for a close timeout — but never
+				// reset an `Rst` (that would ping-pong forever).
+				if op != Op::Rst {
+					hdr = Some(*header);
+					force_rst = true;
+				}
 				return;
 			};
 
@@ -154,7 +165,11 @@ async fn vsock_run() {
 				&& type_ == Type::Stream
 				&& op == Op::Rw
 			{
-				if raw.remote_cid == header_cid {
+				// Match the full remote endpoint, not just the CID: distinct
+				// services on one peer (e.g. two host ports) share a CID, so a
+				// stray packet from another connection's tuple must not be
+				// delivered here.
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.buffer.extend_from_slice(data);
 					raw.fwd_cnt = raw.fwd_cnt.wrapping_add(u32::try_from(data.len()).unwrap());
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
@@ -166,14 +181,14 @@ async fn vsock_run() {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::CreditUpdate {
-				if raw.remote_cid == header_cid {
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
 					raw.tx_waker.wake();
 				} else {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::Shutdown {
-				if raw.remote_cid == header_cid {
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.state = VsockState::Shutdown;
 					raw.rx_waker.wake();
 					raw.tx_waker.wake();
@@ -181,7 +196,11 @@ async fn vsock_run() {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::Rst {
-				if raw.remote_cid == header_cid {
+				// A reset must come from the exact endpoint this socket is
+				// connected to. This is the arm that killed reused ephemeral
+				// ports: a delayed RST from a previously-closed connection's
+				// peer (same CID, different port) reset the port's new owner.
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.state = VsockState::Reset;
 					raw.rx_waker.wake();
 					raw.tx_waker.wake();
@@ -189,7 +208,10 @@ async fn vsock_run() {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::Response && type_ == Type::Stream {
-				if raw.remote_cid == header_cid && raw.state == VsockState::Connecting {
+				if raw.remote_cid == header_cid
+					&& raw.remote_port == remote_port
+					&& raw.state == VsockState::Connecting
+				{
 					raw.state = VsockState::Connected;
 					raw.peer_buf_alloc = header.buf_alloc.to_ne();
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
@@ -222,8 +244,9 @@ async fn vsock_run() {
 				response.dst_port = hdr.src_port;
 				response.len = le32::from_ne(0);
 				response.type_ = hdr.type_;
-				if hdr.op.to_ne() == u16::from(Op::CreditRequest)
-					|| hdr.op.to_ne() == u16::from(Op::Rw)
+				if !force_rst
+					&& (hdr.op.to_ne() == u16::from(Op::CreditRequest)
+						|| hdr.op.to_ne() == u16::from(Op::Rw))
 				{
 					response.op = le16::from_ne(Op::CreditUpdate.into());
 				} else {
@@ -243,6 +266,9 @@ async fn vsock_run() {
 	.await;
 }
 
+/// Start of the ephemeral port range used for outbound connects.
+const EPHEMERAL_START: u32 = u32::MAX / 4;
+
 pub(crate) struct VsockMap {
 	/// Listeners (keyed by listen port) and outbound-connect sockets (keyed by
 	/// a synthetic ephemeral port).
@@ -250,6 +276,12 @@ pub(crate) struct VsockMap {
 	/// Established inbound connections, keyed by `(local_port, remote_cid,
 	/// remote_port)`, so several connections can share one listen port.
 	conn_map: BTreeMap<ConnKey, RawSocket>,
+	/// Next ephemeral port to try for an outbound connect. Cycles through
+	/// `[EPHEMERAL_START, u32::MAX]` instead of always taking the first vacant
+	/// port, so a just-freed port is not immediately reused: late packets
+	/// addressed to the previous owner (e.g. a peer's delayed close `Rst`)
+	/// would otherwise hit the new connection.
+	next_ephemeral: u32,
 }
 
 impl VsockMap {
@@ -257,6 +289,7 @@ impl VsockMap {
 		Self {
 			port_map: BTreeMap::new(),
 			conn_map: BTreeMap::new(),
+			next_ephemeral: EPHEMERAL_START,
 		}
 	}
 
@@ -281,14 +314,20 @@ impl VsockMap {
 	}
 
 	pub fn connect(&mut self, port: u32, cid: u32) -> io::Result<u32> {
-		for i in u32::MAX / 4..u32::MAX {
-			let mut raw = RawSocket::new(VsockState::Connecting);
-			raw.remote_cid = cid;
-			raw.remote_port = port;
+		for _ in 0..=(u32::MAX - EPHEMERAL_START) {
+			let candidate = self.next_ephemeral;
+			self.next_ephemeral = if candidate == u32::MAX {
+				EPHEMERAL_START
+			} else {
+				candidate + 1
+			};
 
-			if let btree_map::Entry::Vacant(vacant_entry) = self.port_map.entry(i) {
+			if let btree_map::Entry::Vacant(vacant_entry) = self.port_map.entry(candidate) {
+				let mut raw = RawSocket::new(VsockState::Connecting);
+				raw.remote_cid = cid;
+				raw.remote_port = port;
 				vacant_entry.insert(raw);
-				return Ok(i);
+				return Ok(candidate);
 			}
 		}
 
