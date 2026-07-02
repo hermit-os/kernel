@@ -354,6 +354,13 @@ impl RxToken<'_> {
 				    return false;
 				}
 
+				if ip_packet.more_frags() || ip_packet.frag_offset() != 0 {
+					// The packet is part of a fragmented IP packet (RFC 791 page 8). We could check its checksum only
+					// if we reassembled it, so we discard it instead.
+					warn!("packet is fragmented, discarding!");
+					return false;
+				}
+
 				Self::is_ip_packet_passable(
 					ip_packet.next_header(),
 					ip_packet.payload(),
@@ -368,8 +375,20 @@ impl RxToken<'_> {
 				};
 				// One level of checksum has been validated and IPv6 headers don't have their own checksums,
 				// so the validation from the device must have been for the IP protocol.
-				hdr.flags.contains(HdrF::DATA_VALID) || Self::is_ip_packet_passable(
-					ip_packet.next_header(),
+				if hdr.flags.contains(HdrF::DATA_VALID) {
+					return true;
+				}
+
+				let next_header = ip_packet.next_header();
+				if next_header == IpProtocol::Ipv6Frag {
+					// The packet is part of a fragmented IP packet. We could check its checksum only if we reassembled
+					// it, so we discard it instead.
+					warn!("packet is fragmented, discarding!");
+					return false;
+				}
+
+				Self::is_ip_packet_passable(
+					next_header,
 					ip_packet.payload(),
 					IpAddress::Ipv6(ip_packet.src_addr()),
 					IpAddress::Ipv6(ip_packet.dst_addr()),
