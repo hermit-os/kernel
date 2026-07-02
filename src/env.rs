@@ -61,6 +61,7 @@ pub fn uhyve_boot_time() -> Option<OffsetDateTime> {
 	any(not(target_arch = "x86_64"), not(feature = "smp")),
 	expect(dead_code)
 )]
+#[cfg(feature = "uhyve")]
 pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
 	match boot_info().platform_info {
 		PlatformInfo::Uhyve { num_cpus, .. } => {
