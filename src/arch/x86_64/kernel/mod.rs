@@ -40,6 +40,7 @@ pub mod vga;
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
+	#[cfg(feature = "uhyve")]
 	if let Some(num_cpus) = env::uhyve_num_cpus() {
 		return num_cpus.get().try_into().unwrap();
 	}
