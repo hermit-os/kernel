@@ -1912,8 +1912,7 @@ checksum = "8d2d250f87fb3fb6f225c907cf54381509f47b40b74b1d1f12d2dccbc915bdfe"
 [[package]]
 name = "trapframe"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa1699c0079cb7ff77b57fd429bcfa87b1220898bb303e0e45f75789778a376d"
+source = "git+https://github.com/hermit-os/trapframe-rs?branch=hermit#5fe6f37087a34a7f7c81837047d4bc9ca7194545"
 dependencies = [
  "raw-cpuid",
  "x86_64",
