@@ -178,8 +178,8 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 	let pc = ELR_EL1.get();
 
 	/* data abort from lower or current level */
-	if (ec == ESR_EL1::EC::Value::SoftwareStepCurrentEL)
-		|| (ec == ESR_EL1::EC::Value::SoftwareStepLowerEL)
+	if (ec == ESR_EL1::EC::Value::DataAbortCurrentEL)
+		|| (ec == ESR_EL1::EC::Value::DataAbortLowerEL)
 	{
 		/* check if value in far_el1 is valid */
 		if (iss & (1 << 10)) == 0 {
