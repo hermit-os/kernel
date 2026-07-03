@@ -94,7 +94,7 @@ impl Qemu {
 	pub fn run(
 		self,
 		image: &Path,
-		_features: &[String],
+		features: &[String],
 		smp: usize,
 		arch: Arch,
 		small: bool,
@@ -169,7 +169,24 @@ impl Qemu {
 			"mioudp" => test_mioudp(guest_ip)?,
 			"poll" => test_poll(guest_ip)?,
 			"stdin" => test_stdin(&mut qemu.0)?,
-			"vsock" => test_vsock()?,
+			"vsock" => {
+				// The example selects its role via cargo features: the `server`
+				// build listens for the ping/pong regression test (#2433), while
+				// the default and `client` builds run the echo test (#880).
+				let has_server = features
+					.iter()
+					.flat_map(|s| s.split(&[' ', ','][..]))
+					.any(|feature| feature == "server");
+				if has_server {
+					test_vsock_server()?;
+				} else {
+					let has_client = features
+						.iter()
+						.flat_map(|s| s.split(&[' ', ','][..]))
+						.any(|feature| feature == "client");
+					test_vsock_echo(has_client)?;
+				}
+			}
 			_ => {}
 		}
 
@@ -592,55 +609,78 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 	Ok(())
 }
 
-fn test_vsock() -> Result<()> {
-	// The VM first connects out to us; we listen, send some messages, and check
-	// the VM echoes them back (#880). Then the VM listens and we open
-	// PING_PONG_CONNECTIONS connections to it, each expecting a "pong" reply to
-	// our "ping". The VM accepting more than one connection is the regression
-	// test for hermit-os/kernel#2433.
-	const ECHO_PORT: u32 = 9975;
+/// Echo test for the vsock interface (hermit-os/kernel#880).
+///
+/// With `has_client`, the guest connects out to us, so we listen and accept;
+/// otherwise the guest listens and we connect to it. Either way we send a few
+/// messages and check the guest echoes them back. This mirrors the historical
+/// behavior driven by kernel `main` CI.
+fn test_vsock_echo(has_client: bool) -> Result<()> {
+	let mut stream = if has_client {
+		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, 9975)?;
+		let (stream, _addr) = listener.accept()?;
+		stream
+	} else {
+		thread::sleep(Duration::from_secs(10));
+		VsockStream::connect_with_cid_port(3, 9975)?
+	};
+
+	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+	for message in messages {
+		writeln!(&mut stream, "{message}")?;
+		thread::sleep(Duration::from_secs(1));
+	}
+
+	const BUF_SIZE: usize = 8 * 1024;
+	let mut buf = vec![0; BUF_SIZE];
+	let n = stream.read(&mut buf)?;
+	let s = str::from_utf8(&buf[0..n])?;
+	let received_messages = s.trim().split('\n').collect::<Vec<_>>();
+	assert_eq!(received_messages, messages);
+
+	Ok(())
+}
+
+/// Regression test for hermit-os/kernel#2433: a vsock listener must accept more
+/// than one connection.
+///
+/// The guest (built with the `server` feature) listens on `PING_PONG_PORT`. We
+/// open `PING_PONG_CONNECTIONS` connections in turn, each sending "ping" and
+/// expecting "pong". Before the fix, the second connection could not be
+/// accepted.
+fn test_vsock_server() -> Result<()> {
 	const PING_PONG_PORT: u32 = 9976;
 	const GUEST_CID: u32 = 3;
 	const PING_PONG_CONNECTIONS: usize = 2;
 
-	// Example 1: we listen, the VM connects, we verify it echoes our messages.
-	{
-		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, ECHO_PORT)?;
-		let (mut stream, _addr) = listener.accept()?;
-
-		let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
-		for message in messages {
-			writeln!(&mut stream, "{message}")?;
-			thread::sleep(Duration::from_secs(1));
+	// Connect with a short retry loop: the guest may not have bound the port
+	// yet, in which case the kernel resets our connection and we retry rather
+	// than racing on a fixed sleep.
+	let connect = || -> Result<VsockStream> {
+		let mut last_err = None;
+		for _ in 0..50 {
+			match VsockStream::connect_with_cid_port(GUEST_CID, PING_PONG_PORT) {
+				Ok(stream) => return Ok(stream),
+				Err(e) => {
+					last_err = Some(e);
+					thread::sleep(Duration::from_millis(200));
+				}
+			}
 		}
+		Err(last_err.unwrap().into())
+	};
 
-		const BUF_SIZE: usize = 8 * 1024;
-		let mut buf = vec![0; BUF_SIZE];
-		let n = stream.read(&mut buf)?;
-		let s = str::from_utf8(&buf[0..n])?;
-		let received_messages = s.trim().split('\n').collect::<Vec<_>>();
-		assert_eq!(received_messages, messages);
-		// Drop `stream`/`listener` here so the VM sees EOF and moves on to
-		// listening for the ping/pong phase.
-	}
-
-	// Example 2: the VM listens; we connect, send "ping", expect "pong".
-	// Give the VM time to start listening on the ping/pong port before we
-	// connect.
-	thread::sleep(Duration::from_secs(1));
-
-	let do_ping_pong = || -> Result<()> {
-		let mut stream = VsockStream::connect_with_cid_port(GUEST_CID, PING_PONG_PORT)?;
+	for i in 0..PING_PONG_CONNECTIONS {
+		let mut stream =
+			connect().with_context(|| format!("connecting ping/pong connection {i}"))?;
 		stream.write_all(b"ping")?;
 		let mut buf = [0u8; 64];
 		let n = stream.read(&mut buf)?;
 		let msg = from_utf8(&buf[..n])?;
-		ensure!(msg == "pong", "expected 'pong', got {msg:?}");
-		Ok(())
-	};
-
-	for _ in 0..PING_PONG_CONNECTIONS {
-		do_ping_pong()?;
+		ensure!(
+			msg == "pong",
+			"connection {i}: expected 'pong', got {msg:?}"
+		);
 	}
 
 	Ok(())

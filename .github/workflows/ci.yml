@@ -289,6 +289,14 @@ jobs:
         working-directory: .
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
         if: matrix.arch != 'riscv64'
+      # Run check if required server feature is present in hermit-rs for vsock example otherwise skips the test which would fail
+      - run: |
+          if cargo metadata --format-version 1 --no-deps --manifest-path ../examples/vsock/Cargo.toml | jq -e '.packages[] | select(.name == "vsock") | .features | has("server")' >/dev/null; then
+            cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --features server qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
+          else
+            echo "::notice:: regression test skipped — checked-out hermit-rs vsock example has no 'server' feature"
+          fi
+        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio --microvm
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
