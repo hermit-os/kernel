@@ -89,12 +89,14 @@ fn determine_rx_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 		);
 		min_buf_size = my_mrg_rxbuf_size;
 	} else {
-		// If [...] are negotiated, the driver SHOULD populate the receive queue(s) with buffers of at least 65562 bytes.
+		// "If VIRTIO_NET_F_GUEST_TSO4, VIRTIO_NET_F_GUEST_TSO6, [...] are negotiated, the driver SHOULD populate the
+		// receive queue(s) with buffers [...] of at least 65601 bytes [...]."
+		// VIRTIO spec. v1.4 sec. 5.1.9.3.1
 		if dev_cfg.features.contains(virtio::net::F::GUEST_TSO4)
 			|| dev_cfg.features.contains(virtio::net::F::GUEST_TSO6)
 			|| dev_cfg.features.contains(virtio::net::F::GUEST_UFO)
 		{
-			min_buf_size = u32::max(min_buf_size, 65562 - size_of::<Hdr>() as u32);
+			min_buf_size = u32::max(min_buf_size, 65601 - size_of::<Hdr>() as u32);
 		} else {
 			// Otherwise, the driver SHOULD populate the receive queue(s) with buffers of at least 1526 bytes.
 			min_buf_size = u32::max(min_buf_size, 1526 - size_of::<Hdr>() as u32);
@@ -817,13 +819,10 @@ impl VirtioNetDriver<Uninit> {
 			// Checksum calculation can partially be offloaded to the device
 			| virtio::net::F::CSUM
 			// Partially checksummed frames can be received
-			| virtio::net::F::GUEST_CSUM;
-
-		// Currently the driver does NOT support the features below.
-		// In order to provide functionality for these, the driver
-		// needs to take care of calculating checksum.
-		// | virtio::net::F::GUEST_TSO4
-		// | virtio::net::F::GUEST_TSO6
+			| virtio::net::F::GUEST_CSUM
+			// Frames with coalesced TCP segments can be received
+			| virtio::net::F::GUEST_TSO4
+			| virtio::net::F::GUEST_TSO6;
 
 		let negotiated_features = self
 			.com_cfg
@@ -900,6 +899,9 @@ impl VirtioNetDriver<Uninit> {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
+		// Not only should we offload receive checksum validation to the device for performance when possible, we MUST
+		// offload it when GUEST_TSO{4,6} are enabled, since otherwise the coalesced packets will be rejected by smoltcp
+		// because of the incorrect checksum.
 		if self.dev_cfg.features.contains(virtio::net::F::CSUM)
 			&& self.dev_cfg.features.contains(virtio::net::F::GUEST_CSUM)
 		{
