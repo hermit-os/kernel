@@ -53,18 +53,14 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	};
 
 	if cap.bar_len() < cap.len() + cap.offset() {
-		error!(
-			"Device config of device {:x}, does not fit into memory specified by bar!",
-			cap.dev_id(),
-		);
+		error!("Device config of device does not fit into memory specified by bar!",);
 		return None;
 	}
 
 	// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
 	if cap.len() < u64::try_from(size_of::<T>()).unwrap() {
 		error!(
-			"Device specific config from device {:x}, does not represent actual structure specified by the standard!",
-			cap.dev_id()
+			"Device specific config from device does not represent actual structure specified by the standard!",
 		);
 		return None;
 	}
@@ -93,7 +89,6 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 #[derive(Clone)]
 pub struct PciCap {
 	bar: PciBar,
-	dev_id: u16,
 	cap: CapData,
 }
 
@@ -114,17 +109,12 @@ impl PciCap {
 		self.bar.mem_addr
 	}
 
-	pub fn dev_id(&self) -> u16 {
-		self.dev_id
-	}
-
 	/// Returns a reference to the actual structure inside the PCI devices memory space.
 	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
 		if self.bar.length < self.len() + self.offset() {
-			let dev_id = self.dev_id;
 			let index = self.bar.index;
 			error!(
-				"Common config of the capability of device {dev_id:x} does not fit into memory specified by bar {index:x}!"
+				"Common config of the capability of device does not fit into memory specified by bar {index:x}!"
 			);
 			return None;
 		}
@@ -150,10 +140,9 @@ impl PciCap {
 
 	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
 		if self.bar.length < self.len() + self.offset() {
-			let dev_id = self.dev_id;
 			let index = self.bar.index;
 			error!(
-				"ISR status config of device {dev_id:x}, does not fit into memory specified by bar {index:x}!"
+				"ISR status config of device does not fit into memory specified by bar {index:x}!"
 			);
 			return None;
 		}
@@ -460,10 +449,9 @@ pub struct NotifCfg {
 impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < cap.len() + cap.offset() {
-			let dev_id = cap.dev_id;
 			let index = cap.bar.index;
 			error!(
-				"Notification config of device {dev_id:x}, does not fit into memory specified by bar {index:x}!"
+				"Notification config of device does not fit into memory specified by bar {index:x}!"
 			);
 			return None;
 		}
@@ -632,7 +620,6 @@ pub(crate) fn map_caps(
 				};
 				let pci_cap = PciCap {
 					bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
-					dev_id: device_id,
 					cap,
 				};
 				match pci_cap.cap.cfg_type {

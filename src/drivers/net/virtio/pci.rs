@@ -22,7 +22,6 @@ impl VirtioNetDriver<Uninit> {
 
 		Some(NetDevCfg {
 			raw: dev_cfg,
-			dev_id: cap.dev_id(),
 			features: virtio::net::F::empty(),
 		})
 	}
@@ -81,10 +80,7 @@ impl VirtioNetDriver<Uninit> {
 
 		let initialized_drv = match drv.init_dev(handlers, device.get_irq()) {
 			Ok(initialized_drv) => {
-				info!(
-					"Network device with id {:x}, has been initialized by driver!",
-					initialized_drv.get_dev_id()
-				);
+				info!("Network device has been initialized by driver!",);
 				initialized_drv
 			}
 			Err(vnet_err) => {

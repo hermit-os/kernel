@@ -9,13 +9,11 @@ use crate::drivers::{InterruptHandlerMap, InterruptLine};
 // Backend-dependent interface for Virtio console driver
 impl VirtioConsoleDriver {
 	pub fn new(
-		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 	) -> Result<VirtioConsoleDriver, VirtioError> {
 		let (caps_coll, dev_cfg_raw) = map_caps(registers);
 		let dev_cfg = ConsoleDevCfg {
 			raw: dev_cfg_raw,
-			dev_id,
 			features: virtio::console::F::empty(),
 		};
 
@@ -33,12 +31,11 @@ impl VirtioConsoleDriver {
 	/// Returns a driver instance of
 	/// [VirtioConsoleDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub fn init(
-		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioConsoleDriver, VirtioError> {
-		let mut drv = VirtioConsoleDriver::new(dev_id, registers)?;
+		let mut drv = VirtioConsoleDriver::new(registers)?;
 		drv.init_dev(handlers, Some(irq))
 			.map_err(VirtioError::ConsoleDriver)?;
 		drv.caps_coll.com_cfg.print_information();

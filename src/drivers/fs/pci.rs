@@ -18,7 +18,6 @@ impl VirtioFsDriver {
 
 		Some(FsDevCfg {
 			raw: dev_cfg,
-			dev_id: cap.dev_id(),
 			features: virtio::fs::F::empty(),
 		})
 	}
@@ -64,10 +63,7 @@ impl VirtioFsDriver {
 		};
 
 		match drv.init_dev(handlers, device.get_irq()) {
-			Ok(()) => info!(
-				"Filesystem device with id {:x}, has been initialized by driver!",
-				drv.get_dev_id()
-			),
+			Ok(()) => info!("Filesystem device has been initialized by driver!",),
 			Err(fs_err) => {
 				drv.set_failed();
 				return Err(VirtioError::FsDriver(fs_err));

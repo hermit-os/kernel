@@ -52,7 +52,6 @@ use crate::mm::device_alloc::DeviceAlloc;
 /// for the driver.
 pub(crate) struct NetDevCfg {
 	pub raw: VolatileRef<'static, virtio::net::Config, ReadOnly>,
-	pub dev_id: u16,
 	pub features: virtio::net::F,
 }
 
@@ -624,11 +623,6 @@ impl Driver for VirtioNetDriver<Init> {
 
 // Backend-independent interface for Virtio network driver
 impl VirtioNetDriver<Init> {
-	#[cfg(feature = "pci")]
-	pub fn get_dev_id(&self) -> u16 {
-		self.dev_cfg.dev_id
-	}
-
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
 	/// has been negotiated. Otherwise assumes an active device.
 	#[cfg(not(feature = "pci"))]
@@ -826,7 +820,7 @@ impl VirtioNetDriver<Uninit> {
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioNetError::FailFeatureNeg);
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -835,15 +829,12 @@ impl VirtioNetDriver<Uninit> {
 
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		if self.caps_coll.com_cfg.check_features() {
-			info!(
-				"Features have been negotiated between virtio network device {:x} and driver.",
-				self.dev_cfg.dev_id
-			);
+			info!("Features have been negotiated between virtio network device and driver.",);
 			// Set feature set in device config fur future use.
 			self.dev_cfg.features = negotiated_features;
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioNetError::FailFeatureNeg);
 		}
 
 		let mut inner = Init {
@@ -857,10 +848,7 @@ impl VirtioNetDriver<Uninit> {
 		debug!("Using RX buffer size of {}", inner.recv_vqs.buf_size);
 
 		self.dev_spec_init(&mut inner)?;
-		info!(
-			"Device specific initialization for Virtio network device {:x} finished",
-			self.dev_cfg.dev_id
-		);
+		info!("Device specific initialization for Virtio network device finished",);
 
 		match &mut self.caps_coll.int_cap {
 			InterruptCapability::IsrStatus(_) => {
@@ -1084,10 +1072,8 @@ pub mod error {
 		)]
 		NoDevCfg(u16),
 
-		#[error(
-			"Virtio network driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
-		)]
-		FailFeatureNeg(u16),
+		#[error("Virtio network driver failed, device did not acknowledge negotiated feature set!")]
+		FailFeatureNeg,
 	}
 }
 

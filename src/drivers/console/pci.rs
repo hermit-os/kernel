@@ -20,7 +20,6 @@ impl VirtioConsoleDriver {
 
 		Some(ConsoleDevCfg {
 			raw: dev_cfg,
-			dev_id: cap.dev_id(),
 			features: virtio::console::F::empty(),
 		})
 	}
@@ -74,10 +73,7 @@ impl VirtioConsoleDriver {
 
 		match drv.init_dev(handlers, device.get_irq()) {
 			Ok(()) => {
-				info!(
-					"Console device with id {:x}, has been initialized by driver!",
-					drv.dev_cfg.dev_id
-				);
+				info!("Console device has been initialized by driver!",);
 
 				Ok(drv)
 			}

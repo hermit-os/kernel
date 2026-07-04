@@ -350,7 +350,7 @@ pub(crate) fn init_device(
 	// Verify the device-ID to find the network card
 	match registers.as_ptr().device_id().read() {
 		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no, handlers) {
+		virtio::Id::Console => match VirtioConsoleDriver::init(registers, irq_no, handlers) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
 				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
@@ -366,7 +366,7 @@ pub(crate) fn init_device(
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(dev_id, registers, irq_no, handlers) {
+			match VirtioFsDriver::init(registers, irq_no, handlers) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
@@ -378,7 +378,7 @@ pub(crate) fn init_device(
 			}
 		}
 		#[cfg(feature = "virtio-net")]
-		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no, handlers) {
+		virtio::Id::Net => match VirtioNetDriver::init(registers, irq_no, handlers) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
@@ -389,7 +389,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
-		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no, handlers) {
+		virtio::Id::Vsock => match VirtioVsockDriver::init(registers, irq_no, handlers) {
 			Ok(virt_vsock_drv) => {
 				info!("Virtio sock driver initialized.");
 				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_vsock_drv)))

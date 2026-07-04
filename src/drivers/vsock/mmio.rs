@@ -9,13 +9,11 @@ use crate::drivers::{InterruptHandlerMap, InterruptLine};
 // Backend-dependent interface for Virtio vsock driver
 impl VirtioVsockDriver {
 	pub fn new(
-		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 	) -> Result<VirtioVsockDriver, VirtioError> {
 		let (caps_coll, dev_cfg_raw) = map_caps(registers);
 		let dev_cfg = VsockDevCfg {
 			raw: dev_cfg_raw,
-			dev_id,
 			features: virtio::vsock::F::empty(),
 		};
 
@@ -34,12 +32,11 @@ impl VirtioVsockDriver {
 	/// Returns a driver instance of
 	/// [VirtioVsockDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub fn init(
-		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioVsockDriver, VirtioError> {
-		let mut drv = VirtioVsockDriver::new(dev_id, registers)?;
+		let mut drv = VirtioVsockDriver::new(registers)?;
 		drv.init_dev(handlers, Some(irq))
 			.map_err(VirtioError::VsockDriver)?;
 		drv.caps_coll.com_cfg.print_information();

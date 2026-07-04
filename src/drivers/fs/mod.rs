@@ -52,7 +52,6 @@ use crate::mm::device_alloc::DeviceAlloc;
 /// for the driver.
 pub(crate) struct FsDevCfg {
 	pub raw: VolatileRef<'static, virtio::fs::Config, ReadOnly>,
-	pub dev_id: u16,
 	pub features: virtio::fs::F,
 }
 
@@ -69,11 +68,6 @@ pub(crate) struct VirtioFsDriver {
 
 // Backend-independent interface for Virtio network driver
 impl VirtioFsDriver {
-	#[cfg(feature = "pci")]
-	pub fn get_dev_id(&self) -> u16 {
-		self.dev_cfg.dev_id
-	}
-
 	#[cfg(feature = "pci")]
 	pub fn set_failed(&mut self) {
 		self.caps_coll.com_cfg.set_failed();
@@ -107,7 +101,7 @@ impl VirtioFsDriver {
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioFsInitError::FailFeatureNeg);
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -116,15 +110,12 @@ impl VirtioFsDriver {
 
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		if self.caps_coll.com_cfg.check_features() {
-			info!(
-				"Features have been negotiated between virtio filesystem device {:x} and driver.",
-				self.dev_cfg.dev_id
-			);
+			info!("Features have been negotiated between virtio filesystem device and driver.",);
 			// Set feature set in device config fur future use.
 			self.dev_cfg.features = negotiated_features;
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioFsInitError::FailFeatureNeg);
 		}
 
 		// 1 highprio queue, and n normal request queues
@@ -324,9 +315,9 @@ pub mod error {
 		NoDevCfg(u16),
 
 		#[error(
-			"Virtio filesystem driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
+			"Virtio filesystem driver failed, device did not acknowledge negotiated feature set!"
 		)]
-		FailFeatureNeg(u16),
+		FailFeatureNeg,
 
 		#[error("Virtio filesystem failed, driver failed due unknown reason!")]
 		Unknown,

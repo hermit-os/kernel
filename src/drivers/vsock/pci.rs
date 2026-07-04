@@ -18,7 +18,6 @@ impl VirtioVsockDriver {
 
 		Some(VsockDevCfg {
 			raw: dev_cfg,
-			dev_id: cap.dev_id(),
 			features: virtio::vsock::F::empty(),
 		})
 	}

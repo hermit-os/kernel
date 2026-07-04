@@ -9,14 +9,10 @@ use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver<Uninit> {
-	pub fn new(
-		dev_id: u16,
-		registers: VolatileRef<'static, DeviceRegisters>,
-	) -> Result<Self, VirtioError> {
+	pub fn new(registers: VolatileRef<'static, DeviceRegisters>) -> Result<Self, VirtioError> {
 		let (caps_coll, dev_cfg_raw) = map_caps(registers);
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
-			dev_id,
 			features: virtio::net::F::empty(),
 		};
 
@@ -35,12 +31,11 @@ impl VirtioNetDriver<Uninit> {
 	/// Returns a driver instance of
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub fn init(
-		dev_id: u16,
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioNetDriver<Init>, VirtioError> {
-		let drv = VirtioNetDriver::new(dev_id, registers)?;
+		let drv = VirtioNetDriver::new(registers)?;
 		let mut drv = drv
 			.init_dev(handlers, Some(irq))
 			.map_err(VirtioError::NetDriver)?;

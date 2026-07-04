@@ -252,7 +252,6 @@ impl EventQueue {
 /// for the driver.
 pub(crate) struct VsockDevCfg {
 	pub raw: VolatileRef<'static, virtio::vsock::Config, ReadOnly>,
-	pub dev_id: u16,
 	pub features: virtio::vsock::F,
 }
 
@@ -272,11 +271,6 @@ impl Driver for VirtioVsockDriver {
 }
 
 impl VirtioVsockDriver {
-	#[cfg(feature = "pci")]
-	pub fn get_dev_id(&self) -> u16 {
-		self.dev_cfg.dev_id
-	}
-
 	#[inline]
 	pub fn get_cid(&self) -> u64 {
 		self.dev_cfg.raw.as_ptr().guest_cid().read().to_ne()
@@ -354,7 +348,7 @@ impl VirtioVsockDriver {
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioVsockError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioVsockError::FailFeatureNeg);
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -363,15 +357,12 @@ impl VirtioVsockDriver {
 
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		if self.caps_coll.com_cfg.check_features() {
-			info!(
-				"Features have been negotiated between virtio socket device {:x} and driver.",
-				self.dev_cfg.dev_id
-			);
+			info!("Features have been negotiated between virtio socket device and driver.",);
 			// Set feature set in device config fur future use.
 			self.dev_cfg.features = negotiated_features;
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioVsockError::FailFeatureNeg(self.dev_cfg.dev_id));
+			return Err(VirtioVsockError::FailFeatureNeg);
 		}
 
 		// create the queues and tell device about them
@@ -499,8 +490,8 @@ pub mod error {
 		NoNotifCfg(u16),
 
 		#[error(
-			"Virtio socket device driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
+			"Virtio socket device driver failed, device did not acknowledge negotiated feature set!"
 		)]
-		FailFeatureNeg(u16),
+		FailFeatureNeg,
 	}
 }
