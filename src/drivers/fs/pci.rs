@@ -48,28 +48,22 @@ impl VirtioFsDriver {
 		device: &PciDevice<PciConfigRegion>,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioFsDriver, VirtioError> {
-		let mut drv = match pci::map_caps(device) {
-			Ok((caps, dev_cfg_list)) => match VirtioFsDriver::new(caps, dev_cfg_list, device) {
-				Ok(driver) => driver,
-				Err(fs_err) => {
-					error!("Initializing new network driver failed. Aborting!");
-					return Err(VirtioError::FsDriver(fs_err));
-				}
-			},
-			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
-				return Err(err);
-			}
-		};
+		let (caps, dev_cfg_list) = pci::map_caps(device)
+			.inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
+		let mut drv = VirtioFsDriver::new(caps, dev_cfg_list, device).map_err(|fs_err| {
+			error!("Initializing new network driver failed. Aborting!");
+			VirtioError::FsDriver(fs_err)
+		})?;
 
 		match drv.init_dev(handlers, device.get_irq()) {
-			Ok(()) => info!("Filesystem device has been initialized by driver!",),
+			Ok(()) => {
+				info!("Filesystem device has been initialized by driver!",);
+				Ok(drv)
+			}
 			Err(fs_err) => {
 				drv.set_failed();
-				return Err(VirtioError::FsDriver(fs_err));
+				Err(VirtioError::FsDriver(fs_err))
 			}
 		}
-
-		Ok(drv)
 	}
 }

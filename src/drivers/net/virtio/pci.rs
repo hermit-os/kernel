@@ -63,30 +63,17 @@ impl VirtioNetDriver<Uninit> {
 	) -> Result<VirtioNetDriver<Init>, VirtioError> {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
+		let (caps, dev_cfg_list) = pci::map_caps(device)
+			.inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
+		let drv = VirtioNetDriver::new(caps, dev_cfg_list, device).map_err(|vnet_err| {
+			error!("Initializing new network driver failed. Aborting!");
+			VirtioError::NetDriver(vnet_err)
+		})?;
 
-		let drv = match pci::map_caps(device) {
-			Ok((caps, dev_cfg_list)) => match VirtioNetDriver::new(caps, dev_cfg_list, device) {
-				Ok(driver) => driver,
-				Err(vnet_err) => {
-					error!("Initializing new network driver failed. Aborting!");
-					return Err(VirtioError::NetDriver(vnet_err));
-				}
-			},
-			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
-				return Err(err);
-			}
-		};
-
-		let initialized_drv = match drv.init_dev(handlers, device.get_irq()) {
-			Ok(initialized_drv) => {
-				info!("Network device has been initialized by driver!",);
-				initialized_drv
-			}
-			Err(vnet_err) => {
-				return Err(VirtioError::NetDriver(vnet_err));
-			}
-		};
+		let initialized_drv = drv
+			.init_dev(handlers, device.get_irq())
+			.map_err(VirtioError::NetDriver)?;
+		info!("Network device has been initialized by driver!",);
 
 		if initialized_drv.is_link_up() {
 			info!("Virtio-net link is up after initialization.");

@@ -52,19 +52,12 @@ impl VirtioVsockDriver {
 		device: &PciDevice<PciConfigRegion>,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioVsockDriver, VirtioError> {
-		let mut drv = match pci::map_caps(device) {
-			Ok((caps, dev_cfg_list)) => match VirtioVsockDriver::new(caps, dev_cfg_list, device) {
-				Ok(driver) => driver,
-				Err(vsock_err) => {
-					error!("Initializing new virtio socket device driver failed. Aborting!");
-					return Err(VirtioError::VsockDriver(vsock_err));
-				}
-			},
-			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
-				return Err(err);
-			}
-		};
+		let (caps, dev_cfg_list) = pci::map_caps(device)
+			.inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
+		let mut drv = VirtioVsockDriver::new(caps, dev_cfg_list, device).map_err(|vsock_err| {
+			error!("Initializing new virtio socket device driver failed. Aborting!");
+			VirtioError::VsockDriver(vsock_err)
+		})?;
 
 		match drv.init_dev(handlers, device.get_irq()) {
 			Ok(()) => {

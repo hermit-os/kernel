@@ -55,21 +55,13 @@ impl VirtioConsoleDriver {
 		// enable bus master mode
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
-		let mut drv = match pci::map_caps(device) {
-			Ok((caps, dev_cfg_list)) => {
-				match VirtioConsoleDriver::new(caps, dev_cfg_list, device) {
-					Ok(driver) => driver,
-					Err(console_err) => {
-						error!("Initializing new virtio console device driver failed. Aborting!");
-						return Err(VirtioError::ConsoleDriver(console_err));
-					}
-				}
-			}
-			Err(err) => {
-				error!("Mapping capabilities failed. Aborting!");
-				return Err(err);
-			}
-		};
+		let (caps, dev_cfg_list) = pci::map_caps(device)
+			.inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
+		let mut drv =
+			VirtioConsoleDriver::new(caps, dev_cfg_list, device).map_err(|console_err| {
+				error!("Initializing new virtio console device driver failed. Aborting!");
+				VirtioError::ConsoleDriver(console_err)
+			})?;
 
 		match drv.init_dev(handlers, device.get_irq()) {
 			Ok(()) => {
