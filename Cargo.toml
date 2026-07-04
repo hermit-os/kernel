@@ -454,7 +454,7 @@ unreadable_literal = "warn"
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "0.3.x" }
 # FIXME: remove once merged and published:
 # https://github.com/rcore-os/trapframe-rs/pull/18
-trapframe = { git = "https://github.com/hermit-os/trapframe-rs", branch = "hermit" }
+trapframe = { git = "https://github.com/rcore-os/trapframe-rs", branch = "stable-rust" }
 
 [profile.dist]
 inherits = "release"
