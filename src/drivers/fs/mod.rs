@@ -68,85 +68,81 @@ pub(crate) struct VirtioFsDriver {
 
 // Backend-independent interface for Virtio network driver
 impl VirtioFsDriver {
-	#[cfg(feature = "pci")]
-	pub fn set_failed(&mut self) {
-		self.caps_coll.com_cfg.set_failed();
-	}
-
 	/// Initializes the device in adherence to specification. Returns Some(VirtioFsError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
 	pub(crate) fn init_dev(
-		&mut self,
+		(mut caps_coll, dev_cfg_raw): (
+			UniCapsColl,
+			VolatileRef<'static, virtio::fs::Config, ReadOnly>,
+		),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
-	) -> Result<(), VirtioFsInitError> {
+	) -> Result<Self, (VirtioFsInitError, UniCapsColl)> {
 		// Reset
-		self.caps_coll.com_cfg.reset_dev();
+		caps_coll.com_cfg.reset_dev();
 
 		// Indicate device, that OS noticed it
-		self.caps_coll.com_cfg.ack_dev();
+		caps_coll.com_cfg.ack_dev();
 
 		// Indicate device, that driver is able to handle it
-		self.caps_coll.com_cfg.set_drv();
+		caps_coll.com_cfg.set_drv();
 
 		let minimal_features = virtio::fs::F::VERSION_1;
-		let negotiated_features = self
-			.caps_coll
+		let negotiated_features = caps_coll
 			.com_cfg
 			.control_registers()
 			.negotiate_features(minimal_features);
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioFsInitError::FailFeatureNeg);
+			return Err((VirtioFsInitError::FailFeatureNeg, caps_coll));
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
 		// and will not be changed.
-		self.caps_coll.com_cfg.features_ok();
+		caps_coll.com_cfg.features_ok();
 
 		// Checks if the device has accepted final set. This finishes feature negotiation.
-		if self.caps_coll.com_cfg.check_features() {
+		let dev_cfg = if caps_coll.com_cfg.check_features() {
 			info!("Features have been negotiated between virtio filesystem device and driver.",);
 			// Set feature set in device config fur future use.
-			self.dev_cfg.features = negotiated_features;
+			FsDevCfg {
+				raw: dev_cfg_raw,
+				features: negotiated_features,
+			}
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioFsInitError::FailFeatureNeg);
-		}
+			return Err((VirtioFsInitError::FailFeatureNeg, caps_coll));
+		};
 
 		// 1 highprio queue, and n normal request queues
-		let vqnum = self
-			.dev_cfg
-			.raw
-			.as_ptr()
-			.num_request_queues()
-			.read()
-			.to_ne() + 1;
+		let vqnum = dev_cfg.raw.as_ptr().num_request_queues().read().to_ne() + 1;
 		if vqnum == 0 {
 			error!("0 request queues requested from device. Aborting!");
-			return Err(VirtioFsInitError::Unknown);
+			return Err((VirtioFsInitError::Unknown, caps_coll));
 		}
+
+		let mut vqueues = Vec::new();
 
 		// create the queues and tell device about them
 		for i in 0..vqnum as u16 {
 			let vq = VirtQueue::Split(
 				SplitVq::new(
-					&mut self.caps_coll.com_cfg,
-					&self.caps_coll.notif_cfg,
+					&mut caps_coll.com_cfg,
+					&caps_coll.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
 					i,
-					self.dev_cfg.features.into(),
+					dev_cfg.features.into(),
 				)
 				.unwrap(),
 			);
-			self.vqueues.push(vq);
+			vqueues.push(vq);
 		}
 
-		match &mut self.caps_coll.int_cap {
+		match &mut caps_coll.int_cap {
 			InterruptCapability::IsrStatus(_) => {
 				let irq = irq.unwrap();
 				handlers.entry(irq).or_default().push_back(|| {
@@ -161,7 +157,7 @@ impl VirtioFsDriver {
 			InterruptCapability::Msix(msix_table) => {
 				use core::iter;
 
-				self.caps_coll.com_cfg.register_msix_vectors(
+				caps_coll.com_cfg.register_msix_vectors(
 					msix_table,
 					handlers,
 					|| {
@@ -176,9 +172,13 @@ impl VirtioFsDriver {
 		}
 
 		// At this point the device is "live"
-		self.caps_coll.com_cfg.drv_ok();
+		caps_coll.com_cfg.drv_ok();
 
-		Ok(())
+		Ok(Self {
+			dev_cfg,
+			caps_coll,
+			vqueues,
+		})
 	}
 
 	pub fn handle_interrupt(&mut self) {

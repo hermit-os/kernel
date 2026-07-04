@@ -1,51 +1,23 @@
-use alloc::vec::Vec;
-
 use volatile::VolatileRef;
 
 use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::InterruptHandlerMap;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
+use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::PciCap;
-use crate::drivers::virtio::transport::{UniCapsColl, pci};
-use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
+use crate::drivers::vsock::VirtioVsockDriver;
 
 impl VirtioVsockDriver {
-	fn map_cfg(cap: &PciCap) -> Option<VsockDevCfg> {
-		let dev_cfg = pci::map_dev_cfg::<virtio::vsock::Config>(cap)?;
-
-		let dev_cfg = VolatileRef::from_ref(dev_cfg);
-
-		Some(VsockDevCfg {
-			raw: dev_cfg,
-			features: virtio::vsock::F::empty(),
-		})
+	fn map_cfg(
+		cap: &PciCap,
+	) -> Option<VolatileRef<'static, virtio::vsock::Config, volatile::access::ReadOnly>> {
+		let dev_cfg = pci::map_dev_cfg(cap)?;
+		Some(VolatileRef::from_ref(dev_cfg))
 	}
 
-	/// Instantiates a new VirtioVsockDriver struct, by checking the available
-	/// configuration structures and moving them into the struct.
-	pub fn new(
-		caps_coll: UniCapsColl,
-		dev_cfg_list: Vec<PciCap>,
-		device: &PciDevice<PciConfigRegion>,
-	) -> Result<Self, error::VirtioVsockError> {
-		let device_id = device.device_id();
-
-		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioVsockDriver::map_cfg) else {
-			error!("No dev config. Aborting!");
-			return Err(error::VirtioVsockError::NoDevCfg(device_id));
-		};
-
-		Ok(VirtioVsockDriver {
-			dev_cfg,
-			caps_coll,
-			event_vq: EventQueue::new(),
-			recv_vq: RxQueue::new(),
-			send_vq: TxQueue::new(),
-		})
-	}
-
-	/// Initializes virtio socket device
+	/// Initializes virtio socket device by checking the available
+	/// configuration structures and calling the initializer on them.
 	///
 	/// Returns a driver instance of VirtioVsockDriver.
 	pub(crate) fn init(
@@ -54,20 +26,25 @@ impl VirtioVsockDriver {
 	) -> Result<VirtioVsockDriver, VirtioError> {
 		let (caps, dev_cfg_list) = pci::map_caps(device)
 			.inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
-		let mut drv = VirtioVsockDriver::new(caps, dev_cfg_list, device).map_err(|vsock_err| {
-			error!("Initializing new virtio socket device driver failed. Aborting!");
-			VirtioError::VsockDriver(vsock_err)
-		})?;
 
-		match drv.init_dev(handlers, device.get_irq()) {
-			Ok(()) => {
+		let dev_cfg = dev_cfg_list
+			.iter()
+			.find_map(VirtioVsockDriver::map_cfg)
+			.ok_or_else(|| {
+				error!("No dev config. Aborting!");
+				error!("Initializing new virtio socket device driver failed. Aborting!");
+				VirtioError::VsockDriver(error::VirtioVsockError::NoDevCfg(device.device_id()))
+			})?;
+
+		match Self::init_dev((caps, dev_cfg), handlers, device.get_irq()) {
+			Ok(drv) => {
 				let cid = drv.get_cid();
 				info!("Socket device with cid {cid:x}, has been initialized by driver!");
 
 				Ok(drv)
 			}
-			Err(fs_err) => {
-				drv.set_failed();
+			Err((fs_err, mut caps_coll)) => {
+				caps_coll.com_cfg.set_failed();
 				Err(VirtioError::VsockDriver(fs_err))
 			}
 		}

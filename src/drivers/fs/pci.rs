@@ -1,67 +1,46 @@
-use alloc::vec::Vec;
-
 use volatile::VolatileRef;
 
 use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::InterruptHandlerMap;
-use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
+use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
+use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::PciCap;
-use crate::drivers::virtio::transport::{UniCapsColl, pci};
 
 impl VirtioFsDriver {
-	fn map_cfg(cap: &PciCap) -> Option<FsDevCfg> {
-		let dev_cfg = pci::map_dev_cfg::<virtio::fs::Config>(cap)?;
-
-		let dev_cfg = VolatileRef::from_ref(dev_cfg);
-
-		Some(FsDevCfg {
-			raw: dev_cfg,
-			features: virtio::fs::F::empty(),
-		})
+	fn map_cfg(
+		cap: &PciCap,
+	) -> Option<VolatileRef<'static, virtio::fs::Config, volatile::access::ReadOnly>> {
+		let dev_cfg = pci::map_dev_cfg(cap)?;
+		Some(VolatileRef::from_ref(dev_cfg))
 	}
 
-	/// Instantiates a new (VirtioFsDriver)[VirtioFsDriver] struct, by checking the available
-	/// configuration structures and moving them into the struct.
-	pub fn new(
-		caps_coll: UniCapsColl,
-		dev_cfg_list: Vec<PciCap>,
-		device: &PciDevice<PciConfigRegion>,
-	) -> Result<Self, error::VirtioFsInitError> {
-		let device_id = device.device_id();
-
-		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioFsDriver::map_cfg) else {
-			error!("No dev config. Aborting!");
-			return Err(error::VirtioFsInitError::NoDevCfg(device_id));
-		};
-
-		Ok(VirtioFsDriver {
-			dev_cfg,
-			caps_coll,
-			vqueues: Vec::new(),
-		})
-	}
-
-	/// Initializes virtio filesystem device
+	/// Initializes virtio filesystem device by checking the available
+	/// configuration structures and calling the initializer on them.
 	pub fn init(
 		device: &PciDevice<PciConfigRegion>,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioFsDriver, VirtioError> {
 		let (caps, dev_cfg_list) = pci::map_caps(device)
 			.inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
-		let mut drv = VirtioFsDriver::new(caps, dev_cfg_list, device).map_err(|fs_err| {
-			error!("Initializing new network driver failed. Aborting!");
-			VirtioError::FsDriver(fs_err)
-		})?;
 
-		match drv.init_dev(handlers, device.get_irq()) {
-			Ok(()) => {
+		let dev_cfg = dev_cfg_list
+			.iter()
+			.find_map(VirtioFsDriver::map_cfg)
+			.ok_or_else(|| {
+				error!("No dev config. Aborting!");
+				error!("Initializing new network driver failed. Aborting!");
+				VirtioError::FsDriver(error::VirtioFsInitError::NoDevCfg(device.device_id()))
+			})?;
+
+		match Self::init_dev((caps, dev_cfg), handlers, device.get_irq()) {
+			Ok(drv) => {
 				info!("Filesystem device has been initialized by driver!",);
 				Ok(drv)
 			}
-			Err(fs_err) => {
-				drv.set_failed();
+			Err((fs_err, mut caps_coll)) => {
+				caps_coll.com_cfg.set_failed();
 				Err(VirtioError::FsDriver(fs_err))
 			}
 		}

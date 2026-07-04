@@ -1,31 +1,13 @@
-use alloc::vec::Vec;
-
 use virtio::mmio::DeviceRegisters;
 use volatile::VolatileRef;
 
-use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
+use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::map_caps;
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
 // Backend-dependent interface for Virtio fs driver
 impl VirtioFsDriver {
-	pub fn new(
-		registers: VolatileRef<'static, DeviceRegisters>,
-	) -> Result<VirtioFsDriver, VirtioError> {
-		let (caps_coll, dev_cfg_raw) = map_caps(registers);
-		let dev_cfg = FsDevCfg {
-			raw: dev_cfg_raw,
-			features: virtio::fs::F::empty(),
-		};
-
-		Ok(VirtioFsDriver {
-			dev_cfg,
-			caps_coll,
-			vqueues: Vec::new(),
-		})
-	}
-
 	/// Initializes virtio fs device by mapping configuration layout to
 	/// respective structs (configuration structs are:
 	///
@@ -36,10 +18,13 @@ impl VirtioFsDriver {
 		irq: InterruptLine,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioFsDriver, VirtioError> {
-		let mut drv = VirtioFsDriver::new(registers)?;
-		drv.init_dev(handlers, Some(irq))
-			.map_err(VirtioError::FsDriver)?;
-		drv.caps_coll.com_cfg.print_information();
+		let mut drv = Self::init_dev(map_caps(registers), handlers, Some(irq))
+			.map_err(|(err, _)| VirtioError::FsDriver(err))?;
+		drv.print_information();
 		Ok(drv)
+	}
+
+	fn print_information(&mut self) {
+		self.caps_coll.com_cfg.print_information();
 	}
 }

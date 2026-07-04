@@ -1,30 +1,13 @@
-use smoltcp::phy::ChecksumCapabilities;
 use virtio::mmio::DeviceRegisters;
 use volatile::VolatileRef;
 
-use crate::drivers::net::virtio::{Init, NetDevCfg, Uninit, VirtioNetDriver};
+use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::map_caps;
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
 // Backend-dependent interface for Virtio network driver
-impl VirtioNetDriver<Uninit> {
-	pub fn new(registers: VolatileRef<'static, DeviceRegisters>) -> Result<Self, VirtioError> {
-		let (caps_coll, dev_cfg_raw) = map_caps(registers);
-		let dev_cfg = NetDevCfg {
-			raw: dev_cfg_raw,
-			features: virtio::net::F::empty(),
-		};
-
-		Ok(VirtioNetDriver {
-			dev_cfg,
-			caps_coll,
-			inner: Uninit,
-			num_vqs: 0,
-			checksums: ChecksumCapabilities::default(),
-		})
-	}
-
+impl VirtioNetDriver {
 	/// Initializes virtio network device by mapping configuration layout to
 	/// respective structs (configuration structs are:
 	///
@@ -34,17 +17,13 @@ impl VirtioNetDriver<Uninit> {
 		registers: VolatileRef<'static, DeviceRegisters>,
 		irq: InterruptLine,
 		handlers: &mut InterruptHandlerMap,
-	) -> Result<VirtioNetDriver<Init>, VirtioError> {
-		let drv = VirtioNetDriver::new(registers)?;
-		let mut drv = drv
-			.init_dev(handlers, Some(irq))
+	) -> Result<VirtioNetDriver, VirtioError> {
+		let mut drv = VirtioNetDriver::init_dev(map_caps(registers), handlers, Some(irq))
 			.map_err(VirtioError::NetDriver)?;
 		drv.print_information();
 		Ok(drv)
 	}
-}
 
-impl VirtioNetDriver<Init> {
 	pub fn print_information(&mut self) {
 		self.caps_coll.com_cfg.print_information();
 		if self.dev_status() == virtio::net::S::LINK_UP {

@@ -3,29 +3,11 @@ use volatile::VolatileRef;
 
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::map_caps;
-use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
+use crate::drivers::vsock::VirtioVsockDriver;
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
 // Backend-dependent interface for Virtio vsock driver
 impl VirtioVsockDriver {
-	pub fn new(
-		registers: VolatileRef<'static, DeviceRegisters>,
-	) -> Result<VirtioVsockDriver, VirtioError> {
-		let (caps_coll, dev_cfg_raw) = map_caps(registers);
-		let dev_cfg = VsockDevCfg {
-			raw: dev_cfg_raw,
-			features: virtio::vsock::F::empty(),
-		};
-
-		Ok(VirtioVsockDriver {
-			dev_cfg,
-			caps_coll,
-			event_vq: EventQueue::new(),
-			recv_vq: RxQueue::new(),
-			send_vq: TxQueue::new(),
-		})
-	}
-
 	/// Initializes virtio vsock device by mapping configuration layout to
 	/// respective structs (configuration structs are:
 	///
@@ -36,9 +18,8 @@ impl VirtioVsockDriver {
 		irq: InterruptLine,
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioVsockDriver, VirtioError> {
-		let mut drv = VirtioVsockDriver::new(registers)?;
-		drv.init_dev(handlers, Some(irq))
-			.map_err(VirtioError::VsockDriver)?;
+		let mut drv = Self::init_dev(map_caps(registers), handlers, Some(irq))
+			.map_err(|(err, _)| VirtioError::VsockDriver(err))?;
 		drv.caps_coll.com_cfg.print_information();
 		Ok(drv)
 	}
