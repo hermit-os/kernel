@@ -38,8 +38,8 @@ use crate::drivers::pci::msix;
 #[cfg(target_arch = "x86_64")]
 use crate::drivers::pci::msix::MsixTableVolatileElementAccess;
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::InterruptCapability;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
+use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
@@ -171,22 +171,6 @@ impl PciCap {
 	}
 }
 
-/// Universal Caplist Collections holds all universal capability structures for
-/// a given Virtio PCI device.
-///
-/// As Virtio's PCI devices are allowed to present multiple capability
-/// structures of the same config type, the structure
-/// provides a driver with all capabilities, sorted in descending priority,
-/// allowing the driver to choose.
-/// The structure contains a special dev_cfg_list field, a vector holding
-/// [PciCap] objects, to allow the driver to map its
-/// device specific configurations independently.
-pub struct UniCapsColl {
-	pub(crate) com_cfg: ComCfg,
-	pub(crate) notif_cfg: NotifCfg,
-	pub(crate) isr_cfg: InterruptCapability,
-	pub(crate) dev_cfg_list: Vec<PciCap>,
-}
 /// Wraps a [`CommonCfg`] in order to preserve
 /// the original structure.
 ///
@@ -609,7 +593,12 @@ impl PciBar {
 	}
 }
 
-pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, VirtioError> {
+/// The return value contains a vector holding
+/// [PciCap] objects, to allow the driver to map its
+/// device specific configurations independently.
+pub(crate) fn map_caps(
+	device: &PciDevice<PciConfigRegion>,
+) -> Result<(UniCapsColl, Vec<PciCap>), VirtioError> {
 	let device_id = device.device_id();
 
 	// In case caplist pointer is not used, abort as it is essential
@@ -733,12 +722,14 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 		_ => (),
 	}
 
-	Ok(UniCapsColl {
-		com_cfg: com_cfg.ok_or(VirtioError::NoComCfg(device_id))?,
-		notif_cfg: notif_cfg.ok_or(VirtioError::NoNotifCfg(device_id))?,
-		isr_cfg: isr_cfg.ok_or(VirtioError::NoIsrCfg(device_id))?,
+	Ok((
+		UniCapsColl {
+			com_cfg: com_cfg.ok_or(VirtioError::NoComCfg(device_id))?,
+			notif_cfg: notif_cfg.ok_or(VirtioError::NoNotifCfg(device_id))?,
+			int_cap: isr_cfg.ok_or(VirtioError::NoIsrCfg(device_id))?,
+		},
 		dev_cfg_list,
-	})
+	))
 }
 
 /// Checks existing drivers for support of given device. Upon match, provides

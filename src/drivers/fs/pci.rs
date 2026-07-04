@@ -7,8 +7,8 @@ use crate::drivers::InterruptHandlerMap;
 use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::pci::PciCap;
+use crate::drivers::virtio::transport::{UniCapsColl, pci};
 
 impl VirtioFsDriver {
 	fn map_cfg(cap: &PciCap) -> Option<FsDevCfg> {
@@ -27,6 +27,7 @@ impl VirtioFsDriver {
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		caps_coll: UniCapsColl,
+		dev_cfg_list: Vec<PciCap>,
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioFsInitError> {
 		let device_id = device.device_id();
@@ -34,8 +35,7 @@ impl VirtioFsDriver {
 		let UniCapsColl {
 			com_cfg,
 			notif_cfg,
-			isr_cfg,
-			dev_cfg_list,
+			int_cap: isr_cfg,
 			..
 		} = caps_coll;
 
@@ -59,7 +59,7 @@ impl VirtioFsDriver {
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioFsDriver, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
-			Ok(caps) => match VirtioFsDriver::new(caps, device) {
+			Ok((caps, dev_cfg_list)) => match VirtioFsDriver::new(caps, dev_cfg_list, device) {
 				Ok(driver) => driver,
 				Err(fs_err) => {
 					error!("Initializing new network driver failed. Aborting!");

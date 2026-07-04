@@ -1,11 +1,13 @@
+use alloc::vec::Vec;
+
 use volatile::VolatileRef;
 
 use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::InterruptHandlerMap;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::pci::PciCap;
+use crate::drivers::virtio::transport::{UniCapsColl, pci};
 use crate::drivers::vsock::{EventQueue, RxQueue, TxQueue, VirtioVsockDriver, VsockDevCfg};
 
 impl VirtioVsockDriver {
@@ -25,6 +27,7 @@ impl VirtioVsockDriver {
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		caps_coll: UniCapsColl,
+		dev_cfg_list: Vec<PciCap>,
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioVsockError> {
 		let device_id = device.device_id();
@@ -32,8 +35,7 @@ impl VirtioVsockDriver {
 		let UniCapsColl {
 			com_cfg,
 			notif_cfg,
-			isr_cfg,
-			dev_cfg_list,
+			int_cap: isr_cfg,
 			..
 		} = caps_coll;
 
@@ -61,7 +63,7 @@ impl VirtioVsockDriver {
 		handlers: &mut InterruptHandlerMap,
 	) -> Result<VirtioVsockDriver, VirtioError> {
 		let mut drv = match pci::map_caps(device) {
-			Ok(caps) => match VirtioVsockDriver::new(caps, device) {
+			Ok((caps, dev_cfg_list)) => match VirtioVsockDriver::new(caps, dev_cfg_list, device) {
 				Ok(driver) => driver,
 				Err(vsock_err) => {
 					error!("Initializing new virtio socket device driver failed. Aborting!");

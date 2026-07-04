@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use pci_types::CommandRegister;
 use virtio::console::Config;
 use volatile::VolatileRef;
@@ -7,7 +9,8 @@ use crate::drivers::InterruptHandlerMap;
 use crate::drivers::console::{ConsoleDevCfg, RxQueue, TxQueue, VirtioConsoleDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::pci::{self, PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::UniCapsColl;
+use crate::drivers::virtio::transport::pci::{self, PciCap};
 
 // Backend-dependent interface for Virtio console driver
 impl VirtioConsoleDriver {
@@ -26,6 +29,7 @@ impl VirtioConsoleDriver {
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		caps_coll: UniCapsColl,
+		dev_cfg_list: Vec<PciCap>,
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioConsoleError> {
 		let device_id = device.device_id();
@@ -33,8 +37,7 @@ impl VirtioConsoleDriver {
 		let UniCapsColl {
 			com_cfg,
 			notif_cfg,
-			isr_cfg,
-			dev_cfg_list,
+			int_cap: isr_cfg,
 			..
 		} = caps_coll;
 
@@ -64,13 +67,15 @@ impl VirtioConsoleDriver {
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
 		let mut drv = match pci::map_caps(device) {
-			Ok(caps) => match VirtioConsoleDriver::new(caps, device) {
-				Ok(driver) => driver,
-				Err(console_err) => {
-					error!("Initializing new virtio console device driver failed. Aborting!");
-					return Err(VirtioError::ConsoleDriver(console_err));
+			Ok((caps, dev_cfg_list)) => {
+				match VirtioConsoleDriver::new(caps, dev_cfg_list, device) {
+					Ok(driver) => driver,
+					Err(console_err) => {
+						error!("Initializing new virtio console device driver failed. Aborting!");
+						return Err(VirtioError::ConsoleDriver(console_err));
+					}
 				}
-			},
+			}
 			Err(err) => {
 				error!("Mapping capabilities failed. Aborting!");
 				return Err(err);

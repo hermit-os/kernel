@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use pci_types::CommandRegister;
 use smoltcp::phy::ChecksumCapabilities;
 use volatile::VolatileRef;
@@ -8,8 +10,8 @@ use crate::drivers::InterruptHandlerMap;
 use crate::drivers::net::virtio::{NetDevCfg, VirtioNetDriver};
 use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
+use crate::drivers::virtio::transport::pci::PciCap;
+use crate::drivers::virtio::transport::{UniCapsColl, pci};
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver<Uninit> {
@@ -29,14 +31,14 @@ impl VirtioNetDriver<Uninit> {
 	/// configuration structures and moving them into the struct.
 	pub(crate) fn new(
 		caps_coll: UniCapsColl,
+		dev_cfg_list: Vec<PciCap>,
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioNetError> {
 		let device_id = device.device_id();
 		let UniCapsColl {
 			com_cfg,
 			notif_cfg,
-			isr_cfg,
-			dev_cfg_list,
+			int_cap: isr_cfg,
 			..
 		} = caps_coll;
 
@@ -72,7 +74,7 @@ impl VirtioNetDriver<Uninit> {
 		device.set_command(CommandRegister::BUS_MASTER_ENABLE);
 
 		let drv = match pci::map_caps(device) {
-			Ok(caps) => match VirtioNetDriver::new(caps, device) {
+			Ok((caps, dev_cfg_list)) => match VirtioNetDriver::new(caps, dev_cfg_list, device) {
 				Ok(driver) => driver,
 				Err(vnet_err) => {
 					error!("Initializing new network driver failed. Aborting!");
