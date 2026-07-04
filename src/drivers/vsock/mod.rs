@@ -26,11 +26,7 @@ use crate::drivers::mmio::get_vsock_driver;
 use crate::drivers::pci::get_vsock_driver;
 use crate::drivers::virtio::ControlRegisters;
 use crate::drivers::virtio::error::VirtioVsockError;
-use crate::drivers::virtio::transport::InterruptCapability;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, NotifCfg};
+use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, Virtq,
@@ -262,9 +258,7 @@ pub(crate) struct VsockDevCfg {
 
 pub(crate) struct VirtioVsockDriver {
 	pub(super) dev_cfg: VsockDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: InterruptCapability,
-	pub(super) notif_cfg: NotifCfg,
+	pub(super) caps_coll: UniCapsColl,
 
 	pub(super) event_vq: EventQueue,
 	pub(super) recv_vq: RxQueue,
@@ -290,7 +284,7 @@ impl VirtioVsockDriver {
 
 	#[cfg(feature = "pci")]
 	pub fn set_failed(&mut self) {
-		self.com_cfg.set_failed();
+		self.caps_coll.com_cfg.set_failed();
 	}
 
 	pub fn disable_interrupts(&mut self) {
@@ -310,7 +304,7 @@ impl VirtioVsockDriver {
 			not(all(feature = "pci", target_arch = "x86_64")),
 			expect(irrefutable_let_patterns)
 		)]
-		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.isr_stat else {
+		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.caps_coll.int_cap else {
 			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
 		};
 
@@ -327,7 +321,7 @@ impl VirtioVsockDriver {
 	}
 
 	fn handle_device_configuration_interrupt(&mut self) {
-		if self.com_cfg.does_device_need_reset() {
+		if self.caps_coll.com_cfg.does_device_need_reset() {
 			todo!("Device configuration change notification cannot be handled yet");
 		}
 	}
@@ -343,16 +337,17 @@ impl VirtioVsockDriver {
 		irq: Option<InterruptLine>,
 	) -> Result<(), VirtioVsockError> {
 		// Reset
-		self.com_cfg.reset_dev();
+		self.caps_coll.com_cfg.reset_dev();
 
 		// Indicate device, that OS noticed it
-		self.com_cfg.ack_dev();
+		self.caps_coll.com_cfg.ack_dev();
 
 		// Indicate device, that driver is able to handle it
-		self.com_cfg.set_drv();
+		self.caps_coll.com_cfg.set_drv();
 
 		let minimal_features = virtio::vsock::F::VERSION_1;
 		let negotiated_features = self
+			.caps_coll
 			.com_cfg
 			.control_registers()
 			.negotiate_features(minimal_features);
@@ -364,10 +359,10 @@ impl VirtioVsockDriver {
 
 		// Indicates the device, that the current feature set is final for the driver
 		// and will not be changed.
-		self.com_cfg.features_ok();
+		self.caps_coll.com_cfg.features_ok();
 
 		// Checks if the device has accepted final set. This finishes feature negotiation.
-		if self.com_cfg.check_features() {
+		if self.caps_coll.com_cfg.check_features() {
 			info!(
 				"Features have been negotiated between virtio socket device {:x} and driver.",
 				self.dev_cfg.dev_id
@@ -382,8 +377,8 @@ impl VirtioVsockDriver {
 		// create the queues and tell device about them
 		self.recv_vq.add(VirtQueue::Split(
 			SplitVq::new(
-				&mut self.com_cfg,
-				&self.notif_cfg,
+				&mut self.caps_coll.com_cfg,
+				&self.caps_coll.notif_cfg,
 				VIRTIO_MAX_QUEUE_SIZE,
 				0,
 				self.dev_cfg.features.into(),
@@ -395,8 +390,8 @@ impl VirtioVsockDriver {
 
 		self.send_vq.add(VirtQueue::Split(
 			SplitVq::new(
-				&mut self.com_cfg,
-				&self.notif_cfg,
+				&mut self.caps_coll.com_cfg,
+				&self.caps_coll.notif_cfg,
 				VIRTIO_MAX_QUEUE_SIZE,
 				1,
 				self.dev_cfg.features.into(),
@@ -409,8 +404,8 @@ impl VirtioVsockDriver {
 		// create the queues and tell device about them
 		self.event_vq.add(VirtQueue::Split(
 			SplitVq::new(
-				&mut self.com_cfg,
-				&self.notif_cfg,
+				&mut self.caps_coll.com_cfg,
+				&self.caps_coll.notif_cfg,
 				VIRTIO_MAX_QUEUE_SIZE,
 				2,
 				self.dev_cfg.features.into(),
@@ -418,7 +413,7 @@ impl VirtioVsockDriver {
 			.unwrap(),
 		));
 
-		match &mut self.isr_stat {
+		match &mut self.caps_coll.int_cap {
 			InterruptCapability::IsrStatus(_) => {
 				let irq = irq.unwrap();
 				handlers.entry(irq).or_default().push_back(|| {
@@ -431,7 +426,7 @@ impl VirtioVsockDriver {
 			}
 			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
 			InterruptCapability::Msix(msix_table) => {
-				self.com_cfg.register_msix_vectors(
+				self.caps_coll.com_cfg.register_msix_vectors(
 					msix_table,
 					handlers,
 					|| {
@@ -451,7 +446,7 @@ impl VirtioVsockDriver {
 		self.event_vq.enable_notifs();
 
 		// At this point the device is "live"
-		self.com_cfg.drv_ok();
+		self.caps_coll.com_cfg.drv_ok();
 
 		Ok(())
 	}

@@ -33,14 +33,6 @@ impl VirtioConsoleDriver {
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioConsoleError> {
 		let device_id = device.device_id();
-
-		let UniCapsColl {
-			com_cfg,
-			notif_cfg,
-			int_cap: isr_cfg,
-			..
-		} = caps_coll;
-
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioConsoleDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
 			return Err(error::VirtioConsoleError::NoDevCfg(device_id));
@@ -48,9 +40,7 @@ impl VirtioConsoleDriver {
 
 		Ok(VirtioConsoleDriver {
 			dev_cfg,
-			com_cfg,
-			isr_stat: isr_cfg,
-			notif_cfg,
+			caps_coll,
 			recv_vq: RxQueue::new(),
 			send_vq: TxQueue::new(),
 		})

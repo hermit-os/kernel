@@ -35,12 +35,6 @@ impl VirtioNetDriver<Uninit> {
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioNetError> {
 		let device_id = device.device_id();
-		let UniCapsColl {
-			com_cfg,
-			notif_cfg,
-			int_cap: isr_cfg,
-			..
-		} = caps_coll;
 
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioNetDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
@@ -49,9 +43,7 @@ impl VirtioNetDriver<Uninit> {
 
 		Ok(VirtioNetDriver {
 			dev_cfg,
-			com_cfg,
-			isr_stat: isr_cfg,
-			notif_cfg,
+			caps_coll,
 			inner: Uninit,
 			num_vqs: 0,
 			checksums: ChecksumCapabilities::default(),

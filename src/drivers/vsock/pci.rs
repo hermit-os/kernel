@@ -32,13 +32,6 @@ impl VirtioVsockDriver {
 	) -> Result<Self, error::VirtioVsockError> {
 		let device_id = device.device_id();
 
-		let UniCapsColl {
-			com_cfg,
-			notif_cfg,
-			int_cap: isr_cfg,
-			..
-		} = caps_coll;
-
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioVsockDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
 			return Err(error::VirtioVsockError::NoDevCfg(device_id));
@@ -46,9 +39,7 @@ impl VirtioVsockDriver {
 
 		Ok(VirtioVsockDriver {
 			dev_cfg,
-			com_cfg,
-			isr_stat: isr_cfg,
-			notif_cfg,
+			caps_coll,
 			event_vq: EventQueue::new(),
 			recv_vq: RxQueue::new(),
 			send_vq: TxQueue::new(),

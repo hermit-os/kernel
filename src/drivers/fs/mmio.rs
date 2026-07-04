@@ -1,44 +1,29 @@
 use alloc::vec::Vec;
 
-use virtio::fs::Config;
-use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
+use virtio::mmio::DeviceRegisters;
 use volatile::VolatileRef;
 
 use crate::drivers::fs::{FsDevCfg, VirtioFsDriver};
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::InterruptCapability;
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::map_caps;
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
 // Backend-dependent interface for Virtio fs driver
 impl VirtioFsDriver {
 	pub fn new(
 		dev_id: u16,
-		mut registers: VolatileRef<'static, DeviceRegisters>,
+		registers: VolatileRef<'static, DeviceRegisters>,
 	) -> Result<VirtioFsDriver, VirtioError> {
-		let dev_cfg_raw: &'static Config = unsafe {
-			&*registers
-				.borrow_mut()
-				.as_mut_ptr()
-				.config()
-				.as_raw_ptr()
-				.cast::<Config>()
-				.as_ptr()
-		};
-		let dev_cfg_raw = VolatileRef::from_ref(dev_cfg_raw);
+		let (caps_coll, dev_cfg_raw) = map_caps(registers);
 		let dev_cfg = FsDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,
 			features: virtio::fs::F::empty(),
 		};
-		let isr_stat = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
-		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
 		Ok(VirtioFsDriver {
 			dev_cfg,
-			com_cfg: ComCfg::new(registers),
-			isr_stat,
-			notif_cfg,
+			caps_coll,
 			vqueues: Vec::new(),
 		})
 	}
@@ -57,7 +42,7 @@ impl VirtioFsDriver {
 		let mut drv = VirtioFsDriver::new(dev_id, registers)?;
 		drv.init_dev(handlers, Some(irq))
 			.map_err(VirtioError::FsDriver)?;
-		drv.com_cfg.print_information();
+		drv.caps_coll.com_cfg.print_information();
 		Ok(drv)
 	}
 }

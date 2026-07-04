@@ -24,6 +24,7 @@ use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
@@ -412,4 +413,30 @@ pub(crate) fn init_device(
 			))
 		}
 	}
+}
+
+pub fn map_caps<Config>(
+	mut registers: VolatileRef<'static, DeviceRegisters>,
+) -> (UniCapsColl, VolatileRef<'static, Config, ReadOnly>) {
+	let dev_cfg_raw: &'static Config = unsafe {
+		&*registers
+			.borrow_mut()
+			.as_mut_ptr()
+			.config()
+			.as_raw_ptr()
+			.cast::<Config>()
+			.as_ptr()
+	};
+	let dev_cfg_raw = VolatileRef::from_ref(dev_cfg_raw);
+	let int_cap = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
+	let notif_cfg = NotifCfg::new(registers.borrow_mut());
+
+	(
+		UniCapsColl {
+			com_cfg: ComCfg::new(registers),
+			int_cap,
+			notif_cfg,
+		},
+		dev_cfg_raw,
+	)
 }

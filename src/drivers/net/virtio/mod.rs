@@ -37,11 +37,7 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
 use crate::drivers::virtio::ControlRegisters;
-use crate::drivers::virtio::transport::InterruptCapability;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, NotifCfg};
+use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -244,10 +240,7 @@ pub(crate) struct Init {
 /// the device itself.
 pub(crate) struct VirtioNetDriver<T = Init> {
 	pub(super) dev_cfg: NetDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: InterruptCapability,
-	pub(super) notif_cfg: NotifCfg,
-
+	pub(super) caps_coll: UniCapsColl,
 	pub(super) inner: T,
 
 	pub(super) num_vqs: u16,
@@ -519,7 +512,8 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
 		if self.dev_cfg.features.contains(virtio::net::F::MAC) {
-			self.com_cfg
+			self.caps_coll
+				.com_cfg
 				.device_config_space()
 				.read_config_with(|| self.dev_cfg.raw.as_ptr().mac().read())
 		} else {
@@ -545,7 +539,7 @@ impl NetworkDriver for VirtioNetDriver<Init> {
 			not(all(feature = "pci", target_arch = "x86_64")),
 			expect(irrefutable_let_patterns)
 		)]
-		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.isr_stat else {
+		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.caps_coll.int_cap else {
 			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
 		};
 
@@ -771,7 +765,7 @@ impl VirtioNetDriver<Init> {
 	}
 
 	pub(crate) fn handle_device_configuration_interrupt(&self) {
-		if self.com_cfg.does_device_need_reset() {
+		if self.caps_coll.com_cfg.does_device_need_reset() {
 			todo!("Device configuration change notification cannot be handled yet");
 		}
 	}
@@ -789,13 +783,13 @@ impl VirtioNetDriver<Uninit> {
 		irq: Option<InterruptLine>,
 	) -> Result<VirtioNetDriver<Init>, VirtioNetError> {
 		// Reset
-		self.com_cfg.reset_dev();
+		self.caps_coll.com_cfg.reset_dev();
 
 		// Indicate device, that OS noticed it
-		self.com_cfg.ack_dev();
+		self.caps_coll.com_cfg.ack_dev();
 
 		// Indicate device, that driver is able to handle it
-		self.com_cfg.set_drv();
+		self.caps_coll.com_cfg.set_drv();
 
 		let minimal_features = virtio::net::F::VERSION_1 | virtio::net::F::MAC;
 
@@ -825,6 +819,7 @@ impl VirtioNetDriver<Uninit> {
 			| virtio::net::F::GUEST_TSO6;
 
 		let negotiated_features = self
+			.caps_coll
 			.com_cfg
 			.control_registers()
 			.negotiate_features(features);
@@ -836,10 +831,10 @@ impl VirtioNetDriver<Uninit> {
 
 		// Indicates the device, that the current feature set is final for the driver
 		// and will not be changed.
-		self.com_cfg.features_ok();
+		self.caps_coll.com_cfg.features_ok();
 
 		// Checks if the device has accepted final set. This finishes feature negotiation.
-		if self.com_cfg.check_features() {
+		if self.caps_coll.com_cfg.check_features() {
 			info!(
 				"Features have been negotiated between virtio network device {:x} and driver.",
 				self.dev_cfg.dev_id
@@ -867,7 +862,7 @@ impl VirtioNetDriver<Uninit> {
 			self.dev_cfg.dev_id
 		);
 
-		match &mut self.isr_stat {
+		match &mut self.caps_coll.int_cap {
 			InterruptCapability::IsrStatus(_) => {
 				let irq = irq.unwrap();
 				handlers
@@ -886,7 +881,7 @@ impl VirtioNetDriver<Uninit> {
 					.features
 					.contains(virtio::net::F::CTRL_VQ)
 					.then_some(self.num_vqs);
-				self.com_cfg.register_msix_vectors(
+				self.caps_coll.com_cfg.register_msix_vectors(
 					msix_table,
 					handlers,
 					crate::executor::network::network_device_configuration_handler,
@@ -897,7 +892,7 @@ impl VirtioNetDriver<Uninit> {
 		}
 
 		// At this point the device is "live"
-		self.com_cfg.drv_ok();
+		self.caps_coll.com_cfg.drv_ok();
 
 		// Not only should we offload receive checksum validation to the device for performance when possible, we MUST
 		// offload it when GUEST_TSO{4,6} are enabled, since otherwise the coalesced packets will be rejected by smoltcp
@@ -918,9 +913,7 @@ impl VirtioNetDriver<Uninit> {
 
 		Ok(VirtioNetDriver {
 			dev_cfg: self.dev_cfg,
-			com_cfg: self.com_cfg,
-			isr_stat: self.isr_stat,
-			notif_cfg: self.notif_cfg,
+			caps_coll: self.caps_coll,
 			inner,
 			num_vqs: self.num_vqs,
 			checksums: self.checksums,
@@ -937,8 +930,8 @@ impl VirtioNetDriver<Uninit> {
 			let mut ctrl_vq = if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
 				VirtQueue::Packed(
 					PackedVq::new(
-						&mut self.com_cfg,
-						&self.notif_cfg,
+						&mut self.caps_coll.com_cfg,
+						&self.caps_coll.notif_cfg,
 						VIRTIO_MAX_QUEUE_SIZE,
 						self.num_vqs,
 						self.dev_cfg.features.into(),
@@ -948,8 +941,8 @@ impl VirtioNetDriver<Uninit> {
 			} else {
 				VirtQueue::Split(
 					SplitVq::new(
-						&mut self.com_cfg,
-						&self.notif_cfg,
+						&mut self.caps_coll.com_cfg,
+						&self.caps_coll.notif_cfg,
 						VIRTIO_MAX_QUEUE_SIZE,
 						self.num_vqs,
 						self.dev_cfg.features.into(),
@@ -1013,8 +1006,8 @@ impl VirtioNetDriver<Uninit> {
 		for i in 0..(self.num_vqs / 2) {
 			if self.dev_cfg.features.contains(virtio::net::F::RING_PACKED) {
 				let mut vq = PackedVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
+					&mut self.caps_coll.com_cfg,
+					&self.caps_coll.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
 					2 * i,
 					self.dev_cfg.features.into(),
@@ -1026,8 +1019,8 @@ impl VirtioNetDriver<Uninit> {
 				inner.recv_vqs.add(VirtQueue::Packed(vq));
 
 				let mut vq = PackedVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
+					&mut self.caps_coll.com_cfg,
+					&self.caps_coll.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
 					2 * i + 1,
 					self.dev_cfg.features.into(),
@@ -1040,8 +1033,8 @@ impl VirtioNetDriver<Uninit> {
 				inner.send_vqs.add(VirtQueue::Packed(vq));
 			} else {
 				let mut vq = SplitVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
+					&mut self.caps_coll.com_cfg,
+					&self.caps_coll.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
 					2 * i,
 					self.dev_cfg.features.into(),
@@ -1053,8 +1046,8 @@ impl VirtioNetDriver<Uninit> {
 				inner.recv_vqs.add(VirtQueue::Split(vq));
 
 				let mut vq = SplitVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
+					&mut self.caps_coll.com_cfg,
+					&self.caps_coll.notif_cfg,
 					VIRTIO_MAX_QUEUE_SIZE,
 					2 * i + 1,
 					self.dev_cfg.features.into(),

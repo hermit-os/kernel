@@ -32,13 +32,6 @@ impl VirtioFsDriver {
 	) -> Result<Self, error::VirtioFsInitError> {
 		let device_id = device.device_id();
 
-		let UniCapsColl {
-			com_cfg,
-			notif_cfg,
-			int_cap: isr_cfg,
-			..
-		} = caps_coll;
-
 		let Some(dev_cfg) = dev_cfg_list.iter().find_map(VirtioFsDriver::map_cfg) else {
 			error!("No dev config. Aborting!");
 			return Err(error::VirtioFsInitError::NoDevCfg(device_id));
@@ -46,9 +39,7 @@ impl VirtioFsDriver {
 
 		Ok(VirtioFsDriver {
 			dev_cfg,
-			com_cfg,
-			isr_stat: isr_cfg,
-			notif_cfg,
+			caps_coll,
 			vqueues: Vec::new(),
 		})
 	}

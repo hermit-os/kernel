@@ -14,7 +14,6 @@ pub(crate) enum InterruptCapability {
 	Msix(volatile::VolatileRef<'static, [crate::drivers::pci::msix::TableEntry]>),
 }
 
-#[cfg_attr(not(feature = "pci"), expect(dead_code))]
 /// Universal Caplist Collections holds all universal capability structures for
 /// a given Virtio device.
 pub struct UniCapsColl {

@@ -1,42 +1,28 @@
 use smoltcp::phy::ChecksumCapabilities;
-use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
+use virtio::mmio::DeviceRegisters;
 use volatile::VolatileRef;
 
 use crate::drivers::net::virtio::{Init, NetDevCfg, Uninit, VirtioNetDriver};
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::InterruptCapability;
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+use crate::drivers::virtio::transport::mmio::map_caps;
 use crate::drivers::{InterruptHandlerMap, InterruptLine};
 
 // Backend-dependent interface for Virtio network driver
 impl VirtioNetDriver<Uninit> {
 	pub fn new(
 		dev_id: u16,
-		mut registers: VolatileRef<'static, DeviceRegisters>,
+		registers: VolatileRef<'static, DeviceRegisters>,
 	) -> Result<Self, VirtioError> {
-		let dev_cfg_raw: &'static virtio::net::Config = unsafe {
-			&*registers
-				.borrow_mut()
-				.as_mut_ptr()
-				.config()
-				.as_raw_ptr()
-				.cast::<virtio::net::Config>()
-				.as_ptr()
-		};
-		let dev_cfg_raw = VolatileRef::from_ref(dev_cfg_raw);
+		let (caps_coll, dev_cfg_raw) = map_caps(registers);
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,
 			features: virtio::net::F::empty(),
 		};
-		let isr_stat = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
-		let notif_cfg = NotifCfg::new(registers.borrow_mut());
 
 		Ok(VirtioNetDriver {
 			dev_cfg,
-			com_cfg: ComCfg::new(registers),
-			isr_stat,
-			notif_cfg,
+			caps_coll,
 			inner: Uninit,
 			num_vqs: 0,
 			checksums: ChecksumCapabilities::default(),
@@ -65,7 +51,7 @@ impl VirtioNetDriver<Uninit> {
 
 impl VirtioNetDriver<Init> {
 	pub fn print_information(&mut self) {
-		self.com_cfg.print_information();
+		self.caps_coll.com_cfg.print_information();
 		if self.dev_status() == virtio::net::S::LINK_UP {
 			info!("The link of the network device is up!");
 		}
