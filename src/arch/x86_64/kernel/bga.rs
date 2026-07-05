@@ -39,7 +39,7 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 		let bga_version = data_port.read();
 
 		if bga_version != VBE_DISPI_ID5 {
-			error!("Unsupported BGA version: {:#06x}", bga_version);
+			error!("Unsupported BGA version: {bga_version:#06x}");
 			return;
 		}
 
