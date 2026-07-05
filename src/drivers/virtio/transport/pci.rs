@@ -10,6 +10,7 @@ use core::ptr::{self, NonNull};
 
 use memory_addresses::PhysAddr;
 use pci_types::capability::PciCapability;
+use thiserror::Error;
 use virtio::pci::{
 	CapCfgType, CapData, CommonCfg, CommonCfgVolatileFieldAccess, CommonCfgVolatileWideFieldAccess,
 	IsrStatus as IsrStatusRaw, NotificationData,
@@ -44,36 +45,6 @@ use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
 
-/// Maps a given device specific pci configuration structure and
-/// returns a static reference to it.
-pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
-	if cap.cap.cfg_type != CapCfgType::Device {
-		error!("Capability of device config has wrong id. Mapping not possible...");
-		return None;
-	};
-
-	if cap.bar_len() < cap.len() + cap.offset() {
-		error!("Device config of device does not fit into memory specified by bar!",);
-		return None;
-	}
-
-	// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-	if cap.len() < u64::try_from(size_of::<T>()).unwrap() {
-		error!(
-			"Device specific config from device does not represent actual structure specified by the standard!",
-		);
-		return None;
-	}
-
-	let virt_addr_raw = cap.bar_addr() + cap.offset();
-
-	// Create mutable reference to the PCI structure in PCI memory
-	let dev_cfg: &'static mut T =
-		unsafe { &mut *(ptr::with_exposed_provenance_mut(virt_addr_raw.try_into().unwrap())) };
-
-	Some(dev_cfg)
-}
-
 /// Virtio's PCI capabilities structure.
 /// See Virtio specification v.1.1 - 4.1.4
 ///
@@ -93,6 +64,10 @@ pub struct PciCap {
 }
 
 impl PciCap {
+	pub fn new(bar: PciBar, cap: CapData) -> Option<Self> {
+		(bar.length >= cap.length.to_ne() + cap.offset.to_ne()).then_some(Self { bar, cap })
+	}
+
 	pub fn offset(&self) -> u64 {
 		self.cap.offset.to_ne()
 	}
@@ -101,63 +76,80 @@ impl PciCap {
 		self.cap.length.to_ne()
 	}
 
-	pub fn bar_len(&self) -> u64 {
-		self.bar.length
-	}
-
 	pub fn bar_addr(&self) -> u64 {
 		self.bar.mem_addr
 	}
 
-	/// Returns a reference to the actual structure inside the PCI devices memory space.
-	fn map_common_cfg(&self) -> Option<VolatileRef<'static, CommonCfg>> {
-		if self.bar.length < self.len() + self.offset() {
-			let index = self.bar.index;
-			error!(
-				"Common config of the capability of device does not fit into memory specified by bar {index:x}!"
-			);
-			return None;
+	/// Maps a given device specific pci configuration structure and
+	/// returns a volatile reference to the actual structure inside the PCI devices memory space.
+	pub fn map_cap_cfg<T: CapCfg, A: volatile::access::Access>(
+		&self,
+	) -> Result<VolatileRef<'static, T, A>, CapCfgError> {
+		if self.cap.cfg_type != T::TYPE {
+			return Err(CapCfgError::WrongCfgType);
 		}
 
-		// `CommonCfg::queue_notify_data` and `CommonCfg::queue_reset` are optional.
-		const MIN_SIZE: usize = size_of::<CommonCfg>() - size_of::<[le16; 2]>();
-		if self.len() < u64::try_from(MIN_SIZE).unwrap() {
-			error!("Common config does not represent actual structure specified by the standard!");
-			return None;
+		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
+		if usize::try_from(self.len()).unwrap() < T::min_size() {
+			return Err(CapCfgError::StructTooLarge);
 		}
 
-		let virt_addr_raw = self.bar.mem_addr + self.offset();
-		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<CommonCfg>(
+		let virt_addr_raw = self.bar_addr() + self.offset();
+		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<T>(
 			virt_addr_raw.try_into().unwrap(),
 		))
 		.unwrap();
 
 		// Create mutable reference to the PCI structure in PCI memory
-		let com_cfg_raw = unsafe { VolatileRef::new(ptr) };
+		let cap_cfg_raw = unsafe { VolatileRef::new(ptr) };
 
-		Some(com_cfg_raw)
+		Ok(cap_cfg_raw.restrict())
 	}
+}
 
-	fn map_isr_status(&self) -> Option<VolatileRef<'static, IsrStatusRaw>> {
-		if self.bar.length < self.len() + self.offset() {
-			let index = self.bar.index;
-			error!(
-				"ISR status config of device does not fit into memory specified by bar {index:x}!"
-			);
-			return None;
-		}
+pub(crate) trait CapCfg: Sized {
+	const TYPE: CapCfgType;
 
-		let virt_addr_raw = self.bar.mem_addr + self.offset();
-		let ptr = NonNull::new(ptr::with_exposed_provenance_mut::<IsrStatusRaw>(
-			virt_addr_raw.try_into().unwrap(),
-		))
-		.unwrap();
-
-		// Create mutable reference to the PCI structure in the devices memory area
-		let isr_stat_raw = unsafe { VolatileRef::new(ptr) };
-
-		Some(isr_stat_raw)
+	fn min_size() -> usize {
+		size_of::<Self>()
 	}
+}
+
+#[derive(Error, Debug)]
+pub(crate) enum CapCfgError {
+	#[error("wrong capability config id, mapping not possible")]
+	WrongCfgType,
+	#[error("structure too large to fit into PCI capability")]
+	StructTooLarge,
+}
+
+impl CapCfg for CommonCfg {
+	const TYPE: CapCfgType = CapCfgType::Common;
+
+	fn min_size() -> usize {
+		// `CommonCfg::queue_notify_data` and `CommonCfg::queue_reset` are optional.
+		size_of::<Self>() - size_of::<[le16; 2]>()
+	}
+}
+
+impl CapCfg for IsrStatusRaw {
+	const TYPE: CapCfgType = CapCfgType::Isr;
+}
+
+impl CapCfg for virtio::console::Config {
+	const TYPE: CapCfgType = CapCfgType::Device;
+}
+
+impl CapCfg for virtio::fs::Config {
+	const TYPE: CapCfgType = CapCfgType::Device;
+}
+
+impl CapCfg for virtio::net::Config {
+	const TYPE: CapCfgType = CapCfgType::Device;
+}
+
+impl CapCfg for virtio::vsock::Config {
+	const TYPE: CapCfgType = CapCfgType::Device;
 }
 
 /// Wraps a [`CommonCfg`] in order to preserve
@@ -448,14 +440,6 @@ pub struct NotifCfg {
 
 impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
-		if cap.bar.length < cap.len() + cap.offset() {
-			let index = cap.bar.index;
-			error!(
-				"Notification config of device does not fit into memory specified by bar {index:x}!"
-			);
-			return None;
-		}
-
 		let notify_off_multiplier = cap.cap.notify_off_multiplier?.to_ne();
 
 		// define base memory address from which the actual Queue Notify address can be derived via
@@ -566,18 +550,13 @@ impl IsrStatus {
 // Currently all fields are public as the struct is instantiated in the drivers::virtio::env module
 #[derive(Copy, Clone, Debug)]
 pub struct PciBar {
-	index: u8,
 	mem_addr: u64,
 	length: u64,
 }
 
 impl PciBar {
-	pub fn new(index: u8, mem_addr: u64, length: u64) -> Self {
-		PciBar {
-			index,
-			mem_addr,
-			length,
-		}
+	pub fn new(mem_addr: u64, length: u64) -> Self {
+		PciBar { mem_addr, length }
 	}
 }
 
@@ -618,18 +597,26 @@ pub(crate) fn map_caps(
 				let Some((addr, size)) = device.memory_map_bar(slot, true) else {
 					continue;
 				};
-				let pci_cap = PciCap {
-					bar: VirtioPciBar::new(slot, addr.as_u64(), size.try_into().unwrap()),
+				let Some(pci_cap) = PciCap::new(
+					VirtioPciBar::new(addr.as_u64(), size.try_into().unwrap()),
 					cap,
+				) else {
+					error!(
+						"The capability of device {device_id:x} does not fit into memory specified by bar {slot:x}!",
+					);
+					continue;
 				};
 				match pci_cap.cap.cfg_type {
 					CapCfgType::Common => {
 						if com_cfg.is_none() {
-							match pci_cap.map_common_cfg() {
-								Some(cap) => com_cfg = Some(ComCfg::new(cap)),
-								None => error!(
-									"Common config capability of device {device_id:x} could not be mapped!"
-								),
+							match pci_cap.map_cap_cfg() {
+								Ok(cap) => com_cfg = Some(ComCfg::new(cap)),
+								Err(err) => {
+									error!("{err}");
+									error!(
+										"Common config capability of device {device_id:x} could not be mapped!"
+									);
+								}
 							}
 						}
 					}
@@ -649,11 +636,14 @@ pub(crate) fn map_caps(
 						#[cfg(target_arch = "x86_64")]
 						let cond = cond && msix_table.is_none();
 						if cond {
-							match pci_cap.map_isr_status() {
-								Some(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat)),
-								None => error!(
-									"ISR status config capability of device {device_id:x} could not be used!"
-								),
+							match pci_cap.map_cap_cfg() {
+								Ok(isr_stat) => isr_cfg = Some(IsrStatus::new(isr_stat)),
+								Err(err) => {
+									error!("{err}");
+									error!(
+										"ISR status config capability of device {device_id:x} could not be used!"
+									);
+								}
 							}
 						}
 					}
