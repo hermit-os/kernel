@@ -746,7 +746,7 @@ pub(crate) fn init_device(
 
 	match id {
 		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(device, handlers) {
+		virtio::Id::Console => match init::<VirtioConsoleDriver>(device, handlers) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
 				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
@@ -762,7 +762,7 @@ pub(crate) fn init_device(
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(device, handlers) {
+			match init::<VirtioFsDriver>(device, handlers) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
@@ -780,8 +780,14 @@ pub(crate) fn init_device(
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
-		virtio::Id::Net => match VirtioNetDriver::init(device, handlers) {
+		virtio::Id::Net => match init::<VirtioNetDriver>(device, handlers) {
 			Ok(virt_net_drv) => {
+				let link_status = if virt_net_drv.is_link_up() {
+					"up"
+				} else {
+					"down"
+				};
+				info!("Virtio-net link is {link_status} after initialization!");
 				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
 			}
@@ -793,8 +799,9 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
-		virtio::Id::Vsock => match VirtioVsockDriver::init(device, handlers) {
+		virtio::Id::Vsock => match init::<VirtioVsockDriver>(device, handlers) {
 			Ok(virt_sock_drv) => {
+				info!("Socket device has cid {:x}.", virt_sock_drv.get_cid());
 				info!("Virtio sock driver initialized.");
 				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_sock_drv)))
 			}
@@ -832,4 +839,46 @@ pub(crate) enum VirtioDriver {
 	Net(alloc::boxed::Box<VirtioNetDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
+}
+
+/// Initializes virtio device by checking the available
+/// configuration structures and calling the initializer on them.
+///
+/// Returns a driver instance.
+fn init<T>(
+	device: &PciDevice<PciConfigRegion>,
+	handlers: &mut InterruptHandlerMap,
+) -> Result<T, VirtioError>
+where
+	T: crate::drivers::virtio::VirtioDriver,
+	T::Config: CapCfg,
+{
+	// enable bus master mode
+	device.set_command(pci_types::CommandRegister::BUS_MASTER_ENABLE);
+
+	let (caps, dev_cfg_list) =
+		map_caps(device).inspect_err(|_| error!("Mapping capabilities failed. Aborting!"))?;
+
+	let dev_cfg = dev_cfg_list
+		.iter()
+		.find_map(|cap| cap.map_cap_cfg().ok())
+		.ok_or_else(|| {
+			error!("No dev config. Aborting!");
+			error!(
+				"Initializing new {} device driver failed. Aborting!",
+				T::get_name()
+			);
+			T::no_dev_cfg_err(device.device_id()).into()
+		})?;
+
+	match T::init_dev((caps, dev_cfg), handlers, device.get_irq()) {
+		Ok(drv) => {
+			info!("{} device has been initialized by driver!", T::get_name());
+			Ok(drv)
+		}
+		Err((err, mut caps_coll)) => {
+			caps_coll.com_cfg.set_failed();
+			Err(err.into())
+		}
+	}
 }

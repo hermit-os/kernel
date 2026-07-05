@@ -162,6 +162,23 @@ where
 	}
 }
 
+pub(super) trait VirtioDriver: super::Driver + Sized {
+	type Config: 'static;
+	type Error: Into<error::VirtioError>;
+
+	fn init_dev(
+		caps_tuple: (
+			transport::UniCapsColl,
+			volatile::VolatileRef<'static, Self::Config, volatile::access::ReadOnly>,
+		),
+		handlers: &mut super::InterruptHandlerMap,
+		irq: Option<super::InterruptLine>,
+	) -> Result<Self, (Self::Error, transport::UniCapsColl)>;
+
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error;
+}
+
 pub mod error {
 	use thiserror::Error;
 
@@ -213,18 +230,18 @@ pub mod error {
 			feature = "virtio-net",
 		))]
 		#[error(transparent)]
-		NetDriver(VirtioNetError),
+		NetDriver(#[from] VirtioNetError),
 
 		#[cfg(feature = "virtio-fs")]
 		#[error(transparent)]
-		FsDriver(VirtioFsInitError),
+		FsDriver(#[from] VirtioFsInitError),
 
 		#[cfg(feature = "virtio-vsock")]
 		#[error(transparent)]
-		VsockDriver(VirtioVsockError),
+		VsockDriver(#[from] VirtioVsockError),
 
 		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
-		ConsoleDriver(VirtioConsoleError),
+		ConsoleDriver(#[from] VirtioConsoleError),
 	}
 }

@@ -1,14 +1,5 @@
 #![allow(dead_code)]
 
-// FIXME: use cfg_select! instead once resolved:
-// https://github.com/rust-lang/rust/issues/158371
-// https://github.com/rust-lang/rust/issues/158400
-#[cfg(feature = "pci")]
-mod pci;
-
-#[cfg(not(feature = "pci"))]
-mod mmio;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
@@ -265,8 +256,8 @@ pub(crate) struct VirtioVsockDriver {
 }
 
 impl Driver for VirtioVsockDriver {
-	fn get_name(&self) -> &'static str {
-		"virtio"
+	fn get_name() -> &'static str {
+		"virtio-vsock"
 	}
 }
 
@@ -314,13 +305,18 @@ impl VirtioVsockDriver {
 			todo!("Device configuration change notification cannot be handled yet");
 		}
 	}
+}
+
+impl super::virtio::VirtioDriver for VirtioVsockDriver {
+	type Config = virtio::vsock::Config;
+	type Error = VirtioVsockError;
 
 	/// Initializes the device in adherence to specification. Returns Some(VirtioVsockError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.10.6
-	pub fn init_dev(
+	fn init_dev(
 		(mut caps_coll, dev_cfg_raw): (
 			UniCapsColl,
 			VolatileRef<'static, virtio::vsock::Config, ReadOnly>,
@@ -451,6 +447,13 @@ impl VirtioVsockDriver {
 		})
 	}
 
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error {
+		VirtioVsockError::NoDevCfg(dev_id)
+	}
+}
+
+impl VirtioVsockDriver {
 	#[inline]
 	pub fn process_packet<F>(&mut self, f: F)
 	where

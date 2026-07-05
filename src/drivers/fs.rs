@@ -5,15 +5,6 @@
 //!
 //! [File System Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-45800011
 
-// FIXME: use cfg_select! instead once resolved:
-// https://github.com/rust-lang/rust/issues/158371
-// https://github.com/rust-lang/rust/issues/158400
-#[cfg(feature = "pci")]
-mod pci;
-
-#[cfg(not(feature = "pci"))]
-mod mmio;
-
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -67,13 +58,16 @@ pub(crate) struct VirtioFsDriver {
 }
 
 // Backend-independent interface for Virtio network driver
-impl VirtioFsDriver {
+impl super::virtio::VirtioDriver for VirtioFsDriver {
+	type Config = virtio::fs::Config;
+	type Error = VirtioFsInitError;
+
 	/// Initializes the device in adherence to specification. Returns Some(VirtioFsError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
-	pub(crate) fn init_dev(
+	fn init_dev(
 		(mut caps_coll, dev_cfg_raw): (
 			UniCapsColl,
 			VolatileRef<'static, virtio::fs::Config, ReadOnly>,
@@ -181,6 +175,13 @@ impl VirtioFsDriver {
 		})
 	}
 
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error {
+		VirtioFsInitError::NoDevCfg(dev_id)
+	}
+}
+
+impl VirtioFsDriver {
 	pub fn handle_interrupt(&mut self) {
 		#[cfg_attr(
 			not(all(feature = "pci", target_arch = "x86_64")),
@@ -296,8 +297,8 @@ impl VirtioFsInterface for VirtioFsDriver {
 }
 
 impl Driver for VirtioFsDriver {
-	fn get_name(&self) -> &'static str {
-		"virtio"
+	fn get_name() -> &'static str {
+		"virtio-fs"
 	}
 }
 

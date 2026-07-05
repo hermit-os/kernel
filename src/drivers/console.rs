@@ -7,15 +7,6 @@
 
 #![allow(dead_code)]
 
-// FIXME: use cfg_select! instead once resolved:
-// https://github.com/rust-lang/rust/issues/158371
-// https://github.com/rust-lang/rust/issues/158400
-#[cfg(feature = "pci")]
-mod pci;
-
-#[cfg(not(feature = "pci"))]
-mod mmio;
-
 use alloc::vec::Vec;
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
@@ -262,8 +253,8 @@ pub(crate) struct VirtioConsoleDriver {
 }
 
 impl Driver for VirtioConsoleDriver {
-	fn get_name(&self) -> &'static str {
-		"virtio"
+	fn get_name() -> &'static str {
+		"virtio-console"
 	}
 }
 
@@ -305,8 +296,13 @@ impl VirtioConsoleDriver {
 	fn handle_queue_interrupt() {
 		crate::console::CONSOLE_WAKER.lock().wake();
 	}
+}
 
-	pub fn init_dev(
+impl super::virtio::VirtioDriver for VirtioConsoleDriver {
+	type Config = Config;
+	type Error = VirtioConsoleError;
+
+	fn init_dev(
 		(mut caps_coll, dev_cfg_raw): (UniCapsColl, VolatileRef<'static, Config, ReadOnly>),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
@@ -413,6 +409,11 @@ impl VirtioConsoleDriver {
 			recv_vq,
 			send_vq,
 		})
+	}
+
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error {
+		VirtioConsoleError::NoDevCfg(dev_id)
 	}
 }
 

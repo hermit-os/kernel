@@ -697,7 +697,7 @@ impl NetworkDriver for RTL8139Driver {
 }
 
 impl Driver for RTL8139Driver {
-	fn get_name(&self) -> &'static str {
+	fn get_name() -> &'static str {
 		"rtl8139"
 	}
 }

@@ -5,15 +5,6 @@
 //!
 //! [Network Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-2170001
 
-// FIXME: use cfg_select! instead once resolved:
-// https://github.com/rust-lang/rust/issues/158371
-// https://github.com/rust-lang/rust/issues/158400
-#[cfg(feature = "pci")]
-mod pci;
-
-#[cfg(not(feature = "pci"))]
-mod mmio;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem::{ManuallyDrop, MaybeUninit};
@@ -605,8 +596,8 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 }
 
 impl Driver for VirtioNetDriver {
-	fn get_name(&self) -> &'static str {
-		"virtio"
+	fn get_name() -> &'static str {
+		"virtio-net"
 	}
 }
 
@@ -754,20 +745,23 @@ impl VirtioNetDriver {
 	}
 }
 
-impl VirtioNetDriver {
+impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
+	type Config = virtio::net::Config;
+	type Error = VirtioNetError;
+
 	/// Initializes the device in adherence to specification. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.1.5
-	pub fn init_dev(
+	fn init_dev(
 		(mut caps_coll, dev_cfg_raw): (
 			UniCapsColl,
 			VolatileRef<'static, virtio::net::Config, ReadOnly>,
 		),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
-	) -> Result<VirtioNetDriver, VirtioNetError> {
+	) -> Result<VirtioNetDriver, (VirtioNetError, UniCapsColl)> {
 		// Reset
 		caps_coll.com_cfg.reset_dev();
 
@@ -811,7 +805,7 @@ impl VirtioNetDriver {
 
 		if !negotiated_features.contains(minimal_features) {
 			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioNetError::FailFeatureNeg);
+			return Err((VirtioNetError::FailFeatureNeg, caps_coll));
 		}
 
 		// Indicates the device, that the current feature set is final for the driver
@@ -828,7 +822,7 @@ impl VirtioNetDriver {
 			}
 		} else {
 			error!("The device does not support our subset of features.");
-			return Err(VirtioNetError::FailFeatureNeg);
+			return Err((VirtioNetError::FailFeatureNeg, caps_coll));
 		};
 
 		let mtu = determine_mtu(&dev_cfg);
@@ -837,7 +831,10 @@ impl VirtioNetDriver {
 			expect(unused_variables)
 		)]
 		let (recv_vqs, send_vqs, num_vqs, ctrl_vq, send_capacity) =
-			Self::dev_spec_init(&mut caps_coll, &dev_cfg)?;
+			match Self::dev_spec_init(&mut caps_coll, &dev_cfg) {
+				Ok(it) => it,
+				Err(err) => return Err((err, caps_coll)),
+			};
 
 		debug!("Using RX buffer size of {}", recv_vqs.buf_size);
 
@@ -904,6 +901,13 @@ impl VirtioNetDriver {
 		})
 	}
 
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error {
+		VirtioNetError::NoDevCfg(dev_id)
+	}
+}
+
+impl VirtioNetDriver {
 	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
 	///
 	/// Returns receive and send queues, the sum of their numbers, the control queue if it exists and the total send
