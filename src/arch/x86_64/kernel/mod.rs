@@ -118,6 +118,7 @@ fn finish_processor_init() {
 
 		// uhyve also boots each processor into _start itself and does not use apic::boot_application_processors.
 		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
+		#[cfg(feature = "smp")]
 		apic::init_next_processor_variables();
 	}
 }
