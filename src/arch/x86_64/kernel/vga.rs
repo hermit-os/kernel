@@ -133,6 +133,10 @@ impl VgaScreen {
 }
 
 pub fn init() {
+	if crate::env::is_uhyve() {
+		return;
+	}
+
 	VGA_SCREEN.lock().init();
 }
 
