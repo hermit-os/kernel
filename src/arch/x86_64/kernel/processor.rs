@@ -392,11 +392,6 @@ impl CpuFrequency {
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		use crate::arch::x86_64::kernel::interrupts::IDT;
 
-		// The PIC is not initialized for uhyve, so we cannot measure anything.
-		if env::is_uhyve() {
-			return Err(());
-		}
-
 		// Measure the CPU frequency by counting 3 ticks of a 100Hz timer.
 		let tick_count = 3;
 		let measurement_frequency = 100;
