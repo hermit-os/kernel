@@ -284,10 +284,8 @@ fn boot_processor_main() -> ! {
 	#[cfg(feature = "smp")]
 	synch_all_cores();
 
-	if kernel::is_uhyve_with_pci() || !env::is_uhyve() {
-		#[cfg(feature = "pci")]
-		drivers::pci::print_information();
-	}
+	#[cfg(feature = "pci")]
+	drivers::pci::print_information();
 
 	// Start the initd task.
 	unsafe { PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE) };
