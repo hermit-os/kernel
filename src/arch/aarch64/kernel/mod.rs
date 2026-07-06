@@ -99,8 +99,14 @@ pub fn boot_next_processor() {
 	#[allow(unused_variables)]
 	let cpu_online = CPU_ONLINE.0.fetch_add(1, Ordering::Release);
 
+	#[allow(clippy::needless_return)]
+	#[cfg(feature = "uhyve")]
+	if crate::env::is_uhyve() {
+		return;
+	}
+
 	#[cfg(all(target_os = "none", feature = "smp"))]
-	if !crate::env::is_uhyve() && get_possible_cpus() > 1 {
+	if get_possible_cpus() > 1 {
 		use core::arch::asm;
 		use core::hint::spin_loop;
 

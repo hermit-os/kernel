@@ -506,19 +506,24 @@ fn default_apic() -> PhysAddr {
 	default_local
 }
 
+fn apic_addr() -> PhysAddr {
+	#[cfg(feature = "uhyve")]
+	if env::is_uhyve() {
+		return default_apic();
+	}
+
+	detect_from_acpi()
+		.or_else(|()| detect_from_mp())
+		.unwrap_or_else(|()| default_apic())
+}
+
 pub fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
 }
 
 pub fn init() {
 	// Detect CPUs and APICs.
-	let local_apic_physical_address = if env::is_uhyve() {
-		default_apic()
-	} else {
-		detect_from_acpi()
-			.or_else(|()| detect_from_mp())
-			.unwrap_or_else(|()| default_apic())
-	};
+	let local_apic_physical_address = apic_addr();
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	if processor::supports_x2apic() {

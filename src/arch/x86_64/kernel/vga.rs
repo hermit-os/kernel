@@ -133,6 +133,7 @@ impl VgaScreen {
 }
 
 pub fn init() {
+	#[cfg(feature = "uhyve")]
 	if crate::env::is_uhyve() {
 		return;
 	}
