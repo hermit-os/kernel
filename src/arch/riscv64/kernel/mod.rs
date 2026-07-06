@@ -40,10 +40,6 @@ static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
 
 // FUNCTIONS
 
-pub fn is_uhyve_with_pci() -> bool {
-	false
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	NUM_CPUS.load(Ordering::Relaxed)
