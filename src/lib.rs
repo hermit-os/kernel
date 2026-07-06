@@ -175,12 +175,6 @@ extern "C" fn initd(_arg: usize) {
 		fn main(argc: i32, argv: *const *const u8, env: *const *const u8);
 	}
 
-	if env::is_uhyve() {
-		info!("Hermit is running on uhyve!");
-	} else {
-		info!("Hermit is running on common system!");
-	}
-
 	// Initialize Drivers
 	drivers::init();
 	// The filesystem needs to be initialized before network to allow writing packet captures to a file.
