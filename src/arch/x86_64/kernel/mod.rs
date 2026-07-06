@@ -110,6 +110,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
+	#[cfg(feature = "uhyve")]
 	if env::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
@@ -129,15 +130,18 @@ pub fn boot_next_processor() {
 	// to initialize the next processor.
 	let cpu_online = CPU_ONLINE.fetch_add(1, Ordering::Release);
 
-	if !env::is_uhyve() {
-		if cpu_online == 0 {
-			#[cfg(all(target_os = "none", feature = "smp"))]
-			apic::boot_application_processors();
-		}
+	#[cfg(feature = "uhyve")]
+	if env::is_uhyve() {
+		return;
+	}
 
-		if !cfg!(feature = "smp") {
-			apic::print_information();
-		}
+	if cpu_online == 0 {
+		#[cfg(all(target_os = "none", feature = "smp"))]
+		apic::boot_application_processors();
+	}
+
+	if !cfg!(feature = "smp") {
+		apic::print_information();
 	}
 }
 

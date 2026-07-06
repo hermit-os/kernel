@@ -262,6 +262,7 @@ pub fn supports_2mib_pages() -> bool {
 }
 
 pub fn configure() {
+	#[cfg(feature = "uhyve")]
 	if env::is_uhyve() {
 		return;
 	}

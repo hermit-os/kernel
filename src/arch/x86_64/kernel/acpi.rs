@@ -517,6 +517,7 @@ pub fn poweroff() {
 }
 
 pub fn init() {
+	#[cfg(feature = "uhyve")]
 	if env::is_uhyve() {
 		return;
 	}
