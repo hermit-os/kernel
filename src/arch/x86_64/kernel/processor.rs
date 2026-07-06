@@ -659,10 +659,6 @@ impl fmt::Display for CpuFeaturePrinter {
 	}
 }
 
-pub(crate) fn run_on_hypervisor() -> bool {
-	env::is_uhyve() || FEATURES.run_on_hypervisor
-}
-
 #[derive(Debug)]
 struct CpuSpeedStep {
 	eist_available: bool,
