@@ -1,8 +1,9 @@
 use alloc::collections::vec_deque::VecDeque;
-use core::num::NonZero;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 
-use arm_pl011_uart::{DataBits, Interrupts, LineConfig, Parity, StopBits, Uart, UniqueMmioPointer};
+use arm_pl011_uart::{
+	DataBits, Interrupts, LineConfig, PL011Registers, Parity, StopBits, Uart, UniqueMmioPointer,
+};
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
@@ -18,16 +19,15 @@ pub(crate) struct UartDevice {
 
 impl UartDevice {
 	pub fn new() -> Self {
-		let base = crate::env::boot_info()
-			.hardware_info
-			.serial_port_base
-			.unwrap();
-		let base = NonZero::try_from(base).unwrap();
-		let base = NonNull::with_exposed_provenance(base);
+		// The loader maps the serial port to 0x1000. Eventually, the kernel
+		// should take care of the initial page tables. Until then, we hardcode
+		// the value to slowly move away from the Hermit-specific boot info
+		// struct.
+		let ptr = ptr::with_exposed_provenance_mut::<PL011Registers>(0x1000);
+		let ptr = NonNull::new(ptr).unwrap();
+		let ptr = unsafe { UniqueMmioPointer::new(ptr) };
 
-		let uart_pointer = unsafe { UniqueMmioPointer::new(base) };
-
-		let mut uart = Uart::new(uart_pointer);
+		let mut uart = Uart::new(ptr);
 
 		let line_config = LineConfig {
 			data_bits: DataBits::Bits8,

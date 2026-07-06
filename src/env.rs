@@ -3,6 +3,7 @@
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::num::NonZero;
 use core::{ptr, str};
 
 use ahash::RandomState;
@@ -12,8 +13,6 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
-
-use crate::arch::kernel;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -53,9 +52,16 @@ pub fn is_uefi() -> bool {
 	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
 }
 
+pub fn fdt_addr() -> Option<NonZero<usize>> {
+	boot_info()
+		.hardware_info
+		.device_tree
+		.map(|fdt| NonZero::new(fdt.get() as usize).unwrap())
+}
+
 pub fn fdt() -> Option<Fdt<'static>> {
-	boot_info().hardware_info.device_tree.map(|fdt| {
-		let ptr = ptr::with_exposed_provenance(fdt.get().try_into().unwrap());
+	fdt_addr().map(|fdt| {
+		let ptr = ptr::with_exposed_provenance(fdt.get());
 		unsafe { Fdt::from_ptr(ptr).unwrap() }
 	})
 }
@@ -69,14 +75,14 @@ pub(crate) fn get_ram_address() -> Option<PhysAddr> {
 
 /// Returns the RSDP physical address if available.
 #[cfg(all(target_arch = "x86_64", feature = "acpi"))]
-pub fn rsdp() -> Option<core::num::NonZero<usize>> {
+pub fn rsdp() -> Option<NonZero<usize>> {
 	let rsdp = fdt()?
 		.find_node("/hermit,rsdp")?
 		.reg()?
 		.next()?
 		.starting_address
 		.addr();
-	core::num::NonZero::new(rsdp)
+	NonZero::new(rsdp)
 }
 
 pub fn fdt_args() -> Option<&'static str> {
@@ -92,7 +98,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = kernel::args().or_else(fdt_args).unwrap_or_default();
+		let args = fdt_args().unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 
