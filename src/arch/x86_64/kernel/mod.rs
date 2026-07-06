@@ -5,7 +5,7 @@ use core::ptr;
 use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
-use hermit_entry::boot_info::{PlatformInfo, RawBootInfo};
+use hermit_entry::boot_info::RawBootInfo;
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
@@ -40,6 +40,8 @@ pub mod vga;
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
+	use hermit_entry::boot_info::PlatformInfo;
+
 	match env::boot_info().platform_info {
 		PlatformInfo::Uhyve { num_cpus, .. } => u32::try_from(num_cpus.get()).unwrap(),
 		_ => apic::local_apic_id_count(),
@@ -54,13 +56,6 @@ pub fn get_processor_count() -> u32 {
 #[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
-}
-
-pub fn is_uhyve_with_pci() -> bool {
-	matches!(
-		env::boot_info().platform_info,
-		PlatformInfo::Uhyve { has_pci: true, .. }
-	)
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
@@ -93,10 +88,9 @@ pub fn boot_processor_init() {
 		#[cfg(feature = "acpi")]
 		acpi::init();
 	}
-	if is_uhyve_with_pci() || !is_uhyve() {
-		#[cfg(feature = "pci")]
-		pci::init();
-	}
+
+	#[cfg(feature = "pci")]
+	pci::init();
 
 	apic::init();
 	scheduler::install_timer_handler();
