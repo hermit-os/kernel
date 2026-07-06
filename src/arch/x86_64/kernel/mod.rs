@@ -64,10 +64,8 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && !env::is_uhyve() {
-		#[cfg(feature = "vga")]
-		vga::init();
-	}
+	#[cfg(feature = "vga")]
+	vga::init();
 
 	crate::mm::init();
 	crate::mm::print_information();
