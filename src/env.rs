@@ -10,7 +10,7 @@ use ahash::RandomState;
 use fdt::Fdt;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Iter;
-use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
+use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
 
@@ -44,8 +44,49 @@ struct Cli {
 }
 
 /// Whether Hermit is running under the "uhyve" hypervisor.
+#[cfg(feature = "uhyve")]
 pub fn is_uhyve() -> bool {
+	use hermit_entry::boot_info::PlatformInfo;
+
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+}
+
+#[cfg_attr(target_arch = "riscv64", expect(dead_code))]
+#[cfg(feature = "uhyve")]
+pub fn uhyve_boot_time() -> Option<time::OffsetDateTime> {
+	use hermit_entry::boot_info::PlatformInfo;
+
+	match boot_info().platform_info {
+		PlatformInfo::Uhyve { boot_time, .. } => Some(boot_time),
+		_ => None,
+	}
+}
+
+#[cfg_attr(
+	any(not(target_arch = "x86_64"), not(feature = "smp")),
+	expect(dead_code)
+)]
+#[cfg(feature = "uhyve")]
+pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
+	use hermit_entry::boot_info::PlatformInfo;
+
+	match boot_info().platform_info {
+		PlatformInfo::Uhyve { num_cpus, .. } => {
+			Some(NonZero::new(num_cpus.get() as usize).unwrap())
+		}
+		_ => None,
+	}
+}
+
+#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
+#[cfg(feature = "uhyve")]
+pub fn uhyve_cpu_freq() -> Option<NonZero<u32>> {
+	use hermit_entry::boot_info::PlatformInfo;
+
+	match boot_info().platform_info {
+		PlatformInfo::Uhyve { cpu_freq, .. } => Some(NonZero::new(cpu_freq?.get()).unwrap()),
+		_ => None,
+	}
 }
 
 pub fn is_uefi() -> bool {

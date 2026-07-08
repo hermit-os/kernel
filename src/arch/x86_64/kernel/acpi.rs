@@ -517,6 +517,11 @@ pub fn poweroff() {
 }
 
 pub fn init() {
+	#[cfg(feature = "uhyve")]
+	if env::is_uhyve() {
+		return;
+	}
+
 	// Detect the RSDP and get a pointer to either the XSDT (64-bit) or RSDT (32-bit), whichever is available.
 	// Both are called RSDT in the following.
 	let rsdp = detect_acpi().expect("Hermit requires an ACPI-compliant system");

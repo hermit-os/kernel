@@ -262,6 +262,11 @@ pub fn supports_2mib_pages() -> bool {
 }
 
 pub fn configure() {
+	#[cfg(feature = "uhyve")]
+	if env::is_uhyve() {
+		return;
+	}
+
 	// TODO: PMCCNTR_EL0 is the best replacement for RDTSC on AArch64.
 	// However, this test code showed that it's apparently not supported under uhyve yet.
 	// Finish the boot loader for QEMU first and then run this code under QEMU, where it should be supported.

@@ -25,7 +25,6 @@ pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
-use crate::env;
 
 #[repr(align(8))]
 pub(crate) struct AlignedAtomicU32(AtomicU32);
@@ -42,7 +41,7 @@ global_asm!(include_str!("start.s"));
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	let fdt = env::fdt().unwrap();
+	let fdt = crate::env::fdt().unwrap();
 	let cpu_count = fdt.cpus().count();
 	u32::try_from(cpu_count).unwrap()
 }
@@ -60,9 +59,7 @@ pub fn get_processor_count() -> u32 {
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {
-	if !env::is_uhyve() {
-		processor::configure();
-	}
+	processor::configure();
 
 	crate::mm::init();
 	crate::mm::print_information();
@@ -102,8 +99,14 @@ pub fn boot_next_processor() {
 	#[allow(unused_variables)]
 	let cpu_online = CPU_ONLINE.0.fetch_add(1, Ordering::Release);
 
+	#[allow(clippy::needless_return)]
+	#[cfg(feature = "uhyve")]
+	if crate::env::is_uhyve() {
+		return;
+	}
+
 	#[cfg(all(target_os = "none", feature = "smp"))]
-	if !env::is_uhyve() && get_possible_cpus() > 1 {
+	if get_possible_cpus() > 1 {
 		use core::arch::asm;
 		use core::hint::spin_loop;
 
@@ -122,7 +125,7 @@ pub fn boot_next_processor() {
 			trace!("Virtual address of smp_start 0x{virt_start:x}");
 			trace!("Physical address of smp_start 0x{phys_start:x}");
 
-			let fdt = env::fdt().unwrap();
+			let fdt = crate::env::fdt().unwrap();
 			let psci_node = fdt.find_node("/psci").unwrap();
 
 			let cpu_on = psci_node.property("cpu_on").unwrap().as_usize().unwrap();

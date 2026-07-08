@@ -1,12 +1,9 @@
-use alloc::alloc::alloc;
 use alloc::vec::Vec;
-use core::alloc::Layout;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
 #[cfg(feature = "acpi")]
 use core::fmt;
 use core::hint::spin_loop;
-use core::sync::atomic::Ordering;
 use core::{cmp, ptr};
 
 use align_address::Align;
@@ -21,7 +18,6 @@ use x86_64::registers::control::Cr3;
 use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
-use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::mm::paging;
@@ -29,7 +25,6 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::swapgs;
-use crate::config::*;
 use crate::mm::{PageAlloc, PageBox, PageRangeAllocator};
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
@@ -511,19 +506,24 @@ fn default_apic() -> PhysAddr {
 	default_local
 }
 
+fn apic_addr() -> PhysAddr {
+	#[cfg(feature = "uhyve")]
+	if env::is_uhyve() {
+		return default_apic();
+	}
+
+	detect_from_acpi()
+		.or_else(|()| detect_from_mp())
+		.unwrap_or_else(|()| default_apic())
+}
+
 pub fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
 }
 
 pub fn init() {
 	// Detect CPUs and APICs.
-	let local_apic_physical_address = if env::is_uhyve() {
-		default_apic()
-	} else {
-		detect_from_acpi()
-			.or_else(|()| detect_from_mp())
-			.unwrap_or_else(|()| default_apic())
-	};
+	let local_apic_physical_address = apic_addr();
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	if processor::supports_x2apic() {
@@ -729,7 +729,15 @@ pub fn init_x2apic() {
 }
 
 /// Initialize the required _start variables for the next CPU to be booted.
+#[cfg(feature = "smp")]
 pub fn init_next_processor_variables() {
+	use alloc::alloc::alloc;
+	use core::alloc::Layout;
+	use core::sync::atomic::Ordering;
+
+	use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
+	use crate::config::KERNEL_STACK_SIZE;
+
 	// Allocate stack for the CPU and pass the addresses.
 	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
 	let stack = unsafe { alloc(layout) };

@@ -8,10 +8,9 @@ use core::arch::x86_64::{
 };
 use core::fmt;
 use core::hint::spin_loop;
-use core::num::{NonZero, NonZeroU32};
+use core::num::NonZero;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
 use raw_cpuid::*;
 use x86_64::instructions::interrupts::int3;
@@ -369,18 +368,19 @@ impl CpuFrequency {
 	}
 
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		fn detect_from_uhyve() -> Result<u16, ()> {
-			match env::boot_info().platform_info {
-				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
-					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
-				)
-				.unwrap()),
-				_ => Err(()),
-			}
+		#[cfg(feature = "uhyve")]
+		{
+			let cpu_freq = env::uhyve_cpu_freq().ok_or(())?.get();
+			let mhz = cpu_freq / 1000;
+
+			self.set_detected_cpu_frequency(
+				mhz.try_into().unwrap(),
+				CpuFrequencySources::Hypervisor,
+			)
 		}
-		// future implementations could add support for different hypervisors
-		// by adding or_else here
-		self.set_detected_cpu_frequency(detect_from_uhyve()?, CpuFrequencySources::Hypervisor)
+
+		#[cfg(not(feature = "uhyve"))]
+		Err(())
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
@@ -400,11 +400,6 @@ impl CpuFrequency {
 	#[cfg(target_os = "none")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		use crate::arch::x86_64::kernel::interrupts::IDT;
-
-		// The PIC is not initialized for uhyve, so we cannot measure anything.
-		if env::is_uhyve() {
-			return Err(());
-		}
 
 		// Measure the CPU frequency by counting 3 ticks of a 100Hz timer.
 		let tick_count = 3;
@@ -666,10 +661,6 @@ impl fmt::Display for CpuFeaturePrinter {
 
 		Ok(())
 	}
-}
-
-pub(crate) fn run_on_hypervisor() -> bool {
-	env::is_uhyve() || FEATURES.run_on_hypervisor
 }
 
 #[derive(Debug)]
