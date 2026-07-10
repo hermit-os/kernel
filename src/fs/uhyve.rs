@@ -14,14 +14,13 @@ use uhyve_interface::v2::parameters::{
 };
 
 use crate::arch::mm::paging;
-use crate::env::fdt;
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
-use crate::io;
 use crate::uhyve::uhyve_hypercall;
+use crate::{env, io};
 
 #[derive(Debug)]
 struct UhyveFileHandleInner(i32);
@@ -242,7 +241,7 @@ impl VfsNode for UhyveDirectory {
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 
-	let mount_str = fdt().and_then(|fdt| {
+	let mount_str = env::fdt().and_then(|fdt| {
 		fdt.find_node("/uhyve,mounts")
 			.and_then(|node| node.property("mounts"))
 			.and_then(|property| property.as_str())
