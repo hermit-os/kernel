@@ -11,6 +11,11 @@ use crate::executor::network::wake_network_waker;
 pub enum Source {
 	Network,
 	Scheduler,
+	/// Preemptive time-slice timer (round-robin between equally prioritized,
+	/// ready tasks). Only armed with the `preemptive` feature and when there is
+	/// contention.
+	#[cfg(feature = "preemptive")]
+	Preemption,
 }
 
 /// A slot in the timer list. Each source is represented once. This is so that
@@ -25,9 +30,15 @@ pub struct Slot {
 	wakeup_time: u64,
 }
 
+#[cfg(feature = "preemptive")]
+const NUMBER_OF_SLOTS: usize = 3;
+
+#[cfg(not(feature = "preemptive"))]
+const NUMBER_OF_SLOTS: usize = 2;
+
 // List of timers with one entry for every possible source.
 #[derive(Debug)]
-pub struct TimerList([Slot; 2]);
+pub struct TimerList([Slot; NUMBER_OF_SLOTS]);
 
 impl TimerList {
 	pub fn new() -> Self {
@@ -38,6 +49,11 @@ impl TimerList {
 			},
 			Slot {
 				source: Source::Scheduler,
+				wakeup_time: u64::MAX,
+			},
+			#[cfg(feature = "preemptive")]
+			Slot {
+				source: Source::Preemption,
 				wakeup_time: u64::MAX,
 			},
 		])
