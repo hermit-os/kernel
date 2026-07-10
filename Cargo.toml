@@ -310,7 +310,7 @@ workspace = true
 
 [dependencies]
 hermit-macro = { version = "=0.1.0", path = "hermit-macro" }
-virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly", "zerocopy"] }
+virtio = { package = "virtio-spec", git = "https://github.com/sbutz/virtio-spec-rs", branch = "sb/entropy", optional = true, features = ["alloc", "mmio", "nightly", "zerocopy"] }
 ahash = { version = "0.8", default-features = false }
 align-address = "0.4"
 anstyle = { version = "1", default-features = false }
