@@ -206,6 +206,9 @@ virtio-console = ["virtio"]
 ## Enables the virtio-fs driver.
 virtio-fs = ["virtio", "dep:fuse-abi", "fuse-abi/num_enum"]
 
+## Enables the virtio-entropy driver.
+virtio-entropy = ["virtio"]
+
 ## Enables the virtio-vsock driver.
 virtio-vsock = ["virtio"]
 

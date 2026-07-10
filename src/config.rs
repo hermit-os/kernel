@@ -17,3 +17,6 @@ pub(crate) const VSOCK_PACKET_SIZE: u32 = 8192;
 
 #[cfg(feature = "virtio-console")]
 pub(crate) const CONSOLE_PACKET_SIZE: u32 = 8192;
+
+#[cfg(feature = "virtio-entropy")]
+pub(crate) const ENTROPY_PACKET_SIZE: u32 = 32;

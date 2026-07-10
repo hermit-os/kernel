@@ -2,6 +2,8 @@
 
 #[cfg(feature = "virtio-console")]
 pub mod console;
+#[cfg(feature = "virtio-entropy")]
+pub mod entropy;
 #[cfg(feature = "virtio-fs")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]

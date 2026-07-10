@@ -962,6 +962,7 @@ pub fn print_information() {
 	infofooter!();
 }
 
+#[cfg_attr(feature = "virtio-entropy", allow(dead_code))]
 pub fn seed_entropy() -> Option<[u8; 32]> {
 	let mut buf = [0; 32];
 

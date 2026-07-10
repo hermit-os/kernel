@@ -6,7 +6,8 @@ use core::fmt;
 #[cfg(any(
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
-	feature = "virtio-console"
+	feature = "virtio-console",
+	feature = "virtio-entropy",
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
@@ -25,6 +26,8 @@ use crate::drivers::Driver;
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
+#[cfg(feature = "virtio-entropy")]
+use crate::drivers::entropy::VirtioEntropyDriver;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
@@ -333,6 +336,8 @@ pub(crate) enum PciDriver {
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-entropy")]
+	VirtioEntropy(InterruptTicketMutex<VirtioEntropyDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 }
@@ -343,6 +348,15 @@ impl PciDriver {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "virtio-entropy")]
+	fn get_entropy_driver(&self) -> Option<&InterruptTicketMutex<VirtioEntropyDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioEntropy(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -382,6 +396,14 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_console_driver())
+}
+
+#[cfg(feature = "virtio-entropy")]
+pub(crate) fn get_entropy_driver() -> Option<&'static InterruptTicketMutex<VirtioEntropyDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_entropy_driver())
 }
 
 #[cfg(feature = "virtio-vsock")]
@@ -428,6 +450,10 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 					crate::console::CONSOLE
 						.lock()
 						.replace_device(IoDevice::Virtio(VirtioUART::new()));
+				}
+				#[cfg(feature = "virtio-entropy")]
+				Ok(VirtioDriver::Entropy(drv)) => {
+					register_driver(PciDriver::VirtioEntropy(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::Fs(drv)) => {

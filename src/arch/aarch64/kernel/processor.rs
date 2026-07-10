@@ -196,6 +196,7 @@ impl fmt::Display for CpuFrequency {
 	}
 }
 
+#[cfg_attr(feature = "virtio-entropy", allow(dead_code))]
 pub fn seed_entropy() -> Option<[u8; 32]> {
 	None
 }
