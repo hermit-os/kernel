@@ -1,8 +1,9 @@
 use crate::arch::kernel;
 use crate::arch::kernel::core_local::{core_id, core_scheduler};
 use crate::arch::kernel::interrupts;
+use crate::env::{self, StartInfo};
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
-use crate::{console, drivers, env, executor, fs, logging, mm, scheduler, syscalls};
+use crate::{console, drivers, executor, fs, logging, mm, scheduler, syscalls};
 
 mod built_info {
 	include!(concat!(env!("OUT_DIR"), "/built.rs"));
@@ -135,9 +136,7 @@ pub fn boot_processor_main() -> ! {
 	info!("Data segment end: {:p}", elf_symbols::data_end());
 	info!("Executable end:   {:p}", elf_symbols::executable_end());
 
-	if let Some(fdt) = env::fdt() {
-		info!("FDT:\n{fdt:#?}");
-	}
+	info!("{}", env::start_info().display());
 
 	kernel::boot_processor_init();
 

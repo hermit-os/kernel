@@ -267,7 +267,10 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	crate::arch::kernel::print_statistics();
 
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	use crate::env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		crate::uhyve::shutdown(arg);
 	}
 

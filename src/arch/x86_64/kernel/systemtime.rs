@@ -175,7 +175,10 @@ static BOOT_TIME: OnceCell<u64> = OnceCell::new();
 
 fn boot_time() -> OffsetDateTime {
 	#[cfg(feature = "uhyve")]
-	if let Some(boot_time) = crate::env::uhyve_boot_time() {
+	use crate::env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if let Some(boot_time) = crate::env::start_info().uhyve_boot_time() {
 		return boot_time;
 	}
 

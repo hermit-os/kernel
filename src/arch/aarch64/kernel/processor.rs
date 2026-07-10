@@ -268,7 +268,10 @@ pub fn supports_2mib_pages() -> bool {
 
 pub fn configure() {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	use crate::env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

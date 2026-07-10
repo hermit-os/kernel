@@ -8,7 +8,7 @@ use x86_64::structures::paging::{PageTableFlags, PhysFrame};
 
 use crate::arch::mm::paging;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
-use crate::env;
+use crate::env::{self, StartInfo};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);
@@ -291,7 +291,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
-	if let Some(rsdp_addr) = env::rsdp_addr() {
+	if let Some(rsdp_addr) = env::start_info().rsdp_addr() {
 		trace!("RSDP detected successfully at {rsdp_addr:#x?}");
 		let rsdp = unsafe {
 			ptr::with_exposed_provenance::<AcpiRsdp>(rsdp_addr.get())
@@ -461,7 +461,10 @@ pub fn poweroff() {
 
 pub fn init() {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	use env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

@@ -10,7 +10,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
+use crate::env::{self, FdtStartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
 
@@ -104,7 +104,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 }
 
 unsafe fn detect_from_fdt() -> Result<(), ()> {
-	let fdt = env::fdt().ok_or(())?;
+	let fdt = env::start_info().fdt().ok_or(())?;
 
 	let all_regions = fdt
 		.find_all_nodes("/memory")
@@ -172,7 +172,7 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let kernel_region = PageRange::containing(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
 
-	let fdt_start = env::fdt_addr().unwrap().get();
+	let fdt_start = env::start_info().fdt_addr().unwrap().get();
 	let fdt_end = fdt_start + fdt.total_size();
 	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
 	reserve(fdt_region);
