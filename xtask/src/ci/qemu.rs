@@ -330,7 +330,7 @@ impl Qemu {
 			Arch::Aarch64 | Arch::Aarch64Be => {
 				if !self.accel {
 					cpu_args.push("-cpu".to_owned());
-					cpu_args.push("cortex-a72".to_owned());
+					cpu_args.push("max,lpa2=off".to_owned());
 				}
 
 				cpu_args.push("-semihosting".to_owned());
