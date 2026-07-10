@@ -4,102 +4,138 @@ use core::ptr;
 use fdt::Fdt;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
-use memory_addresses::PhysAddr;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
-pub fn boot_info() -> &'static BootInfo {
+pub fn start_info() -> &'static (impl StartInfo + BootInfoExt) {
 	BOOT_INFO.get().unwrap()
 }
 
-pub fn set_boot_info(raw_boot_info: RawBootInfo) {
+pub fn set_start_info(raw_boot_info: RawBootInfo) {
 	let boot_info = BootInfo::from(raw_boot_info);
 	BOOT_INFO.set(boot_info).unwrap();
 }
 
-/// Whether Hermit is running under the "uhyve" hypervisor.
-#[cfg(feature = "uhyve")]
-pub fn is_uhyve() -> bool {
-	use hermit_entry::boot_info::PlatformInfo;
+pub trait StartInfo {
+	fn bootargs(&self) -> Option<&str>;
 
-	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+	fn first_ram_address(&self) -> usize;
+
+	#[cfg_attr(any(target_arch = "aarch64", target_arch = "riscv64"), expect(unused))]
+	#[cfg(feature = "acpi")]
+	fn rsdp_addr(&self) -> Option<NonZero<usize>>;
 }
 
-#[cfg_attr(target_arch = "riscv64", expect(dead_code))]
-#[cfg(feature = "uhyve")]
-pub fn uhyve_boot_time() -> Option<time::OffsetDateTime> {
-	use hermit_entry::boot_info::PlatformInfo;
+impl StartInfo for BootInfo {
+	fn bootargs(&self) -> Option<&str> {
+		self.fdt()?.chosen().bootargs()
+	}
 
-	match boot_info().platform_info {
-		PlatformInfo::Uhyve { boot_time, .. } => Some(boot_time),
-		_ => None,
+	fn first_ram_address(&self) -> usize {
+		self.fdt()
+			.unwrap()
+			.memory()
+			.regions()
+			.next()
+			.unwrap()
+			.starting_address
+			.expose_provenance()
+	}
+
+	#[cfg(feature = "acpi")]
+	fn rsdp_addr(&self) -> Option<NonZero<usize>> {
+		let rsdp = self
+			.fdt()?
+			.find_node("/hermit,rsdp")?
+			.reg()?
+			.next()?
+			.starting_address
+			.addr();
+		NonZero::new(rsdp)
 	}
 }
 
-#[cfg_attr(
-	any(not(target_arch = "x86_64"), not(feature = "smp")),
-	expect(dead_code)
-)]
-#[cfg(feature = "uhyve")]
-pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
-	use hermit_entry::boot_info::PlatformInfo;
+pub trait BootInfoExt {
+	fn fdt(&self) -> Option<Fdt<'_>>;
 
-	match boot_info().platform_info {
-		PlatformInfo::Uhyve { num_cpus, .. } => {
-			Some(NonZero::new(num_cpus.get() as usize).unwrap())
+	fn fdt_addr(&self) -> Option<NonZero<usize>>;
+
+	fn is_uefi(&self) -> bool;
+
+	#[cfg(feature = "uhyve")]
+	fn is_uhyve(&self) -> bool;
+
+	#[cfg_attr(target_arch = "riscv64", expect(unused))]
+	#[cfg(feature = "uhyve")]
+	fn uhyve_boot_time(&self) -> Option<time::OffsetDateTime>;
+
+	#[cfg_attr(any(target_arch = "aarch64", target_arch = "riscv64"), expect(unused))]
+	#[cfg(all(feature = "uhyve", feature = "smp"))]
+	fn uhyve_num_cpus(&self) -> Option<NonZero<usize>>;
+
+	#[cfg_attr(any(target_arch = "aarch64", target_arch = "riscv64"), expect(unused))]
+	#[cfg(feature = "uhyve")]
+	fn uhyve_cpu_freq(&self) -> Option<NonZero<u32>>;
+}
+
+impl BootInfoExt for BootInfo {
+	fn fdt(&self) -> Option<Fdt<'_>> {
+		let fdt_addr = self.fdt_addr()?;
+		let ptr = ptr::with_exposed_provenance(fdt_addr.get());
+		let fdt = unsafe { Fdt::from_ptr(ptr).unwrap() };
+		Some(fdt)
+	}
+
+	fn fdt_addr(&self) -> Option<NonZero<usize>> {
+		let fdt_addr = self.hardware_info.device_tree?;
+		let fdt_addr = NonZero::new(fdt_addr.get() as usize).unwrap();
+		Some(fdt_addr)
+	}
+
+	fn is_uefi(&self) -> bool {
+		let Some(fdt) = self.fdt() else {
+			return false;
+		};
+
+		fdt.root().compatible().first() == "hermit,uefi"
+	}
+
+	#[cfg(feature = "uhyve")]
+	fn is_uhyve(&self) -> bool {
+		use hermit_entry::boot_info::PlatformInfo;
+
+		matches!(self.platform_info, PlatformInfo::Uhyve { .. })
+	}
+
+	#[cfg(feature = "uhyve")]
+	fn uhyve_boot_time(&self) -> Option<time::OffsetDateTime> {
+		use hermit_entry::boot_info::PlatformInfo;
+
+		match self.platform_info {
+			PlatformInfo::Uhyve { boot_time, .. } => Some(boot_time),
+			_ => None,
 		}
-		_ => None,
 	}
-}
 
-#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
-#[cfg(feature = "uhyve")]
-pub fn uhyve_cpu_freq() -> Option<NonZero<u32>> {
-	use hermit_entry::boot_info::PlatformInfo;
+	#[cfg(all(feature = "uhyve", feature = "smp"))]
+	fn uhyve_num_cpus(&self) -> Option<NonZero<usize>> {
+		use hermit_entry::boot_info::PlatformInfo;
 
-	match boot_info().platform_info {
-		PlatformInfo::Uhyve { cpu_freq, .. } => Some(NonZero::new(cpu_freq?.get()).unwrap()),
-		_ => None,
+		match self.platform_info {
+			PlatformInfo::Uhyve { num_cpus, .. } => {
+				Some(NonZero::new(num_cpus.get() as usize).unwrap())
+			}
+			_ => None,
+		}
 	}
-}
 
-pub fn is_uefi() -> bool {
-	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
-}
+	#[cfg(feature = "uhyve")]
+	fn uhyve_cpu_freq(&self) -> Option<NonZero<u32>> {
+		use hermit_entry::boot_info::PlatformInfo;
 
-pub fn fdt_addr() -> Option<NonZero<usize>> {
-	boot_info()
-		.hardware_info
-		.device_tree
-		.map(|fdt| NonZero::new(fdt.get() as usize).unwrap())
-}
-
-pub fn fdt() -> Option<Fdt<'static>> {
-	fdt_addr().map(|fdt| {
-		let ptr = ptr::with_exposed_provenance(fdt.get());
-		unsafe { Fdt::from_ptr(ptr).unwrap() }
-	})
-}
-
-pub(crate) fn get_ram_address() -> Option<PhysAddr> {
-	let fdt = fdt()?;
-	let memory = fdt.memory();
-	let ptr = memory.regions().next()?.starting_address;
-	Some(ptr.expose_provenance().into())
-}
-
-/// Returns the RSDP physical address if available.
-#[cfg(all(target_arch = "x86_64", feature = "acpi"))]
-pub fn rsdp() -> Option<NonZero<usize>> {
-	let rsdp = fdt()?
-		.find_node("/hermit,rsdp")?
-		.reg()?
-		.next()?
-		.starting_address
-		.addr();
-	NonZero::new(rsdp)
-}
-
-pub fn fdt_args() -> Option<&'static str> {
-	fdt().and_then(|fdt| fdt.chosen().bootargs())
+		match self.platform_info {
+			PlatformInfo::Uhyve { cpu_freq, .. } => Some(NonZero::new(cpu_freq?.get()).unwrap()),
+			_ => None,
+		}
+	}
 }

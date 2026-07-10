@@ -227,6 +227,7 @@ fn synch_all_cores() {
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
 	use crate::config::USER_STACK_SIZE;
+	use crate::env::BootInfoExt;
 
 	// Initialize the kernel and hardware.
 	mm::claim_initial_heap();
@@ -263,7 +264,7 @@ fn boot_processor_main() -> ! {
 	info!("Data segment end: {:p}", elf_symbols::data_end());
 	info!("Executable end:   {:p}", elf_symbols::executable_end());
 
-	if let Some(fdt) = env::fdt() {
+	if let Some(fdt) = env::start_info().fdt() {
 		info!("FDT:\n{fdt:#?}");
 	}
 

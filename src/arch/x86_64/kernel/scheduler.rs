@@ -13,7 +13,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::config::*;
-use crate::env;
+use crate::env::{self, BootInfoExt};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
@@ -220,7 +220,7 @@ impl Drop for TaskStacks {
 					stacks.total_size >> 10,
 				);
 
-				if !env::is_uefi() {
+				if !env::start_info().is_uefi() {
 					crate::arch::mm::paging::unmap::<BasePageSize>(
 						stacks.virt_addr,
 						stacks.total_size / BasePageSize::SIZE as usize + 4,

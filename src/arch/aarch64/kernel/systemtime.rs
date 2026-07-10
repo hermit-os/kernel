@@ -6,7 +6,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use time::OffsetDateTime;
 
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
+use crate::env::{self, BootInfoExt};
 use crate::mm::{PageAlloc, PageRangeAllocator};
 
 static PL031_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
@@ -46,11 +46,11 @@ fn rtc_read(off: usize) -> u32 {
 
 fn boot_time() -> OffsetDateTime {
 	#[cfg(feature = "uhyve")]
-	if let Some(boot_time) = env::uhyve_boot_time() {
+	if let Some(boot_time) = env::start_info().uhyve_boot_time() {
 		return boot_time;
 	}
 
-	let fdt = env::fdt().unwrap();
+	let fdt = env::start_info().fdt().unwrap();
 	let Some(pl031_node) = fdt.find_compatible(&["arm,pl031"]) else {
 		error!("Could not find PL031 Real Time Clock to determine the boot time.");
 		return OffsetDateTime::UNIX_EPOCH;

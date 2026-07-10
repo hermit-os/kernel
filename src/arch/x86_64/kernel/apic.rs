@@ -25,6 +25,7 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::swapgs;
+use crate::env::BootInfoExt;
 use crate::mm::{PageAlloc, PageBox, PageRangeAllocator};
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
@@ -306,7 +307,7 @@ pub fn local_apic_id_count() -> u32 {
 }
 
 fn init_ioapic_address(phys_addr: PhysAddr) {
-	if env::is_uefi() {
+	if env::start_info().is_uefi() {
 		// UEFI systems have already id mapped everything, so we can just set the physical address as the virtual one
 		IOAPIC_ADDRESS
 			.set(VirtAddr::new(phys_addr.as_u64()))
@@ -508,7 +509,7 @@ fn default_apic() -> PhysAddr {
 
 fn apic_addr() -> PhysAddr {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if env::start_info().is_uhyve() {
 		return default_apic();
 	}
 
@@ -528,7 +529,7 @@ pub fn init() {
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	if processor::supports_x2apic() {
 		init_x2apic();
-	} else if env::is_uefi() {
+	} else if env::start_info().is_uefi() {
 		// already id mapped in UEFI systems, just use the physical address as virtual one
 		LOCAL_APIC_ADDRESS
 			.set(VirtAddr::new(local_apic_physical_address.as_u64()))
@@ -765,7 +766,7 @@ pub fn boot_application_processors() {
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 
-	if env::is_uefi() {
+	if env::start_info().is_uefi() {
 		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
 		let pt = unsafe { paging::identity_mapped_page_table() };
 		let virt_addr = SMP_BOOT_CODE_ADDRESS;

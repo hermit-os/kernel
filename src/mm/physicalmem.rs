@@ -10,7 +10,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
+use crate::env::{self, BootInfoExt};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
 
@@ -104,7 +104,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 }
 
 unsafe fn detect_from_fdt() -> Result<(), ()> {
-	let fdt = env::fdt().ok_or(())?;
+	let fdt = env::start_info().fdt().ok_or(())?;
 
 	let all_regions = fdt
 		.find_all_nodes("/memory")
@@ -121,16 +121,17 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		let size = m.size.unwrap() as u64;
 		let end_address = start_address + size;
 
-		if end_address <= super::kernel_end_address().as_u64() && !env::is_uefi() {
+		if end_address <= super::kernel_end_address().as_u64() && !env::start_info().is_uefi() {
 			continue;
 		}
 
-		let start_address =
-			if start_address <= super::kernel_start_address().as_u64() && !env::is_uefi() {
-				super::kernel_end_address()
-			} else {
-				VirtAddr::new(start_address)
-			};
+		let start_address = if start_address <= super::kernel_start_address().as_u64()
+			&& !env::start_info().is_uefi()
+		{
+			super::kernel_end_address()
+		} else {
+			VirtAddr::new(start_address)
+		};
 
 		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
 		unsafe {
@@ -160,7 +161,7 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		reserve(reservation);
 	}
 
-	let kernel_start = if env::is_uefi() {
+	let kernel_start = if env::start_info().is_uefi() {
 		super::kernel_start_address().as_usize()
 	} else {
 		// FIXME: Memory before the kernel causes trouble on non-uefi systems.
@@ -171,7 +172,7 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
 
-	let fdt_start = env::fdt_addr().unwrap().get();
+	let fdt_start = env::start_info().fdt_addr().unwrap().get();
 	let fdt_end = fdt_start + fdt.total_size();
 	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
 	reserve(fdt_region);
@@ -201,7 +202,7 @@ impl PageRangeExt for PageRange {
 }
 
 unsafe fn init() {
-	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
+	if env::start_info().is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
 		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
 		let count = usize::try_from(count).unwrap();

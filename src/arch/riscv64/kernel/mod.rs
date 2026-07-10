@@ -23,7 +23,7 @@ use crate::arch::riscv64::kernel::core_local::core_id;
 pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
 use crate::arch::riscv64::kernel::processor::lsb;
 use crate::config::KERNEL_STACK_SIZE;
-use crate::env;
+use crate::env::{self, BootInfoExt};
 use crate::init_cell::InitCell;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
@@ -60,7 +60,7 @@ pub fn get_hart_mask() -> u64 {
 }
 
 pub fn get_timebase_freq() -> u64 {
-	let fdt = env::fdt().unwrap();
+	let fdt = env::start_info().fdt().unwrap();
 
 	// Get timebase-freq
 	let cpus_node = fdt
@@ -150,7 +150,7 @@ pub fn boot_next_processor() {
 	CPU_ONLINE.fetch_add(1, Ordering::Release);
 
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

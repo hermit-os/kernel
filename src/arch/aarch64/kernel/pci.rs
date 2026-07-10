@@ -15,7 +15,7 @@ use crate::arch::aarch64::kernel::core_local::core_id;
 use crate::arch::aarch64::kernel::interrupts::GIC;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
-use crate::env;
+use crate::env::{self, BootInfoExt};
 use crate::mm::{PageAlloc, PageRangeAllocator};
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -222,7 +222,7 @@ fn detect_interrupt(
 }
 
 pub fn init() {
-	let fdt = env::fdt().unwrap();
+	let fdt = env::start_info().fdt().unwrap();
 
 	if let Some(pci_node) = fdt.find_compatible(&["pci-host-ecam-generic"]) {
 		let reg = pci_node.reg().unwrap().next().unwrap();

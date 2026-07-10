@@ -36,6 +36,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
+use crate::env::BootInfoExt;
 #[cfg(feature = "virtio-net")]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -120,7 +121,7 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 
 pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	without_interrupts(|| {
-		let Some(fdt) = crate::env::fdt() else {
+		let Some(fdt) = crate::env::start_info().fdt() else {
 			error!("No device tree found, cannot initialize MMIO drivers");
 			return;
 		};

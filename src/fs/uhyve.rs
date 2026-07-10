@@ -14,6 +14,7 @@ use uhyve_interface::v2::parameters::{
 };
 
 use crate::arch::mm::paging;
+use crate::env::BootInfoExt;
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::fs::{
@@ -241,7 +242,7 @@ impl VfsNode for UhyveDirectory {
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 
-	let mount_str = env::fdt().and_then(|fdt| {
+	let mount_str = env::start_info().fdt().and_then(|fdt| {
 		fdt.find_node("/uhyve,mounts")
 			.and_then(|node| node.property("mounts"))
 			.and_then(|property| property.as_str())

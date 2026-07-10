@@ -19,7 +19,7 @@ use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::kernel::serial::handle_uart_interrupt;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::InterruptHandlerMap;
-use crate::env;
+use crate::env::{self, BootInfoExt};
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId, timer_interrupts};
 
@@ -266,7 +266,7 @@ pub fn wakeup_core(core_id: CoreId) {
 pub(crate) fn init() {
 	info!("Initialize generic interrupt controller");
 
-	let fdt = env::fdt().unwrap();
+	let fdt = env::start_info().fdt().unwrap();
 
 	let intc_node = fdt.find_node("/intc").unwrap();
 	let mut reg_iter = intc_node.reg().unwrap();
@@ -445,7 +445,7 @@ pub fn init_cpu() {
 	GicCpuInterface::enable_group1(true);
 	GicCpuInterface::set_priority_mask(0xff);
 
-	let fdt = env::fdt().unwrap();
+	let fdt = env::start_info().fdt().unwrap();
 
 	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
 		let irq_slice = timer_node.property("interrupts").unwrap().value;

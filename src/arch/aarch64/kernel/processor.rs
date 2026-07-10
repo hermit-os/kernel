@@ -6,6 +6,8 @@ use hermit_sync::{Lazy, OnceCell, without_interrupts};
 
 use super::lscpu;
 use crate::env;
+#[cfg(feature = "uhyve")]
+use crate::env::BootInfoExt;
 
 /// Current FPU state. Saved at context switch when changed.
 ///
@@ -263,7 +265,7 @@ pub fn supports_2mib_pages() -> bool {
 
 pub fn configure() {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

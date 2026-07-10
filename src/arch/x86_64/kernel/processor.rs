@@ -27,7 +27,7 @@ use x86_64::{VirtAddr, instructions};
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{interrupts, pic, pit};
-use crate::env;
+use crate::env::{self, BootInfoExt};
 
 /// See <http://biosbits.org>.
 const MSR_PLATFORM_INFO: u32 = 0xce;
@@ -352,7 +352,8 @@ impl CpuFrequency {
 
 	fn detect_from_fdt(&mut self) -> Result<(), ()> {
 		fn mhz_from_fdt() -> Option<NonZero<u16>> {
-			let khz = env::fdt()?
+			let khz = env::start_info()
+				.fdt()?
 				.find_node("/hermit,tsc")?
 				.property("khz")?
 				.as_usize()?;
@@ -370,7 +371,7 @@ impl CpuFrequency {
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		#[cfg(feature = "uhyve")]
 		{
-			let cpu_freq = env::uhyve_cpu_freq().ok_or(())?.get();
+			let cpu_freq = env::start_info().uhyve_cpu_freq().ok_or(())?.get();
 			let mhz = cpu_freq / 1000;
 
 			self.set_detected_cpu_frequency(

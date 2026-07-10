@@ -41,7 +41,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = fdt_args().unwrap_or_default();
+		let args = start_info().bootargs().unwrap_or_default();
 		info!("bootargs = {args}");
 		let words = shell_words::split(args).unwrap();
 
