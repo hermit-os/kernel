@@ -265,6 +265,12 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package stdin --features hermit/virtio-console --no-default-features qemu ${{ matrix.qemu_flags }} --devices virtio-console-mmio
         if: matrix.arch != 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hello_world --features hermit/virtio-rng,hermit/pci --no-default-features qemu ${{ matrix.qemu_flags }} --devices virtio-rng-pci
+        if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hello_world --features hermit/virtio-rng --no-default-features qemu ${{ matrix.qemu_flags }} --devices virtio-rng-mmio --microvm
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hello_world --features hermit/virtio-rng --no-default-features qemu ${{ matrix.qemu_flags }} --devices virtio-rng-mmio
+        if: matrix.arch != 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package thread_test --smp 4 qemu ${{ matrix.qemu_flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --features fs qemu ${{ matrix.qemu_flags }} --devices virtio-fs-pci
         if: matrix.arch == 'x86_64'

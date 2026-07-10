@@ -6,7 +6,8 @@ use core::fmt;
 #[cfg(any(
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
-	feature = "virtio-console"
+	feature = "virtio-console",
+	feature = "virtio-rng",
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
@@ -31,6 +32,8 @@ use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::VirtioRngDriver;
 #[cfg(feature = "virtio")]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(feature = "virtio")]
@@ -333,6 +336,8 @@ pub(crate) enum PciDriver {
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-rng")]
+	VirtioRng(InterruptTicketMutex<VirtioRngDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 }
@@ -343,6 +348,15 @@ impl PciDriver {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "virtio-rng")]
+	fn get_rng_driver(&self) -> Option<&InterruptTicketMutex<VirtioRngDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioRng(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -382,6 +396,14 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_console_driver())
+}
+
+#[cfg(feature = "virtio-rng")]
+pub(crate) fn get_rng_driver() -> Option<&'static InterruptTicketMutex<VirtioRngDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_rng_driver())
 }
 
 #[cfg(feature = "virtio-vsock")]
@@ -432,6 +454,10 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::Fs(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
+				}
+				#[cfg(feature = "virtio-rng")]
+				Ok(VirtioDriver::Rng(drv)) => {
+					register_driver(PciDriver::VirtioRng(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 				Ok(VirtioDriver::Net(drv)) => *NETWORK_DEVICE.lock() = Some(*drv),

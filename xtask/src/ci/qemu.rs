@@ -88,6 +88,12 @@ pub enum Device {
 	/// virtio-net via PCI.
 	VirtioNetPci,
 
+	/// virtio-rng via MMIO.
+	VirtioRngMmio,
+
+	/// virtio-rng via PCI.
+	VirtioRngPci,
+
 	/// virtio-vsock via MMIO.
 	VirtioVsockMmio,
 
@@ -479,6 +485,15 @@ impl Qemu {
 						"-device".to_owned(),
 						"virtconsole,chardev=char0".to_owned(),
 					]
+				}
+				device @ (Device::VirtioRngMmio | Device::VirtioRngPci) => {
+					let device_arg = match device {
+						Device::VirtioRngMmio => "virtio-rng-device",
+						Device::VirtioRngPci => "virtio-rng-pci,disable-legacy=on",
+						_ => unreachable!(),
+					};
+
+					vec!["-device".to_owned(), device_arg.to_owned()]
 				}
 				device @ (Device::VirtioVsockMmio | Device::VirtioVsockPci) => {
 					let device_arg = match device {

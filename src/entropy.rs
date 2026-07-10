@@ -7,7 +7,9 @@ use hermit_sync::InterruptTicketMutex;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::{Rng, SeedableRng};
 
-use crate::arch::kernel::processor::{get_timer_ticks, seed_entropy};
+use crate::arch::kernel::processor::{get_timer_ticks, seed_entropy as processor_seed_entropy};
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::seed_entropy as virtio_seed_entropy;
 use crate::errno::Errno;
 use crate::io;
 
@@ -36,9 +38,7 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> io::Result<usize> {
 	let pool = match pool {
 		Some(pool) if now.saturating_sub(pool.last_reseed) <= RESEED_INTERVAL => pool,
 		pool => {
-			let Some(seed) = seed_entropy() else {
-				return Err(Errno::Nosys);
-			};
+			let seed = seed_entropy().ok_or(Errno::Nosys)?;
 
 			pool.insert(Pool {
 				rng: ChaCha20Rng::from_seed(seed),
@@ -51,4 +51,13 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> io::Result<usize> {
 	// Slice lengths are always <= isize::MAX so this return value cannot conflict
 	// with error numbers.
 	Ok(buf.len())
+}
+
+fn seed_entropy() -> Option<[u8; 32]> {
+	#[cfg(feature = "virtio-rng")]
+	if let Some(entropy) = virtio_seed_entropy() {
+		return Some(entropy);
+	}
+
+	processor_seed_entropy()
 }

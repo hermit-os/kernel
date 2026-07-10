@@ -6,6 +6,7 @@ use arm_gic::{IntId, Trigger};
 #[cfg(any(
 	feature = "virtio-console",
 	feature = "virtio-fs",
+	feature = "virtio-rng",
 	feature = "virtio-vsock",
 ))]
 use hermit_sync::InterruptTicketMutex;
@@ -26,11 +27,14 @@ use crate::drivers::console::VirtioUART;
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::VirtioRngDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(any(
 	feature = "virtio-console",
 	feature = "virtio-fs",
 	feature = "virtio-net",
+	feature = "virtio-rng",
 	feature = "virtio-vsock",
 ))]
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
@@ -49,6 +53,8 @@ pub(crate) enum MmioDriver {
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
+	#[cfg(feature = "virtio-rng")]
+	VirtioRng(InterruptTicketMutex<VirtioRngDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 }
@@ -72,6 +78,15 @@ impl MmioDriver {
 		}
 	}
 
+	#[cfg(feature = "virtio-rng")]
+	fn get_rng_driver(&self) -> Option<&InterruptTicketMutex<VirtioRngDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioRng(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
 	#[cfg(feature = "virtio-vsock")]
 	fn get_vsock_driver(&self) -> Option<&InterruptTicketMutex<VirtioVsockDriver>> {
 		#[allow(unreachable_patterns)]
@@ -85,6 +100,7 @@ impl MmioDriver {
 #[cfg(any(
 	feature = "virtio-console",
 	feature = "virtio-fs",
+	feature = "virtio-rng",
 	feature = "virtio-vsock"
 ))]
 pub(crate) fn register_driver(drv: MmioDriver) {
@@ -108,6 +124,14 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_filesystem_driver())
+}
+
+#[cfg(feature = "virtio-rng")]
+pub(crate) fn get_rng_driver() -> Option<&'static InterruptTicketMutex<VirtioRngDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_rng_driver())
 }
 
 #[cfg(feature = "virtio-vsock")]
@@ -240,6 +264,10 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 						}
 						#[cfg(feature = "virtio-net")]
 						VirtioDriver::Net(drv) => *NETWORK_DEVICE.lock() = Some(*drv),
+						#[cfg(feature = "virtio-rng")]
+						VirtioDriver::Rng(drv) => {
+							register_driver(MmioDriver::VirtioRng(InterruptTicketMutex::new(*drv)));
+						}
 						#[cfg(feature = "virtio-vsock")]
 						VirtioDriver::Vsock(drv) => register_driver(MmioDriver::VirtioVsock(
 							InterruptTicketMutex::new(*drv),
