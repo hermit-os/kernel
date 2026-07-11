@@ -22,7 +22,56 @@ impl AsRef<Path> for Archive {
 }
 
 impl Archive {
-	pub fn syscall_symbols(&self) -> Result<Vec<String>> {
+	pub fn retain_kernel_symbols(&self) -> Result<()> {
+		eprintln!("Retaining kernel symbols");
+
+		let explicit_symbols = self.explicit_symbols().iter().copied();
+		let syscall_symbols = self.syscall_symbols()?;
+		let syscall_symbols = syscall_symbols.iter().map(String::as_str);
+
+		let symbols = explicit_symbols.chain(syscall_symbols).collect();
+		self.retain_symbols(symbols)?;
+
+		Ok(())
+	}
+
+	pub fn retain_builtin_symbols(&self) -> Result<()> {
+		eprintln!("Retaining hermit-builtins symbols");
+		let sh = crate::sh()?;
+
+		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
+		let builtin_symbols = builtin_symbols.lines();
+
+		let symbols = builtin_symbols.collect();
+		self.retain_symbols(symbols)?;
+
+		Ok(())
+	}
+
+	pub fn retain_masos_symbols(&self) -> Result<()> {
+		eprintln!("Retaining MASOS symbols");
+		let sh = crate::sh()?;
+
+		let explicit_symbols = self.explicit_symbols().iter().copied();
+		let syscall_symbols = self.syscall_symbols()?;
+		let syscall_symbols = syscall_symbols.iter().map(String::as_str);
+		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
+		let builtin_symbols = builtin_symbols.lines();
+
+		let symbols = explicit_symbols
+			.chain(syscall_symbols)
+			.chain(builtin_symbols)
+			.collect();
+		self.retain_symbols(symbols)?;
+
+		Ok(())
+	}
+
+	fn explicit_symbols(&self) -> &[&str] {
+		&["_start", "__bss_start", "mcount", "runtime_entry"]
+	}
+
+	fn syscall_symbols(&self) -> Result<Vec<String>> {
 		let sh = crate::sh()?;
 		let archive = self.as_ref();
 
@@ -31,7 +80,7 @@ impl Archive {
 		let symbols = archive
 			.summarize()
 			.into_iter()
-			.filter(|(member_name, _, _)| member_name.starts_with("hermit-"))
+			.filter(|(member_name, _, _)| member_name.starts_with("hermit"))
 			.flat_map(|(_, _, symbols)| symbols)
 			.filter(|symbol| symbol.starts_with("sys_"))
 			.map(String::from)
@@ -40,7 +89,7 @@ impl Archive {
 		Ok(symbols)
 	}
 
-	pub fn retain_symbols(&self, mut exported_symbols: HashSet<&str>) -> Result<()> {
+	fn retain_symbols(&self, mut exported_symbols: HashSet<&str>) -> Result<()> {
 		let sh = crate::sh()?;
 		let archive = self.as_ref();
 		let prefix = {
@@ -83,6 +132,16 @@ impl Archive {
 		cmd!(sh, "{objcopy} --redefine-syms={rename_path} {archive}").run()?;
 
 		sh.remove_path(&rename_path)?;
+
+		Ok(())
+	}
+
+	pub fn create(&self) -> Result<()> {
+		let sh = crate::sh()?;
+		let archive = self.as_ref();
+
+		let ar = crate::binutil("ar").unwrap();
+		cmd!(sh, "{ar} qc {archive}").run()?;
 
 		Ok(())
 	}
