@@ -854,9 +854,7 @@ pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 	}
 
 	let l1 = unsafe {
-		&mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(
-			l0_entry.address().as_usize(),
-		)
+		&mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(l0_entry.address().as_usize())
 	};
 	let l1_entry = &mut l1.entries[l1_idx];
 	if !l1_entry.is_present() || !l1_entry.is_table_or_4kib_page() {
@@ -864,9 +862,7 @@ pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 	}
 
 	let l2 = unsafe {
-		&mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(
-			l1_entry.address().as_usize(),
-		)
+		&mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(l1_entry.address().as_usize())
 	};
 	let l2_entry = &mut l2.entries[l2_idx];
 	if !l2_entry.is_present() || !l2_entry.is_table_or_4kib_page() {
@@ -874,9 +870,7 @@ pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 	}
 
 	let l3 = unsafe {
-		&mut *ptr::with_exposed_provenance_mut::<PageTable<L3Table>>(
-			l2_entry.address().as_usize(),
-		)
+		&mut *ptr::with_exposed_provenance_mut::<PageTable<L3Table>>(l2_entry.address().as_usize())
 	};
 	let l3_entry = &mut l3.entries[l3_idx];
 
@@ -1107,23 +1101,23 @@ pub fn drop_user_space(l0_phys: usize) {
 	clear_l0(l0_phys);
 
 	// The L0 table is not loaded on any core, so no TLB flush is necessary.
-	let range =
-		free_list::PageRange::new(l0_phys, l0_phys + BasePageSize::SIZE as usize).unwrap();
+	let range = free_list::PageRange::new(l0_phys, l0_phys + BasePageSize::SIZE as usize).unwrap();
 	unsafe { FrameAlloc::deallocate(range) };
 }
 
 /// Clear the user-space portion of the currently active address space.
 #[cfg(feature = "common-os")]
 pub fn clear_user_space() {
-	use crate::fd::STDERR_FILENO;
-	use crate::core_scheduler;
 	use aarch64_cpu::registers::TTBR0_EL1;
 
+	use crate::core_scheduler;
+	use crate::fd::STDERR_FILENO;
+
 	core_scheduler()
-        .get_current_task()
-        .borrow()       
-        .vmas                   
-        .write()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
 		.clear();
 	core_scheduler()
 		.get_current_task_object_map()
@@ -1157,8 +1151,7 @@ pub fn create_new_root_page_table() -> usize {
 	let new_l0_phys = frame_range.start();
 
 	let cur_l0_phys = TTBR0_EL1.get_baddr() as usize;
-	let cur_l0 =
-		unsafe { &*ptr::with_exposed_provenance::<PageTable<L0Table>>(cur_l0_phys) };
+	let cur_l0 = unsafe { &*ptr::with_exposed_provenance::<PageTable<L0Table>>(cur_l0_phys) };
 
 	let new_l0 =
 		unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(new_l0_phys) };
@@ -1218,8 +1211,7 @@ pub fn copy_current_root_page_table() -> usize {
 		unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(new_l0_phys) };
 
 	let cur_l0_phys = TTBR0_EL1.get_baddr() as usize;
-	let cur_l0 =
-		unsafe { &*ptr::with_exposed_provenance::<PageTable<L0Table>>(cur_l0_phys) };
+	let cur_l0 = unsafe { &*ptr::with_exposed_provenance::<PageTable<L0Table>>(cur_l0_phys) };
 
 	// Inherit kernel L0 entries verbatim (sharing the L1/L2/L3 tables
 	// below). Only the user-space slot needs a deep copy with COW so
@@ -1247,9 +1239,8 @@ pub fn copy_current_root_page_table() -> usize {
 		let cur_l1 = unsafe {
 			&*ptr::with_exposed_provenance::<PageTable<L1Table>>(cur_l0_entry.address().as_usize())
 		};
-		let new_l1 = unsafe {
-			&mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(new_l1_phys)
-		};
+		let new_l1 =
+			unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(new_l1_phys) };
 
 		for l1_idx in 0..512usize {
 			let cur_l1_entry = &cur_l1.entries[l1_idx];
@@ -1303,10 +1294,11 @@ pub fn copy_current_root_page_table() -> usize {
 				// The child holds an additional reference to every
 				// user-space frame in this page table.
 				for entry in new_l3.entries.iter() {
-					let flags = PageTableEntryFlags::from_bits_truncate(
-						entry.physical_address_and_flags,
-					);
-					if flags.contains(PageTableEntryFlags::PRESENT|PageTableEntryFlags::USER_ACCESSIBLE) {
+					let flags =
+						PageTableEntryFlags::from_bits_truncate(entry.physical_address_and_flags);
+					if flags.contains(
+						PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE,
+					) {
 						crate::mm::frame_ref_inc(entry.address());
 					}
 				}
