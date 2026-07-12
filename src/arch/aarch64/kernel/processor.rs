@@ -242,9 +242,13 @@ pub fn shutdown(error_code: i32) -> ! {
 	// PSCI did not terminate (no dispatcher, or call returned). Fall back
 	// to semihosting if the feature is compiled in — useful under TCG
 	// where it correctly propagates `error_code` to the host shell.
-	if cfg!(feature = "semihosting") {
+	#[cfg(feature = "semihosting")]
+	{
 		semihosting::process::exit(error_code)
-	} else {
+	}
+
+	#[cfg(not(feature = "semihosting"))]
+	{
 		// Last resort: park the CPU forever.
 		loop {
 			aarch64_cpu::asm::wfe();

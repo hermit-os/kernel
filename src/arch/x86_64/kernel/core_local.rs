@@ -29,6 +29,7 @@ pub(crate) struct CoreLocal {
 	/// Start address of the kernel stack
 	pub kernel_stack: Cell<*mut u8>,
 	/// Current address of the user stack during a system call
+	#[cfg(feature = "common-os")]
 	pub user_stack: Cell<*mut u8>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
@@ -58,6 +59,7 @@ impl CoreLocal {
 			scheduler: Cell::new(ptr::null_mut()),
 			tss: Cell::new(ptr::null_mut()),
 			kernel_stack: Cell::new(ptr::null_mut()),
+			#[cfg(feature = "common-os")]
 			user_stack: Cell::new(ptr::null_mut()),
 			irq_statistics,
 			ex: StaticLocalExecutor::new(),

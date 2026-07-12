@@ -14,7 +14,8 @@ pub mod serial;
 mod start;
 pub mod systemtime;
 
-use alloc::alloc::{Layout, alloc};
+use alloc::alloc::alloc;
+use core::alloc::Layout;
 #[cfg(feature = "common-os")]
 use core::arch::asm;
 use core::arch::global_asm;
@@ -28,7 +29,7 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub use self::scheduler::prepare_fork_child_stack;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
@@ -197,6 +198,7 @@ const USER_STACK_SIZE: usize = 0x8000;
 /// Map the user-mode binary into the address space and run the ELF-loader
 /// closure against the freshly-mapped pages. Mirrors the x86_64 sibling
 /// (`arch::x86_64::kernel::load_application`).
+#[allow(clippy::result_unit_err)]
 #[cfg(feature = "common-os")]
 pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
 where
@@ -250,10 +252,10 @@ where
 		.vmas
 		.write()
 		.insert(
-			VirtAddr::from(USER_START),
+			USER_START,
 			VirtualMemoryArea::new(
-				VirtAddr::from(USER_START),
-				VirtAddr::from(USER_START + code_size).align_up(BasePageSize::SIZE),
+				USER_START,
+				(USER_START + code_size).align_up(BasePageSize::SIZE),
 				VirtualMemoryAreaProt::READ
 					| VirtualMemoryAreaProt::WRITE
 					| VirtualMemoryAreaProt::EXECUTE,
@@ -284,7 +286,7 @@ where
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
-		let tls_virt = VirtAddr::from(USER_START + code_size + BasePageSize::SIZE as usize);
+		let tls_virt = USER_START + code_size + BasePageSize::SIZE as usize;
 		paging::map::<BasePageSize>(
 			tls_virt,
 			physaddr,
