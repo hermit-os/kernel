@@ -14,7 +14,7 @@ use ahash::RandomState;
 use crossbeam_utils::Backoff;
 use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
-#[cfg(all(feature = "common-os", not(target_arch = "x86_64")))]
+#[cfg(target_arch = "aarch64")]
 use memory_addresses::VirtAddr;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
@@ -862,7 +862,7 @@ impl PerCoreScheduler {
 				crate::mm::FrameAlloc::free_space() >> 10
 			);
 			#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
-			debug!("Cleaned up task {}", id);
+			debug!("Cleaned up task {id}");
 		}
 	}
 

@@ -1,10 +1,11 @@
 //! Architecture dependent interface to initialize a task
 
 use core::arch::naked_asm;
+#[cfg(feature = "common-os")]
+use core::mem;
 use core::sync::atomic::Ordering;
-use core::{mem, ptr};
 
-use aarch64_cpu::asm::barrier::{SY, dsb, isb};
+use aarch64_cpu::asm::barrier::{SY, isb};
 use aarch64_cpu::registers::*;
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
@@ -206,7 +207,7 @@ impl TaskStacks {
 	}
 
 	/// Returns the start address of the stack region (virt_addr of CommonStack).
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	pub fn get_stack_virt_addr(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
@@ -215,7 +216,7 @@ impl TaskStacks {
 	}
 
 	/// Returns total size of all stacks combined.
-	#[cfg(feature = "common-os")]
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	pub fn get_total_stack_size(&self) -> usize {
 		match self {
 			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
@@ -344,7 +345,7 @@ impl Task {
 			// register file.
 			stack -= size_of::<State>();
 			let state = stack.as_mut_ptr::<State>();
-			ptr::write_bytes(state.cast::<u8>(), 0, size_of::<State>());
+			state.cast::<u8>().write_bytes(0, size_of::<State>());
 
 			// Initial user stack: top of the user-stack region with the
 			// usual debug marker. AAPCS64 doesn't require any extra slop
@@ -425,8 +426,6 @@ impl TaskFrame for Task {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
-	use aarch64_cpu::asm::barrier::{ISH, ISHST};
-
 	// Trap next FPU instruction so we can lazily restore FPU state
 	CPACR_EL1.modify(CPACR_EL1::FPEN::TrapEl0El1);
 	isb(SY);
@@ -450,6 +449,8 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 			.as_usize() as u64;
 		let cur_pt = TTBR0_EL1.get_baddr();
 		if cur_pt != new_pt {
+			use aarch64_cpu::asm::barrier::{ISH, ISHST, dsb};
+
 			// Memory-barrier sequence per ARM ARM D8.13.2: DSB ISHST
 			// ensures all prior PT updates are observable; the MSR
 			// installs the new translation base; ISB flushes the
@@ -526,7 +527,7 @@ pub unsafe fn prepare_fork_child_stack(
 	//    the State (ELR_EL1 = post-SVC user PC, SPSR_EL1 = EL0t, SP_EL0
 	//    = user stack, x1..x30 = parent's user regs) is already correct.
 	unsafe {
-		let state = ptr::with_exposed_provenance_mut::<State>(child_state_addr);
+		let state = core::ptr::with_exposed_provenance_mut::<State>(child_state_addr);
 		(*state).x0 = 0;
 	}
 

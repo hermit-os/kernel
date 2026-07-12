@@ -622,52 +622,52 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 		if let Some((_, vma)) = guard
 			.range((Bound::Unbounded, Bound::Included(virtaddr)))
 			.next_back()
+			&& virtaddr >= vma.start
+			&& virtaddr < vma.end
 		{
-			if virtaddr >= vma.start && virtaddr < vma.end {
-				let layout = PageLayout::from_size_align(
-					BasePageSize::SIZE as usize,
+			let layout = PageLayout::from_size_align(
+				BasePageSize::SIZE as usize,
+				BasePageSize::SIZE as usize,
+			)
+			.unwrap();
+			let frame_range = FrameAlloc::allocate(layout).unwrap();
+			let physaddr = PhysAddr::from(frame_range.start());
+			let mut flags = PageTableEntryFlags::empty();
+			flags.normal().user();
+			if vma.prot.contains(VirtualMemoryAreaProt::WRITE) {
+				flags.writable();
+			}
+			if vma.prot.contains(VirtualMemoryAreaProt::EXECUTE) {
+				flags.execute_disable();
+			}
+
+			// `virtaddr` is `x86_64::VirtAddr` (from `Cr2::read`); the
+			// `map` helper signs the parameter as `memory_addresses::VirtAddr`.
+			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
+
+			// clear page
+			let slice = unsafe {
+				core::slice::from_raw_parts_mut(
+					virtaddr.as_mut_ptr::<u8>().cast::<u8>(),
 					BasePageSize::SIZE as usize,
 				)
-				.unwrap();
-				let frame_range = FrameAlloc::allocate(layout).unwrap();
-				let physaddr = PhysAddr::from(frame_range.start());
-				let mut flags = PageTableEntryFlags::empty();
-				flags.normal().user();
-				if vma.prot.contains(VirtualMemoryAreaProt::WRITE) {
-					flags.writable();
+			};
+			slice.fill(0);
+
+			#[cfg(feature = "fork")]
+			crate::mm::frame_ref_inc(physaddr);
+
+			// Restore user GS before returning to ring 3; the COW path
+			// above does the same. Without this, iret leaves the kernel
+			// GS-base installed, the user's next FS/GS access reads
+			// kernel state and the program either misbehaves or wedges.
+			if swapped_gs {
+				unsafe {
+					core::arch::asm!("swapgs", options(nostack));
 				}
-				if vma.prot.contains(VirtualMemoryAreaProt::EXECUTE) {
-					flags.execute_disable();
-				}
-
-				// `virtaddr` is `x86_64::VirtAddr` (from `Cr2::read`); the
-				// `map` helper signs the parameter as `memory_addresses::VirtAddr`.
-				map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
-
-				// clear page
-				let slice = unsafe {
-					core::slice::from_raw_parts_mut(
-						virtaddr.as_mut_ptr() as *mut u8,
-						BasePageSize::SIZE as usize,
-					)
-				};
-				slice.fill(0);
-
-				#[cfg(feature = "fork")]
-				crate::mm::frame_ref_inc(physaddr);
-
-				// Restore user GS before returning to ring 3; the COW path
-				// above does the same. Without this, iret leaves the kernel
-				// GS-base installed, the user's next FS/GS access reads
-				// kernel state and the program either misbehaves or wedges.
-				if swapped_gs {
-					unsafe {
-						core::arch::asm!("swapgs", options(nostack));
-					}
-				}
-
-				return;
 			}
+
+			return;
 		}
 	}
 

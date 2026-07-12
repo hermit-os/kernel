@@ -179,6 +179,7 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &mut State) {
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	use crate::arch::mm::paging::do_cow_fault;
 
 	let esr = ESR_EL1.get();
@@ -255,41 +256,40 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 
 			if let Some((_, vma)) = guard
 				.range((Bound::Unbounded, Bound::Included(addr)))
-				.next_back()
+				.next_back() && addr >= vma.start
+				&& addr < vma.end
 			{
-				if addr >= vma.start && addr < vma.end {
-					let layout = PageLayout::from_size_align(
-						BasePageSize::SIZE as usize,
+				let layout = PageLayout::from_size_align(
+					BasePageSize::SIZE as usize,
+					BasePageSize::SIZE as usize,
+				)
+				.unwrap();
+				let frame_range = FrameAlloc::allocate(layout).unwrap();
+				let physaddr = PhysAddr::from(frame_range.start());
+				let mut flags = PageTableEntryFlags::empty();
+				flags.normal().user();
+				if vma.prot.contains(VirtualMemoryAreaProt::WRITE) {
+					flags.writable();
+				}
+				if vma.prot.contains(VirtualMemoryAreaProt::EXECUTE) {
+					flags.execute_disable();
+				}
+
+				paging::map::<BasePageSize>(addr, physaddr, 1, flags);
+
+				// clear page
+				let slice = unsafe {
+					core::slice::from_raw_parts_mut(
+						addr.as_mut_ptr::<u8>().cast::<u8>(),
 						BasePageSize::SIZE as usize,
 					)
-					.unwrap();
-					let frame_range = FrameAlloc::allocate(layout).unwrap();
-					let physaddr = PhysAddr::from(frame_range.start());
-					let mut flags = PageTableEntryFlags::empty();
-					flags.normal().user();
-					if vma.prot.contains(VirtualMemoryAreaProt::WRITE) {
-						flags.writable();
-					}
-					if vma.prot.contains(VirtualMemoryAreaProt::EXECUTE) {
-						flags.execute_disable();
-					}
+				};
+				slice.fill(0);
 
-					paging::map::<BasePageSize>(addr, physaddr, 1, flags);
+				#[cfg(feature = "fork")]
+				crate::mm::frame_ref_inc(physaddr);
 
-					// clear page
-					let slice = unsafe {
-						core::slice::from_raw_parts_mut(
-							addr.as_mut_ptr() as *mut u8,
-							BasePageSize::SIZE as usize,
-						)
-					};
-					slice.fill(0);
-
-					#[cfg(feature = "fork")]
-					crate::mm::frame_ref_inc(physaddr);
-
-					return;
-				}
+				return;
 			}
 		}
 
@@ -379,7 +379,7 @@ fn dispatch_svc64(state: &mut State) {
 
 	if nr >= NO_SYSCALLS {
 		error!("Invalid syscall number {nr}");
-		state.x0 = (-i32::from(Errno::Nosys)) as u32 as u64;
+		state.x0 = u64::from((-i32::from(Errno::Nosys)) as u32);
 		return;
 	}
 

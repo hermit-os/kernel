@@ -226,7 +226,7 @@ impl PageTableEntry {
 	}
 
 	/// Return whether this entry is a 4KiB page.
-	#[cfg(all(feature = "common-os", feature = "fork"))]
+	#[cfg(feature = "common-os")]
 	fn is_table_or_4kib_page(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::TABLE_OR_4KIB_PAGE.bits()) != 0
 	}
@@ -803,7 +803,7 @@ fn flush_tlb_all() {
 }
 
 /// Invalidate one TLB entry by virtual address (broadcast to all cores).
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 fn flush_tlb_one(virt: VirtAddr) {
 	dsb(ISHST);
 	unsafe {
@@ -1331,7 +1331,7 @@ pub fn prepare_mem_copy_on_write() {
 /// base address. Used by `fork`: the child's `TaskStacks::new` has already
 /// allocated and mapped fresh physical frames at `stack_address`, so we
 /// simply `memcpy` the parent's stack pages into the child's mapping.
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn copy_kernel_stack_to(stack_address: usize) {
 	use crate::arch::kernel::core_local::core_scheduler;
 
