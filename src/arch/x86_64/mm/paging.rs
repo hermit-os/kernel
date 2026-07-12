@@ -106,7 +106,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 		self
 	}
 
-	#[cfg(all(feature = "common-os", feature = "fork"))]	
+	#[cfg(all(feature = "common-os", feature = "fork"))]
 	fn copy_on_write(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::WRITABLE);
 		self.remove(PageTableEntryFlags::DIRTY);
@@ -338,8 +338,11 @@ pub fn mark_user_pages_copy_on_write() {
 				};
 				for pt_idx in 0..512usize {
 					let pt_entry = &mut pt[pt_idx];
-					if pt_entry.flags().contains(PageTableEntryFlags::PRESENT|PageTableEntryFlags::WRITABLE|PageTableEntryFlags::USER_ACCESSIBLE)
-						&& !pt_entry.flags().contains(PageTableEntryFlags::BIT_9)
+					if pt_entry.flags().contains(
+						PageTableEntryFlags::PRESENT
+							| PageTableEntryFlags::WRITABLE
+							| PageTableEntryFlags::USER_ACCESSIBLE,
+					) && !pt_entry.flags().contains(PageTableEntryFlags::BIT_9)
 					{
 						let new_flags = *pt_entry.flags().copy_on_write();
 						pt_entry.set_addr(pt_entry.addr(), new_flags);
@@ -401,10 +404,9 @@ fn clear_pml4(pml4_phys: usize) {
 
 				for pt_idx in 0..512usize {
 					let pt_entry = &mut pt[pt_idx];
-					if pt_entry
-						.flags()
-						.contains(PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE)
-					{
+					if pt_entry.flags().contains(
+						PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE,
+					) {
 						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
 						#[cfg(feature = "fork")]
 						if crate::mm::frame_ref_dec(phys_addr) {
@@ -448,14 +450,14 @@ pub fn drop_user_space(pml4_phys: usize) {
 
 #[cfg(feature = "common-os")]
 pub fn clear_user_space() {
-	use crate::fd::STDERR_FILENO;
 	use crate::core_scheduler;
+	use crate::fd::STDERR_FILENO;
 
 	core_scheduler()
-        .get_current_task()
-        .borrow()       
-        .vmas                   
-        .write()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
 		.clear();
 	core_scheduler()
 		.get_current_task_object_map()
@@ -555,7 +557,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 			true
 		}
 	};
-	
+
 	increment_irq_counter(14);
 
 	let faulting_addr = Cr2::read().unwrap();
@@ -610,16 +612,23 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 
 	{
 		use core::ops::Bound;
-		use crate::mm::FrameAlloc;
+
 		use crate::mm::vma::VirtualMemoryAreaProt;
 
 		let current_task = core_scheduler().get_current_task();
-    	let current_task_borrowed = current_task.borrow();
-    	let guard = current_task_borrowed.vmas.read();
+		let current_task_borrowed = current_task.borrow();
+		let guard = current_task_borrowed.vmas.read();
 
-		if let Some((_, vma)) = guard.range((Bound::Unbounded, Bound::Included(virtaddr))).next_back() {
+		if let Some((_, vma)) = guard
+			.range((Bound::Unbounded, Bound::Included(virtaddr)))
+			.next_back()
+		{
 			if virtaddr >= vma.start && virtaddr < vma.end {
-				let layout = PageLayout::from_size_align(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
+				let layout = PageLayout::from_size_align(
+					BasePageSize::SIZE as usize,
+					BasePageSize::SIZE as usize,
+				)
+				.unwrap();
 				let frame_range = FrameAlloc::allocate(layout).unwrap();
 				let physaddr = PhysAddr::from(frame_range.start());
 				let mut flags = PageTableEntryFlags::empty();
@@ -633,15 +642,15 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 
 				// `virtaddr` is `x86_64::VirtAddr` (from `Cr2::read`); the
 				// `map` helper signs the parameter as `memory_addresses::VirtAddr`.
-				map::<BasePageSize>(
-					virtaddr.into(),
-					physaddr,
-					1,
-					flags,
-				);
+				map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
 
 				// clear page
-				let slice = unsafe { core::slice::from_raw_parts_mut(virtaddr.as_mut_ptr() as *mut u8, BasePageSize::SIZE as usize) };
+				let slice = unsafe {
+					core::slice::from_raw_parts_mut(
+						virtaddr.as_mut_ptr() as *mut u8,
+						BasePageSize::SIZE as usize,
+					)
+				};
 				slice.fill(0);
 
 				#[cfg(feature = "fork")]

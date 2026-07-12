@@ -219,9 +219,7 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 	 * COW-marked page, which can happen e.g. when the kernel writes
 	 * argv/envp into the freshly-mapped user page during the loader path.
 	 */
-	if ec == ESR_EL1::EC::Value::DataAbortCurrentEL
-		|| ec == ESR_EL1::EC::Value::DataAbortLowerEL
-	{
+	if ec == ESR_EL1::EC::Value::DataAbortCurrentEL || ec == ESR_EL1::EC::Value::DataAbortLowerEL {
 		#[cfg(feature = "common-os")]
 		increment_irq_counter(PAGE_FAULT_IRQ);
 
@@ -236,29 +234,35 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		let is_permission_fault = (0b00_1100..=0b00_1111).contains(&dfsc);
 
 		#[cfg(all(feature = "common-os", feature = "fork"))]
-		if is_write
-			&& is_permission_fault
-			&& do_cow_fault(VirtAddr::new(far))
-		{
+		if is_write && is_permission_fault && do_cow_fault(VirtAddr::new(far)) {
 			// Faulting instruction is retried on `eret` from the trap.
 			return;
 		}
 
 		#[cfg(feature = "common-os")]
 		{
-			use align_address::Align;
 			use core::ops::Bound;
+
+			use align_address::Align;
+
 			use crate::mm::FrameAlloc;
 			use crate::mm::vma::VirtualMemoryAreaProt;
 
 			let addr = VirtAddr::new(far).align_down(BasePageSize::SIZE);
 			let current_task = core_scheduler().get_current_task();
-        	let current_task_borrowed = current_task.borrow();
-        	let guard = current_task_borrowed.vmas.read();
+			let current_task_borrowed = current_task.borrow();
+			let guard = current_task_borrowed.vmas.read();
 
-			if let Some((_, vma)) = guard.range((Bound::Unbounded, Bound::Included(addr))).next_back() {
+			if let Some((_, vma)) = guard
+				.range((Bound::Unbounded, Bound::Included(addr)))
+				.next_back()
+			{
 				if addr >= vma.start && addr < vma.end {
-					let layout = PageLayout::from_size_align(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
+					let layout = PageLayout::from_size_align(
+						BasePageSize::SIZE as usize,
+						BasePageSize::SIZE as usize,
+					)
+					.unwrap();
 					let frame_range = FrameAlloc::allocate(layout).unwrap();
 					let physaddr = PhysAddr::from(frame_range.start());
 					let mut flags = PageTableEntryFlags::empty();
@@ -270,15 +274,15 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 						flags.execute_disable();
 					}
 
-					paging::map::<BasePageSize>(
-						addr,
-						physaddr,
-						1,
-						flags,
-					);
+					paging::map::<BasePageSize>(addr, physaddr, 1, flags);
 
 					// clear page
-					let slice = unsafe { core::slice::from_raw_parts_mut(addr.as_mut_ptr() as *mut u8, BasePageSize::SIZE as usize) };
+					let slice = unsafe {
+						core::slice::from_raw_parts_mut(
+							addr.as_mut_ptr() as *mut u8,
+							BasePageSize::SIZE as usize,
+						)
+					};
 					slice.fill(0);
 
 					#[cfg(feature = "fork")]
@@ -292,16 +296,13 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		let kind = dfsc_kind(dfsc);
 		let access = if is_write { "write" } else { "read" };
 		error!("Current stack pointer {state:p}");
-		error!(
-			"Unhandled data abort: {kind} on {access} of {far:#x} (DFSC={dfsc:#x})"
-		);
+		error!("Unhandled data abort: {kind} on {access} of {far:#x} (DFSC={dfsc:#x})");
 		error!("Exception return address {:#x}", ELR_EL1.get());
 		error!("Thread ID register {:#x}", TPIDR_EL0.get());
 		error!("Table Base Register {:#x}", TTBR0_EL1.get());
 		error!("Exception Syndrome Register {esr:#x}");
 
-		if let Some(irqid) =
-			GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
+		if let Some(irqid) = GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
 		{
 			GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
 		} else {
