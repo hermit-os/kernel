@@ -392,9 +392,11 @@ fn set_user_tpidr_el0(value: u64) {
 /// new PC, SPSR_EL1 the new PSTATE (mode bits select EL0t), and SP_EL0 the
 /// user stack. Per AAPCS64, `argc` lives in `x0` and `argv` in `x1`.
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) -> ! {
-	use alloc::ffi::CString;
-
+pub unsafe fn jump_to_user_land(
+	entry_point: usize,
+	args: alloc::vec::Vec<alloc::ffi::CString>,
+	envs: alloc::vec::Vec<alloc::ffi::CString>,
+) -> ! {
 	use align_address::Align;
 	use free_list::PageLayout;
 
@@ -441,27 +443,40 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
 	}
 
-	// Place the argv pointer array on the user stack.
-	let stack_pointer = stack_top - arg.len() * size_of::<*mut u8>();
+	// Place the argv and envp pointer arrays on the user stack. Both
+	// arrays follow the C convention and are terminated by a null pointer.
+	let ptr_count = args.len() + 1 + envs.len() + 1;
+	let stack_pointer = stack_top - ptr_count * size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
-	let argv = unsafe { slice::from_raw_parts_mut(stack_ptr, arg.len()) };
-	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
+	let arrays = unsafe { slice::from_raw_parts_mut(stack_ptr, ptr_count) };
+	let (argv, envp) = arrays.split_at_mut(args.len() + 1);
+	let len = args
+		.iter()
+		.chain(envs.iter())
+		.fold(0, |acc, x| acc + x.as_bytes_with_nul().len());
 	// AAPCS64 requires SP to be 16-byte aligned at function entry.
 	let stack_pointer = (stack_pointer - len).align_down(16);
 
 	let mut pos: usize = 0;
-	for (i, s) in arg.iter().enumerate() {
-		let s = CString::new(*s).unwrap();
+	for (dst, s) in argv
+		.iter_mut()
+		.zip(args.iter())
+		.chain(envp.iter_mut().zip(envs.iter()))
+	{
 		let bytes = s.as_bytes_with_nul();
-		argv[i] = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
+		*dst = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
 		pos += bytes.len();
 
 		unsafe {
-			argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
+			dst.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
 		}
 	}
+	argv[args.len()] = ptr::null_mut();
+	envp[envs.len()] = ptr::null_mut();
 
-	drop(arg);
+	let argc = args.len();
+	drop(args);
+	drop(envs);
 
 	debug!("Jump to user space at 0x{entry_point:x}, stack pointer 0x{stack_pointer:x}");
 
@@ -480,10 +495,11 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 			"msr sp_el0,   {sp}",
 			"msr elr_el1,  {pc}",
 			"msr spsr_el1, {spsr}",
-			"mov x0, {argc}",
-			"mov x1, {argv}",
 			// Clear scratch registers so EL1 state cannot leak into EL0.
-			"mov x2,  xzr", "mov x3,  xzr", "mov x4,  xzr", "mov x5,  xzr",
+			// `x0`, `x1`, and `x2` carry argc, argv, and envp and are
+			// bound as fixed register operands below, so the register
+			// allocator cannot hand them out for the other operands.
+			"mov x3,  xzr", "mov x4,  xzr", "mov x5,  xzr",
 			"mov x6,  xzr", "mov x7,  xzr", "mov x8,  xzr", "mov x9,  xzr",
 			"mov x10, xzr", "mov x11, xzr", "mov x12, xzr", "mov x13, xzr",
 			"mov x14, xzr", "mov x15, xzr", "mov x16, xzr", "mov x17, xzr",
@@ -495,8 +511,9 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 			sp   = in(reg) stack_pointer,
 			pc   = in(reg) entry_point,
 			spsr = in(reg) USER_SPSR,
-			argc = in(reg) argv.len(),
-			argv = in(reg) argv.as_ptr(),
+			in("x0") argc,
+			in("x1") argv.as_ptr(),
+			in("x2") envp.as_ptr(),
 			options(nostack, noreturn)
 		);
 	}
