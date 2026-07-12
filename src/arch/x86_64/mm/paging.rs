@@ -674,7 +674,7 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	// A spawned user thread whose entry function returns comes back here
 	// with RIP=0: the `thread_start` wrapper in std's hermit pal just
 	// returns, and the kernel-crafted return slot at the top of the user
-	// stack was zero-initialised. Treat an instruction-fetch fault at 0
+	// stack was zero-initialized. Treat an instruction-fetch fault at 0
 	// in ring 3 as a clean thread exit.
 	if error_code.contains(PageFaultErrorCode::USER_MODE)
 		&& error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
