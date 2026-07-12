@@ -8,7 +8,7 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
-#[cfg(feature = "common-os")]
+#[cfg(all(feature = "common-os", feature = "fork"))]
 pub use self::switch::prepare_fork_child_stack;
 use crate::env;
 #[cfg(feature = "uhyve")]
@@ -168,6 +168,7 @@ const USER_STACK: VirtAddr = VirtAddr::new(0x0180_0000_0000 - USER_STACK_SIZE as
 #[cfg(feature = "common-os")]
 const USER_STACK_SIZE: usize = 0x8000;
 
+#[allow(clippy::result_unit_err)]
 #[cfg(feature = "common-os")]
 pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
 where
@@ -213,7 +214,7 @@ where
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
 	paging::map::<BasePageSize>(
-		VirtAddr::from(USER_START),
+		USER_START,
 		physaddr,
 		code_size / BasePageSize::SIZE as usize,
 		flags,
@@ -222,10 +223,8 @@ where
 	// this file's local `use` brings in `memory_addresses::VirtAddr`.
 	// Convert at the boundary so the BTreeMap-keyed insert type-checks.
 	{
-		let start: x86_64::VirtAddr = VirtAddr::from(USER_START).into();
-		let end: x86_64::VirtAddr = VirtAddr::from(USER_START + code_size)
-			.align_up(BasePageSize::SIZE)
-			.into();
+		let start: x86_64::VirtAddr = USER_START.into();
+		let end: x86_64::VirtAddr = (USER_START + code_size).align_up(BasePageSize::SIZE).into();
 		core_scheduler()
 			.get_current_task()
 			.borrow_mut()

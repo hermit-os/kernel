@@ -28,17 +28,14 @@ use x86_64::VirtAddr;
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
+#[cfg(feature = "common-os")]
 use crate::arch;
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::processor::{self, FPUState};
 use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
-use crate::env;
-#[cfg(not(feature = "common-os"))]
 use crate::fd::stdio;
 use crate::fd::{Fd, RawFd};
-#[cfg(not(feature = "common-os"))]
-use crate::fd::{STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 #[cfg(feature = "common-os")]
 use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::CoreId;
