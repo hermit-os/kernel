@@ -154,14 +154,22 @@ pub(crate) extern "C" fn invalid_syscall(sys_no: u64) -> ! {
 /// loader will replace this function
 #[linkage = "weak"]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_spawn_process(_path: *const c_char) -> i32 {
+pub extern "C" fn sys_spawn_process(
+	_path: *const c_char,
+	_argv: *const *const c_char,
+	_envp: *const *const c_char,
+) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
 /// loader will replace this function
 #[linkage = "weak"]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_exec(_path: *const c_char) -> i32 {
+pub extern "C" fn sys_exec(
+	_path: *const c_char,
+	_argv: *const *const c_char,
+	_envp: *const *const c_char,
+) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
