@@ -134,7 +134,7 @@ const SYSNO_GETADDRINFO: usize = 52;
 /// number of the system call `freeaddrinfo`
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 const SYSNO_FREEADDRINFO: usize = 53;
-/// number of the system call `availale_parallelism`
+/// number of the system call `available_parallelism`
 const SYSNO_AVAILABLE_PARALLELISM: usize = 54;
 /// number of the system call `getdents64`
 const SYSNO_GET_DENTS64: usize = 55;
