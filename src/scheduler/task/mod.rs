@@ -459,7 +459,7 @@ impl PriorityTaskQueue {
 	}
 }
 
-/// Per-process TLS template used to initialise newly spawned threads.
+/// Per-process TLS template used to initialize newly spawned threads.
 ///
 /// `size` is the byte size of the TLS data block (the offset at which the
 /// TCB / thread pointer lives, also the value that the parent's main thread
