@@ -39,6 +39,7 @@ impl VirtualMemoryArea {
 	}
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Copy, Clone)]
 pub enum MemoryType {
 	HEAP,
@@ -86,7 +87,7 @@ pub extern "C" fn sys_mmap(
 	prot_flags: VirtualMemoryAreaProt,
 	ret: &mut *mut u8,
 ) -> i32 {
-	if *ret == core::ptr::null_mut() {
+	if (*ret).is_null() {
 		let current_task = core_scheduler().get_current_task();
 		let current_task_borrowed = current_task.borrow();
 		let mut guard = current_task_borrowed.vmas.write();
@@ -154,5 +155,5 @@ pub extern "C" fn sys_mmap(
 		return 0;
 	}
 
-	return -i32::from(Errno::Inval);
+	-i32::from(Errno::Inval)
 }
