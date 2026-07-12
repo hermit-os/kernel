@@ -30,10 +30,8 @@ pub fn copy_current_root_page_table() -> usize {
 	use core::ptr;
 
 	use free_list::PageLayout;
-	use x86_64::structures::paging::PageTable;
 	use x86_64::registers::control::Cr3;
-
-	use crate::mm::{FrameAlloc, PageRangeAllocator};
+	use x86_64::structures::paging::PageTable;
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 
@@ -132,7 +130,10 @@ pub fn copy_current_root_page_table() -> usize {
 				// The child now holds an additional user reference to every
 				// frame in this page table.
 				for entry in new_pt.iter() {
-					if entry.flags().contains(PageTableFlags::PRESENT|PageTableFlags::USER_ACCESSIBLE) {
+					if entry
+						.flags()
+						.contains(PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE)
+					{
 						crate::mm::frame_ref_inc(entry.addr().into());
 					}
 				}
@@ -172,11 +173,8 @@ pub fn prepare_mem_copy_on_write() {
 pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u64 {
 	use align_address::Align;
 	use free_list::PageLayout;
-	use memory_addresses::{PhysAddr, VirtAddr};
-	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+	use x86_64::structures::paging::Size4KiB as BasePageSize;
 
-	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
-	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 

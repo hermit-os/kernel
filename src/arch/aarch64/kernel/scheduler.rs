@@ -334,8 +334,7 @@ impl Task {
 	) {
 		unsafe {
 			// Debug marker at the very top of the kernel stack.
-			let mut stack = self.stacks.get_kernel_stack()
-				+ self.stacks.get_kernel_stack_size()
+			let mut stack = self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
 				- TaskStacks::MARKER_SIZE;
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 

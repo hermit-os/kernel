@@ -1,15 +1,9 @@
 pub mod paging;
 
 #[cfg(feature = "common-os")]
-pub use paging::{
-	clear_user_space, create_new_root_page_table,
-	drop_user_space,
-};
-
+pub use paging::{clear_user_space, create_new_root_page_table, drop_user_space};
 #[cfg(all(feature = "common-os", feature = "fork"))]
-pub use paging::{
-	copy_current_root_page_table, copy_kernel_stack_to, prepare_mem_copy_on_write
-};
+pub use paging::{copy_current_root_page_table, copy_kernel_stack_to, prepare_mem_copy_on_write};
 
 /// AArch64 sibling of the x86_64 [`allocate_thread_tls`].
 ///
@@ -26,10 +20,7 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	use free_list::PageLayout;
 	use memory_addresses::arch::aarch64::{PhysAddr, VirtAddr};
 
-	use crate::arch::aarch64::mm::paging::{
-		self, BasePageSize, PageSize, PageTableEntryFlags,
-	};
-	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+	use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 
