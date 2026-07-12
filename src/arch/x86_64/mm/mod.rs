@@ -4,17 +4,17 @@ pub(crate) mod paging;
 use core::slice;
 
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use paging::copy_kernel_stack_to;
+/// Copy the kernel stack pages of the current task to a new base address.
+#[cfg(feature = "common-os")]
+pub use paging::{clear_user_space, drop_user_space};
 #[cfg(feature = "common-os")]
 pub use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 #[cfg(feature = "common-os")]
 use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
-/// Copy the kernel stack pages of the current task to a new base address.
-#[cfg(feature = "common-os")]
-pub use paging::{drop_user_space, clear_user_space};
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub use paging::copy_kernel_stack_to;
 
 #[cfg(feature = "common-os")]
 pub fn create_new_root_page_table() -> usize {
@@ -82,10 +82,8 @@ pub fn copy_current_root_page_table() -> usize {
 	use core::ptr;
 
 	use free_list::PageLayout;
-	use x86_64::structures::paging::PageTable;
 	use x86_64::registers::control::Cr3;
-
-	use crate::mm::{FrameAlloc, PageRangeAllocator};
+	use x86_64::structures::paging::PageTable;
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 
@@ -184,7 +182,10 @@ pub fn copy_current_root_page_table() -> usize {
 				// The child now holds an additional user reference to every
 				// frame in this page table.
 				for entry in new_pt.iter() {
-					if entry.flags().contains(PageTableFlags::PRESENT|PageTableFlags::USER_ACCESSIBLE) {
+					if entry
+						.flags()
+						.contains(PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE)
+					{
 						crate::mm::frame_ref_inc(entry.addr().into());
 					}
 				}
@@ -224,11 +225,8 @@ pub fn prepare_mem_copy_on_write() {
 pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u64 {
 	use align_address::Align;
 	use free_list::PageLayout;
-	use memory_addresses::{PhysAddr, VirtAddr};
-	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+	use x86_64::structures::paging::Size4KiB as BasePageSize;
 
-	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
-	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 

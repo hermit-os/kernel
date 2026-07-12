@@ -232,29 +232,35 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		let is_permission_fault = (0b00_1100..=0b00_1111).contains(&dfsc);
 
 		#[cfg(all(feature = "common-os", feature = "fork"))]
-		if is_write
-			&& is_permission_fault
-			&& do_cow_fault(VirtAddr::new(far))
-		{
+		if is_write && is_permission_fault && do_cow_fault(VirtAddr::new(far)) {
 			// Faulting instruction is retried on `eret` from the trap.
 			return;
 		}
 
 		#[cfg(feature = "common-os")]
 		{
-			use align_address::Align;
 			use core::ops::Bound;
+
+			use align_address::Align;
+
 			use crate::mm::FrameAlloc;
 			use crate::mm::vma::VirtualMemoryAreaProt;
 
 			let addr = VirtAddr::new(far).align_down(BasePageSize::SIZE);
 			let current_task = core_scheduler().get_current_task();
-        	let current_task_borrowed = current_task.borrow();
-        	let guard = current_task_borrowed.vmas.read();
+			let current_task_borrowed = current_task.borrow();
+			let guard = current_task_borrowed.vmas.read();
 
-			if let Some((_, vma)) = guard.range((Bound::Unbounded, Bound::Included(addr))).next_back() {
+			if let Some((_, vma)) = guard
+				.range((Bound::Unbounded, Bound::Included(addr)))
+				.next_back()
+			{
 				if addr >= vma.start && addr < vma.end {
-					let layout = PageLayout::from_size_align(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize).unwrap();
+					let layout = PageLayout::from_size_align(
+						BasePageSize::SIZE as usize,
+						BasePageSize::SIZE as usize,
+					)
+					.unwrap();
 					let frame_range = FrameAlloc::allocate(layout).unwrap();
 					let physaddr = PhysAddr::from(frame_range.start());
 					let mut flags = PageTableEntryFlags::empty();
@@ -266,15 +272,15 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 						flags.execute_disable();
 					}
 
-					paging::map::<BasePageSize>(
-						addr,
-						physaddr,
-						1,
-						flags,
-					);
+					paging::map::<BasePageSize>(addr, physaddr, 1, flags);
 
 					// clear page
-					let slice = unsafe { core::slice::from_raw_parts_mut(addr.as_mut_ptr() as *mut u8, BasePageSize::SIZE as usize) };
+					let slice = unsafe {
+						core::slice::from_raw_parts_mut(
+							addr.as_mut_ptr() as *mut u8,
+							BasePageSize::SIZE as usize,
+						)
+					};
 					slice.fill(0);
 
 					#[cfg(feature = "fork")]
