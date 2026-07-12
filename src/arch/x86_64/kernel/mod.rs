@@ -15,6 +15,8 @@ use crate::env;
 use crate::env::UhyveStartInfo;
 #[cfg(feature = "common-os")]
 pub use self::switch::prepare_fork_child_stack;
+#[cfg(feature = "common-os")]
+use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(feature = "acpi")]
 mod acpi;
@@ -178,28 +180,28 @@ where
 		Option<&'static mut [u8]>,
 	) -> Result<Option<alloc::vec::Vec<u8>>, ()>,
 {
+	use alloc::sync::Arc;
+
+	use ahash::RandomState;
 	use align_address::Align;
 	use free_list::PageLayout;
-	use memory_addresses::{PhysAddr, VirtAddr};
+	use hashbrown::HashMap;
+	use hermit_sync::RwSpinLock;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
-	use crate::fd::{Fd, RawFd};
-	use crate::fd::stdio;
+	use crate::fd::{Fd, RawFd, stdio};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 	use crate::mm::vma::*;
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 	// each process has to provide its own object_map
 	// => create a new one
-	let mut object_map = HashMap::<
-			RawFd,
-			Arc<async_lock::RwLock<Fd>>,
-			RandomState,
-		>::with_hasher(
-			RandomState::with_seeds(0, 0, 0, 0),
-		);
+	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
+		RandomState::with_seeds(0, 0, 0, 0),
+	);
 	stdio::setup(&mut object_map);
 	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
 
@@ -225,17 +227,25 @@ where
 	// Convert at the boundary so the BTreeMap-keyed insert type-checks.
 	{
 		let start: x86_64::VirtAddr = VirtAddr::from(USER_START).into();
-		let end: x86_64::VirtAddr =
-			VirtAddr::from(USER_START + code_size).align_up(BasePageSize::SIZE).into();
-		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(
-			start,
-			VirtualMemoryArea::new(
+		let end: x86_64::VirtAddr = VirtAddr::from(USER_START + code_size)
+			.align_up(BasePageSize::SIZE)
+			.into();
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
 				start,
-				end,
-				VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE | VirtualMemoryAreaProt::EXECUTE,
-				MemoryType::CODE,
-			),
-		);
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ
+						| VirtualMemoryAreaProt::WRITE
+						| VirtualMemoryAreaProt::EXECUTE,
+					MemoryType::CODE,
+				),
+			);
 	}
 
 	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
@@ -260,29 +270,34 @@ where
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
-		let tls_virt = VirtAddr::from(USER_START.as_usize() + code_size + BasePageSize::SIZE as usize);
+		let tls_virt =
+			VirtAddr::from(USER_START.as_usize() + code_size + BasePageSize::SIZE as usize);
 		paging::map::<BasePageSize>(
 			tls_virt,
 			physaddr,
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
-	
+
 		{
 			let start: x86_64::VirtAddr = tls_virt.into();
-			let end: x86_64::VirtAddr =
-				(tls_virt + tls_memsz).align_up(BasePageSize::SIZE).into();
-			core_scheduler().get_current_task().borrow_mut().vmas.write().insert(
-				start,
-				VirtualMemoryArea::new(
+			let end: x86_64::VirtAddr = (tls_virt + tls_memsz).align_up(BasePageSize::SIZE).into();
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.vmas
+				.write()
+				.insert(
 					start,
-					end,
-					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
-					MemoryType::TLS
-				),
-			);
+					VirtualMemoryArea::new(
+						start,
+						end,
+						VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+						MemoryType::TLS,
+					),
+				);
 		}
-	
+
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
 		for elem in block.iter_mut() {
@@ -302,12 +317,10 @@ where
 		let tls_init = func(code_slice, Some(block))?;
 
 		if let Some(init) = tls_init {
-			let template = Arc::new(
-				crate::scheduler::task::TlsTemplate {
-					size: tls_offset,
-					init,
-				},
-			);
+			let template = Arc::new(crate::scheduler::task::TlsTemplate {
+				size: tls_offset,
+				init,
+			});
 			core_scheduler()
 				.get_current_task()
 				.borrow_mut()
@@ -327,8 +340,9 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 
 	use align_address::Align;
 	use free_list::PageLayout;
-	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
-	use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
+	use x86_64::structures::paging::{
+		PageSize, PageTableFlags as PageTableEntryFlags, Size4KiB as BasePageSize,
+	};
 
 	use crate::arch::kernel::scheduler::TaskStacks;
 	use crate::arch::x86_64::mm::paging::PageTableEntryFlagsExt;
@@ -337,6 +351,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 	use crate::mm::vma::*;
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 	debug!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();
@@ -357,8 +372,21 @@ pub unsafe fn jump_to_user_land(entry_point: usize, arg: alloc::vec::Vec<&str>) 
 	);
 	{
 		let start: x86_64::VirtAddr = USER_STACK.into();
-		let end: x86_64::VirtAddr = (USER_STACK+USER_STACK_SIZE).into();
-		core_scheduler().get_current_task().borrow_mut().vmas.write().insert(start, VirtualMemoryArea::new(start, end, VirtualMemoryAreaProt::READ|VirtualMemoryAreaProt::WRITE, MemoryType::STACK));
+		let end: x86_64::VirtAddr = (USER_STACK + USER_STACK_SIZE).into();
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				start,
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+					MemoryType::STACK,
+				),
+			);
 	}
 	#[cfg(feature = "fork")]
 	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
