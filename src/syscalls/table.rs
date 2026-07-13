@@ -37,10 +37,8 @@ const SYSNO_WRITEV: usize = 12;
 /// Number of the system call `readv`
 const SYSNO_READV: usize = 13;
 /// number of the system call `fork`
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const SYSNO_FORK: usize = 14;
 /// number of the system call `waitpid`
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 const SYSNO_WAITPID: usize = 15;
 /// number of the system call `spawn_process`
 const SYSNO_SPAWN_PROCESS: usize = 16;
@@ -185,14 +183,15 @@ pub(crate) unsafe extern "C" fn sys_invalid() {
 	);
 }
 
-/// Sentinel placeholder for unregistered syscall slots on aarch64.
+/// Sentinel placeholder for unregistered syscall slots on aarch64 and
+/// riscv64.
 ///
-/// The aarch64 dispatcher in `do_sync` compares the table entry against
-/// this function pointer before invoking; if it matches, it bails out
-/// with `invalid_syscall(nr)` — the body here is therefore never executed.
-/// The empty `extern "C"` body still gives us a stable, no_mangle symbol
-/// whose address we can compare against.
-#[cfg(target_arch = "aarch64")]
+/// The dispatchers (`do_sync` on aarch64, `user_loop` on riscv64) compare
+/// the table entry against this function pointer before invoking; if it
+/// matches, they bail out without calling it — the body here is therefore
+/// never executed. The empty `extern "C"` body still gives us a stable,
+/// no_mangle symbol whose address we can compare against.
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn sys_invalid() {}
 
@@ -222,11 +221,8 @@ impl SyscallTable {
 		table.handle[SYSNO_OPEN] = sys_open as *const _;
 		table.handle[SYSNO_READV] = sys_readv as *const _;
 		table.handle[SYSNO_WRITEV] = sys_writev as *const _;
-		#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-		{
-			table.handle[SYSNO_FORK] = sys_fork as *const _;
-			table.handle[SYSNO_WAITPID] = sys_waitpid as *const _;
-		}
+		table.handle[SYSNO_FORK] = sys_fork as *const _;
+		table.handle[SYSNO_WAITPID] = sys_waitpid as *const _;
 		table.handle[SYSNO_SPAWN_PROCESS] = sys_spawn_process as *const _;
 		table.handle[SYSNO_CLOCK_GETTIME] = sys_clock_gettime as *const _;
 		table.handle[SYSNO_SPAWN] = sys_spawn as *const _;
@@ -279,7 +275,7 @@ impl SyscallTable {
 }
 
 impl SyscallTable {
-	#[cfg(target_arch = "aarch64")]
+	#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 	#[inline]
 	pub(crate) fn handler(&self, nr: usize) -> *const usize {
 		self.handle[nr]

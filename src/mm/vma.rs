@@ -76,7 +76,14 @@ bitflags! {
 // loaded image while still falling inside L0[2] (which ends at
 // 0x0180_0000_0000). The address is canonical on x86_64 as well
 // (bit 47 = 0).
+#[cfg(not(target_arch = "riscv64"))]
 const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x0140_0000_0000);
+
+// Sv39 only covers 256 GiB, so the riscv64 user layout is denser: code
+// at 64 GiB (`USER_START`), heap at 128 GiB, stack below 192 GiB — all
+// in disjoint 1 GiB root slots of the user region (64..256 GiB).
+#[cfg(target_arch = "riscv64")]
+const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x20_0000_0000);
 
 /// Creates a new virtual memory mapping of the `size` specified with
 /// protection bits specified in `prot_flags`.

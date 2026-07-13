@@ -16,6 +16,8 @@ use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
 #[cfg(target_arch = "aarch64")]
 use memory_addresses::VirtAddr;
+#[cfg(all(target_arch = "riscv64", feature = "common-os"))]
+use memory_addresses::VirtAddr;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
@@ -651,7 +653,11 @@ impl PerCoreScheduler {
 	/// clone the standard descriptors.
 	#[cfg(feature = "common-os")]
 	#[cfg_attr(
-		not(any(target_arch = "x86_64", target_arch = "aarch64")),
+		not(any(
+			target_arch = "x86_64",
+			target_arch = "aarch64",
+			target_arch = "riscv64"
+		)),
 		expect(dead_code)
 	)]
 	pub fn recreate_objmap(&self) -> io::Result<()> {
@@ -1018,6 +1024,22 @@ impl PerCoreScheduler {
 				self.current_task.borrow_mut().last_fpu_state.save();
 			}
 			task.borrow().last_fpu_state.restore();
+
+			// Install the new task's address space before switching to
+			// its kernel stack.
+			#[cfg(feature = "common-os")]
+			{
+				use riscv::register::satp;
+
+				let new_ppn = task.borrow().root_page_table.as_usize() >> 12;
+				if satp::read().ppn() != new_ppn {
+					unsafe {
+						satp::set(satp::Mode::Sv39, 0, new_ppn);
+						riscv::asm::sfence_vma_all();
+					}
+				}
+			}
+
 			self.current_task = task;
 			unsafe {
 				switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
