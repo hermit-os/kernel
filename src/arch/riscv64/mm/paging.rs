@@ -56,6 +56,11 @@ bitflags! {
 
 		/// The RSW field is reserved for use by supervisor
 		const RSW  = (1 << 8) | (1 << 9);
+
+		/// Software marker (RSW bit 8): the frame is shared Copy-On-Write.
+		/// Set together with a cleared WRITABLE bit; the store-fault
+		/// handler clones the frame on the first write.
+		const COW_MARKER = 1 << 8;
 	}
 }
 
@@ -91,6 +96,12 @@ impl PageTableEntryFlags {
 		self
 	}
 
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	pub fn copy_on_write(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::WRITABLE);
+		self.insert(PageTableEntryFlags::COW_MARKER);
+		self
+	}
 }
 
 /// An entry in either table
@@ -137,6 +148,11 @@ impl PageTableEntry {
 		(self.physical_address_and_flags & PageTableEntryFlags::EXECUTABLE.bits()) != 0
 	}
 
+	/// Returns the flag bits of this entry (low 10 bits of the PTE).
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	fn flags(self) -> PageTableEntryFlags {
+		PageTableEntryFlags::from_bits_truncate(self.physical_address_and_flags.as_u64() & 0x3ff)
+	}
 
 	/// Mark this as an invalid (not present) entry
 	fn unset(&mut self) {
@@ -813,13 +829,23 @@ fn clear_user_slots(root_phys: usize) {
 				unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(l0_phys) };
 			for l0_entry in l0.entries.iter_mut() {
 				if l0_entry.is_present() && l0_entry.is_user() {
-					let frame_phys = l0_entry.address().as_usize();
-					let range = free_list::PageRange::new(
-						frame_phys,
-						frame_phys + BasePageSize::SIZE as usize,
-					)
-					.unwrap();
-					unsafe { FrameAlloc::deallocate(range) };
+					// With fork support the frame may be COW-shared with
+					// another address space; it is only released when the
+					// last reference is dropped.
+					#[cfg(feature = "fork")]
+					let release = crate::mm::frame_ref_dec(l0_entry.address());
+					#[cfg(not(feature = "fork"))]
+					let release = true;
+
+					if release {
+						let frame_phys = l0_entry.address().as_usize();
+						let range = free_list::PageRange::new(
+							frame_phys,
+							frame_phys + BasePageSize::SIZE as usize,
+						)
+						.unwrap();
+						unsafe { FrameAlloc::deallocate(range) };
+					}
 				}
 				l0_entry.unset();
 			}
@@ -848,6 +874,214 @@ pub fn drop_user_space(root_phys: usize) {
 	let range =
 		free_list::PageRange::new(root_phys, root_phys + BasePageSize::SIZE as usize).unwrap();
 	unsafe { FrameAlloc::deallocate(range) };
+}
+
+/// Walk the user slots of the currently active root table and mark every
+/// writable user page as Copy-On-Write. Must be called before duplicating
+/// the page table for a fork.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn mark_user_pages_copy_on_write() {
+	let root = active_root_table();
+
+	for root_entry in root.entries[USER_ROOT_INDEX_FIRST..USER_ROOT_INDEX_LAST].iter_mut() {
+		if !root_entry.is_present() {
+			continue;
+		}
+
+		let l1 = unsafe {
+			&mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(
+				root_entry.address().as_usize(),
+			)
+		};
+		for l1_entry in l1.entries.iter_mut() {
+			if !l1_entry.is_present() {
+				continue;
+			}
+
+			let l0 = unsafe {
+				&mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(
+					l1_entry.address().as_usize(),
+				)
+			};
+			for l0_entry in l0.entries.iter_mut() {
+				let flags = l0_entry.flags();
+				let user_writable = l0_entry.is_present()
+					&& flags.contains(PageTableEntryFlags::USER_ACCESSIBLE)
+					&& flags.contains(PageTableEntryFlags::WRITABLE)
+					&& !flags.contains(PageTableEntryFlags::COW_MARKER);
+				if user_writable {
+					let addr = l0_entry.address();
+					let mut new_flags = flags;
+					new_flags.copy_on_write();
+					l0_entry.set(addr, new_flags);
+				}
+			}
+		}
+	}
+
+	asm::sfence_vma_all();
+}
+
+/// Duplicate the currently active root page table for a fork.
+///
+/// The kernel slots are shared with the parent (copied by value, pointing
+/// at the same L1 subtables); the user slots are deep-copied so parent
+/// and child own separate table hierarchies referencing the same
+/// (COW-marked) frames. Every user frame gains one reference for the
+/// child.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn copy_current_root_page_table() -> usize {
+	let cur_root = active_root_table();
+
+	let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+	let new_root_phys = frame_range.start();
+	let new_root =
+		unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(new_root_phys) };
+
+	// Kernel slots are inherited verbatim (sharing the L1 subtables).
+	for (new_entry, cur_entry) in new_root
+		.entries
+		.iter_mut()
+		.zip(cur_root.entries.iter())
+		.take(USER_ROOT_INDEX_FIRST)
+	{
+		*new_entry = *cur_entry;
+	}
+
+	// User slots get a deep copy of the L1/L0 hierarchy.
+	for (idx, new_entry) in new_root.entries[USER_ROOT_INDEX_FIRST..]
+		.iter_mut()
+		.enumerate()
+	{
+		let cur_entry = &cur_root.entries[USER_ROOT_INDEX_FIRST + idx];
+		if !cur_entry.is_present() || USER_ROOT_INDEX_FIRST + idx >= USER_ROOT_INDEX_LAST {
+			new_entry.unset();
+			continue;
+		}
+
+		let cur_l1 = unsafe {
+			&*ptr::with_exposed_provenance::<PageTable<L1Table>>(cur_entry.address().as_usize())
+		};
+
+		let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+		let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+		let new_l1_phys = frame_range.start();
+		let new_l1 =
+			unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(new_l1_phys) };
+
+		for (new_l1_entry, cur_l1_entry) in new_l1.entries.iter_mut().zip(cur_l1.entries.iter()) {
+			if !cur_l1_entry.is_present() {
+				new_l1_entry.unset();
+				continue;
+			}
+
+			let cur_l0 = unsafe {
+				&*ptr::with_exposed_provenance::<PageTable<L0Table>>(
+					cur_l1_entry.address().as_usize(),
+				)
+			};
+
+			let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+			let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+			let new_l0_phys = frame_range.start();
+			let new_l0 = unsafe {
+				&mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(new_l0_phys)
+			};
+
+			// Leaf entries are copied verbatim (already COW-marked by
+			// `mark_user_pages_copy_on_write`); the child holds an
+			// additional reference to every user frame.
+			for (new_l0_entry, cur_l0_entry) in new_l0.entries.iter_mut().zip(cur_l0.entries.iter())
+			{
+				*new_l0_entry = *cur_l0_entry;
+				if cur_l0_entry.is_present() && cur_l0_entry.is_user() {
+					crate::mm::frame_ref_inc(cur_l0_entry.address());
+				}
+			}
+
+			new_l1_entry.set(
+				PhysAddr::new(new_l0_phys as u64),
+				PageTableEntryFlags::empty(),
+			);
+		}
+
+		new_entry.set(
+			PhysAddr::new(new_l1_phys as u64),
+			PageTableEntryFlags::empty(),
+		);
+	}
+
+	new_root_phys
+}
+
+/// Handle a store fault on a Copy-On-Write page of the currently active
+/// address space.
+///
+/// Returns `true` if the fault was resolved (the frame was cloned or
+/// re-marked writable) and the faulting instruction can be retried.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
+	let vaddr = faulting_addr.align_down(BasePageSize::SIZE);
+	if !(USER_SPACE_START..USER_SPACE_END).contains(&vaddr.as_usize()) {
+		return false;
+	}
+
+	let root = active_root_table();
+	let page = Page::<BasePageSize>::including_address(vaddr);
+
+	let root_entry = &root.entries[page.table_index::<L2Table>()];
+	if !root_entry.is_present() {
+		return false;
+	}
+	let l1 = unsafe {
+		&*ptr::with_exposed_provenance::<PageTable<L1Table>>(root_entry.address().as_usize())
+	};
+	let l1_entry = &l1.entries[page.table_index::<L1Table>()];
+	if !l1_entry.is_present() {
+		return false;
+	}
+	let l0 = unsafe {
+		&mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(l1_entry.address().as_usize())
+	};
+	let l0_entry = &mut l0.entries[page.table_index::<L0Table>()];
+
+	let flags = l0_entry.flags();
+	let is_cow = l0_entry.is_present()
+		&& flags.contains(PageTableEntryFlags::USER_ACCESSIBLE)
+		&& flags.contains(PageTableEntryFlags::COW_MARKER)
+		&& !flags.contains(PageTableEntryFlags::WRITABLE);
+	if !is_cow {
+		return false;
+	}
+
+	let src_phys = l0_entry.address();
+	let mut new_flags = flags;
+	new_flags.remove(PageTableEntryFlags::COW_MARKER);
+	new_flags.insert(PageTableEntryFlags::WRITABLE);
+
+	// Drop this address space's COW reference.
+	if crate::mm::frame_ref_dec(src_phys) {
+		// Last reference: no other address space uses the frame anymore,
+		// so it can simply be made writable again.
+		crate::mm::frame_ref_inc(src_phys);
+		l0_entry.set(src_phys, new_flags);
+	} else {
+		// The frame is still shared: clone it and map the copy writable.
+		let new_phys = crate::mm::copy_page(src_phys);
+		crate::mm::frame_ref_inc(new_phys);
+		l0_entry.set(new_phys, new_flags);
+	}
+
+	asm::sfence_vma(0, vaddr.as_usize());
+	true
+}
+
+/// Mark the user pages of the current address space Copy-On-Write in
+/// preparation of duplicating it for a fork.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn prepare_mem_copy_on_write() {
+	mark_user_pages_copy_on_write();
 }
 
 /// Clear the user-space portion of the currently active address space.
