@@ -146,13 +146,26 @@ impl TaskStacks {
 			flags,
 		);
 
+		// User-stack flags differ between unikernel and common-os builds:
+		// in common-os the same VA is reachable from both S-mode (the
+		// kernel prepares the frame) and U-mode (the thread runs on it),
+		// so the mapping needs the U bit.
+		#[cfg(feature = "common-os")]
+		let user_flags = {
+			let mut f = PageTableEntryFlags::empty();
+			f.normal().writable().user().execute_disable();
+			f
+		};
+		#[cfg(not(feature = "common-os"))]
+		let user_flags = flags;
+
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			//virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
 			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
-			flags,
+			user_flags,
 		);
 
 		// clear user stack
@@ -270,6 +283,61 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Exit task
 	debug!("Exit thread with error code 0!");
 	core_scheduler().exit(0)
+}
+
+/// First code of a new user-space thread (spawned via `spawn2` from a
+/// user process), running in kernel mode on the thread's kernel stack.
+/// Enters the user loop, which drops to U-mode at `entry(arg)`.
+#[cfg(feature = "common-os")]
+extern "C" fn user_task_entry(entry: usize, arg: usize, user_stack: usize, tp: usize) -> ! {
+	crate::arch::riscv64::kernel::user_loop(entry, user_stack, tp as u64, [arg, 0, 0])
+}
+
+#[cfg(feature = "common-os")]
+impl Task {
+	/// Craft the initial kernel-stack frame for a new user-space thread.
+	/// When the scheduler first picks this task, `switch_to_task` pops the
+	/// `State` and returns into `user_task_entry`, which enters user mode
+	/// at `func(arg)` on the thread's user stack.
+	///
+	/// `tls_thread_ptr` is the thread-pointer value prepared by
+	/// `scheduler::allocate_thread_tls`; zero leaves `tp` cleared.
+	pub(crate) fn create_user_stack_frame(
+		&mut self,
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		tls_thread_ptr: u64,
+	) {
+		unsafe {
+			// Set a marker for debugging at the very top.
+			let mut stack =
+				self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size() - 0x10u64;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			// Put the State structure expected by the ASM switch() function on the stack.
+			stack -= size_of::<State>();
+
+			let state = stack.as_mut_ptr::<State>();
+			state.cast::<u8>().write_bytes(0, size_of::<State>());
+
+			// The RISC-V psABI requires SP to be 16-byte aligned.
+			self.user_stack_pointer =
+				(self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10u64)
+					.align_down(16u64);
+
+			(*state).ra = core::mem::transmute::<
+				extern "C" fn(usize, usize, usize, usize) -> !,
+				unsafe extern "C" fn(extern "C" fn(usize), usize, u64),
+			>(user_task_entry);
+			(*state).sp = stack.as_usize();
+			(*state).a0 = func as usize;
+			(*state).a1 = arg;
+			(*state).a2 = self.user_stack_pointer.as_usize();
+			(*state).a3 = tls_thread_ptr as usize;
+
+			self.last_stack_pointer = stack;
+		}
+	}
 }
 
 impl TaskFrame for Task {

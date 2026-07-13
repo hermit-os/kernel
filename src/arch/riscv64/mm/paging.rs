@@ -85,6 +85,12 @@ impl PageTableEntryFlags {
 		self.remove(PageTableEntryFlags::EXECUTABLE);
 		self
 	}
+
+	pub fn user(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::USER_ACCESSIBLE);
+		self
+	}
+
 }
 
 /// An entry in either table
@@ -131,6 +137,7 @@ impl PageTableEntry {
 		(self.physical_address_and_flags & PageTableEntryFlags::EXECUTABLE.bits()) != 0
 	}
 
+
 	/// Mark this as an invalid (not present) entry
 	fn unset(&mut self) {
 		self.physical_address_and_flags = PhysAddr::zero();
@@ -151,7 +158,11 @@ impl PageTableEntry {
 
 		let mut flags_to_set = flags;
 		flags_to_set.insert(PageTableEntryFlags::VALID);
-		flags_to_set.insert(PageTableEntryFlags::GLOBAL);
+		// User mappings are per-process and must not survive an address
+		// space switch; only kernel mappings are marked global.
+		if !flags_to_set.contains(PageTableEntryFlags::USER_ACCESSIBLE) {
+			flags_to_set.insert(PageTableEntryFlags::GLOBAL);
+		}
 		self.physical_address_and_flags =
 			PhysAddr::new((physical_address.as_u64() >> 2) | flags_to_set.bits());
 	}
@@ -583,6 +594,43 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	panic!("virtual_to_physical should never reach this point");
 }
 
+/// Start of the user-space region (inclusive). Sv39 root slot 64.
+///
+/// The kernel owns root slots 0..64 (0..64 GiB, see
+/// `mm::virtualmem::kernel_heap_end`); everything from here up to the
+/// end of the Sv39 address space belongs to user processes and is
+/// managed per process in its own root page table.
+#[cfg(feature = "common-os")]
+pub(crate) const USER_SPACE_START: usize = 0x10_0000_0000;
+/// End of the user-space region (exclusive). Sv39 ends at 256 GiB.
+#[cfg(feature = "common-os")]
+pub(crate) const USER_SPACE_END: usize = 0x40_0000_0000;
+
+/// First root-table index of the user-space region.
+#[cfg(feature = "common-os")]
+const USER_ROOT_INDEX_FIRST: usize = USER_SPACE_START >> (PAGE_BITS + 2 * PAGE_MAP_BITS);
+/// Root-table index one past the user-space region.
+#[cfg(feature = "common-os")]
+const USER_ROOT_INDEX_LAST: usize = USER_SPACE_END >> (PAGE_BITS + 2 * PAGE_MAP_BITS);
+
+#[cfg(feature = "common-os")]
+#[inline]
+fn is_user_address(virtual_address: VirtAddr) -> bool {
+	(USER_SPACE_START..USER_SPACE_END).contains(&virtual_address.as_usize())
+}
+
+/// Returns the root page table that is currently installed in `satp`.
+///
+/// Every task owns its root table (or the shared boot root), so mutating
+/// it without a lock is sound as long as the caller only touches the
+/// user-space slots of its own address space.
+#[cfg(feature = "common-os")]
+#[allow(clippy::mut_from_ref)]
+fn active_root_table() -> &'static mut PageTable<L2Table> {
+	let root_phys = satp::read().ppn() << PAGE_BITS;
+	unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(root_phys) }
+}
+
 pub fn map<S: PageSize>(
 	virtual_address: VirtAddr,
 	physical_address: PhysAddr,
@@ -594,11 +642,21 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
+
+	// User mappings are private to the current address space and go into
+	// the root table referenced by `satp`. Kernel mappings go into the
+	// static kernel root table; its L1 subtables are shared with every
+	// process root (see `create_new_root_page_table`), so they become
+	// visible in all address spaces.
+	#[cfg(feature = "common-os")]
+	if is_user_address(virtual_address) {
+		active_root_table().map_pages(range, physical_address, flags);
+		return;
+	}
+
 	ROOT_PAGETABLE
 		.lock()
 		.map_pages(range, physical_address, flags);
-
-	//assert_eq!(virtual_address.as_u64(), physical_address.as_u64(), "Paging not implemented");
 }
 
 pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), usize> {
@@ -624,9 +682,13 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!("Unmapping virtual address {virtual_address:#X} ({count} pages)");
 
 	let range = get_page_range::<S>(virtual_address, count);
-	/* let root_pagetable = unsafe {
-		&mut *mem::transmute::<*mut u64, *mut PageTable<L2Table>>(L2TABLE_ADDRESS.as_mut_ptr())
-	}; */
+
+	#[cfg(feature = "common-os")]
+	if is_user_address(virtual_address) {
+		active_root_table().map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
+		return;
+	}
+
 	ROOT_PAGETABLE
 		.lock()
 		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
@@ -659,4 +721,157 @@ pub unsafe fn enable_page_table() {
 		satp::set(mode, asid, ppn);
 		asm::sfence_vma_all();
 	}
+}
+
+/// Physical address of the static kernel root page table.
+#[cfg(feature = "common-os")]
+pub(crate) fn kernel_root_page_table() -> usize {
+	ROOT_PAGETABLE.data_ptr().expose_provenance()
+}
+
+/// Pre-populate every kernel slot of the static root page table with an
+/// (initially empty) L1 subtable.
+///
+/// `create_new_root_page_table` copies the kernel slots of the static
+/// root *by value* into each new process root, so both share the same L1
+/// subtables. Kernel mappings created later (task stacks, TLS blocks,
+/// heap growth) modify those shared subtables and become visible in all
+/// address spaces — but only if the root slot already existed at copy
+/// time. Allocating all 64 kernel L1 tables up front closes that hole.
+#[cfg(feature = "common-os")]
+pub fn prepopulate_kernel_root() {
+	let mut root = ROOT_PAGETABLE.lock();
+
+	for entry in root.entries[..USER_ROOT_INDEX_FIRST].iter_mut() {
+		if !entry.is_present() {
+			let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+			let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+			let l1_phys = frame_range.start();
+
+			let l1 =
+				unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(l1_phys) };
+			for l1_entry in l1.entries.iter_mut() {
+				l1_entry.unset();
+			}
+
+			// A pointer entry: VALID without R/W/X.
+			entry.set(PhysAddr::new(l1_phys as u64), PageTableEntryFlags::empty());
+		}
+	}
+}
+
+/// Create a new root page table for a fresh address space.
+///
+/// The kernel slots are copied verbatim from the static kernel root, so
+/// the new address space shares all kernel L1 subtables. The user slots
+/// start out empty.
+#[cfg(feature = "common-os")]
+pub fn create_new_root_page_table() -> usize {
+	let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+	let new_root_phys = frame_range.start();
+
+	let new_root =
+		unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(new_root_phys) };
+	let kernel_root = ROOT_PAGETABLE.lock();
+
+	for (new_entry, kernel_entry) in new_root
+		.entries
+		.iter_mut()
+		.zip(kernel_root.entries.iter())
+		.take(USER_ROOT_INDEX_FIRST)
+	{
+		*new_entry = *kernel_entry;
+	}
+	for new_entry in new_root.entries[USER_ROOT_INDEX_FIRST..].iter_mut() {
+		new_entry.unset();
+	}
+
+	new_root_phys
+}
+
+/// Release all user-space mappings of the root table at `root_phys`:
+/// every user-accessible frame and the L1/L0 subtables that held them.
+#[cfg(feature = "common-os")]
+fn clear_user_slots(root_phys: usize) {
+	let root = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(root_phys) };
+
+	for root_entry in root.entries[USER_ROOT_INDEX_FIRST..USER_ROOT_INDEX_LAST].iter_mut() {
+		if !root_entry.is_present() {
+			continue;
+		}
+
+		let l1_phys = root_entry.address().as_usize();
+		let l1 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(l1_phys) };
+		for l1_entry in l1.entries.iter_mut() {
+			if !l1_entry.is_present() {
+				continue;
+			}
+
+			let l0_phys = l1_entry.address().as_usize();
+			let l0 =
+				unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(l0_phys) };
+			for l0_entry in l0.entries.iter_mut() {
+				if l0_entry.is_present() && l0_entry.is_user() {
+					let frame_phys = l0_entry.address().as_usize();
+					let range = free_list::PageRange::new(
+						frame_phys,
+						frame_phys + BasePageSize::SIZE as usize,
+					)
+					.unwrap();
+					unsafe { FrameAlloc::deallocate(range) };
+				}
+				l0_entry.unset();
+			}
+
+			let range =
+				free_list::PageRange::new(l0_phys, l0_phys + BasePageSize::SIZE as usize).unwrap();
+			unsafe { FrameAlloc::deallocate(range) };
+			l1_entry.unset();
+		}
+
+		let range =
+			free_list::PageRange::new(l1_phys, l1_phys + BasePageSize::SIZE as usize).unwrap();
+		unsafe { FrameAlloc::deallocate(range) };
+		root_entry.unset();
+	}
+}
+
+/// Release the address space rooted at `root_phys`: all user mappings,
+/// their page tables, and the root table itself.
+///
+/// Must not be called for the currently installed root page table.
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(root_phys: usize) {
+	clear_user_slots(root_phys);
+
+	let range =
+		free_list::PageRange::new(root_phys, root_phys + BasePageSize::SIZE as usize).unwrap();
+	unsafe { FrameAlloc::deallocate(range) };
+}
+
+/// Clear the user-space portion of the currently active address space.
+///
+/// Used by `exec` to tear down the old process image before the loader
+/// maps the new one.
+#[cfg(feature = "common-os")]
+pub fn clear_user_space() {
+	use crate::core_scheduler;
+	use crate::fd::STDERR_FILENO;
+
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
+		.clear();
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&fd, _| fd <= STDERR_FILENO);
+
+	let root_phys = satp::read().ppn() << PAGE_BITS;
+	clear_user_slots(root_phys);
+
+	asm::sfence_vma_all();
 }

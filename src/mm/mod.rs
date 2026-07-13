@@ -117,6 +117,13 @@ pub(crate) fn init() {
 	unsafe {
 		paging::enable_page_table();
 	}
+	#[cfg(all(target_arch = "riscv64", feature = "common-os"))]
+	{
+		paging::prepopulate_kernel_root();
+		crate::scheduler::BOOT_ROOT_PAGE_TABLE
+			.set(paging::kernel_root_page_table())
+			.unwrap();
+	}
 
 	let total_mem = physicalmem::total_memory_size();
 	info!("Total memory size: {} MiB", total_mem >> 20);
