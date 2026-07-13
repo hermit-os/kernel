@@ -7,9 +7,7 @@ use free_list::{FreeList, PageLayout, PageRange, PageRangeError};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 
-#[cfg(target_arch = "x86_64")]
-use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, PageSize};
 use crate::env;
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
@@ -67,7 +65,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 			type IdentityPageSize = paging::BasePageSize;
 		}
 		target_arch = "riscv64" => {
-			type IdentityPageSize = HugePageSize;
+			type IdentityPageSize = paging::HugePageSize;
 		}
 		target_arch = "x86_64" => {
 			type IdentityPageSize = paging::LargePageSize;
@@ -85,22 +83,6 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 		.step_by(IdentityPageSize::SIZE.try_into().unwrap())
 		.map(|addr| PhysAddr::new(addr.try_into().unwrap()))
 		.for_each(paging::identity_map::<IdentityPageSize>);
-
-	// Map the physical memory again if DeviceAlloc operates at an offset
-	if DeviceAlloc.phys_offset() != VirtAddr::zero() {
-		let flags = {
-			let mut flags = PageTableEntryFlags::empty();
-			flags.normal().writable().execute_disable();
-			flags
-		};
-		(start..end)
-			.step_by(IdentityPageSize::SIZE.try_into().unwrap())
-			.for_each(|addr| {
-				let phys_addr = PhysAddr::new(addr.try_into().unwrap());
-				let virt_addr = VirtAddr::from_ptr(DeviceAlloc.ptr_from::<()>(phys_addr));
-				paging::map::<IdentityPageSize>(virt_addr, phys_addr, 1, flags);
-			});
-	}
 }
 
 unsafe fn detect_from_fdt() -> Result<(), ()> {
@@ -201,12 +183,7 @@ impl PageRangeExt for PageRange {
 }
 
 unsafe fn init() {
-	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
-		let start = DeviceAlloc.phys_offset();
-		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
-		let count = usize::try_from(count).unwrap();
-		paging::unmap::<HugePageSize>(start, count);
-	}
+	DeviceAlloc::init();
 
 	unsafe {
 		detect_from_fdt().unwrap();
