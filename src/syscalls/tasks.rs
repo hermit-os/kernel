@@ -18,19 +18,17 @@ pub type Pid = i32;
 
 /// Fork the current process.
 /// Returns the child's PID to the parent, and 0 to the child.
-#[cfg(all(
-	any(target_arch = "x86_64", target_arch = "aarch64"),
-	feature = "common-os"
-))]
+/// Fork is not implemented on riscv64 yet, so the call fails there.
+#[cfg(feature = "common-os")]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fork() -> i32 {
-	#[cfg(feature = "fork")]
+	#[cfg(all(feature = "fork", any(target_arch = "x86_64", target_arch = "aarch64")))]
 	unsafe {
 		scheduler::fork().into()
 	}
 
-	#[cfg(not(feature = "fork"))]
+	#[cfg(not(all(feature = "fork", any(target_arch = "x86_64", target_arch = "aarch64"))))]
 	{
 		-i32::from(Errno::Nosys)
 	}
@@ -47,10 +45,7 @@ pub extern "C" fn sys_fork() -> i32 {
 
 /// Waitpid block the current process until termination of process `pid`.
 /// Returns 0 is the process terminates
-#[cfg(all(
-	any(target_arch = "x86_64", target_arch = "aarch64"),
-	feature = "common-os"
-))]
+#[cfg(feature = "common-os")]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_waitpid(pid: Pid) -> i32 {
@@ -233,19 +228,13 @@ pub unsafe extern "C" fn sys_spawn2(
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	#[cfg(all(
-		any(target_arch = "x86_64", target_arch = "aarch64"),
-		feature = "common-os"
-	))]
+	#[cfg(feature = "common-os")]
 	{
 		unsafe {
 			scheduler::spawn_thread(func, arg, Priority::from(prio), stack_size, selector).into()
 		}
 	}
-	#[cfg(not(all(
-		any(target_arch = "x86_64", target_arch = "aarch64"),
-		feature = "common-os"
-	)))]
+	#[cfg(not(feature = "common-os"))]
 	{
 		unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
 	}
@@ -261,18 +250,12 @@ pub unsafe extern "C" fn sys_spawn(
 	selector: isize,
 ) -> i32 {
 	let new_id = {
-		#[cfg(all(
-			any(target_arch = "x86_64", target_arch = "aarch64"),
-			feature = "common-os"
-		))]
+		#[cfg(feature = "common-os")]
 		unsafe {
 			scheduler::spawn_thread(func, arg, Priority::from(prio), USER_STACK_SIZE, selector)
 				.into()
 		}
-		#[cfg(not(all(
-			any(target_arch = "x86_64", target_arch = "aarch64"),
-			feature = "common-os"
-		)))]
+		#[cfg(not(feature = "common-os"))]
 		unsafe {
 			scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
 		}
