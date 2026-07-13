@@ -22,7 +22,7 @@ use crate::fd::{AccessPermission, ObjectInterface, PollEvent, StatusFlags};
 use crate::fd::{Endpoint, ListenEndpoint, SocketOption};
 use crate::fs::mem::{MemDirectoryInterface, RamFileInterface, RomFileInterface};
 #[cfg(feature = "uhyve")]
-use crate::fs::uhyve::UhyveFileHandle;
+use crate::fs::uhyve::{UhyveDirectoryHandle, UhyveFileHandle};
 #[cfg(feature = "virtio-fs")]
 use crate::fs::virtio_fs::{VirtioFsDirectoryHandle, VirtioFsFileHandle};
 use crate::fs::{DirectoryReader, FileAttr, SeekWhence};
@@ -58,6 +58,8 @@ pub(crate) enum Fd {
 	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
 	RandomFile(RandomFile),
+	#[cfg(feature = "uhyve")]
+	UhyveDirectoryHandle(UhyveDirectoryHandle),
 }
 
 macro_rules! fd_from {
@@ -108,6 +110,8 @@ fd_from! {
 	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
 	RandomFile(RandomFile),
+	#[cfg(feature = "uhyve")]
+	UhyveDirectoryHandle(UhyveDirectoryHandle),
 }
 
 impl ObjectInterface for Fd {
@@ -142,6 +146,8 @@ impl ObjectInterface for Fd {
 			#[cfg(feature = "uhyve")]
 			Self::UhyveFileHandle(fd) => fd,
 			Self::RandomFile(fd) => fd,
+			#[cfg(feature = "uhyve")]
+			Self::UhyveDirectoryHandle(fd) => fd,
 		} {
 			async fn poll(&self, event: PollEvent) -> io::Result<PollEvent>;
 			async fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
