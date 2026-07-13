@@ -293,6 +293,50 @@ extern "C" fn user_task_entry(entry: usize, arg: usize, user_stack: usize, tp: u
 	crate::arch::riscv64::kernel::user_loop(entry, user_stack, tp as u64, [arg, 0, 0])
 }
 
+/// First code of a fork child, running in kernel mode on the child's
+/// fresh kernel stack. Re-enters user mode with the parent's saved
+/// register state (`a0` already patched to 0 by `fork_from_user_context`).
+#[cfg(all(feature = "common-os", feature = "fork"))]
+extern "C" fn fork_child_entry(ctx_box: usize) -> ! {
+	let ctx = unsafe {
+		alloc::boxed::Box::from_raw(core::ptr::with_exposed_provenance_mut::<
+			trapframe::UserContext,
+		>(ctx_box))
+	};
+	crate::arch::riscv64::kernel::user_loop_resume(*ctx)
+}
+
+/// Craft the initial kernel-stack frame for a fork child. When the
+/// scheduler first picks the child, `switch_to_task` pops the `State`
+/// and returns into `fork_child_entry` with the boxed `UserContext` as
+/// argument. Returns the child's initial `last_stack_pointer`.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub(crate) fn create_fork_stack_frame(
+	stacks: &TaskStacks,
+	ctx: alloc::boxed::Box<trapframe::UserContext>,
+) -> VirtAddr {
+	unsafe {
+		// Set a marker for debugging at the very top.
+		let mut stack = stacks.get_kernel_stack() + stacks.get_kernel_stack_size() - 0x10u64;
+		*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+		// Put the State structure expected by the ASM switch() function on the stack.
+		stack -= size_of::<State>();
+
+		let state = stack.as_mut_ptr::<State>();
+		state.cast::<u8>().write_bytes(0, size_of::<State>());
+
+		(*state).ra = core::mem::transmute::<
+			extern "C" fn(usize) -> !,
+			unsafe extern "C" fn(extern "C" fn(usize), usize, u64),
+		>(fork_child_entry);
+		(*state).sp = stack.as_usize();
+		(*state).a0 = alloc::boxed::Box::into_raw(ctx).expose_provenance();
+
+		stack
+	}
+}
+
 #[cfg(feature = "common-os")]
 impl Task {
 	/// Craft the initial kernel-stack frame for a new user-space thread.
