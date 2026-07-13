@@ -37,7 +37,7 @@ const SYSNO_WRITEV: usize = 12;
 /// Number of the system call `readv`
 const SYSNO_READV: usize = 13;
 /// number of the system call `fork`
-const SYSNO_FORK: usize = 14;
+pub(crate) const SYSNO_FORK: usize = 14;
 /// number of the system call `waitpid`
 const SYSNO_WAITPID: usize = 15;
 /// number of the system call `spawn_process`
