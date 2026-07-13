@@ -91,6 +91,8 @@ pub fn boot_processor_init() {
 	crate::mm::init();
 	crate::mm::print_information();
 	interrupts::install();
+	#[cfg(feature = "pci")]
+	pci::init();
 
 	finish_processor_init();
 }
