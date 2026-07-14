@@ -852,6 +852,7 @@ fn init<T>(
 where
 	T: crate::drivers::virtio::VirtioDriver,
 	T::Config: CapCfg,
+	virtio::F: From<T::DeviceFeatures> + AsRef<T::DeviceFeatures> + AsMut<T::DeviceFeatures>,
 {
 	// enable bus master mode
 	device.set_command(pci_types::CommandRegister::BUS_MASTER_ENABLE);
@@ -878,7 +879,7 @@ where
 		}
 		Err((err, mut caps_coll)) => {
 			caps_coll.com_cfg.set_failed();
-			Err(err.into())
+			Err(err)
 		}
 	}
 }

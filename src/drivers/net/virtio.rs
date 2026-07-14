@@ -27,7 +27,7 @@ use self::error::VirtioNetError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio::constants::BUFF_PER_PACKET;
 use crate::drivers::net::{NetworkDriver, mtu};
-use crate::drivers::virtio::ControlRegisters;
+use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::packed::PackedVq;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
@@ -38,13 +38,7 @@ use crate::drivers::{Driver, InterruptHandlerMap, InterruptLine};
 use crate::executor::network::wake_network_waker;
 use crate::mm::device_alloc::DeviceAlloc;
 
-/// A wrapper struct for the raw configuration structure.
-/// Handling the right access to fields, as some are read-only
-/// for the driver.
-pub(crate) struct NetDevCfg {
-	pub raw: VolatileRef<'static, virtio::net::Config, ReadOnly>,
-	pub features: virtio::net::F,
-}
+type NetDevCfg = crate::drivers::virtio::DevCfg<VirtioNetDriver>;
 
 fn determine_mtu(dev_cfg: &NetDevCfg) -> u16 {
 	// If VIRTIO_NET_F_MTU is negotiated, "the driver uses mtu as the maximum MTU value"
@@ -98,7 +92,7 @@ pub struct RxQueues {
 }
 
 impl RxQueues {
-	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
+	fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
 			buf_size: determine_rx_buf_size(dev_cfg),
@@ -173,7 +167,7 @@ pub struct TxQueues {
 }
 
 impl TxQueues {
-	pub fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
+	fn new(vqs: Vec<VirtQueue>, dev_cfg: &NetDevCfg) -> Self {
 		Self {
 			vqs,
 			buf_size: determine_mtu(dev_cfg).into(),
@@ -748,6 +742,34 @@ impl VirtioNetDriver {
 impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 	type Config = virtio::net::Config;
 	type Error = VirtioNetError;
+	type DeviceFeatures = virtio::net::F;
+
+	const MINIMAL_FEATURES: Self::DeviceFeatures =
+		virtio::net::F::VERSION_1.union(virtio::net::F::MAC);
+	// If wanted, push new features into feats here:
+	const OPTIONAL_FEATURES: Self::DeviceFeatures =
+		// Indirect descriptors can be used
+		virtio::net::F::INDIRECT_DESC
+			// Packed Vq can be used
+			.union(virtio::net::F::RING_PACKED)
+			.union(virtio::net::F::NOTIFICATION_DATA)
+			// MTU setting can be used
+			.union(virtio::net::F::MTU)
+			// Driver can merge receive buffers
+			.union(virtio::net::F::MRG_RXBUF)
+			// the link status can be announced
+			.union(virtio::net::F::STATUS)
+			// control queue support
+			.union(virtio::net::F::CTRL_VQ)
+			// Multiqueue support
+			.union(virtio::net::F::MQ)
+			// Checksum calculation can partially be offloaded to the device
+			.union(virtio::net::F::CSUM)
+			// Partially checksummed frames can be received
+			.union(virtio::net::F::GUEST_CSUM)
+			// Frames with coalesced TCP segments can be received
+			.union(virtio::net::F::GUEST_TSO4)
+			.union(virtio::net::F::GUEST_TSO6);
 
 	/// Initializes the device in adherence to specification. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
@@ -761,115 +783,61 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 		),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
-	) -> Result<VirtioNetDriver, (VirtioNetError, UniCapsColl)> {
-		// Reset
-		caps_coll.com_cfg.reset_dev();
+	) -> Result<Self, (VirtioError, UniCapsColl)> {
+		let mut mtu = None;
+		let mut recv_vqs = None;
+		let mut send_vqs = None;
+		let mut ctrl_vq = None;
+		let mut send_capacity = None;
 
-		// Indicate device, that OS noticed it
-		caps_coll.com_cfg.ack_dev();
+		let dev_cfg = match caps_coll.init_caps(dev_cfg_raw, |caps_coll, dev_cfg| {
+			mtu = Some(determine_mtu(dev_cfg));
+			let dev_spec_init = Self::dev_spec_init(caps_coll, dev_cfg)?;
+			debug!("Using RX buffer size of {}", dev_spec_init.0.buf_size);
+			recv_vqs = Some(dev_spec_init.0);
+			send_vqs = Some(dev_spec_init.1);
+			#[cfg_attr(
+				not(all(feature = "pci", target_arch = "x86_64")),
+				expect(unused_variables)
+			)]
+			let num_vqs = dev_spec_init.2;
+			ctrl_vq = Some(dev_spec_init.3);
+			send_capacity = Some(dev_spec_init.4);
 
-		// Indicate device, that driver is able to handle it
-		caps_coll.com_cfg.set_drv();
+			info!("Device specific initialization for Virtio network device finished",);
 
-		let minimal_features = virtio::net::F::VERSION_1 | virtio::net::F::MAC;
-
-		// If wanted, push new features into feats here:
-		let features = minimal_features
-			// Indirect descriptors can be used
-			| virtio::net::F::INDIRECT_DESC
-			// Packed Vq can be used
-			| virtio::net::F::RING_PACKED
-			| virtio::net::F::NOTIFICATION_DATA
-			// MTU setting can be used
-			| virtio::net::F::MTU
-			// Driver can merge receive buffers
-			| virtio::net::F::MRG_RXBUF
-			// the link status can be announced
-			| virtio::net::F::STATUS
-			// control queue support
-			| virtio::net::F::CTRL_VQ
-			// Multiqueue support
-			| virtio::net::F::MQ
-			// Checksum calculation can partially be offloaded to the device
-			| virtio::net::F::CSUM
-			// Partially checksummed frames can be received
-			| virtio::net::F::GUEST_CSUM
-			// Frames with coalesced TCP segments can be received
-			| virtio::net::F::GUEST_TSO4
-			| virtio::net::F::GUEST_TSO6;
-
-		let negotiated_features = caps_coll
-			.com_cfg
-			.control_registers()
-			.negotiate_features(features);
-
-		if !negotiated_features.contains(minimal_features) {
-			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err((VirtioNetError::FailFeatureNeg, caps_coll));
-		}
-
-		// Indicates the device, that the current feature set is final for the driver
-		// and will not be changed.
-		caps_coll.com_cfg.features_ok();
-
-		// Checks if the device has accepted final set. This finishes feature negotiation.
-		let dev_cfg = if caps_coll.com_cfg.check_features() {
-			info!("Features have been negotiated between virtio network device and driver.",);
-			// Set feature set in device config fur future use.
-			NetDevCfg {
-				raw: dev_cfg_raw,
-				features: negotiated_features,
+			match &mut caps_coll.int_cap {
+				InterruptCapability::IsrStatus(_) => {
+					let irq = irq.unwrap();
+					handlers
+						.entry(irq)
+						.or_default()
+						.push_back(crate::executor::network::network_handler);
+					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+					info!("Virtio interrupt handler at line {irq}");
+				}
+				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+				InterruptCapability::Msix(msix_table) => {
+					let recv_vqs = (0..num_vqs).step_by(2);
+					let send_vqs = (1..num_vqs).step_by(2);
+					let ctrl_vq = dev_cfg
+						.features
+						.contains(virtio::net::F::CTRL_VQ)
+						.then_some(num_vqs);
+					caps_coll.com_cfg.register_msix_vectors(
+						msix_table,
+						handlers,
+						crate::executor::network::network_device_configuration_handler,
+						[(recv_vqs, wake_network_waker as fn())].into_iter(),
+						send_vqs.chain(ctrl_vq),
+					);
+				}
 			}
-		} else {
-			error!("The device does not support our subset of features.");
-			return Err((VirtioNetError::FailFeatureNeg, caps_coll));
+			Ok(())
+		}) {
+			Ok(dev_cfg) => dev_cfg,
+			Err(err) => return Err((err, caps_coll)),
 		};
-
-		let mtu = determine_mtu(&dev_cfg);
-		#[cfg_attr(
-			not(all(feature = "pci", target_arch = "x86_64")),
-			expect(unused_variables)
-		)]
-		let (recv_vqs, send_vqs, num_vqs, ctrl_vq, send_capacity) =
-			match Self::dev_spec_init(&mut caps_coll, &dev_cfg) {
-				Ok(it) => it,
-				Err(err) => return Err((err, caps_coll)),
-			};
-
-		debug!("Using RX buffer size of {}", recv_vqs.buf_size);
-
-		info!("Device specific initialization for Virtio network device finished",);
-
-		match &mut caps_coll.int_cap {
-			InterruptCapability::IsrStatus(_) => {
-				let irq = irq.unwrap();
-				handlers
-					.entry(irq)
-					.or_default()
-					.push_back(crate::executor::network::network_handler);
-				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
-			}
-			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
-			InterruptCapability::Msix(msix_table) => {
-				let recv_vqs = (0..num_vqs).step_by(2);
-				let send_vqs = (1..num_vqs).step_by(2);
-				let ctrl_vq = dev_cfg
-					.features
-					.contains(virtio::net::F::CTRL_VQ)
-					.then_some(num_vqs);
-				caps_coll.com_cfg.register_msix_vectors(
-					msix_table,
-					handlers,
-					crate::executor::network::network_device_configuration_handler,
-					[(recv_vqs, wake_network_waker as fn())].into_iter(),
-					send_vqs.chain(ctrl_vq),
-				);
-			}
-		}
-
-		// At this point the device is "live"
-		caps_coll.com_cfg.drv_ok();
 
 		let mut checksums = ChecksumCapabilities::default();
 		// Not only should we offload receive checksum validation to the device for performance when possible, we MUST
@@ -892,11 +860,11 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			caps_coll,
-			mtu,
-			ctrl_vq,
-			recv_vqs,
-			send_vqs,
-			send_capacity,
+			mtu: mtu.unwrap(),
+			ctrl_vq: ctrl_vq.unwrap(),
+			recv_vqs: recv_vqs.unwrap(),
+			send_vqs: send_vqs.unwrap(),
+			send_capacity: send_capacity.unwrap(),
 			checksums,
 		})
 	}
@@ -1069,9 +1037,6 @@ pub mod error {
 			"Virtio network driver failed, for device {0:x}, due to a missing or malformed device config!"
 		)]
 		NoDevCfg(u16),
-
-		#[error("Virtio network driver failed, device did not acknowledge negotiated feature set!")]
-		FailFeatureNeg,
 	}
 }
 

@@ -15,8 +15,7 @@ use crate::config::{VIRTIO_MAX_QUEUE_SIZE, VSOCK_PACKET_SIZE};
 use crate::drivers::mmio::get_vsock_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_vsock_driver;
-use crate::drivers::virtio::ControlRegisters;
-use crate::drivers::virtio::error::VirtioVsockError;
+use crate::drivers::virtio::error::{VirtioError, VirtioVsockError};
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -238,13 +237,7 @@ impl EventQueue {
 	}
 }
 
-/// A wrapper struct for the raw configuration structure.
-/// Handling the right access to fields, as some are read-only
-/// for the driver.
-pub(crate) struct VsockDevCfg {
-	pub raw: VolatileRef<'static, virtio::vsock::Config, ReadOnly>,
-	pub features: virtio::vsock::F,
-}
+type VsockDevCfg = super::virtio::DevCfg<VirtioVsockDriver>;
 
 pub(crate) struct VirtioVsockDriver {
 	pub(super) dev_cfg: VsockDevCfg,
@@ -310,6 +303,10 @@ impl VirtioVsockDriver {
 impl super::virtio::VirtioDriver for VirtioVsockDriver {
 	type Config = virtio::vsock::Config;
 	type Error = VirtioVsockError;
+	type DeviceFeatures = virtio::vsock::F;
+
+	const MINIMAL_FEATURES: Self::DeviceFeatures = virtio::vsock::F::VERSION_1;
+	const OPTIONAL_FEATURES: Self::DeviceFeatures = virtio::vsock::F::empty();
 
 	/// Initializes the device in adherence to specification. Returns Some(VirtioVsockError)
 	/// upon failure and None in case everything worked as expected.
@@ -323,120 +320,87 @@ impl super::virtio::VirtioDriver for VirtioVsockDriver {
 		),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
-	) -> Result<Self, (VirtioVsockError, UniCapsColl)> {
-		// Reset
-		caps_coll.com_cfg.reset_dev();
-
-		// Indicate device, that OS noticed it
-		caps_coll.com_cfg.ack_dev();
-
-		// Indicate device, that driver is able to handle it
-		caps_coll.com_cfg.set_drv();
-
-		let minimal_features = virtio::vsock::F::VERSION_1;
-		let negotiated_features = caps_coll
-			.com_cfg
-			.control_registers()
-			.negotiate_features(minimal_features);
-
-		if !negotiated_features.contains(minimal_features) {
-			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err((VirtioVsockError::FailFeatureNeg, caps_coll));
-		}
-
-		// Indicates the device, that the current feature set is final for the driver
-		// and will not be changed.
-		caps_coll.com_cfg.features_ok();
-
-		// Checks if the device has accepted final set. This finishes feature negotiation.
-		let dev_cfg = if caps_coll.com_cfg.check_features() {
-			info!("Features have been negotiated between virtio socket device and driver.",);
-			// Set feature set in device config fur future use.
-			VsockDevCfg {
-				raw: dev_cfg_raw,
-				features: negotiated_features,
-			}
-		} else {
-			error!("The device does not support our subset of features.");
-			return Err((VirtioVsockError::FailFeatureNeg, caps_coll));
-		};
-
+	) -> Result<Self, (VirtioError, UniCapsColl)> {
 		let mut recv_vq = RxQueue::new();
-		// create the queues and tell device about them
-		recv_vq.add(VirtQueue::Split(
-			SplitVq::new(
-				&mut caps_coll.com_cfg,
-				&caps_coll.notif_cfg,
-				VIRTIO_MAX_QUEUE_SIZE,
-				0,
-				dev_cfg.features.into(),
-			)
-			.unwrap(),
-		));
-		// Interrupt for receiving packets is wanted
-		recv_vq.enable_notifs();
-
 		let mut send_vq = TxQueue::new();
-		send_vq.add(VirtQueue::Split(
-			SplitVq::new(
-				&mut caps_coll.com_cfg,
-				&caps_coll.notif_cfg,
-				VIRTIO_MAX_QUEUE_SIZE,
-				1,
-				dev_cfg.features.into(),
-			)
-			.unwrap(),
-		));
-		// Interrupt for communicating that a sent packet left, is not needed
-		send_vq.disable_notifs();
-
 		let mut event_vq = EventQueue::new();
-		// create the queues and tell device about them
-		event_vq.add(VirtQueue::Split(
-			SplitVq::new(
-				&mut caps_coll.com_cfg,
-				&caps_coll.notif_cfg,
-				VIRTIO_MAX_QUEUE_SIZE,
-				2,
-				dev_cfg.features.into(),
-			)
-			.unwrap(),
-		));
+		let dev_cfg = match caps_coll.init_caps(dev_cfg_raw, |caps_coll, dev_cfg| {
+			// create the queues and tell device about them
+			recv_vq.add(VirtQueue::Split(
+				SplitVq::new(
+					&mut caps_coll.com_cfg,
+					&caps_coll.notif_cfg,
+					VIRTIO_MAX_QUEUE_SIZE,
+					0,
+					virtio::F::from(dev_cfg.features),
+				)
+				.unwrap(),
+			));
+			// Interrupt for receiving packets is wanted
+			recv_vq.enable_notifs();
 
-		match &mut caps_coll.int_cap {
-			InterruptCapability::IsrStatus(_) => {
-				let irq = irq.unwrap();
-				handlers.entry(irq).or_default().push_back(|| {
-					if let Some(driver) = get_vsock_driver() {
-						driver.lock().handle_interrupt();
-					};
-				});
-				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
-			}
-			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
-			InterruptCapability::Msix(msix_table) => {
-				caps_coll.com_cfg.register_msix_vectors(
-					msix_table,
-					handlers,
-					|| {
+			send_vq.add(VirtQueue::Split(
+				SplitVq::new(
+					&mut caps_coll.com_cfg,
+					&caps_coll.notif_cfg,
+					VIRTIO_MAX_QUEUE_SIZE,
+					1,
+					virtio::F::from(dev_cfg.features),
+				)
+				.unwrap(),
+			));
+			// Interrupt for communicating that a sent packet left, is not needed
+			send_vq.disable_notifs();
+
+			// create the queues and tell device about them
+			event_vq.add(VirtQueue::Split(
+				SplitVq::new(
+					&mut caps_coll.com_cfg,
+					&caps_coll.notif_cfg,
+					VIRTIO_MAX_QUEUE_SIZE,
+					2,
+					virtio::F::from(dev_cfg.features),
+				)
+				.unwrap(),
+			));
+
+			match &mut caps_coll.int_cap {
+				InterruptCapability::IsrStatus(_) => {
+					let irq = irq.unwrap();
+					handlers.entry(irq).or_default().push_back(|| {
 						if let Some(driver) = get_vsock_driver() {
-							driver.lock().handle_device_configuration_interrupt();
+							driver.lock().handle_interrupt();
 						};
-					},
-					// The no-op handler allows the processor to receive an interrupt and reschedule.
-					// FIXME: replace with a function to wake the vsock task waker once it is not woken unconditionally.
-					[([0], (|| {}) as fn())].into_iter(),
-					1..3,
-				);
+					});
+					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+					info!("Virtio interrupt handler at line {irq}");
+				}
+				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+				InterruptCapability::Msix(msix_table) => {
+					caps_coll.com_cfg.register_msix_vectors(
+						msix_table,
+						handlers,
+						|| {
+							if let Some(driver) = get_vsock_driver() {
+								driver.lock().handle_device_configuration_interrupt();
+							};
+						},
+						// The no-op handler allows the processor to receive an interrupt and reschedule.
+						// FIXME: replace with a function to wake the vsock task waker once it is not woken unconditionally.
+						[([0], (|| {}) as fn())].into_iter(),
+						1..3,
+					);
+				}
 			}
-		}
 
-		// Interrupt for event packets is wanted
-		event_vq.enable_notifs();
+			// Interrupt for event packets is wanted
+			event_vq.enable_notifs();
 
-		// At this point the device is "live"
-		caps_coll.com_cfg.drv_ok();
+			Ok(())
+		}) {
+			Ok(dev_cfg) => dev_cfg,
+			Err(err) => return Err((err, caps_coll)),
+		};
 
 		Ok(Self {
 			dev_cfg,
@@ -480,6 +444,7 @@ pub mod error {
 
 	/// Virtio socket device error enum.
 	#[derive(Error, Debug, Copy, Clone)]
+	#[allow(clippy::enum_variant_names)]
 	pub enum VirtioVsockError {
 		#[error(
 			"Virtio socket device driver failed, for device {0:x}, due to a missing or malformed device config!"
@@ -500,10 +465,5 @@ pub mod error {
 			"Virtio socket device driver failed, for device {0:x}, due to a missing or malformed notification config!"
 		)]
 		NoNotifCfg(u16),
-
-		#[error(
-			"Virtio socket device driver failed, device did not acknowledge negotiated feature set!"
-		)]
-		FailFeatureNeg,
 	}
 }

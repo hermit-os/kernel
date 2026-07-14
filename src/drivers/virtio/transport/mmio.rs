@@ -455,8 +455,9 @@ fn init<T: crate::drivers::virtio::VirtioDriver>(
 	registers: VolatileRef<'static, DeviceRegisters>,
 	irq: InterruptLine,
 	handlers: &mut InterruptHandlerMap,
-) -> Result<T, VirtioError> {
-	let drv =
-		T::init_dev(map_caps(registers), handlers, Some(irq)).map_err(|(err, _)| err.into())?;
-	Ok(drv)
+) -> Result<T, VirtioError>
+where
+	virtio::F: From<T::DeviceFeatures> + AsRef<T::DeviceFeatures> + AsMut<T::DeviceFeatures>,
+{
+	T::init_dev(map_caps(registers), handlers, Some(irq)).map_err(|(err, _)| err)
 }

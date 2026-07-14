@@ -21,8 +21,7 @@ use crate::drivers::error::DriverError;
 use crate::drivers::mmio::get_console_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_console_driver;
-use crate::drivers::virtio::ControlRegisters;
-use crate::drivers::virtio::error::VirtioConsoleError;
+use crate::drivers::virtio::error::{VirtioConsoleError, VirtioError};
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -236,13 +235,7 @@ impl TxQueue {
 	}
 }
 
-/// A wrapper struct for the raw configuration structure.
-/// Handling the right access to fields, as some are read-only
-/// for the driver.
-pub(crate) struct ConsoleDevCfg {
-	pub raw: VolatileRef<'static, Config, ReadOnly>,
-	pub features: virtio::console::F,
-}
+type ConsoleDevCfg = super::virtio::DevCfg<VirtioConsoleDriver>;
 
 pub(crate) struct VirtioConsoleDriver {
 	pub(super) dev_cfg: ConsoleDevCfg,
@@ -301,107 +294,76 @@ impl VirtioConsoleDriver {
 impl super::virtio::VirtioDriver for VirtioConsoleDriver {
 	type Config = Config;
 	type Error = VirtioConsoleError;
+	type DeviceFeatures = virtio::console::F;
+
+	const MINIMAL_FEATURES: Self::DeviceFeatures = virtio::console::F::VERSION_1;
+	const OPTIONAL_FEATURES: Self::DeviceFeatures = virtio::console::F::empty();
 
 	fn init_dev(
 		(mut caps_coll, dev_cfg_raw): (UniCapsColl, VolatileRef<'static, Config, ReadOnly>),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
-	) -> Result<Self, (VirtioConsoleError, UniCapsColl)> {
-		// Reset
-		caps_coll.com_cfg.reset_dev();
-
-		// Indicate device, that OS noticed it
-		caps_coll.com_cfg.ack_dev();
-
-		// Indicate device, that driver is able to handle it
-		caps_coll.com_cfg.set_drv();
-
-		let minimal_features = virtio::console::F::VERSION_1;
-		let negotiated_features = caps_coll
-			.com_cfg
-			.control_registers()
-			.negotiate_features(minimal_features);
-
-		if !negotiated_features.contains(minimal_features) {
-			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err((VirtioConsoleError::FailFeatureNeg, caps_coll));
-		}
-
-		// Indicates the device, that the current feature set is final for the driver
-		// and will not be changed.
-		caps_coll.com_cfg.features_ok();
-
-		// Checks if the device has accepted final set. This finishes feature negotiation.
-		let dev_cfg = if caps_coll.com_cfg.check_features() {
-			info!("Features have been negotiated between virtio console device and driver.",);
-			// Set feature set in device config fur future use.
-			ConsoleDevCfg {
-				raw: dev_cfg_raw,
-				features: negotiated_features,
-			}
-		} else {
-			error!("The device does not support our subset of features.");
-			return Err((VirtioConsoleError::FailFeatureNeg, caps_coll));
-		};
-
+	) -> Result<Self, (VirtioError, UniCapsColl)> {
 		let mut recv_vq = RxQueue::new();
-
-		// create the queues and tell device about them
-		recv_vq.add(VirtQueue::Split(
-			SplitVq::new(
-				&mut caps_coll.com_cfg,
-				&caps_coll.notif_cfg,
-				VIRTIO_MAX_QUEUE_SIZE,
-				0,
-				dev_cfg.features.into(),
-			)
-			.unwrap(),
-		));
-		// Interrupt for receiving packets is wanted
-		recv_vq.enable_notifs();
-
 		let mut send_vq = TxQueue::new();
 
-		send_vq.add(VirtQueue::Split(
-			SplitVq::new(
-				&mut caps_coll.com_cfg,
-				&caps_coll.notif_cfg,
-				VIRTIO_MAX_QUEUE_SIZE,
-				1,
-				dev_cfg.features.into(),
-			)
-			.unwrap(),
-		));
-		// Interrupt for communicating that a sent packet left, is not needed
-		send_vq.disable_notifs();
+		let dev_cfg = match caps_coll.init_caps(dev_cfg_raw, |caps_coll, dev_cfg| {
+			// create the queues and tell device about them
+			recv_vq.add(VirtQueue::Split(
+				SplitVq::new(
+					&mut caps_coll.com_cfg,
+					&caps_coll.notif_cfg,
+					VIRTIO_MAX_QUEUE_SIZE,
+					0,
+					virtio::F::from(dev_cfg.features),
+				)
+				.unwrap(),
+			));
+			// Interrupt for receiving packets is wanted
+			recv_vq.enable_notifs();
 
-		match &mut caps_coll.int_cap {
-			InterruptCapability::IsrStatus(_) => {
-				let irq = irq.unwrap();
-				handlers.entry(irq).or_default().push_back(|| {
-					if let Some(driver) = get_console_driver() {
-						driver.lock().handle_interrupt();
-					};
-				});
-				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
+			send_vq.add(VirtQueue::Split(
+				SplitVq::new(
+					&mut caps_coll.com_cfg,
+					&caps_coll.notif_cfg,
+					VIRTIO_MAX_QUEUE_SIZE,
+					1,
+					virtio::F::from(dev_cfg.features),
+				)
+				.unwrap(),
+			));
+			// Interrupt for communicating that a sent packet left, is not needed
+			send_vq.disable_notifs();
+
+			match &mut caps_coll.int_cap {
+				InterruptCapability::IsrStatus(_) => {
+					let irq = irq.unwrap();
+					handlers.entry(irq).or_default().push_back(|| {
+						if let Some(driver) = get_console_driver() {
+							driver.lock().handle_interrupt();
+						};
+					});
+					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+					info!("Virtio interrupt handler at line {irq}");
+				}
+				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+				InterruptCapability::Msix(msix_table) => caps_coll.com_cfg.register_msix_vectors(
+					msix_table,
+					handlers,
+					|| {
+						if let Some(driver) = get_console_driver() {
+							driver.lock().handle_device_configuration_interrupt();
+						};
+					},
+					[(0..2u16, Self::handle_queue_interrupt as fn())].into_iter(),
+					[],
+				),
 			}
-			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
-			InterruptCapability::Msix(msix_table) => caps_coll.com_cfg.register_msix_vectors(
-				msix_table,
-				handlers,
-				|| {
-					if let Some(driver) = get_console_driver() {
-						driver.lock().handle_device_configuration_interrupt();
-					};
-				},
-				[(0..2u16, Self::handle_queue_interrupt as fn())].into_iter(),
-				[],
-			),
-		}
-
-		// At this point the device is "live"
-		caps_coll.com_cfg.drv_ok();
+			Ok(())
+		}) {
+			Ok(dev_cfg) => dev_cfg,
+			Err(err) => return Err((err, caps_coll)),
+		};
 
 		Ok(Self {
 			dev_cfg,
@@ -456,11 +418,5 @@ pub mod error {
 			"Virtio console device driver failed, for device {0:x}, due to a missing or malformed device config!"
 		)]
 		NoDevCfg(u16),
-
-		/// The device did not acknowledge the negotiated feature set.
-		#[error(
-			"Virtio console device driver failed, device did not acknowledge negotiated feature set!"
-		)]
-		FailFeatureNeg,
 	}
 }
