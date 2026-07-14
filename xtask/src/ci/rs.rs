@@ -1,7 +1,9 @@
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{Args, Subcommand};
+use hermit_entry::config;
 
 use crate::cargo_build::CargoBuild;
 
@@ -58,6 +60,7 @@ impl Rs {
 		}
 
 		let mut cargo = crate::cargo();
+		let parent_root = super::parent_root();
 
 		if self.package.contains("rftrace") {
 			cargo.env(
@@ -67,7 +70,7 @@ impl Rs {
 		};
 
 		cargo
-			.current_dir(super::parent_root())
+			.current_dir(parent_root)
 			.arg("build")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.args(self.cargo_build.cargo_build_args())
@@ -77,10 +80,88 @@ impl Rs {
 		let status = cargo.status()?;
 		assert!(status.success());
 
+		// discover Hermit Images case
+		let manifest_dir = {
+			let cur_package = cargo_metadata::PackageName::new(self.package.clone());
+			let mut cargo = cargo_metadata::MetadataCommand::new();
+			cargo
+				.current_dir(parent_root)
+				.no_deps()
+				.verbose(true)
+				.exec()?
+				.packages
+				.iter()
+				.find(|i| i.name == cur_package)
+				.expect("unable to find current package in `cargo metadata` output")
+				// this path points to `Cargo.toml`
+				.manifest_path
+				.parent()
+				.unwrap()
+				.to_path_buf()
+		};
+		eprintln!("MANIFEST_DIR = {manifest_dir}");
+		let hermit_image_root = {
+			let image_root = manifest_dir.join("image-root");
+			if image_root.is_dir() {
+				Some(image_root)
+			} else {
+				None
+			}
+		};
+
+		let mut build_artifact = self.cargo_build.artifact.ci_image(&self.package);
+
+		// handle Hermit Images
+		if let Some(image_root) = hermit_image_root {
+			eprintln!("discovered image-root, creating Hermit Image.");
+			// find kernel name
+			let konfig = fs::read_to_string(image_root.join(config::Config::DEFAULT_PATH))?;
+			let konfig: config::Config<'_> = toml::from_str(&konfig)?;
+			let kernel_name: &str = match &konfig {
+				config::Config::V1 { kernel, .. } => kernel,
+			};
+
+			let tar_artifact_path = build_artifact.with_extension("tar.gz");
+			let mut tar_artifact = tar::Builder::new(flate2::write::GzEncoder::new(
+				fs::File::create(&tar_artifact_path)?,
+				flate2::Compression::default(),
+			));
+			tar_artifact.mode(tar::HeaderMode::Deterministic);
+
+			// NOTE: use tar ustar to create the image.
+
+			// add kernel
+			eprintln!("- {kernel_name}");
+			{
+				let mut header = tar::Header::new_ustar();
+				let kernel_meta = fs::metadata(&build_artifact)?;
+				header.set_path(kernel_name).unwrap();
+				header.set_size(kernel_meta.len());
+				header.set_cksum();
+
+				tar_artifact.append(&header, fs::File::open(&build_artifact)?)?;
+			}
+
+			// add rest
+			for entry in walkdir::WalkDir::new(&image_root) {
+				let entry = entry?;
+				let entry_rel_path = entry.path().strip_prefix(&image_root)?;
+				eprintln!("- {}", entry_rel_path.display());
+				if entry_rel_path == Path::new(kernel_name) || entry.metadata()?.is_dir() {
+					continue;
+				}
+
+				tar_artifact.append_path_with_name(entry.path(), entry_rel_path)?;
+			}
+
+			tar_artifact.into_inner()?.finish()?.sync_all()?;
+			build_artifact = tar_artifact_path;
+		}
+
 		if super::in_ci() {
 			eprintln!("::endgroup::");
 		}
 
-		Ok(self.cargo_build.artifact.ci_image(&self.package))
+		Ok(build_artifact)
 	}
 }
