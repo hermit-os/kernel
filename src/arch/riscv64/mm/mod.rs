@@ -1,7 +1,5 @@
 pub mod paging;
 
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub use paging::{copy_current_root_page_table, prepare_mem_copy_on_write};
 #[cfg(feature = "common-os")]
 pub use paging::{create_new_root_page_table, drop_user_space};
 

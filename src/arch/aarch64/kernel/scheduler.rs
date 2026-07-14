@@ -206,24 +206,6 @@ impl TaskStacks {
 		}
 	}
 
-	/// Returns the start address of the stack region (virt_addr of CommonStack).
-	#[cfg(all(feature = "common-os", feature = "fork"))]
-	pub fn get_stack_virt_addr(&self) -> VirtAddr {
-		match self {
-			TaskStacks::Boot(stacks) => stacks.stack,
-			TaskStacks::Common(stacks) => stacks.virt_addr,
-		}
-	}
-
-	/// Returns total size of all stacks combined.
-	#[cfg(all(feature = "common-os", feature = "fork"))]
-	pub fn get_total_stack_size(&self) -> usize {
-		match self {
-			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
-			TaskStacks::Common(stacks) => stacks.total_size,
-		}
-	}
-
 	pub fn get_user_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
@@ -468,72 +450,4 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 	}
 
 	scheduler.get_last_stack_pointer().as_u64()
-}
-
-/// Prepare the child's stack and root page table for a fork(), AArch64.
-///
-/// Mirrors the role of the x86_64 `prepare_fork_child_stack`, but does not
-/// need a naked-asm child-entry stub: when the SVC trapped into EL1, the
-/// hardware-supplied `trap_entry` macro pushed a complete `State` struct
-/// at the top of the parent's kernel stack. Copying the kernel stack page
-/// for the child duplicates that `State`; if we then patch `x0 = 0` in
-/// the child's copy, the existing trap-exit machinery will `eret` it
-/// straight back to the user-space instruction after the SVC with the
-/// fork-returns-zero contract satisfied.
-///
-/// Operations performed (in order; ordering matters):
-/// 1. Copy the parent's kernel stack pages into `new_stack_addr`. This
-///    runs in the parent's still-active page table, so the new mappings
-///    become visible immediately.
-/// 2. Snapshot the current root page table for the child via
-///    `copy_current_root_page_table` — the snapshot now includes the
-///    just-copied stack mapping.
-/// 3. Patch the child's saved-`x0` to 0.
-/// 4. Compute the child's saved kernel-SP (the address of the child's
-///    `State` copy) and store it through `stack_pointer`.
-///
-/// Returns `false` (the parent path); the child path becomes reachable
-/// once the scheduler context-switches to the new task and the existing
-/// IRQ trap-exit pops the child's `State` and `eret`s.
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub unsafe fn prepare_fork_child_stack(
-	stack_pointer: *mut usize,
-	root_page_table: *mut usize,
-	new_stack_addr: usize,
-) -> bool {
-	use crate::arch::aarch64::mm::{copy_current_root_page_table, copy_kernel_stack_to};
-
-	// 1. Copy the kernel stack pages into the child's region. Must run
-	//    before the page-table snapshot so the new mappings are visible.
-	copy_kernel_stack_to(new_stack_addr);
-
-	// 2. Duplicate the root page table for the child and hand the new
-	//    physical address back to the caller.
-	let new_pt = copy_current_root_page_table();
-	unsafe { *root_page_table = new_pt };
-
-	// 3. Locate the parent's saved `State` (the structure `trap_entry`
-	//    pushed at SVC time) and compute the matching address inside the
-	//    child's freshly-copied kernel stack.
-	let task = core_scheduler().get_current_task();
-	let parent_stack_base = task.borrow().stacks.get_stack_virt_addr().as_usize();
-	let kernel_stack_top = task.borrow().stacks.get_kernel_stack().as_usize()
-		+ task.borrow().stacks.get_kernel_stack_size();
-	let parent_state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - size_of::<State>();
-	let offset = new_stack_addr.wrapping_sub(parent_stack_base);
-	let child_state_addr = parent_state_addr.wrapping_add(offset);
-
-	// 4. Patch the child's `x0` so fork() returns 0 there. The rest of
-	//    the State (ELR_EL1 = post-SVC user PC, SPSR_EL1 = EL0t, SP_EL0
-	//    = user stack, x1..x30 = parent's user regs) is already correct.
-	unsafe {
-		let state = core::ptr::with_exposed_provenance_mut::<State>(child_state_addr);
-		(*state).x0 = 0;
-	}
-
-	// 5. Hand the child's kernel SP back to the caller; the scheduler
-	//    will plug it into the child's task struct as `last_stack_pointer`.
-	unsafe { *stack_pointer = child_state_addr };
-
-	false
 }

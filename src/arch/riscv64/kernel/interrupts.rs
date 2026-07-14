@@ -249,20 +249,12 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 			crate::arch::riscv64::kernel::scheduler::timer_handler();
 		}
 		// The kernel writes to user pages through `sstatus.SUM` (program
-		// loading, argv/envp setup, syscall buffers). Such a store can
-		// fault on a COW-marked or not-yet-faulted user page and must be
-		// resolved exactly like the corresponding user-mode fault.
+		// loading, argv/envp setup, syscall buffers). Such an access can
+		// fault on a not-yet-faulted user page and must be resolved
+		// exactly like the corresponding user-mode fault.
 		#[cfg(feature = "common-os")]
 		Trap::Exception(Exception::LoadPageFault | Exception::StorePageFault) => {
 			let fault_addr = stval;
-
-			#[cfg(feature = "fork")]
-			if matches!(cause, Trap::Exception(Exception::StorePageFault))
-				&& crate::arch::riscv64::mm::paging::do_cow_fault(memory_addresses::VirtAddr::new(
-					fault_addr as u64,
-				)) {
-				return;
-			}
 
 			if !crate::arch::riscv64::kernel::do_user_page_fault(fault_addr) {
 				error!("Unhandled kernel page fault at {fault_addr:#x} ({cause:?})");

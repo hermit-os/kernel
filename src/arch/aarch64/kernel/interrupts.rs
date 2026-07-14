@@ -179,9 +179,6 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn do_sync(state: &mut State) {
-	#[cfg(all(feature = "common-os", feature = "fork"))]
-	use crate::arch::mm::paging::do_cow_fault;
-
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
@@ -215,10 +212,10 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		core_scheduler().exit(0);
 	}
 
-	/* Data Abort from current or lower EL — the primary path is a COW
-	 * write fault from EL0 (EC=0x25). EC=0x24 covers a kernel write to a
-	 * COW-marked page, which can happen e.g. when the kernel writes
-	 * argv/envp into the freshly-mapped user page during the loader path.
+	/* Data Abort from current or lower EL — resolved against the task's
+	 * VMAs (demand paging). EC=0x25 is a fault from EL0; EC=0x24 covers
+	 * a kernel access to a not-yet-faulted user page, which can happen
+	 * e.g. when the kernel writes argv/envp during the loader path.
 	 */
 	if ec == ESR_EL1::EC::Value::DataAbortCurrentEL || ec == ESR_EL1::EC::Value::DataAbortLowerEL {
 		#[cfg(feature = "common-os")]
@@ -231,14 +228,6 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 		// Permission fault DFSC values are 0b001100..0b001111 (level 0..3).
 		let dfsc = iss & 0b11_1111;
 		let is_write = (iss & (1 << 6)) != 0;
-		#[cfg(all(feature = "common-os", feature = "fork"))]
-		let is_permission_fault = (0b00_1100..=0b00_1111).contains(&dfsc);
-
-		#[cfg(all(feature = "common-os", feature = "fork"))]
-		if is_write && is_permission_fault && do_cow_fault(VirtAddr::new(far)) {
-			// Faulting instruction is retried on `eret` from the trap.
-			return;
-		}
 
 		#[cfg(feature = "common-os")]
 		{
@@ -285,9 +274,6 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 					)
 				};
 				slice.fill(0);
-
-				#[cfg(feature = "fork")]
-				crate::mm::frame_ref_inc(physaddr);
 
 				return;
 			}

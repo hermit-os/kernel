@@ -29,8 +29,6 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub use self::scheduler::prepare_fork_child_stack;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
@@ -217,8 +215,6 @@ where
 
 	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
 	use crate::fd::{Fd, RawFd};
-	#[cfg(feature = "fork")]
-	use crate::mm::frame_ref_inc;
 	use crate::mm::vma::*;
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
@@ -233,10 +229,6 @@ where
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
-	#[cfg(feature = "fork")]
-	for i in 0..code_size / BasePageSize::SIZE as usize {
-		frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
-	}
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
@@ -279,10 +271,6 @@ where
 		let layout = PageLayout::from_size(tls_memsz).unwrap();
 		let frame_range = FrameAlloc::allocate(layout).unwrap();
 		let physaddr = PhysAddr::from(frame_range.start());
-		#[cfg(feature = "fork")]
-		for i in 0..tls_memsz / BasePageSize::SIZE as usize {
-			frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
-		}
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
@@ -402,8 +390,6 @@ pub unsafe fn jump_to_user_land(
 
 	use crate::arch::aarch64::kernel::scheduler::TaskStacks;
 	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
-	#[cfg(feature = "fork")]
-	use crate::mm::frame_ref_inc;
 	use crate::mm::vma::*;
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
@@ -438,10 +424,6 @@ pub unsafe fn jump_to_user_land(
 				MemoryType::STACK,
 			),
 		);
-	#[cfg(feature = "fork")]
-	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
-		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
-	}
 
 	// Place the argv and envp pointer arrays on the user stack. Both
 	// arrays follow the C convention and are terminated by a null pointer.

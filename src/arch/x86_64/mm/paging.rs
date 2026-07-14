@@ -54,10 +54,6 @@ pub trait PageTableEntryFlagsExt {
 	#[expect(dead_code)]
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self;
-
-	/// Mark a page as Copy-On-Write: remove WRITABLE, remove DIRTY, set BIT_9 as COW marker.
-	#[cfg(all(feature = "common-os", feature = "fork"))]
-	fn copy_on_write(&mut self) -> &mut Self;
 }
 
 impl PageTableEntryFlagsExt for PageTableEntryFlags {
@@ -103,14 +99,6 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	fn kernel(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
 		self.insert(PageTableEntryFlags::GLOBAL);
-		self
-	}
-
-	#[cfg(all(feature = "common-os", feature = "fork"))]
-	fn copy_on_write(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::WRITABLE);
-		self.remove(PageTableEntryFlags::DIRTY);
-		self.insert(PageTableEntryFlags::BIT_9); // BIT_9 = COW marker
 		self
 	}
 }
@@ -290,73 +278,6 @@ where
 	}
 }
 
-/// Walk user pages in the current PML4 and mark all writable user pages as Copy-On-Write.
-/// This must be called before duplicating the page table for a fork.
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub fn mark_user_pages_copy_on_write() {
-	// Since the kernel identity-maps all physical memory (phys addr == virt addr),
-	// we can dereference physical addresses directly as page table pointers.
-	let (frame, _) = Cr3::read();
-	let pml4 = unsafe {
-		&mut *ptr::with_exposed_provenance_mut::<PageTable>(frame.start_address().as_u64() as usize)
-	};
-
-	// Walk PML4 entries 1..511 (user-space entries).
-	// Entry 0 is for the low kernel mapping; entry 511 is the self-reference.
-	for pml4_idx in 1..511usize {
-		let pml4_entry = &mut pml4[pml4_idx];
-		if !pml4_entry.flags().contains(PageTableEntryFlags::PRESENT) {
-			continue;
-		}
-		let pdpt = unsafe {
-			&mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_entry.addr().as_u64() as usize)
-		};
-		for pdpt_idx in 0..512usize {
-			let pdpt_entry = &mut pdpt[pdpt_idx];
-			if !pdpt_entry.flags().contains(PageTableEntryFlags::PRESENT) {
-				continue;
-			}
-			let pd = unsafe {
-				&mut *ptr::with_exposed_provenance_mut::<PageTable>(
-					pdpt_entry.addr().as_u64().try_into().unwrap(),
-				)
-			};
-			for pd_idx in 0..512usize {
-				let pd_entry = &mut pd[pd_idx];
-				if !pd_entry.flags().contains(PageTableEntryFlags::PRESENT) {
-					continue;
-				}
-				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
-					// Skip huge pages (2 MiB) - not handled as COW here
-					warn!("User space isn't able to use huge pages");
-					continue;
-				}
-				let pt = unsafe {
-					&mut *ptr::with_exposed_provenance_mut::<PageTable>(
-						pd_entry.addr().as_u64().try_into().unwrap(),
-					)
-				};
-				for pt_idx in 0..512usize {
-					let pt_entry = &mut pt[pt_idx];
-					if pt_entry.flags().contains(
-						PageTableEntryFlags::PRESENT
-							| PageTableEntryFlags::WRITABLE
-							| PageTableEntryFlags::USER_ACCESSIBLE,
-					) && !pt_entry.flags().contains(PageTableEntryFlags::BIT_9)
-					{
-						let new_flags = *pt_entry.flags().copy_on_write();
-						pt_entry.set_addr(pt_entry.addr(), new_flags);
-					}
-				}
-			}
-		}
-	}
-
-	tlb::flush_all();
-	#[cfg(feature = "smp")]
-	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
-}
-
 #[cfg(feature = "common-os")]
 fn clear_pml4(pml4_phys: usize) {
 	// Free a 4 KiB physical frame back to the frame allocator.
@@ -395,7 +316,7 @@ fn clear_pml4(pml4_phys: usize) {
 					continue;
 				}
 				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
-					// Skip huge pages (2 MiB) - not handled as COW here
+					// Skip huge pages (2 MiB) - not used for user space
 					warn!("User space isn't able to use huge pages");
 					continue;
 				}
@@ -408,11 +329,6 @@ fn clear_pml4(pml4_phys: usize) {
 						PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE,
 					) {
 						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
-						#[cfg(feature = "fork")]
-						if crate::mm::frame_ref_dec(phys_addr) {
-							free_frame(phys_addr.as_u64() as usize);
-						}
-						#[cfg(not(feature = "fork"))]
 						{
 							free_frame(phys_addr.as_u64() as usize);
 						}
@@ -476,57 +392,6 @@ pub fn clear_user_space() {
 	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
 }
 
-/// Copy the contents of the current task's kernel stack to a new virtual
-/// base address. Used by fork: the child's `TaskStacks::new` has already
-/// allocated and mapped fresh physical frames at `stack_address`, so we
-/// simply `memcpy` the parent's stack pages into the child's mapping.
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub fn copy_kernel_stack_to(stack_address: usize) {
-	use crate::arch::kernel::core_local::core_scheduler;
-
-	let virt_addr = core_scheduler()
-		.get_current_task()
-		.borrow()
-		.stacks
-		.get_stack_virt_addr();
-	let total_size = core_scheduler()
-		.get_current_task()
-		.borrow()
-		.stacks
-		.get_total_stack_size();
-
-	let addr_diff = stack_address as u64 - virt_addr.as_u64();
-
-	let page_table = unsafe { identity_mapped_page_table() };
-
-	// The virtual layout has 4 guard pages (unmapped) interspersed; iterate
-	// the full range including those so no mapped pages are missed.
-	let full_virt_size = total_size as u64 + 4 * BasePageSize::SIZE;
-	for i in (virt_addr.as_u64()..(virt_addr.as_u64() + full_virt_size))
-		.step_by(BasePageSize::SIZE as usize)
-	{
-		let virt = x86_64::VirtAddr::new(i);
-		match page_table.translate(virt) {
-			TranslateResult::Mapped { .. } => {
-				// Both src and dst are already mapped in the current page
-				// table (dst via TaskStacks::new), so a plain memcpy suffices.
-				let src = ptr::with_exposed_provenance::<u8>(i as usize);
-				let dst = ptr::with_exposed_provenance_mut::<u8>((i + addr_diff) as usize);
-				unsafe {
-					dst.copy_from_nonoverlapping(src, BasePageSize::SIZE as usize);
-				}
-			}
-			TranslateResult::NotMapped => {}
-			TranslateResult::InvalidFrameAddress(_) => {
-				error!("Unexpected translation result for stack page at {i:#X}");
-				scheduler::abort();
-			}
-		}
-	}
-
-	tlb::flush_all();
-}
-
 #[cfg(not(feature = "common-os"))]
 pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
@@ -568,47 +433,6 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 		core_scheduler().get_current_task_id(),
 		faulting_addr
 	);
-
-	// Handle Copy-On-Write faults: write fault on a read-only page with BIT_9 set.
-	#[cfg(feature = "fork")]
-	if error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
-		&& !error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
-	{
-		let page_table = unsafe { identity_mapped_page_table() };
-		if let TranslateResult::Mapped { flags, .. } = page_table.translate(virtaddr)
-			&& flags.contains(PageTableEntryFlags::BIT_9)
-			&& !flags.contains(PageTableEntryFlags::WRITABLE)
-		{
-			// COW fault: allocate a new page, copy old contents, map as writable.
-			if let Some(src_phys) = virtual_to_physical(virtaddr.into()) {
-				let mut new_flags = flags;
-				new_flags.insert(PageTableEntryFlags::WRITABLE);
-				new_flags.remove(PageTableEntryFlags::BIT_9);
-				// Drop this task's COW reference
-				let ref_is_zero = crate::mm::frame_ref_dec(src_phys);
-
-				if ref_is_zero {
-					crate::mm::frame_ref_inc(src_phys);
-					map::<BasePageSize>(virtaddr.into(), src_phys, 1, new_flags);
-				} else {
-					let new_phys = crate::mm::copy_page(src_phys);
-					crate::mm::frame_ref_inc(new_phys);
-					map::<BasePageSize>(virtaddr.into(), new_phys, 1, new_flags);
-				}
-
-				if swapped_gs {
-					unsafe {
-						core::arch::asm!("swapgs", options(nostack));
-					}
-				}
-
-				return;
-			} else {
-				error!("COW: failed to resolve physical address for {virtaddr:p}");
-				scheduler::abort();
-			}
-		}
-	}
 
 	{
 		use core::ops::Bound;
@@ -654,13 +478,10 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 			};
 			slice.fill(0);
 
-			#[cfg(feature = "fork")]
-			crate::mm::frame_ref_inc(physaddr);
-
-			// Restore user GS before returning to ring 3; the COW path
-			// above does the same. Without this, iret leaves the kernel
-			// GS-base installed, the user's next FS/GS access reads
-			// kernel state and the program either misbehaves or wedges.
+			// Restore user GS before returning to ring 3. Without this,
+			// iret leaves the kernel GS-base installed, the user's next
+			// FS/GS access reads kernel state and the program either
+			// misbehaves or wedges.
 			if swapped_gs {
 				unsafe {
 					core::arch::asm!("swapgs", options(nostack));

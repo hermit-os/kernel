@@ -230,10 +230,6 @@ where
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
-	#[cfg(feature = "fork")]
-	for i in 0..code_size / BasePageSize::SIZE as usize {
-		crate::mm::frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
-	}
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user();
@@ -276,10 +272,6 @@ where
 		let layout = PageLayout::from_size(tls_memsz).unwrap();
 		let frame_range = FrameAlloc::allocate(layout).unwrap();
 		let physaddr = PhysAddr::from(frame_range.start());
-		#[cfg(feature = "fork")]
-		for i in 0..tls_memsz / BasePageSize::SIZE as usize {
-			crate::mm::frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
-		}
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
@@ -409,8 +401,6 @@ pub(crate) fn do_user_page_fault(fault_addr: usize) -> bool {
 		}
 
 		paging::map::<BasePageSize>(addr, physaddr, 1, flags);
-		#[cfg(feature = "fork")]
-		crate::mm::frame_ref_inc(physaddr);
 
 		// Clear the page through the identity mapping of physical memory,
 		// so this works independently of `sstatus.SUM`.
@@ -515,10 +505,9 @@ pub(crate) fn user_loop(
 	user_loop_resume(ctx)
 }
 
-/// Service all traps the user code raises, starting (or resuming, for a
-/// fork child) user execution from `ctx`. Never returns; the process
-/// leaves through the `exit` system call (or is torn down after a fatal
-/// fault).
+/// Service all traps the user code raises, starting user execution
+/// from `ctx`. Never returns; the process leaves through the `exit`
+/// system call (or is torn down after a fatal fault).
 #[cfg(feature = "common-os")]
 pub(crate) fn user_loop_resume(mut ctx: trapframe::UserContext) -> ! {
 	use riscv::interrupt::{Exception, Interrupt, Trap};
@@ -535,17 +524,6 @@ pub(crate) fn user_loop_resume(mut ctx: trapframe::UserContext) -> ! {
 
 		match cause {
 			Trap::Exception(Exception::UserEnvCall) => {
-				// `fork` needs the full user context to seed the child's
-				// user loop, so it is dispatched here instead of through
-				// the syscall table.
-				#[cfg(feature = "fork")]
-				if ctx.general.a7 == crate::syscalls::table::SYSNO_FORK {
-					ctx.sepc += 4;
-					let pid: i32 = unsafe { crate::scheduler::fork_from_user_context(&ctx) }.into();
-					ctx.general.a0 = pid as usize;
-					continue;
-				}
-
 				dispatch_syscall(&mut ctx);
 			}
 			Trap::Exception(
@@ -554,14 +532,6 @@ pub(crate) fn user_loop_resume(mut ctx: trapframe::UserContext) -> ! {
 				| Exception::StorePageFault,
 			) => {
 				let fault_addr = stval::read();
-
-				#[cfg(feature = "fork")]
-				if matches!(cause, Trap::Exception(Exception::StorePageFault))
-					&& crate::arch::riscv64::mm::paging::do_cow_fault(
-						memory_addresses::VirtAddr::new(fault_addr as u64),
-					) {
-					continue;
-				}
 
 				if !do_user_page_fault(fault_addr) {
 					error!("Unhandled user page fault at {fault_addr:#x} ({cause:?})");
@@ -608,10 +578,6 @@ pub unsafe fn jump_to_user_land(entry_point: usize, args: Vec<CString>, envs: Ve
 	let layout = PageLayout::from_size(USER_STACK_SIZE).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let phys_addr = PhysAddr::from(frame_range.start());
-	#[cfg(feature = "fork")]
-	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
-		crate::mm::frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
-	}
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_disable();
 	paging::map::<BasePageSize>(
