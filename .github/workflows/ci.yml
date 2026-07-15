@@ -190,7 +190,8 @@ jobs:
       - name: Checkout hermit-rs
         uses: actions/checkout@v7
         with:
-          repository: hermit-os/hermit-rs
+          repository: fogti/hermit-rs
+          ref: bulk-uniform-rename
       - name: Checkout hermit-kernel
         uses: actions/checkout@v7
         with:
