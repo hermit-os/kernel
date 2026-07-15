@@ -627,7 +627,15 @@ pub fn init_cpu() {
 
 	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
 		let irq_slice = timer_node.property("interrupts").unwrap().value;
-		/* Secure Phys IRQ */
+		// Select the Virtual Timer triplet, matching `init()`: the kernel
+		// programs the virtual timer (CNTV_*), and timer PPIs are per-core,
+		// so every application processor has to enable the *same* interrupt
+		// in its redistributor that the boot core selected.
+		/* Secure Phys IRQ — skip */
+		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
+		/* Non-secure Phys IRQ — skip */
 		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
