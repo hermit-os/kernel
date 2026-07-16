@@ -18,13 +18,11 @@ use pci_types::{
 };
 
 use crate::arch::kernel::pci::PciConfigRegion;
-#[cfg(feature = "virtio-console")]
-use crate::console::IoDevice;
 #[allow(unused_imports)]
 use crate::drivers::Driver;
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
-use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
+use crate::drivers::console::VirtioConsoleDriver;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
@@ -376,14 +374,6 @@ pub(crate) type NetworkDevice = VirtioNetDriver;
 #[cfg(feature = "rtl8139")]
 pub(crate) type NetworkDevice = RTL8139Driver;
 
-#[cfg(feature = "virtio-console")]
-pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
-	PCI_DRIVERS
-		.get()?
-		.iter()
-		.find_map(|drv| drv.get_console_driver())
-}
-
 #[cfg(feature = "virtio-vsock")]
 pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
 	PCI_DRIVERS
@@ -423,11 +413,7 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 			match pci_virtio::init_device(adapter, handlers) {
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
-					register_driver(PciDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
-					info!("Switch to virtio console");
-					crate::console::CONSOLE
-						.lock()
-						.replace_device(IoDevice::Virtio(VirtioUART::new()));
+					crate::console::switch_to_virtio(*drv);
 				}
 				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::Fs(drv)) => {

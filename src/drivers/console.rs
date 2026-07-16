@@ -16,11 +16,8 @@ use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
 use crate::config::{CONSOLE_PACKET_SIZE, VIRTIO_MAX_QUEUE_SIZE};
+use crate::console::{CONSOLE, IoDevice};
 use crate::drivers::error::DriverError;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_console_driver;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_console_driver;
 use crate::drivers::virtio::error::{VirtioConsoleError, VirtioError};
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::split::SplitVq;
@@ -57,47 +54,9 @@ fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 	}
 }
 
-pub(crate) struct VirtioUART;
-
-impl VirtioUART {
-	pub const fn new() -> Self {
-		Self {}
-	}
-}
-
-impl ErrorType for VirtioUART {
-	type Error = Errno;
-}
-
-impl Read for VirtioUART {
-	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let drv = get_console_driver().ok_or(Errno::Io)?;
-
-		drv.lock().read(buf)
-	}
-}
-
-impl ReadReady for VirtioUART {
+impl ReadReady for VirtioConsoleDriver {
 	fn read_ready(&mut self) -> Result<bool, Self::Error> {
-		let Some(drv) = get_console_driver() else {
-			return Ok(false);
-		};
-
-		Ok(drv.lock().has_packet())
-	}
-}
-
-impl Write for VirtioUART {
-	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		if let Some(drv) = get_console_driver() {
-			drv.lock().write_all(buf)?;
-		}
-
-		Ok(buf.len())
-	}
-
-	fn flush(&mut self) -> Result<(), Self::Error> {
-		Ok(())
+		Ok(self.has_packet())
 	}
 }
 
@@ -339,9 +298,9 @@ impl super::virtio::VirtioDriver for VirtioConsoleDriver {
 				InterruptCapability::IsrStatus(_) => {
 					let irq = irq.unwrap();
 					handlers.entry(irq).or_default().push_back(|| {
-						if let Some(driver) = get_console_driver() {
-							driver.lock().handle_interrupt();
-						};
+						if let IoDevice::Virtio(ref mut driver) = CONSOLE.lock().device {
+							driver.handle_interrupt();
+						}
 					});
 					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 					info!("Virtio interrupt handler at line {irq}");
@@ -351,8 +310,8 @@ impl super::virtio::VirtioDriver for VirtioConsoleDriver {
 					msix_table,
 					handlers,
 					|| {
-						if let Some(driver) = get_console_driver() {
-							driver.lock().handle_device_configuration_interrupt();
+						if let IoDevice::Virtio(ref mut driver) = CONSOLE.lock().device {
+							driver.handle_device_configuration_interrupt();
 						};
 					},
 					[(0..2u16, Self::handle_queue_interrupt as fn())].into_iter(),
