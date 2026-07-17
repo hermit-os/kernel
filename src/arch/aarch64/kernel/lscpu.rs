@@ -252,25 +252,25 @@ static FT_PARTS: PartsTable = &[
 static MS_PARTS: PartsTable = &[(0xd49, "Azure-Cobalt-100")];
 
 static IMPLEMENTERS: &[(u8, &str, PartsTable)] = &[
-	(0x41, "ARM", ARM_PARTS),
-	(0x42, "Broadcom", BRCM_PARTS),
-	(0x43, "Cavium", CAVIUM_PARTS),
-	(0x44, "DEC", DEC_PARTS),
-	(0x46, "FUJITSU", FUJITSU_PARTS),
-	(0x48, "HiSilicon", HISI_PARTS),
-	(0x49, "Infineon", &[]),           // no parts known
-	(0x4d, "Motorola/Freescale", &[]), // no parts known
-	(0x4e, "NVIDIA", NVIDIA_PARTS),
-	(0x50, "APM", APM_PARTS),
-	(0x51, "Qualcomm", QCOM_PARTS),
-	(0x53, "Samsung", SAMSUNG_PARTS),
-	(0x56, "Marvell", MARVELL_PARTS),
-	(0x61, "Apple", APPLE_PARTS),
-	(0x66, "Faraday", FARADAY_PARTS),
-	(0x69, "Intel", INTEL_PARTS),
-	(0x6d, "Microsoft", MS_PARTS),
-	(0x70, "Phytium", FT_PARTS),
-	(0xc0, "Ampere", AMPERE_PARTS),
+	(b'A', "ARM", ARM_PARTS),
+	(b'B', "Broadcom", BRCM_PARTS),
+	(b'C', "Cavium", CAVIUM_PARTS),
+	(b'D', "DEC", DEC_PARTS),
+	(b'F', "FUJITSU", FUJITSU_PARTS),
+	(b'H', "HiSilicon", HISI_PARTS),
+	(b'I', "Infineon", &[]),           // no parts known
+	(b'M', "Motorola/Freescale", &[]), // no parts known
+	(b'N', "NVIDIA", NVIDIA_PARTS),
+	(b'P', "APM", APM_PARTS),
+	(b'Q', "Qualcomm", QCOM_PARTS),
+	(b'S', "Samsung", SAMSUNG_PARTS),
+	(b'V', "Marvell", MARVELL_PARTS),
+	(b'a', "Apple", APPLE_PARTS),
+	(b'f', "Faraday", FARADAY_PARTS),
+	(b'i', "Intel", INTEL_PARTS),
+	(b'm', "Microsoft", MS_PARTS),
+	(b'p', "Phytium", FT_PARTS),
+	(0xc0, "Ampere", AMPERE_PARTS), // À
 ];
 
 pub fn pretty_implementer_and_part(
