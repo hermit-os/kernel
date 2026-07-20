@@ -12,12 +12,12 @@ use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
+use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::env;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
-
 #[repr(C, packed)]
 struct State {
 	#[cfg(feature = "common-os")]
@@ -129,12 +129,20 @@ impl TaskStacks {
 			flags,
 		);
 
-		// map user stack into the address space
+		// map user stack into the address space (must be user-accessible under common-os)
+		#[cfg(feature = "common-os")]
+		let user_flags = {
+			let mut f = PageTableEntryFlags::empty();
+			f.normal().writable().user().execute_disable();
+			f
+		};
+		#[cfg(not(feature = "common-os"))]
+		let user_flags = flags;
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
-			flags,
+			user_flags,
 		);
 
 		// clear user stack
@@ -269,6 +277,76 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	core_scheduler().exit(0)
 }
 
+/// Entry trampoline for a new user-space thread (common-os).
+///
+/// Called in kernel mode the first time the task is scheduled. It crafts
+/// an `iretq` frame that transfers control to `func(arg)` in ring 3 on
+/// the new user stack. Matches the descriptor layout used by
+/// `jump_to_user_land`: user CS=0x2b, user SS=0x23, RFLAGS=0x1202.
+#[cfg(feature = "common-os")]
+#[unsafe(naked)]
+extern "C" fn task_start_user(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
+	// rdi = func (user entry)
+	// rsi = arg  (forwarded as first argument to `func`)
+	// rdx = user stack pointer
+	naked_asm!(
+		"swapgs",
+		"push 0x23",    // user SS
+		"push rdx",     // user RSP
+		"push 0x1202",  // RFLAGS (IF=1)
+		"push 0x2b",    // user CS
+		"push rdi",     // RIP = user func
+		"mov rdi, rsi", // first argument for user func
+		"iretq",
+	)
+}
+
+#[cfg(feature = "common-os")]
+impl Task {
+	/// Build the initial kernel-stack context for a new user-space thread.
+	///
+	/// When this task is first scheduled, `switch_to_task` restores the
+	/// saved registers and `ret`s into `task_start_user`, which then
+	/// `iretq`s to `func(arg)` in ring 3 on the freshly allocated user
+	/// stack.
+	pub(crate) fn create_user_stack_frame(
+		&mut self,
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		tls_fs_base: u64,
+	) {
+		unsafe {
+			// Debug marker at the very top of the kernel stack.
+			let mut stack = self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			stack -= size_of::<State>();
+			let state = stack.as_mut_ptr::<State>();
+			state.cast::<u8>().write_bytes(0, size_of::<State>());
+
+			(*state).rip = task_start_user;
+			(*state).rdi = func as usize as u64;
+			(*state).rsi = arg as u64;
+			(*state).rflags = 0x1202u64;
+			// FS.Base for the new user-space thread (its private TLS area).
+			(*state).fs = tls_fs_base;
+
+			// `stack` / `get_user_stack()` produce `memory_addresses::VirtAddr`,
+			// while `Task::{last,user}_stack_pointer` is `x86_64::VirtAddr` —
+			// convert at the assignment boundary.
+			self.last_stack_pointer = stack.into();
+			self.user_stack_pointer = (self.stacks.get_user_stack()
+				+ self.stacks.get_user_stack_size()
+				- TaskStacks::MARKER_SIZE)
+				.into();
+
+			// rdx is used by task_start_user as the new user-mode RSP
+			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;
+		}
+	}
+}
+
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: unsafe extern "C" fn(usize), arg: usize) {
 		// Check if TLS is allocated already and if the task uses thread-local storage.
@@ -301,10 +379,11 @@ impl TaskFrame for Task {
 			(*state).rflags = 0x1202u64;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
-			self.last_stack_pointer = stack;
-			self.user_stack_pointer = self.stacks.get_user_stack()
+			self.last_stack_pointer = stack.into();
+			self.user_stack_pointer = (self.stacks.get_user_stack()
 				+ self.stacks.get_user_stack_size()
-				- TaskStacks::MARKER_SIZE;
+				- TaskStacks::MARKER_SIZE)
+				.into();
 
 			// rdx is required to initialize the stack
 			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;
@@ -312,7 +391,8 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStackFrame) {
+extern "x86-interrupt" fn timer_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
 
 	debug!("Handle timer interrupt");
@@ -321,6 +401,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().reschedule();
+	swapgs(&stack_frame);
 }
 
 pub fn install_timer_handler() {

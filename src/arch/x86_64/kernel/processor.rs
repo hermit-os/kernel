@@ -909,7 +909,7 @@ pub fn configure() {
 		let syscall_handler_addr = syscall::syscall_handler as *const ();
 		let syscall_handler_addr = VirtAddr::from_ptr(syscall_handler_addr);
 		LStar::write(syscall_handler_addr);
-		SFMask::write(RFlags::INTERRUPT_FLAG); // clear IF flag during system call
+		SFMask::write(RFlags::INTERRUPT_FLAG | RFlags::TRAP_FLAG); // clear IF and TF flag during system call
 	}
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.

@@ -55,6 +55,9 @@ bitflags! {
 		/// Set if this entry points to normal memory (cacheable)
 		const NORMAL = 1 << 4;
 
+		/// Set if memory referenced by this entry shall also be accessible from EL0 (user mode).
+		const USER_ACCESSIBLE = 1 << 6;
+
 		/// Set if memory referenced by this entry shall be read-only.
 		const READ_ONLY = 1 << 7;
 
@@ -79,7 +82,7 @@ bitflags! {
 }
 
 impl PageTableEntryFlags {
-	#[expect(dead_code)]
+	#[allow(dead_code)]
 	pub fn present(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::PRESENT);
 		self
@@ -102,7 +105,7 @@ impl PageTableEntryFlags {
 		self
 	}
 
-	#[expect(dead_code)]
+	#[allow(dead_code)]
 	pub fn read_only(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::READ_ONLY);
 		self
@@ -117,6 +120,72 @@ impl PageTableEntryFlags {
 		self.insert(PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER);
 		self.insert(PageTableEntryFlags::UNPRIVILEGED_EXECUTE_NEVER);
 		self
+	}
+
+	#[cfg(feature = "common-os")]
+	pub fn execute_enable(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER);
+		self.remove(PageTableEntryFlags::UNPRIVILEGED_EXECUTE_NEVER);
+		self
+	}
+
+	#[cfg(feature = "common-os")]
+	pub fn user(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::USER_ACCESSIBLE);
+		// An EL0-accessible page must not be executable from EL1.
+		self.insert(PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER);
+		self
+	}
+
+	#[cfg(feature = "common-os")]
+	pub fn kernel(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
+		self
+	}
+}
+
+/// Extension trait that mirrors the x86_64 `PageTableEntryFlagsExt` API for the
+/// common-os layer. On AArch64 the `PageTableEntryFlags` type already carries
+/// the same helpers as inherent methods; this trait exists only so that
+/// architecture-independent callers can be written in terms of a single API.
+#[cfg(feature = "common-os")]
+#[allow(dead_code)]
+pub trait PageTableEntryFlagsExt {
+	fn device(&mut self) -> &mut Self;
+	fn normal(&mut self) -> &mut Self;
+	fn read_only(&mut self) -> &mut Self;
+	fn writable(&mut self) -> &mut Self;
+	fn execute_disable(&mut self) -> &mut Self;
+	fn execute_enable(&mut self) -> &mut Self;
+	fn user(&mut self) -> &mut Self;
+	fn kernel(&mut self) -> &mut Self;
+}
+
+#[cfg(feature = "common-os")]
+impl PageTableEntryFlagsExt for PageTableEntryFlags {
+	fn device(&mut self) -> &mut Self {
+		PageTableEntryFlags::device(self)
+	}
+	fn normal(&mut self) -> &mut Self {
+		PageTableEntryFlags::normal(self)
+	}
+	fn read_only(&mut self) -> &mut Self {
+		PageTableEntryFlags::read_only(self)
+	}
+	fn writable(&mut self) -> &mut Self {
+		PageTableEntryFlags::writable(self)
+	}
+	fn execute_disable(&mut self) -> &mut Self {
+		PageTableEntryFlags::execute_disable(self)
+	}
+	fn execute_enable(&mut self) -> &mut Self {
+		PageTableEntryFlags::execute_enable(self)
+	}
+	fn user(&mut self) -> &mut Self {
+		PageTableEntryFlags::user(self)
+	}
+	fn kernel(&mut self) -> &mut Self {
+		PageTableEntryFlags::kernel(self)
 	}
 }
 
@@ -141,7 +210,7 @@ impl PageTableEntry {
 	}
 
 	/// Return whether this entry is a 4KiB page.
-	#[expect(dead_code)]
+	#[cfg(feature = "common-os")]
 	fn is_table_or_4kib_page(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::TABLE_OR_4KIB_PAGE.bits()) != 0
 	}
@@ -570,15 +639,6 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 	Page::range(first_page, last_page)
 }
 
-#[expect(dead_code)]
-pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
-	trace!("Looking up Page Table Entry for {virtual_address:p}");
-
-	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
-	root_pagetable.get_page_table_entry(page)
-}
-
 fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	trace!("Getting physical address for {virtual_address:p}");
 
@@ -704,6 +764,226 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
+}
+
+/// Flush the entire (non-global) TLB on this core and broadcast to others.
+#[cfg(feature = "common-os")]
+fn flush_tlb_all() {
+	dsb(ISHST);
+	unsafe {
+		asm!("tlbi vmalle1is", options(nostack));
+	}
+	dsb(ISH);
+	isb(SY);
+}
+
+/// Recursively free the user-space portion of a given L0 page table.
+///
+/// Entry 0 (kernel low mapping) and entry 511 (self-reference) are preserved.
+///
+/// **Important**: Hermit shares TTBR0_EL1 between user space and the kernel's
+/// own heap and task stacks (PageAlloc hands out addresses in the high half of
+/// the low 48-bit range, e.g. starting at `0x800000000000`). The same L0
+/// entries (1..510) can therefore back **mixed** kernel + user mappings — and
+/// even L1/L2/L3 tables further down might contain a mix.
+///
+/// We must only free a sub-table once it is **completely empty** after the
+/// user-page sweep; otherwise we would unmap the kernel's own heap or the
+/// kernel stack the current task is running on, which makes the very next
+/// stack access fault and the CPU spins in recursive sync exceptions.
+#[cfg(feature = "common-os")]
+fn clear_l0(l0_phys: usize) {
+	fn free_frame(phys: usize) {
+		let range = free_list::PageRange::new(phys, phys + BasePageSize::SIZE as usize).unwrap();
+		unsafe { FrameAlloc::deallocate(range) };
+	}
+
+	fn pt_is_empty<L>(pt: &PageTable<L>) -> bool
+	where
+		L: PageTableLevel,
+	{
+		pt.entries.iter().all(|e| !e.is_present())
+	}
+
+	let l0 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(l0_phys) };
+
+	// Only walk the user-space L0 slot. All other entries point at
+	// kernel L1 tables that are *shared* across every task's PT — clearing
+	// them here would unmap the kernel's own heap and stack.
+	for l0_idx in [USER_L0_INDEX].iter().copied() {
+		let l0_entry = &mut l0.entries[l0_idx];
+		if !l0_entry.is_present() {
+			continue;
+		}
+		let l1_phys = l0_entry.address().as_usize();
+		let l1 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(l1_phys) };
+
+		for l1_idx in 0..512usize {
+			let l1_entry = &mut l1.entries[l1_idx];
+			if !l1_entry.is_present() {
+				continue;
+			}
+			if !l1_entry.is_table_or_4kib_page() {
+				warn!("User space isn't able to use 1 GiB pages");
+				continue;
+			}
+			let l2_phys = l1_entry.address().as_usize();
+			let l2 =
+				unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(l2_phys) };
+
+			for l2_idx in 0..512usize {
+				let l2_entry = &mut l2.entries[l2_idx];
+				if !l2_entry.is_present() {
+					continue;
+				}
+				if !l2_entry.is_table_or_4kib_page() {
+					warn!("User space isn't able to use 2 MiB pages");
+					continue;
+				}
+				let l3_phys = l2_entry.address().as_usize();
+				let l3 = unsafe {
+					&mut *ptr::with_exposed_provenance_mut::<PageTable<L3Table>>(l3_phys)
+				};
+
+				for l3_idx in 0..512usize {
+					let l3_entry = &mut l3.entries[l3_idx];
+					let flags = PageTableEntryFlags::from_bits_truncate(
+						l3_entry.physical_address_and_flags,
+					);
+					if flags.contains(PageTableEntryFlags::PRESENT)
+						&& flags.contains(PageTableEntryFlags::USER_ACCESSIBLE)
+					{
+						let phys_addr = l3_entry.address();
+
+						{
+							free_frame(phys_addr.as_usize());
+						}
+						*l3_entry = PageTableEntry::default();
+					}
+				}
+
+				if pt_is_empty(l3) {
+					free_frame(l3_phys);
+					*l2_entry = PageTableEntry::default();
+				}
+			}
+
+			if pt_is_empty(l2) {
+				free_frame(l2_phys);
+				*l1_entry = PageTableEntry::default();
+			}
+		}
+
+		if pt_is_empty(l1) {
+			free_frame(l1_phys);
+			*l0_entry = PageTableEntry::default();
+		}
+	}
+}
+
+/// Drop an inactive user address space: free all user pages and all user-space
+/// page-table pages, then free the L0 table itself.
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(l0_phys: usize) {
+	debug!("Drop the user space at L0 {l0_phys:#x}");
+
+	clear_l0(l0_phys);
+
+	// The L0 table is not loaded on any core, so no TLB flush is necessary.
+	let range = free_list::PageRange::new(l0_phys, l0_phys + BasePageSize::SIZE as usize).unwrap();
+	unsafe { FrameAlloc::deallocate(range) };
+}
+
+/// Clear the user-space portion of the currently active address space.
+#[cfg(feature = "common-os")]
+pub fn clear_user_space() {
+	use aarch64_cpu::registers::TTBR0_EL1;
+
+	use crate::core_scheduler;
+	use crate::fd::STDERR_FILENO;
+
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
+		.clear();
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&k, _| k <= STDERR_FILENO);
+
+	let l0_phys = TTBR0_EL1.get_baddr() as usize;
+	debug!("Clear the user space at L0 {l0_phys:#x}");
+
+	clear_l0(l0_phys);
+
+	flush_tlb_all();
+}
+
+/// Allocate a fresh L0 (root) page table for a new address space.
+///
+/// The new L0 inherits the kernel low mapping from the currently active L0
+/// (entry 0) and installs a self-reference at entry 511. User-space entries
+/// (1..511) are left empty.
+/// Index of the L0 entry that backs the user-space load area
+/// (`USER_START = 0x0100_0000_0000`, bits 47..39 = 2).
+#[cfg(feature = "common-os")]
+const USER_L0_INDEX: usize = (crate::arch::aarch64::kernel::USER_START.as_usize() >> 39) & 0x1ff;
+
+#[cfg(feature = "common-os")]
+pub fn create_new_root_page_table() -> usize {
+	use aarch64_cpu::registers::TTBR0_EL1;
+
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).expect("Failed to allocate L0 table");
+	let new_l0_phys = frame_range.start();
+
+	let cur_l0_phys = TTBR0_EL1.get_baddr() as usize;
+	let cur_l0 = unsafe { &*ptr::with_exposed_provenance::<PageTable<L0Table>>(cur_l0_phys) };
+
+	let new_l0 =
+		unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(new_l0_phys) };
+
+	// Inherit every L0 entry from the current (kernel) page table EXCEPT
+	// the user-space slot — that one is left empty so the new task starts
+	// with a clean user address space.
+	//
+	// Sharing the kernel L0 entries means we share the L1/L2/L3 tables
+	// underneath. That is intentional: kernel mappings (kernel image,
+	// heap, per-CPU stacks, …) are global and must
+	// stay in sync across every common-os task. Without sharing, the
+	// kernel would lose access to its own heap as soon as the scheduler
+	// switches TTBR0_EL1 to this task's PT.
+	for (i, entry) in new_l0.entries.iter_mut().enumerate() {
+		*entry = if i == USER_L0_INDEX || i == 511 {
+			PageTableEntry::default()
+		} else {
+			cur_l0.entries[i]
+		};
+	}
+
+	let self_flags = PageTableEntryFlags::PRESENT
+		| PageTableEntryFlags::TABLE_OR_4KIB_PAGE
+		| PageTableEntryFlags::NORMAL
+		| PageTableEntryFlags::INNER_SHAREABLE
+		| PageTableEntryFlags::ACCESSED
+		| PageTableEntryFlags::SELF;
+	new_l0.entries[511].set(PhysAddr::new(new_l0_phys as u64), self_flags);
+
+	new_l0_phys
+}
+
+/// Returns the physical address of the current task's root page table.
+#[allow(dead_code)]
+#[cfg(feature = "common-os")]
+pub fn get_current_root_page_table() -> usize {
+	use crate::arch::kernel::core_local::core_scheduler;
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.root_page_table
+		.as_usize()
 }
 
 pub unsafe fn init() {

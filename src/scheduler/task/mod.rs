@@ -3,9 +3,13 @@
 #[cfg(not(feature = "common-os"))]
 pub(crate) mod tls;
 
+#[cfg(feature = "common-os")]
+use alloc::collections::BTreeMap;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
+#[cfg(feature = "common-os")]
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
 use core::{cmp, fmt};
@@ -13,17 +17,73 @@ use core::{cmp, fmt};
 use ahash::RandomState;
 use crossbeam_utils::CachePadded;
 use hashbrown::HashMap;
-use hermit_sync::{OnceCell, RwSpinLock};
+#[cfg(not(feature = "common-os"))]
+use hermit_sync::OnceCell;
+use hermit_sync::RwSpinLock;
+#[cfg(not(target_arch = "x86_64"))]
 use memory_addresses::VirtAddr;
+#[cfg(target_arch = "x86_64")]
+use x86_64::VirtAddr;
 
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
+#[cfg(feature = "common-os")]
+use crate::arch;
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::processor::{self, FPUState};
 use crate::arch::kernel::scheduler::TaskStacks;
-use crate::fd::{Fd, RawFd, stdio};
+#[cfg(not(feature = "common-os"))]
+use crate::fd::stdio;
+use crate::fd::{Fd, RawFd};
+#[cfg(feature = "common-os")]
+use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::CoreId;
+
+/// A reference-counted handle to a process's root page table.
+///
+/// Threads of the same process share the same `Arc<RootPageTable>`. When
+/// the last owning task is dropped, the physical page-table hierarchy and
+/// the user-space mappings are released.
+#[cfg(feature = "common-os")]
+pub struct RootPageTable {
+	pml4_phys: usize,
+	/// `false` for the boot page table, which must never be released.
+	owned: bool,
+}
+
+#[cfg(feature = "common-os")]
+impl RootPageTable {
+	/// Wraps a freshly allocated PML4 that this process owns.
+	pub fn new(pml4_phys: usize) -> Self {
+		Self {
+			pml4_phys,
+			owned: true,
+		}
+	}
+
+	/// Wraps the boot page table, shared by all idle tasks. Dropping this
+	/// instance is a no-op.
+	pub fn new_boot(pml4_phys: usize) -> Self {
+		Self {
+			pml4_phys,
+			owned: false,
+		}
+	}
+
+	pub fn as_usize(&self) -> usize {
+		self.pml4_phys
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl Drop for RootPageTable {
+	fn drop(&mut self) {
+		if self.owned {
+			arch::mm::drop_user_space(self.pml4_phys);
+		}
+	}
+}
 
 /// Returns the most significant bit.
 ///
@@ -50,21 +110,62 @@ pub(crate) enum TaskStatus {
 	Idle,
 }
 
-/// Unique identifier for a task (i.e. `pid`).
+/// Unique identifier for a task (i.e. `tid`).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct TaskId(i32);
 
 impl TaskId {
-	pub const fn into(self) -> i32 {
-		self.0
-	}
-
 	pub const fn from(x: i32) -> Self {
 		TaskId(x)
 	}
 }
 
+impl From<TaskId> for i32 {
+	fn from(tid: TaskId) -> Self {
+		tid.0
+	}
+}
+
 impl fmt::Display for TaskId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+/// Process ID — shared between every thread of the same process.
+///
+/// For the main thread of a process it carries the same numeric value
+/// as the thread's [`TaskId`]; additional threads inherit it from the
+/// spawning thread. A [`TaskId`] converts into a `ProcessId` via
+/// [`From`] / [`Into`] (used by `Task::new` to seed `pid = tid` for a
+/// newly created main thread).
+#[cfg(feature = "common-os")]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct ProcessId(i32);
+
+#[cfg(feature = "common-os")]
+impl ProcessId {
+	pub const fn from(x: i32) -> Self {
+		ProcessId(x)
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl From<ProcessId> for i32 {
+	fn from(pid: ProcessId) -> Self {
+		pid.0
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl From<TaskId> for ProcessId {
+	fn from(tid: TaskId) -> Self {
+		ProcessId(tid.0)
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl fmt::Display for ProcessId {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
@@ -355,6 +456,21 @@ impl PriorityTaskQueue {
 	}
 }
 
+/// Per-process TLS template used to initialize newly spawned threads.
+///
+/// `size` is the byte size of the TLS data block (the offset at which the
+/// TCB / thread pointer lives, also the value that the parent's main thread
+/// uses for its own block). `init` is a snapshot of the freshly-loaded TLS
+/// image taken right after the user binary's `PT_TLS` segment was copied
+/// into place by `load_application`. Each new thread starts with a verbatim
+/// copy of `init`, so it sees pristine `#[thread_local]` defaults rather
+/// than mutated state from another thread.
+#[cfg(feature = "common-os")]
+pub(crate) struct TlsTemplate {
+	pub size: usize,
+	pub init: Vec<u8>,
+}
+
 /// A task control block, which identifies either a process or a thread
 #[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
 #[cfg_attr(
@@ -364,6 +480,11 @@ impl PriorityTaskQueue {
 pub(crate) struct Task {
 	/// The ID of this context
 	pub id: TaskId,
+	/// Process ID — equal to `id` for the main thread of a process, and
+	/// inherited from the spawning thread for every additional thread of
+	/// the same process.
+	#[cfg(feature = "common-os")]
+	pub pid: ProcessId,
 	/// Status of a task, e.g. if the task is ready or blocked
 	pub status: TaskStatus,
 	/// Task priority,
@@ -383,9 +504,18 @@ pub(crate) struct Task {
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Tls>,
-	// Physical address of the 1st level page table
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-	pub root_page_table: usize,
+	// Physical address of the 1st level page table, shared between all
+	// threads of the same process via `Arc`. The address space is freed when
+	// the last thread referencing this `RootPageTable` is dropped.
+	#[cfg(feature = "common-os")]
+	pub root_page_table: Arc<RootPageTable>,
+	/// Per-process TLS template used to allocate fresh TLS regions for new
+	/// threads. `None` for kernel-only tasks; set by `load_application`
+	/// when the user binary has a `PT_TLS` segment.
+	#[cfg(feature = "common-os")]
+	pub tls_template: Option<Arc<TlsTemplate>>,
+	#[cfg(feature = "common-os")]
+	pub vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 }
 
 pub(crate) trait TaskFrame {
@@ -406,6 +536,8 @@ impl Task {
 
 		Task {
 			id: tid,
+			#[cfg(feature = "common-os")]
+			pid: tid.into(),
 			status: task_status,
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
@@ -416,19 +548,28 @@ impl Task {
 			object_map,
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: crate::arch::mm::create_new_root_page_table(),
+			#[cfg(feature = "common-os")]
+			root_page_table: Arc::new(RootPageTable::new(arch::mm::create_new_root_page_table())),
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		}
 	}
 
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
 		debug!("Creating idle task {tid}");
 
-		/// All cores use the same mapping between file descriptor and the referenced object
+		/// In the unikernel case all cores share the same mapping between
+		/// file descriptor and the referenced object. Under `common-os`,
+		/// each process gets its own `object_map` when the application is
+		/// loaded, so the idle task only needs an empty placeholder.
+		#[cfg(not(feature = "common-os"))]
 		static OBJECT_MAP: OnceCell<
 			Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		> = OnceCell::new();
 
+		#[cfg(not(feature = "common-os"))]
 		if core_id == 0 {
 			OBJECT_MAP
 				.set(Arc::new(RwSpinLock::new(HashMap::<
@@ -454,6 +595,8 @@ impl Task {
 
 		Task {
 			id: tid,
+			#[cfg(feature = "common-os")]
+			pid: tid.into(),
 			status: TaskStatus::Idle,
 			prio: IDLE_PRIO,
 			last_stack_pointer: VirtAddr::zero(),
@@ -461,20 +604,73 @@ impl Task {
 			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
+			#[cfg(not(feature = "common-os"))]
 			object_map: OBJECT_MAP.get().unwrap().clone(),
+			#[cfg(feature = "common-os")]
+			object_map: Arc::new(RwSpinLock::new(HashMap::<
+				RawFd,
+				Arc<async_lock::RwLock<Fd>>,
+				RandomState,
+			>::with_hasher(RandomState::with_seeds(
+				0, 0, 0, 0,
+			)))),
 			#[cfg(not(feature = "common-os"))]
 			tls,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			#[cfg(feature = "common-os")]
+			root_page_table: Arc::new(RootPageTable::new_boot(
+				*crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			)),
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
+		}
+	}
+
+	/// Create a new user-space thread that shares its parent's address space.
+	///
+	/// The `root_page_table` `Arc` is cloned from the parent, so all threads
+	/// of the same process drop together when the last one exits.
+	/// `parent_pid` is the spawning thread's `pid`; the new thread joins
+	/// the same process and reports the same `pid` value.
+	#[cfg(feature = "common-os")]
+	#[allow(clippy::too_many_arguments)]
+	pub fn new_thread(
+		tid: TaskId,
+		parent_pid: ProcessId,
+		core_id: CoreId,
+		task_status: TaskStatus,
+		task_prio: Priority,
+		stacks: TaskStacks,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+		root_page_table: Arc<RootPageTable>,
+		tls_template: Option<Arc<TlsTemplate>>,
+		vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
+	) -> Task {
+		debug!("Creating user thread {tid} (pid {parent_pid}) on core {core_id}");
+		Task {
+			id: tid,
+			pid: parent_pid,
+			status: task_status,
+			prio: task_prio,
+			last_stack_pointer: VirtAddr::zero(),
+			user_stack_pointer: VirtAddr::zero(),
+			last_fpu_state: FPUState::new(),
+			core_id,
+			stacks,
+			object_map,
+			root_page_table,
+			tls_template,
+			vmas,
 		}
 	}
 }
 
-/*impl Drop for Task {
+impl Drop for Task {
 	fn drop(&mut self) {
-		debug!("Drop task {}", self.id);
+		//debug!("Drop task {}", self.id);
 	}
-}*/
+}
 
 struct BlockedTask {
 	task: Rc<RefCell<Task>>,

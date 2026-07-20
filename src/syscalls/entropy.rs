@@ -33,7 +33,7 @@ unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 
 	entropy::read(buf, flags)
 		.unwrap_or_else(|_| {
-			warn!("Unable to read entropy! Fallback to a naive implementation!");
+			trace!("Unable to read entropy! Fallback to a naive implementation!");
 			for byte in &mut *buf {
 				*byte = (generate_park_miller_lehmer_random_number() & 0xff)
 					.try_into()
@@ -53,7 +53,14 @@ unsafe fn read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
-	unsafe { read_entropy(buf, len, flags) }
+	let ret = unsafe { read_entropy(buf, len, flags) };
+	if ret >= 0 {
+		debug!("Read {ret} bytes with cryptographically secure random data");
+	} else {
+		error!("Unable to read cryptographically secure random data");
+	}
+
+	ret
 }
 
 /// Create a cryptographicly secure 32bit random number with the support of

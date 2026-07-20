@@ -6,6 +6,8 @@ use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
 use hermit_entry::boot_info::RawBootInfo;
+#[cfg(feature = "common-os")]
+use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
@@ -189,24 +191,44 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 }
 
 #[cfg(feature = "common-os")]
-const LOADER_START: usize = 0x0100_0000_0000;
+pub(crate) const USER_START: VirtAddr = VirtAddr::new(0x0100_0000_0000);
 #[cfg(feature = "common-os")]
-const LOADER_STACK_SIZE: usize = 0x8000;
+const USER_STACK: VirtAddr = VirtAddr::new(0x0180_0000_0000 - USER_STACK_SIZE as u64);
+#[cfg(feature = "common-os")]
+const USER_STACK_SIZE: usize = 0x8000;
 
+#[allow(clippy::result_unit_err)]
 #[cfg(feature = "common-os")]
-pub fn load_application<F, T>(code_size: u64, tls_size: u64, func: F) -> T
+pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
 where
-	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> T,
+	F: FnOnce(
+		&'static mut [u8],
+		Option<&'static mut [u8]>,
+	) -> Result<Option<alloc::vec::Vec<u8>>, ()>,
 {
+	use alloc::sync::Arc;
+
+	use ahash::RandomState;
 	use align_address::Align;
 	use free_list::PageLayout;
-	use memory_addresses::{PhysAddr, VirtAddr};
+	use hashbrown::HashMap;
+	use hermit_sync::RwSpinLock;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
+	use crate::fd::{Fd, RawFd, stdio};
+	use crate::mm::vma::*;
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
-	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
+	// each process has to provide its own object_map
+	// => create a new one
+	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
+		RandomState::with_seeds(0, 0, 0, 0),
+	);
+	stdio::setup(&mut object_map);
+	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
+
+	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
 	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
@@ -214,13 +236,36 @@ where
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable().user().execute_enable();
 	paging::map::<BasePageSize>(
-		VirtAddr::from(LOADER_START),
+		USER_START,
 		physaddr,
 		code_size / BasePageSize::SIZE as usize,
 		flags,
 	);
+	// VirtAddr's defined in vma.rs is `x86_64::VirtAddr` on x86_64 but
+	// this file's local `use` brings in `memory_addresses::VirtAddr`.
+	// Convert at the boundary so the BTreeMap-keyed insert type-checks.
+	{
+		let start: x86_64::VirtAddr = USER_START.into();
+		let end: x86_64::VirtAddr = (USER_START + code_size).align_up(BasePageSize::SIZE).into();
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				start,
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ
+						| VirtualMemoryAreaProt::WRITE
+						| VirtualMemoryAreaProt::EXECUTE,
+					MemoryType::CODE,
+				),
+			);
+	}
 
-	let loader_start_ptr = ptr::with_exposed_provenance_mut(LOADER_START);
+	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
 	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
 
 	if tls_size > 0 {
@@ -238,13 +283,34 @@ where
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().user().execute_disable();
-		let tls_virt = VirtAddr::from(LOADER_START + code_size + BasePageSize::SIZE as usize);
+		let tls_virt =
+			VirtAddr::from(USER_START.as_usize() + code_size + BasePageSize::SIZE as usize);
 		paging::map::<BasePageSize>(
 			tls_virt,
 			physaddr,
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
+
+		{
+			let start: x86_64::VirtAddr = tls_virt.into();
+			let end: x86_64::VirtAddr = (tls_virt + tls_memsz).align_up(BasePageSize::SIZE).into();
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.vmas
+				.write()
+				.insert(
+					start,
+					VirtualMemoryArea::new(
+						start,
+						end,
+						VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+						MemoryType::TLS,
+					),
+				);
+		}
+
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
 		for elem in block.iter_mut() {
@@ -258,47 +324,117 @@ where
 		}
 		processor::writefs(thread_ptr.expose_provenance());
 
-		func(code_slice, Some(block))
+		// Run the ELF loader, which copies the binary's `PT_TLS` initial
+		// image into `block` and returns the pristine PT_TLS image
+		// directly from the ELF buffer.
+		let tls_init = func(code_slice, Some(block))?;
+
+		if let Some(init) = tls_init {
+			let template = Arc::new(crate::scheduler::task::TlsTemplate {
+				size: tls_offset,
+				init,
+			});
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.tls_template = Some(template);
+		}
+
+		Ok(())
 	} else {
-		func(code_slice, None)
+		func(code_slice, None)?;
+		Ok(())
 	}
 }
 
 #[cfg(feature = "common-os")]
-pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&str]) -> ! {
-	use alloc::ffi::CString;
-
+pub unsafe fn jump_to_user_land(
+	entry_point: usize,
+	args: alloc::vec::Vec<alloc::ffi::CString>,
+	envs: alloc::vec::Vec<alloc::ffi::CString>,
+) -> ! {
 	use align_address::Align;
-	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+	use free_list::PageLayout;
+	use x86_64::structures::paging::{
+		PageSize, PageTableFlags as PageTableEntryFlags, Size4KiB as BasePageSize,
+	};
 
+	use crate::arch::mm::paging;
 	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
+	use crate::arch::x86_64::mm::paging::PageTableEntryFlagsExt;
+	use crate::mm::vma::*;
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
-	info!("Create new file descriptor table");
+	debug!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();
 
-	let entry_point: usize = LOADER_START | entry_point;
-	let stack_pointer: usize = LOADER_START
-		+ (code_size + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE.try_into().unwrap())
-		- 8;
+	let entry_point: usize = USER_START.as_usize() | entry_point;
+	let stack_pointer: usize = USER_STACK.as_usize() + USER_STACK_SIZE - 8;
 
-	let stack_pointer = stack_pointer - 128 /* red zone */ - arg.len() * size_of::<*mut u8>();
+	let layout = PageLayout::from_size(USER_STACK_SIZE).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable().user();
+	paging::map::<BasePageSize>(
+		USER_STACK,
+		phys_addr,
+		USER_STACK_SIZE / BasePageSize::SIZE as usize,
+		flags,
+	);
+	{
+		let start: x86_64::VirtAddr = USER_STACK.into();
+		let end: x86_64::VirtAddr = (USER_STACK + USER_STACK_SIZE).into();
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				start,
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+					MemoryType::STACK,
+				),
+			);
+	}
+
+	// Place the argv and envp pointer arrays on the user stack. Both
+	// arrays follow the C convention and are terminated by a null pointer.
+	let ptr_count = args.len() + 1 + envs.len() + 1;
+	let stack_pointer = stack_pointer - 128 /* red zone */ - ptr_count * size_of::<*mut u8>();
 	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
-	let argv = unsafe { slice::from_raw_parts_mut(stack_ptr, arg.len()) };
-	let len = arg.iter().fold(0, |acc, x| acc + x.len() + 1);
+	let arrays = unsafe { slice::from_raw_parts_mut(stack_ptr, ptr_count) };
+	let (argv, envp) = arrays.split_at_mut(args.len() + 1);
+	let len = args
+		.iter()
+		.chain(envs.iter())
+		.fold(0, |acc, x| acc + x.as_bytes_with_nul().len());
 	// align stack pointer to fulfill the requirements of the x86_64 ABI
 	let stack_pointer = (stack_pointer - len).align_down(16) - size_of::<usize>();
 
 	let mut pos: usize = 0;
-	for (i, s) in arg.iter().enumerate() {
-		let s = CString::new(*s).unwrap();
+	for (dst, s) in argv
+		.iter_mut()
+		.zip(args.iter())
+		.chain(envp.iter_mut().zip(envs.iter()))
+	{
 		let bytes = s.as_bytes_with_nul();
-		argv[i] = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
+		*dst = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
 		pos += bytes.len();
 
 		unsafe {
-			argv[i].copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
+			dst.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
 		}
 	}
+	argv[args.len()] = ptr::null_mut();
+	envp[envs.len()] = ptr::null_mut();
+
+	let argc = args.len();
+	drop(args);
+	drop(envs);
 
 	debug!("Jump to user space at 0x{entry_point:x}, stack pointer 0x{stack_pointer:x}");
 
@@ -311,8 +447,14 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			"push {3}",
 			"push {4}",
 			"push {5}",
-			"mov rdi, {6}",
-			"mov rsi, {7}",
+			// Clear registers so that state cannot leak. `rdi`, `rsi`,
+			// and `rdx` carry argc, argv, and envp and are bound as
+			// fixed register operands below, so the register allocator
+			// cannot hand them out for the other `in(reg)` operands.
+			"xor rax, rax", "xor rbx, rbx", "xor rcx, rcx",
+			"xor r8, r8", "xor r9, r9", "xor r10, r10",
+			"xor r11, r11", "xor r12, r12", "xor r13, r13",
+			"xor r14, r14", "xor r15, r15",
 			"iretq",
 			const u64::MAX - (TaskStacks::MARKER_SIZE as u64 - 1),
 			const 0x23usize,
@@ -320,8 +462,9 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			const 0x1202u64,
 			const 0x2busize,
 			in(reg) entry_point,
-			in(reg) argv.len(),
-			in(reg) argv.as_ptr(),
+			in("rdi") argc,
+			in("rsi") argv.as_ptr(),
+			in("rdx") envp.as_ptr(),
 			options(nostack, noreturn)
 		);
 	}
