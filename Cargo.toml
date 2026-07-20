@@ -369,7 +369,7 @@ features = [
 free-list = { version = "0.3", features = ["x86_64"] }
 raw-cpuid = "11"
 uart_16550 = { version = "0.6", features = ["embedded-io"] }
-x86_64 = "0.15"
+x86_64 = { version = "0.15", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
 memory_addresses = { version = "0.4", default-features = false, features = [
 	"x86_64",
 	"conv-x86_64",
