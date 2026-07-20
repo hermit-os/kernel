@@ -16,6 +16,7 @@ use x86_64::structures::paging::{
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::env::BootInfoExt;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 use crate::{env, scheduler};
 
@@ -318,7 +319,7 @@ pub fn init() {
 fn make_p4_writable() {
 	debug!("Making P4 table writable");
 
-	if !env::is_uefi() {
+	if !env::start_info().is_uefi() {
 		return;
 	}
 

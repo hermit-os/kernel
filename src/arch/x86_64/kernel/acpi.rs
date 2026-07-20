@@ -11,7 +11,7 @@ use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::env;
+use crate::env::{self, BootInfoExt, StartInfo};
 use crate::mm::{PageAlloc, PageRangeAllocator};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
@@ -107,7 +107,7 @@ pub struct AcpiTable<'a> {
 
 impl AcpiTable<'_> {
 	fn map(physical_address: PhysAddr) -> Self {
-		if env::is_uefi() {
+		if env::start_info().is_uefi() {
 			// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
 			let allocated_virtual_address = VirtAddr::new(physical_address.as_u64());
 			let header = unsafe {
@@ -191,7 +191,7 @@ impl AcpiTable<'_> {
 
 impl Drop for AcpiTable<'_> {
 	fn drop(&mut self) {
-		if !env::is_uefi() {
+		if !env::start_info().is_uefi() {
 			let range = PageRange::from_start_len(
 				self.allocated_virtual_address.as_usize(),
 				self.allocated_length,
@@ -348,7 +348,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
-	if let Some(rsdp) = env::rsdp() {
+	if let Some(rsdp) = env::start_info().rsdp_addr() {
 		trace!("RSDP detected successfully at {rsdp:#x?}");
 		let rsdp = unsafe {
 			ptr::with_exposed_provenance::<AcpiRsdp>(rsdp.get())
@@ -518,7 +518,7 @@ pub fn poweroff() {
 
 pub fn init() {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

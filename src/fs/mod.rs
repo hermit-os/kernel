@@ -19,6 +19,8 @@ use hermit_sync::{InterruptSpinMutex, OnceCell};
 use mem::MemDirectory;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+#[cfg(feature = "uhyve")]
+use crate::env::BootInfoExt;
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption, insert_object, remove_object};
@@ -332,7 +334,7 @@ pub(crate) fn init() {
 	virtio_fs::init();
 
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	if crate::env::start_info().is_uhyve() {
 		uhyve::init();
 	}
 

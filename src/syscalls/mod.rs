@@ -21,6 +21,8 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+#[cfg(feature = "uhyve")]
+use crate::env::BootInfoExt;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
@@ -266,7 +268,7 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	crate::arch::kernel::print_statistics();
 
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if env::start_info().is_uhyve() {
 		crate::uhyve::shutdown(arg);
 	}
 

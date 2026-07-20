@@ -9,7 +9,7 @@ use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
 use crate::config::KERNEL_STACK_SIZE;
-use crate::env;
+use crate::env::{self, BootInfoExt};
 
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
@@ -52,8 +52,8 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 	if CPU_ONLINE.load(Ordering::Acquire) == 0 {
 		crate::logging::KERNEL_LOGGER.set_time(true);
 
-		env::set_boot_info(*boot_info.unwrap());
-		let fdt = env::fdt().unwrap();
+		env::set_start_info(*boot_info.unwrap());
+		let fdt = env::start_info().fdt().unwrap();
 		// Init HART_MASK
 		let mut hart_mask = 0;
 		for cpu in fdt.cpus() {

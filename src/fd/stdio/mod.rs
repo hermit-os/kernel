@@ -14,11 +14,13 @@ use hashbrown::HashMap;
 pub use self::console::{ConsoleStderr, ConsoleStdin, ConsoleStdout};
 #[cfg(feature = "uhyve")]
 pub use self::uhyve::{UhyveStderr, UhyveStdin, UhyveStdout};
+#[cfg(feature = "uhyve")]
+use crate::env::BootInfoExt;
 use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 
 pub(crate) fn setup(fds: &mut HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>) {
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	if crate::env::start_info().is_uhyve() {
 		let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new().into()));
 		let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new().into()));
 		let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new().into()));

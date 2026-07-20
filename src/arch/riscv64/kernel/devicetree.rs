@@ -43,7 +43,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 	not(feature = "pci"),
 ))]
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
-use crate::env;
+use crate::env::{self, BootInfoExt};
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
 #[cfg(all(
@@ -68,7 +68,7 @@ enum Model {
 /// This function should only be called once
 pub fn init() {
 	debug!("Init devicetree");
-	let Some(fdt) = env::fdt() else {
+	let Some(fdt) = env::start_info().fdt() else {
 		return;
 	};
 
@@ -106,7 +106,7 @@ pub fn init() {
 /// This function should only be called once
 pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	// TODO: Implement devicetree correctly
-	if let Some(fdt) = env::fdt() {
+	if let Some(fdt) = env::start_info().fdt() {
 		debug!("Init drivers using devicetree");
 
 		unsafe {

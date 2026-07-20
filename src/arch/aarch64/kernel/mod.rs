@@ -25,6 +25,8 @@ pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
+#[cfg(any(feature = "uhyve", feature = "smp"))]
+use crate::env::BootInfoExt;
 
 #[repr(align(8))]
 pub(crate) struct AlignedAtomicU32(AtomicU32);
@@ -41,7 +43,7 @@ global_asm!(include_str!("start.s"));
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	let fdt = crate::env::fdt().unwrap();
+	let fdt = crate::env::start_info().fdt().unwrap();
 	let cpu_count = fdt.cpus().count();
 	u32::try_from(cpu_count).unwrap()
 }
@@ -101,7 +103,7 @@ pub fn boot_next_processor() {
 
 	#[allow(clippy::needless_return)]
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	if crate::env::start_info().is_uhyve() {
 		return;
 	}
 
@@ -125,7 +127,7 @@ pub fn boot_next_processor() {
 			trace!("Virtual address of smp_start 0x{virt_start:x}");
 			trace!("Physical address of smp_start 0x{phys_start:x}");
 
-			let fdt = crate::env::fdt().unwrap();
+			let fdt = crate::env::start_info().fdt().unwrap();
 			let psci_node = fdt.find_node("/psci").unwrap();
 
 			let cpu_on = psci_node.property("cpu_on").unwrap().as_usize().unwrap();

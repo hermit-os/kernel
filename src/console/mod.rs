@@ -10,6 +10,8 @@ use hermit_sync::{InterruptTicketMutex, Lazy};
 use crate::arch::kernel::serial::SerialDevice;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioUART;
+#[cfg(feature = "uhyve")]
+use crate::env::BootInfoExt;
 use crate::errno::Errno;
 use crate::executor::WakerRegistration;
 
@@ -157,7 +159,7 @@ pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 	CoreLocal::install();
 
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	if crate::env::start_info().is_uhyve() {
 		return InterruptTicketMutex::new(Console::new(IoDevice::Uhyve(uhyve::UhyveSerial::new())));
 	}
 

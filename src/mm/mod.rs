@@ -65,6 +65,8 @@ pub use self::virtualmem::{PageAlloc, PageBox};
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
+#[cfg(target_os = "none")]
+use crate::env::{BootInfoExt, StartInfo};
 use crate::{arch, env};
 
 #[cfg(target_os = "none")]
@@ -142,12 +144,11 @@ pub(crate) fn init() {
 	let has_1gib_pages = arch::kernel::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::kernel::processor::supports_2mib_pages();
 
-	let min_mem = if env::is_uefi() {
+	let min_mem = if env::start_info().is_uefi() {
 		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
 		reserved_space
 	} else {
-		(kernel_addr_range.end.as_u64() - env::get_ram_address().unwrap().as_u64()
-			+ reserved_space as u64) as usize
+		kernel_addr_range.end.as_usize() - env::start_info().first_ram_address() + reserved_space
 	};
 	info!("Minimum memory size: {} MiB", min_mem >> 20);
 	let avail_mem = total_mem
