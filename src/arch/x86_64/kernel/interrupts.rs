@@ -157,10 +157,12 @@ pub(crate) fn install() {
 	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
-pub(crate) fn install_handlers(#[allow(unused_mut)] mut handlers: InterruptHandlerMap) {
+#[allow(unused_mut)]
+pub(crate) fn install_handlers(mut handlers: InterruptHandlerMap) {
 	#[cfg(feature = "pc-keyboard")]
 	{
 		use crate::arch::kernel::pc_keyboard::get_keyboard_handler;
+
 		let (irq, handler) = get_keyboard_handler();
 		handlers.entry(irq).or_default().push_back(handler);
 	}
