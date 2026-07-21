@@ -3,7 +3,8 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::from_utf8;
-use std::time::Duration;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 use std::{env, fs, io, thread};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -570,8 +571,26 @@ fn get_frequency() -> u64 {
 }
 
 fn test_stdin(child: &mut Child) -> Result<()> {
+	/// Upper bound for the guest to echo back every message. This only
+	/// caps the failure case — the test stops waiting as soon as the last
+	/// message shows up.
+	const ECHO_TIMEOUT: Duration = Duration::from_secs(60);
+
 	thread::sleep(Duration::from_secs(10));
 	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
+
+	// Reading blocks, so the echo is collected on a separate thread while
+	// the main thread feeds stdin.
+	let stdout = child.stdout.take().unwrap();
+	let (tx, rx) = mpsc::channel();
+	thread::spawn(move || {
+		for line in BufReader::new(stdout).lines() {
+			let Ok(line) = line else { break };
+			if tx.send(line).is_err() {
+				break;
+			}
+		}
+	});
 
 	let mut stdin = child.stdin.take().unwrap();
 	for message in messages {
@@ -580,20 +599,31 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 		thread::sleep(Duration::from_secs(1));
 	}
 
-	child.terminate()?;
+	// Wait for the guest to echo everything back before terminating QEMU.
+	// Terminating after a fixed delay cut the output off mid-line on slow
+	// targets, such as aarch64_be, which is emulated without hardware
+	// acceleration.
+	let mut stdout_lines = Vec::new();
+	let mut missing = messages.to_vec();
+	let deadline = Instant::now() + ECHO_TIMEOUT;
+	while !missing.is_empty() {
+		let Some(timeout) = deadline.checked_duration_since(Instant::now()) else {
+			break;
+		};
+		let Ok(line) = rx.recv_timeout(timeout) else {
+			break;
+		};
+		missing.retain(|message| !line.contains(message));
+		stdout_lines.push(line);
+	}
 
-	let stdout = child.stdout.take().unwrap();
-	let stdout_lines = BufReader::new(stdout)
-		.lines()
-		.collect::<Result<Vec<_>, _>>()?;
+	child.terminate()?;
 
 	for line in &stdout_lines {
 		println!("{line}");
 	}
 
-	for message in messages {
-		assert!(stdout_lines.iter().any(|line| line.contains(message)));
-	}
+	assert!(missing.is_empty(), "missing from output: {missing:?}");
 
 	Ok(())
 }
