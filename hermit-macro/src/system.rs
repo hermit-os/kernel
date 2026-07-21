@@ -1,6 +1,7 @@
 use proc_macro2::{Ident, Span};
 use syn::{
-	Abi, Attribute, FnArg, Item, ItemFn, Pat, Result, Signature, Stmt, Visibility, parse_quote,
+	Abi, Attribute, FnArg, FnModifiers, Item, ItemFn, Pat, Result, Signature, Stmt, Visibility,
+	parse_quote,
 };
 
 fn parse_attr(attr: Option<Ident>) -> Result<bool> {
@@ -110,6 +111,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 	let inner_func = ItemFn {
 		attrs: vec![],
 		vis: Visibility::Inherited,
+		modifiers: FnModifiers::default(),
 		sig: Signature {
 			ident: inner_ident.clone(),
 			..func.sig.clone()
@@ -146,11 +148,12 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 	};
 
 	let args = &sig.args;
-	let unsafety = &func.sig.unsafety;
+	let safety = &func.sig.safety;
 	let kernel_ident = Ident::new(&format!("_{}", func.sig.ident), Span::call_site());
 	let kernel_func = ItemFn {
 		attrs: vec![parse_quote!(#[allow(unreachable_code)])],
 		vis: Visibility::Inherited,
+		modifiers: FnModifiers::default(),
 		sig: Signature {
 			ident: kernel_ident.clone(),
 			..func.sig.clone()
@@ -160,7 +163,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 			print!(#strace_format, #(#input_idents),*);
 
 			#[allow(clippy::diverging_sub_expression)]
-			let ret = #unsafety { #inner_ident(#(#args),*) };
+			let ret = #safety { #inner_ident(#(#args),*) };
 
 			#[cfg(feature = "strace")]
 			println!(") = {ret:?}");
@@ -187,7 +190,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 					unsafe { crate::arch::kernel::kernel_stack::#kernel_function_ident(#(#args,)* #kernel_ident) }
 				}
 				_ => {
-					#unsafety { #kernel_ident(#(#args),*) }
+					#safety { #kernel_ident(#(#args),*) }
 				}
 			}
 		}},
