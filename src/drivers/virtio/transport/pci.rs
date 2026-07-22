@@ -581,6 +581,8 @@ pub(crate) fn map_caps(
 	#[cfg(target_arch = "x86_64")]
 	let mut msix_table = None;
 
+	let bar_mappings = device.memory_map_bars(true);
+
 	// Reads all PCI capabilities, starting at the capabilities list pointer from the
 	// PCI device.
 	//
@@ -594,7 +596,7 @@ pub(crate) fn map_caps(
 					continue;
 				}
 				let slot = cap.bar;
-				let Some((addr, size)) = device.memory_map_bar(slot, true) else {
+				let Some((addr, size)) = bar_mappings[usize::from(slot)] else {
 					continue;
 				};
 				let Some(pci_cap) = PciCap::new(
@@ -661,9 +663,12 @@ pub(crate) fn map_caps(
 			#[cfg(target_arch = "x86_64")]
 			PciCapability::MsiX(mut msix_capability) => {
 				msix_capability.set_enabled(true, device.access());
-				let (base_addr, _) = device
-					.memory_map_bar(msix_capability.table_bar(), true)
-					.unwrap();
+
+				// the capability should provide a valid BAR ID and "[t]he BAR [...] must map
+				// Memory Space" (PCIe spec. 6.0 sec. 7.7.2) for the MSI-X capability
+				let (base_addr, _) =
+					bar_mappings[usize::from(msix_capability.table_bar())].unwrap();
+
 				let table_ptr = NonNull::slice_from_raw_parts(
 					NonNull::with_exposed_provenance(
 						core::num::NonZero::new(

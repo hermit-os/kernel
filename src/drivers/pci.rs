@@ -111,53 +111,65 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		}
 	}
 
-	/// Memory maps pci bar with specified index to identical location in virtual memory.
+	/// Memory maps pci BARs to identical location in virtual memory.
 	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
-	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
-	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(VirtAddr, usize)> {
-		let (address, size, prefetchable, _width) = match self.get_bar(index) {
-			Some(Bar::Io { .. }) => {
-				warn!("Cannot map IOBar!");
+	/// Element at index is [Some] if the mapping of the BAR at the same index is successful, else [None] (if bar non-existent or IOSpace)
+	pub fn memory_map_bars(&self, no_cache: bool) -> [Option<(VirtAddr, usize)>; MAX_BARS] {
+		let mut should_skip = false;
+		core::array::from_fn(|index| {
+			if should_skip {
+				should_skip = false;
 				return None;
 			}
-			Some(Bar::Memory32 {
-				address,
-				size,
-				prefetchable,
-			}) => (
-				u64::from(address),
-				usize::try_from(size).unwrap(),
-				prefetchable,
-				32,
-			),
-			Some(Bar::Memory64 {
-				address,
-				size,
-				prefetchable,
-			}) => (address, usize::try_from(size).unwrap(), prefetchable, 64),
-			_ => {
+
+			let index = u8::try_from(index).unwrap();
+			let (address, size, prefetchable, _width) = match self.get_bar(index) {
+				Some(Bar::Io { .. }) => {
+					warn!("Cannot map IOBar!");
+					return None;
+				}
+				Some(Bar::Memory32 {
+					address,
+					size,
+					prefetchable,
+				}) => (
+					u64::from(address),
+					usize::try_from(size).unwrap(),
+					prefetchable,
+					32,
+				),
+				Some(Bar::Memory64 {
+					address,
+					size,
+					prefetchable,
+				}) => {
+					should_skip = true;
+					(address, usize::try_from(size).unwrap(), prefetchable, 64)
+				}
+				_ => {
+					return None;
+				}
+			};
+
+			if address == 0 {
 				return None;
 			}
-		};
 
-		if address == 0 {
-			return None;
-		}
+			debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
 
-		debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
+			if !prefetchable {
+				warn!("Currently only mapping of prefetchable bars is supported!");
+			}
 
-		if !prefetchable {
-			warn!("Currently only mapping of prefetchable bars is supported!");
-		}
+			// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
+			// We therefore do not need to reserve any additional memory in our kernel.
+			// Map bar into RW^X virtual memory
+			let physical_address = address;
+			let virtual_address =
+				crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache);
 
-		// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
-		// We therefore do not need to reserve any additional memory in our kernel.
-		// Map bar into RW^X virtual memory
-		let physical_address = address;
-		let virtual_address =
-			crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache);
-
-		Some((virtual_address, size))
+			Some((virtual_address, size))
+		})
 	}
 
 	pub fn get_irq(&self) -> Option<InterruptLine> {
