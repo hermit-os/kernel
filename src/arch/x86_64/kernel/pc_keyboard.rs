@@ -16,43 +16,60 @@ const PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT: u8 = 0x01;
 const PS2_BUFFER_FULL: u8 = 0x01;
 
 const BUFFER_SIZE: usize = 256;
+struct Ps2;
+
+impl Ps2 {
+	pub fn read_status() -> u8 {
+		let mut status_port = Port::<u8>::new(PS2_CMD_PORT);
+		unsafe { status_port.read() }
+	}
+
+	pub fn write_cmd(cmd: u8) {
+		let mut cmd_port = Port::<u8>::new(PS2_CMD_PORT);
+		unsafe { cmd_port.write(cmd) }
+	}
+
+	pub fn read_data() -> u8 {
+		let mut data_port = Port::<u8>::new(PS2_DATA_PORT);
+		unsafe { data_port.read() }
+	}
+
+	pub fn write_data(data: u8) {
+		let mut data_port = Port::<u8>::new(PS2_DATA_PORT);
+		unsafe { data_port.write(data) }
+	}
+}
 
 static KEYBOARD_BUFFER: Lazy<InterruptTicketMutex<VecDeque<u8>>> =
 	Lazy::new(|| InterruptTicketMutex::new(VecDeque::with_capacity(BUFFER_SIZE)));
 
+fn keyboard_handler() {
+	let scancode = Ps2::read_data();
+	let mut buffer = KEYBOARD_BUFFER.lock();
+
+	if buffer.len() >= BUFFER_SIZE {
+		buffer.pop_front();
+	}
+	buffer.push_back(scancode);
+}
+
 pub(crate) fn get_keyboard_handler() -> (u8, fn()) {
-	let mut cmd_port = Port::<u8>::new(PS2_CMD_PORT);
-	let mut data_port = Port::<u8>::new(PS2_DATA_PORT);
-
-	unsafe {
-		cmd_port.write(PS2_CMD_DISABLE_KEYBOARD);
-		cmd_port.write(PS2_CMD_DISABLE_MOUSE);
-
-		// Clear garbage data from the PS/2 buffer
-		while (cmd_port.read() & PS2_BUFFER_FULL) != 0 {
-			let _ = data_port.read();
-		}
-
-		cmd_port.write(PS2_CMD_READ_CNFG);
-		let mut config = data_port.read();
-
-		config |= PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT;
-
-		cmd_port.write(PS2_CMD_WRITE_CNFG);
-		data_port.write(config);
-		cmd_port.write(PS2_CMD_ENABLE_KEYBOARD);
+	Ps2::write_cmd(PS2_CMD_DISABLE_KEYBOARD);
+	Ps2::write_cmd(PS2_CMD_DISABLE_MOUSE);
+	// Ensure an empty buffer to guard against stuck data
+	while (Ps2::read_status() & PS2_BUFFER_FULL) != 0 {
+		let _ = Ps2::read_data();
 	}
 
-	fn keyboard_handler() {
-		let mut data_port = Port::<u8>::new(PS2_DATA_PORT);
-		let scancode = unsafe { data_port.read() };
-		let mut buffer = KEYBOARD_BUFFER.lock();
+	Ps2::write_cmd(PS2_CMD_READ_CNFG);
+	let mut config = Ps2::read_data();
 
-		if buffer.len() >= BUFFER_SIZE {
-			buffer.pop_front();
-		}
-		buffer.push_back(scancode);
-	}
+	config |= PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT;
+
+	Ps2::write_cmd(PS2_CMD_WRITE_CNFG);
+
+	Ps2::write_data(config);
+	Ps2::write_cmd(PS2_CMD_ENABLE_KEYBOARD);
 
 	// Force the initialization of the keyboard buffer to ensure it is ready before any interrupts occur.
 	Lazy::force(&KEYBOARD_BUFFER);
