@@ -1,0 +1,38 @@
+name: LLM Review
+
+# pull_request_target runs in the BASE repo context, so secrets and a
+# write-scoped GITHUB_TOKEN are available even for fork PRs.
+# NOTE: changes to this file only take effect once merged to the default
+# branch — they will NOT run for the PR that introduces them.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write   # required to post the review
+
+jobs:
+  review:
+    name: Inline LLM review
+    # skip drafts; only run once the PR is ready
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      # SECURITY: do NOT add `ref: ${{ github.event.pull_request.head.sha }}` here.
+      # Under pull_request_target that would check out and potentially execute
+      # untrusted fork code WITH access to secrets. We only need the script from
+      # the base branch; the PR diff is read via the API, never executed.
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Run inline LLM review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_BASE: ${{ secrets.LLM_API_BASE }}   # e.g. http://llm-host:8080/v1
+          LLM_MODEL: "mistralai/Devstral-Small-2-24B-Instruct-2512"  # # the model id your server exposes
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}     # set this secret if the endpoint needs auth
+        run: python .github/scripts/llm_review.py
