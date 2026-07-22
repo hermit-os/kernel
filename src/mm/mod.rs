@@ -146,8 +146,7 @@ pub(crate) fn init() {
 		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
 		reserved_space
 	} else {
-		(kernel_addr_range.end.as_u64() - env::get_ram_address().unwrap().as_u64()
-			+ reserved_space as u64) as usize
+		(kernel_addr_range.end.as_u64() + reserved_space as u64) as usize
 	};
 	info!("Minimum memory size: {} MiB", min_mem >> 20);
 	let avail_mem = total_mem

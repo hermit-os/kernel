@@ -27,6 +27,7 @@ pub mod pci;
 pub mod pic;
 pub mod pit;
 pub mod processor;
+pub mod pvh;
 pub mod scheduler;
 pub mod serial;
 #[cfg(target_os = "none")]
@@ -168,7 +169,8 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	}
 
 	if cpu_id == 0 {
-		env::set_boot_info(*boot_info.unwrap());
+		// env::set_boot_info(*boot_info.unwrap());
+		println!("Foo");
 
 		crate::boot_processor_main()
 	} else {
