@@ -1,4 +1,4 @@
-use alloc::collections::{BTreeMap, btree_map};
+use alloc::collections::{BTreeMap, VecDeque, btree_map};
 use alloc::vec::Vec;
 use core::future;
 use core::task::Poll;
@@ -24,10 +24,38 @@ pub(crate) enum VsockState {
 	ReceiveRequest,
 	Connected,
 	Connecting,
+	/// The peer sent a graceful `Op::Shutdown`. Buffered data may still be
+	/// read; once drained, reads report EOF.
 	Shutdown,
+	/// The peer (or the device) sent an abortive `Op::Rst`. Buffered data may
+	/// still be read; once drained, reads report `ECONNRESET`.
+	Reset,
 }
 
 pub(crate) const RAW_SOCKET_BUFFER_SIZE: usize = 256 * 1024;
+
+/// Default depth of a listener's pending-connection backlog, used when
+/// `accept()` is called without an explicit `listen()`. Mirrors the TCP
+/// socket's `DEFAULT_BACKLOG`.
+pub(crate) const DEFAULT_BACKLOG: usize = 128;
+
+/// Upper bound on a listener's backlog, matching the TCP socket's `SOMAXCONN`
+/// (the default maximum used by modern Linux).
+pub(crate) const SOMAXCONN: usize = 4096;
+
+/// A pending inbound connection request waiting to be `accept()`ed, captured
+/// from an `Op::Request` packet.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PendingRequest {
+	pub remote_cid: u32,
+	pub remote_port: u32,
+	pub peer_buf_alloc: u32,
+}
+
+/// Identifies an established connection by its local (listen) port and the
+/// remote endpoint `(remote_cid, remote_port)`. Multiple connections may share
+/// one local port, mirroring how TCP demultiplexes by the connection 4-tuple.
+pub(crate) type ConnKey = (u32, u32, u32);
 
 #[derive(Debug)]
 pub(crate) struct RawSocket {
@@ -41,6 +69,12 @@ pub(crate) struct RawSocket {
 	pub rx_waker: WakerRegistration,
 	pub tx_waker: WakerRegistration,
 	pub buffer: Vec<u8>,
+	/// Inbound connection requests queued on a listener, awaiting `accept()`.
+	/// Only used by listener sockets; empty for connections.
+	pub pending: VecDeque<PendingRequest>,
+	/// Maximum depth of `pending` for a listener (set by `listen()`, clamped to
+	/// `SOMAXCONN`). Further requests beyond this are reset.
+	pub backlog: usize,
 }
 
 impl RawSocket {
@@ -56,6 +90,8 @@ impl RawSocket {
 			rx_waker: WakerRegistration::new(),
 			tx_waker: WakerRegistration::new(),
 			buffer: Vec::with_capacity(RAW_SOCKET_BUFFER_SIZE),
+			pending: VecDeque::new(),
+			backlog: DEFAULT_BACKLOG,
 		}
 	}
 }
@@ -70,6 +106,9 @@ async fn vsock_run() {
 		let mut driver_guard = driver.lock();
 		let mut hdr: Option<Hdr> = None;
 		let mut fwd_cnt: u32 = 0;
+		// Force the reply to be `Op::Rst` regardless of the incoming op (used
+		// for packets addressed to a socket that no longer exists).
+		let mut force_rst: bool = false;
 
 		driver_guard.process_packet(|header, data| {
 			let op = Op::try_from(header.op.to_ne()).unwrap();
@@ -77,22 +116,60 @@ async fn vsock_run() {
 			let type_ = Type::try_from(header.type_.to_ne()).unwrap();
 			let mut vsock_guard = VSOCK_MAP.lock();
 			let header_cid: u32 = header.src_cid.to_ne().try_into().unwrap();
+			let remote_port = header.src_port.to_ne();
 
-			let Some(raw) = vsock_guard.get_mut_socket(port) else {
+			// Packets for an established connection address the local listen
+			// port but belong to a specific remote endpoint, so route them to
+			// the connection entry keyed by `(port, remote_cid, remote_port)`.
+			// `Op::Request` (and outbound-connect responses) have no such entry
+			// yet and fall back to the listener/connect socket in `port_map`.
+			let raw = if let Some(conn) =
+				vsock_guard.get_mut_connection((port, header_cid, remote_port))
+			{
+				conn
+			} else if let Some(s) = vsock_guard.get_mut_socket(port) {
+				s
+			} else {
+				// No socket owns this port: the connection is gone (or never
+				// existed). Reply `Op::Rst` so the peer tears its side down
+				// promptly instead of waiting for a close timeout — but never
+				// reset an `Rst` (that would ping-pong forever).
+				if op != Op::Rst {
+					hdr = Some(*header);
+					force_rst = true;
+				}
 				return;
 			};
 
-			if op == Op::Request && raw.state == VsockState::Listen && type_ == Type::Stream {
-				raw.state = VsockState::ReceiveRequest;
-				raw.remote_cid = header_cid;
-				raw.remote_port = header.src_port.to_ne();
-				raw.peer_buf_alloc = header.buf_alloc.to_ne();
-				raw.rx_waker.wake();
+			if op == Op::Request
+				&& (raw.state == VsockState::Listen || raw.state == VsockState::ReceiveRequest)
+				&& type_ == Type::Stream
+			{
+				// Queue the inbound request on the listener's backlog so several
+				// concurrent connects on the same port can be accepted in turn.
+				// `ReceiveRequest` means "at least one request is pending accept".
+				if raw.pending.len() < raw.backlog {
+					raw.pending.push_back(PendingRequest {
+						remote_cid: header_cid,
+						remote_port: header.src_port.to_ne(),
+						peer_buf_alloc: header.buf_alloc.to_ne(),
+					});
+					raw.state = VsockState::ReceiveRequest;
+					raw.rx_waker.wake();
+				} else {
+					// Backlog full: reset so the peer backs off and retries.
+					hdr = Some(*header);
+					fwd_cnt = raw.fwd_cnt;
+				}
 			} else if (raw.state == VsockState::Connected || raw.state == VsockState::Shutdown)
 				&& type_ == Type::Stream
 				&& op == Op::Rw
 			{
-				if raw.remote_cid == header_cid {
+				// Match the full remote endpoint, not just the CID: distinct
+				// services on one peer (e.g. two host ports) share a CID, so a
+				// stray packet from another connection's tuple must not be
+				// delivered here.
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.buffer.extend_from_slice(data);
 					raw.fwd_cnt = raw.fwd_cnt.wrapping_add(u32::try_from(data.len()).unwrap());
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
@@ -104,25 +181,53 @@ async fn vsock_run() {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::CreditUpdate {
-				if raw.remote_cid == header_cid {
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
 					raw.tx_waker.wake();
 				} else {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::Shutdown {
-				if raw.remote_cid == header_cid {
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
 					raw.state = VsockState::Shutdown;
+					raw.rx_waker.wake();
+					raw.tx_waker.wake();
+				} else {
+					trace!("Receive message from invalid source {header_cid}");
+				}
+			} else if op == Op::Rst {
+				// A reset must come from the exact endpoint this socket is
+				// connected to. This is the arm that killed reused ephemeral
+				// ports: a delayed RST from a previously-closed connection's
+				// peer (same CID, different port) reset the port's new owner.
+				if raw.remote_cid == header_cid && raw.remote_port == remote_port {
+					raw.state = VsockState::Reset;
+					raw.rx_waker.wake();
+					raw.tx_waker.wake();
 				} else {
 					trace!("Receive message from invalid source {header_cid}");
 				}
 			} else if op == Op::Response && type_ == Type::Stream {
-				if raw.remote_cid == header_cid && raw.state == VsockState::Connecting {
+				if raw.remote_cid == header_cid
+					&& raw.remote_port == remote_port
+					&& raw.state == VsockState::Connecting
+				{
 					raw.state = VsockState::Connected;
 					raw.peer_buf_alloc = header.buf_alloc.to_ne();
 					raw.peer_fwd_cnt = header.fwd_cnt.to_ne();
+					// The blocking `connect()` future parks on `rx_waker` (see
+					// `Socket::connect`'s Connecting arm), so it MUST be woken
+					// here or the connect never returns. Wake `tx_waker` too:
+					// a freshly-connected socket is immediately writable.
+					raw.rx_waker.wake();
 					raw.tx_waker.wake();
 				}
+			} else if op == Op::Request {
+				// A request that did not match the listener backlog arm above
+				// (e.g. addressed to a non-listening socket). Reset so the peer
+				// fails fast instead of blocking until it times out.
+				hdr = Some(*header);
+				fwd_cnt = raw.fwd_cnt;
 			} else if raw.remote_cid == header_cid {
 				hdr = Some(*header);
 				fwd_cnt = raw.fwd_cnt;
@@ -139,8 +244,9 @@ async fn vsock_run() {
 				response.dst_port = hdr.src_port;
 				response.len = le32::from_ne(0);
 				response.type_ = hdr.type_;
-				if hdr.op.to_ne() == u16::from(Op::CreditRequest)
-					|| hdr.op.to_ne() == u16::from(Op::Rw)
+				if !force_rst
+					&& (hdr.op.to_ne() == u16::from(Op::CreditRequest)
+						|| hdr.op.to_ne() == u16::from(Op::Rw))
 				{
 					response.op = le16::from_ne(Op::CreditUpdate.into());
 				} else {
@@ -160,14 +266,30 @@ async fn vsock_run() {
 	.await;
 }
 
+/// Start of the ephemeral port range used for outbound connects.
+const EPHEMERAL_START: u32 = u32::MAX / 4;
+
 pub(crate) struct VsockMap {
+	/// Listeners (keyed by listen port) and outbound-connect sockets (keyed by
+	/// a synthetic ephemeral port).
 	port_map: BTreeMap<u32, RawSocket>,
+	/// Established inbound connections, keyed by `(local_port, remote_cid,
+	/// remote_port)`, so several connections can share one listen port.
+	conn_map: BTreeMap<ConnKey, RawSocket>,
+	/// Next ephemeral port to try for an outbound connect. Cycles through
+	/// `[EPHEMERAL_START, u32::MAX]` instead of always taking the first vacant
+	/// port, so a just-freed port is not immediately reused: late packets
+	/// addressed to the previous owner (e.g. a peer's delayed close `Rst`)
+	/// would otherwise hit the new connection.
+	next_ephemeral: u32,
 }
 
 impl VsockMap {
 	pub const fn new() -> Self {
 		Self {
 			port_map: BTreeMap::new(),
+			conn_map: BTreeMap::new(),
+			next_ephemeral: EPHEMERAL_START,
 		}
 	}
 
@@ -183,31 +305,77 @@ impl VsockMap {
 		}
 	}
 
-	pub fn connect(&mut self, port: u32, cid: u32) -> io::Result<u32> {
-		for i in u32::MAX / 4..u32::MAX {
-			let mut raw = RawSocket::new(VsockState::Connecting);
-			raw.remote_cid = cid;
-			raw.remote_port = port;
+	/// Set the pending-connection backlog depth for the listener on `port`,
+	/// clamped to `SOMAXCONN`.
+	pub fn set_backlog(&mut self, port: u32, backlog: usize) -> io::Result<()> {
+		let listener = self.port_map.get_mut(&port).ok_or(Errno::Inval)?;
+		listener.backlog = backlog.min(SOMAXCONN);
+		Ok(())
+	}
 
-			if let btree_map::Entry::Vacant(vacant_entry) = self.port_map.entry(i) {
+	pub fn connect(&mut self, port: u32, cid: u32) -> io::Result<u32> {
+		for _ in 0..=(u32::MAX - EPHEMERAL_START) {
+			let candidate = self.next_ephemeral;
+			self.next_ephemeral = if candidate == u32::MAX {
+				EPHEMERAL_START
+			} else {
+				candidate + 1
+			};
+
+			if let btree_map::Entry::Vacant(vacant_entry) = self.port_map.entry(candidate) {
+				let mut raw = RawSocket::new(VsockState::Connecting);
+				raw.remote_cid = cid;
+				raw.remote_port = port;
 				vacant_entry.insert(raw);
-				return Ok(i);
+				return Ok(candidate);
 			}
 		}
 
 		Err(Errno::Badf)
 	}
 
-	pub fn get_socket(&self, port: u32) -> Option<&RawSocket> {
-		self.port_map.get(&port)
-	}
-
 	pub fn get_mut_socket(&mut self, port: u32) -> Option<&mut RawSocket> {
 		self.port_map.get_mut(&port)
 	}
 
+	pub fn get_mut_connection(&mut self, key: ConnKey) -> Option<&mut RawSocket> {
+		self.conn_map.get_mut(&key)
+	}
+
 	pub fn remove_socket(&mut self, port: u32) {
 		self.port_map.remove(&port);
+	}
+
+	pub fn remove_connection(&mut self, key: ConnKey) {
+		self.conn_map.remove(&key);
+	}
+
+	/// Pop the next pending request from the listener on `listen_port`'s backlog,
+	/// move it into `conn_map` keyed by `(listen_port, remote_cid, remote_port)`,
+	/// and return the new connection's key. The listener stays in
+	/// `ReceiveRequest` while more requests remain queued, otherwise returns to
+	/// `Listen`. Resetting fields in place preserves the listener's wakers, so an
+	/// `accept()` future already parked on it is not lost.
+	pub fn establish(&mut self, listen_port: u32) -> io::Result<ConnKey> {
+		let listener = self.port_map.get_mut(&listen_port).ok_or(Errno::Inval)?;
+		let req = listener.pending.pop_front().ok_or(Errno::Again)?;
+		let key = (listen_port, req.remote_cid, req.remote_port);
+
+		let mut conn = RawSocket::new(VsockState::Connected);
+		conn.remote_cid = req.remote_cid;
+		conn.remote_port = req.remote_port;
+		conn.peer_buf_alloc = req.peer_buf_alloc;
+
+		// Stay in ReceiveRequest if more requests are queued so `accept()` keeps
+		// draining them; otherwise go back to plain Listen.
+		listener.state = if listener.pending.is_empty() {
+			VsockState::Listen
+		} else {
+			VsockState::ReceiveRequest
+		};
+
+		self.conn_map.insert(key, conn);
+		Ok(key)
 	}
 }
 
