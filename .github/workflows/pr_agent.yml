@@ -1,0 +1,32 @@
+# Based on https://github.com/The-PR-Agent/pr-agent/blob/1885eb4056887b8c8a530f0a35b842bba05cb425/docs/docs/installation/github.md#using-with-pull_request_target-forkcontribution-support
+
+name: PR Agent
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, review_requested]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    if: ${{ github.event.sender.type != 'Bot' && (github.event_name == 'pull_request_target' || github.event.issue.pull_request) }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: write
+    steps:
+      - name: PR Agent action step
+        uses: the-pr-agent/pr-agent@main
+        env:
+          # Model configuration
+          config.model: "openai/mistralai/Devstral-Small-2-24B-Instruct-2512"
+          config.fallback_models: '[]'
+          config.custom_model_max_tokens: "262144"
+          # Secrets
+          OPENAI.API_BASE: ${{ secrets.PR_AGENT_OPENAI_API_BASE }}
+          OPENAI.KEY: ${{ secrets.PR_AGENT_OPENAI_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Tool configuration
+          github_action_config.pr_actions: '["opened", "reopened", "synchronize", "ready_for_review", "review_requested"]'
+          github_action_config.auto_review: "false"
+          github_action_config.auto_describe: "false"
+          github_action_config.auto_improve: "false"
