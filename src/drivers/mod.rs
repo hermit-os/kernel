@@ -69,7 +69,7 @@ pub mod error {
 #[allow(dead_code)]
 pub(crate) trait Driver {
 	/// Returns the device driver name
-	fn get_name(&self) -> &'static str;
+	fn get_name() -> &'static str;
 }
 
 pub(crate) fn init() {

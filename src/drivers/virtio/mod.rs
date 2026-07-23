@@ -17,7 +17,11 @@ pub mod virtqueue;
 
 use core::fmt;
 
+use bitflags::Flags;
 use virtio::FeatureBits;
+
+use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::UniCapsColl;
 
 trait VirtioIdExt {
 	fn as_feature(&self) -> Option<&str>;
@@ -162,6 +166,110 @@ where
 	}
 }
 
+pub(super) trait VirtioDriver: super::Driver + Sized
+where
+	virtio::F:
+		From<Self::DeviceFeatures> + AsRef<Self::DeviceFeatures> + AsMut<Self::DeviceFeatures>,
+{
+	type Config: 'static;
+	type Error: Into<VirtioError>;
+	type DeviceFeatures: FeatureBits + fmt::Debug + Copy;
+
+	const MINIMAL_FEATURES: Self::DeviceFeatures;
+	const OPTIONAL_FEATURES: Self::DeviceFeatures;
+
+	fn init_dev(
+		caps_tuple: (
+			UniCapsColl,
+			volatile::VolatileRef<'static, Self::Config, volatile::access::ReadOnly>,
+		),
+		handlers: &mut super::InterruptHandlerMap,
+		irq: Option<super::InterruptLine>,
+	) -> Result<Self, (VirtioError, UniCapsColl)>;
+
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error;
+}
+
+impl UniCapsColl {
+	pub(super) fn init_caps<T: VirtioDriver>(
+		&mut self,
+		dev_cfg_raw: volatile::VolatileRef<'static, T::Config, volatile::access::ReadOnly>,
+		mut device_specific_setup: impl FnMut(&mut Self, &mut DevCfg<T>) -> Result<(), T::Error>,
+	) -> Result<DevCfg<T>, VirtioError>
+	where
+		virtio::F: From<T::DeviceFeatures> + AsRef<T::DeviceFeatures> + AsMut<T::DeviceFeatures>,
+	{
+		// Reset
+		self.com_cfg.reset_dev();
+
+		// Indicate device, that OS noticed it
+		self.com_cfg.ack_dev();
+
+		// Indicate device, that driver is able to handle it
+		self.com_cfg.set_drv();
+
+		let negotiated_features = self
+			.com_cfg
+			.control_registers()
+			.negotiate_features(T::MINIMAL_FEATURES.union(T::OPTIONAL_FEATURES));
+
+		if !negotiated_features.contains(T::MINIMAL_FEATURES) {
+			error!("Device features set, does not satisfy minimal features needed. Aborting!");
+			return Err(VirtioError::FailFeatureNeg);
+		}
+
+		// Indicates the device, that the current feature set is final for the driver
+		// and will not be changed.
+		self.com_cfg.features_ok();
+
+		// Checks if the device has accepted final set. This finishes feature negotiation.
+		let mut dev_cfg = if self.com_cfg.check_features() {
+			info!(
+				"Features have been negotiated between {} device and driver.",
+				T::get_name()
+			);
+			// Set feature set in device config for future use.
+			DevCfg {
+				raw: dev_cfg_raw,
+				features: negotiated_features,
+			}
+		} else {
+			error!("The device does not support our subset of features.");
+			return Err(VirtioError::FailFeatureNeg);
+		};
+
+		device_specific_setup(self, &mut dev_cfg).map_err(|err| err.into())?;
+
+		// At this point the device is "live"
+		self.com_cfg.drv_ok();
+
+		Ok(dev_cfg)
+	}
+}
+
+/// A wrapper struct for the raw configuration structure.
+/// Handling the right access to fields, as some are read-only
+/// for the driver.
+pub(super) struct DevCfg<T: VirtioDriver>
+where
+	virtio::F: From<T::DeviceFeatures> + AsRef<T::DeviceFeatures> + AsMut<T::DeviceFeatures>,
+{
+	pub(super) features: T::DeviceFeatures,
+	#[cfg_attr(
+		all(
+			not(any(
+				feature = "virtio-fs",
+				feature = "virtio-net",
+				feature = "virtio-vsock",
+			)),
+			feature = "virtio-console"
+		),
+		expect(dead_code)
+	)]
+	pub(super) raw: volatile::VolatileRef<'static, T::Config, volatile::access::ReadOnly>,
+}
+
 pub mod error {
 	use thiserror::Error;
 
@@ -207,24 +315,27 @@ pub mod error {
 		#[error("Device with id {0:#x} not supported.")]
 		DevNotSupported(u16),
 
+		#[error("Virtio driver failed, device did not acknowledge negotiated feature set!")]
+		FailFeatureNeg,
+
 		#[cfg(all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
 		#[error(transparent)]
-		NetDriver(VirtioNetError),
+		NetDriver(#[from] VirtioNetError),
 
 		#[cfg(feature = "virtio-fs")]
 		#[error(transparent)]
-		FsDriver(VirtioFsInitError),
+		FsDriver(#[from] VirtioFsInitError),
 
 		#[cfg(feature = "virtio-vsock")]
 		#[error(transparent)]
-		VsockDriver(VirtioVsockError),
+		VsockDriver(#[from] VirtioVsockError),
 
 		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
-		ConsoleDriver(VirtioConsoleError),
+		ConsoleDriver(#[from] VirtioConsoleError),
 	}
 }
