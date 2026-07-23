@@ -216,6 +216,15 @@ virtio-vsock = ["virtio"]
 ## This is only useful on PCs (x86-64).
 vga = []
 
+## Enables the PS/2 keyboard driver.
+## 
+## This feature initializes the PS/2 keyboard controller and installs a keyboard interrupt handler. 
+## It also provides a system call to receive the last scancode from the internal keyboard buffer. 
+## Note that this is not a complete keyboard driver and not needed for general keyboard support.
+## It allows receiving scancodes from the PS/2 keyboard that can be used to port applications.
+## This is only useful on PCs (x86-64). 
+pc-keyboard = []   
+
 #! ### Performance Features
 
 ## Disables putting the CPU to sleep.
