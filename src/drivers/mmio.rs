@@ -1,5 +1,3 @@
-#[cfg(feature = "virtio-console")]
-pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 #[cfg(feature = "virtio-fs")]
 pub(crate) use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "virtio-vsock")]

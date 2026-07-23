@@ -314,7 +314,7 @@ impl TxFields {
 }
 
 impl Driver for GEMDriver {
-	fn get_name(&self) -> &'static str {
+	fn get_name() -> &'static str {
 		"gem"
 	}
 }

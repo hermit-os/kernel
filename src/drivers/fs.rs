@@ -5,15 +5,6 @@
 //!
 //! [File System Device]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-45800011
 
-// FIXME: use cfg_select! instead once resolved:
-// https://github.com/rust-lang/rust/issues/158371
-// https://github.com/rust-lang/rust/issues/158400
-#[cfg(feature = "pci")]
-mod pci;
-
-#[cfg(not(feature = "pci"))]
-mod mmio;
-
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -34,13 +25,8 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
-use crate::drivers::virtio::ControlRegisters;
-use crate::drivers::virtio::error::VirtioFsInitError;
-use crate::drivers::virtio::transport::InterruptCapability;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, NotifCfg};
+use crate::drivers::virtio::error::{VirtioError, VirtioFsInitError};
+use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
@@ -51,14 +37,7 @@ use crate::errno::Errno;
 use crate::fs::virtio_fs::{self, Rsp, RspHeader, VirtioFsError, VirtioFsInterface};
 use crate::mm::device_alloc::DeviceAlloc;
 
-/// A wrapper struct for the raw configuration structure.
-/// Handling the right access to fields, as some are read-only
-/// for the driver.
-pub(crate) struct FsDevCfg {
-	pub raw: VolatileRef<'static, virtio::fs::Config, ReadOnly>,
-	pub dev_id: u16,
-	pub features: virtio::fs::F,
-}
+type FsDevCfg = super::virtio::DevCfg<VirtioFsDriver>;
 
 /// Virtio file system driver struct.
 ///
@@ -67,140 +46,111 @@ pub(crate) struct FsDevCfg {
 #[allow(dead_code)]
 pub(crate) struct VirtioFsDriver {
 	pub(super) dev_cfg: FsDevCfg,
-	pub(super) com_cfg: ComCfg,
-	pub(super) isr_stat: InterruptCapability,
-	pub(super) notif_cfg: NotifCfg,
+	pub(super) caps_coll: UniCapsColl,
 	pub(super) vqueues: Vec<VirtQueue>,
 }
 
 // Backend-independent interface for Virtio network driver
-impl VirtioFsDriver {
-	#[cfg(feature = "pci")]
-	pub fn get_dev_id(&self) -> u16 {
-		self.dev_cfg.dev_id
-	}
+impl super::virtio::VirtioDriver for VirtioFsDriver {
+	type Config = virtio::fs::Config;
+	type Error = VirtioFsInitError;
+	type DeviceFeatures = virtio::fs::F;
 
-	#[cfg(feature = "pci")]
-	pub fn set_failed(&mut self) {
-		self.com_cfg.set_failed();
-	}
+	const MINIMAL_FEATURES: Self::DeviceFeatures = virtio::fs::F::VERSION_1;
+	const OPTIONAL_FEATURES: Self::DeviceFeatures = virtio::fs::F::empty();
 
 	/// Initializes the device in adherence to specification. Returns Some(VirtioFsError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
-	pub(crate) fn init_dev(
-		&mut self,
+	fn init_dev(
+		(mut caps_coll, dev_cfg_raw): (
+			UniCapsColl,
+			VolatileRef<'static, virtio::fs::Config, ReadOnly>,
+		),
 		handlers: &mut InterruptHandlerMap,
 		irq: Option<InterruptLine>,
-	) -> Result<(), VirtioFsInitError> {
-		// Reset
-		self.com_cfg.reset_dev();
+	) -> Result<Self, (VirtioError, UniCapsColl)> {
+		let mut vqueues = Vec::new();
 
-		// Indicate device, that OS noticed it
-		self.com_cfg.ack_dev();
-
-		// Indicate device, that driver is able to handle it
-		self.com_cfg.set_drv();
-
-		let minimal_features = virtio::fs::F::VERSION_1;
-		let negotiated_features = self
-			.com_cfg
-			.control_registers()
-			.negotiate_features(minimal_features);
-
-		if !negotiated_features.contains(minimal_features) {
-			error!("Device features set, does not satisfy minimal features needed. Aborting!");
-			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
-		}
-
-		// Indicates the device, that the current feature set is final for the driver
-		// and will not be changed.
-		self.com_cfg.features_ok();
-
-		// Checks if the device has accepted final set. This finishes feature negotiation.
-		if self.com_cfg.check_features() {
-			info!(
-				"Features have been negotiated between virtio filesystem device {:x} and driver.",
-				self.dev_cfg.dev_id
-			);
-			// Set feature set in device config fur future use.
-			self.dev_cfg.features = negotiated_features;
-		} else {
-			error!("The device does not support our subset of features.");
-			return Err(VirtioFsInitError::FailFeatureNeg(self.dev_cfg.dev_id));
-		}
-
-		// 1 highprio queue, and n normal request queues
-		let vqnum = self
-			.dev_cfg
-			.raw
-			.as_ptr()
-			.num_request_queues()
-			.read()
-			.to_ne() + 1;
-		if vqnum == 0 {
-			error!("0 request queues requested from device. Aborting!");
-			return Err(VirtioFsInitError::Unknown);
-		}
-
-		// create the queues and tell device about them
-		for i in 0..vqnum as u16 {
-			let vq = VirtQueue::Split(
-				SplitVq::new(
-					&mut self.com_cfg,
-					&self.notif_cfg,
-					VIRTIO_MAX_QUEUE_SIZE,
-					i,
-					self.dev_cfg.features.into(),
-				)
-				.unwrap(),
-			);
-			self.vqueues.push(vq);
-		}
-
-		match &mut self.isr_stat {
-			InterruptCapability::IsrStatus(_) => {
-				let irq = irq.unwrap();
-				handlers.entry(irq).or_default().push_back(|| {
-					if let Some(driver) = get_filesystem_driver() {
-						driver.lock().handle_interrupt();
-					};
-				});
-				crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
-				info!("Virtio interrupt handler at line {irq}");
+		let dev_cfg = match caps_coll.init_caps(dev_cfg_raw, |caps_coll, dev_cfg| {
+			// 1 highprio queue, and n normal request queues
+			let vqnum = dev_cfg.raw.as_ptr().num_request_queues().read().to_ne() + 1;
+			if vqnum == 0 {
+				error!("0 request queues requested from device. Aborting!");
+				return Err(VirtioFsInitError::Unknown);
 			}
-			#[cfg(all(feature = "pci", target_arch = "x86_64"))]
-			InterruptCapability::Msix(msix_table) => {
-				use core::iter;
 
-				self.com_cfg.register_msix_vectors(
-					msix_table,
-					handlers,
-					|| {
-						if let Some(driver) = get_filesystem_driver() {
-							driver.lock().handle_device_configuration_interrupt();
-						};
-					},
-					iter::empty::<(iter::Empty<_>, _)>(),
-					0..vqnum as u16,
+			// create the queues and tell device about them
+			for i in 0..vqnum as u16 {
+				let vq = VirtQueue::Split(
+					SplitVq::new(
+						&mut caps_coll.com_cfg,
+						&caps_coll.notif_cfg,
+						VIRTIO_MAX_QUEUE_SIZE,
+						i,
+						virtio::F::from(dev_cfg.features),
+					)
+					.unwrap(),
 				);
+				vqueues.push(vq);
 			}
-		}
 
-		// At this point the device is "live"
-		self.com_cfg.drv_ok();
+			match &mut caps_coll.int_cap {
+				InterruptCapability::IsrStatus(_) => {
+					let irq = irq.unwrap();
+					handlers.entry(irq).or_default().push_back(|| {
+						if let Some(driver) = get_filesystem_driver() {
+							driver.lock().handle_interrupt();
+						};
+					});
+					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
+					info!("Virtio interrupt handler at line {irq}");
+				}
+				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+				InterruptCapability::Msix(msix_table) => {
+					use core::iter;
 
-		Ok(())
+					caps_coll.com_cfg.register_msix_vectors(
+						msix_table,
+						handlers,
+						|| {
+							if let Some(driver) = get_filesystem_driver() {
+								driver.lock().handle_device_configuration_interrupt();
+							};
+						},
+						iter::empty::<(iter::Empty<_>, _)>(),
+						0..vqnum as u16,
+					);
+				}
+			}
+			Ok(())
+		}) {
+			Ok(dev_cfg) => dev_cfg,
+			Err(err) => return Err((err, caps_coll)),
+		};
+
+		Ok(Self {
+			dev_cfg,
+			caps_coll,
+			vqueues,
+		})
 	}
 
+	#[cfg(feature = "pci")]
+	fn no_dev_cfg_err(dev_id: u16) -> Self::Error {
+		VirtioFsInitError::NoDevCfg(dev_id)
+	}
+}
+
+impl VirtioFsDriver {
 	pub fn handle_interrupt(&mut self) {
 		#[cfg_attr(
 			not(all(feature = "pci", target_arch = "x86_64")),
 			expect(irrefutable_let_patterns)
 		)]
-		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.isr_stat else {
+		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.caps_coll.int_cap else {
 			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
 		};
 
@@ -216,7 +166,7 @@ impl VirtioFsDriver {
 	}
 
 	fn handle_device_configuration_interrupt(&mut self) {
-		if self.com_cfg.does_device_need_reset() {
+		if self.caps_coll.com_cfg.does_device_need_reset() {
 			todo!("Device configuration change notification cannot be handled yet");
 		}
 	}
@@ -310,8 +260,8 @@ impl VirtioFsInterface for VirtioFsDriver {
 }
 
 impl Driver for VirtioFsDriver {
-	fn get_name(&self) -> &'static str {
-		"virtio"
+	fn get_name() -> &'static str {
+		"virtio-fs"
 	}
 }
 
@@ -327,11 +277,6 @@ pub mod error {
 			"Virtio filesystem driver failed, for device {0:x}, due to a missing or malformed device config!"
 		)]
 		NoDevCfg(u16),
-
-		#[error(
-			"Virtio filesystem driver failed, for device {0:x}, device did not acknowledge negotiated feature set!"
-		)]
-		FailFeatureNeg(u16),
 
 		#[error("Virtio filesystem failed, driver failed due unknown reason!")]
 		Unknown,

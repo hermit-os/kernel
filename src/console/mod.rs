@@ -9,18 +9,19 @@ use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch::kernel::serial::SerialDevice;
 #[cfg(feature = "virtio-console")]
-use crate::drivers::console::VirtioUART;
+use crate::drivers::console::VirtioConsoleDriver;
 use crate::errno::Errno;
 use crate::executor::WakerRegistration;
 
 const SERIAL_BUFFER_SIZE: usize = 256;
 
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum IoDevice {
 	#[cfg(feature = "uhyve")]
 	Uhyve(uhyve::UhyveSerial),
 	Uart(SerialDevice),
 	#[cfg(feature = "virtio-console")]
-	Virtio(VirtioUART),
+	Virtio(VirtioConsoleDriver),
 }
 
 impl ErrorType for IoDevice {
@@ -77,7 +78,7 @@ impl Write for IoDevice {
 }
 
 pub(crate) struct Console {
-	device: IoDevice,
+	pub device: IoDevice,
 	buffer: Vec<u8, SERIAL_BUFFER_SIZE>,
 }
 
@@ -88,11 +89,12 @@ impl Console {
 			buffer: Vec::new(),
 		}
 	}
+}
 
-	#[cfg(feature = "virtio-console")]
-	pub fn replace_device(&mut self, device: IoDevice) {
-		self.device = device;
-	}
+#[cfg(feature = "virtio-console")]
+pub(crate) fn switch_to_virtio(device: VirtioConsoleDriver) {
+	info!("Switch to virtio console");
+	CONSOLE.lock().device = IoDevice::Virtio(device);
 }
 
 impl ErrorType for Console {
