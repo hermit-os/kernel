@@ -167,6 +167,8 @@ pub mod error {
 
 	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
+	#[cfg(feature = "virtio-entropy")]
+	pub use crate::drivers::entropy::error::VirtioEntropyError;
 	#[cfg(feature = "virtio-fs")]
 	pub use crate::drivers::fs::error::VirtioFsInitError;
 	#[cfg(all(
@@ -226,5 +228,9 @@ pub mod error {
 		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
 		ConsoleDriver(VirtioConsoleError),
+
+		#[cfg(feature = "virtio-entropy")]
+		#[error(transparent)]
+		EntropyDriver(VirtioEntropyError),
 	}
 }

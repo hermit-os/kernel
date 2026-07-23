@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 
 #[cfg(any(
 	feature = "virtio-console",
+	feature = "virtio-entropy",
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
 ))]
@@ -9,6 +10,8 @@ use hermit_sync::InterruptSpinMutex;
 
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(feature = "virtio-entropy")]
+use crate::drivers::entropy::VirtioEntropyDriver;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "gem-net")]
@@ -25,6 +28,8 @@ pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::n
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptSpinMutex<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-entropy")]
+	VirtioEntropy(InterruptSpinMutex<VirtioEntropyDriver>),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptSpinMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-vsock")]
@@ -37,6 +42,15 @@ impl MmioDriver {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "virtio-entropy")]
+	fn get_entropy_driver(&self) -> Option<&InterruptSpinMutex<VirtioEntropyDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioEntropy(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -62,6 +76,7 @@ impl MmioDriver {
 
 #[cfg(any(
 	feature = "virtio-console",
+	feature = "virtio-entropy",
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
 ))]
@@ -81,6 +96,14 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptSpinMutex<VirtioC
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_console_driver())
+}
+
+#[cfg(feature = "virtio-entropy")]
+pub(crate) fn get_entropy_driver() -> Option<&'static InterruptSpinMutex<VirtioEntropyDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_entropy_driver())
 }
 
 #[cfg(feature = "virtio-fs")]

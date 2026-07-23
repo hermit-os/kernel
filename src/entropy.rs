@@ -7,7 +7,11 @@ use hermit_sync::InterruptTicketMutex;
 use rand_chacha::ChaCha20Rng;
 use rand_chacha::rand_core::{Rng, SeedableRng};
 
-use crate::arch::kernel::processor::{get_timer_ticks, seed_entropy};
+use crate::arch::kernel::processor::get_timer_ticks;
+#[cfg(not(feature = "virtio-entropy"))]
+use crate::arch::kernel::processor::seed_entropy as processor_seed_entropy;
+#[cfg(feature = "virtio-entropy")]
+use crate::drivers::entropy::seed_entropy as virtio_seed_entropy;
 use crate::errno::Errno;
 use crate::io;
 
@@ -36,12 +40,20 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> io::Result<usize> {
 	let pool = match pool {
 		Some(pool) if now.saturating_sub(pool.last_reseed) <= RESEED_INTERVAL => pool,
 		pool => {
-			let Some(seed) = seed_entropy() else {
-				return Err(Errno::Nosys);
+			let seed = {
+				#[cfg(feature = "virtio-entropy")]
+				{
+					virtio_seed_entropy()
+				}
+				#[cfg(not(feature = "virtio-entropy"))]
+				{
+					processor_seed_entropy()
+				}
 			};
+			let seed_bytes = seed.ok_or(Errno::Nosys)?;
 
 			pool.insert(Pool {
-				rng: ChaCha20Rng::from_seed(seed),
+				rng: ChaCha20Rng::from_seed(seed_bytes),
 				last_reseed: now,
 			})
 		}

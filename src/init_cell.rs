@@ -2,6 +2,7 @@
 	not(any(
 		feature = "virtio-vsock",
 		feature = "virtio-fs",
+		feature = "virtio-entropy",
 		feature = "virtio-console"
 	)),
 	expect(dead_code)

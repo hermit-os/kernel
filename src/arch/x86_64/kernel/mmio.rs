@@ -7,6 +7,7 @@ use align_address::Align;
 use free_list::{PageLayout, PageRange};
 #[cfg(any(
 	feature = "virtio-console",
+	feature = "virtio-entropy",
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
 ))]
@@ -23,6 +24,8 @@ use crate::arch::x86_64::mm::paging::{
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(feature = "virtio-entropy")]
+use crate::drivers::entropy::VirtioEntropyDriver;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
@@ -30,6 +33,7 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(any(
 	feature = "virtio-console",
+	feature = "virtio-entropy",
 	feature = "virtio-fs",
 	feature = "virtio-net",
 	feature = "virtio-vsock",
@@ -51,6 +55,8 @@ static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-console")]
 	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-entropy")]
+	VirtioEntropy(InterruptTicketMutex<VirtioEntropyDriver>),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-vsock")]
@@ -63,6 +69,15 @@ impl MmioDriver {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioConsole(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	#[cfg(feature = "virtio-entropy")]
+	fn get_entropy_driver(&self) -> Option<&InterruptTicketMutex<VirtioEntropyDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioEntropy(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -184,6 +199,7 @@ fn guess_device(
 
 #[cfg(any(
 	feature = "virtio-console",
+	feature = "virtio-entropy",
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
 ))]
@@ -200,6 +216,14 @@ pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<Virti
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_console_driver())
+}
+
+#[cfg(feature = "virtio-entropy")]
+pub(crate) fn get_entropy_driver() -> Option<&'static InterruptTicketMutex<VirtioEntropyDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_entropy_driver())
 }
 
 #[cfg(feature = "virtio-fs")]
@@ -227,6 +251,10 @@ fn register_mmio(
 		#[cfg(feature = "virtio-console")]
 		Ok(VirtioDriver::Console(drv)) => {
 			register_driver(MmioDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
+		}
+		#[cfg(feature = "virtio-entropy")]
+		Ok(VirtioDriver::Entropy(drv)) => {
+			register_driver(MmioDriver::VirtioEntropy(InterruptTicketMutex::new(*drv)));
 		}
 		#[cfg(feature = "virtio-fs")]
 		Ok(VirtioDriver::Fs(drv)) => {

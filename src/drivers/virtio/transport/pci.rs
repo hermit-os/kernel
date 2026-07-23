@@ -22,6 +22,8 @@ use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
+#[cfg(feature = "virtio-entropy")]
+use crate::drivers::entropy::VirtioEntropyDriver;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
@@ -790,6 +792,19 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "virtio-entropy")]
+		virtio::Id::Rng => match VirtioEntropyDriver::init(device) {
+			Ok(virt_entropy_drv) => {
+				info!("Virtio entropy driver initialized.");
+				Ok(VirtioDriver::Entropy(alloc::boxed::Box::new(
+					virt_entropy_drv,
+				)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio entropy driver could not be initialized with device: {device_id:x}");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "virtio-fs")]
 		virtio::Id::Fs => {
 			// TODO: check subclass
@@ -854,6 +869,8 @@ pub(crate) fn init_device(
 pub(crate) enum VirtioDriver {
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-entropy")]
+	Entropy(alloc::boxed::Box<VirtioEntropyDriver>),
 	#[cfg(feature = "virtio-fs")]
 	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(all(
