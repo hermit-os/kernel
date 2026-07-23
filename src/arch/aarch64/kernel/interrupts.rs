@@ -33,6 +33,10 @@ pub(crate) const SGI_RESCHED: u8 = 1;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
+/// Timer interrupt and its trigger mode, parsed once from the device tree by
+/// [`init`]. Timer PPIs are per-core, so [`init_cpu`] reuses this to enable the
+/// exact same interrupt in every application processor's redistributor.
+static TIMER_IRQ: OnceCell<(IntId, Trigger)> = OnceCell::new();
 /// Number of the UART interrupt
 static mut UART_INTERRUPT: u32 = 0;
 /// Possible interrupt handlers
@@ -263,6 +267,28 @@ pub fn wakeup_core(core_id: CoreId) {
 	.unwrap();
 }
 
+/// Decodes an `(interrupt-type, interrupt-number, flags)` triplet from a device
+/// tree `interrupts` property into its [`IntId`] and [`Trigger`].
+fn decode_interrupt(irqtype: u32, irq: u32, irqflags: u32) -> (IntId, Trigger) {
+	let id = if irqtype == 1 {
+		IntId::ppi(irq)
+	} else if irqtype == 0 {
+		IntId::spi(irq)
+	} else {
+		panic!("Invalid interrupt type");
+	};
+
+	let trigger = if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
+		Trigger::Level
+	} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
+		Trigger::Edge
+	} else {
+		panic!("Invalid interrupt level!");
+	};
+
+	(id, trigger)
+}
+
 pub(crate) fn init() {
 	info!("Initialize generic interrupt controller");
 
@@ -356,25 +382,15 @@ pub(crate) fn init() {
 			.lock()
 			.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
 
+		// Cache the parsed interrupt so that every application processor enables
+		// the exact same PPI in its redistributor (see `init_cpu`).
+		let (timer_irqid, trigger) = decode_interrupt(irqtype, irq, irqflags);
+		TIMER_IRQ.set((timer_irqid, trigger)).unwrap();
+
 		// enable timer interrupt
-		let timer_irqid = if irqtype == 1 {
-			IntId::ppi(irq)
-		} else if irqtype == 0 {
-			IntId::spi(irq)
-		} else {
-			panic!("Invalid interrupt type");
-		};
 		gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00)
 			.unwrap();
-		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level)
-				.unwrap();
-		} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge)
-				.unwrap();
-		} else {
-			panic!("Invalid interrupt level!");
-		}
+		gic.set_trigger(timer_irqid, Some(cpu_id), trigger).unwrap();
 		gic.enable_interrupt(timer_irqid, Some(cpu_id), true)
 			.unwrap();
 	}
@@ -445,41 +461,13 @@ pub fn init_cpu() {
 	GicCpuInterface::enable_group1(true);
 	GicCpuInterface::set_priority_mask(0xff);
 
-	let fdt = env::fdt().unwrap();
-
-	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
-		let irq_slice = timer_node.property("interrupts").unwrap().value;
-		/* Secure Phys IRQ */
-		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		/* Non-secure Phys IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-		let irq = u32::from_be_bytes(irq.try_into().unwrap());
-		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
-
-		// enable timer interrupt
-		let timer_irqid = if irqtype == 1 {
-			IntId::ppi(irq)
-		} else if irqtype == 0 {
-			IntId::spi(irq)
-		} else {
-			panic!("Invalid interrupt type");
-		};
+	// Enable the same timer interrupt that `init()` parsed from the device
+	// tree. The timer is a per-core PPI, so it has to be enabled in every
+	// redistributor; reusing the cached value keeps all cores in sync.
+	if let Some(&(timer_irqid, trigger)) = TIMER_IRQ.get() {
 		gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00)
 			.unwrap();
-		if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level)
-				.unwrap();
-		} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-			gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge)
-				.unwrap();
-		} else {
-			panic!("Invalid interrupt level!");
-		}
+		gic.set_trigger(timer_irqid, Some(cpu_id), trigger).unwrap();
 		gic.enable_interrupt(timer_irqid, Some(cpu_id), true)
 			.unwrap();
 	}
