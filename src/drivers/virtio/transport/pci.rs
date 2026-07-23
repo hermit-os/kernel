@@ -6,6 +6,8 @@
 //! [Virtio Over PCI Bus]: https://docs.oasis-open.org/virtio/virtio/v1.2/cs01/virtio-v1.2-cs01.html#x1-1150001
 
 use alloc::vec::Vec;
+use core::array;
+use core::cell::LazyCell;
 use core::ptr::{self, NonNull};
 
 use memory_addresses::PhysAddr;
@@ -625,6 +627,10 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 	#[cfg(target_arch = "x86_64")]
 	let mut msix_table = None;
 
+	let bar_mappings = array::from_fn::<_, 6, _>(|slot| {
+		LazyCell::new(move || device.memory_map_bar(u8::try_from(slot).unwrap(), true))
+	});
+
 	// Reads all PCI capabilities, starting at the capabilities list pointer from the
 	// PCI device.
 	//
@@ -638,7 +644,7 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 					continue;
 				}
 				let slot = cap.bar;
-				let Some((addr, size)) = device.memory_map_bar(slot, true) else {
+				let Some((addr, size)) = *bar_mappings[usize::from(slot)] else {
 					continue;
 				};
 				let pci_cap = PciCap {
@@ -695,9 +701,8 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 			#[cfg(target_arch = "x86_64")]
 			PciCapability::MsiX(mut msix_capability) => {
 				msix_capability.set_enabled(true, device.access());
-				let (base_addr, _) = device
-					.memory_map_bar(msix_capability.table_bar(), true)
-					.unwrap();
+				let (base_addr, _) =
+					bar_mappings[usize::from(msix_capability.table_bar())].unwrap();
 				let table_ptr = NonNull::slice_from_raw_parts(
 					NonNull::with_exposed_provenance(
 						core::num::NonZero::new(
