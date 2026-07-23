@@ -155,6 +155,8 @@ pub(crate) fn install() {
 	}
 
 	IRQ_NAMES.lock().insert(7, "FPU");
+	#[cfg(feature = "common-os")]
+	IRQ_NAMES.lock().insert(14, "Page Fault");
 }
 
 pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {

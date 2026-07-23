@@ -44,6 +44,8 @@ pub(crate) mod device_alloc;
 mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
+#[cfg(feature = "common-os")]
+pub(crate) mod vma;
 
 use core::alloc::Layout;
 use core::mem::MaybeUninit;
@@ -59,7 +61,11 @@ use talc::TalcLock;
 use talc::source::Manual;
 
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
+#[cfg(feature = "common-os")]
+pub use self::physicalmem::copy_page;
 pub use self::physicalmem::{FrameAlloc, FrameBox};
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use self::physicalmem::{frame_ref_dec, frame_ref_inc};
 pub use self::virtualmem::{PageAlloc, PageBox};
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;

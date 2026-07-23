@@ -14,9 +14,15 @@ use ahash::RandomState;
 use crossbeam_utils::Backoff;
 use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
+#[cfg(target_arch = "aarch64")]
+use memory_addresses::VirtAddr;
+#[cfg(all(target_arch = "riscv64", feature = "common-os"))]
+use memory_addresses::VirtAddr;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
+#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+use x86_64::VirtAddr;
 
 use crate::arch::kernel;
 use crate::arch::kernel::core_local::*;
@@ -29,6 +35,8 @@ use crate::arch::kernel::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::io;
+#[cfg(feature = "common-os")]
+use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::task::*;
 
 pub mod task;
@@ -45,6 +53,8 @@ static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>
 /// Map between Task ID and TaskHandle
 static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
+/// Count the number of spawned tasks
+static SPAWN_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -212,6 +222,24 @@ struct NewTask {
 	core_id: CoreId,
 	stacks: TaskStacks,
 	object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+	/// When `Some`, the new task is a user-space thread that shares the
+	/// given root page table with its parent process and inherits the
+	/// parent's `pid`. When `None`, the task is a regular kernel-mode
+	/// task with a fresh address space; its `pid` equals its `tid`.
+	#[cfg(feature = "common-os")]
+	thread_of: Option<(Arc<RootPageTable>, ProcessId)>,
+	/// Per-process TLS template, cloned from the spawning thread. Used by
+	/// `From<NewTask>` to propagate the template into the new task so that
+	/// any threads it spawns in turn can allocate their own TLS regions.
+	#[cfg(feature = "common-os")]
+	tls_template: Option<Arc<TlsTemplate>>,
+	/// Per-thread TLS thread-pointer (FS.Base on x86_64, TPIDR_EL0 on
+	/// aarch64), already prepared by `spawn_thread` from the per-process
+	/// `TlsTemplate`. Zero means "do not install a thread pointer".
+	#[cfg(feature = "common-os")]
+	tls_base: u64,
+	#[cfg(feature = "common-os")]
+	vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 }
 
 impl From<NewTask> for Task {
@@ -224,7 +252,34 @@ impl From<NewTask> for Task {
 			core_id,
 			stacks,
 			object_map,
+			#[cfg(feature = "common-os")]
+			thread_of,
+			#[cfg(feature = "common-os")]
+			tls_template,
+			#[cfg(feature = "common-os")]
+			tls_base,
+			#[cfg(feature = "common-os")]
+			vmas,
 		} = value;
+
+		#[cfg(feature = "common-os")]
+		if let Some((root_page_table, parent_pid)) = thread_of {
+			let mut task = Self::new_thread(
+				tid,
+				parent_pid,
+				core_id,
+				TaskStatus::Ready,
+				prio,
+				stacks,
+				object_map,
+				root_page_table,
+				tls_template,
+				vmas,
+			);
+			task.create_user_stack_frame(func, arg, tls_base);
+			return task;
+		}
+
 		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks, object_map);
 		task.create_stack_frame(func, arg);
 		task
@@ -251,6 +306,14 @@ impl PerCoreScheduler {
 			core_id,
 			stacks,
 			object_map: core_scheduler().get_current_task_object_map(),
+			#[cfg(feature = "common-os")]
+			thread_of: None,
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(feature = "common-os")]
+			tls_base: 0,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		};
 
 		// Add it to the task lists.
@@ -297,6 +360,107 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	/// Spawn a new user-space thread that shares the current task's
+	/// address space (root page table).
+	///
+	/// `func` must be a valid ring-3 entry point mapped in the shared
+	/// address space. The new thread receives its own kernel/interrupt
+	/// stacks and a fresh user stack, all mapped into the shared PT via
+	/// the regular `TaskStacks::new` path.
+	#[cfg(feature = "common-os")]
+	pub unsafe fn spawn_thread(
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		prio: Priority,
+		core_id: CoreId,
+		stack_size: usize,
+	) -> TaskId {
+		let tid = get_tid();
+		// TaskStacks::new maps into the current address space — which *is*
+		// the shared PT of the calling thread — so the new stacks are
+		// immediately visible to every thread in this process.
+		let stacks = TaskStacks::new(stack_size);
+
+		let (root_page_table, object_map, tls_template, vmas, parent_pid) = {
+			let current = core_scheduler().get_current_task();
+			let borrowed = current.borrow();
+			(
+				borrowed.root_page_table.clone(),
+				borrowed.object_map.clone(),
+				borrowed.tls_template.clone(),
+				borrowed.vmas.clone(),
+				borrowed.pid,
+			)
+		};
+
+		// Allocate a private TLS region for the new thread from the pristine
+		// per-process TLS template captured at `load_application` time. Must
+		// run in the parent's address space (still active here in the syscall
+		// path) so that the new user-accessible pages get mapped into the
+		// shared root page table.
+		let tls_base = if let Some(ref template) = tls_template {
+			crate::arch::mm::allocate_thread_tls(template)
+		} else {
+			0
+		};
+
+		let new_task = NewTask {
+			tid,
+			func,
+			arg,
+			prio,
+			core_id,
+			stacks,
+			object_map,
+			thread_of: Some((root_page_table, parent_pid)),
+			tls_template,
+			tls_base,
+			vmas,
+		};
+
+		let wakeup = {
+			#[cfg(feature = "smp")]
+			let mut input_locked = get_scheduler_input(core_id).lock();
+			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(
+				tid,
+				TaskHandle::new(
+					tid,
+					prio,
+					#[cfg(feature = "smp")]
+					core_id,
+				),
+			);
+			NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+			#[cfg(feature = "smp")]
+			if core_id == core_scheduler().core_id {
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				input_locked.new_tasks.push_back(new_task);
+				true
+			}
+			#[cfg(not(feature = "smp"))]
+			if core_id == 0 {
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				panic!("Invalid core_id {core_id}!")
+			}
+		};
+
+		debug!("Creating user thread {tid} with priority {prio} on core {core_id}");
+
+		if wakeup {
+			kernel::wakeup_core(core_id);
+		}
+
+		tid
+	}
+
 	#[cfg(feature = "newlib")]
 	fn clone_impl(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
@@ -328,6 +492,12 @@ impl PerCoreScheduler {
 			core_id,
 			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
 			object_map: current_task_borrowed.object_map.clone(),
+			#[cfg(feature = "common-os")]
+			thread_of: None,
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(feature = "common-os")]
+			tls_base: 0,
 		};
 
 		// Add it to the task lists.
@@ -445,6 +615,22 @@ impl PerCoreScheduler {
 		without_interrupts(|| self.current_task.borrow().id)
 	}
 
+	/// Returns the Rc<RefCell<Task>> for the currently running task.
+	#[cfg(feature = "common-os")]
+	#[inline]
+	pub fn get_current_task(&self) -> Rc<RefCell<Task>> {
+		self.current_task.clone()
+	}
+
+	#[cfg(feature = "common-os")]
+	#[inline]
+	pub fn set_current_task_object_map(
+		&mut self,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+	) {
+		without_interrupts(|| self.current_task.borrow_mut().object_map = object_map);
+	}
+
 	#[inline]
 	pub fn get_current_task_object_map(
 		&self,
@@ -466,7 +652,14 @@ impl PerCoreScheduler {
 	/// Creates a new map between file descriptor and their IO interface and
 	/// clone the standard descriptors.
 	#[cfg(feature = "common-os")]
-	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
+	#[cfg_attr(
+		not(any(
+			target_arch = "x86_64",
+			target_arch = "aarch64",
+			target_arch = "riscv64"
+		)),
+		expect(dead_code)
+	)]
 	pub fn recreate_objmap(&self) -> io::Result<()> {
 		let mut map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
@@ -667,7 +860,15 @@ impl PerCoreScheduler {
 	fn cleanup_tasks(&mut self) {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		while let Some(finished_task) = self.finished_tasks.pop_front() {
-			debug!("Cleaning up task {}", finished_task.borrow().id);
+			let id = finished_task.borrow().id;
+			drop(finished_task);
+			#[cfg(feature = "common-os")]
+			trace!(
+				"Cleaned up task {id} — free frames: {} KiB",
+				crate::mm::FrameAlloc::free_space() >> 10
+			);
+			#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+			debug!("Cleaned up task {id}");
 		}
 	}
 
@@ -722,7 +923,7 @@ impl PerCoreScheduler {
 
 	#[inline]
 	#[cfg(target_arch = "aarch64")]
-	pub fn get_last_stack_pointer(&self) -> memory_addresses::VirtAddr {
+	pub fn get_last_stack_pointer(&self) -> VirtAddr {
 		self.current_task.borrow().last_stack_pointer
 	}
 
@@ -823,6 +1024,22 @@ impl PerCoreScheduler {
 				self.current_task.borrow_mut().last_fpu_state.save();
 			}
 			task.borrow().last_fpu_state.restore();
+
+			// Install the new task's address space before switching to
+			// its kernel stack.
+			#[cfg(feature = "common-os")]
+			{
+				use riscv::register::satp;
+
+				let new_ppn = task.borrow().root_page_table.as_usize() >> 12;
+				if satp::read().ppn() != new_ppn {
+					unsafe {
+						satp::set(satp::Mode::Sv39, 0, new_ppn);
+						riscv::asm::sfence_vma_all();
+					}
+				}
+			}
+
 			self.current_task = task;
 			unsafe {
 				switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
@@ -906,16 +1123,37 @@ pub unsafe fn spawn(
 	stack_size: usize,
 	selector: isize,
 ) -> TaskId {
-	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
-
 	let core_id = if selector < 0 {
 		// use Round Robin to schedule the cores
-		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+		SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
 	} else {
 		selector as u32
 	};
 
 	unsafe { PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size) }
+}
+
+/// Spawn a user-space thread that shares the current task's address space.
+///
+/// Used by `sys_spawn`/`sys_spawn2` under the `common-os` feature to
+/// implement POSIX-style threads: the entry point `func` lives in user
+/// space and the new thread executes in ring 3 against the parent
+/// process's root page table.
+#[cfg(feature = "common-os")]
+pub unsafe fn spawn_thread(
+	func: unsafe extern "C" fn(usize),
+	arg: usize,
+	prio: Priority,
+	stack_size: usize,
+	selector: isize,
+) -> TaskId {
+	let core_id = if selector < 0 {
+		SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+	} else {
+		selector as u32
+	};
+
+	unsafe { PerCoreScheduler::spawn_thread(func, arg, prio, core_id, stack_size) }
 }
 
 #[allow(clippy::result_unit_err)]
@@ -944,6 +1182,243 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	}
 }
 
+/// Fork the current task.
+///
+/// Marks user pages as Copy-On-Write, duplicates the page table hierarchy,
+/// copies the kernel stack, and enqueues a new child task that will resume
+/// execution right after the `prepare_fork_child_stack` call returning 1.
+///
+/// Returns the child's `TaskId` in the parent; the child itself sees `TaskId(0)`.
+#[cfg(all(
+	any(target_arch = "x86_64", target_arch = "aarch64"),
+	all(feature = "common-os", feature = "fork")
+))]
+pub unsafe fn fork() -> TaskId {
+	use crate::arch::kernel::prepare_fork_child_stack;
+	use crate::arch::mm::prepare_mem_copy_on_write;
+
+	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
+
+	// Mark user pages COW before copying the page table.
+	prepare_mem_copy_on_write();
+
+	let stack_size = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_user_stack_size();
+	let stacks = TaskStacks::new(stack_size);
+
+	let mut child_stack_pointer: usize = 0;
+	let mut child_root_page_table: usize = 0;
+
+	// Copy the kernel stack and duplicate the page table; returns false in parent.
+	let is_child = unsafe {
+		prepare_fork_child_stack(
+			&raw mut child_stack_pointer,
+			&raw mut child_root_page_table,
+			stacks.get_stack_virt_addr().as_usize(),
+		)
+	};
+
+	if is_child {
+		// We are in the child context (stack is already switched).
+		// Prevent the newly-allocated stacks from being dropped here —
+		// they are owned by the child task created in the parent.
+		core::mem::forget(stacks);
+		return TaskId::from(0);
+	}
+
+	// Parent path: register the child task.
+	let tid = get_tid();
+	let child_last_sp = VirtAddr::new(child_stack_pointer.try_into().unwrap());
+	let parent_user_sp = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.user_stack_pointer;
+	let parent_prio = core_scheduler().get_current_task().borrow().prio;
+	let parent_object_map = Arc::new(RwSpinLock::new(HashMap::<
+		RawFd,
+		Arc<async_lock::RwLock<Fd>>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(
+		0, 0, 0, 0,
+	))));
+	for (key, val) in core_scheduler().get_current_task_object_map().read().iter() {
+		parent_object_map.write().insert(*key, val.clone());
+	}
+	let parent_tls_template = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.tls_template
+		.clone();
+	let parent_vmas = Arc::new(RwSpinLock::new(
+		core_scheduler()
+			.get_current_task()
+			.borrow()
+			.vmas
+			.read()
+			.clone(),
+	));
+
+	let child_task = Task::new_fork(
+		tid,
+		core_id,
+		TaskStatus::Ready,
+		parent_prio,
+		stacks,
+		child_last_sp,
+		parent_user_sp,
+		parent_object_map,
+		Arc::new(RootPageTable::new(child_root_page_table)),
+		parent_tls_template,
+		parent_vmas,
+	);
+
+	let wakeup = {
+		#[cfg(feature = "smp")]
+		let _input_locked = get_scheduler_input(core_id).lock();
+		WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+		TASKS.lock().insert(
+			tid,
+			TaskHandle::new(
+				tid,
+				parent_prio,
+				#[cfg(feature = "smp")]
+				core_id,
+			),
+		);
+		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+		#[cfg(feature = "smp")]
+		if core_id == core_scheduler().core_id {
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		} else {
+			// For SMP we'd need to send to the target core; for now push locally.
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		}
+		#[cfg(not(feature = "smp"))]
+		{
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		}
+	};
+
+	if wakeup {
+		kernel::wakeup_core(core_id);
+	}
+
+	debug!("Child was created and has the id {tid}");
+
+	tid
+}
+
+/// Fork the current task from its saved user-mode context (riscv64).
+///
+/// On riscv64 the user-mode dispatcher (`user_loop`) owns the complete
+/// trap context, so — unlike the x86_64/aarch64 path — no kernel stack
+/// has to be cloned: the child gets a fresh kernel stack and re-enters
+/// user mode through its own `user_loop_resume`, seeded with a copy of
+/// the parent's `UserContext` in which `a0` (the fork return value) is
+/// set to 0.
+///
+/// Returns the child's `TaskId`; only the parent executes this function.
+#[cfg(all(target_arch = "riscv64", feature = "common-os", feature = "fork"))]
+pub unsafe fn fork_from_user_context(parent_ctx: &trapframe::UserContext) -> TaskId {
+	use crate::arch::mm::{copy_current_root_page_table, prepare_mem_copy_on_write};
+
+	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
+
+	// Mark user pages COW before copying the page table.
+	prepare_mem_copy_on_write();
+	let child_root_page_table = copy_current_root_page_table();
+
+	let stack_size = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_user_stack_size();
+	let stacks = TaskStacks::new(stack_size);
+
+	// The child resumes user execution with the parent's register state,
+	// except that `fork` returns 0 in the child.
+	let mut child_ctx = Box::new(*parent_ctx);
+	child_ctx.general.a0 = 0;
+	let child_last_sp = kernel::scheduler::create_fork_stack_frame(&stacks, child_ctx);
+
+	let tid = get_tid();
+	let parent_user_sp = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.user_stack_pointer;
+	let parent_prio = core_scheduler().get_current_task().borrow().prio;
+	let parent_object_map = Arc::new(RwSpinLock::new(HashMap::<
+		RawFd,
+		Arc<async_lock::RwLock<Fd>>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(
+		0, 0, 0, 0,
+	))));
+	for (key, val) in core_scheduler().get_current_task_object_map().read().iter() {
+		parent_object_map.write().insert(*key, val.clone());
+	}
+	let parent_tls_template = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.tls_template
+		.clone();
+	let parent_vmas = Arc::new(RwSpinLock::new(
+		core_scheduler()
+			.get_current_task()
+			.borrow()
+			.vmas
+			.read()
+			.clone(),
+	));
+
+	let child_task = Task::new_fork(
+		tid,
+		core_id,
+		TaskStatus::Ready,
+		parent_prio,
+		stacks,
+		child_last_sp,
+		parent_user_sp,
+		parent_object_map,
+		Arc::new(RootPageTable::new(child_root_page_table)),
+		parent_tls_template,
+		parent_vmas,
+	);
+
+	{
+		#[cfg(feature = "smp")]
+		let _input_locked = get_scheduler_input(core_id).lock();
+		WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+		TASKS.lock().insert(
+			tid,
+			TaskHandle::new(
+				tid,
+				parent_prio,
+				#[cfg(feature = "smp")]
+				core_id,
+			),
+		);
+		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+		let task = Rc::new(RefCell::new(child_task));
+		core_scheduler().ready_queue.push(task);
+	}
+
+	debug!("Child was created and has the id {tid}");
+
+	tid
+}
+
 pub fn shutdown(arg: i32) -> ! {
 	crate::syscalls::shutdown(arg)
 }
@@ -952,11 +1427,11 @@ fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
 	TASKS.lock().get(&id).copied()
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
 
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 pub(crate) fn get_root_page_table() -> usize {
 	let current_task_borrowed = core_scheduler().current_task.borrow_mut();
-	current_task_borrowed.root_page_table
+	current_task_borrowed.root_page_table.as_usize()
 }
