@@ -1,4 +1,5 @@
 use alloc::collections::VecDeque;
+use core::num::NonZero;
 
 use hermit_sync::{InterruptTicketMutex, Lazy};
 use x86_64::instructions::port::Port;
@@ -16,27 +17,23 @@ const PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT: u8 = 0x01;
 const PS2_BUFFER_FULL: u8 = 0x01;
 
 const BUFFER_SIZE: usize = 256;
-struct Ps2;
 
+struct Ps2;
 impl Ps2 {
 	pub fn read_status() -> u8 {
-		let mut status_port = Port::<u8>::new(PS2_CMD_PORT);
-		unsafe { status_port.read() }
+		unsafe { Port::<u8>::new(PS2_CMD_PORT).read() }
 	}
 
 	pub fn write_cmd(cmd: u8) {
-		let mut cmd_port = Port::<u8>::new(PS2_CMD_PORT);
-		unsafe { cmd_port.write(cmd) }
+		unsafe { Port::<u8>::new(PS2_CMD_PORT).write(cmd) }
 	}
 
 	pub fn read_data() -> u8 {
-		let mut data_port = Port::<u8>::new(PS2_DATA_PORT);
-		unsafe { data_port.read() }
+		unsafe { Port::<u8>::new(PS2_DATA_PORT).read() }
 	}
 
 	pub fn write_data(data: u8) {
-		let mut data_port = Port::<u8>::new(PS2_DATA_PORT);
-		unsafe { data_port.write(data) }
+		unsafe { Port::<u8>::new(PS2_DATA_PORT).write(data) }
 	}
 }
 
@@ -47,15 +44,18 @@ fn keyboard_handler() {
 	let scancode = Ps2::read_data();
 	let mut buffer = KEYBOARD_BUFFER.lock();
 
+	// Don't allow the buffer to grow infinitely, pop the oldest scancode if the buffer is full.
 	if buffer.len() >= BUFFER_SIZE {
 		buffer.pop_front();
 	}
+
 	buffer.push_back(scancode);
 }
 
 pub(crate) fn get_keyboard_handler() -> (u8, fn()) {
 	Ps2::write_cmd(PS2_CMD_DISABLE_KEYBOARD);
 	Ps2::write_cmd(PS2_CMD_DISABLE_MOUSE);
+
 	// Ensure an empty buffer to guard against stuck data
 	while (Ps2::read_status() & PS2_BUFFER_FULL) != 0 {
 		let _ = Ps2::read_data();
@@ -80,6 +80,6 @@ pub(crate) fn get_keyboard_handler() -> (u8, fn()) {
 }
 
 /// Pops a scancode from the keyboard buffer, returning None if the buffer is empty.
-pub fn pop_scancode() -> Option<u8> {
+pub fn pop_scancode() -> Option<NonZero<u8>> {
 	KEYBOARD_BUFFER.lock().pop_front()
 }
