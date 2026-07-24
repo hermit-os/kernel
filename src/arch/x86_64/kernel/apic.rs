@@ -894,7 +894,7 @@ pub fn ipi_tlb_flush() {
 #[allow(unused_variables)]
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
-	if core_id_to_wakeup != core_id() && !processor::supports_mwait() {
+	if core_id_to_wakeup != core_id() && !processor::supports_mwait() && scheduler::sleep_state::try_wake_up(core_id_to_wakeup) {
 		without_interrupts(|| {
 			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 			let local_apic_id = apic_ids[core_id_to_wakeup as usize];
