@@ -49,8 +49,6 @@ use crate::env::{self, FdtStartInfo};
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
 
-static mut PLATFORM_MODEL: Model = Model::Unknown;
-
 enum Model {
 	Fux40,
 	Virt,
@@ -59,36 +57,60 @@ enum Model {
 
 /// Inits variables based on the device tree
 /// This function should only be called once
-pub fn init() {
-	debug!("Init devicetree");
+pub fn init_interrupt_controller() {
 	let Some(fdt) = env::start_info().fdt() else {
 		return;
 	};
 
-	let model = fdt
-		.find_node("/")
-		.unwrap()
-		.property("compatible")
-		.expect("compatible not found in FDT")
-		.as_str()
-		.unwrap();
+	if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
+		debug!("Found interrupt controller");
+		let plic_region = plic_node
+			.reg()
+			.expect("Reg property for PLIC not found in FDT")
+			.next()
+			.unwrap();
 
-	let platform_model = if model.contains("riscv-virtio") {
-		Model::Virt
-	} else if model.contains("sifive,hifive-unmatched-a00")
-		|| model.contains("sifive,hifive-unleashed-a00")
-		|| model.contains("sifive,fu740")
-		|| model.contains("sifive,fu540")
-	{
-		Model::Fux40
+		let plic_region_start = PhysAddr::from(plic_region.starting_address.addr());
+		debug!(
+			"Init PLIC at {:p}, size: {:x}",
+			plic_region_start,
+			plic_region.size.unwrap()
+		);
+		assert!(plic_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap());
+
+		paging::identity_map::<paging::HugePageSize>(plic_region_start);
+
+		let model = fdt
+			.find_node("/")
+			.unwrap()
+			.property("compatible")
+			.expect("compatible not found in FDT")
+			.as_str()
+			.unwrap();
+
+		let platform_model = if model.contains("riscv-virtio") {
+			Model::Virt
+		} else if model.contains("sifive,hifive-unmatched-a00")
+			|| model.contains("sifive,hifive-unleashed-a00")
+			|| model.contains("sifive,fu740")
+			|| model.contains("sifive,fu540")
+		{
+			Model::Fux40
+		} else {
+			warn!("Unknown platform, guessing PLIC context 1");
+			Model::Unknown
+		};
+		info!("Model: {model}");
+
+		// TODO: Determine correct context via devicetree and allow more than one context
+		let context = match platform_model {
+			Model::Virt | Model::Unknown => 1,
+			Model::Fux40 => 2,
+		};
+		init_plic(plic_region.starting_address, context);
 	} else {
-		warn!("Unknown platform, guessing PLIC context 1");
-		Model::Unknown
-	};
-	unsafe {
-		PLATFORM_MODEL = platform_model;
+		warn!("No interrupt controller found");
 	}
-	info!("Model: {model}");
 }
 
 #[cfg_attr(
@@ -101,37 +123,6 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	// TODO: Implement devicetree correctly
 	if let Some(fdt) = env::start_info().fdt() {
 		debug!("Init drivers using devicetree");
-
-		// Init PLIC first
-		if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
-			debug!("Found interrupt controller");
-			let plic_region = plic_node
-				.reg()
-				.expect("Reg property for PLIC not found in FDT")
-				.next()
-				.unwrap();
-
-			let plic_region_start = PhysAddr::from(plic_region.starting_address.addr());
-			debug!(
-				"Init PLIC at {:p}, size: {:x}",
-				plic_region_start,
-				plic_region.size.unwrap()
-			);
-			assert!(
-				plic_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
-			);
-
-			paging::identity_map::<paging::HugePageSize>(plic_region_start);
-
-			// TODO: Determine correct context via devicetree and allow more than one context
-			let context = unsafe {
-				match PLATFORM_MODEL {
-					Model::Virt | Model::Unknown => 1,
-					Model::Fux40 => 2,
-				}
-			};
-			init_plic(plic_region.starting_address, context);
-		}
 
 		// Init GEM
 		#[cfg(all(feature = "gem-net", not(feature = "pci")))]
@@ -272,7 +263,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					*NETWORK_DEVICE.lock() = Some(*drv);
 				}
 				#[cfg(feature = "virtio-rng")]
-				Ok(VirtioDriver::Rng(drv)) => {
+				VirtioDriver::Rng(drv) => {
 					register_driver(MmioDriver::VirtioRng(hermit_sync::InterruptSpinMutex::new(
 						*drv,
 					)));
