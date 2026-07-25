@@ -189,8 +189,15 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 		// Init virtio-mmio
 		#[cfg(all(feature = "virtio", not(feature = "pci")))]
-		if let Some(virtio_node) = fdt.find_compatible(&["virtio,mmio"]) {
+		for virtio_node in fdt.all_nodes() {
+			let is_virtio_mmio = virtio_node
+				.compatible()
+				.is_some_and(|c| c.all().any(|x| x == "virtio,mmio"));
+			if !is_virtio_mmio {
+				continue;
+			}
 			debug!("Found virtio mmio device");
+
 			let virtio_region = virtio_node
 				.reg()
 				.expect("reg property for virtio mmio not found in FDT")
