@@ -29,6 +29,13 @@ fn in_ci() -> bool {
 	std::env::var_os("CI") == Some("true".into())
 }
 
+fn split_args<T: PartialEq<str>>(args: &[T]) -> (&[T], &[T]) {
+	match args.iter().position(|arg| arg == "--") {
+		Some(index) => (&args[..index], &args[index + 1..]),
+		None => (args, &[]),
+	}
+}
+
 pub fn parent_root() -> &'static Path {
 	crate::project_root().parent().unwrap()
 }

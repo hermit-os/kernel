@@ -2,7 +2,7 @@
   "boot-source": {{
     "kernel_image_path": "{kernel_image_path}",
     "initrd_path": "{initrd_path}",
-    "boot_args": ""
+    "boot_args": "{boot_args}"
   }},
   "drives": [],
   "machine-config": {{
