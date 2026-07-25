@@ -13,6 +13,7 @@ use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use memory_addresses::PhysAddr;
+use shlex::Shlex;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -141,9 +142,8 @@ impl Default for Cli {
 
 		let args = fdt_args().unwrap_or_default();
 		info!("bootargs = {args}");
-		let words = shell_words::split(args).unwrap();
+		let mut words = Shlex::new(args);
 
-		let mut words = words.into_iter();
 		let expect_arg = |arg: Option<String>, name: &str| {
 			arg.unwrap_or_else(|| {
 				panic!("The argument '{name}' requires a value but none was supplied")
