@@ -8,6 +8,8 @@ use delegate::delegate;
 
 use crate::fd::eventfd::EventFd;
 use crate::fd::null_file::NullFile;
+#[cfg(feature = "common-os")]
+use crate::fd::pipe::{PipeReceiver, PipeSender};
 use crate::fd::random_file::RandomFile;
 #[cfg(feature = "tcp")]
 use crate::fd::socket::tcp;
@@ -41,6 +43,10 @@ pub(crate) enum Fd {
 	#[cfg(feature = "uhyve")]
 	UhyveStderr(UhyveStderr),
 	EventFd(EventFd),
+	#[cfg(feature = "common-os")]
+	PipeReceiver(PipeReceiver),
+	#[cfg(feature = "common-os")]
+	PipeSender(PipeSender),
 	#[cfg(feature = "tcp")]
 	TcpSocket(tcp::Socket),
 	#[cfg(feature = "udp")]
@@ -92,6 +98,10 @@ fd_from! {
 	#[cfg(feature = "uhyve")]
 	UhyveStderr(UhyveStderr),
 	EventFd(EventFd),
+	#[cfg(feature = "common-os")]
+	PipeReceiver(PipeReceiver),
+	#[cfg(feature = "common-os")]
+	PipeSender(PipeSender),
 	#[cfg(feature = "tcp")]
 	TcpSocket(tcp::Socket),
 	#[cfg(feature = "udp")]
@@ -127,6 +137,10 @@ impl ObjectInterface for Fd {
 			#[cfg(feature = "uhyve")]
 			Self::UhyveStderr(fd) => fd,
 			Self::EventFd(fd) => fd,
+			#[cfg(feature = "common-os")]
+			Self::PipeReceiver(fd) => fd,
+			#[cfg(feature = "common-os")]
+			Self::PipeSender(fd) => fd,
 			#[cfg(feature = "tcp")]
 			Self::TcpSocket(fd) => fd,
 			#[cfg(feature = "udp")]
