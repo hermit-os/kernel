@@ -2,7 +2,7 @@
   plot_group: Startup Time
   name: 1 core
   bin: startup_benchmark
-  hermit_rs_manifest_path: benches/startup/Cargo.toml
+  hermit_rs_manifest_path: benches/startup_benchmark/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \
@@ -21,7 +21,7 @@
   plot_group: Startup Time
   name: 2 cores
   bin: startup_benchmark
-  hermit_rs_manifest_path: benches/startup/Cargo.toml
+  hermit_rs_manifest_path: benches/startup_benchmark/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \
@@ -40,7 +40,7 @@
   plot_group: Startup Time
   name: 4 cores
   bin: startup_benchmark
-  hermit_rs_manifest_path: benches/startup/Cargo.toml
+  hermit_rs_manifest_path: benches/startup_benchmark/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \
@@ -59,7 +59,7 @@
   plot_group: Multithreaded Pi Efficiency
   name: Pi Multithreaded Benchmark
   bin: multithreaded_benchmark
-  hermit_rs_manifest_path: benches/multithreaded/Cargo.toml
+  hermit_rs_manifest_path: benches/multithreaded_benchmark/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \

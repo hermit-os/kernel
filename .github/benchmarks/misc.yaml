@@ -1,7 +1,7 @@
 - group: Micro
   name: Micro Benchmarks
   bin: micro_benchmarks
-  hermit_rs_manifest_path: benches/micro/Cargo.toml
+  hermit_rs_manifest_path: benches/micro_benchmarks/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \
@@ -18,7 +18,7 @@
 - group: Allocations
   name: Allocation Benchmarks
   bin: alloc_benchmarks
-  hermit_rs_manifest_path: benches/alloc/Cargo.toml
+  hermit_rs_manifest_path: benches/alloc_benchmarks/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \
@@ -35,7 +35,7 @@
 - group: Mutex
   name: Mutex Stress Test
   bin: mutex_benchmark
-  hermit_rs_manifest_path: benches/mutex/Cargo.toml
+  hermit_rs_manifest_path: benches/mutex_benchmark/Cargo.toml
   command: |
     sudo qemu-system-x86_64 \
       -accel kvm \
