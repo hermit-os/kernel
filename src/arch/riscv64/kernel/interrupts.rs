@@ -248,6 +248,20 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 		Trap::Interrupt(Interrupt::SupervisorTimer) => {
 			crate::arch::riscv64::kernel::scheduler::timer_handler();
 		}
+		// The kernel writes to user pages through `sstatus.SUM` (program
+		// loading, argv/envp setup, syscall buffers). Such an access can
+		// fault on a not-yet-faulted user page and must be resolved
+		// exactly like the corresponding user-mode fault.
+		#[cfg(feature = "common-os")]
+		Trap::Exception(Exception::LoadPageFault | Exception::StorePageFault) => {
+			let fault_addr = stval;
+
+			if !crate::arch::riscv64::kernel::do_user_page_fault(fault_addr) {
+				error!("Unhandled kernel page fault at {fault_addr:#x} ({cause:?})");
+				error!("sepc = {sepc:x}");
+				scheduler::abort();
+			}
+		}
 		cause => {
 			error!("Interrupt: {cause:?}");
 			error!("tf = {tf:x?} ");
@@ -261,7 +275,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 }
 
 /// Handles external interrupts
-fn external_handler() {
+pub(crate) fn external_handler() {
 	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 

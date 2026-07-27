@@ -142,6 +142,17 @@ macro_rules! save_context {
 macro_rules! restore_context {
 	() => {
 		concat!(
+			restore_context_without_return!(),
+			r#"
+			ret
+			"#
+		)
+	};
+}
+
+macro_rules! restore_context_without_return {
+	() => {
+		concat!(
 			pop_gs!(),
 			pop_fs!(),
 			r#"
@@ -161,7 +172,6 @@ macro_rules! restore_context {
 			pop rcx
 			pop rax
 			popfq
-			ret
 			"#
 		)
 	};

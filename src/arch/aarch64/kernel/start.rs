@@ -266,6 +266,39 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	// Memory barrier
 	dsb(SY);
 
+	// On CPUs that implement FEAT_PAN (ARMv8.1+, e.g. Apple Silicon under
+	// HVF), `PSTATE.PAN` may default to 1, which would make every kernel
+	// write to a USER_ACCESSIBLE page (e.g. clearing the user-space TLS
+	// region during `load_application`) trap as a permission fault.
+	// Hermit's common-os path needs the kernel to be able to set up
+	// user pages on behalf of the loader, so:
+	//   1. set SCTLR_EL1.SPAN=1 so `PSTATE.PAN` is *not* forced to 1 on
+	//      exception entry (otherwise every SVC/IRQ would re-set PAN
+	//      and our `msr pan, #0` below would only hold for one trap), and
+	//   2. clear `PSTATE.PAN` itself.
+	// On older CPUs without FEAT_PAN (e.g. Cortex-A72) the PAN field in
+	// ID_AA64MMFR1_EL1 reads zero, so we skip the `msr pan, #0` (which
+	// would otherwise UNDEF). Touching SCTLR.SPAN is safe even there:
+	// the bit is RES0 and the OR is a no-op.
+	unsafe {
+		asm!(
+			// SCTLR_EL1.SPAN <- 1: keep PSTATE.PAN unchanged on exception entry.
+			"mrs {tmp}, sctlr_el1",
+			"orr {tmp}, {tmp}, #(1 << 23)",
+			"msr sctlr_el1, {tmp}",
+			"isb",
+			// Clear PSTATE.PAN if the CPU implements FEAT_PAN.
+			"mrs {tmp}, id_aa64mmfr1_el1",
+			"ubfx {tmp}, {tmp}, #20, #4",
+			"cbz {tmp}, 9f",
+			".arch_extension pan",
+			"msr pan, #0",
+			"9:",
+			tmp = out(reg) _,
+			options(nostack, preserves_flags),
+		);
+	}
+
 	if cpu_id == 0 {
 		env::set_boot_info(*boot_info.unwrap());
 		crate::boot_processor_main()

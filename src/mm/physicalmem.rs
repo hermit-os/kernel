@@ -48,6 +48,12 @@ impl PageRangeAllocator for FrameAlloc {
 	}
 }
 
+impl FrameAlloc {
+	pub fn free_space() -> usize {
+		PHYSICAL_FREE_LIST.lock().free_space()
+	}
+}
+
 impl fmt::Display for FrameAlloc {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let free_list = PHYSICAL_FREE_LIST.lock();

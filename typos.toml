@@ -5,6 +5,7 @@ extend-ignore-identifiers-re = [
     "ist",
     "parm",
     "sie",
+    "Spectre",
 ]
 
 [default.extend-identifiers]

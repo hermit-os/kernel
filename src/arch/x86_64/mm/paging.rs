@@ -1,6 +1,8 @@
 use core::{fmt, ptr};
 
 use free_list::PageLayout;
+#[cfg(feature = "common-os")]
+use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -96,6 +98,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
+		self.insert(PageTableEntryFlags::GLOBAL);
 		self
 	}
 }
@@ -275,6 +278,120 @@ where
 	}
 }
 
+#[cfg(feature = "common-os")]
+fn clear_pml4(pml4_phys: usize) {
+	// Free a 4 KiB physical frame back to the frame allocator.
+	fn free_frame(phys: usize) {
+		let range = free_list::PageRange::new(phys, phys + free_list::PAGE_SIZE).unwrap();
+		unsafe { FrameAlloc::deallocate(range) };
+	}
+
+	// Task::drop is usually called from another task's context (e.g. the
+	// idle task running `cleanup_tasks`), so `Cr3::read()` would return the
+	// page table of the cleaning task — not of the one being destroyed.
+	// Walk the stored PML4 directly through the kernel identity map.
+	let pml4 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_phys) };
+
+	// Walk PML4 entries 1..511 (user-space entries).
+	// Entry 0 is for the low kernel mapping; entry 511 is the self-reference.
+	for pml4_idx in 1..511usize {
+		let pml4_entry = &mut pml4[pml4_idx];
+		if !pml4_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+			continue;
+		}
+		let pdpt_phys = pml4_entry.addr().as_u64() as usize;
+		let pdpt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pdpt_phys) };
+
+		for pdpt_idx in 0..512usize {
+			let pdpt_entry = &mut pdpt[pdpt_idx];
+			if !pdpt_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+				continue;
+			}
+			let pd_phys = pdpt_entry.addr().as_u64() as usize;
+			let pd = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pd_phys) };
+
+			for pd_idx in 0..512usize {
+				let pd_entry = &mut pd[pd_idx];
+				if !pd_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+					continue;
+				}
+				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
+					// Skip huge pages (2 MiB) - not used for user space
+					warn!("User space isn't able to use huge pages");
+					continue;
+				}
+				let pt_phys = pd_entry.addr().as_u64() as usize;
+				let pt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pt_phys) };
+
+				for pt_idx in 0..512usize {
+					let pt_entry = &mut pt[pt_idx];
+					if pt_entry.flags().contains(
+						PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE,
+					) {
+						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
+						{
+							free_frame(phys_addr.as_u64() as usize);
+						}
+						pt_entry.set_unused();
+					}
+				}
+
+				// PT emptied → free the PT frame and clear the PD entry.
+				free_frame(pt_phys);
+				pd_entry.set_unused();
+			}
+
+			// PD emptied → free the PD frame and clear the PDPT entry.
+			free_frame(pd_phys);
+			pdpt_entry.set_unused();
+		}
+
+		// PDPT emptied → free the PDPT frame and clear the PML4 entry.
+		free_frame(pdpt_phys);
+		pml4_entry.set_unused();
+	}
+}
+
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(pml4_phys: usize) {
+	debug!("Drop the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	// Finally free the PML4 itself. No TLB flush needed: the dropped page
+	// table is not loaded on any core.
+	let range = free_list::PageRange::new(pml4_phys, pml4_phys + free_list::PAGE_SIZE).unwrap();
+	unsafe { FrameAlloc::deallocate(range) };
+}
+
+#[cfg(feature = "common-os")]
+pub fn clear_user_space() {
+	use crate::core_scheduler;
+	use crate::fd::STDERR_FILENO;
+
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
+		.clear();
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&k, _| k <= STDERR_FILENO);
+
+	let (p4_frame, _) = Cr3::read_raw();
+	let pml4_phys = p4_frame.start_address().as_u64() as usize;
+
+	debug!("Clear the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	tlb::flush_all();
+	#[cfg(feature = "smp")]
+	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+}
+
 #[cfg(not(feature = "common-os"))]
 pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
@@ -294,13 +411,112 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	mut stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
-	unsafe {
-		if stack_frame.as_mut().read().code_segment != SegmentSelector(0x08) {
-			core::arch::asm!("swapgs", options(nostack));
+	use core::arch::asm;
+
+	use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
+	let swapped_gs = unsafe {
+		if stack_frame.as_mut().read().code_segment == SegmentSelector(0x08) {
+			false
+		} else {
+			asm!("swapgs", options(nostack));
+			true
+		}
+	};
+
+	increment_irq_counter(14);
+
+	let faulting_addr = Cr2::read().unwrap();
+	let virtaddr = faulting_addr.align_down(BasePageSize::SIZE);
+
+	debug!(
+		"Task {} triggers a page fault at {:p}.",
+		core_scheduler().get_current_task_id(),
+		faulting_addr
+	);
+
+	{
+		use core::ops::Bound;
+
+		use crate::mm::vma::VirtualMemoryAreaProt;
+
+		let current_task = core_scheduler().get_current_task();
+		let current_task_borrowed = current_task.borrow();
+		let guard = current_task_borrowed.vmas.read();
+
+		if let Some((_, vma)) = guard
+			.range((Bound::Unbounded, Bound::Included(virtaddr)))
+			.next_back()
+			&& virtaddr >= vma.start
+			&& virtaddr < vma.end
+		{
+			let layout = PageLayout::from_size_align(
+				BasePageSize::SIZE as usize,
+				BasePageSize::SIZE as usize,
+			)
+			.unwrap();
+			let frame_range = FrameAlloc::allocate(layout).unwrap();
+			let physaddr = PhysAddr::from(frame_range.start());
+			let mut flags = PageTableEntryFlags::empty();
+			flags.normal().user();
+			if vma.prot.contains(VirtualMemoryAreaProt::WRITE) {
+				flags.writable();
+			}
+			if vma.prot.contains(VirtualMemoryAreaProt::EXECUTE) {
+				flags.execute_disable();
+			}
+
+			// `virtaddr` is `x86_64::VirtAddr` (from `Cr2::read`); the
+			// `map` helper signs the parameter as `memory_addresses::VirtAddr`.
+			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
+
+			// clear page
+			let slice = unsafe {
+				core::slice::from_raw_parts_mut(
+					virtaddr.as_mut_ptr::<u8>().cast::<u8>(),
+					BasePageSize::SIZE as usize,
+				)
+			};
+			slice.fill(0);
+
+			// Restore user GS before returning to ring 3. Without this,
+			// iret leaves the kernel GS-base installed, the user's next
+			// FS/GS access reads kernel state and the program either
+			// misbehaves or wedges.
+			if swapped_gs {
+				unsafe {
+					core::arch::asm!("swapgs", options(nostack));
+				}
+			}
+
+			return;
 		}
 	}
+
+	// A spawned user thread whose entry function returns comes back here
+	// with RIP=0: the `thread_start` wrapper in std's hermit pal just
+	// returns, and the kernel-crafted return slot at the top of the user
+	// stack was zero-initialized. Treat an instruction-fetch fault at 0
+	// in ring 3 as a clean thread exit.
+	if error_code.contains(PageFaultErrorCode::USER_MODE)
+		&& error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+		&& faulting_addr.as_u64() == 0
+	{
+		debug!(
+			"User thread {} returned from entry; exiting cleanly.",
+			core_scheduler().get_current_task_id()
+		);
+		// Do not swap GS back here. `exit` will context-switch to another
+		// task, so the current kernel GS must remain in place for the
+		// scheduler bookkeeping. `swapped_gs` is a no-op at this point:
+		// the handler never returns, and the next task's GS is restored
+		// by the context switch.
+		let _ = swapped_gs;
+		use crate::scheduler::PerCoreSchedulerExt;
+		core_scheduler().exit(0);
+	}
+
 	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
+	error!("page_fault_linear_address = {faulting_addr:p}");
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());

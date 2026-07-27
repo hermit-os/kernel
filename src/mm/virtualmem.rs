@@ -71,8 +71,15 @@ pub fn kernel_heap_end() -> VirtAddr {
 			VirtAddr::new(0xFFFF_FFFF_FFFF)
 		}
 		target_arch = "riscv64" => {
-			// 256 GiB
-			VirtAddr::new(0x0040_0000_0000 - 1)
+			if cfg!(feature = "common-os") {
+				// The kernel owns the Sv39 root slots below 64 GiB; the
+				// region above belongs to user processes (see
+				// `arch::riscv64::mm::paging::USER_SPACE_START`).
+				VirtAddr::new(0x0010_0000_0000 - 1)
+			} else {
+				// 256 GiB
+				VirtAddr::new(0x0040_0000_0000 - 1)
+			}
 		}
 		target_arch = "x86_64" => {
 			use x86_64::structures::paging::PageTableIndex;
