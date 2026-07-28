@@ -13,3 +13,6 @@ pub const SHUT_RD: i32 = 0;
 pub const SHUT_WR: i32 = 1;
 /// Further sends and receives will be disallowed
 pub const SHUT_RDWR: i32 = 2;
+
+/// The default queue size for incoming connections
+pub const DEFAULT_BACKLOG: i32 = 128;
