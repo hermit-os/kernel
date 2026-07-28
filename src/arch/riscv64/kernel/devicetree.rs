@@ -9,7 +9,9 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use volatile::VolatileRef;
 
-use crate::arch::kernel::interrupts::init_plic;
+#[cfg(all(any(feature = "gem-net", feature = "virtio"), not(feature = "pci")))]
+use crate::arch::kernel::interrupts::EXTERNAL_INTERRUPT_CONTROLLER;
+use crate::arch::kernel::interrupts::{init_aplic, init_plic};
 #[cfg(all(
 	any(
 		feature = "virtio-fs",
@@ -49,6 +51,8 @@ use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env::{self, FdtStartInfo};
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
+#[cfg(all(feature = "virtio", not(feature = "pci")))]
+use crate::mm::PageRangeAllocator;
 
 enum Model {
 	Fux40,
@@ -63,8 +67,24 @@ pub fn init_interrupt_controller() {
 		return;
 	};
 
-	if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
-		debug!("Found interrupt controller");
+	if let Some(aplic_node) = find_aplic(&fdt) {
+		assert!(
+			aplic_node.property("msi-parent").is_none(),
+			"Only APLIC in direct delivery mode is supported yet"
+		);
+
+		let aplic_region = aplic_node
+			.reg()
+			.expect("Reg property for APLIC not found in FDT")
+			.next()
+			.unwrap();
+		let addr = PhysAddr::from(aplic_region.starting_address.addr());
+		let size = aplic_region.size.unwrap();
+
+		debug!("Found APLIC at {addr:p}, size: {size:#x}");
+		init_aplic(addr, size);
+	} else if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
+		debug!("Found external interrupt controller");
 		let plic_region = plic_node
 			.reg()
 			.expect("Reg property for PLIC not found in FDT")
@@ -104,8 +124,28 @@ pub fn init_interrupt_controller() {
 		};
 		init_plic(plic_region_start, plic_region_size, context);
 	} else {
-		warn!("No interrupt controller found");
+		warn!("No external interrupt controller found");
 	}
+}
+
+fn find_aplic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
+	let mut node = fdt.find_compatible(&["riscv,aplic"])?;
+
+	// Different interrupts domains, including m-mode domains, show up as differnent nodes.
+	// We expect a hierachy of one m-mode domain and one s-mode domain as described in
+	// 'The RISC-V Advanced Interrupt Architecture', Version 1, Figure 4.2
+	if node.property("status").and_then(|p| p.as_str()) == Some("disabled") {
+		let phandle = node.property("riscv,children")?.as_usize()?;
+		node = fdt.find_phandle(phandle as u32)?;
+
+		// Ensure the S-mode domain is actually enabled
+		assert!(
+			node.property("status").and_then(|p| p.as_str()) != Some("disabled"),
+			"Referenced s-mode interrupt domain is not enabled in FDT"
+		);
+	}
+
+	Some(node)
 }
 
 #[cfg_attr(
@@ -134,6 +174,19 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				.expect("interrupts property for GEM not found in FDT")
 				.next()
 				.unwrap();
+			let parent_interrupt_cells = gem_node
+				.interrupt_parent()
+				.expect("interrupt-parent node for virtio mmio not found in FDT")
+				.interrupt_cells()
+				.expect("#interrupt-cells property for virtio mmio missing or invalid");
+			let (irq_number, source_mode) = match parent_interrupt_cells {
+				1 => (irq as u32, 0),
+				2 => ((irq >> 32) as u32, irq as u32),
+				_ => {
+					panic!("Unsupported #interrupt-cells value: {parent_interrupt_cells}");
+				}
+			};
+
 			let mac = gem_node
 				.property("local-mac-address")
 				.expect("local-mac-address property for GEM not found in FDT")
@@ -163,12 +216,19 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 			paging::identity_map::<paging::HugePageSize>(gem_region_start);
 			match gem::init_device(
 				VirtAddr::new(gem_region_start.as_u64()),
-				irq.try_into().unwrap(),
+				irq_number.try_into().unwrap(),
 				phy_addr,
 				<[u8; 6]>::try_from(mac).expect("MAC with invalid length"),
 				handlers,
 			) {
-				Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
+				Ok(drv) => {
+					EXTERNAL_INTERRUPT_CONTROLLER
+						.lock()
+						.as_mut()
+						.unwrap()
+						.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode);
+					*NETWORK_DEVICE.lock() = Some(drv);
+				}
 				Err(err) => error!("Could not initialize GEM driver: {err}"),
 			}
 		}
@@ -197,6 +257,18 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				.expect("interrupts property for virtio mmio not found in FDT")
 				.next()
 				.unwrap();
+			let parent_interrupt_cells = virtio_node
+				.interrupt_parent()
+				.expect("interrupt-parent node for virtio mmio not found in FDT")
+				.interrupt_cells()
+				.expect("#interrupt-cells property for virtio mmio missing or invalid");
+			let (irq_number, source_mode) = match parent_interrupt_cells {
+				1 => (irq as u32, 0),
+				2 => ((irq >> 32) as u32, irq as u32),
+				_ => {
+					panic!("Unsupported #interrupt-cells value: {parent_interrupt_cells}");
+				}
+			};
 
 			let virtio_region_start =
 				PhysAddr::from(virtio_region.starting_address.expose_provenance());
@@ -233,7 +305,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 			if cfg!(debug_assertions) {
 				use free_list::PageRange;
 
-				use crate::mm::{FrameAlloc, PageRangeAllocator};
+				use crate::mm::FrameAlloc;
 
 				let start = virtio_region.starting_address.addr();
 				let len = virtio_region.size.unwrap();
@@ -244,17 +316,35 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 			debug!("Found virtio {id:?} at {mmio:p}");
 
-			match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
+			let drv = match mmio_virtio::init_device(mmio, irq_number.try_into().unwrap(), handlers)
+			{
+				Ok(drv) => drv,
+				Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(0))) => {
+					continue;
+				}
+				Err(err) => {
+					error!("Could not initialize virtio-mmio device: {err}");
+					continue;
+				}
+			};
+
+			EXTERNAL_INTERRUPT_CONTROLLER
+				.lock()
+				.as_mut()
+				.unwrap()
+				.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode);
+
+			match drv {
 				#[cfg(feature = "virtio-console")]
-				Ok(VirtioDriver::Console(drv)) => crate::console::switch_to_virtio(*drv),
+				VirtioDriver::Console(drv) => crate::console::switch_to_virtio(*drv),
 				#[cfg(feature = "virtio-fs")]
-				Ok(VirtioDriver::Fs(drv)) => {
+				VirtioDriver::Fs(drv) => {
 					register_driver(MmioDriver::VirtioFs(hermit_sync::InterruptSpinMutex::new(
 						*drv,
 					)));
 				}
 				#[cfg(feature = "virtio-net")]
-				Ok(VirtioDriver::Net(drv)) => {
+				VirtioDriver::Net(drv) => {
 					*NETWORK_DEVICE.lock() = Some(*drv);
 				}
 				#[cfg(feature = "virtio-rng")]
@@ -264,13 +354,11 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					)));
 				}
 				#[cfg(feature = "virtio-vsock")]
-				Ok(VirtioDriver::Vsock(drv)) => {
+				VirtioDriver::Vsock(drv) => {
 					register_driver(MmioDriver::VirtioVsock(
 						hermit_sync::InterruptSpinMutex::new(*drv),
 					));
 				}
-				Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(0))) => (),
-				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}
 		}
 	}
