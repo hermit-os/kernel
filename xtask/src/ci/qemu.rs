@@ -182,7 +182,11 @@ impl Qemu {
 					.iter()
 					.flat_map(|s| s.split(&[' ', ','][..]))
 					.any(|feature| feature == "client");
-				test_vsock(has_client)?;
+				if has_client {
+					test_vsock_client()?;
+				} else {
+					test_vsock_server()?;
+				}
 			}
 			_ => {}
 		}
@@ -610,16 +614,7 @@ fn test_stdin(child: &mut Child) -> Result<()> {
 	Ok(())
 }
 
-fn test_vsock(has_client: bool) -> Result<()> {
-	let mut stream = if has_client {
-		let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, 9975)?;
-		let (stream, _addr) = listener.accept()?;
-		stream
-	} else {
-		thread::sleep(Duration::from_secs(10));
-		VsockStream::connect_with_cid_port(3, 9975)?
-	};
-
+fn test_vsock_connection(mut stream: VsockStream) -> Result<()> {
 	let messages = ["Hello, there!", "Hello, again!", "Bye-bye!"];
 	for message in messages {
 		writeln!(&mut stream, "{message}")?;
@@ -633,12 +628,31 @@ fn test_vsock(has_client: bool) -> Result<()> {
 	let received_messages = s.trim().split('\n').collect::<Vec<_>>();
 	assert_eq!(received_messages, messages);
 
-	drop(stream);
+	Ok(())
+}
 
-	if has_client {
-		let dur = Duration::from_secs(10);
-		eprintln!("[CI] Sleeping {dur:?} to free up VSOCK port again.");
-		thread::sleep(dur);
+fn test_vsock_client() -> Result<()> {
+	let listener = VsockListener::bind_with_cid_port(vsock::VMADDR_CID_ANY, 9975)?;
+	let (stream, _addr) = listener.accept()?;
+
+	test_vsock_connection(stream)?;
+
+	let dur = Duration::from_secs(10);
+	eprintln!("[CI] Sleeping {dur:?} to free up VSOCK port again.");
+	thread::sleep(dur);
+
+	Ok(())
+}
+
+fn test_vsock_server() -> Result<()> {
+	thread::sleep(Duration::from_secs(10));
+
+	for i in 0usize..10 {
+		eprintln!("[CI] Opening connection {i}...");
+		let stream = VsockStream::connect_with_cid_port(3, 9975)?;
+
+		test_vsock_connection(stream)?;
+		thread::sleep(Duration::from_secs(1));
 	}
 
 	Ok(())
