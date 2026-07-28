@@ -16,3 +16,7 @@ pub const SHUT_RDWR: i32 = 2;
 
 /// The default queue size for incoming connections
 pub const DEFAULT_BACKLOG: i32 = 128;
+
+/// The maximum queue size for incoming connections,
+/// based on the default maximum used by modern Linux.
+pub const SOMAXCONN: i32 = 4096;

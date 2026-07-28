@@ -10,7 +10,7 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 
-use super::{DEFAULT_BACKLOG, SHUT_RD, SHUT_RDWR, SHUT_WR};
+use super::{DEFAULT_BACKLOG, SHUT_RD, SHUT_RDWR, SHUT_WR, SOMAXCONN};
 use crate::config::DEFAULT_KEEP_ALIVE_INTERVAL;
 use crate::errno::Errno;
 use crate::executor::block_on;
@@ -18,10 +18,6 @@ use crate::executor::network::{Handle, NIC, wake_network_waker};
 use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
 use crate::io;
 use crate::syscalls::socket::Af;
-
-/// The maximum queue size for incoming connections,
-/// based on the default maximum used by modern Linux.
-pub const SOMAXCONN: i32 = 4096;
 
 fn get_ephemeral_port() -> u16 {
 	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
