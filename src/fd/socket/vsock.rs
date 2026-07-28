@@ -6,12 +6,13 @@ use core::task::Poll;
 use virtio::vsock::{Hdr, Op, Type};
 use virtio::{le16, le32, le64};
 
+use super::{SHUT_RD, SHUT_RDWR, SHUT_WR};
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 use crate::errno::Errno;
-use crate::executor::vsock::{VSOCK_MAP, VsockState};
+use crate::executor::vsock::{ConnKey, RawSocket, VSOCK_MAP, VsockMap, VsockState};
 use crate::fd::{self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent};
 use crate::io;
 
@@ -39,18 +40,14 @@ impl VsockEndpoint {
 	}
 }
 
-pub struct NullSocket;
-
-impl NullSocket {
-	pub const fn new() -> Self {
-		Self {}
-	}
-}
-
-impl ObjectInterface for NullSocket {}
-
 pub struct Socket {
+	/// The local port this socket is bound/listening on, or the synthetic
+	/// ephemeral port of an outbound connection.
 	port: u32,
+	/// Set for sockets returned by `accept`: identifies the established
+	/// connection in the executor's connection map. `None` for listeners and
+	/// outbound-connect sockets, which are keyed by `port` instead.
+	conn: Option<ConnKey>,
 	cid: u32,
 	is_nonblocking: bool,
 }
@@ -59,8 +56,19 @@ impl Socket {
 	pub fn new() -> Self {
 		Self {
 			port: 0,
+			conn: None,
 			cid: u32::MAX,
 			is_nonblocking: false,
+		}
+	}
+
+	/// Borrow this socket's `RawSocket` from the executor map, whether it is a
+	/// listener/connect socket (keyed by `port`) or an accepted connection
+	/// (keyed by `conn`).
+	fn raw_mut<'a>(&self, map: &'a mut VsockMap) -> Option<&'a mut RawSocket> {
+		match self.conn {
+			Some(key) => map.get_mut_connection(key),
+			None => map.get_mut_socket(self.port),
 		}
 	}
 }
@@ -69,7 +77,7 @@ impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(self.port).ok_or(Errno::Inval)?;
+			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Shutdown | VsockState::ReceiveRequest => {
@@ -235,8 +243,8 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn getpeername(&self) -> io::Result<Option<Endpoint>> {
-		let guard = VSOCK_MAP.lock();
-		let raw = guard.get_socket(self.port).ok_or(Errno::Inval)?;
+		let mut guard = VSOCK_MAP.lock();
+		let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 		Ok(Some(Endpoint::Vsock(VsockEndpoint::new(
 			raw.remote_port,
@@ -253,14 +261,19 @@ impl ObjectInterface for Socket {
 		))))
 	}
 
-	async fn listen(&mut self, _backlog: i32) -> io::Result<()> {
-		Ok(())
+	async fn listen(&mut self, backlog: i32) -> io::Result<()> {
+		if backlog <= 0 {
+			return Err(Errno::Inval);
+		}
+		VSOCK_MAP
+			.lock()
+			.set_backlog(self.port, usize::try_from(backlog).unwrap())
 	}
 
 	async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)> {
 		let port = self.port;
 
-		let endpoint = future::poll_fn(|cx| {
+		let (conn_key, endpoint) = future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
 			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
 
@@ -274,48 +287,79 @@ impl ObjectInterface for Socket {
 					}
 				}
 				VsockState::ReceiveRequest => {
-					let result = {
-						const HEADER_SIZE: usize = size_of::<Hdr>();
-						let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
-						let local_cid = driver_guard.get_cid();
-
-						driver_guard.send_packet(HEADER_SIZE, |buffer| {
-							let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
-
-							response.src_cid = le64::from_ne(local_cid);
-							response.dst_cid = le64::from_ne(raw.remote_cid.into());
-							response.src_port = le32::from_ne(port);
-							response.dst_port = le32::from_ne(raw.remote_port);
-							response.len = le32::from_ne(0);
-							response.type_ = le16::from_ne(Type::Stream.into());
-							response.op = le16::from_ne(Op::Response.into());
-							response.flags = le32::from_ne(0);
-							response.buf_alloc = le32::from_ne(
-								crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32,
-							);
-							response.fwd_cnt = le32::from_ne(raw.fwd_cnt);
-						});
-
-						raw.state = VsockState::Connected;
-
-						Ok(VsockEndpoint::new(raw.remote_port, raw.remote_cid))
+					// Peek the head of the listener's backlog to build the
+					// handshake response for the request we're about to accept.
+					let Some(req) = raw.pending.front().copied() else {
+						// Spurious ReceiveRequest with an empty queue: wait.
+						raw.rx_waker.register(cx.waker());
+						return Poll::Pending;
 					};
+					let fwd_cnt = raw.fwd_cnt;
 
-					Poll::Ready(result)
+					const HEADER_SIZE: usize = size_of::<Hdr>();
+					let mut driver_guard = hardware::get_vsock_driver().unwrap().lock();
+					let local_cid = driver_guard.get_cid();
+
+					driver_guard.send_packet(HEADER_SIZE, |buffer| {
+						let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
+
+						response.src_cid = le64::from_ne(local_cid);
+						response.dst_cid = le64::from_ne(req.remote_cid.into());
+						response.src_port = le32::from_ne(port);
+						response.dst_port = le32::from_ne(req.remote_port);
+						response.len = le32::from_ne(0);
+						response.type_ = le16::from_ne(Type::Stream.into());
+						response.op = le16::from_ne(Op::Response.into());
+						response.flags = le32::from_ne(0);
+						response.buf_alloc =
+							le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+						response.fwd_cnt = le32::from_ne(fwd_cnt);
+					});
+					drop(driver_guard);
+
+					let endpoint = VsockEndpoint::new(req.remote_port, req.remote_cid);
+
+					// Pop the request into the connection map. If more requests
+					// remain queued, re-wake so a subsequent `accept()` drains
+					// them (the listener stays in ReceiveRequest).
+					let conn_key = guard.establish(port)?;
+					if let Some(listener) = guard.get_mut_socket(port)
+						&& !listener.pending.is_empty()
+					{
+						listener.rx_waker.wake();
+					}
+
+					Poll::Ready(Ok((conn_key, endpoint)))
 				}
 				_ => Poll::Ready(Err(Errno::Badf)),
 			}
 		})
 		.await?;
 
+		// Return the accepted connection as a DISTINCT Socket addressing the
+		// established connection. The listener `self` is left untouched, so it
+		// keeps accepting further connections on the same port.
+		let conn = Socket {
+			port,
+			conn: Some(conn_key),
+			cid: self.cid,
+			is_nonblocking: self.is_nonblocking,
+		};
+
 		Ok((
-			Arc::new(async_lock::RwLock::new(NullSocket::new().into())),
+			Arc::new(async_lock::RwLock::new(conn.into())),
 			Endpoint::Vsock(endpoint),
 		))
 	}
 
-	async fn shutdown(&self, _how: i32) -> io::Result<()> {
-		Ok(())
+	async fn shutdown(&self, how: i32) -> io::Result<()> {
+		// Validate `how` for parity with the other socket types. This does not
+		// yet emit an `Op::Shutdown` to the peer, so a remote `read` is not
+		// woken with EOF by a local shutdown.
+		match how {
+			SHUT_RD | SHUT_WR | SHUT_RDWR => Ok(()),
+			_ => Err(Errno::Inval),
+		}
 	}
 
 	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
@@ -334,10 +378,9 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
+			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 
 			match raw.state {
 				VsockState::Connected => {
@@ -389,7 +432,7 @@ impl ObjectInterface for Socket {
 		let port = self.port;
 		future::poll_fn(|cx| {
 			let mut guard = VSOCK_MAP.lock();
-			let raw = guard.get_mut_socket(port).ok_or(Errno::Inval)?;
+			let raw = self.raw_mut(&mut guard).ok_or(Errno::Inval)?;
 			let diff = raw.tx_cnt.abs_diff(raw.peer_fwd_cnt);
 
 			match raw.state {
@@ -449,7 +492,65 @@ impl ObjectInterface for Socket {
 
 impl Drop for Socket {
 	fn drop(&mut self) {
-		let mut guard = VSOCK_MAP.lock();
-		guard.remove_socket(self.port);
+		// Remove our state and snapshot the peer first, releasing VSOCK_MAP
+		// before touching the driver: the RX dispatch locks driver -> VSOCK_MAP,
+		// so holding VSOCK_MAP while taking the driver lock would invert the
+		// lock order.
+		let peer = {
+			let mut guard = VSOCK_MAP.lock();
+			match self.conn {
+				Some(key) => {
+					let peer = guard
+						.get_mut_connection(key)
+						.map(|raw| (raw.state, raw.remote_cid, raw.remote_port, key.local_port));
+					guard.remove_connection(key);
+					peer
+				}
+				None => {
+					let peer = guard
+						.get_mut_socket(self.port)
+						.map(|raw| (raw.state, raw.remote_cid, raw.remote_port, self.port));
+					guard.remove_socket(self.port);
+					peer
+				}
+			}
+		};
+
+		// Complete the close handshake: tell the peer this connection is gone.
+		// Without this the peer never learns the socket died. A peer that
+		// closed first (half-open) sits in its close timeout (~8 s on Linux
+		// virtio-vsock) and then fires an `Op::Rst` at our local port — which
+		// the ephemeral allocator may have already handed to a NEW connection.
+		// A peer with the connection still open blocks in `read()` forever.
+		// Only states with a live peer are notified.
+		let Some((state, remote_cid, remote_port, local_port)) = peer else {
+			return;
+		};
+		if !matches!(
+			state,
+			VsockState::Connected | VsockState::Shutdown | VsockState::Connecting
+		) {
+			return;
+		}
+		if let Some(driver) = hardware::get_vsock_driver() {
+			const HEADER_SIZE: usize = size_of::<Hdr>();
+			let mut driver_guard = driver.lock();
+			let local_cid = driver_guard.get_cid();
+			driver_guard.send_packet(HEADER_SIZE, |buffer| {
+				let response = unsafe { &mut *buffer.as_mut_ptr().cast::<Hdr>() };
+
+				response.src_cid = le64::from_ne(local_cid);
+				response.dst_cid = le64::from_ne(remote_cid.into());
+				response.src_port = le32::from_ne(local_port);
+				response.dst_port = le32::from_ne(remote_port);
+				response.len = le32::from_ne(0);
+				response.type_ = le16::from_ne(Type::Stream.into());
+				response.op = le16::from_ne(Op::Rst.into());
+				response.flags = le32::from_ne(0);
+				response.buf_alloc =
+					le32::from_ne(crate::executor::vsock::RAW_SOCKET_BUFFER_SIZE as u32);
+				response.fwd_cnt = le32::from_ne(0);
+			});
+		}
 	}
 }
