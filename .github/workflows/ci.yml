@@ -289,9 +289,15 @@ jobs:
         working-directory: .
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
         if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio --microvm
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio --microvm
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features --features hermit/virtio-vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
+        if: matrix.arch != 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --features client qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
+        if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --features client --no-default-features qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio --microvm
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --features client --no-default-features qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
         if: matrix.arch != 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
         if: matrix.arch != 'riscv64'

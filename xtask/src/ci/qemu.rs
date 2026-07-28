@@ -633,6 +633,14 @@ fn test_vsock(has_client: bool) -> Result<()> {
 	let received_messages = s.trim().split('\n').collect::<Vec<_>>();
 	assert_eq!(received_messages, messages);
 
+	drop(stream);
+
+	if has_client {
+		let dur = Duration::from_secs(10);
+		eprintln!("[CI] Sleeping {dur:?} to free up VSOCK port again.");
+		thread::sleep(dur);
+	}
+
 	Ok(())
 }
 
