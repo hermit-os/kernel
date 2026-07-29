@@ -44,8 +44,6 @@ pub(crate) enum Fd {
 	#[cfg(feature = "udp")]
 	UdpSocket(udp::Socket),
 	#[cfg(feature = "virtio-vsock")]
-	VsockNullSocket(vsock::NullSocket),
-	#[cfg(feature = "virtio-vsock")]
 	VsockSocket(vsock::Socket),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFsFileHandle(VirtioFsFileHandle),
@@ -94,8 +92,6 @@ fd_from! {
 	#[cfg(feature = "udp")]
 	UdpSocket(udp::Socket),
 	#[cfg(feature = "virtio-vsock")]
-	VsockNullSocket(vsock::NullSocket),
-	#[cfg(feature = "virtio-vsock")]
 	VsockSocket(vsock::Socket),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFsFileHandle(VirtioFsFileHandle),
@@ -127,8 +123,6 @@ impl ObjectInterface for Fd {
 			Self::TcpSocket(fd) => fd,
 			#[cfg(feature = "udp")]
 			Self::UdpSocket(fd) => fd,
-			#[cfg(feature = "virtio-vsock")]
-			Self::VsockNullSocket(fd) => fd,
 			#[cfg(feature = "virtio-vsock")]
 			Self::VsockSocket(fd) => fd,
 			#[cfg(feature = "virtio-fs")]
