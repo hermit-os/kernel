@@ -11,22 +11,49 @@ pub struct ConsoleStdin;
 
 impl ObjectInterface for ConsoleStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let available = if CONSOLE.lock().read_ready()? {
-			PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND
-		} else {
-			PollEvent::empty()
-		};
+		future::poll_fn(|cx| {
+			let readable = PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND;
+			let (available, requires_polling) = {
+				let mut console = CONSOLE.lock();
+				(console.read_ready()?, console.requires_input_polling())
+			};
+			let ready = event
+				& if available {
+					readable
+				} else {
+					PollEvent::empty()
+				};
 
-		Ok(event & available)
+			if !ready.is_empty() || !event.intersects(readable) {
+				Poll::Ready(Ok(ready))
+			} else {
+				if requires_polling {
+					cx.waker().wake_by_ref();
+				} else {
+					CONSOLE_WAKER.lock().register(cx.waker());
+					if CONSOLE.lock().read_ready()? {
+						return Poll::Ready(Ok(event & readable));
+					}
+				}
+				Poll::Pending
+			}
+		})
+		.await
 	}
 
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
-			let read_bytes = CONSOLE.lock().read(buf)?;
+			let (read_bytes, requires_polling) = {
+				let mut console = CONSOLE.lock();
+				(console.read(buf)?, console.requires_input_polling())
+			};
 			if read_bytes > 0 {
 				CONSOLE.lock().write_all(&buf[..read_bytes])?;
 				CONSOLE.lock().flush()?;
 				Poll::Ready(Ok(read_bytes))
+			} else if requires_polling {
+				cx.waker().wake_by_ref();
+				Poll::Pending
 			} else {
 				CONSOLE_WAKER.lock().register(cx.waker());
 				Poll::Pending
