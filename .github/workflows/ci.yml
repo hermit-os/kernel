@@ -258,6 +258,9 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hello_world --no-default-features qemu ${{ matrix.qemu_flags }} --microvm
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package stdin qemu ${{ matrix.qemu_flags }}
+        if: matrix.arch != 'riscv64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package stdin qemu ${{ matrix.qemu_flags }} --no-semihosting
+        if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package stdin --features hermit/virtio-console qemu ${{ matrix.qemu_flags }} --devices virtio-console-pci
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package stdin --features hermit/virtio-console --no-default-features qemu ${{ matrix.qemu_flags }} --devices virtio-console-mmio --microvm

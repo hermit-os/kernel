@@ -41,6 +41,10 @@ pub struct Qemu {
 	#[arg(long)]
 	uefi: bool,
 
+	/// Disable semihosting.
+	#[arg(long)]
+	no_semihosting: bool,
+
 	/// Devices to enable.
 	#[arg(long)]
 	devices: Vec<Device>,
@@ -135,7 +139,7 @@ impl Qemu {
 
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
-			.args(self.serial_args(image_name, arch))
+			.args(self.serial_args())
 			.args(self.image_args(image, arch)?)
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
@@ -345,7 +349,9 @@ impl Qemu {
 					cpu_args.push("max,lpa2=off".to_owned());
 				}
 
-				cpu_args.push("-semihosting".to_owned());
+				if !self.no_semihosting {
+					cpu_args.push("-semihosting".to_owned());
+				}
 				cpu_args
 			}
 			Arch::Riscv64 => {
@@ -358,7 +364,9 @@ impl Qemu {
 					}
 				}
 
-				cpu_args.push("-semihosting".to_owned());
+				if !self.no_semihosting {
+					cpu_args.push("-semihosting".to_owned());
+				}
 				cpu_args
 			}
 		}
@@ -382,16 +390,13 @@ impl Qemu {
 		1024
 	}
 
-	fn serial_args(&self, image_name: &str, arch: Arch) -> &[&str] {
+	fn serial_args(&self) -> &[&str] {
 		if self
 			.devices
 			.iter()
 			.any(|device| matches!(device, Device::VirtioConsoleMmio | Device::VirtioConsolePci))
 		{
 			&[]
-		} else if arch == Arch::Riscv64 && image_name == "stdin" {
-			// OpenSBI semihosting and the serial device would otherwise both read stdin.
-			&["-serial", "none"]
 		} else {
 			&["-serial", "stdio"]
 		}
