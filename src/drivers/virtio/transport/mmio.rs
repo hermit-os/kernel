@@ -24,6 +24,7 @@ use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
@@ -349,7 +350,7 @@ pub(crate) fn init_device(
 	// Verify the device-ID to find the network card
 	match registers.as_ptr().device_id().read() {
 		#[cfg(feature = "virtio-console")]
-		virtio::Id::Console => match VirtioConsoleDriver::init(dev_id, registers, irq_no, handlers) {
+		virtio::Id::Console => match init::<VirtioConsoleDriver>(registers, irq_no, handlers) {
 			Ok(virt_console_drv) => {
 				info!("Virtio console driver initialized.");
 				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
@@ -365,7 +366,7 @@ pub(crate) fn init_device(
 		virtio::Id::Fs => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(dev_id, registers, irq_no, handlers) {
+			match init::<VirtioFsDriver>(registers, irq_no, handlers) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
@@ -377,8 +378,11 @@ pub(crate) fn init_device(
 			}
 		}
 		#[cfg(feature = "virtio-net")]
-		virtio::Id::Net => match VirtioNetDriver::init(dev_id, registers, irq_no, handlers) {
+		virtio::Id::Net => match init::<VirtioNetDriver>(registers, irq_no, handlers) {
 			Ok(virt_net_drv) => {
+				if virt_net_drv.dev_status() == virtio::net::S::LINK_UP {
+					info!("The link of the network device is up!");
+				}
 				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
 			}
@@ -388,7 +392,7 @@ pub(crate) fn init_device(
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
-		virtio::Id::Vsock => match VirtioVsockDriver::init(dev_id, registers, irq_no, handlers) {
+		virtio::Id::Vsock => match init::<VirtioVsockDriver>(registers, irq_no, handlers) {
 			Ok(virt_vsock_drv) => {
 				info!("Virtio sock driver initialized.");
 				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_vsock_drv)))
@@ -412,4 +416,48 @@ pub(crate) fn init_device(
 			))
 		}
 	}
+}
+
+pub fn map_caps<Config>(
+	mut registers: VolatileRef<'static, DeviceRegisters>,
+) -> (UniCapsColl, VolatileRef<'static, Config, ReadOnly>) {
+	let dev_cfg_raw: &'static Config = unsafe {
+		&*registers
+			.borrow_mut()
+			.as_mut_ptr()
+			.config()
+			.as_raw_ptr()
+			.cast::<Config>()
+			.as_ptr()
+	};
+	let dev_cfg_raw = VolatileRef::from_ref(dev_cfg_raw);
+	let int_cap = InterruptCapability::IsrStatus(IsrStatus::new(registers.borrow_mut()));
+	let notif_cfg = NotifCfg::new(registers.borrow_mut());
+	let mut com_cfg = ComCfg::new(registers);
+	com_cfg.print_information();
+
+	(
+		UniCapsColl {
+			com_cfg,
+			notif_cfg,
+			int_cap,
+		},
+		dev_cfg_raw,
+	)
+}
+
+/// Initializes virtio vsock device by mapping configuration layout to
+/// respective structs (configuration structs are:
+///
+/// Returns a driver instance of
+/// [VirtioVsockDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
+fn init<T: crate::drivers::virtio::VirtioDriver>(
+	registers: VolatileRef<'static, DeviceRegisters>,
+	irq: InterruptLine,
+	handlers: &mut InterruptHandlerMap,
+) -> Result<T, VirtioError>
+where
+	virtio::F: From<T::DeviceFeatures> + AsRef<T::DeviceFeatures> + AsMut<T::DeviceFeatures>,
+{
+	T::init_dev(map_caps(registers), handlers, Some(irq)).map_err(|(err, _)| err)
 }

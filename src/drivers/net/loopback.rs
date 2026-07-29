@@ -26,7 +26,7 @@ impl LoopbackDriver {
 }
 
 impl Driver for LoopbackDriver {
-	fn get_name(&self) -> &'static str {
+	fn get_name() -> &'static str {
 		"loopback"
 	}
 }
