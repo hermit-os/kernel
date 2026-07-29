@@ -135,7 +135,7 @@ impl Qemu {
 
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
-			.args(self.serial_args())
+			.args(self.serial_args(image_name, arch))
 			.args(self.image_args(image, arch)?)
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
@@ -382,13 +382,16 @@ impl Qemu {
 		1024
 	}
 
-	fn serial_args(&self) -> &[&str] {
+	fn serial_args(&self, image_name: &str, arch: Arch) -> &[&str] {
 		if self
 			.devices
 			.iter()
 			.any(|device| matches!(device, Device::VirtioConsoleMmio | Device::VirtioConsolePci))
 		{
 			&[]
+		} else if arch == Arch::Riscv64 && image_name == "stdin" {
+			// OpenSBI semihosting and the serial device would otherwise both read stdin.
+			&["-serial", "none"]
 		} else {
 			&["-serial", "stdio"]
 		}
