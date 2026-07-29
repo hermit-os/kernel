@@ -1,5 +1,7 @@
 pub mod kernel;
 pub mod mm;
+#[cfg(target_os = "none")]
+pub mod start;
 
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
