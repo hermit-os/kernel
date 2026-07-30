@@ -1,5 +1,5 @@
-use std::env;
 use std::process::{Command, ExitStatus};
+use std::{env, fs};
 
 use anyhow::{Result, ensure};
 use clap::Args;
@@ -141,11 +141,20 @@ impl Qemu {
 		) {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if self.build.target() == Target::Riscv64Sbi {
+			let opensbi_paths = &[
+				"/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin", // Ubuntu
+				"/usr/share/opensbi/generic/firmware/fw_jump.bin",        // Alpine
+			];
+			let opensbi_path = opensbi_paths
+				.iter()
+				.find(|p| fs::exists(p).unwrap_or_default())
+				.expect("OpenSBI was not found");
+
 			vec![
 				"-machine".to_string(),
 				"virt".to_string(),
 				"-bios".to_string(),
-				"/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin".to_string(),
+				opensbi_path.to_string(),
 			]
 		} else {
 			vec![]
