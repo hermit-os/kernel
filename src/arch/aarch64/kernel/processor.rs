@@ -330,7 +330,7 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 
 	// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
 	let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
-	let deadline = (wt / 1000) * freq;
+	let deadline = wt * freq / 1000;
 
 	CNTP_CVAL_EL0.set(deadline);
 	CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
