@@ -35,6 +35,7 @@ pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 pub(crate) static CURRENT_BOOT_ID: AtomicU32 = AtomicU32::new(0);
 pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
 pub(crate) static HART_MASK: AtomicU64 = AtomicU64::new(0);
+#[cfg_attr(not(any(feature = "hermit-entry", feature = "smp")), expect(dead_code))]
 pub(crate) static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
 
 // FUNCTIONS

@@ -11,8 +11,7 @@ use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
-	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, Size4KiB,
-	Translate,
+	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, Size4KiB, Translate,
 };
 
 use crate::arch::kernel::processor;
@@ -120,7 +119,10 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 ///
 /// This is useful for compatibility with the Hermit loader version 0.5.6.
 // FIXME: Remove once we drop support for loader 0.5.6
+#[cfg(feature = "hermit-entry")]
 pub fn is_recursive() -> bool {
+	use x86_64::structures::paging::PageTableIndex;
+
 	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
 	let level_4_table = identity_mapped_page_table.level_4_table();
 

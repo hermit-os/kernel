@@ -2,14 +2,20 @@ use core::alloc::AllocError;
 use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(feature = "hermit-entry")]
 use align_address::Align;
-use free_list::{FreeList, PageLayout, PageRange, PageRangeError};
+#[cfg(feature = "hermit-entry")]
+use free_list::PageRangeError;
+use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
-use memory_addresses::{PhysAddr, VirtAddr};
+use memory_addresses::VirtAddr;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(feature = "hermit-entry")]
+use crate::arch::mm::paging::PageTableEntryFlags;
+#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, HugePageSize, PageSize};
+#[cfg(feature = "hermit-entry")]
 use crate::env::{self, FdtStartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
@@ -61,7 +67,10 @@ pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "hermit-entry")]
 pub unsafe fn map_frame_range(frame_range: PageRange) {
+	use memory_addresses::PhysAddr;
+
 	cfg_select! {
 		target_arch = "aarch64" => {
 			type IdentityPageSize = paging::BasePageSize;
@@ -103,6 +112,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 	}
 }
 
+#[cfg(feature = "hermit-entry")]
 unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let fdt = env::start_info().fdt().ok_or(())?;
 
@@ -181,12 +191,14 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 }
 
 // FIXME: upstream these
+#[cfg(feature = "hermit-entry")]
 trait PageRangeExt: Sized {
 	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError>;
 
 	fn and(self, rhs: Self) -> Option<Self>;
 }
 
+#[cfg(feature = "hermit-entry")]
 impl PageRangeExt for PageRange {
 	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError> {
 		let start = start.align_down(free_list::PAGE_SIZE);
@@ -209,6 +221,7 @@ unsafe fn init() {
 		paging::unmap::<HugePageSize>(start, count);
 	}
 
+	#[cfg(feature = "hermit-entry")]
 	unsafe {
 		detect_from_fdt().unwrap();
 	}

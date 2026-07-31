@@ -1,9 +1,17 @@
+#[cfg(feature = "hermit-entry")]
 mod hermit_entry;
+
+#[cfg(feature = "hermit-entry")]
+pub use hermit_entry::*;
+
+#[cfg(not(feature = "hermit-entry"))]
+mod unsupported;
 
 use core::fmt;
 use core::num::NonZero;
 
-pub use hermit_entry::*;
+#[cfg(not(feature = "hermit-entry"))]
+pub use unsupported::*;
 
 pub trait StartInfo {
 	fn display(&self) -> impl fmt::Display {
@@ -27,11 +35,17 @@ pub trait StartInfo {
 	}
 }
 
+#[cfg(any(
+	feature = "hermit-entry",
+	target_arch = "aarch64",
+	target_arch = "riscv64"
+))]
 pub trait FdtStartInfo: StartInfo {
 	fn fdt(&self) -> Option<fdt::Fdt<'_>> {
 		None
 	}
 
+	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	fn fdt_addr(&self) -> Option<NonZero<usize>> {
 		None
 	}
