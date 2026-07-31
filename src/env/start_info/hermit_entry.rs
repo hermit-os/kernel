@@ -5,6 +5,8 @@ use fdt::Fdt;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
+use super::{FdtStartInfo, StartInfo};
+
 static START_INFO: OnceCell<BootInfo> = OnceCell::new();
 
 #[cfg(not(feature = "uhyve"))]
@@ -13,56 +15,13 @@ pub fn start_info() -> &'static impl FdtStartInfo {
 }
 
 #[cfg(feature = "uhyve")]
-pub fn start_info() -> &'static impl UhyveStartInfo {
+pub fn start_info() -> &'static impl super::UhyveStartInfo {
 	START_INFO.get().unwrap()
 }
 
 pub fn set_start_info(raw_boot_info: RawBootInfo) {
 	let start_info = BootInfo::from(raw_boot_info);
 	START_INFO.set(start_info).unwrap();
-}
-
-pub trait StartInfo {
-	fn display(&self) -> impl fmt::Display {
-		fmt::from_fn(|f| f.write_str("StartInfo::display not implemented"))
-	}
-
-	fn bootargs(&self) -> Option<&str> {
-		None
-	}
-
-	#[cfg_attr(
-		any(
-			not(feature = "acpi"),
-			target_arch = "aarch64",
-			target_arch = "riscv64"
-		),
-		expect(dead_code)
-	)]
-	fn rsdp_addr(&self) -> Option<NonZero<usize>> {
-		None
-	}
-}
-
-pub trait FdtStartInfo: StartInfo {
-	fn fdt(&self) -> Option<Fdt<'_>> {
-		None
-	}
-
-	fn fdt_addr(&self) -> Option<NonZero<usize>> {
-		None
-	}
-}
-
-#[cfg(feature = "uhyve")]
-pub trait UhyveStartInfo: FdtStartInfo {
-	fn is_uhyve(&self) -> bool;
-
-	#[cfg_attr(target_arch = "riscv64", expect(unused))]
-	fn uhyve_boot_time(&self) -> Option<time::OffsetDateTime>;
-
-	#[cfg_attr(not(all(target_arch = "x86_64", feature = "smp")), expect(unused))]
-	fn uhyve_num_cpus(&self) -> Option<NonZero<usize>>;
 }
 
 impl StartInfo for BootInfo {
@@ -108,7 +67,7 @@ impl FdtStartInfo for BootInfo {
 }
 
 #[cfg(feature = "uhyve")]
-impl UhyveStartInfo for BootInfo {
+impl super::UhyveStartInfo for BootInfo {
 	fn is_uhyve(&self) -> bool {
 		use hermit_entry::boot_info::PlatformInfo;
 
