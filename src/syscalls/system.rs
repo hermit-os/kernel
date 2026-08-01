@@ -18,7 +18,7 @@ pub unsafe extern "C" fn sys_read_keyboard(buffer: *mut u8, size: usize, nonbloc
 		return 0;
 	}
 	let buffer_slice: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(buffer, size) };
-	let result = crate::kernel::pc_keyboard::pop_scancodes(buffer_slice, nonblock);
+	let result = crate::arch::kernel::pc_keyboard::pop_scancodes(buffer_slice, nonblock);
 	if result == 0 && nonblock {
 		-(crate::errno::Errno::Again as isize)
 	} else {

@@ -4,18 +4,24 @@ use core::num::NonZeroU8;
 use hermit_sync::{InterruptTicketMutex, Lazy};
 use x86_64::instructions::port::Port;
 
-use crate::kernel::interrupts;
+use crate::arch::kernel::interrupts;
 use crate::synch::semaphore::Semaphore;
 
 const PS2_DATA_PORT: u16 = 0x60;
 const PS2_CMD_PORT: u16 = 0x64;
-const PS2_CMD_READ_CNFG: u8 = 0x20;
-const PS2_CMD_WRITE_CNFG: u8 = 0x60;
-const PS2_CMD_DISABLE_KEYBOARD: u8 = 0xad;
-const PS2_CMD_DISABLE_MOUSE: u8 = 0xa7;
-const PS2_CMD_ENABLE_KEYBOARD: u8 = 0xae;
-#[allow(dead_code)]
-const PS2_CMD_ENABLE_MOUSE: u8 = 0xa8;
+
+#[repr(u8)]
+enum Ps2Command {
+	ReadConfig = 0x20,
+	WriteConfig = 0x60,
+	DisableKeyboard = 0xad,
+	DisableMouse = 0xa7,
+	EnableKeyboard = 0xae,
+	#[allow(dead_code)]
+	EnableMouse = 0xa8,
+	TestFirstPort = 0xab,
+}
+
 const PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT: u8 = 0x01;
 const PS2_BUFFER_FULL: u8 = 0x01;
 
@@ -28,8 +34,8 @@ impl Ps2 {
 		unsafe { Port::<u8>::new(PS2_CMD_PORT).read() }
 	}
 
-	pub fn write_cmd(cmd: u8) {
-		unsafe { Port::<u8>::new(PS2_CMD_PORT).write(cmd) }
+	pub fn write_cmd(cmd: Ps2Command) {
+		unsafe { Port::<u8>::new(PS2_CMD_PORT).write(cmd as u8) }
 	}
 
 	pub fn read_data() -> u8 {
@@ -65,23 +71,29 @@ fn keyboard_handler() {
 }
 
 pub(crate) fn get_keyboard_handler() -> (u8, fn()) {
-	Ps2::write_cmd(PS2_CMD_DISABLE_KEYBOARD);
-	Ps2::write_cmd(PS2_CMD_DISABLE_MOUSE);
+	Ps2::write_cmd(Ps2Command::DisableKeyboard);
+	Ps2::write_cmd(Ps2Command::DisableMouse);
 
 	// Ensure an empty buffer to guard against stuck/garbage data
 	while (Ps2::read_status() & PS2_BUFFER_FULL) != 0 {
 		let _ = Ps2::read_data();
 	}
 
-	Ps2::write_cmd(PS2_CMD_READ_CNFG);
+	Ps2::write_cmd(Ps2Command::ReadConfig);
 	let mut config = Ps2::read_data();
 
 	config |= PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT;
 
-	Ps2::write_cmd(PS2_CMD_WRITE_CNFG);
-
+	Ps2::write_cmd(Ps2Command::WriteConfig);
 	Ps2::write_data(config);
-	Ps2::write_cmd(PS2_CMD_ENABLE_KEYBOARD);
+
+	Ps2::write_cmd(Ps2Command::TestFirstPort);
+
+	if Ps2::read_data() != 0 {
+		error!("PS/2 keyboard test failed");
+	}
+
+	Ps2::write_cmd(Ps2Command::EnableKeyboard);
 
 	// Force the initialization of the keyboard buffer to ensure it is ready before any interrupts occur.
 	Lazy::force(&KEYBOARD_BUFFER);
