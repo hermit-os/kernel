@@ -374,22 +374,6 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		#[cfg(feature = "uhyve")]
-		{
-			let cpu_freq = env::uhyve_cpu_freq().ok_or(())?.get();
-			let mhz = cpu_freq / 1000;
-
-			self.set_detected_cpu_frequency(
-				mhz.try_into().unwrap(),
-				CpuFrequencySources::Hypervisor,
-			)
-		}
-
-		#[cfg(not(feature = "uhyve"))]
-		Err(())
-	}
-
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
 		_stack_frame: interrupts::ExceptionStackFrame,
 	) {
@@ -484,7 +468,6 @@ impl CpuFrequency {
 				.or_else(|_e| self.detect_from_cpuid(&cpuid))
 				.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
 				.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
-				.or_else(|_e| self.detect_from_hypervisor())
 				.or_else(|_e| self.detect_from_cmdline())
 				.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 				.or_else(|_e| self.measure_frequency())
