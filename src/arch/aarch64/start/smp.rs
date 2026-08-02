@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use core::ptr;
 use core::sync::atomic::AtomicPtr;
 
@@ -22,9 +20,13 @@ const MT_NORMAL: u64 = 4;
 const TCR_IRGN_WBWA: u64 = ((1) << 8) | ((1) << 24);
 const TCR_ORGN_WBWA: u64 = ((1) << 10) | ((1) << 26);
 const TCR_SHARED: u64 = ((3) << 12) | ((3) << 28);
+#[expect(dead_code)]
 const TCR_TBI0: u64 = 1 << 37;
+#[expect(dead_code)]
 const TCR_TBI1: u64 = 1 << 38;
+#[expect(dead_code)]
 const TCR_ASID16: u64 = 1 << 36;
+#[expect(dead_code)]
 const TCR_TG1_16K: u64 = 1 << 30;
 const TCR_TG1_4K: u64 = 0 << 30;
 const TCR_FLAGS: u64 = TCR_IRGN_WBWA | TCR_ORGN_WBWA | TCR_SHARED;
