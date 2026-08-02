@@ -728,7 +728,7 @@ pub fn init_x2apic() {
 	}
 }
 
-/// Initialize the required _start variables for the next CPU to be booted.
+/// Initialize the required `smp::start` variables for the next CPU to be booted.
 #[cfg(feature = "smp")]
 pub fn init_next_processor_variables() {
 	use alloc::alloc::alloc;
@@ -751,8 +751,9 @@ pub fn init_next_processor_variables() {
 /// This is partly confirmed by <https://wiki.osdev.org/Symmetric_Multiprocessing>
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn boot_application_processors() {
-	use hermit_entry::boot_info::RawBootInfo;
 	use x86_64::structures::paging::Translate;
+
+	use crate::arch::start::smp;
 
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
 
@@ -797,11 +798,11 @@ pub fn boot_application_processors() {
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to {:p}",
-			arch::start::hermit_entry::_start as *const ()
+			smp::smp_start as *const ()
 		);
 		(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY)
-			.as_mut_ptr::<unsafe extern "C" fn(Option<&'static RawBootInfo>, cpu_id: u32) -> !>()
-			.write_unaligned(arch::start::hermit_entry::_start);
+			.as_mut_ptr::<unsafe extern "C" fn() -> !>()
+			.write_unaligned(smp::smp_start);
 	}
 
 	// Now wake up each application processor.
