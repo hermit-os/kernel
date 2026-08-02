@@ -61,11 +61,11 @@ use talc::source::Manual;
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
 pub use self::physicalmem::{FrameAlloc, FrameBox};
 pub use self::virtualmem::{PageAlloc, PageBox};
+use crate::arch;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;
 pub use crate::arch::mm::paging::virtual_to_physical;
 use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
-use crate::{arch, env};
 
 #[cfg(target_os = "none")]
 #[global_allocator]
@@ -135,20 +135,12 @@ pub(crate) fn init() {
 	let npage_3tables = npages / npage_div + 1;
 	let npage_2tables = npage_3tables / npage_div + 1;
 	let npage_1tables = npage_2tables / npage_div + 1;
-	let reserved_space = (npage_3tables + npage_2tables + npage_1tables)
-		* BasePageSize::SIZE as usize
+	let min_mem = (npage_3tables + npage_2tables + npage_1tables) * BasePageSize::SIZE as usize
 		+ 2 * LargePageSize::SIZE as usize;
 	#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 	let has_1gib_pages = arch::kernel::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::kernel::processor::supports_2mib_pages();
 
-	let min_mem = if env::is_uefi() {
-		// On UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
-		reserved_space
-	} else {
-		(kernel_addr_range.end.as_u64() - env::get_ram_address().unwrap().as_u64()
-			+ reserved_space as u64) as usize
-	};
 	info!("Minimum memory size: {} MiB", min_mem >> 20);
 	let avail_mem = total_mem
 		.checked_sub(min_mem)
