@@ -8,7 +8,6 @@ use core::arch::x86_64::{
 };
 use core::fmt;
 use core::hint::spin_loop;
-use core::num::NonZero;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use hermit_sync::Lazy;
@@ -351,20 +350,28 @@ impl CpuFrequency {
 	}
 
 	fn detect_from_fdt(&mut self) -> Result<(), ()> {
-		fn mhz_from_fdt() -> Option<NonZero<u16>> {
-			let khz = env::fdt()?
-				.find_node("/hermit,tsc")?
-				.property("khz")?
-				.as_usize()?;
-			let khz = u32::try_from(khz).ok()?;
-			let mhz = u16::try_from(khz / 1000).ok()?;
-			NonZero::new(mhz)
+		#[cfg(feature = "uhyve")]
+		{
+			use core::num::NonZero;
+
+			fn mhz_from_fdt() -> Option<NonZero<u16>> {
+				let khz = env::fdt()?
+					.find_node("/hermit,tsc")?
+					.property("khz")?
+					.as_usize()?;
+				let khz = u32::try_from(khz).ok()?;
+				let mhz = u16::try_from(khz / 1000).ok()?;
+				NonZero::new(mhz)
+			}
+
+			let mhz = mhz_from_fdt().ok_or(())?;
+			self.set_detected_cpu_frequency(mhz.get(), CpuFrequencySources::Fdt)?;
+
+			Ok(())
 		}
 
-		let mhz = mhz_from_fdt().ok_or(())?;
-		self.set_detected_cpu_frequency(mhz.get(), CpuFrequencySources::Fdt)?;
-
-		Ok(())
+		#[cfg(not(feature = "uhyve"))]
+		Err(())
 	}
 
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
