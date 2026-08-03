@@ -148,14 +148,19 @@ pub fn boot_next_processor() {
 	// TODO: Old: Changing cpu_online will cause uhyve to start the next processor
 	CPU_ONLINE.fetch_add(1, Ordering::Release);
 
+	#[allow(clippy::needless_return)]
 	#[cfg(feature = "uhyve")]
 	if env::is_uhyve() {
 		return;
 	}
 
-	//When running bare-metal/QEMU we use the firmware to start the next hart
-	let start_addr = (crate::arch::start::hermit_entry::_start as *const ()).expose_provenance();
-	sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
+	#[cfg(feature = "smp")]
+	{
+		//When running bare-metal/QEMU we use the firmware to start the next hart
+		let start_addr =
+			(crate::arch::start::hermit_entry::_start as *const ()).expose_provenance();
+		sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
+	}
 }
 
 pub fn print_statistics() {
