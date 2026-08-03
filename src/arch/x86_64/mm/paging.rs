@@ -312,15 +312,14 @@ pub fn init() {
 	unsafe {
 		log_page_tables();
 	}
-	make_p4_writable();
+
+	if env::is_uefi() {
+		make_p4_writable();
+	}
 }
 
 fn make_p4_writable() {
 	debug!("Making P4 table writable");
-
-	if !env::is_uefi() {
-		return;
-	}
 
 	let mut pt = unsafe { identity_mapped_page_table() };
 
