@@ -157,8 +157,7 @@ pub fn boot_next_processor() {
 	#[cfg(feature = "smp")]
 	{
 		//When running bare-metal/QEMU we use the firmware to start the next hart
-		let start_addr =
-			(crate::arch::start::hermit_entry::_start as *const ()).expose_provenance();
+		let start_addr = (crate::arch::start::smp::smp_start as *const ()).expose_provenance();
 		sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
 	}
 }
