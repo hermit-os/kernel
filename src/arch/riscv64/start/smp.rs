@@ -25,5 +25,5 @@ pub unsafe extern "C" fn smp_start(hart_id: usize) -> ! {
 unsafe extern "C" fn smp_start_rust(hart_id: usize) -> ! {
 	CURRENT_BOOT_ID.store(hart_id as u32, Ordering::Relaxed);
 
-	crate::application_processor_main();
+	crate::rt::application_processor_main();
 }

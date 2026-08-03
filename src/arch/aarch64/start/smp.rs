@@ -189,5 +189,5 @@ unsafe extern "C" fn smp_start_rust() -> ! {
 	// Memory barrier
 	dsb(SY);
 
-	crate::application_processor_main()
+	crate::rt::application_processor_main()
 }

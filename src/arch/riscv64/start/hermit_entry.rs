@@ -67,7 +67,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 		}
 		NUM_CPUS.store(fdt.cpus().count().try_into().unwrap(), Ordering::Relaxed);
 		HART_MASK.store(hart_mask, Ordering::Relaxed);
-		crate::boot_processor_main()
+		crate::rt::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
 		{
@@ -81,6 +81,6 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 			}
 		}
 		#[cfg(feature = "smp")]
-		crate::application_processor_main();
+		crate::rt::application_processor_main();
 	}
 }
