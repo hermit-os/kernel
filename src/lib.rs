@@ -111,6 +111,7 @@ mod init_buf;
 mod init_cell;
 pub mod io;
 pub mod mm;
+#[cfg(target_os = "none")]
 pub mod rt;
 pub mod scheduler;
 #[cfg(feature = "shell")]

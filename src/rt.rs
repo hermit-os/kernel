@@ -9,19 +9,15 @@ use crate::arch::kernel::interrupts;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 use crate::{console, drivers, env, executor, fs, logging, mm, scheduler, syscalls};
 
-#[cfg(target_os = "none")]
 mod built_info {
 	include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-#[cfg(target_os = "none")]
 hermit_entry::define_abi_tag!();
 
-#[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
 
 #[cfg(test)]
-#[cfg(target_os = "none")]
 #[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	println!("Executing hermit unittests. Any arguments are dropped");
@@ -30,7 +26,6 @@ extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *c
 }
 
 //https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
-#[cfg(target_os = "none")]
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
 	println!("Running {} tests", tests.len());
@@ -40,7 +35,6 @@ pub fn test_runner(tests: &[&dyn Fn()]) {
 	core_scheduler().exit(0)
 }
 
-#[cfg(target_os = "none")]
 #[test_case]
 fn trivial_test() {
 	println!("Test test test");
@@ -48,7 +42,6 @@ fn trivial_test() {
 }
 
 /// Entry point of a kernel thread, which initialize the libos
-#[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
 	unsafe extern "C" {
 		#[cfg(all(not(test), not(any(feature = "nostd", feature = "common-os"))))]
@@ -93,7 +86,6 @@ extern "C" fn initd(_arg: usize) {
 	crate::test_main();
 }
 
-#[cfg(target_os = "none")]
 #[cfg(feature = "smp")]
 fn synch_all_cores() {
 	static CORE_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -107,7 +99,6 @@ fn synch_all_cores() {
 }
 
 /// Entry Point of Hermit for the Boot Processor
-#[cfg(target_os = "none")]
 pub fn boot_processor_main() -> ! {
 	use crate::config::USER_STACK_SIZE;
 
@@ -172,7 +163,7 @@ pub fn boot_processor_main() -> ! {
 }
 
 /// Entry Point of Hermit for an Application Processor
-#[cfg(all(target_os = "none", feature = "smp"))]
+#[cfg(feature = "smp")]
 pub fn application_processor_main() -> ! {
 	kernel::application_processor_init();
 	#[cfg(not(target_arch = "riscv64"))]
@@ -189,7 +180,6 @@ pub fn application_processor_main() -> ! {
 	PerCoreScheduler::run();
 }
 
-#[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 	let core_id = core_id();
