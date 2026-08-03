@@ -37,7 +37,7 @@ pub(crate) static CPU_ONLINE: AlignedAtomicU32 = AlignedAtomicU32(AtomicU32::new
 pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[cfg(target_os = "none")]
-global_asm!(include_str!("start.s"));
+global_asm!(include_str!("exceptions.s"));
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
