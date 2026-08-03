@@ -10,8 +10,6 @@ pub mod pci;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-#[cfg(target_os = "none")]
-mod start;
 pub mod systemtime;
 
 use alloc::alloc::alloc;
@@ -112,7 +110,7 @@ pub fn boot_next_processor() {
 
 		use memory_addresses::VirtAddr;
 
-		use crate::arch::aarch64::kernel::start::{TTBR0, smp_start};
+		use crate::arch::aarch64::start::smp::{TTBR0, smp_start};
 		use crate::mm::virtual_to_physical;
 
 		if cpu_online == 0 {

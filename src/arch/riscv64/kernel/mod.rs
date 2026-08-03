@@ -8,7 +8,6 @@ pub mod pci;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-mod start;
 pub mod switch;
 pub mod systemtime;
 use alloc::vec::Vec;
@@ -32,11 +31,11 @@ use crate::mm::{FrameAlloc, PageRangeAllocator};
 pub(crate) static HARTS_AVAILABLE: InitCell<Vec<usize>> = InitCell::new(Vec::new());
 
 /// Kernel header to announce machine features
-static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
-static CURRENT_BOOT_ID: AtomicU32 = AtomicU32::new(0);
-static CURRENT_STACK_ADDRESS: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
-static HART_MASK: AtomicU64 = AtomicU64::new(0);
-static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
+pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+pub(crate) static CURRENT_BOOT_ID: AtomicU32 = AtomicU32::new(0);
+pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
+pub(crate) static HART_MASK: AtomicU64 = AtomicU64::new(0);
+pub(crate) static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
 
 // FUNCTIONS
 
@@ -155,7 +154,7 @@ pub fn boot_next_processor() {
 	}
 
 	//When running bare-metal/QEMU we use the firmware to start the next hart
-	let start_addr = (start::_start as *const ()).expose_provenance();
+	let start_addr = (crate::arch::start::hermit_entry::_start as *const ()).expose_provenance();
 	sbi_rt::hart_start(next_hart_id as usize, start_addr, 0).unwrap();
 }
 

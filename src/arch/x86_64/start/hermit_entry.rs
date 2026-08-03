@@ -2,10 +2,12 @@ use core::arch::naked_asm;
 
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
+use x86_64::registers::control::Cr0;
 
-use crate::arch::kernel::pre_init;
 use crate::arch::kernel::scheduler::TaskStacks;
+use crate::arch::kernel::{CPU_ONLINE, CURRENT_STACK_ADDRESS};
 use crate::config::KERNEL_STACK_SIZE;
+use crate::env;
 
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
@@ -56,9 +58,40 @@ pub unsafe extern "C" fn _start(_boot_info: Option<&'static RawBootInfo>, cpu_id
 		// Jump into Rust code
 		"jmp {pre_init}",
 
-		cpu_online = sym super::CPU_ONLINE,
-		current_stack_address = sym super::CURRENT_STACK_ADDRESS,
+		cpu_online = sym CPU_ONLINE,
+		current_stack_address = sym CURRENT_STACK_ADDRESS,
 		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 		pre_init = sym pre_init,
 	)
+}
+
+#[inline(never)]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u32) -> ! {
+	use x86_64::registers::control::Cr0Flags;
+
+	// Enable caching
+	unsafe {
+		Cr0::update(|flags| flags.remove(Cr0Flags::CACHE_DISABLE | Cr0Flags::NOT_WRITE_THROUGH));
+	}
+
+	if cpu_id == 0 {
+		env::set_boot_info(*boot_info.unwrap());
+
+		crate::boot_processor_main()
+	} else {
+		#[cfg(not(feature = "smp"))]
+		{
+			let style = anstyle::Style::new().fg_color(Some(anstyle::AnsiColor::Red.into()));
+			let preamble = format_args!("[            ][{cpu_id}][{style}ERROR{style:#}]");
+			println!(
+				"{preamble} Secondary core booted, but Hermit was not built with SMP support!"
+			);
+			loop {
+				crate::arch::kernel::processor::halt();
+			}
+		}
+		#[cfg(feature = "smp")]
+		crate::application_processor_main();
+	}
 }

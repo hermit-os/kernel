@@ -754,8 +754,6 @@ pub fn boot_application_processors() {
 	use hermit_entry::boot_info::RawBootInfo;
 	use x86_64::structures::paging::Translate;
 
-	use super::start;
-
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
 
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
@@ -799,11 +797,11 @@ pub fn boot_application_processors() {
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to {:p}",
-			start::_start as *const ()
+			arch::start::hermit_entry::_start as *const ()
 		);
 		(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY)
 			.as_mut_ptr::<unsafe extern "C" fn(Option<&'static RawBootInfo>, cpu_id: u32) -> !>()
-			.write_unaligned(start::_start);
+			.write_unaligned(arch::start::hermit_entry::_start);
 	}
 
 	// Now wake up each application processor.
