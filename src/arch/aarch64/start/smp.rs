@@ -3,7 +3,7 @@ use core::sync::atomic::AtomicPtr;
 
 use aarch64_cpu::asm::barrier::{SY, dsb};
 
-use crate::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::kernel::CURRENT_STACK_ADDRESS;
 
 /*
  * Memory types available.
@@ -48,8 +48,8 @@ pub(crate) static TTBR0: AtomicPtr<u8> = AtomicPtr::new(ptr::null_mut());
 
 #[unsafe(naked)]
 pub(crate) unsafe extern "C" fn smp_start() -> ! {
+	use crate::arch::kernel::scheduler::TaskStacks;
 	use crate::config::KERNEL_STACK_SIZE;
-	use crate::kernel::scheduler::TaskStacks;
 
 	// Prepare system control register (SCTRL)
 	//

@@ -4,12 +4,12 @@ use core::sync::atomic::Ordering;
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
+use crate::arch::kernel::{CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
 #[cfg(not(feature = "smp"))]
 use crate::arch::riscv64::kernel::processor;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
-use crate::kernel::{CPU_ONLINE, CURRENT_BOOT_ID, HART_MASK, NUM_CPUS};
 
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 

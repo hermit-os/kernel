@@ -9,6 +9,15 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use volatile::VolatileRef;
 
+#[cfg(all(
+	any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-vsock",
+	),
+	not(feature = "pci")
+))]
+use crate::arch::kernel::mmio::register_driver;
 use crate::arch::riscv64::kernel::interrupts::init_plic;
 #[cfg(all(
 	any(
@@ -46,15 +55,6 @@ use crate::drivers::virtio::transport::mmio::VirtioDriver;
 use crate::env;
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
-#[cfg(all(
-	any(
-		feature = "virtio-console",
-		feature = "virtio-fs",
-		feature = "virtio-vsock",
-	),
-	not(feature = "pci")
-))]
-use crate::kernel::mmio::register_driver;
 
 static mut PLATFORM_MODEL: Model = Model::Unknown;
 
