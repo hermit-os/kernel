@@ -130,10 +130,12 @@ pub mod time;
 #[cfg(feature = "uhyve")]
 mod uhyve;
 
+#[cfg(target_os = "none")]
 mod built_info {
 	include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
+#[cfg(target_os = "none")]
 hermit_entry::define_abi_tag!();
 
 #[cfg(target_os = "none")]
@@ -149,6 +151,7 @@ extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *c
 }
 
 //https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
+#[cfg(target_os = "none")]
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
 	println!("Running {} tests", tests.len());
@@ -211,6 +214,7 @@ extern "C" fn initd(_arg: usize) {
 	test_main();
 }
 
+#[cfg(target_os = "none")]
 #[cfg(feature = "smp")]
 fn synch_all_cores() {
 	static CORE_COUNTER: AtomicU32 = AtomicU32::new(0);
