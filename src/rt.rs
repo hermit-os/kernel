@@ -1,8 +1,3 @@
-#[cfg(feature = "smp")]
-use core::hint::spin_loop;
-#[cfg(feature = "smp")]
-use core::sync::atomic::{AtomicU32, Ordering};
-
 use crate::arch::kernel;
 use crate::arch::kernel::core_local::{core_id, core_scheduler};
 use crate::arch::kernel::interrupts;
@@ -88,13 +83,16 @@ extern "C" fn initd(_arg: usize) {
 
 #[cfg(feature = "smp")]
 fn synch_all_cores() {
+	use core::hint;
+	use core::sync::atomic::{AtomicU32, Ordering};
+
 	static CORE_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 	CORE_COUNTER.fetch_add(1, Ordering::SeqCst);
 
 	let possible_cpus = kernel::get_possible_cpus();
 	while CORE_COUNTER.load(Ordering::SeqCst) != possible_cpus {
-		spin_loop();
+		hint::spin_loop();
 	}
 }
 
