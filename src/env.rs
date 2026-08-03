@@ -12,7 +12,6 @@ use hashbrown::HashMap;
 use hashbrown::hash_map::Iter;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
-use memory_addresses::PhysAddr;
 use shlex::Shlex;
 
 static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
@@ -106,13 +105,6 @@ pub fn fdt() -> Option<Fdt<'static>> {
 		let ptr = ptr::with_exposed_provenance(fdt.get());
 		unsafe { Fdt::from_ptr(ptr).unwrap() }
 	})
-}
-
-pub(crate) fn get_ram_address() -> Option<PhysAddr> {
-	let fdt = fdt()?;
-	let memory = fdt.memory();
-	let ptr = memory.regions().next()?.starting_address;
-	Some(ptr.expose_provenance().into())
 }
 
 /// Returns the RSDP physical address if available.
