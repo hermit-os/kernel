@@ -804,7 +804,7 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 			ctrl_vq = Some(dev_spec_init.3);
 			send_capacity = Some(dev_spec_init.4);
 
-			info!("Device specific initialization for Virtio network device finished",);
+			info!("Device specific initialization for Virtio network device finished");
 
 			match &mut caps_coll.int_cap {
 				InterruptCapability::IsrStatus(_) => {
