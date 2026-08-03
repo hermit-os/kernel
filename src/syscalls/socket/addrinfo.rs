@@ -474,9 +474,7 @@ fn getaddrinfo_node(
 	}
 
 	cfg_select! {
-		feature = "dns" => {
-			resolve(nodename, ai_flags, ai_family, want_ipv4, want_ipv6)
-		}
+		feature = "dns" => resolve(nodename, ai_flags, ai_family, want_ipv4, want_ipv6),
 		_ => {
 			error!("Cannot resolve {nodename} as DNS is configured out");
 			Err(Eai::Noname)

@@ -1141,13 +1141,17 @@ pub unsafe extern "C" fn sys_sendto(
 					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
 
-				Some(Endpoint::Ip(IpEndpoint::from(unsafe {*(addr.cast::<sockaddr_in>())})))
+				Some(Endpoint::Ip(IpEndpoint::from(unsafe {
+					*(addr.cast::<sockaddr_in>())
+				})))
 			} else if sa_family == Af::Inet6 {
 				if addr_len < u32::try_from(size_of::<sockaddr_in6>()).unwrap() {
 					return (-i32::from(Errno::Inval)).try_into().unwrap();
 				}
 
-				Some(Endpoint::Ip(IpEndpoint::from(unsafe { *(addr.cast::<sockaddr_in6>()) })))
+				Some(Endpoint::Ip(IpEndpoint::from(unsafe {
+					*(addr.cast::<sockaddr_in6>())
+				})))
 			} else {
 				None
 			};

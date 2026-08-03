@@ -230,9 +230,7 @@ pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
 	cfg_select! {
-		feature = "semihosting" => {
-			semihosting::process::exit(error_code)
-		}
+		feature = "semihosting" => semihosting::process::exit(error_code),
 		_ => {
 			// use SBI shutdown
 			match sbi_rt::system_reset(sbi_rt::Shutdown, sbi_rt::NoReason).into_result() {
