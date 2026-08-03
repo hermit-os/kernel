@@ -152,15 +152,13 @@ impl Tls {
 				let addr = self.thread_ptr().expose_provenance();
 				TPIDR_EL0.set(addr.try_into().unwrap());
 			}
-			target_arch = "riscv64" => {
-				unsafe {
-					core::arch::asm!(
-						"mv tp, {}",
-						in(reg) self.thread_ptr().expose_provenance(),
-						options(nomem, nostack, preserves_flags),
-					);
-				}
-			}
+			target_arch = "riscv64" => unsafe {
+				core::arch::asm!(
+					"mv tp, {}",
+					in(reg) self.thread_ptr().expose_provenance(),
+					options(nomem, nostack, preserves_flags),
+				);
+			},
 			target_arch = "x86_64" => {
 				use crate::arch::kernel::processor;
 

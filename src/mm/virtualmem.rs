@@ -68,7 +68,7 @@ pub fn kernel_heap_end() -> VirtAddr {
 	cfg_select! {
 		target_arch = "aarch64" => {
 			// maximum address, which can be supported by TTBR0
-			VirtAddr::new(0xFFFF_FFFF_FFFF)
+			VirtAddr::new(0xffff_ffff_ffff)
 		}
 		target_arch = "riscv64" => {
 			// 256 GiB

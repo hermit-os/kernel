@@ -49,13 +49,19 @@ impl<'a> NetworkInterface<'a> {
 				feature = "rtl8139",
 				feature = "virtio-net",
 			) => {
-				#[cfg_attr(any(feature = "net-trace", feature = "write-pcap-file"), expect(unused_mut))]
+				#[cfg_attr(
+					any(feature = "net-trace", feature = "write-pcap-file"),
+					expect(unused_mut)
+				)]
 				let Some(mut device) = NETWORK_DEVICE.lock().take() else {
 					return NetworkState::InitializationFailed;
 				};
 			}
 			_ => {
-				#[cfg_attr(any(feature = "net-trace", feature = "write-pcap-file"), expect(unused_mut))]
+				#[cfg_attr(
+					any(feature = "net-trace", feature = "write-pcap-file"),
+					expect(unused_mut)
+				)]
 				let mut device = LoopbackDriver::new();
 			}
 		}

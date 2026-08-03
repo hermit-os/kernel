@@ -58,13 +58,7 @@ cfg_select! {
 	) => {
 		pub(crate) use crate::arch::kernel::mmio::NetworkDevice;
 	}
-	all(
-		feature = "pci",
-		any(
-			feature = "rtl8139",
-			feature = "virtio-net",
-		),
-	) => {
+	all(feature = "pci", any(feature = "rtl8139", feature = "virtio-net")) => {
 		pub(crate) use crate::drivers::pci::NetworkDevice;
 	}
 	_ => {

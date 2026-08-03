@@ -283,10 +283,11 @@ impl VirtioVsockDriver {
 
 		let status = isr_stat.acknowledge();
 
-		let config_change = cfg_select! {
-			feature = "pci" => virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT,
-			_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
-		};
+		let config_change =
+			cfg_select! {
+				feature = "pci" => virtio::pci::IsrStatus::DEVICE_CONFIGURATION_INTERRUPT,
+				_ => virtio::mmio::InterruptStatus::CONFIGURATION_CHANGE_NOTIFICATION,
+			};
 
 		if status.contains(config_change) {
 			self.handle_device_configuration_interrupt();

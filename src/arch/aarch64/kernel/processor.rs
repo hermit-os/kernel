@@ -219,9 +219,7 @@ pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
 	cfg_select! {
-		feature = "semihosting" => {
-			semihosting::process::exit(error_code)
-		}
+		feature = "semihosting" => semihosting::process::exit(error_code),
 		_ => {
 			unsafe {
 				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
