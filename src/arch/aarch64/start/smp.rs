@@ -1,6 +1,8 @@
 use core::ptr;
 use core::sync::atomic::AtomicPtr;
 
+use aarch64_cpu::asm::barrier::{SY, dsb};
+
 use crate::kernel::CURRENT_STACK_ADDRESS;
 
 /*
@@ -154,13 +156,13 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		"ldr x0, ={sctlr_el1}",
 		"msr sctlr_el1, x0",
 
-		// initialize argument for pre_init
+		// initialize argument for `smp_start_rust()`
 		"mov x0, xzr",
 		"mrs x1, mpidr_el1",
 		"and x1, x1, #0xff",
 
 		// Jump to Rust code
-		"b {pre_init}",
+		"b {smp_start_rust}",
 
 		mair_el1 = const mair(0x00, MT_DEVICE_nGnRnE) | mair(0x04, MT_DEVICE_nGnRE) | mair(0x0c, MT_DEVICE_GRE) | mair(0x44, MT_NORMAL_NC) | mair(0xff, MT_NORMAL),
 		tcr_bits = const tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
@@ -168,6 +170,24 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 		current_stack_address = sym CURRENT_STACK_ADDRESS,
 		sctlr_el1 = const SCTLR_EL1,
 		ttbr0 = sym TTBR0,
-		pre_init = sym crate::arch::start::hermit_entry::pre_init,
+		smp_start_rust = sym smp_start_rust,
 	)
+}
+
+unsafe extern "C" fn smp_start_rust() -> ! {
+	// set exception table
+	unsafe {
+		core::arch::asm!(
+			"adrp x4, vector_table",
+			"add x4, x4, #:lo12:vector_table",
+			"msr vbar_el1, x4",
+			out("x4") _,
+			options(nostack),
+		);
+	}
+
+	// Memory barrier
+	dsb(SY);
+
+	crate::application_processor_main()
 }
