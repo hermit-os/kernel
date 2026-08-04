@@ -141,7 +141,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends qemu-system-x86
+          sudo apt-get install --no-install-recommends qemu-system-x86-hwe
       - uses: mkroening/rust-toolchain-toml@main
       - name: Unit tests
         run: cargo test --lib
@@ -173,17 +173,17 @@ jobs:
           - profile: dev
             hermit-careful: 1
           - arch: x86_64
-            packages: qemu-system-x86 uftrace
+            packages: qemu-system-x86-hwe uftrace
             qemu_flags: --accel --sudo
           - arch: aarch64
-            packages: qemu-system-arm ipxe-qemu
+            packages: qemu-system-arm-hwe ipxe-qemu
             rs_flags: --features hermit/semihosting
           # FIXME: enable semihosting once it works with QEMU
           # See https://github.com/taiki-e/semihosting/issues/18.
           - arch: aarch64_be
-            packages: qemu-system-arm ipxe-qemu
+            packages: qemu-system-arm-hwe ipxe-qemu
           - arch: riscv64
-            packages: qemu-system-riscv
+            packages: qemu-system-riscv-hwe
             rs_flags: --features hermit/semihosting
 
     steps:
