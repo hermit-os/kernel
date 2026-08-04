@@ -9,9 +9,9 @@ use align_address::Align;
 use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
-use crate::arch::aarch64::kernel::core_local::core_scheduler;
-use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::kernel::core_local::core_scheduler;
+use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::PerCoreSchedulerExt;

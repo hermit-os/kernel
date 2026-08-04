@@ -5,7 +5,7 @@ use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
 use time::OffsetDateTime;
 
-use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::env;
 use crate::mm::{PageAlloc, PageRangeAllocator};
 

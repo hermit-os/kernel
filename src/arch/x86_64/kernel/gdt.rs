@@ -14,8 +14,8 @@ use x86_64::structures::tss::TaskStateSegment;
 use super::CURRENT_STACK_ADDRESS;
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
-use crate::arch::x86_64::kernel::core_local::{CoreLocal, core_scheduler};
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::kernel::core_local::{CoreLocal, core_scheduler};
+use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {

@@ -7,9 +7,6 @@ use core::hint::spin_loop;
 use core::{cmp, ptr};
 
 use align_address::Align;
-#[cfg(feature = "smp")]
-use arch::x86_64::kernel::core_local::*;
-use arch::x86_64::kernel::{interrupts, processor};
 use free_list::PageLayout;
 use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
@@ -19,12 +16,15 @@ use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
 #[cfg(feature = "acpi")]
-use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::paging::{
+use crate::arch::kernel::acpi;
+#[cfg(feature = "smp")]
+use crate::arch::kernel::core_local::*;
+use crate::arch::kernel::{interrupts, processor};
+use crate::arch::mm::paging;
+use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::swapgs;
+use crate::arch::swapgs;
 use crate::mm::{PageAlloc, PageBox, PageRangeAllocator};
 use crate::scheduler::CoreId;
 use crate::{arch, env, scheduler};
@@ -735,7 +735,7 @@ pub fn init_next_processor_variables() {
 	use core::alloc::Layout;
 	use core::sync::atomic::Ordering;
 
-	use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
+	use crate::arch::kernel::CURRENT_STACK_ADDRESS;
 	use crate::config::KERNEL_STACK_SIZE;
 
 	// Allocate stack for the CPU and pass the addresses.

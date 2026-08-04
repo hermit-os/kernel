@@ -14,8 +14,8 @@ use x86_64::structures::paging::{
 	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, Size4KiB, Translate,
 };
 
-use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::arch::kernel::processor;
+use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 use crate::{env, scheduler};
 
@@ -196,7 +196,7 @@ pub fn map<S>(
 
 	if unmapped {
 		#[cfg(feature = "smp")]
-		crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+		crate::arch::kernel::apic::ipi_tlb_flush();
 	}
 }
 

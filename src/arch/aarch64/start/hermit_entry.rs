@@ -4,10 +4,10 @@ use aarch64_cpu::asm::barrier::{SY, dsb};
 use hermit_entry::Entry;
 use hermit_entry::boot_info::RawBootInfo;
 
+use crate::arch::kernel::scheduler::TaskStacks;
+use crate::arch::kernel::{CPU_ONLINE, CURRENT_STACK_ADDRESS};
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
-use crate::kernel::scheduler::TaskStacks;
-use crate::kernel::{CPU_ONLINE, CURRENT_STACK_ADDRESS};
 
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[unsafe(no_mangle)]
@@ -92,7 +92,7 @@ pub unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_i
 
 	if cpu_id == 0 {
 		env::set_boot_info(*boot_info.unwrap());
-		crate::boot_processor_main()
+		crate::rt::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
 		{
@@ -106,6 +106,6 @@ pub unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_i
 			}
 		}
 		#[cfg(feature = "smp")]
-		crate::application_processor_main()
+		crate::rt::application_processor_main()
 	}
 }

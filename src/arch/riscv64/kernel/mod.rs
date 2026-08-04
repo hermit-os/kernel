@@ -18,9 +18,9 @@ use free_list::PageLayout;
 use riscv::register::sstatus;
 
 pub(crate) use self::processor::{set_oneshot_timer, wakeup_core};
-use crate::arch::riscv64::kernel::core_local::core_id;
-pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
-use crate::arch::riscv64::kernel::processor::lsb;
+use crate::arch::kernel::core_local::core_id;
+pub use crate::arch::kernel::devicetree::init_drivers;
+use crate::arch::kernel::processor::lsb;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env;
 use crate::init_cell::InitCell;

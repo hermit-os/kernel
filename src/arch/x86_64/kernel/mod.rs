@@ -8,7 +8,7 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
-use crate::arch::x86_64::kernel::core_local::*;
+use crate::arch::kernel::core_local::*;
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -167,7 +167,7 @@ where
 	use memory_addresses::{PhysAddr, VirtAddr};
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
-	use crate::arch::x86_64::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
+	use crate::arch::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 	let code_size = (code_size as usize + LOADER_STACK_SIZE).align_up(BasePageSize::SIZE as usize);
@@ -235,7 +235,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 	use align_address::Align;
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
-	use crate::arch::x86_64::kernel::scheduler::TaskStacks;
+	use crate::arch::kernel::scheduler::TaskStacks;
 
 	info!("Create new file descriptor table");
 	core_scheduler().recreate_objmap().unwrap();

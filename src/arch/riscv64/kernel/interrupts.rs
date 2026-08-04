@@ -171,7 +171,7 @@ pub(crate) fn enable_and_wait() {
 				trace!("SOFT");
 				//Disable Supervisor-level software interrupt
 				sie::clear_ssoft();
-				crate::arch::riscv64::kernel::scheduler::wakeup_handler();
+				crate::arch::kernel::scheduler::wakeup_handler();
 				break;
 			}
 
@@ -187,7 +187,7 @@ pub(crate) fn enable_and_wait() {
 
 				debug!("sip: {pending_interrupts:x?}");
 				trace!("TIMER");
-				crate::arch::riscv64::kernel::scheduler::timer_handler();
+				crate::arch::kernel::scheduler::timer_handler();
 				break;
 			}
 		}
@@ -243,10 +243,10 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 		Trap::Interrupt(Interrupt::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
 		Trap::Interrupt(Interrupt::SupervisorSoft) => {
-			crate::arch::riscv64::kernel::scheduler::wakeup_handler();
+			crate::arch::kernel::scheduler::wakeup_handler();
 		}
 		Trap::Interrupt(Interrupt::SupervisorTimer) => {
-			crate::arch::riscv64::kernel::scheduler::timer_handler();
+			crate::arch::kernel::scheduler::timer_handler();
 		}
 		cause => {
 			error!("Interrupt: {cause:?}");

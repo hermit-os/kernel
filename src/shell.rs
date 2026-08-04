@@ -1,7 +1,7 @@
 use embedded_io::{Read, Write};
 use simple_shell::*;
 
-use crate::interrupts::print_statistics;
+use crate::arch::kernel::interrupts::print_statistics;
 
 fn read() -> Option<u8> {
 	let mut buf = [0; 1];

@@ -1,8 +1,8 @@
 use x86_64::registers::control::{Cr0, Cr0Flags};
 
+use crate::arch::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::kernel::scheduler::TaskStacks;
 use crate::config::KERNEL_STACK_SIZE;
-use crate::kernel::CURRENT_STACK_ADDRESS;
 
 #[unsafe(naked)]
 pub unsafe extern "C" fn smp_start() -> ! {
@@ -29,5 +29,5 @@ unsafe extern "C" fn smp_start_rust() -> ! {
 		Cr0::update(|flags| flags.remove(Cr0Flags::CACHE_DISABLE | Cr0Flags::NOT_WRITE_THROUGH));
 	}
 
-	crate::application_processor_main();
+	crate::rt::application_processor_main();
 }

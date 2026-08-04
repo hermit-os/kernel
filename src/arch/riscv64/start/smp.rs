@@ -1,9 +1,8 @@
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 
-use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::kernel::{CURRENT_BOOT_ID, CURRENT_STACK_ADDRESS};
 use crate::config::KERNEL_STACK_SIZE;
-use crate::kernel::CURRENT_BOOT_ID;
 
 #[unsafe(naked)]
 pub unsafe extern "C" fn smp_start(hart_id: usize) -> ! {
@@ -26,5 +25,5 @@ pub unsafe extern "C" fn smp_start(hart_id: usize) -> ! {
 unsafe extern "C" fn smp_start_rust(hart_id: usize) -> ! {
 	CURRENT_BOOT_ID.store(hart_id as u32, Ordering::Relaxed);
 
-	crate::application_processor_main();
+	crate::rt::application_processor_main();
 }

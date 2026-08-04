@@ -4,8 +4,8 @@ use hermit_sync::SpinMutex;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
 
-use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
+use crate::arch::mm::paging;
+use crate::arch::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
 
 const CRT_CONTROLLER_ADDRESS: Port<u8> = Port::new(0x3d4);
 const CRT_CONTROLLER_DATA: Port<u8> = Port::new(0x3d5);
