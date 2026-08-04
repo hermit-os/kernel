@@ -11,14 +11,15 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::{Bar, CommandRegister};
 use x86_64::instructions::port::{Port, PortWriteOnly};
 
+use crate::arch::kernel::pci::PciConfigRegion;
 use crate::arch::x86_64::mm::paging::{
 	self, BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::drivers::pci::PciDevice;
-use crate::kernel::pci::PciConfigRegion;
 
+#[derive(Debug)]
 pub struct BgaInfo {
-	pub framebuffer: *mut u8,
+	pub framebuffer: usize,
 	pub width: u16,
 	pub height: u16,
 	pub bpp: u16,
@@ -26,36 +27,32 @@ pub struct BgaInfo {
 
 static BGA_INFO: OnceCell<BgaInfo> = OnceCell::new();
 
-unsafe impl Send for BgaInfo {}
-unsafe impl Sync for BgaInfo {}
-
 const VBE_DISPI_IOPORT_INDEX: u16 = 0x01ce;
 const VBE_DISPI_IOPORT_DATA: u16 = 0x01cf;
 
-pub struct VbeDispiIndex;
-
 #[allow(dead_code)]
-impl VbeDispiIndex {
+#[repr(u16)]
+pub enum VbeDispiIndex {
 	#[doc(alias = "VBE_DISPI_INDEX_ID")]
-	pub const ID: u16 = 0;
+	Id = 0,
 	#[doc(alias = "VBE_DISPI_INDEX_XRES")]
-	pub const XRES: u16 = 1;
+	Xres = 1,
 	#[doc(alias = "VBE_DISPI_INDEX_YRES")]
-	pub const YRES: u16 = 2;
+	Yres = 2,
 	#[doc(alias = "VBE_DISPI_INDEX_BPP")]
-	pub const BPP: u16 = 3;
+	Bpp = 3,
 	#[doc(alias = "VBE_DISPI_INDEX_ENABLE")]
-	pub const ENABLE: u16 = 4;
+	Enable = 4,
 	#[doc(alias = "VBE_DISPI_INDEX_BANK")]
-	pub const BANK: u16 = 5;
+	Bank = 5,
 	#[doc(alias = "VBE_DISPI_INDEX_VIRT_WIDTH")]
-	pub const VIRT_WIDTH: u16 = 6;
+	VirtWidth = 6,
 	#[doc(alias = "VBE_DISPI_INDEX_VIRT_HEIGHT")]
-	pub const VIRT_HEIGHT: u16 = 7;
+	VirtHeight = 7,
 	#[doc(alias = "VBE_DISPI_INDEX_X_OFFSET")]
-	pub const X_OFFSET: u16 = 8;
+	XOffset = 8,
 	#[doc(alias = "VBE_DISPI_INDEX_Y_OFFSET")]
-	pub const Y_OFFSET: u16 = 9;
+	YOffset = 9,
 }
 
 const VBE_DISPI_DISABLED: u16 = 0x00;
@@ -65,41 +62,40 @@ const VBE_DISPI_LFB_ENABLED: u16 = 0x40;
 #[allow(dead_code)]
 const VBE_DISPI_NOCLEARMEM: u16 = 0x80;
 
-pub struct VbeDispiId;
-
 #[allow(dead_code)]
-impl VbeDispiId {
+#[repr(u16)]
+pub enum VbeDispiId {
 	#[doc(alias = "VBE_DISPI_ID0")]
-	pub const ID0: u16 = 0xb0c0;
+	Id0 = 0xb0c0,
 	#[doc(alias = "VBE_DISPI_ID1")]
-	pub const ID1: u16 = 0xb0c1;
+	Id1 = 0xb0c1,
 	#[doc(alias = "VBE_DISPI_ID2")]
-	pub const ID2: u16 = 0xb0c2;
+	Id2 = 0xb0c2,
 	#[doc(alias = "VBE_DISPI_ID3")]
-	pub const ID3: u16 = 0xb0c3;
+	Id3 = 0xb0c3,
 	#[doc(alias = "VBE_DISPI_ID4")]
-	pub const ID4: u16 = 0xb0c4;
+	Id4 = 0xb0c4,
 	#[doc(alias = "VBE_DISPI_ID5")]
-	pub const ID5: u16 = 0xb0c5;
+	Id5 = 0xb0c5,
 }
 
 struct BgaRegisters;
 
 impl BgaRegisters {
-	pub fn read(index: u16) -> u16 {
+	pub fn read(index: VbeDispiIndex) -> u16 {
 		let mut index_port: PortWriteOnly<u16> = PortWriteOnly::new(VBE_DISPI_IOPORT_INDEX);
 		let mut data_port: Port<u16> = Port::new(VBE_DISPI_IOPORT_DATA);
 		unsafe {
-			index_port.write(index);
+			index_port.write(index as u16);
 			data_port.read()
 		}
 	}
 
-	pub fn write(index: u16, value: u16) {
+	pub fn write(index: VbeDispiIndex, value: u16) {
 		let mut index_port: PortWriteOnly<u16> = PortWriteOnly::new(VBE_DISPI_IOPORT_INDEX);
 		let mut data_port: Port<u16> = Port::new(VBE_DISPI_IOPORT_DATA);
 		unsafe {
-			index_port.write(index);
+			index_port.write(index as u16);
 			data_port.write(value);
 		}
 	}
@@ -111,19 +107,19 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 	let height: u16 = 400;
 	let bpp: u16 = 32;
 
-	let bga_version = BgaRegisters::read(VbeDispiIndex::ID);
+	let bga_version = BgaRegisters::read(VbeDispiIndex::Id);
 
-	if bga_version != VbeDispiId::ID5 {
+	if bga_version != VbeDispiId::Id5 as u16 {
 		error!("Unsupported BGA version: {bga_version:#06x}");
 		return;
 	}
 
-	BgaRegisters::write(VbeDispiIndex::ENABLE, VBE_DISPI_DISABLED);
-	BgaRegisters::write(VbeDispiIndex::XRES, width);
-	BgaRegisters::write(VbeDispiIndex::YRES, height);
-	BgaRegisters::write(VbeDispiIndex::BPP, bpp);
+	BgaRegisters::write(VbeDispiIndex::Enable, VBE_DISPI_DISABLED);
+	BgaRegisters::write(VbeDispiIndex::Xres, width);
+	BgaRegisters::write(VbeDispiIndex::Yres, height);
+	BgaRegisters::write(VbeDispiIndex::Bpp, bpp);
 	BgaRegisters::write(
-		VbeDispiIndex::ENABLE,
+		VbeDispiIndex::Enable,
 		VBE_DISPI_ENABLED | VBE_DISPI_LFB_ENABLED,
 	);
 
@@ -137,12 +133,12 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 
 	BGA_INFO
 		.set(BgaInfo {
-			framebuffer: core::ptr::with_exposed_provenance_mut(phys_addr as usize),
+			framebuffer: phys_addr as usize,
 			width,
 			height,
 			bpp,
 		})
-		.ok();
+		.unwrap();
 
 	assert!(
 		size.is_multiple_of(4096),

@@ -470,7 +470,7 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 				adapter.device_id()
 			);
 
-			crate::kernel::bga::init_device(adapter);
+			crate::arch::kernel::bga::init_device(adapter);
 		}
 
 		PCI_DRIVERS.finalize();
