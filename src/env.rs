@@ -14,15 +14,15 @@ use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 use shlex::Shlex;
 
-static BOOT_INFO: OnceCell<BootInfo> = OnceCell::new();
+static START_INFO: OnceCell<BootInfo> = OnceCell::new();
 
-pub fn boot_info() -> &'static BootInfo {
-	BOOT_INFO.get().unwrap()
+pub fn start_info() -> &'static BootInfo {
+	START_INFO.get().unwrap()
 }
 
-pub fn set_boot_info(raw_boot_info: RawBootInfo) {
-	let boot_info = BootInfo::from(raw_boot_info);
-	BOOT_INFO.set(boot_info).unwrap();
+pub fn set_start_info(raw_boot_info: RawBootInfo) {
+	let start_info = BootInfo::from(raw_boot_info);
+	START_INFO.set(start_info).unwrap();
 }
 
 static CLI: OnceCell<Cli> = OnceCell::new();
@@ -48,7 +48,7 @@ struct Cli {
 pub fn is_uhyve() -> bool {
 	use hermit_entry::boot_info::PlatformInfo;
 
-	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+	matches!(start_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
 #[cfg_attr(target_arch = "riscv64", expect(dead_code))]
@@ -56,7 +56,7 @@ pub fn is_uhyve() -> bool {
 pub fn uhyve_boot_time() -> Option<time::OffsetDateTime> {
 	use hermit_entry::boot_info::PlatformInfo;
 
-	match boot_info().platform_info {
+	match start_info().platform_info {
 		PlatformInfo::Uhyve { boot_time, .. } => Some(boot_time),
 		_ => None,
 	}
@@ -70,7 +70,7 @@ pub fn uhyve_boot_time() -> Option<time::OffsetDateTime> {
 pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
 	use hermit_entry::boot_info::PlatformInfo;
 
-	match boot_info().platform_info {
+	match start_info().platform_info {
 		PlatformInfo::Uhyve { num_cpus, .. } => {
 			Some(NonZero::new(num_cpus.get() as usize).unwrap())
 		}
@@ -79,7 +79,7 @@ pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
 }
 
 pub fn fdt_addr() -> Option<NonZero<usize>> {
-	boot_info()
+	start_info()
 		.hardware_info
 		.device_tree
 		.map(|fdt| NonZero::new(fdt.get() as usize).unwrap())
