@@ -7,9 +7,9 @@ use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 use super::interrupts::{IDT, IST_SIZE};
-use crate::arch::x86_64::kernel::core_local::*;
-use crate::arch::x86_64::kernel::{apic, interrupts};
-use crate::arch::x86_64::mm::paging::{
+use crate::arch::kernel::core_local::*;
+use crate::arch::kernel::{apic, interrupts};
+use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::config::*;

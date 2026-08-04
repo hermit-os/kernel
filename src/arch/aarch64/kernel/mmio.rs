@@ -13,8 +13,8 @@ use hermit_sync::without_interrupts;
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
-use crate::arch::aarch64::kernel::interrupts::GIC;
-use crate::arch::aarch64::mm::paging::{self, PageSize};
+use crate::arch::kernel::interrupts::GIC;
+use crate::arch::mm::paging::{self, PageSize};
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
 use crate::drivers::InterruptHandlerMap;

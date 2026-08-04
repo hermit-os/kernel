@@ -9,6 +9,16 @@ use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use volatile::VolatileRef;
 
+use crate::arch::kernel::interrupts::init_plic;
+#[cfg(all(
+	any(
+		feature = "virtio-console",
+		feature = "virtio-fs",
+		feature = "virtio-vsock",
+	),
+	not(feature = "pci"),
+))]
+use crate::arch::kernel::mmio::MmioDriver;
 #[cfg(all(
 	any(
 		feature = "virtio-console",
@@ -18,17 +28,7 @@ use volatile::VolatileRef;
 	not(feature = "pci")
 ))]
 use crate::arch::kernel::mmio::register_driver;
-use crate::arch::riscv64::kernel::interrupts::init_plic;
-#[cfg(all(
-	any(
-		feature = "virtio-console",
-		feature = "virtio-fs",
-		feature = "virtio-vsock",
-	),
-	not(feature = "pci"),
-))]
-use crate::arch::riscv64::kernel::mmio::MmioDriver;
-use crate::arch::riscv64::mm::paging::{self, PageSize};
+use crate::arch::mm::paging::{self, PageSize};
 #[cfg(feature = "virtio-console")]
 use crate::console::IoDevice;
 use crate::drivers::InterruptHandlerMap;

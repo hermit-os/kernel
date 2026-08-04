@@ -14,10 +14,10 @@ use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
 use memory_addresses::{PhysAddr, VirtAddr};
 
-use crate::arch::aarch64::kernel::core_local::{core_id, core_scheduler, increment_irq_counter};
-use crate::arch::aarch64::kernel::scheduler::State;
-use crate::arch::aarch64::kernel::serial::handle_uart_interrupt;
-use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::kernel::core_local::{core_id, core_scheduler, increment_irq_counter};
+use crate::arch::kernel::scheduler::State;
+use crate::arch::kernel::serial::handle_uart_interrupt;
+use crate::arch::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::InterruptHandlerMap;
 use crate::env;
 use crate::mm::{PageAlloc, PageRangeAllocator};

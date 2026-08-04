@@ -2,7 +2,7 @@
 
 use x86_64::instructions::port::Port;
 
-use crate::arch::x86_64::kernel::pic;
+use crate::arch::kernel::pic;
 
 const PIT_CLOCK: u64 = 1_193_182;
 pub const PIT_INTERRUPT_NUMBER: u8 = pic::PIC1_OFFSET;

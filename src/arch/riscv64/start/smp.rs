@@ -1,8 +1,7 @@
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 
-use crate::arch::kernel::CURRENT_BOOT_ID;
-use crate::arch::riscv64::kernel::CURRENT_STACK_ADDRESS;
+use crate::arch::kernel::{CURRENT_BOOT_ID, CURRENT_STACK_ADDRESS};
 use crate::config::KERNEL_STACK_SIZE;
 
 #[unsafe(naked)]

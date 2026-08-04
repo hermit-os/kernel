@@ -12,10 +12,10 @@ use x86_64::set_general_handler;
 use x86_64::structures::idt::InterruptDescriptorTable;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 
-use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_counter};
-use crate::arch::x86_64::kernel::{apic, processor};
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, page_fault_handler};
-use crate::arch::x86_64::swapgs;
+use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
+use crate::arch::kernel::{apic, processor};
+use crate::arch::mm::paging::{BasePageSize, PageSize, page_fault_handler};
+use crate::arch::swapgs;
 use crate::drivers::InterruptHandlerMap;
 use crate::scheduler::{self, CoreId};
 

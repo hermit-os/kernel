@@ -3,7 +3,7 @@ use core::num::NonZeroU64;
 
 use riscv::register::{sie, sstatus, time};
 
-use crate::arch::riscv64::kernel::{HARTS_AVAILABLE, get_timebase_freq};
+use crate::arch::kernel::{HARTS_AVAILABLE, get_timebase_freq};
 use crate::scheduler::CoreId;
 
 /// Current FPU state. Saved at context switch when changed

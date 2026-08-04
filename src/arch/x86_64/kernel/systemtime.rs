@@ -4,7 +4,7 @@ use hermit_sync::{OnceCell, without_interrupts};
 use time::OffsetDateTime;
 use x86_64::instructions::port::Port;
 
-use crate::arch::x86_64::kernel::processor;
+use crate::arch::kernel::processor;
 
 const CMOS_COMMAND: Port<u8> = Port::new(0x70);
 const CMOS_DATA: Port<u8> = Port::new(0x71);

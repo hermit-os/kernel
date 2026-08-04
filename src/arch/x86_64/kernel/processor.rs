@@ -24,8 +24,8 @@ use x86_64::structures::DescriptorTablePointer;
 use x86_64::{VirtAddr, instructions};
 
 #[cfg(feature = "acpi")]
-use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::{interrupts, pic, pit};
+use crate::arch::kernel::acpi;
+use crate::arch::kernel::{interrupts, pic, pit};
 use crate::env;
 
 /// See <http://biosbits.org>.
@@ -390,7 +390,7 @@ impl CpuFrequency {
 
 	#[cfg(target_os = "none")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
-		use crate::arch::x86_64::kernel::interrupts::IDT;
+		use crate::arch::kernel::interrupts::IDT;
 
 		// Measure the CPU frequency by counting 3 ticks of a 100Hz timer.
 		let tick_count = 3;
@@ -879,7 +879,7 @@ pub fn configure() {
 		use x86_64::registers::rflags::RFlags;
 		use x86_64::structures::gdt::SegmentSelector;
 
-		use crate::arch::x86_64::kernel::syscall;
+		use crate::arch::kernel::syscall;
 
 		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
 			Some(finfo) => finfo.has_syscall_sysret(),

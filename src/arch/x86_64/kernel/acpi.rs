@@ -7,8 +7,8 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
 use x86_64::structures::paging::PhysFrame;
 
-use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::paging::{
+use crate::arch::mm::paging;
+use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::env;

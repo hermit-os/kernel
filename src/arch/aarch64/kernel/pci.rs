@@ -11,9 +11,9 @@ use pci_types::{
 	PciHeader,
 };
 
-use crate::arch::aarch64::kernel::core_local::core_id;
-use crate::arch::aarch64::kernel::interrupts::GIC;
-use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::kernel::core_local::core_id;
+use crate::arch::kernel::interrupts::GIC;
+use crate::arch::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
 use crate::env;
 use crate::mm::{PageAlloc, PageRangeAllocator};

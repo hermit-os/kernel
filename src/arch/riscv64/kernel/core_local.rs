@@ -9,7 +9,7 @@ use async_executor::StaticLocalExecutor;
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::{RawRwSpinLock, RawSpinMutex};
 
-use crate::arch::riscv64::kernel::CPU_ONLINE;
+use crate::arch::kernel::CPU_ONLINE;
 #[cfg(feature = "smp")]
 use crate::scheduler::SchedulerInput;
 use crate::scheduler::{CoreId, PerCoreScheduler};
