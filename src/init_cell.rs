@@ -1,5 +1,6 @@
 #![cfg_attr(
 	not(any(
+		target_arch = "riscv64",
 		feature = "virtio-vsock",
 		feature = "virtio-fs",
 		feature = "virtio-rng"

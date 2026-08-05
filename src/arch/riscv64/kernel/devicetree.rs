@@ -1,9 +1,12 @@
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use core::ptr::NonNull;
 
 use memory_addresses::PhysAddr;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
+use riscv::interrupt::Interrupt;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
@@ -11,7 +14,7 @@ use volatile::VolatileRef;
 
 #[cfg(all(any(feature = "gem-net", feature = "virtio"), not(feature = "pci")))]
 use crate::arch::kernel::interrupts::EXTERNAL_INTERRUPT_CONTROLLER;
-use crate::arch::kernel::interrupts::{init_aplic, init_plic};
+use crate::arch::kernel::interrupts::{init_aplic, init_interrupt_files, init_plic};
 #[cfg(all(
 	any(
 		feature = "virtio-fs",
@@ -67,12 +70,85 @@ pub fn init_interrupt_controller() {
 		return;
 	};
 
-	if let Some(aplic_node) = find_aplic(&fdt) {
+	if let Some(imsic_node) = find_imsic(&fdt) {
+		let imsic_region = imsic_node
+			.reg()
+			.expect("Reg property for imsic not found in FDT")
+			.next()
+			.unwrap();
+		let addr = PhysAddr::from(imsic_region.starting_address.addr());
+		let size = imsic_region.size.unwrap();
+
+		let interrupt_cells = 1;
+		let mut num_harts = 0;
+
+		// Build a mapping from interrupt-controller phandle to hart-id
+		let mut intc_to_hart = BTreeMap::new();
+		for cpu_node in fdt.find_node("/cpus").unwrap().children() {
+			if !cpu_node
+				.compatible()
+				.is_some_and(|c| c.all().any(|x| x == "riscv"))
+			{
+				continue;
+			}
+
+			// Assumes cpu has only one child node which is the interrupt-controller
+			let intc_node = cpu_node
+				.children()
+				.next()
+				.expect("No child node found for cpu node in FDT");
+			assert!(
+				intc_node
+					.compatible()
+					.is_some_and(|c| c.all().any(|x| x == "riscv,cpu-intc")),
+				"Child node of cpu node is not compatible with riscv,cpu-intc"
+			);
+			assert!(
+				intc_node
+					.interrupt_cells()
+					.is_some_and(|c| c == interrupt_cells)
+			);
+
+			let intc_phandle = intc_node.property("phandle").unwrap().as_usize().unwrap();
+			let hart_id = cpu_node.property("reg").unwrap().as_usize().unwrap();
+
+			intc_to_hart.insert(intc_phandle, hart_id);
+
+			num_harts += 1;
+		}
+
+		let mut num_interrupt_files = 0;
+		let interrupts_extended = imsic_node.property("interrupts-extended").unwrap().value;
+		let size_per_entry = (1 + interrupt_cells) * size_of::<u32>();
+
+		// Build a mapping from hart-id to index of the interrupt file region
+		let mut interrupt_file_indices: Vec<usize> = Vec::new();
+		interrupt_file_indices.resize_with(interrupts_extended.len() / size_per_entry, || 0);
+		for (index, entry) in interrupts_extended.chunks_exact(size_per_entry).enumerate() {
+			let irq_type = u32::from_be_bytes(entry[4..8].try_into().unwrap());
+			if irq_type != Interrupt::SupervisorExternal as u32 {
+				continue;
+			}
+
+			let intc_phandle = u32::from_be_bytes(entry[0..4].try_into().unwrap());
+			let hart_id = intc_to_hart
+				.get(&(intc_phandle as usize))
+				.expect("No cpu node found for interrupt-controller phandle in FDT");
+
+			interrupt_file_indices[*hart_id] = index;
+
+			num_interrupt_files += 1;
+		}
 		assert!(
-			aplic_node.property("msi-parent").is_none(),
-			"Only APLIC in direct delivery mode is supported yet"
+			num_interrupt_files == num_harts,
+			"Number of interrupt files does not match number of harts in FDT. AMP is not supported."
 		);
 
+		debug!("Found IMSIC at {addr:p}, size: {size:#x}, num_harts: {num_harts}");
+		init_interrupt_files(addr, size, interrupt_file_indices);
+	}
+
+	if let Some(aplic_node) = find_aplic(&fdt) {
 		let aplic_region = aplic_node
 			.reg()
 			.expect("Reg property for APLIC not found in FDT")
@@ -80,9 +156,10 @@ pub fn init_interrupt_controller() {
 			.unwrap();
 		let addr = PhysAddr::from(aplic_region.starting_address.addr());
 		let size = aplic_region.size.unwrap();
+		let msi_delivery = aplic_node.property("msi-parent").is_some();
 
-		debug!("Found APLIC at {addr:p}, size: {size:#x}");
-		init_aplic(addr, size);
+		debug!("Found APLIC at {addr:p}, size: {size:#x}, msi_delivery: {msi_delivery:?}");
+		init_aplic(addr, size, msi_delivery);
 	} else if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
 		debug!("Found external interrupt controller");
 		let plic_region = plic_node
@@ -126,6 +203,33 @@ pub fn init_interrupt_controller() {
 	} else {
 		warn!("No external interrupt controller found");
 	}
+}
+
+pub fn msi_supported_vectors() -> Option<usize> {
+	let fdt = env::start_info().fdt()?;
+	let imsic_node = find_imsic(&fdt)?;
+
+	imsic_node.property("riscv,num-ids")?.as_usize()
+}
+
+fn find_imsic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
+	let mut node = fdt.find_compatible(&["riscv,imsics"])?;
+
+	// Different interrupts domains, including m-mode domains, show up as differnent nodes.
+	// We expect a hierachy of one m-mode domain and one s-mode domain as described in
+	// 'The RISC-V Advanced Interrupt Architecture', Version 1, Figure 4.2
+	if node.property("status").and_then(|p| p.as_str()) == Some("disabled") {
+		let phandle = node.property("riscv,children")?.as_usize()?;
+		node = fdt.find_phandle(phandle as u32)?;
+
+		// Ensure the S-mode domain is actually enabled
+		assert!(
+			node.property("status").and_then(|p| p.as_str()) != Some("disabled"),
+			"Referenced s-mode interrupt domain is not enabled in FDT"
+		);
+	}
+
+	Some(node)
 }
 
 fn find_aplic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {

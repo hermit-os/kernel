@@ -1,8 +1,11 @@
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::mem::offset_of;
 use core::num::NonZeroU16;
 use core::ptr::NonNull;
 
 use ahash::RandomState;
+use align_address::Align;
 use bit_field::BitField;
 use bitfield_struct::bitfield;
 use free_list::PageLayout;
@@ -11,16 +14,23 @@ use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::asm::wfi;
 use riscv::interrupt::{Exception, Interrupt, Trap};
-use riscv::register::{scause, sie, sip, sstatus, stval};
+use riscv::register::{scause, sie, sip, sireg, siselect, sstatus, stopei, stval};
 use trapframe::TrapFrame;
 use volatile::access::{NoAccess, ReadOnly, ReadWrite, WriteOnly};
 use volatile::{VolatileFieldAccess, VolatileRef};
 
+use crate::arch::kernel::{HARTS_AVAILABLE, INTERRUPT_FILES};
 use crate::arch::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::riscv64::kernel::core_local::core_id;
+use crate::arch::riscv64::kernel::core_local::{core_id, msi_controller, set_msi_controller};
+use crate::arch::riscv64::kernel::devicetree::msi_supported_vectors;
 use crate::drivers::InterruptHandlerMap;
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler;
+use crate::scheduler::CoreId;
+
+const MSI_EIID_WAKEUP: u16 = 2;
+
+pub type MsiController = Imsic;
 
 pub(crate) enum ExternalInterruptController {
 	Plic(Plic),
@@ -76,6 +86,183 @@ impl ExternalInterruptController {
 			Self::Aplic(aplic) => aplic.complete_interrupt(irq_number),
 		}
 	}
+}
+
+// Reference: The RISC-V Advanced Interrupt Architecture, Version 1.0, Chapter 3.5
+#[repr(C)]
+#[derive(VolatileFieldAccess)]
+pub(crate) struct InterruptFile {
+	#[access(WriteOnly)]
+	seteipnum_le: u32,
+
+	#[access(WriteOnly)]
+	_seteipnum_be: u32,
+
+	#[access(NoAccess)]
+	__: [u32; 0x3fe],
+}
+const _: () = assert!(size_of::<InterruptFile>() == 0x1000);
+
+// Reference: The RISC-V Advanced Interrupt Architecture, Version 1.0, Chapter 3.8.1
+#[repr(usize)]
+enum Eidelivery {
+	// Interrupt delivery disabled
+	_Disabled = 0,
+
+	// Interrupt delivery from the interrupt file is enabled
+	ViaInterruptFile = 1,
+
+	// Interrupt delivery from a PLIC or APLIC is enabled.
+	// Support is option.
+	_ViaExternalController = 0x4000_0000,
+}
+
+// Reference: The RISC-V Advanced Interrupt Architecture, Version 1.0, Chapter 3.7
+#[repr(usize)]
+enum ISelect {
+	// Interrupt delivery mode.
+	// See `Eidelivery` for details.
+	Eidelivery = 0x70,
+
+	// Interrupt priority threshold
+	Eithreshold = 0x72,
+
+	// Interrupt ending bits
+	_Eip0 = 0x80,
+	_Eip63 = 0xbf,
+
+	// Interrupt enable bits
+	Eie0 = 0xc0,
+	Eie63 = 0xff,
+}
+
+pub(crate) struct Imsic {
+	max_vectors: u16,
+}
+
+// IRQ numbers are reused as EIID (external interrupt identifier aka msi vector).
+// This greatly simplifies support for IMSIC:
+// - No per core msi pool allocator
+// - No per core mapping from EIID to IRQ number
+// - No per core handler map
+// This work if the following assumptions are true:
+// - The range of EIIDs supported by the IMSICs is a superset of the range of IRQ numbers
+//   supported by the APLIC. This is checked in devicestree.rs.
+// This adds the following limitations:
+// - IPIs might be more expensive if they collide with other IRQs.
+impl Imsic {
+	pub fn new(max_vectors: u16) -> Self {
+		Self { max_vectors }
+	}
+
+	fn read(&mut self, index: usize) -> usize {
+		assert!(index & 1 == 0, "If XLEN=64, the index must be even");
+		unsafe {
+			siselect::write(siselect::Siselect::from_bits(index));
+		}
+		sireg::read().bits()
+	}
+
+	fn write(&mut self, index: usize, value: usize) {
+		unsafe {
+			siselect::write(siselect::Siselect::from_bits(index));
+			sireg::write(sireg::Sireg::from_bits(value));
+		}
+	}
+
+	fn set_interrupt_delivery_mode(&mut self, mode: Eidelivery) {
+		self.write(ISelect::Eidelivery as usize, mode as usize);
+	}
+
+	fn set_interrupt_priority_threshold(&mut self, threshold: u8) {
+		assert!(
+			threshold == 0 || threshold >= MSI_EIID_WAKEUP as u8,
+			"IPIs shall not be masked by the priority threshold"
+		);
+		self.write(ISelect::Eithreshold as usize, threshold as usize);
+	}
+
+	fn set_interrupt_enable(&mut self, eiid: NonZeroU16, value: bool) {
+		assert!(eiid.get() < self.max_vectors);
+
+		let eiid = eiid.get() as usize;
+		let eie_index = ISelect::Eie0 as usize + ((eiid / 64) * 2);
+		assert!(
+			eie_index <= ISelect::Eie63 as usize,
+			"Interrupt number {eiid} is out of range for Imsic"
+		);
+		let bit_position = eiid % 64;
+		let current_value = self.read(eie_index);
+		if value {
+			self.write(eie_index, current_value | (1 << bit_position));
+		} else {
+			self.write(eie_index, current_value & !(1 << bit_position));
+		}
+	}
+
+	fn claim_interrupt(&mut self) -> Option<NonZeroU16> {
+		unsafe { stopei::read_clear() }
+			.iid()
+			.try_into()
+			.ok()
+			.and_then(NonZeroU16::new)
+	}
+
+	fn complete_interrupt(&mut self, _eiid: NonZeroU16) {
+		// atomic read and write of stopic register automatically completes the interrupt
+	}
+}
+
+pub(crate) fn init_interrupt_files(
+	addr: PhysAddr,
+	size: usize,
+	interrupt_file_indices: Vec<usize>,
+) {
+	assert!(
+		addr.is_aligned_to(BasePageSize::SIZE),
+		"Imsic control region is not page aligned"
+	);
+	assert!(
+		size.is_multiple_of(usize::try_from(BasePageSize::SIZE).unwrap()),
+		"Imsic control region size is not a multiple of a page"
+	);
+
+	let layout = PageLayout::from_size(size).unwrap();
+	let page_range = PageAlloc::allocate(layout).unwrap();
+	let interrupt_file_base_addr = VirtAddr::from(page_range.start());
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.device().normal().writable().execute_disable();
+	paging::map::<BasePageSize>(
+		interrupt_file_base_addr,
+		addr,
+		size / usize::try_from(BasePageSize::SIZE).unwrap(),
+		flags,
+	);
+
+	INTERRUPT_FILES.with(|files| {
+		*files.unwrap() = interrupt_file_indices
+			.into_iter()
+			.map(|index| {
+				let hart_addr = interrupt_file_base_addr + (index * size_of::<InterruptFile>());
+				assert!(hart_addr < interrupt_file_base_addr + size);
+				hart_addr
+			})
+			.collect();
+	});
+	INTERRUPT_FILES.finalize();
+}
+
+pub(crate) fn init_imsic(max_vectors: u16) {
+	let mut imsic = Box::new(Imsic::new(max_vectors));
+
+	imsic.set_interrupt_delivery_mode(Eidelivery::ViaInterruptFile);
+
+	// Enable MSI used for IPI
+	#[cfg(feature = "smp")]
+	imsic.set_interrupt_enable(NonZeroU16::new(MSI_EIID_WAKEUP).unwrap(), true);
+
+	set_msi_controller(Box::into_raw(imsic));
 }
 
 // Reference: The RISC-V Advanced Interrupt Architecture, Version 1.0, Chapter 4.5.1
@@ -424,7 +611,18 @@ pub(crate) struct Aplic {
 }
 
 impl Aplic {
-	fn init(&mut self) {
+	fn new(
+		control_region: VolatileRef<'static, AplicControlRegion>,
+		interrupt_delivery_control: VolatileRef<'static, InterruptDeliveryControlArray>,
+	) -> Self {
+		Self {
+			control_region,
+			interrupt_delivery_control,
+			ipriolen: 0,
+		}
+	}
+
+	fn init(&mut self, msi_delivery: bool) {
 		let aplic_ptr = self.control_region.as_mut_ptr();
 		let mut domaincfg = aplic_ptr.domaincfg().read();
 		if domaincfg.big_endian() {
@@ -438,16 +636,15 @@ impl Aplic {
 
 		let aplic_ptr = self.control_region.as_mut_ptr();
 		let mut domaincfg = aplic_ptr.domaincfg().read();
-		if domaincfg.msi_delivery() {
-			domaincfg.set_msi_delivery(false);
+
+		if domaincfg.msi_delivery() != msi_delivery {
+			domaincfg.set_msi_delivery(msi_delivery);
 			aplic_ptr.domaincfg().write(domaincfg);
 			assert!(
-				!aplic_ptr.domaincfg().read().msi_delivery(),
-				"APLIC does not support direct delivery."
+				aplic_ptr.domaincfg().read().msi_delivery() == msi_delivery,
+				"APLIC does not support the desired delivery mode."
 			);
 		}
-
-		self.ipriolen = self.probe_ipriolen();
 
 		let aplic_ptr = self.control_region.as_mut_ptr();
 		aplic_ptr.domaincfg().update(|mut cfg| {
@@ -455,12 +652,15 @@ impl Aplic {
 			cfg
 		});
 
-		let hart_idc = unsafe {
-			self.interrupt_delivery_control
-				.as_mut_ptr()
-				.map(|control| control.cast().offset(Aplic::get_hart_index() as isize))
-		};
-		hart_idc.idelivery().write(1);
+		if !msi_delivery {
+			self.ipriolen = self.probe_ipriolen();
+			let hart_idc = unsafe {
+				self.interrupt_delivery_control
+					.as_mut_ptr()
+					.map(|control| control.cast().offset(Aplic::get_hart_index() as isize))
+			};
+			hart_idc.idelivery().write(1);
+		}
 	}
 
 	/// Determines the number of implemented interrupt priority bits (IPRIOLEN)
@@ -531,6 +731,22 @@ impl Aplic {
 				.clrienum()
 				.write(u32::from(irq_number));
 		}
+
+		if let Some(msi_controller) = msi_controller() {
+			let target: u32 = unsafe {
+				self.control_region
+					.as_mut_ptr()
+					.target()
+					.map(|slice| {
+						slice
+							.cast()
+							.offset(isize::try_from(irq_number).unwrap() - 1)
+					})
+					.read()
+			};
+			let eiid = TargetMsiDelivery::from(target).eiid();
+			msi_controller.set_interrupt_enable(NonZeroU16::new(eiid).unwrap(), value);
+		}
 	}
 
 	fn set_interrupt_source_mode(&mut self, irq_number: u16, mode: SourceMode) {
@@ -559,9 +775,19 @@ impl Aplic {
 	}
 
 	fn set_interrupt_priority(&mut self, irq_number: u16, priority: u8) {
-		// Clamp to the largest representable priority value (lowest priority).
-		let max_priority = ((1u16 << self.ipriolen) - 1) as u8;
-		let priority = priority.min(max_priority);
+		let new_value = if msi_controller().is_some() {
+			warn!("APLIC interrupt priority is not supported in MSI delivery mode");
+			TargetMsiDelivery::new()
+				.with_hart_index(Aplic::get_hart_index())
+				.with_eiid(irq_number)
+				.into_bits()
+		} else {
+			let max_priority = u8::MAX >> (8 - self.ipriolen);
+			TargetDirectDelivery::new()
+				.with_hart_index(Aplic::get_hart_index())
+				.with_priority(priority.min(max_priority))
+				.into_bits()
+		};
 
 		let target = unsafe {
 			self.control_region.as_mut_ptr().target().map(|slice| {
@@ -570,40 +796,51 @@ impl Aplic {
 					.offset(isize::try_from(irq_number).unwrap() - 1)
 			})
 		};
-		let new_value = TargetRegister::from(
-			TargetDirectDelivery::new()
-				.with_hart_index(Aplic::get_hart_index())
-				.with_priority(priority)
-				.into_bits(),
-		);
-		target.write(new_value);
+		target.write(TargetRegister::from(new_value));
 	}
 
 	fn set_priority_threshold(&mut self, threshold: u8) {
-		let hart_idc = unsafe {
-			self.interrupt_delivery_control
-				.as_mut_ptr()
-				.map(|control| control.cast().offset(Aplic::get_hart_index() as isize))
-		};
-		hart_idc.ithreshold().write(u32::from(threshold));
+		if let Some(msi_controller) = msi_controller() {
+			msi_controller.set_interrupt_priority_threshold(threshold);
+		} else {
+			let hart_idc = unsafe {
+				self.interrupt_delivery_control
+					.as_mut_ptr()
+					.map(|control| control.cast().offset(Aplic::get_hart_index() as isize))
+			};
+			hart_idc.ithreshold().write(u32::from(threshold));
+		}
 	}
 
 	fn claim_interrupt(&mut self) -> Option<NonZeroU16> {
-		let hart_idc = unsafe {
-			self.interrupt_delivery_control
-				.as_mut_ptr()
-				.map(|control| control.cast().offset(Aplic::get_hart_index() as isize))
-		};
-		let claimi = hart_idc.claimi().read();
-		NonZeroU16::new(claimi.identity())
+		trace!("Claiming interrupt from APLIC");
+		if let Some(msi_controller) = msi_controller() {
+			msi_controller.claim_interrupt()
+		} else {
+			let hart_idc = unsafe {
+				self.interrupt_delivery_control
+					.as_mut_ptr()
+					.map(|control| control.cast().offset(Aplic::get_hart_index() as isize))
+			};
+			let claimi = hart_idc.claimi().read();
+			NonZeroU16::new(claimi.identity())
+		}
 	}
 
 	fn complete_interrupt(&mut self, _irq_number: u16) {
-		// reading claimi register automatically completes the interrupt in direct delivery mode.
+		if let Some(msi_controller) = msi_controller() {
+			msi_controller.complete_interrupt(NonZeroU16::new(_irq_number).unwrap());
+		} else {
+			// reading claimi register automatically completes the interrupt
+		}
 	}
 }
 
-pub(crate) fn init_aplic(addr: PhysAddr, size: usize) {
+pub(crate) fn init_aplic(addr: PhysAddr, size: usize, msi_delivery: bool) {
+	assert!(
+		addr.is_aligned_to(BasePageSize::SIZE),
+		"Aplic control region is not page aligned"
+	);
 	assert!(
 		size == 32 * 1024,
 		"Expected 32 KiB control region for APLIC in direct delivery mode"
@@ -627,6 +864,7 @@ pub(crate) fn init_aplic(addr: PhysAddr, size: usize) {
 			NonNull::new(control_region_addr.as_mut_ptr::<AplicControlRegion>()).unwrap(),
 		)
 	};
+
 	let interrupt_delivery_control = unsafe {
 		VolatileRef::new(
 			NonNull::new(
@@ -636,12 +874,8 @@ pub(crate) fn init_aplic(addr: PhysAddr, size: usize) {
 			.unwrap(),
 		)
 	};
-	let mut aplic = Aplic {
-		control_region,
-		interrupt_delivery_control,
-		ipriolen: 0,
-	};
-	aplic.init();
+	let mut aplic = Aplic::new(control_region, interrupt_delivery_control);
+	aplic.init(msi_delivery);
 
 	*EXTERNAL_INTERRUPT_CONTROLLER.lock() = Some(ExternalInterruptController::Aplic(aplic));
 }
@@ -772,6 +1006,10 @@ static INTERRUPT_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 
 /// Init Interrupts
 pub(crate) fn install() {
+	if let Some(max_vectors) = msi_supported_vectors() {
+		init_imsic(max_vectors.try_into().unwrap());
+	}
+
 	unsafe {
 		// Install trap handler
 		trapframe::init();
@@ -869,7 +1107,8 @@ pub(crate) fn disable() {
 }
 
 /// Currently not needed because we use the trapframe crate
-pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
+#[cfg_attr(not(feature = "smp"), expect(unused_mut))]
+pub(crate) fn install_handlers(mut handlers: InterruptHandlerMap) {
 	let mut ctrl_guard = EXTERNAL_INTERRUPT_CONTROLLER.lock();
 	let ctrl = ctrl_guard.as_mut().unwrap();
 
@@ -879,6 +1118,17 @@ pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
 		ctrl.enable_interrupt(u16::from(*irq_number));
 	}
 	ctrl.set_priority_threshold(0);
+
+	// Register MSI handler for IPIs
+	#[cfg(feature = "smp")]
+	if msi_controller().is_some() {
+		handlers
+			.entry(MSI_EIID_WAKEUP.try_into().unwrap())
+			.or_default()
+			.push_back(|| {
+				crate::arch::kernel::scheduler::wakeup_handler();
+			});
+	}
 
 	INTERRUPT_HANDLERS.set(handlers).unwrap();
 }
@@ -929,6 +1179,7 @@ fn external_handler() {
 	// Claim interrupt
 	let mut ctrl_guard = EXTERNAL_INTERRUPT_CONTROLLER.lock();
 	let ctrl = ctrl_guard.as_mut().unwrap();
+	trace!("External interrupt handler called");
 	if let Some(irq) = ctrl.claim_interrupt() {
 		let irq = irq.get();
 		debug!("External INT: {irq}");
@@ -950,3 +1201,19 @@ fn external_handler() {
 }
 
 pub(crate) fn print_statistics() {}
+
+pub fn wakeup_core(core_to_wakeup: CoreId) {
+	let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
+	debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
+	if msi_controller().is_some() {
+		let addr = INTERRUPT_FILES.get().unwrap()[hart_id];
+		let mut interrupt_file =
+			unsafe { VolatileRef::new(NonNull::new(addr.as_mut_ptr()).unwrap()) };
+		interrupt_file
+			.as_mut_ptr()
+			.seteipnum_le()
+			.write(u32::from(MSI_EIID_WAKEUP));
+	} else {
+		sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
+	}
+}
