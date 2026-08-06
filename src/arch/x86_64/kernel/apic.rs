@@ -306,22 +306,11 @@ pub fn local_apic_id_count() -> u32 {
 }
 
 fn init_ioapic_address(phys_addr: PhysAddr) {
-	if env::is_uefi() {
-		// UEFI systems have already id mapped everything, so we can just set the physical address as the virtual one
-		IOAPIC_ADDRESS
-			.set(VirtAddr::new(phys_addr.as_u64()))
-			.unwrap();
-	} else {
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = PageAlloc::allocate(layout).unwrap();
-		let ioapic_address = VirtAddr::from(page_range.start());
-		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
-		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}");
+	paging::identity_map::<BasePageSize>(phys_addr);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
-	}
+	IOAPIC_ADDRESS
+		.set(VirtAddr::new(phys_addr.as_u64()))
+		.unwrap();
 }
 
 #[cfg(not(feature = "acpi"))]
