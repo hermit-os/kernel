@@ -294,11 +294,23 @@ impl Qemu {
 			} else {
 				"virt"
 			};
+
+			let opensbi_paths = &[
+				"opensbi/generic/firmware/fw_jump.bin", // Local
+				"/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin", // Ubuntu
+				"/usr/share/opensbi/generic/firmware/fw_jump.bin", // Alpine
+			];
+			let opensbi_path = opensbi_paths
+				.iter()
+				.copied()
+				.find(|p| fs::exists(p).unwrap_or_default())
+				.expect("OpenSBI was not found");
+
 			vec![
 				"-machine".to_owned(),
 				machine.to_owned(),
 				"-bios".to_owned(),
-				"opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_owned(),
+				opensbi_path.to_owned(),
 			]
 		} else {
 			vec![]
