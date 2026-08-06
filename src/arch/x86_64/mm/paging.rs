@@ -37,7 +37,7 @@ pub trait PageTableEntryFlagsExt {
 
 	fn normal(&mut self) -> &mut Self;
 
-	#[cfg(feature = "acpi")]
+	#[expect(dead_code)]
 	fn read_only(&mut self) -> &mut Self;
 
 	fn writable(&mut self) -> &mut Self;
@@ -66,7 +66,6 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 		self
 	}
 
-	#[cfg(feature = "acpi")]
 	fn read_only(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::WRITABLE);
 		self
