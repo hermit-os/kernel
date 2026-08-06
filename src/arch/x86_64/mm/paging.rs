@@ -32,6 +32,7 @@ unsafe impl FrameAllocator<Size4KiB> for FrameAlloc {
 }
 
 pub trait PageTableEntryFlagsExt {
+	#[cfg_attr(not(any(feature = "pci", feature = "vga")), expect(dead_code))]
 	fn device(&mut self) -> &mut Self;
 
 	fn normal(&mut self) -> &mut Self;

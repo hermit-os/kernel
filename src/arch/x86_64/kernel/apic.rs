@@ -25,9 +25,9 @@ use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::swapgs;
-use crate::mm::{PageAlloc, PageBox, PageRangeAllocator};
+use crate::mm::PageBox;
 use crate::scheduler::CoreId;
-use crate::{arch, env, scheduler};
+use crate::{arch, scheduler};
 
 /// APIC Location and Status (R/W) See Table 35-2. See Section 10.4.4, Local APIC  Status and Location.
 const IA32_APIC_BASE: Msr = Msr::new(0x1b);
@@ -497,7 +497,7 @@ fn default_apic() -> PhysAddr {
 
 fn apic_addr() -> PhysAddr {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if crate::env::is_uhyve() {
 		return default_apic();
 	}
 
@@ -517,25 +517,12 @@ pub fn init() {
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	if processor::supports_x2apic() {
 		init_x2apic();
-	} else if env::is_uefi() {
-		// already id mapped in UEFI systems, just use the physical address as virtual one
+	} else {
+		paging::identity_map::<BasePageSize>(local_apic_physical_address);
+
 		LOCAL_APIC_ADDRESS
 			.set(VirtAddr::new(local_apic_physical_address.as_u64()))
 			.unwrap();
-	} else {
-		// We use the traditional xAPIC mode available on all x86-64 CPUs.
-		// It uses a mapped page for communication.
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = PageAlloc::allocate(layout).unwrap();
-		let local_apic_address = VirtAddr::from(page_range.start());
-		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
-		debug!(
-			"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
-		);
-
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
