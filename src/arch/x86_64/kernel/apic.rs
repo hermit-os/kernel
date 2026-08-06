@@ -751,8 +751,6 @@ pub fn init_next_processor_variables() {
 /// This is partly confirmed by <https://wiki.osdev.org/Symmetric_Multiprocessing>
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn boot_application_processors() {
-	use x86_64::structures::paging::Translate;
-
 	use crate::arch::start::smp;
 
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
@@ -764,24 +762,19 @@ pub fn boot_application_processors() {
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 
-	if env::is_uefi() {
-		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
-		let pt = unsafe { paging::identity_mapped_page_table() };
-		let virt_addr = SMP_BOOT_CODE_ADDRESS;
-		let phys_addr = pt.translate_addr(virt_addr.into()).unwrap();
-		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64());
-	} else {
-		// Identity-map the boot code page and copy over the code.
-		debug!("Mapping SMP boot code to physical and virtual address {SMP_BOOT_CODE_ADDRESS:p}");
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable();
+	// Ensure identity mapping
+	// Does not use `paging::identity_map()` since this mapping must not be `NO_EXECUTE`.
+	let phys_addr = paging::virtual_to_physical(SMP_BOOT_CODE_ADDRESS);
+	let expected_phys_addr = PhysAddr::new(SMP_BOOT_CODE_ADDRESS.as_u64());
+	if phys_addr != Some(expected_phys_addr) {
 		paging::map::<BasePageSize>(
 			SMP_BOOT_CODE_ADDRESS,
-			PhysAddr::new(SMP_BOOT_CODE_ADDRESS.as_u64()),
+			expected_phys_addr,
 			1,
-			flags,
+			PageTableEntryFlags::WRITABLE,
 		);
 	}
+
 	unsafe {
 		// FIXME: do bounds checking. Better yet: do the copy via slices
 		SMP_BOOT_CODE_ADDRESS
