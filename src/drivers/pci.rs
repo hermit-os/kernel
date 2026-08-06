@@ -73,9 +73,23 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	/// Returns the bar at bar-register `slot`.
 	pub fn get_bar(&self, slot: u8) -> Option<Bar> {
-		let header = self.header();
-		let endpoint = EndpointHeader::from_header(header, &self.access)?;
-		endpoint.bar(slot, &self.access)
+		let endpoint = EndpointHeader::from_header(self.header(), &self.access)?;
+		let mut header = self.header();
+
+		// Determining the size of a bar writes all-ones into it and restores the
+		// old value afterwards. While decoding is enabled, the device decodes
+		// these intermediate values as real addresses and relocates itself. On a
+		// passed-through device the host follows that relocation and tries to map
+		// the bar at an address outside of the guest, which kills the VM. The PCI
+		// specification requires decoding to be disabled while sizing a bar.
+		let command = header.command(&self.access);
+		header.update_command(&self.access, |command| {
+			command & !(CommandRegister::IO_ENABLE | CommandRegister::MEMORY_ENABLE)
+		});
+		let bar = endpoint.bar(slot, &self.access);
+		header.update_command(&self.access, |_| command);
+
+		bar
 	}
 
 	/// Configure the bar at register `slot`
@@ -277,7 +291,7 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 
 			let mut slot: u8 = 0;
 			while usize::from(slot) < MAX_BARS {
-				if let Some(pci_bar) = endpoint.bar(slot, &self.access) {
+				if let Some(pci_bar) = self.get_bar(slot) {
 					match pci_bar {
 						Bar::Memory64 {
 							address,
