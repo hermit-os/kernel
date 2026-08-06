@@ -613,6 +613,26 @@ fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
 	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
 }
 
+/// Reconfigures an interrupt line for a legacy PCI interrupt.
+///
+/// [`init_ioapic`] sets up every line for the edge triggered, active high
+/// behavior of the ISA interrupts. PCI signals its interrupts level triggered
+/// and active low instead.
+#[cfg(feature = "pci")]
+pub(crate) fn ioapic_set_pci_interrupt(irq: u8, apicid: u8) {
+	assert!(irq <= 24);
+
+	let off = u32::from(irq * 2);
+	let ioredirect_upper = u32::from(apicid) << 24;
+	// Vector, active low (bit 13) and level triggered (bit 15).
+	let ioredirect_lower = u32::from(0x20 + irq) | (1 << 13) | (1 << 15);
+
+	debug!("Configuring irq {irq} as level triggered, active low");
+
+	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
+	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
+}
+
 pub fn init_local_apic() {
 	// Mask out all interrupts we don't need right now.
 	local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_MASK);
