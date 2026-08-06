@@ -28,6 +28,7 @@ use crate::drivers::error::DriverError;
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(all(
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
+	not(feature = "ixgbe"),
 	not(feature = "rtl8139"),
 	feature = "virtio-net",
 ))]
@@ -789,6 +790,7 @@ pub(crate) fn init_device(
 		}
 		#[cfg(all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
+			not(feature = "ixgbe"),
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
@@ -856,6 +858,7 @@ pub(crate) enum VirtioDriver {
 	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
+		not(feature = "ixgbe"),
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]

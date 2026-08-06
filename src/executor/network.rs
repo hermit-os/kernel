@@ -41,6 +41,7 @@ pub(crate) enum NetworkState<'a> {
 
 #[cfg(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "ixgbe",
 	feature = "rtl8139",
 	feature = "virtio-net",
 ))]
@@ -55,6 +56,7 @@ pub(crate) fn network_handler() {
 #[cfg(all(
 	feature = "virtio-net",
 	not(feature = "rtl8139"),
+	not(feature = "ixgbe"),
 	feature = "pci",
 	target_arch = "x86_64"
 ))]
@@ -397,6 +399,7 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "ixgbe",
 		feature = "rtl8139",
 		feature = "virtio-net",
 	))]
@@ -407,6 +410,7 @@ impl<'a> NetworkInterface<'a> {
 	#[cfg(all(
 		feature = "virtio-net",
 		not(feature = "rtl8139"),
+		not(feature = "ixgbe"),
 		feature = "pci",
 		target_arch = "x86_64"
 	))]

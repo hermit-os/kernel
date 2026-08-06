@@ -1,7 +1,10 @@
 #[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 pub mod gem;
+#[cfg(all(feature = "ixgbe", target_arch = "x86_64"))]
+pub mod ixgbe;
 #[cfg(not(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "ixgbe",
 	feature = "rtl8139",
 	feature = "virtio-net",
 )))]
@@ -10,6 +13,7 @@ pub mod loopback;
 pub mod rtl8139;
 #[cfg(all(
 	not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
+	not(feature = "ixgbe"),
 	not(feature = "rtl8139"),
 	feature = "virtio-net",
 ))]
@@ -36,6 +40,7 @@ pub(crate) trait NetworkDriver: Driver + smoltcp::phy::Device {
 /// or environment variables.
 #[cfg(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "ixgbe",
 	feature = "rtl8139",
 	feature = "virtio-net",
 ))]
@@ -58,7 +63,10 @@ cfg_select! {
 	) => {
 		pub(crate) use crate::arch::kernel::mmio::NetworkDevice;
 	}
-	all(feature = "pci", any(feature = "rtl8139", feature = "virtio-net")) => {
+	all(
+		feature = "pci",
+		any(feature = "ixgbe", feature = "rtl8139", feature = "virtio-net",),
+	) => {
 		pub(crate) use crate::drivers::pci::NetworkDevice;
 	}
 	_ => {

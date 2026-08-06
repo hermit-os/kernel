@@ -19,6 +19,7 @@ use crate::arch::kernel::systemtime;
 use crate::drivers::Driver;
 #[cfg(any(
 	all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+	feature = "ixgbe",
 	feature = "rtl8139",
 	feature = "virtio-net",
 	feature = "write-pcap-file"
@@ -29,6 +30,7 @@ use crate::drivers::net::NetworkDriver;
 cfg_select! {
 	any(
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "ixgbe",
 		feature = "rtl8139",
 		feature = "virtio-net",
 	) => {
@@ -46,6 +48,7 @@ impl<'a> NetworkInterface<'a> {
 		cfg_select! {
 			any(
 				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				feature = "ixgbe",
 				feature = "rtl8139",
 				feature = "virtio-net",
 			) => {

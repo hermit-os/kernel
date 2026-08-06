@@ -23,9 +23,15 @@ use crate::drivers::Driver;
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
-#[cfg(feature = "rtl8139")]
+#[cfg(feature = "ixgbe")]
+use crate::drivers::net::ixgbe::{self, IxgbeDriver};
+#[cfg(all(feature = "rtl8139", not(feature = "ixgbe")))]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
-#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
+#[cfg(all(
+	not(feature = "rtl8139"),
+	not(feature = "ixgbe"),
+	feature = "virtio-net"
+))]
 use crate::drivers::net::virtio::VirtioNetDriver;
 #[cfg(feature = "virtio-rng")]
 use crate::drivers::rng::VirtioRngDriver;
@@ -36,7 +42,7 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
-#[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
+#[cfg(any(feature = "ixgbe", feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 
@@ -403,14 +409,29 @@ pub(crate) fn register_driver(drv: PciDriver) {
 	PCI_DRIVERS.with(|pci_drivers| pci_drivers.unwrap().push(drv));
 }
 
-#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
+#[cfg(all(
+	not(feature = "ixgbe"),
+	not(feature = "rtl8139"),
+	feature = "virtio-net"
+))]
 pub(crate) type NetworkDevice = VirtioNetDriver;
 
-#[cfg(feature = "rtl8139")]
+#[cfg(all(feature = "rtl8139", not(feature = "ixgbe")))]
 pub(crate) type NetworkDevice = RTL8139Driver;
+
+#[cfg(feature = "ixgbe")]
+pub(crate) type NetworkDevice = IxgbeDriver;
 
 #[cfg(feature = "virtio-rng")]
 pub(crate) fn get_rng_driver() -> Option<&'static InterruptTicketMutex<VirtioRngDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_rng_driver())
+}
+
+#[cfg(feature = "virtio-console")]
+pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
 	PCI_DRIVERS
 		.get()?
 		.iter()
@@ -434,7 +455,7 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 }
 
 #[cfg_attr(
-	not(any(feature = "virtio", feature = "rtl8139")),
+	not(any(feature = "virtio", feature = "rtl8139", feature = "ixgbe")),
 	expect(unused_variables)
 )]
 pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
@@ -466,7 +487,11 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 				Ok(VirtioDriver::Rng(drv)) => {
 					register_driver(PciDriver::VirtioRng(InterruptTicketMutex::new(*drv)));
 				}
-				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
+				#[cfg(all(
+					not(feature = "ixgbe"),
+					not(feature = "rtl8139"),
+					feature = "virtio-net"
+				))]
 				Ok(VirtioDriver::Net(drv)) => *NETWORK_DEVICE.lock() = Some(*drv),
 				#[cfg(feature = "virtio-vsock")]
 				Ok(VirtioDriver::Vsock(drv)) => {
@@ -476,8 +501,26 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 			}
 		}
 
+		// Searching for an Intel X550 (ixgbe family)
+		#[cfg(feature = "ixgbe")]
+		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
+			let (vendor_id, device_id) = x.id();
+			// 0x1563: X550-T2, 0x15d1: X550-T1
+			vendor_id == 0x8086 && (device_id == 0x1563 || device_id == 0x15d1)
+		}) {
+			info!(
+				"Found Intel X550 network device with device id {:#x}",
+				adapter.device_id()
+			);
+
+			match ixgbe::init_device(adapter, handlers) {
+				Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
+				Err(err) => error!("Could not initialize ixgbe device: {err}"),
+			}
+		}
+
 		// Searching for Realtek RTL8139, which is supported by Qemu
-		#[cfg(feature = "rtl8139")]
+		#[cfg(all(feature = "rtl8139", not(feature = "ixgbe")))]
 		for adapter in PCI_DEVICES.finalize().iter().filter(|x| {
 			let (vendor_id, device_id) = x.id();
 			vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
@@ -496,7 +539,7 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 	});
 }
 
-#[cfg(feature = "virtio")]
+#[cfg(any(feature = "virtio", feature = "ixgbe"))]
 pub(crate) mod msix {
 	// Intel 64 and IA-32 Architectures Software Developer’s Manual volume 2 section 12.11.2.1.
 	pub const VECTOR_MAX: u8 = 0xfe;

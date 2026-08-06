@@ -279,6 +279,7 @@ pub mod error {
 	pub use crate::drivers::fs::error::VirtioFsInitError;
 	#[cfg(all(
 		not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
+		not(feature = "ixgbe"),
 		not(feature = "rtl8139"),
 		feature = "virtio-net",
 	))]
@@ -322,6 +323,7 @@ pub mod error {
 
 		#[cfg(all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
+			not(feature = "ixgbe"),
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		))]
