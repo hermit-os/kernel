@@ -262,6 +262,17 @@ pub fn get_timestamp() -> u64 {
 	time::read64()
 }
 
+#[cfg(feature = "ixgbe")]
+#[inline]
+pub fn udelay(usecs: u64) {
+	// Round up so that even sub-tick delays wait at least one tick.
+	let ticks = (get_timebase_freq() * usecs).div_ceil(1_000_000).max(1);
+	let end = get_timestamp() + ticks;
+	while get_timestamp() < end {
+		core::hint::spin_loop();
+	}
+}
+
 pub fn supports_1gib_pages() -> bool {
 	true
 }
