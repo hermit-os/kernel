@@ -24,7 +24,7 @@ pub struct FramebufferInfo {
 #[cfg(all(target_arch = "x86_64", feature = "bga"))]
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_get_framebuffer_info(info: *mut FramebufferInfo) -> c_int {
+pub unsafe extern "C" fn sys_get_bga_info(info: *mut FramebufferInfo) -> c_int {
 	if info.is_null() {
 		return -1;
 	};
@@ -45,4 +45,12 @@ pub unsafe extern "C" fn sys_get_framebuffer_info(info: *mut FramebufferInfo) ->
 		}
 		None => -1,
 	}
+}
+
+#[cfg(all(target_arch = "x86_64", feature = "bga"))]
+#[hermit_macro::system]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_set_bga_resolution(width: u16, height: u16, bpp: u16) -> c_int {
+	crate::arch::kernel::bga::set_resolution(width, height, bpp);
+	0
 }

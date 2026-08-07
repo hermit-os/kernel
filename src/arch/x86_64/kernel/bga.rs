@@ -6,7 +6,7 @@
 //! into the virtual address space. It also provides a function to retrieve the physical
 //! address of the framebuffer.
 
-use hermit_sync::OnceCell;
+use hermit_sync::{Lazy, TicketMutex};
 use memory_addresses::{PhysAddr, VirtAddr};
 use pci_types::{Bar, CommandRegister};
 use x86_64::instructions::port::{Port, PortWriteOnly};
@@ -17,7 +17,7 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::drivers::pci::PciDevice;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct BgaInfo {
 	pub framebuffer: usize,
 	pub width: u16,
@@ -25,7 +25,7 @@ pub struct BgaInfo {
 	pub bpp: u16,
 }
 
-static BGA_INFO: OnceCell<BgaInfo> = OnceCell::new();
+static BGA_INFO: Lazy<TicketMutex<Option<BgaInfo>>> = Lazy::new(|| TicketMutex::new(None));
 
 const VBE_DISPI_IOPORT_INDEX: u16 = 0x01ce;
 const VBE_DISPI_IOPORT_DATA: u16 = 0x01cf;
@@ -102,7 +102,7 @@ impl BgaRegisters {
 }
 
 pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
-	//To Do: Add support for different resolutions and BPP values
+	// Hardcoded standard values
 	let width: u16 = 640;
 	let height: u16 = 400;
 	let bpp: u16 = 32;
@@ -114,15 +114,6 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 		return;
 	}
 
-	BgaRegisters::write(VbeDispiIndex::Enable, VBE_DISPI_DISABLED);
-	BgaRegisters::write(VbeDispiIndex::Xres, width);
-	BgaRegisters::write(VbeDispiIndex::Yres, height);
-	BgaRegisters::write(VbeDispiIndex::Bpp, bpp);
-	BgaRegisters::write(
-		VbeDispiIndex::Enable,
-		VBE_DISPI_ENABLED | VBE_DISPI_LFB_ENABLED,
-	);
-
 	adapter.set_command(CommandRegister::MEMORY_ENABLE);
 
 	let (phys_addr, size) = match adapter.get_bar(0) {
@@ -131,14 +122,14 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 		_ => return,
 	};
 
-	BGA_INFO
-		.set(BgaInfo {
-			framebuffer: phys_addr as usize,
-			width,
-			height,
-			bpp,
-		})
-		.unwrap();
+	*BGA_INFO.lock() = Some(BgaInfo {
+		framebuffer: phys_addr as usize,
+		width: 0,
+		height: 0,
+		bpp: 0,
+	});
+
+	set_resolution(width, height, bpp);
 
 	assert!(
 		size.is_multiple_of(4096),
@@ -156,6 +147,24 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 	);
 }
 
-pub fn get_framebuffer_info() -> Option<&'static BgaInfo> {
-	BGA_INFO.get()
+pub fn set_resolution(width: u16, height: u16, bpp: u16) {
+	BgaRegisters::write(VbeDispiIndex::Enable, VBE_DISPI_DISABLED);
+	BgaRegisters::write(VbeDispiIndex::Xres, width);
+	BgaRegisters::write(VbeDispiIndex::Yres, height);
+	BgaRegisters::write(VbeDispiIndex::Bpp, bpp);
+	BgaRegisters::write(
+		VbeDispiIndex::Enable,
+		VBE_DISPI_ENABLED | VBE_DISPI_LFB_ENABLED,
+	);
+	if let Some(ref mut info) = *BGA_INFO.lock() {
+		info.width = width;
+		info.height = height;
+		info.bpp = bpp;
+	} else {
+		error!("BGA is not initialized");
+	}
+}
+
+pub fn get_framebuffer_info() -> Option<BgaInfo> {
+	*BGA_INFO.lock()
 }
