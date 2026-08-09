@@ -9,7 +9,7 @@ pub fn init() {
 		target_arch = "aarch64" => unsafe {
 			// FIXME: remove this once we have early page tables on ARM.
 			log::set_logger_racy(&LOGGER).unwrap();
-		}
+		},
 		_ => log::set_logger(&LOGGER).unwrap(),
 	}
 	let level_filter = option_env!("LOADER_LOG")
