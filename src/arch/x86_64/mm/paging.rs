@@ -17,7 +17,7 @@ use x86_64::structures::paging::{
 use crate::arch::kernel::processor;
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::mm::{FrameAlloc, PageRangeAllocator};
-use crate::{env, scheduler};
+use crate::scheduler;
 
 unsafe impl FrameAllocator<Size4KiB> for FrameAlloc {
 	fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
@@ -313,14 +313,13 @@ pub fn init() {
 		log_page_tables();
 	}
 
-	if env::is_uefi() {
-		make_p4_writable();
-	}
+	ensure_p4_writable();
 }
 
-fn make_p4_writable() {
-	debug!("Making P4 table writable");
-
+/// Makes the level 4 page table writable.
+///
+/// This is useful when reusing UEFI's page tables which might not be writable.
+fn ensure_p4_writable() {
 	let mut pt = unsafe { identity_mapped_page_table() };
 
 	let p4_page = {
@@ -332,6 +331,12 @@ fn make_p4_writable() {
 	let TranslateResult::Mapped { frame, flags, .. } = pt.translate(p4_page.start_address()) else {
 		unreachable!()
 	};
+
+	if flags.contains(PageTableEntryFlags::WRITABLE) {
+		return;
+	}
+
+	debug!("Making P4 table writable...");
 
 	let make_writable = || unsafe {
 		let flags = flags | PageTableEntryFlags::WRITABLE;
