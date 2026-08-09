@@ -170,6 +170,9 @@ dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
 ## Enables DNS support.
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
 
+## Enables support for ICMP echo reply (ping).
+icmp-echo-reply = ["net", "smoltcp", "smoltcp/auto-icmp-echo-reply"]
+
 ## Enables pretty-printing the network traffic to the serial device.
 net-trace = ["smoltcp?/log", "smoltcp?/verbose"]
 
