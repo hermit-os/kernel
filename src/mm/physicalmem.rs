@@ -117,22 +117,29 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		.map(|m| m.reg().unwrap().next().unwrap());
 
 	for m in all_regions {
-		let start_address = m.starting_address.expose_provenance() as u64;
-		let size = m.size.unwrap() as u64;
-		let end_address = start_address + size;
+		let mut start_addr = m.starting_address.expose_provenance();
+		let mut end_addr = start_addr + m.size.unwrap();
 
-		if end_address <= super::kernel_end_address().as_u64() && !env::is_uefi() {
+		// Don't use the zero page.
+		start_addr = start_addr.max(0x1000);
+
+		#[cfg(target_arch = "x86_64")]
+		if paging::is_recursive() {
+			start_addr = start_addr.max(super::kernel_end_address().as_usize());
+		}
+
+		if cfg!(target_arch = "aarch64") || cfg!(target_arch = "riscv64") {
+			start_addr = start_addr.max(super::kernel_end_address().as_usize());
+		}
+
+		start_addr = start_addr.align_up(0x1000);
+		end_addr = end_addr.align_down(0x1000);
+
+		if start_addr > end_addr {
 			continue;
 		}
 
-		let start_address =
-			if start_address <= super::kernel_start_address().as_u64() && !env::is_uefi() {
-				super::kernel_end_address()
-			} else {
-				VirtAddr::new(start_address)
-			};
-
-		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
+		let range = PageRange::new(start_addr, end_addr).unwrap();
 		unsafe {
 			FrameAlloc::deallocate(range);
 			map_frame_range(range);
@@ -160,13 +167,7 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		reserve(reservation);
 	}
 
-	let kernel_start = if env::is_uefi() {
-		super::kernel_start_address().as_usize()
-	} else {
-		// FIXME: Memory before the kernel causes trouble on non-uefi systems.
-		// It is unclear, which exact regions cause problems.
-		0
-	};
+	let kernel_start = super::kernel_start_address().as_usize();
 	let kernel_end = super::kernel_end_address().as_usize();
 	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
@@ -201,7 +202,7 @@ impl PageRangeExt for PageRange {
 }
 
 unsafe fn init() {
-	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
+	if cfg!(target_arch = "x86_64") && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
 		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
 		let count = usize::try_from(count).unwrap();

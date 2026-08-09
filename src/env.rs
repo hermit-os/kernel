@@ -78,10 +78,6 @@ pub fn uhyve_num_cpus() -> Option<NonZero<usize>> {
 	}
 }
 
-pub fn is_uefi() -> bool {
-	fdt().is_some_and(|fdt| fdt.root().compatible().first() == "hermit,uefi")
-}
-
 pub fn fdt_addr() -> Option<NonZero<usize>> {
 	boot_info()
 		.hardware_info

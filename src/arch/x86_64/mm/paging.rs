@@ -11,7 +11,8 @@ use x86_64::structures::paging::frame::PhysFrameRange;
 use x86_64::structures::paging::mapper::{MapToError, MappedFrame, TranslateResult, UnmapError};
 use x86_64::structures::paging::page::PageRange;
 use x86_64::structures::paging::{
-	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PhysFrame, Size4KiB, Translate,
+	FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, Size4KiB,
+	Translate,
 };
 
 use crate::arch::kernel::processor;
@@ -113,6 +114,21 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 		let level_4_table = level_4_table_ptr.as_mut().unwrap();
 		OffsetPageTable::new(level_4_table, x86_64::addr::VirtAddr::new(0x0))
 	}
+}
+
+/// Returns true if the level 4 page table has a recursive entry.
+///
+/// This is useful for compatibility with the Hermit loader version 0.5.6.
+// FIXME: Remove once we drop support for loader 0.5.6
+pub fn is_recursive() -> bool {
+	let identity_mapped_page_table = unsafe { identity_mapped_page_table() };
+	let level_4_table = identity_mapped_page_table.level_4_table();
+
+	let recursive_index = PageTableIndex::new(511);
+	let level_4_table_virt_addr = ptr::from_ref(level_4_table).addr();
+	let recursive_index_phys_addr = level_4_table[recursive_index].addr().as_u64() as usize;
+
+	level_4_table_virt_addr == recursive_index_phys_addr
 }
 
 /// Translate a virtual memory address to a physical one.
