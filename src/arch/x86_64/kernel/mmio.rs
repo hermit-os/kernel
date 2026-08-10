@@ -41,7 +41,7 @@ use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
-use crate::mm::{FrameAlloc, PageBox, PageRangeAllocator};
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -247,7 +247,7 @@ fn register_mmio(
 pub(crate) fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	without_interrupts(|| {
 		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = PageBox::new(layout).unwrap();
+		let page_range = PageAlloc::allocate(layout).unwrap();
 		let virtual_address = VirtAddr::from(page_range.start());
 
 		let linux_mmio = env::mmio();
