@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use core::{ptr, str};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
+use free_list::PageRange;
 #[cfg(any(
 	feature = "virtio-console",
 	feature = "virtio-fs",
@@ -12,14 +12,11 @@ use free_list::{PageLayout, PageRange};
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
-use memory_addresses::{PhysAddr, VirtAddr};
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 use volatile::VolatileRef;
 
 use crate::arch::mm::paging;
-use crate::arch::mm::paging::{
-	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
-};
+use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
@@ -41,7 +38,7 @@ use crate::env;
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
-use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
+use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 pub const MAGIC_VALUE: u32 = 0x7472_6976;
 
@@ -113,23 +110,11 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 	Some(mmio)
 }
 
-fn detect_device(
-	virtual_address: VirtAddr,
-	phys_addr: usize,
-) -> Option<VolatileRef<'static, DeviceRegisters>> {
+fn detect_device(phys_addr: usize) -> Option<VolatileRef<'static, DeviceRegisters>> {
 	trace!("Trying to detect MMIO device at {phys_addr:#x}...");
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
-	paging::map::<BasePageSize>(
-		virtual_address,
-		PhysAddr::from(phys_addr.align_down(BasePageSize::SIZE as usize)),
-		1,
-		flags,
-	);
-
-	let addr = virtual_address.as_usize() | (phys_addr & (BasePageSize::SIZE as usize - 1));
-	let ptr = ptr::with_exposed_provenance_mut::<u8>(addr);
+	paging::identity_map::<BasePageSize>(phys_addr.align_down(BasePageSize::SIZE as usize).into());
+	let ptr = ptr::with_exposed_provenance_mut::<u8>(phys_addr);
 
 	let mmio = unsafe { check_ptr(ptr) }?;
 
@@ -146,7 +131,6 @@ fn detect_device(
 
 fn check_linux_args(
 	linux_mmio: &'static [String],
-	virtual_address: VirtAddr,
 ) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	linux_mmio
 		.iter()
@@ -157,7 +141,7 @@ fn check_linux_args(
 				let without_prefix = v[0].trim_start_matches("0x");
 				let phys_addr = usize::from_str_radix(without_prefix, 16).unwrap();
 				let irq: u8 = v[1].parse::<u8>().unwrap();
-				detect_device(virtual_address, phys_addr).map(|mmio| (mmio, irq))
+				detect_device(phys_addr).map(|mmio| (mmio, irq))
 			} else {
 				warn!("Invalid prefix in {arg}");
 				None
@@ -165,9 +149,7 @@ fn check_linux_args(
 		})
 }
 
-fn guess_device(
-	virtual_address: VirtAddr,
-) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+fn guess_device() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	// From https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/include/hw/i386/microvm.h#L53.
 	const VIRTIO_MMIO_BASE: usize = 0xfeb0_0000;
 	// Although these values are not constants in reality, those are the values
@@ -177,7 +159,7 @@ fn guess_device(
 	const VIRTIO_NUM_TRANSPORTS: u8 = 8;
 
 	(0..VIRTIO_NUM_TRANSPORTS).flat_map(move |i| {
-		detect_device(virtual_address, VIRTIO_MMIO_BASE + usize::from(i) * 512)
+		detect_device(VIRTIO_MMIO_BASE + usize::from(i) * 512)
 			.map(|mmio| (mmio, VIRTIO_IRQ_BASE + i))
 	})
 }
@@ -246,18 +228,14 @@ fn register_mmio(
 
 pub(crate) fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	without_interrupts(|| {
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = PageAlloc::allocate(layout).unwrap();
-		let virtual_address = VirtAddr::from(page_range.start());
-
 		let linux_mmio = env::mmio();
 
 		if linux_mmio.is_empty() {
-			for (mmio, irq) in guess_device(virtual_address) {
+			for (mmio, irq) in guess_device() {
 				register_mmio(mmio, irq, handlers);
 			}
 		} else {
-			for (mmio, irq) in check_linux_args(linux_mmio, virtual_address) {
+			for (mmio, irq) in check_linux_args(linux_mmio) {
 				register_mmio(mmio, irq, handlers);
 			}
 		}
