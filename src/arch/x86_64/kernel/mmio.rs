@@ -115,27 +115,27 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 
 fn detect_device(
 	virtual_address: VirtAddr,
-	current_address: usize,
+	phys_addr: usize,
 ) -> Option<VolatileRef<'static, DeviceRegisters>> {
-	trace!("try to detect MMIO device at physical address {current_address:#X}");
+	trace!("try to detect MMIO device at physical address {phys_addr:#X}");
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 	paging::map::<BasePageSize>(
 		virtual_address,
-		PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
+		PhysAddr::from(phys_addr.align_down(BasePageSize::SIZE as usize)),
 		1,
 		flags,
 	);
 
-	let addr = virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1));
+	let addr = virtual_address.as_usize() | (phys_addr & (BasePageSize::SIZE as usize - 1));
 	let ptr = ptr::with_exposed_provenance_mut::<u8>(addr);
 
 	let mmio = unsafe { check_ptr(ptr) }?;
 
 	if cfg!(debug_assertions) {
 		let len = usize::try_from(BasePageSize::SIZE).unwrap();
-		let start = current_address.align_down(len);
+		let start = phys_addr.align_down(len);
 		let frame_range = PageRange::from_start_len(start, len).unwrap();
 
 		FrameAlloc::allocate_at(frame_range).unwrap_err();
@@ -155,9 +155,9 @@ fn check_linux_args(
 			if let Some(arg) = arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
 				let v: Vec<&str> = arg.trim().split(':').collect();
 				let without_prefix = v[0].trim_start_matches("0x");
-				let current_address = usize::from_str_radix(without_prefix, 16).unwrap();
+				let phys_addr = usize::from_str_radix(without_prefix, 16).unwrap();
 				let irq: u8 = v[1].parse::<u8>().unwrap();
-				detect_device(virtual_address, current_address).map(|mmio| (mmio, irq))
+				detect_device(virtual_address, phys_addr).map(|mmio| (mmio, irq))
 			} else {
 				warn!("Invalid prefix in {arg}");
 				None
