@@ -111,7 +111,7 @@ pub fn rsdp() -> Option<NonZero<usize>> {
 	NonZero::new(rsdp)
 }
 
-pub fn fdt_args() -> Option<&'static str> {
+pub fn bootargs() -> Option<&'static str> {
 	fdt().and_then(|fdt| fdt.chosen().bootargs())
 }
 
@@ -124,7 +124,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = fdt_args().unwrap_or_default();
+		let args = bootargs().unwrap_or_default();
 		info!("bootargs = {args}");
 		let mut words = Shlex::new(args);
 
