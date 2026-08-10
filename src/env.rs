@@ -93,7 +93,14 @@ pub fn fdt() -> Option<Fdt<'static>> {
 }
 
 /// Returns the RSDP physical address if available.
-#[cfg(all(target_arch = "x86_64", feature = "acpi"))]
+#[cfg_attr(
+	any(
+		not(feature = "acpi"),
+		target_arch = "aarch64",
+		target_arch = "riscv64"
+	),
+	expect(dead_code)
+)]
 pub fn rsdp() -> Option<NonZero<usize>> {
 	let rsdp = fdt()?
 		.find_node("/hermit,rsdp")?
