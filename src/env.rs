@@ -101,14 +101,14 @@ pub fn fdt() -> Option<Fdt<'static>> {
 	),
 	expect(dead_code)
 )]
-pub fn rsdp() -> Option<NonZero<usize>> {
-	let rsdp = fdt()?
+pub fn rsdp_addr() -> Option<NonZero<usize>> {
+	let rsdp_addr = fdt()?
 		.find_node("/hermit,rsdp")?
 		.reg()?
 		.next()?
 		.starting_address
 		.addr();
-	NonZero::new(rsdp)
+	NonZero::new(rsdp_addr)
 }
 
 pub fn bootargs() -> Option<&'static str> {
