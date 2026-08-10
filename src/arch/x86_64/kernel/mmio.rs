@@ -117,7 +117,7 @@ fn detect_device(
 	virtual_address: VirtAddr,
 	phys_addr: usize,
 ) -> Option<VolatileRef<'static, DeviceRegisters>> {
-	trace!("try to detect MMIO device at physical address {phys_addr:#X}");
+	trace!("Trying to detect MMIO device at {phys_addr:#x}...");
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
@@ -150,7 +150,7 @@ fn check_linux_args(
 ) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	linux_mmio
 		.iter()
-		.inspect(|arg| trace!("check linux parameter: {arg}"))
+		.inspect(|arg| trace!("Checking Linux parameter {arg}..."))
 		.flat_map(move |arg| {
 			if let Some(arg) = arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
 				let v: Vec<&str> = arg.trim().split(':').collect();
@@ -269,7 +269,7 @@ pub(crate) fn init_drivers(handlers: &mut InterruptHandlerMap) {
 			use crate::console::IoDevice;
 			use crate::drivers::console::VirtioUART;
 
-			info!("Switch to virtio console");
+			info!("Switching to virtio console...");
 			crate::console::CONSOLE
 				.lock()
 				.replace_device(IoDevice::Virtio(VirtioUART::new()));
