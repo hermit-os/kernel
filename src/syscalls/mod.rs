@@ -8,6 +8,7 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::{ptr, slice};
 
+use align_address::Align;
 use dirent_display::Dirent64Display;
 
 pub use self::condvar::*;
@@ -890,7 +891,11 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_image_start_addr() -> usize {
-	crate::mm::kernel_start_address().as_usize()
+	use crate::arch::mm::paging::{LargePageSize, PageSize};
+
+	elf_symbols::executable_start()
+		.addr()
+		.align_down(LargePageSize::SIZE as usize)
 }
 
 #[cfg(test)]

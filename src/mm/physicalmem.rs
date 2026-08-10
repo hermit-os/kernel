@@ -125,11 +125,11 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 
 		#[cfg(target_arch = "x86_64")]
 		if paging::is_recursive() {
-			start_addr = start_addr.max(super::kernel_end_address().as_usize());
+			start_addr = start_addr.max(elf_symbols::executable_end().addr());
 		}
 
 		if cfg!(target_arch = "aarch64") || cfg!(target_arch = "riscv64") {
-			start_addr = start_addr.max(super::kernel_end_address().as_usize());
+			start_addr = start_addr.max(elf_symbols::executable_end().addr());
 		}
 
 		start_addr = start_addr.align_up(0x1000);
@@ -167,9 +167,9 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		reserve(reservation);
 	}
 
-	let kernel_start = super::kernel_start_address().as_usize();
-	let kernel_end = super::kernel_end_address().as_usize();
-	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
+	let kernel_start = elf_symbols::executable_start().addr();
+	let kernel_end = elf_symbols::executable_end().addr();
+	let kernel_region = PageRange::containing(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
 
 	let fdt_start = env::fdt_addr().unwrap().get();
