@@ -47,11 +47,10 @@ mod virtualmem;
 
 use core::alloc::Layout;
 use core::mem::MaybeUninit;
-use core::ops::Range;
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
-use hermit_sync::{Lazy, RawInterruptTicketMutex};
+use hermit_sync::RawInterruptTicketMutex;
 pub use memory_addresses::{PhysAddr, VirtAddr};
 #[cfg(target_os = "none")]
 use talc::TalcLock;
@@ -70,26 +69,6 @@ use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
 #[cfg(target_os = "none")]
 #[global_allocator]
 pub(crate) static ALLOCATOR: TalcLock<RawInterruptTicketMutex, Manual> = TalcLock::new(Manual);
-
-/// Physical and virtual address range of the 2 MiB pages that map the kernel.
-static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
-	if cfg!(target_os = "none") {
-		// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
-		let start = VirtAddr::from_ptr(elf_symbols::executable_start());
-		let end = VirtAddr::from_ptr(elf_symbols::executable_end());
-		start.align_down(LargePageSize::SIZE)..end.align_up(LargePageSize::SIZE)
-	} else {
-		VirtAddr::zero()..VirtAddr::zero()
-	}
-});
-
-pub(crate) fn kernel_start_address() -> VirtAddr {
-	KERNEL_ADDR_RANGE.start
-}
-
-pub(crate) fn kernel_end_address() -> VirtAddr {
-	KERNEL_ADDR_RANGE.end
-}
 
 #[cfg(target_os = "none")]
 pub(crate) fn claim_initial_heap() {
@@ -114,19 +93,12 @@ pub(crate) fn claim_initial_heap() {
 pub(crate) fn init() {
 	use crate::arch::mm::paging;
 
-	Lazy::force(&KERNEL_ADDR_RANGE);
-
 	unsafe {
 		arch::mm::init();
 	}
 
 	let total_mem = physicalmem::total_memory_size();
-	let kernel_addr_range = KERNEL_ADDR_RANGE.clone();
 	info!("Total memory size: {} MiB", total_mem >> 20);
-	info!(
-		"Kernel region: {:p}..{:p}",
-		kernel_addr_range.start, kernel_addr_range.end
-	);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
