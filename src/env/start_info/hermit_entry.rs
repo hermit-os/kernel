@@ -19,12 +19,12 @@ pub fn start_info() -> &'static impl super::UhyveStartInfo {
 	START_INFO.get().unwrap()
 }
 
-pub fn set_start_info(raw_boot_info: RawBootInfo) {
+pub unsafe fn set_start_info(raw_boot_info: RawBootInfo) {
 	let start_info = BootInfo::from(raw_boot_info);
 	START_INFO.set(start_info).unwrap();
 }
 
-impl StartInfo for BootInfo {
+unsafe impl StartInfo for BootInfo {
 	fn display(&self) -> impl fmt::Display {
 		fmt::from_fn(|f| {
 			if let Some(fdt) = self.fdt() {
@@ -51,7 +51,7 @@ impl StartInfo for BootInfo {
 	}
 }
 
-impl FdtStartInfo for BootInfo {
+unsafe impl FdtStartInfo for BootInfo {
 	fn fdt(&self) -> Option<Fdt<'_>> {
 		let fdt_addr = self.fdt_addr()?;
 		let ptr = ptr::with_exposed_provenance(fdt_addr.get());
