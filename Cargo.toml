@@ -278,7 +278,7 @@ document-features = ["dep:document-features"]
 ## Enables support for hermit-entry boot info.
 ##
 ## This is automatically enabled by the `loader` and `uhyve` features.
-hermit-entry = ["dep:hermit-entry"]
+hermit-entry = ["dep:hermit-entry", "dep:fdt"]
 
 ## Enables the network backend.
 ##
@@ -341,7 +341,6 @@ embedded-io = { version = "0.7", features = ["alloc"] }
 endian-num = { version = "0.2", optional = true, features = ["linux-types"] }
 enum_dispatch = "0.3"
 env_filter = { version = "2.0.0", default-features = false }
-fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
 hashbrown = { version = "0.17", default-features = false }
@@ -379,6 +378,7 @@ features = [
 ]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
+fdt = { version = "0.1", features = ["pretty-printing"], optional = true }
 free-list = { version = "0.3", features = ["x86_64"] }
 raw-cpuid = "11"
 uart_16550 = { version = "0.6", features = ["embedded-io"] }
@@ -392,12 +392,14 @@ memory_addresses = { version = "0.4", default-features = false, features = [
 aarch64-cpu = "11"
 arm-gic = { version = "0.8" }
 arm-pl011-uart = { version = "0.5", default-features = false }
+fdt = { version = "0.1", features = ["pretty-printing"] }
 semihosting = { version = "0.1", optional = true }
 memory_addresses = { version = "0.4", default-features = false, features = [
 	"aarch64",
 ] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
+fdt = { version = "0.1", features = ["pretty-printing"] }
 riscv = "0.16"
 sbi-rt = "0.0.4"
 semihosting = { version = "0.1", optional = true }
