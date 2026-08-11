@@ -9,7 +9,7 @@ use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 
 use endian_num::{le16, le32, le64};
-use pci_types::{Bar, CommandRegister, MAX_BARS};
+use pci_types::CommandRegister;
 use smoltcp::phy::DeviceCapabilities;
 use thiserror::Error;
 use volatile::access::{NoAccess, ReadOnly, ReadWrite};
@@ -746,19 +746,15 @@ pub(crate) fn init_device(
 	handlers: &mut InterruptHandlerMap,
 ) -> Result<RTL8139Driver, DriverError> {
 	let irq = device.get_irq().unwrap();
-	let mut regs = None;
-
-	for i in 0..MAX_BARS {
-		let Some(Bar::Memory32 { .. }) = device.get_bar(i.try_into().unwrap()) else {
-			continue;
-		};
-
-		let (addr, _size) = device.memory_map_bar(i.try_into().unwrap(), true).unwrap();
-
-		regs = Some(unsafe { VolatileRef::new(NonNull::new(addr.as_mut_ptr()).unwrap()) });
-	}
-
-	let mut regs = regs.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?;
+	let mut regs = device
+		.memory_map_bars(true)
+		.into_iter()
+		.find_map(|bar| {
+			bar.map(|(addr, _size)| unsafe {
+				VolatileRef::new(NonNull::new(addr.as_mut_ptr()).unwrap())
+			})
+		})
+		.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?;
 
 	debug!("Found RTL8139 at IO {regs:?} (irq {irq})");
 
