@@ -386,10 +386,7 @@ free-list = { version = "0.3", features = ["x86_64"] }
 raw-cpuid = "11"
 uart_16550 = { version = "0.6", features = ["embedded-io"] }
 x86_64 = { version = "0.15", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
-memory_addresses = { version = "0.4", default-features = false, features = [
-	"x86_64",
-	"conv-x86_64",
-] }
+memory_addresses = { version = "0.4", default-features = false, features = ["x86_64", "conv-x86_64"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
@@ -397,9 +394,7 @@ arm-gic = { version = "0.8" }
 arm-pl011-uart = { version = "0.5", default-features = false }
 fdt = { version = "0.1", features = ["pretty-printing"] }
 semihosting = { version = "0.1", optional = true }
-memory_addresses = { version = "0.4", default-features = false, features = [
-	"aarch64",
-] }
+memory_addresses = { version = "0.4", default-features = false, features = ["aarch64"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 fdt = { version = "0.1", features = ["pretty-printing"] }
@@ -408,9 +403,7 @@ sbi-rt = "0.0.4"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
 trapframe = "0.11"
-memory_addresses = { version = "0.4", default-features = false, features = [
-	"riscv64",
-] }
+memory_addresses = { version = "0.4", default-features = false, features = ["riscv64"] }
 volatile = { version = "0.6", features = ["derive"] }
 
 [dev-dependencies]
