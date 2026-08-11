@@ -12,7 +12,6 @@ use volatile::VolatileRef;
 use crate::arch::kernel::interrupts::init_plic;
 #[cfg(all(
 	any(
-		feature = "virtio-console",
 		feature = "virtio-fs",
 		feature = "virtio-rng",
 		feature = "virtio-vsock",
@@ -22,7 +21,6 @@ use crate::arch::kernel::interrupts::init_plic;
 use crate::arch::kernel::mmio::MmioDriver;
 #[cfg(all(
 	any(
-		feature = "virtio-console",
 		feature = "virtio-fs",
 		feature = "virtio-rng",
 		feature = "virtio-vsock",
@@ -31,17 +29,9 @@ use crate::arch::kernel::mmio::MmioDriver;
 ))]
 use crate::arch::kernel::mmio::register_driver;
 use crate::arch::mm::paging::{self, PageSize};
-#[cfg(feature = "virtio-console")]
-use crate::console::IoDevice;
 use crate::drivers::InterruptHandlerMap;
-#[cfg(feature = "virtio-console")]
-use crate::drivers::console::VirtioUART;
-#[cfg(all(feature = "virtio-console", not(feature = "pci")))]
-use crate::drivers::mmio::get_console_driver;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use crate::drivers::net::gem;
-#[cfg(all(feature = "virtio-console", feature = "pci"))]
-use crate::drivers::pci::get_console_driver;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(all(
@@ -262,11 +252,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 				match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
 					#[cfg(feature = "virtio-console")]
-					Ok(VirtioDriver::Console(drv)) => {
-						register_driver(MmioDriver::VirtioConsole(
-							hermit_sync::InterruptSpinMutex::new(*drv),
-						));
-					}
+					Ok(VirtioDriver::Console(drv)) => crate::console::switch_to_virtio(*drv),
 					#[cfg(feature = "virtio-fs")]
 					Ok(VirtioDriver::Fs(drv)) => {
 						register_driver(MmioDriver::VirtioFs(
@@ -297,14 +283,4 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 	#[cfg(all(any(feature = "virtio", feature = "gem-net"), not(feature = "pci")))]
 	super::mmio::MMIO_DRIVERS.finalize();
-
-	#[cfg(feature = "virtio-console")]
-	{
-		if get_console_driver().is_some() {
-			info!("Switch to virtio console");
-			crate::console::CONSOLE
-				.lock()
-				.replace_device(IoDevice::Virtio(VirtioUART::new()));
-		}
-	}
 }
