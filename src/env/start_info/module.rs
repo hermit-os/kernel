@@ -25,7 +25,7 @@ impl Module {
 	/// # Safety
 	///
 	/// The physical memory must be identity-mapped and valid for creating a slice.
-	#[expect(dead_code)]
+	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	pub unsafe fn new(phys_addr: usize, len: usize) -> Self {
 		Self { phys_addr, len }
 	}
