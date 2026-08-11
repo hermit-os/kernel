@@ -173,7 +173,12 @@ tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 
 ## Enables DHCPv4 support.
-dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
+dhcpv4 = [
+	"net",
+	"smoltcp",
+	"smoltcp/proto-dhcpv4",
+	"smoltcp/socket-dhcpv4",
+]
 
 ## Enables DNS support.
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
@@ -291,7 +296,11 @@ net = []
 ## Enables the virtio driver backend.
 ##
 ## This is automatically enabled by any virtio driver.
-virtio = ["dep:virtio", "dep:mem-barrier", "volatile/derive"]
+virtio = [
+	"dep:virtio",
+	"dep:mem-barrier",
+	"volatile/derive",
+]
 
 ## Enables a warning that this libhermit.a was prebuilt.
 warn-prebuilt = []
@@ -417,13 +426,8 @@ built = { version = "0.8", features = ["git2", "chrono"] }
 llvm-tools = "0.1"
 
 [workspace]
-members = [
-	"hermit-macro",
-	"xtask",
-]
-exclude = [
-	"hermit-builtins",
-]
+members = ["hermit-macro", "xtask"]
+exclude = ["hermit-builtins"]
 
 [workspace.lints.rust]
 # Lint groups
@@ -433,7 +437,7 @@ rust_2018_idioms = "warn"
 # Lints
 redundant_imports = "warn"
 single_use_lifetimes = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(careful)"] }
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
 
