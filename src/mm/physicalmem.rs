@@ -14,7 +14,7 @@ use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize};
 #[cfg(feature = "hermit-entry")]
-use crate::env::{self, FdtStartInfo, StartInfo};
+use crate::env::{self, FdtStartInfo, MemmapType, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
 #[cfg(feature = "hermit-entry")]
@@ -116,17 +116,13 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 unsafe fn detect_from_fdt() {
 	let fdt = env::start_info().fdt().unwrap();
 
-	let all_regions = fdt
-		.find_all_nodes("/memory")
-		.map(|m| m.reg().unwrap().next().unwrap());
-	assert_ne!(all_regions.count(), 0);
-	let all_regions = fdt
-		.find_all_nodes("/memory")
-		.map(|m| m.reg().unwrap().next().unwrap());
+	for memmap_entry in env::start_info().memmap() {
+		if memmap_entry.ty != MemmapType::Ram {
+			continue;
+		}
 
-	for m in all_regions {
-		let mut start_addr = m.starting_address.expose_provenance();
-		let mut end_addr = start_addr + m.size.unwrap();
+		let mut start_addr = memmap_entry.phys_addr;
+		let mut end_addr = start_addr + memmap_entry.len;
 
 		// Don't use the zero page.
 		start_addr = start_addr.max(0x1000);
