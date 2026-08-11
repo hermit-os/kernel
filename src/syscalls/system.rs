@@ -33,7 +33,9 @@ pub unsafe extern "C" fn sys_get_bga_info(info: *mut FramebufferInfo) -> c_int {
 	match bga_info {
 		Some(bga_info) => {
 			let info_c = FramebufferInfo {
-				framebuffer: core::ptr::with_exposed_provenance_mut(bga_info.framebuffer),
+				framebuffer: core::ptr::with_exposed_provenance_mut(
+					bga_info.framebuffer.as_usize(),
+				),
 				width: u32::from(bga_info.width),
 				height: u32::from(bga_info.height),
 				bpp: u32::from(bga_info.bpp),

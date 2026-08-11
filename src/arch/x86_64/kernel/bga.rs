@@ -19,7 +19,7 @@ use crate::drivers::pci::PciDevice;
 
 #[derive(Debug, Clone, Copy)]
 pub struct BgaInfo {
-	pub framebuffer: usize,
+	pub framebuffer: PhysAddr,
 	pub width: u16,
 	pub height: u16,
 	pub bpp: u16,
@@ -123,7 +123,7 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 	};
 
 	*BGA_INFO.lock() = Some(BgaInfo {
-		framebuffer: phys_addr as usize,
+		framebuffer: PhysAddr::from(phys_addr),
 		width: 0,
 		height: 0,
 		bpp: 0,
