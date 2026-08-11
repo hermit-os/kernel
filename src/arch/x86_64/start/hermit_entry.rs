@@ -76,7 +76,9 @@ unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_id: u
 	}
 
 	if cpu_id == 0 {
-		env::set_start_info(*boot_info.unwrap());
+		unsafe {
+			env::set_start_info(*boot_info.unwrap());
+		}
 
 		crate::rt::boot_processor_main()
 	} else {

@@ -12,7 +12,7 @@ pub fn start_info() -> &'static impl super::FdtStartInfo {
 	&panic!()
 }
 
-impl super::StartInfo for ! {
+unsafe impl super::StartInfo for ! {
 	fn bootargs(&self) -> Option<&str> {
 		*self
 	}
@@ -23,7 +23,7 @@ impl super::StartInfo for ! {
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
-impl super::FdtStartInfo for ! {
+unsafe impl super::FdtStartInfo for ! {
 	fn fdt(&self) -> Option<fdt::Fdt<'_>> {
 		*self
 	}

@@ -13,7 +13,7 @@ use core::num::NonZero;
 #[cfg(not(feature = "hermit-entry"))]
 pub use unsupported::*;
 
-pub trait StartInfo {
+pub unsafe trait StartInfo {
 	fn display(&self) -> impl fmt::Display {
 		fmt::from_fn(|f| f.write_str("StartInfo::display not implemented"))
 	}
@@ -40,7 +40,7 @@ pub trait StartInfo {
 	target_arch = "aarch64",
 	target_arch = "riscv64"
 ))]
-pub trait FdtStartInfo: StartInfo {
+pub unsafe trait FdtStartInfo: StartInfo {
 	fn fdt(&self) -> Option<fdt::Fdt<'_>> {
 		None
 	}
