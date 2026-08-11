@@ -10,7 +10,7 @@ use crate::arch::kernel::{
 	CPU_ONLINE, CURRENT_BOOT_ID, CURRENT_STACK_ADDRESS, HART_MASK, NUM_CPUS,
 };
 use crate::config::KERNEL_STACK_SIZE;
-use crate::env;
+use crate::env::{self, FdtStartInfo};
 
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
@@ -54,7 +54,7 @@ unsafe extern "C" fn pre_init(hart_id: usize, boot_info: Option<&'static RawBoot
 		crate::logging::KERNEL_LOGGER.set_time(true);
 
 		env::set_start_info(*boot_info.unwrap());
-		let fdt = env::fdt().unwrap();
+		let fdt = env::start_info().fdt().unwrap();
 		// Init HART_MASK
 		let mut hart_mask = 0;
 		for cpu in fdt.cpus() {

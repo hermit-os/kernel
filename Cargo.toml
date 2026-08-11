@@ -42,6 +42,7 @@ default = [
 	"dhcpv4",
 	"fsgsbase",
 	"kernel-stack",
+	"loader",
 	"pci-ids",
 	"pci",
 	"smp",
@@ -81,12 +82,19 @@ newlib = []
 
 #! ### Platform Features
 
+## Enables [Hermit loader] support.
+##
+## The Hermit loader is a bootloader that adapts to multiple platforms.
+##
+## [Hermit loader]: https://github.com/hermit-os/loader
+loader = ["hermit-entry"]
+
 ## Enables [Uhyve] support.
 ##
 ## Uhyve is a Hermit-specific _virtual machine monitor_ (VMM).
 ##
 ## [Uhyve]: https://github.com/hermit-os/uhyve
-uhyve = ["dep:uhyve-interface"]
+uhyve = ["hermit-entry", "dep:uhyve-interface"]
 
 #! ### Hardware Features
 #!
@@ -267,6 +275,11 @@ strace = []
 ## Documents the Cargo features in the crate docs.
 document-features = ["dep:document-features"]
 
+## Enables support for hermit-entry boot info.
+##
+## This is automatically enabled by the `loader` and `uhyve` features.
+hermit-entry = ["dep:hermit-entry"]
+
 ## Enables the network backend.
 ##
 ## This is automatically enabled by any network feature.
@@ -333,7 +346,7 @@ free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
 hashbrown = { version = "0.17", default-features = false }
 heapless = "0.9"
-hermit-entry = { version = "0.10.10", features = ["kernel"] }
+hermit-entry = { version = "0.10", features = ["kernel"], optional = true }
 hermit-sync = "0.1"
 log = { version = "0.4", default-features = false }
 mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }

@@ -354,8 +354,11 @@ impl CpuFrequency {
 		{
 			use core::num::NonZero;
 
+			use crate::env::FdtStartInfo;
+
 			fn mhz_from_fdt() -> Option<NonZero<u16>> {
-				let khz = env::fdt()?
+				let khz = env::start_info()
+					.fdt()?
 					.find_node("/hermit,tsc")?
 					.property("khz")?
 					.as_usize()?;

@@ -22,7 +22,7 @@ use crate::arch::kernel::core_local::core_id;
 pub use crate::arch::kernel::devicetree::init_drivers;
 use crate::arch::kernel::processor::lsb;
 use crate::config::KERNEL_STACK_SIZE;
-use crate::env;
+use crate::env::{self, FdtStartInfo};
 use crate::init_cell::InitCell;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
@@ -35,6 +35,7 @@ pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 pub(crate) static CURRENT_BOOT_ID: AtomicU32 = AtomicU32::new(0);
 pub(crate) static CURRENT_STACK_ADDRESS: AtomicPtr<()> = AtomicPtr::new(ptr::null_mut());
 pub(crate) static HART_MASK: AtomicU64 = AtomicU64::new(0);
+#[cfg_attr(not(any(feature = "hermit-entry", feature = "smp")), expect(dead_code))]
 pub(crate) static NUM_CPUS: AtomicU32 = AtomicU32::new(0);
 
 // FUNCTIONS
@@ -59,7 +60,7 @@ pub fn get_hart_mask() -> u64 {
 }
 
 pub fn get_timebase_freq() -> u64 {
-	let fdt = env::fdt().unwrap();
+	let fdt = env::start_info().fdt().unwrap();
 
 	// Get timebase-freq
 	let cpus_node = fdt
@@ -148,9 +149,12 @@ pub fn boot_next_processor() {
 	// TODO: Old: Changing cpu_online will cause uhyve to start the next processor
 	CPU_ONLINE.fetch_add(1, Ordering::Release);
 
+	#[cfg(feature = "uhyve")]
+	use env::UhyveStartInfo;
+
 	#[allow(clippy::needless_return)]
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

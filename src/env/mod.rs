@@ -42,7 +42,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
-		let args = bootargs().unwrap_or_default();
+		let args = start_info().bootargs().unwrap_or_default();
 		info!("bootargs = {args}");
 		let mut words = Shlex::new(args);
 

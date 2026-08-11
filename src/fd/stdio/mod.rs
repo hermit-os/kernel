@@ -18,7 +18,10 @@ use crate::fd::{Fd, RawFd, STDERR_FILENO, STDIN_FILENO, STDOUT_FILENO};
 
 pub(crate) fn setup(fds: &mut HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>) {
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	use crate::env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if crate::env::start_info().is_uhyve() {
 		let stdin = Arc::new(async_lock::RwLock::new(UhyveStdin::new().into()));
 		let stdout = Arc::new(async_lock::RwLock::new(UhyveStdout::new().into()));
 		let stderr = Arc::new(async_lock::RwLock::new(UhyveStderr::new().into()));

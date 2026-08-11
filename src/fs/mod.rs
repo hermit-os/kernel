@@ -332,7 +332,10 @@ pub(crate) fn init() {
 	virtio_fs::init();
 
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	use crate::env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if crate::env::start_info().is_uhyve() {
 		uhyve::init();
 	}
 

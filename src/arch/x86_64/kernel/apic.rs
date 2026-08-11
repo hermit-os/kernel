@@ -497,7 +497,10 @@ fn default_apic() -> PhysAddr {
 
 fn apic_addr() -> PhysAddr {
 	#[cfg(feature = "uhyve")]
-	if crate::env::is_uhyve() {
+	use crate::env::{self, UhyveStartInfo};
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		return default_apic();
 	}
 
