@@ -113,15 +113,13 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 }
 
 #[cfg(feature = "hermit-entry")]
-unsafe fn detect_from_fdt() -> Result<(), ()> {
-	let fdt = env::start_info().fdt().ok_or(())?;
+unsafe fn detect_from_fdt() {
+	let fdt = env::start_info().fdt().unwrap();
 
 	let all_regions = fdt
 		.find_all_nodes("/memory")
 		.map(|m| m.reg().unwrap().next().unwrap());
-	if all_regions.count() == 0 {
-		return Err(());
-	}
+	assert_ne!(all_regions.count(), 0);
 	let all_regions = fdt
 		.find_all_nodes("/memory")
 		.map(|m| m.reg().unwrap().next().unwrap());
@@ -190,8 +188,6 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	for module in env::start_info().modules() {
 		reserve(module.phys_frame_range());
 	}
-
-	Ok(())
 }
 
 unsafe fn init() {
@@ -204,6 +200,6 @@ unsafe fn init() {
 
 	#[cfg(feature = "hermit-entry")]
 	unsafe {
-		detect_from_fdt().unwrap();
+		detect_from_fdt();
 	}
 }
