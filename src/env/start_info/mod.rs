@@ -9,12 +9,22 @@ cfg_select! {
 	}
 }
 
-use core::fmt;
+mod module;
+
 use core::num::NonZero;
+use core::{fmt, iter};
+
+pub use self::module::Module;
 
 pub unsafe trait StartInfo {
 	fn display(&self) -> impl fmt::Display {
 		fmt::from_fn(|f| f.write_str("StartInfo::display not implemented"))
+	}
+
+	/// Returns the modules passed to the kernel at start.
+	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
+	fn modules(&self) -> impl Iterator<Item = Module> {
+		iter::empty()
 	}
 
 	fn bootargs(&self) -> Option<&str> {

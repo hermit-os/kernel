@@ -14,7 +14,7 @@ use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize};
 #[cfg(feature = "hermit-entry")]
-use crate::env::{self, FdtStartInfo};
+use crate::env::{self, FdtStartInfo, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
 #[cfg(feature = "hermit-entry")]
@@ -186,6 +186,10 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let fdt_end = fdt_start + fdt.total_size();
 	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
 	reserve(fdt_region);
+
+	for module in env::start_info().modules() {
+		reserve(module.phys_frame_range());
+	}
 
 	Ok(())
 }
