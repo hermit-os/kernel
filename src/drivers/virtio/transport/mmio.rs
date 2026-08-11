@@ -23,6 +23,8 @@ use crate::drivers::error::DriverError;
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::VirtioRngDriver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
@@ -328,6 +330,8 @@ pub(crate) enum VirtioDriver {
 	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(feature = "virtio-net")]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
+	#[cfg(feature = "virtio-rng")]
+	Rng(alloc::boxed::Box<VirtioRngDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 }
@@ -388,6 +392,17 @@ pub(crate) fn init_device(
 			}
 			Err(virtio_error) => {
 				error!("Virtio network driver could not be initialized with device");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
+		#[cfg(feature = "virtio-rng")]
+		virtio::Id::Rng => match init::<VirtioRngDriver>(registers, irq_no, handlers) {
+			Ok(virt_rng_drv) => {
+				info!("Virtio rng driver initialized.");
+				Ok(VirtioDriver::Rng(alloc::boxed::Box::new(virt_rng_drv)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio rng driver could not be initialized with device");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},

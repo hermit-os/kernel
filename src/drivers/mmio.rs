@@ -2,5 +2,7 @@
 pub(crate) use crate::arch::kernel::mmio::get_console_driver;
 #[cfg(feature = "virtio-fs")]
 pub(crate) use crate::arch::kernel::mmio::get_filesystem_driver;
+#[cfg(feature = "virtio-rng")]
+pub(crate) use crate::arch::kernel::mmio::get_rng_driver;
 #[cfg(feature = "virtio-vsock")]
 pub(crate) use crate::arch::kernel::mmio::get_vsock_driver;

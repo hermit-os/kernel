@@ -285,6 +285,8 @@ pub mod error {
 	pub use crate::drivers::net::virtio::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
+	#[cfg(feature = "virtio-rng")]
+	pub use crate::drivers::rng::error::VirtioRngError;
 	#[cfg(feature = "virtio-vsock")]
 	pub use crate::drivers::vsock::error::VirtioVsockError;
 
@@ -337,5 +339,9 @@ pub mod error {
 		#[cfg(feature = "virtio-console")]
 		#[error(transparent)]
 		ConsoleDriver(#[from] VirtioConsoleError),
+
+		#[cfg(feature = "virtio-rng")]
+		#[error(transparent)]
+		RngDriver(#[from] VirtioRngError),
 	}
 }

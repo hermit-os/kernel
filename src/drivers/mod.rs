@@ -10,6 +10,8 @@ pub mod mmio;
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
+#[cfg(feature = "virtio-rng")]
+pub mod rng;
 #[cfg(feature = "virtio")]
 pub mod virtio;
 #[cfg(feature = "virtio-vsock")]

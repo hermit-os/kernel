@@ -14,6 +14,7 @@ use crate::arch::kernel::interrupts::init_plic;
 	any(
 		feature = "virtio-console",
 		feature = "virtio-fs",
+		feature = "virtio-rng",
 		feature = "virtio-vsock",
 	),
 	not(feature = "pci"),
@@ -23,6 +24,7 @@ use crate::arch::kernel::mmio::MmioDriver;
 	any(
 		feature = "virtio-console",
 		feature = "virtio-fs",
+		feature = "virtio-rng",
 		feature = "virtio-vsock",
 	),
 	not(feature = "pci")
@@ -47,6 +49,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 		feature = "virtio-console",
 		feature = "virtio-fs",
 		feature = "virtio-net",
+		feature = "virtio-rng",
 		feature = "virtio-vsock",
 	),
 	not(feature = "pci"),
@@ -273,6 +276,12 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					#[cfg(feature = "virtio-net")]
 					Ok(VirtioDriver::Net(drv)) => {
 						*NETWORK_DEVICE.lock() = Some(*drv);
+					}
+					#[cfg(feature = "virtio-rng")]
+					Ok(VirtioDriver::Rng(drv)) => {
+						register_driver(MmioDriver::VirtioRng(
+							hermit_sync::InterruptSpinMutex::new(*drv),
+						));
 					}
 					#[cfg(feature = "virtio-vsock")]
 					Ok(VirtioDriver::Vsock(drv)) => {
