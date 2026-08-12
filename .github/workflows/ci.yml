@@ -42,12 +42,12 @@ jobs:
       - run: rustup component add clippy
       - name: cargo clippy
         run: |
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock --target x86_64-unknown-none --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock --target x86_64-unknown-none --no-default-features
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock --target aarch64-unknown-none-softfloat --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock --target aarch64-unknown-none-softfloat --no-default-features
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock --target riscv64gc-unknown-none-elf --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock --target riscv64gc-unknown-none-elf --no-default-features
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target x86_64-unknown-none --all-targets
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target x86_64-unknown-none --no-default-features
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target aarch64-unknown-none-softfloat --all-targets
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target aarch64-unknown-none-softfloat --no-default-features
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target riscv64gc-unknown-none-elf --all-targets
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target riscv64gc-unknown-none-elf --no-default-features
       - name: cargo clippy (hermit-builtins)
         run: cargo clippy --target x86_64-unknown-hermit -Zbuild-std=core
         working-directory: hermit-builtins
