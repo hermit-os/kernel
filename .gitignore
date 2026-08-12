@@ -1,5 +1,5 @@
 /hermit-loader-*
-/opensbi-*-rv-bin
+/opensbi*
 /shared
 /target
 /vhostqemu.pid
