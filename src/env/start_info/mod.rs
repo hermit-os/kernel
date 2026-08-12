@@ -1,17 +1,16 @@
-#[cfg(feature = "hermit-entry")]
-mod hermit_entry;
-
-#[cfg(feature = "hermit-entry")]
-pub use hermit_entry::*;
-
-#[cfg(not(feature = "hermit-entry"))]
-mod unsupported;
+cfg_select! {
+	feature = "hermit-entry" => {
+		mod hermit_entry;
+		pub use self::hermit_entry::*;
+	}
+	_ => {
+		mod unsupported;
+		pub use self::unsupported::*;
+	}
+}
 
 use core::fmt;
 use core::num::NonZero;
-
-#[cfg(not(feature = "hermit-entry"))]
-pub use unsupported::*;
 
 pub unsafe trait StartInfo {
 	fn display(&self) -> impl fmt::Display {
