@@ -417,7 +417,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 /// of structs of `PollFd`.
 pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	let result = block_on(poll_fds(fds), timeout);
-	if let Err(ref e) = result
+	if let Err(e) = &result
 		&& timeout.is_some()
 	{
 		// A return value of zero indicates that the system call timed out

@@ -38,10 +38,10 @@ impl WakerRegistration {
 
 	/// Register a waker. Overwrites the previous waker, if any.
 	pub fn register(&mut self, w: &Waker) {
-		match self.waker {
+		match &self.waker {
 			// Optimization: If both the old and new Wakers wake the same task, we can simply
 			// keep the old waker, skipping the clone.
-			Some(ref w2) if (w2.will_wake(w)) => {}
+			Some(w2) if (w2.will_wake(w)) => {}
 			// In all other cases
 			// - we have no waker registered
 			// - we have a waker registered but it's for a different task.

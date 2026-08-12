@@ -262,7 +262,7 @@ impl VirtioConsoleDriver {
 			not(all(feature = "pci", target_arch = "x86_64")),
 			expect(irrefutable_let_patterns)
 		)]
-		let InterruptCapability::IsrStatus(ref mut isr_stat) = self.caps_coll.int_cap else {
+		let InterruptCapability::IsrStatus(isr_stat) = &mut self.caps_coll.int_cap else {
 			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
 		};
 
