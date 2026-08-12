@@ -42,10 +42,14 @@ pub unsafe trait StartInfo {
 ))]
 pub unsafe trait FdtStartInfo: StartInfo {
 	fn fdt(&self) -> Option<fdt::Fdt<'_>> {
-		None
+		let phys_addr = self.fdt_addr()?.get();
+		// We require this to be identity-mapped at boot time for now.
+		let virt_addr = phys_addr;
+		let ptr = core::ptr::with_exposed_provenance(virt_addr);
+		let fdt = unsafe { fdt::Fdt::from_ptr(ptr).ok()? };
+		Some(fdt)
 	}
 
-	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	fn fdt_addr(&self) -> Option<NonZero<usize>> {
 		None
 	}

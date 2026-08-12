@@ -1,7 +1,6 @@
+use core::fmt;
 use core::num::NonZero;
-use core::{fmt, ptr};
 
-use fdt::Fdt;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
@@ -52,13 +51,6 @@ unsafe impl StartInfo for BootInfo {
 }
 
 unsafe impl FdtStartInfo for BootInfo {
-	fn fdt(&self) -> Option<Fdt<'_>> {
-		let fdt_addr = self.fdt_addr()?;
-		let ptr = ptr::with_exposed_provenance(fdt_addr.get());
-		let fdt = unsafe { Fdt::from_ptr(ptr).unwrap() };
-		Some(fdt)
-	}
-
 	fn fdt_addr(&self) -> Option<NonZero<usize>> {
 		let fdt_addr = self.hardware_info.device_tree?;
 		let fdt_addr = NonZero::new(fdt_addr.get() as usize).unwrap();
