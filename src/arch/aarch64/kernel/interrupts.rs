@@ -263,6 +263,33 @@ pub fn wakeup_core(core_id: CoreId) {
 	.unwrap();
 }
 
+/// Returns the `(type, irq, flags)` of the non-secure timer.
+///
+/// For details, see [Linux Devicetree bindings - ARM architected timer].
+///
+/// [Linux Devicetree bindings - ARM architected timer]: https://www.kernel.org/doc/Documentation/devicetree/bindings/arm/arch_timer.txt
+fn timer_irq() -> Option<(u32, u32, u32)> {
+	let fdt = env::start_info().fdt().unwrap();
+	let timer_node = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"])?;
+	let irq_slice = timer_node.property("interrupts").unwrap().value;
+
+	// secure timer
+	let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+	let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+	let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
+
+	// non-secure timer
+	let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
+	let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
+	let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
+
+	let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+	let irq = u32::from_be_bytes(irq.try_into().unwrap());
+	let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+
+	Some((irqtype, irq, irqflags))
+}
+
 pub(crate) fn init() {
 	info!("Initialize generic interrupt controller");
 
@@ -332,20 +359,7 @@ pub(crate) fn init() {
 	gic.setup(cpu_id);
 	GicCpuInterface::set_priority_mask(0xff);
 
-	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
-		let irq_slice = timer_node.property("interrupts").unwrap().value;
-
-		/* Secure Phys IRQ */
-		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		/* Non-secure Phys IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-		let irq = u32::from_be_bytes(irq.try_into().unwrap());
-		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+	if let Some((irqtype, irq, irqflags)) = timer_irq() {
 		unsafe {
 			TIMER_INTERRUPT = irq;
 		}
@@ -445,22 +459,7 @@ pub fn init_cpu() {
 	GicCpuInterface::enable_group1(true);
 	GicCpuInterface::set_priority_mask(0xff);
 
-	let fdt = env::start_info().fdt().unwrap();
-
-	if let Some(timer_node) = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"]) {
-		let irq_slice = timer_node.property("interrupts").unwrap().value;
-		/* Secure Phys IRQ */
-		let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		/* Non-secure Phys IRQ */
-		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
-		let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-		let irq = u32::from_be_bytes(irq.try_into().unwrap());
-		let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
-
+	if let Some((irqtype, irq, irqflags)) = timer_irq() {
 		// enable timer interrupt
 		let timer_irqid = if irqtype == 1 {
 			IntId::ppi(irq)
