@@ -117,7 +117,7 @@ fn start_endpoint() -> u16 {
 
 	unsafe {
 		asm!(
-			"mrs {value}, cntpct_el0",
+			"mrs {value}, cntvct_el0",
 			value = out(reg) value,
 			options(nostack),
 		);

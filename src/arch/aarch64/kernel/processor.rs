@@ -118,7 +118,8 @@ static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	}
 	cpu_frequency
 });
-// Value of CNTPCT_EL0 at boot time
+
+/// The value of CNTVCT_EL0 at boot time.
 static BOOT_COUNTER: OnceCell<u64> = OnceCell::new();
 
 enum CpuFrequencySources {
@@ -252,7 +253,7 @@ pub fn get_frequency() -> u16 {
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	CNTPCT_EL0.get() - BOOT_COUNTER.get().unwrap()
+	CNTVCT_EL0.get() - BOOT_COUNTER.get().unwrap()
 }
 
 #[inline]
@@ -316,7 +317,7 @@ pub fn configure() {
 }
 
 pub fn detect_frequency() {
-	BOOT_COUNTER.set(CNTPCT_EL0.get()).unwrap();
+	BOOT_COUNTER.set(CNTVCT_EL0.get()).unwrap();
 	Lazy::force(&CPU_FREQUENCY);
 }
 
@@ -324,8 +325,8 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	let Some(wt) = wakeup_time else {
 		// disable timer
-		CNTP_CVAL_EL0.set(0);
-		CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::CLEAR);
+		CNTV_CVAL_EL0.set(0);
+		CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::CLEAR);
 		return;
 	};
 
@@ -333,8 +334,8 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	let freq: u64 = CPU_FREQUENCY.get().into(); // frequency in KHz
 	let deadline = (wt / 1000) * freq;
 
-	CNTP_CVAL_EL0.set(deadline);
-	CNTP_CTL_EL0.write(CNTP_CTL_EL0::ENABLE::SET);
+	CNTV_CVAL_EL0.set(deadline);
+	CNTV_CTL_EL0.write(CNTV_CTL_EL0::ENABLE::SET);
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {

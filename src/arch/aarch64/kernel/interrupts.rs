@@ -263,7 +263,11 @@ pub fn wakeup_core(core_id: CoreId) {
 	.unwrap();
 }
 
-/// Returns the `(type, irq, flags)` of the non-secure timer.
+/// Returns the `(type, irq, flags)` of the virtual timer.
+///
+/// We use the virtual timer instead of the non-secure timer because it is always
+/// available. The non-secure timer may be hidden on macOS HVF on Apple Silicon,
+/// for example. The virtual timer should work on bare metal too.
 ///
 /// For details, see [Linux Devicetree bindings - ARM architected timer].
 ///
@@ -273,21 +277,19 @@ fn timer_irq() -> Option<(u32, u32, u32)> {
 	let timer_node = fdt.find_compatible(&["arm,armv8-timer", "arm,armv7-timer"])?;
 	let irq_slice = timer_node.property("interrupts").unwrap().value;
 
-	// secure timer
-	let (_irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
-	let (_irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-	let (_irqflags, irq_slice) = irq_slice.split_at(size_of::<u32>());
+	// interrupts : Interrupt list for secure, non-secure, virtual and hypervisor timers, in that order.
+	// Skip the secure non-secure timers.
+	let (_, irq_slice) = irq_slice.split_at(6 * size_of::<u32>());
 
-	// non-secure timer
 	let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
 	let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
-	let (irqflags, _irq_slice) = irq_slice.split_at(size_of::<u32>());
+	let (irqflags, _) = irq_slice.split_at(size_of::<u32>());
 
-	let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
-	let irq = u32::from_be_bytes(irq.try_into().unwrap());
-	let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
-
-	Some((irqtype, irq, irqflags))
+	Some((
+		u32::from_be_bytes(irqtype.try_into().unwrap()),
+		u32::from_be_bytes(irq.try_into().unwrap()),
+		u32::from_be_bytes(irqflags.try_into().unwrap()),
+	))
 }
 
 /// Unmasks the timer interrupt on `cpu_id`'s redistributor.
