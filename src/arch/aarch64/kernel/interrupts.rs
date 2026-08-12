@@ -292,27 +292,23 @@ fn timer_irq() -> Option<(u32, u32, u32)> {
 
 /// Unmasks the timer interrupt on `cpu_id`'s redistributor.
 fn enable_timer_irq(gic: &mut GicV3<'_>, cpu_id: usize, irqtype: u32, irq: u32, irqflags: u32) {
-	let timer_irqid = if irqtype == 1 {
-		IntId::ppi(irq)
-	} else if irqtype == 0 {
-		IntId::spi(irq)
-	} else {
-		panic!("Invalid interrupt type");
+	let timer_irqid = match irqtype {
+		1 => IntId::ppi(irq),
+		0 => IntId::spi(irq),
+		_ => panic!("Invalid interrupt type"),
 	};
 
 	gic.set_interrupt_priority(timer_irqid, Some(cpu_id), 0x00)
 		.unwrap();
-
-	if (irqflags & 0xf) == 4 || (irqflags & 0xf) == 8 {
-		gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level)
-			.unwrap();
-	} else if (irqflags & 0xf) == 2 || (irqflags & 0xf) == 1 {
-		gic.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge)
-			.unwrap();
-	} else {
-		panic!("Invalid interrupt level!");
+	match irqflags & 0xf {
+		4 | 8 => gic
+			.set_trigger(timer_irqid, Some(cpu_id), Trigger::Level)
+			.unwrap(),
+		1 | 2 => gic
+			.set_trigger(timer_irqid, Some(cpu_id), Trigger::Edge)
+			.unwrap(),
+		_ => panic!("Invalid interrupt level!"),
 	}
-
 	gic.enable_interrupt(timer_irqid, Some(cpu_id), true)
 		.unwrap();
 }
