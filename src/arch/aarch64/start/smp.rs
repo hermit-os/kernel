@@ -155,6 +155,7 @@ pub(crate) unsafe extern "C" fn smp_start() -> ! {
 
 		"ldr x0, ={sctlr_el1}",
 		"msr sctlr_el1, x0",
+		"isb",
 
 		// initialize argument for `smp_start_rust()`
 		"mov x0, xzr",
