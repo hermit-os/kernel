@@ -1,7 +1,6 @@
 /// A memory map entry.
 ///
 /// This entry is part of the start info's memory map that describes physical memory.
-#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 pub struct MemmapEntry {
 	/// The physical address of this memory map entry.
 	pub phys_addr: usize,

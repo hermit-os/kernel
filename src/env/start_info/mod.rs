@@ -15,7 +15,6 @@ mod module;
 use core::num::NonZero;
 use core::{fmt, iter};
 
-#[cfg_attr(not(feature = "hermit-entry"), expect(unused_imports))]
 pub use self::memmap::{MemmapEntry, MemmapType};
 pub use self::module::Module;
 
@@ -25,7 +24,6 @@ pub unsafe trait StartInfo {
 	}
 
 	/// Returns the modules passed to the kernel at start.
-	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	fn modules(&self) -> impl Iterator<Item = Module> {
 		iter::empty()
 	}
@@ -46,7 +44,6 @@ pub unsafe trait StartInfo {
 		None
 	}
 
-	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	fn memmap(&self) -> impl Iterator<Item = MemmapEntry> {
 		iter::empty()
 	}

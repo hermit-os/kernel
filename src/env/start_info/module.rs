@@ -53,7 +53,6 @@ impl Module {
 	}
 
 	/// The physical frames covered by this module.
-	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	pub fn phys_frame_range(&self) -> PageRange {
 		let start = self.phys_addr;
 		let end = self.phys_addr + self.len;

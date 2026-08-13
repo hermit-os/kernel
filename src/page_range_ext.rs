@@ -1,7 +1,5 @@
 //! FIXME(mkroening): upstream these
 
-#![cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
-
 use align_address::Align;
 use free_list::{PageRange, PageRangeError};
 

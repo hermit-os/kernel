@@ -2,22 +2,17 @@ use core::alloc::AllocError;
 use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-#[cfg(feature = "hermit-entry")]
 use align_address::Align;
 use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
 
-#[cfg(feature = "hermit-entry")]
-use crate::arch::mm::paging::PageTableEntryFlags;
 #[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize};
-#[cfg(feature = "hermit-entry")]
-use crate::env::{self, FdtStartInfo, MemmapType, StartInfo};
+use crate::env::{self, MemmapType, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
-#[cfg(feature = "hermit-entry")]
 use crate::page_range_ext::PageRangeExt;
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
@@ -71,6 +66,8 @@ pub fn total_memory_size() -> usize {
 pub unsafe fn map_frame_range(frame_range: PageRange) {
 	use memory_addresses::PhysAddr;
 
+	use crate::arch::mm::paging::PageTableEntryFlags;
+
 	cfg_select! {
 		target_arch = "aarch64" => {
 			type IdentityPageSize = paging::BasePageSize;
@@ -112,10 +109,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 	}
 }
 
-#[cfg(feature = "hermit-entry")]
-unsafe fn detect_from_fdt() {
-	let fdt = env::start_info().fdt().unwrap();
-
+unsafe fn detect_from_start_info() {
 	for memmap_entry in env::start_info().memmap() {
 		if memmap_entry.ty != MemmapType::Ram {
 			continue;
@@ -127,7 +121,7 @@ unsafe fn detect_from_fdt() {
 		// Don't use the zero page.
 		start_addr = start_addr.max(0x1000);
 
-		#[cfg(target_arch = "x86_64")]
+		#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 		if paging::is_recursive() {
 			start_addr = start_addr.max(elf_symbols::executable_end().addr());
 		}
@@ -146,6 +140,9 @@ unsafe fn detect_from_fdt() {
 		let range = PageRange::new(start_addr, end_addr).unwrap();
 		unsafe {
 			FrameAlloc::deallocate(range);
+		}
+		#[cfg(feature = "hermit-entry")]
+		unsafe {
 			map_frame_range(range);
 		}
 		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
@@ -164,25 +161,32 @@ unsafe fn detect_from_fdt() {
 		}
 	};
 
-	for reservation in fdt.memory_reservations() {
-		let start = reservation.address().addr();
-		let end = start + reservation.size();
-		let reservation = PageRange::new(start, end).unwrap();
-		reserve(reservation);
-	}
-
 	let kernel_start = elf_symbols::executable_start().addr();
 	let kernel_end = elf_symbols::executable_end().addr();
 	let kernel_region = PageRange::containing(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
 
-	let fdt_start = env::start_info().fdt_addr().unwrap().get();
-	let fdt_end = fdt_start + fdt.total_size();
-	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
-	reserve(fdt_region);
-
 	for module in env::start_info().modules() {
 		reserve(module.phys_frame_range());
+	}
+
+	#[cfg(feature = "hermit-entry")]
+	{
+		use crate::env::FdtStartInfo;
+
+		let fdt = env::start_info().fdt().unwrap();
+
+		for reservation in fdt.memory_reservations() {
+			let start = reservation.address().addr();
+			let end = start + reservation.size();
+			let reservation = PageRange::new(start, end).unwrap();
+			reserve(reservation);
+		}
+
+		let fdt_start = env::start_info().fdt_addr().unwrap().get();
+		let fdt_end = fdt_start + fdt.total_size();
+		let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
+		reserve(fdt_region);
 	}
 }
 
@@ -194,8 +198,7 @@ unsafe fn init() {
 		paging::unmap::<HugePageSize>(start, count);
 	}
 
-	#[cfg(feature = "hermit-entry")]
 	unsafe {
-		detect_from_fdt();
+		detect_from_start_info();
 	}
 }
