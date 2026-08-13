@@ -4,7 +4,7 @@ use core::num::NonZero;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
-use super::{FdtStartInfo, StartInfo};
+use super::{FdtStartInfo, Module, StartInfo};
 
 static START_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -47,6 +47,26 @@ unsafe impl StartInfo for BootInfo {
 			.starting_address
 			.addr();
 		NonZero::new(rsdp)
+	}
+
+	fn modules(&self) -> impl Iterator<Item = Module> {
+		fn initrd(fdt: fdt::Fdt<'_>) -> Option<Module> {
+			let chosen = fdt.find_node("/chosen")?;
+
+			let start = chosen.property("linux,initrd-start")?;
+			let end = chosen.property("linux,initrd-end")?;
+
+			let start = start.as_usize()?;
+			let end = end.as_usize()?;
+			let len = end.checked_sub(start)?;
+
+			// SAFETY: The bootloader guarantees the addresses to be valid.
+			let module = unsafe { Module::new(start, len) };
+
+			Some(module)
+		}
+
+		self.fdt().and_then(initrd).into_iter()
 	}
 }
 

@@ -4,8 +4,6 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "hermit-entry")]
 use align_address::Align;
-#[cfg(feature = "hermit-entry")]
-use free_list::PageRangeError;
 use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 use memory_addresses::VirtAddr;
@@ -16,9 +14,11 @@ use crate::arch::mm::paging::PageTableEntryFlags;
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize};
 #[cfg(feature = "hermit-entry")]
-use crate::env::{self, FdtStartInfo};
+use crate::env::{self, FdtStartInfo, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
+#[cfg(feature = "hermit-entry")]
+use crate::page_range_ext::PageRangeExt;
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -187,30 +187,11 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
 	reserve(fdt_region);
 
+	for module in env::start_info().modules() {
+		reserve(module.phys_frame_range());
+	}
+
 	Ok(())
-}
-
-// FIXME: upstream these
-#[cfg(feature = "hermit-entry")]
-trait PageRangeExt: Sized {
-	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError>;
-
-	fn and(self, rhs: Self) -> Option<Self>;
-}
-
-#[cfg(feature = "hermit-entry")]
-impl PageRangeExt for PageRange {
-	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError> {
-		let start = start.align_down(free_list::PAGE_SIZE);
-		let end = end.align_up(free_list::PAGE_SIZE);
-		Self::new(start, end)
-	}
-
-	fn and(self, rhs: Self) -> Option<Self> {
-		let start = self.start().max(rhs.start());
-		let end = self.end().min(rhs.end());
-		Self::new(start, end).ok()
-	}
 }
 
 unsafe fn init() {

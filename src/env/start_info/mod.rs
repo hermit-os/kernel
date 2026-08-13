@@ -1,21 +1,30 @@
-#[cfg(feature = "hermit-entry")]
-mod hermit_entry;
+cfg_select! {
+	feature = "hermit-entry" => {
+		mod hermit_entry;
+		pub use self::hermit_entry::*;
+	}
+	_ => {
+		mod unsupported;
+		pub use self::unsupported::*;
+	}
+}
 
-#[cfg(feature = "hermit-entry")]
-pub use hermit_entry::*;
+mod module;
 
-#[cfg(not(feature = "hermit-entry"))]
-mod unsupported;
-
-use core::fmt;
 use core::num::NonZero;
+use core::{fmt, iter};
 
-#[cfg(not(feature = "hermit-entry"))]
-pub use unsupported::*;
+pub use self::module::Module;
 
 pub unsafe trait StartInfo {
 	fn display(&self) -> impl fmt::Display {
 		fmt::from_fn(|f| f.write_str("StartInfo::display not implemented"))
+	}
+
+	/// Returns the modules passed to the kernel at start.
+	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
+	fn modules(&self) -> impl Iterator<Item = Module> {
+		iter::empty()
 	}
 
 	fn bootargs(&self) -> Option<&str> {
