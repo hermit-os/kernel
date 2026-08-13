@@ -4,9 +4,9 @@ use free_list::PageRange;
 
 use crate::page_range_ext::PageRangeExt;
 
-/// A module that is passed to the kernel at start.
+/// A boot-protocol module that is passed to the kernel at start.
 ///
-/// This blob is loaded into physical memory by the bootloader or VMM and is described via the start info.
+/// This is a blob that is loaded into physical memory by the bootloader or VMM and is described via the start info.
 ///
 /// Examples of modules:
 /// - an initramfs
