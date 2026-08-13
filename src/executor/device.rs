@@ -1,4 +1,5 @@
 use alloc::boxed::Box;
+use alloc::string::ToString;
 use core::str::FromStr;
 
 use smoltcp::iface::{Config, Interface, SocketSet};
@@ -115,20 +116,28 @@ impl<'a> NetworkInterface<'a> {
 			sockets.add(dhcpv4::Socket::new())
 		};
 
-		if !cfg!(feature = "dhcpv4") || hermit_var!("HERMIT_IP").is_some() {
-			let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
-			let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
-			let mymask =
-				Ipv4Address::from_str(hermit_var_or!("HERMIT_MASK", "255.255.255.0")).unwrap();
+		if hermit_var!("HERMIT_MASK").is_some() {
+			warn!(
+				"HERMIT_MASK was removed in favor of including the prefix length in HERMIT_IP and has no effect anymore"
+			);
+		}
 
-			let ip_addr = IpCidr::from(Ipv4Cidr::from_netmask(myip, mymask).unwrap());
+		if !cfg!(feature = "dhcpv4") || hermit_var!("HERMIT_IP").is_some() {
+			let ip_and_prefix_len = hermit_var_or!("HERMIT_IP", "10.0.5.3/24").to_string();
+			let mut parts = ip_and_prefix_len.split('/');
+			let ip = Ipv4Address::from_str(parts.next().unwrap()).unwrap();
+			let prefix_len = parts.next().unwrap().parse().unwrap();
+			let gw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
+
+			let ip_addr = IpCidr::from(Ipv4Cidr::new(ip, prefix_len));
+
 			info!("IP address: {ip_addr}");
-			info!("Gateway:    {mygw}");
+			info!("Gateway:    {gw}");
 
 			iface.update_ip_addrs(|ip_addrs| {
-				ip_addrs.push(ip_addr).unwrap();
+				ip_addrs.push(ip_addr);
 			});
-			iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
+			iface.routes_mut().add_default_ipv4_route(gw).unwrap();
 
 			#[cfg(feature = "dns")]
 			{

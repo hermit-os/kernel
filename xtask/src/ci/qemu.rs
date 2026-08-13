@@ -17,6 +17,7 @@ use crate::arch::Arch;
 use crate::ci;
 
 const DEFAULT_GUEST_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 3));
+const DEFAULT_GUEST_PREFIX_LEN: u8 = 24;
 
 /// Run image on QEMU.
 #[derive(Args)]
@@ -561,7 +562,10 @@ impl Qemu {
 			args.extend(["-freq".to_owned(), frequency.to_string()]);
 		}
 		if self.tap {
-			args.extend(["-ip".to_owned(), DEFAULT_GUEST_IP.to_string()]);
+			args.extend([
+				"-ip".to_owned(),
+				format!("{DEFAULT_GUEST_IP}/{DEFAULT_GUEST_PREFIX_LEN}"),
+			]);
 		}
 		args
 	}
