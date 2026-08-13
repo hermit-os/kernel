@@ -7,9 +7,16 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use align_address::Align;
 use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
+#[cfg(any(feature = "common-os", feature = "hermit-entry"))]
+use memory_addresses::PhysAddr;
 use memory_addresses::VirtAddr;
 
-#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
+#[cfg(any(feature = "common-os", feature = "hermit-entry"))]
+use crate::arch::mm::paging::PageTableEntryFlags;
+#[cfg(all(
+	target_arch = "x86_64",
+	any(feature = "common-os", feature = "hermit-entry")
+))]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{self, HugePageSize, PageSize};
 use crate::env::{self, MemmapType, StartInfo};
@@ -147,10 +154,6 @@ pub fn total_memory_size() -> usize {
 
 #[cfg(feature = "hermit-entry")]
 pub unsafe fn map_frame_range(frame_range: PageRange) {
-	use memory_addresses::PhysAddr;
-
-	use crate::arch::mm::paging::PageTableEntryFlags;
-
 	cfg_select! {
 		target_arch = "aarch64" => {
 			type IdentityPageSize = paging::BasePageSize;

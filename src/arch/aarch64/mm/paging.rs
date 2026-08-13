@@ -1111,7 +1111,7 @@ pub fn drop_user_space(l0_phys: usize) {
 pub fn clear_user_space() {
 	use aarch64_cpu::registers::TTBR0_EL1;
 
-	use crate::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::fd::STDERR_FILENO;
 
 	core_scheduler()

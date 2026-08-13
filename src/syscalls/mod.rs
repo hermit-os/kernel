@@ -922,7 +922,7 @@ pub unsafe extern "C" fn sys_pipe(pipefd: *mut RawFd) -> i32 {
 #[cfg(not(feature = "common-os"))]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn sys_pipe(pipefd: *mut RawFd) -> i32 {
+pub unsafe extern "C" fn sys_pipe(_pipefd: *mut RawFd) -> i32 {
 	-i32::from(Errno::Nosys)
 }
 
