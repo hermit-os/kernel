@@ -5,6 +5,8 @@ use core::ptr;
 use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
+#[cfg(feature = "common-os")]
+use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
@@ -15,8 +17,6 @@ use crate::env;
 use crate::env::UhyveStartInfo;
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub use self::switch::prepare_fork_child_stack;
-#[cfg(feature = "common-os")]
-use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(feature = "acpi")]
 mod acpi;
@@ -191,7 +191,6 @@ where
 	use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
 
 	use crate::arch::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
-	use crate::mm::{FrameAlloc, PageRangeAllocator};
 	use crate::fd::{Fd, RawFd, stdio};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
@@ -346,9 +345,8 @@ pub unsafe fn jump_to_user_land(
 	};
 
 	use crate::arch::kernel::scheduler::TaskStacks;
-	use crate::arch::x86_64::mm::paging::PageTableEntryFlagsExt;
-	use crate::mm::{FrameAlloc, PageRangeAllocator};
 	use crate::arch::mm::paging;
+	use crate::arch::x86_64::mm::paging::PageTableEntryFlagsExt;
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
 	use crate::mm::vma::*;

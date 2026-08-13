@@ -1090,7 +1090,7 @@ pub fn prepare_mem_copy_on_write() {
 /// maps the new one.
 #[cfg(feature = "common-os")]
 pub fn clear_user_space() {
-	use crate::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::fd::STDERR_FILENO;
 
 	core_scheduler()
