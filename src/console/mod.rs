@@ -15,6 +15,7 @@ use crate::executor::WakerRegistration;
 
 const SERIAL_BUFFER_SIZE: usize = 256;
 
+#[cfg_attr(target_arch = "riscv64", allow(clippy::large_enum_variant))]
 pub(crate) enum IoDevice {
 	#[cfg(feature = "uhyve")]
 	Uhyve(uhyve::UhyveSerial),
@@ -87,6 +88,10 @@ impl Console {
 			device,
 			buffer: Vec::new(),
 		}
+	}
+
+	pub fn requires_input_polling(&self) -> bool {
+		cfg!(target_arch = "riscv64") && matches!(&self.device, IoDevice::Uart(_))
 	}
 
 	#[cfg(feature = "virtio-console")]

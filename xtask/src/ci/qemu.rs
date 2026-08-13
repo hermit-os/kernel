@@ -41,6 +41,10 @@ pub struct Qemu {
 	#[arg(long)]
 	uefi: bool,
 
+	/// Disable semihosting.
+	#[arg(long)]
+	no_semihosting: bool,
+
 	/// Devices to enable.
 	#[arg(long)]
 	devices: Vec<Device>,
@@ -363,7 +367,9 @@ impl Qemu {
 					cpu_args.push("max,lpa2=off".to_owned());
 				}
 
-				cpu_args.push("-semihosting".to_owned());
+				if !self.no_semihosting {
+					cpu_args.push("-semihosting".to_owned());
+				}
 				cpu_args
 			}
 			Arch::Riscv64 => {
@@ -376,7 +382,9 @@ impl Qemu {
 					}
 				}
 
-				cpu_args.push("-semihosting".to_owned());
+				if !self.no_semihosting {
+					cpu_args.push("-semihosting".to_owned());
+				}
 				cpu_args
 			}
 		}
