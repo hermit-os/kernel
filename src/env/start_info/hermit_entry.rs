@@ -1,10 +1,11 @@
+use alloc::vec::Vec;
 use core::fmt;
 use core::num::NonZero;
 
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
 
-use super::{FdtStartInfo, Module, StartInfo};
+use super::{FdtStartInfo, MemmapEntry, MemmapType, Module, StartInfo};
 
 static START_INFO: OnceCell<BootInfo> = OnceCell::new();
 
@@ -67,6 +68,23 @@ unsafe impl StartInfo for BootInfo {
 		}
 
 		self.fdt().and_then(initrd).into_iter()
+	}
+
+	fn memmap(&self) -> impl Iterator<Item = MemmapEntry> {
+		// FIXME: use super let when available and don't collect
+		let memmap = self
+			.fdt()
+			.iter()
+			.flat_map(|fdt| fdt.find_all_nodes("/memory"))
+			.flat_map(|node| node.reg())
+			.flatten()
+			.map(|region| MemmapEntry {
+				phys_addr: region.starting_address.expose_provenance(),
+				len: region.size.unwrap(),
+				ty: MemmapType::Ram,
+			})
+			.collect::<Vec<_>>();
+		memmap.into_iter()
 	}
 }
 

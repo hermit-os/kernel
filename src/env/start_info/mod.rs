@@ -9,11 +9,13 @@ cfg_select! {
 	}
 }
 
+mod memmap;
 mod module;
 
 use core::num::NonZero;
 use core::{fmt, iter};
 
+pub use self::memmap::{MemmapEntry, MemmapType};
 pub use self::module::Module;
 
 pub unsafe trait StartInfo {
@@ -22,7 +24,6 @@ pub unsafe trait StartInfo {
 	}
 
 	/// Returns the modules passed to the kernel at start.
-	#[cfg_attr(not(feature = "hermit-entry"), expect(dead_code))]
 	fn modules(&self) -> impl Iterator<Item = Module> {
 		iter::empty()
 	}
@@ -41,6 +42,10 @@ pub unsafe trait StartInfo {
 	)]
 	fn rsdp_addr(&self) -> Option<NonZero<usize>> {
 		None
+	}
+
+	fn memmap(&self) -> impl Iterator<Item = MemmapEntry> {
+		iter::empty()
 	}
 }
 
