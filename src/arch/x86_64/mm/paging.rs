@@ -468,7 +468,7 @@ pub fn drop_user_space(pml4_phys: usize) {
 
 #[cfg(feature = "common-os")]
 pub fn clear_user_space() {
-	use crate::core_scheduler;
+	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::fd::STDERR_FILENO;
 
 	core_scheduler()

@@ -27,10 +27,10 @@ use memory_addresses::{PhysAddr, VirtAddr};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
-use crate::arch::kernel::core_local::*;
-use crate::arch::mm::paging::{BasePageSize, PageSize};
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub use self::scheduler::prepare_fork_child_stack;
+use crate::arch::kernel::core_local::*;
+use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
 #[cfg(feature = "smp")]
 use crate::env::FdtStartInfo;
