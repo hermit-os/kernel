@@ -196,6 +196,15 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 					return None;
 				}
 
+				// A legacy PCI interrupt is signaled level triggered and active
+				// low, while the IOAPIC defaults to the edge triggered, active
+				// high behavior of the ISA interrupts. Without the correction a
+				// passed-through device stops delivering interrupts after its
+				// first one, because the host only unmasks the interrupt once the
+				// guest has completed a level triggered one.
+				#[cfg(target_arch = "x86_64")]
+				crate::arch::kernel::apic::ioapic_set_pci_interrupt(line, 0);
+
 				Some(line)
 			}
 			5.. => {
