@@ -98,7 +98,7 @@ pub(crate) struct NetworkInterface<'a> {
 	pub(super) sockets: SocketSet<'a>,
 	pub(super) device: MaybeTracerDevice,
 	#[cfg(feature = "dhcpv4")]
-	pub(super) dhcp_handle: SocketHandle,
+	pub(super) dhcp_handle: Option<SocketHandle>,
 	#[cfg(feature = "dns")]
 	pub(super) dns_handle: Option<SocketHandle>,
 }
@@ -149,7 +149,11 @@ async fn dhcpv4_run() {
 		};
 
 		let nic = guard.as_nic_mut().unwrap();
-		let dhcp_handle = nic.dhcp_handle;
+		let Some(dhcp_handle) = nic.dhcp_handle else {
+			// DHCP enabled at compile time but not configure at runtime
+			return Poll::Ready(());
+		};
+
 		let socket = nic.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp_handle);
 
 		socket.register_waker(cx.waker());

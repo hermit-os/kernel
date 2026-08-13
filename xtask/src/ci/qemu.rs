@@ -18,6 +18,9 @@ use crate::ci;
 
 const DEFAULT_GUEST_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 3));
 const DEFAULT_GUEST_PREFIX_LEN: u8 = 24;
+const DEFAULT_GUEST_GATEWAY: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 1));
+const DEFAULT_GUEST_DNS0: IpAddr = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
+const DEFAULT_GUEST_DNS1: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
 
 /// Run image on QEMU.
 #[derive(Args)]
@@ -562,10 +565,9 @@ impl Qemu {
 			args.extend(["-freq".to_owned(), frequency.to_string()]);
 		}
 		if self.tap {
-			args.extend([
-				"-ip".to_owned(),
-				format!("{DEFAULT_GUEST_IP}/{DEFAULT_GUEST_PREFIX_LEN}"),
-			]);
+			args.push(format!(
+				"ip={DEFAULT_GUEST_IP}/{DEFAULT_GUEST_PREFIX_LEN}:{DEFAULT_GUEST_GATEWAY}::::{DEFAULT_GUEST_DNS0}:{DEFAULT_GUEST_DNS1}"
+			));
 		}
 		args
 	}
@@ -591,11 +593,7 @@ impl Qemu {
 
 	fn guest_ip(&self) -> IpAddr {
 		if self.tap {
-			if let Ok(ip) = env::var("HERMIT_IP") {
-				ip.parse().unwrap()
-			} else {
-				DEFAULT_GUEST_IP
-			}
+			DEFAULT_GUEST_IP
 		} else {
 			Ipv4Addr::LOCALHOST.into()
 		}
