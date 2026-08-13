@@ -73,8 +73,11 @@ impl Default for Cli {
 					env_vars.insert(Cow::Borrowed("HERMIT_IP"), ip);
 				}
 				"-mask" => {
-					let mask = expect_arg(words.next(), word);
-					env_vars.insert(Cow::Borrowed("HERMIT_MASK"), mask);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -mask bootarg was removed in favor of including the prefix length in the -ip parameter"
+					);
 				}
 				"-gateway" => {
 					let gateway = expect_arg(words.next(), word);
