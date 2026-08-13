@@ -256,6 +256,17 @@ pub fn get_timestamp() -> u64 {
 	CNTVCT_EL0.get() - BOOT_COUNTER.get().unwrap()
 }
 
+#[cfg(feature = "ixgbe")]
+#[inline]
+pub fn udelay(usecs: u64) {
+	let khz: u64 = CPU_FREQUENCY.get().into();
+	let ticks = (khz * usecs).div_ceil(1_000).max(1);
+	let end = get_timestamp() + ticks;
+	while get_timestamp() < end {
+		core::hint::spin_loop();
+	}
+}
+
 #[inline]
 #[allow(dead_code)]
 pub fn supports_1gib_pages() -> bool {
