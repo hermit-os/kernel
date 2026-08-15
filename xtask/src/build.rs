@@ -74,8 +74,8 @@ impl Build {
 		eprintln!("Building hermit-builtins");
 		let mut cargo = crate::cargo();
 		cargo
+			.current_dir("hermit-builtins")
 			.arg("build")
-			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.arg("--profile")
 			.arg(self.cargo_build.artifact.builtins_profile_path_component())
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
