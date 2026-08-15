@@ -33,9 +33,14 @@ unsafe impl FdtStartInfo for BootInfo {
 #[cfg(feature = "uhyve")]
 impl super::UhyveStartInfo for BootInfo {
 	fn is_uhyve(&self) -> bool {
-		use hermit_entry::boot_info::PlatformInfo;
+		let Some(fdt) = self.fdt() else {
+			return false;
+		};
 
-		matches!(self.platform_info, PlatformInfo::Uhyve { .. })
+		fdt.root()
+			.compatible()
+			.all()
+			.any(|compatible| compatible == "hermit,uhyve")
 	}
 
 	fn uhyve_boot_time(&self) -> Option<time::OffsetDateTime> {
