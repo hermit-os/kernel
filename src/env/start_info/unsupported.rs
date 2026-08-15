@@ -1,7 +1,9 @@
 use core::num::NonZero;
 
+use super::StartInfo;
+
 #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
-pub fn start_info() -> &'static impl super::StartInfo {
+pub fn start_info() -> &'static impl StartInfo {
 	#[expect(unreachable_code)]
 	&panic!()
 }
@@ -12,7 +14,7 @@ pub fn start_info() -> &'static impl super::FdtStartInfo {
 	&panic!()
 }
 
-unsafe impl super::StartInfo for ! {
+unsafe impl StartInfo for ! {
 	fn bootargs(&self) -> Option<&str> {
 		*self
 	}
