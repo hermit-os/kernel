@@ -10,12 +10,12 @@ use super::{FdtStartInfo, MemmapEntry, MemmapType, Module, StartInfo};
 static START_INFO: OnceCell<BootInfo> = OnceCell::new();
 
 #[cfg(not(feature = "uhyve"))]
-pub fn start_info() -> &'static impl FdtStartInfo {
+pub fn start_info() -> &'static (impl StartInfo + FdtStartInfo) {
 	START_INFO.get().unwrap()
 }
 
 #[cfg(feature = "uhyve")]
-pub fn start_info() -> &'static impl super::UhyveStartInfo {
+pub fn start_info() -> &'static (impl StartInfo + super::UhyveStartInfo) {
 	START_INFO.get().unwrap()
 }
 

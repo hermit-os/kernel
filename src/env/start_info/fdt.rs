@@ -2,9 +2,7 @@ use core::num::NonZero;
 
 use fdt::Fdt;
 
-use super::StartInfo;
-
-pub unsafe trait FdtStartInfo: StartInfo {
+pub unsafe trait FdtStartInfo {
 	fn fdt(&self) -> Option<Fdt<'_>> {
 		let phys_addr = self.fdt_addr()?.get();
 		// We require this to be identity-mapped at boot time for now.

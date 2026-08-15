@@ -9,7 +9,7 @@ pub fn start_info() -> &'static impl StartInfo {
 }
 
 #[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
-pub fn start_info() -> &'static impl super::FdtStartInfo {
+pub fn start_info() -> &'static (impl StartInfo + super::FdtStartInfo) {
 	#[expect(unreachable_code)]
 	&panic!()
 }
