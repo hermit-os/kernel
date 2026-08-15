@@ -9,12 +9,24 @@ cfg_select! {
 	}
 }
 
+#[cfg(any(
+	feature = "hermit-entry",
+	target_arch = "aarch64",
+	target_arch = "riscv64"
+))]
+mod fdt;
 mod memmap;
 mod module;
 
 use core::num::NonZero;
 use core::{fmt, iter};
 
+#[cfg(any(
+	feature = "hermit-entry",
+	target_arch = "aarch64",
+	target_arch = "riscv64"
+))]
+pub use self::fdt::FdtStartInfo;
 pub use self::memmap::{MemmapEntry, MemmapType};
 pub use self::module::Module;
 
@@ -46,26 +58,6 @@ pub unsafe trait StartInfo {
 
 	fn memmap(&self) -> impl Iterator<Item = MemmapEntry> {
 		iter::empty()
-	}
-}
-
-#[cfg(any(
-	feature = "hermit-entry",
-	target_arch = "aarch64",
-	target_arch = "riscv64"
-))]
-pub unsafe trait FdtStartInfo: StartInfo {
-	fn fdt(&self) -> Option<fdt::Fdt<'_>> {
-		let phys_addr = self.fdt_addr()?.get();
-		// We require this to be identity-mapped at boot time for now.
-		let virt_addr = phys_addr;
-		let ptr = core::ptr::with_exposed_provenance(virt_addr);
-		let fdt = unsafe { fdt::Fdt::from_ptr(ptr).ok()? };
-		Some(fdt)
-	}
-
-	fn fdt_addr(&self) -> Option<NonZero<usize>> {
-		None
 	}
 }
 
