@@ -678,10 +678,7 @@ impl From<Infallible> for Errno {
 }
 
 /// Returns the pointer to `errno`.
-#[cfg(all(
-	not(any(feature = "common-os", feature = "nostd")),
-	not(target_arch = "riscv64"),
-))]
+#[cfg(all(not(feature = "nostd"), not(target_arch = "riscv64"),))]
 #[unsafe(no_mangle)]
 #[linkage = "weak"]
 pub extern "C" fn sys_errno_location() -> *mut i32 {
@@ -709,7 +706,7 @@ pub extern "C" fn sys_get_errno() -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_errno() -> i32 {
 	cfg_select! {
-		any(feature = "common-os", target_arch = "riscv64") => 0,
+		target_arch = "riscv64" => 0,
 		_ => unsafe { *sys_errno_location() },
 	}
 }
@@ -725,7 +722,7 @@ pub(crate) trait ToErrno {
 	{
 		if let Some(errno) = self.to_errno() {
 			cfg_select! {
-				any(feature = "common-os", feature = "nostd", target_arch = "riscv64") => {
+				any(feature = "nostd", target_arch = "riscv64") => {
 					let _ = errno;
 				}
 				_ => unsafe {

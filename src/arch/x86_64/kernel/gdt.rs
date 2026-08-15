@@ -6,8 +6,6 @@ use core::sync::atomic::Ordering;
 use x86_64::VirtAddr;
 use x86_64::instructions::tables;
 use x86_64::registers::segmentation::{CS, DS, ES, SS, Segment};
-#[cfg(feature = "common-os")]
-use x86_64::structures::gdt::DescriptorFlags;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::tss::TaskStateSegment;
 
@@ -22,13 +20,6 @@ pub fn add_current_core() {
 	let gdt: &mut GlobalDescriptorTable = Box::leak(Box::new(GlobalDescriptorTable::new()));
 	let kernel_code_selector = gdt.append(Descriptor::kernel_code_segment());
 	let kernel_data_selector = gdt.append(Descriptor::kernel_data_segment());
-	#[cfg(feature = "common-os")]
-	{
-		let _user_code32_selector =
-			gdt.append(Descriptor::UserSegment(DescriptorFlags::USER_CODE32.bits()));
-		let _user_data64_selector = gdt.append(Descriptor::user_data_segment());
-		let _user_code64_selector = gdt.append(Descriptor::user_code_segment());
-	}
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
 	let tss = Box::leak(Box::new(TaskStateSegment::new()));
@@ -73,24 +64,5 @@ pub fn add_current_core() {
 }
 
 pub extern "C" fn set_current_kernel_stack() {
-	#[cfg(feature = "common-os")]
-	{
-		use x86_64::PhysAddr;
-		use x86_64::registers::control::Cr3;
-		use x86_64::structures::paging::PhysFrame;
-
-		let root = crate::scheduler::get_root_page_table();
-		let new_frame =
-			PhysFrame::from_start_address(PhysAddr::new(root.try_into().unwrap())).unwrap();
-
-		let (current_frame, val) = Cr3::read_raw();
-
-		if current_frame != new_frame {
-			unsafe {
-				Cr3::write_raw(new_frame, val);
-			}
-		}
-	}
-
 	core_scheduler().set_current_kernel_stack();
 }

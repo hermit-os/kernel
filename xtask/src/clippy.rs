@@ -19,7 +19,6 @@ impl Clippy {
 			let clippy = || cmd!(sh, "cargo clippy --target={triple} --all-targets");
 
 			clippy().run()?;
-			clippy().arg("--features=common-os").run()?;
 			clippy()
 				.arg("--features=acpi,dns,fsgsbase,pci,smp,vga")
 				.run()?;

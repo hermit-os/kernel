@@ -4,23 +4,7 @@ use x86_64::registers::control::Cr0Flags;
 
 use crate::arch::kernel::gdt::set_current_kernel_stack;
 
-#[cfg(not(feature = "common-os"))]
-macro_rules! push_gs {
-	() => {
-		r#"
-		"#
-	};
-}
-
-#[cfg(not(feature = "common-os"))]
-macro_rules! pop_gs {
-	() => {
-		r#"
-		"#
-	};
-}
-
-#[cfg(all(feature = "fsgsbase", feature = "common-os"))]
+#[cfg(feature = "fsgsbase")]
 macro_rules! push_gs {
 	() => {
 		r#"
@@ -30,7 +14,7 @@ macro_rules! push_gs {
 	};
 }
 
-#[cfg(all(feature = "fsgsbase", feature = "common-os"))]
+#[cfg(feature = "fsgsbase")]
 macro_rules! pop_gs {
 	() => {
 		r#"
@@ -40,7 +24,7 @@ macro_rules! pop_gs {
 	};
 }
 
-#[cfg(all(not(feature = "fsgsbase"), feature = "common-os"))]
+#[cfg(not(feature = "fsgsbase"))]
 macro_rules! push_gs {
 	() => {
 		r#"
@@ -53,7 +37,7 @@ macro_rules! push_gs {
 	};
 }
 
-#[cfg(all(not(feature = "fsgsbase"), feature = "common-os"))]
+#[cfg(not(feature = "fsgsbase"))]
 macro_rules! pop_gs {
 	() => {
 		r#"

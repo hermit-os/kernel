@@ -2,8 +2,6 @@ use core::{fmt, ptr};
 
 use free_list::PageLayout;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
-#[cfg(feature = "common-os")]
-use x86_64::registers::segmentation::SegmentSelector;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
@@ -43,16 +41,6 @@ pub trait PageTableEntryFlagsExt {
 	fn writable(&mut self) -> &mut Self;
 
 	fn execute_disable(&mut self) -> &mut Self;
-
-	#[cfg(feature = "common-os")]
-	fn execute_enable(&mut self) -> &mut Self;
-
-	#[cfg(feature = "common-os")]
-	fn user(&mut self) -> &mut Self;
-
-	#[expect(dead_code)]
-	#[cfg(feature = "common-os")]
-	fn kernel(&mut self) -> &mut Self;
 }
 
 impl PageTableEntryFlagsExt for PageTableEntryFlags {
@@ -78,24 +66,6 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 
 	fn execute_disable(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::NO_EXECUTE);
-		self
-	}
-
-	#[cfg(feature = "common-os")]
-	fn execute_enable(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::NO_EXECUTE);
-		self
-	}
-
-	#[cfg(feature = "common-os")]
-	fn user(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::USER_ACCESSIBLE);
-		self
-	}
-
-	#[cfg(feature = "common-os")]
-	fn kernel(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
 		self
 	}
 }
@@ -293,30 +263,10 @@ where
 	}
 }
 
-#[cfg(not(feature = "common-os"))]
 pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
-	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
-	error!("error_code = {error_code:?}");
-	error!("fs = {:#X}", processor::readfs());
-	error!("gs = {:#X}", processor::readgs());
-	error!("stack_frame = {stack_frame:#?}");
-	scheduler::abort();
-}
-
-#[cfg(feature = "common-os")]
-pub(crate) extern "x86-interrupt" fn page_fault_handler(
-	mut stack_frame: ExceptionStackFrame,
-	error_code: PageFaultErrorCode,
-) {
-	unsafe {
-		if stack_frame.as_mut().read().code_segment != SegmentSelector(0x08) {
-			core::arch::asm!("swapgs", options(nostack));
-		}
-	}
 	error!("Page fault (#PF)!");
 	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
 	error!("error_code = {error_code:?}");

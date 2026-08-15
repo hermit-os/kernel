@@ -77,11 +77,7 @@ pub fn kernel_heap_end() -> VirtAddr {
 		target_arch = "x86_64" => {
 			use x86_64::structures::paging::PageTableIndex;
 
-			let p4_index = if cfg!(feature = "common-os") {
-				PageTableIndex::new(1)
-			} else {
-				PageTableIndex::new(256)
-			};
+			let p4_index = PageTableIndex::new(256);
 
 			let addr = u64::from(p4_index) << 39;
 			assert_eq!(VirtAddr::new_truncate(addr).p4_index(), p4_index);
