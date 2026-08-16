@@ -1,9 +1,9 @@
-use std::io;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
 pub fn binutil(name: &str) -> Option<PathBuf> {
-	static LLVM_TOOLS: LazyLock<LlvmTools> = LazyLock::new(|| LlvmTools::new().unwrap());
+	static LLVM_TOOLS: LazyLock<LlvmTools> =
+		LazyLock::new(|| LlvmTools::new().expect("llvm-tools should be found"));
 
 	LLVM_TOOLS.tool(name)
 }
@@ -13,12 +13,12 @@ struct LlvmTools {
 }
 
 impl LlvmTools {
-	pub fn new() -> io::Result<Self> {
+	pub fn new() -> Option<Self> {
 		let mut rustc = crate::rustc();
 		rustc.args(["--print", "sysroot"]);
 
 		eprintln!("$ {rustc:?}");
-		let output = rustc.output()?;
+		let output = rustc.output().unwrap();
 		assert!(output.status.success());
 
 		let sysroot = String::from_utf8(output.stdout).unwrap();
@@ -27,18 +27,14 @@ impl LlvmTools {
 			.collect::<PathBuf>();
 
 		let example_exe = exe("objdump");
-		for entry in rustlib.read_dir()? {
-			let bin = entry?.path().join("bin");
+		for entry in rustlib.read_dir().unwrap() {
+			let bin = entry.unwrap().path().join("bin");
 			if bin.join(&example_exe).exists() {
-				return Ok(Self { bin });
+				return Some(Self { bin });
 			}
 		}
-		Err(io::Error::new(
-			io::ErrorKind::NotFound,
-			"Could not find llvm-tools component\n\
-			\n\
-			Maybe the rustup component `llvm-tools` is missing? Install it through: `rustup component add llvm-tools`",
-		))
+
+		None
 	}
 
 	pub fn tool(&self, name: &str) -> Option<PathBuf> {
