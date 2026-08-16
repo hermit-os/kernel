@@ -57,14 +57,18 @@ impl Rs {
 			self.cargo_build.features.push("hermit/smp".to_owned());
 		}
 
-		let mut cargo = crate::cargo();
+		let mut rustflags = Vec::new();
 
 		if self.package.contains("rftrace") {
-			cargo.env(
-				"RUSTFLAGS",
-				"-Zinstrument-mcount -Cpasses=ee-instrument<post-inline>",
-			);
+			rustflags.push("-Zinstrument-mcount");
+			rustflags.push("-Cpasses=ee-instrument<post-inline>");
 		};
+
+		let mut cargo = crate::cargo();
+
+		if !rustflags.is_empty() {
+			cargo.env("CARGO_ENCODED_RUSTFLAGS", rustflags.join("\x1f"));
+		}
 
 		cargo
 			.current_dir(super::parent_root())
