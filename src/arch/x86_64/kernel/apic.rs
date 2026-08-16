@@ -313,12 +313,6 @@ fn init_ioapic_address(phys_addr: PhysAddr) {
 		.unwrap();
 }
 
-#[cfg(not(feature = "acpi"))]
-fn detect_from_acpi() -> Result<PhysAddr, ()> {
-	// dummy implementation if acpi support is disabled
-	Err(())
-}
-
 #[cfg(feature = "acpi")]
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
@@ -504,6 +498,7 @@ fn apic_addr() -> PhysAddr {
 		return default_apic();
 	}
 
+	#[cfg(feature = "acpi")]
 	if let Ok(apic_addr) = detect_from_acpi() {
 		return apic_addr;
 	}
