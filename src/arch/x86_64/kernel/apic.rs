@@ -504,9 +504,15 @@ fn apic_addr() -> PhysAddr {
 		return default_apic();
 	}
 
-	detect_from_acpi()
-		.or_else(|()| detect_from_mp())
-		.unwrap_or_else(|()| default_apic())
+	if let Ok(apic_addr) = detect_from_acpi() {
+		return apic_addr;
+	}
+
+	if let Ok(apic_addr) = detect_from_mp() {
+		return apic_addr;
+	}
+
+	default_apic()
 }
 
 pub fn eoi() {
