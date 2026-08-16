@@ -29,10 +29,6 @@ pub struct Qemu {
 	#[arg(long)]
 	sudo: bool,
 
-	/// Enable the `microvm` machine type.
-	#[arg(long)]
-	microvm: bool,
-
 	/// Enable PCIe support.
 	#[arg(long)]
 	pci_e: bool,
@@ -101,6 +97,19 @@ pub enum Device {
 	VirtioVsockPci,
 }
 
+impl Device {
+	fn is_mmio(&self) -> bool {
+		matches!(
+			self,
+			Self::VirtioConsoleMmio
+				| Self::VirtioFsMmio
+				| Self::VirtioNetMmio
+				| Self::VirtioRngMmio
+				| Self::VirtioVsockMmio
+		)
+	}
+}
+
 impl Qemu {
 	pub fn run(
 		self,
@@ -150,7 +159,7 @@ impl Qemu {
 			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.device_args(memory))
 			.args(qemu_args)
-			.args(self.cmdline_args(image_name, hermit_args));
+			.args(self.cmdline_args(image_name, hermit_args, arch));
 
 		eprintln!("$ {qemu}");
 		let mut qemu = Command::from(qemu);
@@ -278,8 +287,12 @@ impl Qemu {
 		Ok(image_args)
 	}
 
+	fn is_mmio(&self) -> bool {
+		self.devices.iter().any(Device::is_mmio)
+	}
+
 	fn machine_args(&self, arch: Arch) -> Vec<String> {
-		if self.microvm {
+		if arch == Arch::X86_64 && self.is_mmio() {
 			vec![
 				"-M".to_owned(),
 				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off"
@@ -521,10 +534,10 @@ impl Qemu {
 			.collect()
 	}
 
-	fn cmdline_args(&self, image_name: &str, hermit_args: &[String]) -> Vec<String> {
+	fn cmdline_args(&self, image_name: &str, hermit_args: &[String], arch: Arch) -> Vec<String> {
 		let (user_kernel_args, user_app_args) = ci::split_args(hermit_args);
 
-		let mut cmdline = self.kernel_args();
+		let mut cmdline = self.kernel_args(arch);
 		cmdline.extend(user_kernel_args.iter().cloned());
 
 		let mut app_args = self.app_args(image_name);
@@ -541,9 +554,9 @@ impl Qemu {
 		vec!["-append".to_owned(), cmdline.join(" ")]
 	}
 
-	fn kernel_args(&self) -> Vec<String> {
+	fn kernel_args(&self, arch: Arch) -> Vec<String> {
 		let mut args = vec![];
-		if self.microvm {
+		if arch == Arch::X86_64 && self.is_mmio() {
 			let frequency = get_frequency();
 			args.extend(["-freq".to_owned(), frequency.to_string()]);
 		}
