@@ -891,6 +891,41 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 	fd::eventfd(initval, flags).unwrap_or_else(|e| -i32::from(e))
 }
 
+/// Create a unidirectional pipe.
+///
+/// On success two file descriptors are stored in the caller-provided
+/// array `pipefd`: `pipefd[0]` refers to the read end, `pipefd[1]` to the
+/// write end. The descriptors are inherited across `fork`, so a pipe set
+/// up beforehand can be used to communicate between parent and child.
+///
+/// Returns `0` on success or a negative error number on failure.
+#[cfg(feature = "common-os")]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_pipe(pipefd: *mut RawFd) -> i32 {
+	if pipefd.is_null() {
+		return -i32::from(Errno::Inval);
+	}
+
+	match fd::pipe() {
+		Ok((read_fd, write_fd)) => {
+			unsafe {
+				pipefd.write(read_fd);
+				pipefd.add(1).write(write_fd);
+			}
+			0
+		}
+		Err(e) => -i32::from(e),
+	}
+}
+
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_pipe(_pipefd: *mut RawFd) -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_image_start_addr() -> usize {
