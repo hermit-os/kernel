@@ -26,7 +26,7 @@ impl LlvmTools {
 			.iter()
 			.collect::<PathBuf>();
 
-		let example_exe = exe("objdump");
+		let example_exe = exe("llvm-objdump");
 		for entry in rustlib.read_dir().unwrap() {
 			let bin = entry.unwrap().path().join("bin");
 			if bin.join(&example_exe).exists() {
@@ -45,5 +45,5 @@ impl LlvmTools {
 
 fn exe(name: &str) -> String {
 	let exe_suffix = std::env::consts::EXE_SUFFIX;
-	format!("llvm-{name}{exe_suffix}")
+	format!("{name}{exe_suffix}")
 }
