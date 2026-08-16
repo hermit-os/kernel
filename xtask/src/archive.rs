@@ -49,7 +49,7 @@ impl Archive {
 		};
 
 		let all_symbols = {
-			let llvm_nm = crate::binutil("llvm-nm").unwrap();
+			let llvm_nm = crate::binutil("llvm-nm");
 			let stdout = cmd!(sh, "{llvm_nm} --export-symbols {archive}")
 				.output()?
 				.stdout;
@@ -81,7 +81,7 @@ impl Archive {
 		let rename_path = archive.with_extension("redefine-syms");
 		sh.write_file(&rename_path, symbol_renames)?;
 
-		let llvm_objcopy = crate::binutil("llvm-objcopy").unwrap();
+		let llvm_objcopy = crate::binutil("llvm-objcopy");
 		cmd!(sh, "{llvm_objcopy} --redefine-syms={rename_path} {archive}").run()?;
 
 		sh.remove_path(&rename_path)?;
@@ -94,7 +94,7 @@ impl Archive {
 		let archive = self.as_ref();
 		let file = file.as_ref();
 
-		let llvm_ar = crate::binutil("llvm-ar").unwrap();
+		let llvm_ar = crate::binutil("llvm-ar");
 		cmd!(sh, "{llvm_ar} qL {archive} {file}").run()?;
 
 		Ok(())

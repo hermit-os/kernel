@@ -780,7 +780,7 @@ fn check_rftrace(image: &Path) -> Result<()> {
 	let sh = crate::sh()?;
 	let image_name = image.file_name().unwrap().to_str().unwrap();
 
-	let llvm_nm = crate::binutil("llvm-nm").unwrap();
+	let llvm_nm = crate::binutil("llvm-nm");
 	let symbols = cmd!(sh, "{llvm_nm} --demangle --numeric-sort {image}")
 		.output()?
 		.stdout;

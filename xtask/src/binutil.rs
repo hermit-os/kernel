@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-pub fn binutil(name: &str) -> Option<PathBuf> {
-	static LLVM_TOOLS: LazyLock<LlvmTools> =
-		LazyLock::new(|| LlvmTools::new().expect("llvm-tools should be found"));
+pub fn binutil(name: &str) -> PathBuf {
+	static LLVM_TOOLS: LazyLock<Option<LlvmTools>> = LazyLock::new(LlvmTools::new);
 
-	LLVM_TOOLS.tool(name)
+	LLVM_TOOLS
+		.as_ref()
+		.and_then(|llvm_tools| llvm_tools.tool(name))
+		.unwrap_or(PathBuf::from(name))
 }
 
 struct LlvmTools {
