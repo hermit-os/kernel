@@ -39,9 +39,6 @@ const AML_BYTEPREFIX: u8 = 0x0a;
 /// Bit to enable an ACPI Sleep State.
 const SLP_EN: u16 = 1 << 13;
 
-/// The "Multiple APIC Description Table" (MADT) preserved for get_apic_table().
-static MADT: OnceCell<AcpiTable<'_>> = OnceCell::new();
-
 /// The MCFG table, to address PCIe configuration space
 #[cfg(feature = "pci")]
 static MCFG: OnceCell<AcpiTable<'_>> = OnceCell::new();
@@ -138,7 +135,7 @@ impl AcpiTable<'_> {
 		self.header_start_address() + size_of::<AcpiSdtHeader>()
 	}
 
-	pub fn table_end_address(&self) -> usize {
+	fn table_end_address(&self) -> usize {
 		self.header_start_address() + self.header.length as usize
 	}
 
@@ -436,10 +433,6 @@ fn parse_ssdt(ssdt: AcpiTable<'_>) {
 	search_s5_in_table(ssdt);
 }
 
-pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
-	MADT.get()
-}
-
 #[cfg(feature = "pci")]
 pub fn get_mcfg_table() -> Option<&'static AcpiTable<'static>> {
 	MCFG.get()
@@ -507,15 +500,7 @@ pub fn init() {
 		let table = AcpiTable::map(table_physical_address);
 		debug!("Found ACPI table: {}", table.header.signature());
 
-		if table.header.signature() == "APIC" {
-			// The "Multiple APIC Description Table" (MADT) aka "APIC Table" (APIC)
-			// Check and save the entire APIC table for the get_apic_table() call.
-			assert!(
-				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"MADT at {table_physical_address:p} has invalid checksum"
-			);
-			MADT.set(table).unwrap();
-		} else if table.header.signature() == "FACP" {
+		if table.header.signature() == "FACP" {
 			// The "Fixed ACPI Description Table" (FADT) aka "Fixed ACPI Control Pointer" (FACP)
 			// Check and parse this table for the poweroff() call.
 			assert!(
