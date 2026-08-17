@@ -1,7 +1,6 @@
 [package]
 name = "hermit-loader"
 version = "0.5.6"
-authors = ["The Hermit Project Developers"]
 edition = "2024"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
