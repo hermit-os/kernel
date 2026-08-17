@@ -105,6 +105,11 @@ virtio-net:
       - any-glob-to-any-file:
           - "src/drivers/net/virtio.rs"
 
+virtio-rng:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/rng.rs"
+
 virtio-vsock:
   - changed-files:
       - any-glob-to-any-file:
