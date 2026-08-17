@@ -77,7 +77,7 @@ pci:
 gem:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/drivers/net/gem/**"
+          - "src/drivers/net/gem.rs"
 
 loopback:
   - changed-files:
@@ -92,23 +92,28 @@ rtl8139:
 virtio-console:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/drivers/console/**"
+          - "src/drivers/console.rs"
 
 virtio-fs:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/drivers/fs/**"
+          - "src/drivers/fs.rs"
           - "src/fs/virtio_fs.rs"
 
 virtio-net:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/drivers/net/virtio/**"
+          - "src/drivers/net/virtio.rs"
+
+virtio-rng:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/rng.rs"
 
 virtio-vsock:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/drivers/vsock/**"
+          - "src/drivers/vsock.rs"
           - "src/executor/vsock.rs"
 
 # Kernel modules
