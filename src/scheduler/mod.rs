@@ -846,7 +846,11 @@ fn get_tid() -> TaskId {
 
 #[inline]
 pub(crate) fn abort() -> ! {
-	core_scheduler().exit(-1)
+	let Some(core_scheduler) = maybe_core_scheduler() else {
+		shutdown(-1)
+	};
+
+	core_scheduler.exit(-1)
 }
 
 /// Add a per-core scheduler for the current core.

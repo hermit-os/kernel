@@ -93,6 +93,10 @@ pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
 }
 
+pub(crate) fn maybe_core_scheduler() -> Option<&'static mut PerCoreScheduler> {
+	unsafe { CoreLocal::get().scheduler.get().as_mut() }
+}
+
 pub(crate) fn ex() -> &'static StaticLocalExecutor<RawSpinMutex, RawRwSpinLock> {
 	&CoreLocal::get().ex
 }

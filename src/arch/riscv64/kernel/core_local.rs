@@ -79,6 +79,10 @@ pub fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { CoreLocal::get().scheduler.get().as_mut().unwrap() }
 }
 
+pub(crate) fn maybe_core_scheduler() -> Option<&'static mut PerCoreScheduler> {
+	unsafe { CoreLocal::get().scheduler.get().as_mut() }
+}
+
 #[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	CoreLocal::get().scheduler.set(scheduler);
