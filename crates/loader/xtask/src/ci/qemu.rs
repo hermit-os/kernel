@@ -142,8 +142,9 @@ impl Qemu {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
 		} else if self.build.target() == Target::Riscv64Sbi {
 			let opensbi_paths = &[
+				"opensbi/generic/firmware/fw_jump.bin", // Local
 				"/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin", // Ubuntu
-				"/usr/share/opensbi/generic/firmware/fw_jump.bin",        // Alpine
+				"/usr/share/opensbi/generic/firmware/fw_jump.bin", // Alpine
 			];
 			let opensbi_path = opensbi_paths
 				.iter()
