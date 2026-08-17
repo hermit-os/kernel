@@ -88,6 +88,13 @@ pub fn shutdown() -> Option<!> {
 
 	let aml_interpreter = AML_INTERPRETER.get()?;
 
+	// Execute the \_PTS (Prepare To Sleep) control method if available.
+	let pts_path = AmlName::from_str(r"\_PTS").ok()?;
+	let pts_args = vec![Object::Integer(5).wrap()];
+	if let Err(err) = aml_interpreter.evaluate(pts_path, pts_args) {
+		debug!("Could not execute \\_PTS: {err:?}");
+	}
+
 	// Read the S5 system state package. The contents are defined in
 	// https://uefi.org/specs/ACPI/6.6/07_Power_and_Performance_Mgmt.html#sx-system-states
 	let s5_path = AmlName::from_str(r"\_S5").ok()?;
