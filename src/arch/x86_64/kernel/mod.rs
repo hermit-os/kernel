@@ -88,6 +88,9 @@ pub fn boot_processor_init() {
 	systemtime::init();
 
 	#[cfg(feature = "acpi")]
+	crate::acpi::init();
+
+	#[cfg(feature = "acpi")]
 	acpi::init();
 
 	#[cfg(feature = "pci")]
