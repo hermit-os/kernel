@@ -131,7 +131,7 @@ impl VirtioBlkDriver {
 	/// Asks the device to write out its cache.
 	///
 	/// Returns `Errno::Nosys` if the device did not negotiate
-	/// [`feature::FLUSH`].
+	/// `feature::FLUSH`.
 	pub fn flush(&mut self) -> Result<(), Errno> {
 		if !self.dev_cfg.features.contains(virtio::blk::F::FLUSH) {
 			return Err(Errno::Nosys);

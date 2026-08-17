@@ -322,6 +322,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
+name = "bytemuck"
+version = "1.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.5",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -601,6 +621,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9eb1aa714776b75c7e67e1da744b81a129b3ff919c8712b5e1b32252c1f07cc7"
 
 [[package]]
+name = "embedded-io-async"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2564b9f813c544241430e147d8bc454815ef9ac998878d30cc3055449f7fd4c0"
+dependencies = [
+ "embedded-io",
+]
+
+[[package]]
 name = "endian-num"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -820,6 +849,64 @@ dependencies = [
 ]
 
 [[package]]
+name = "hadris-common"
+version = "2.1.0"
+source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+dependencies = [
+ "hadris-fixed",
+ "hadris-io",
+ "hadris-path",
+ "heapless",
+ "zerocopy",
+]
+
+[[package]]
+name = "hadris-fat"
+version = "2.1.0"
+source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "chrono",
+ "hadris-common",
+ "hadris-fixed",
+ "hadris-io",
+ "hadris-macros",
+ "hadris-path",
+ "parse-size",
+ "spin",
+]
+
+[[package]]
+name = "hadris-fixed"
+version = "2.1.0"
+source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+
+[[package]]
+name = "hadris-io"
+version = "2.1.0"
+source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+dependencies = [
+ "bytemuck",
+ "cfg-if",
+ "embedded-io",
+ "embedded-io-async",
+]
+
+[[package]]
+name = "hadris-macros"
+version = "2.1.0"
+source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+dependencies = [
+ "proc-macro2",
+]
+
+[[package]]
+name = "hadris-path"
+version = "2.1.0"
+source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+
+[[package]]
 name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -897,6 +984,7 @@ dependencies = [
  "float-cmp",
  "free-list",
  "fuse-abi",
+ "hadris-fat",
  "hashbrown",
  "heapless",
  "hermit-entry",
@@ -1359,6 +1447,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 
 [[package]]
+name = "parse-size"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "487f2ccd1e17ce8c1bfab3a65c89525af41cfad4c8659021a1e9a2aacd73b89b"
+
+[[package]]
 name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1744,6 +1838,15 @@ dependencies = [
  "heapless",
  "log",
  "managed",
+]
+
+[[package]]
+name = "spin"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0134f9043ed38b087ac4f7d4af44c79e2c9e5094421fe3164f435ce585953b10"
+dependencies = [
+ "lock_api",
 ]
 
 [[package]]
@@ -2409,3 +2512,8 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+
+[[patch.unused]]
+name = "virtio-spec"
+version = "0.3.2"
+source = "git+https://github.com/stlankes/virtio-spec-rs?branch=block#94d7608884052f55d0ee869fb6b274d20f14853f"
