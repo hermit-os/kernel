@@ -32,6 +32,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "acpi"
+version = "6.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b763acdc1d85c36d61acf97a59938f23202d0e8efe45e8759de10c02db242744"
+dependencies = [
+ "bit_field",
+ "bitflags 2.13.1",
+ "byteorder",
+ "log",
+ "pci_types",
+ "spinning_top",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -868,6 +882,7 @@ name = "hermit-kernel"
 version = "0.13.0"
 dependencies = [
  "aarch64-cpu 11.2.0",
+ "acpi",
  "ahash",
  "align-address 0.4.0",
  "anstyle",
@@ -899,6 +914,7 @@ dependencies = [
  "hermit-macro",
  "hermit-sync",
  "llvm-tools",
+ "lock_api",
  "log",
  "mem-barrier",
  "memory_addresses 0.4.0",
