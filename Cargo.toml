@@ -166,7 +166,7 @@ smp = ["acpi"]
 #! ### Network Features
 
 ## Enables TCP support.
-tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
+tcp = ["net", "smoltcp", "smoltcp/socket-tcp", "smoltcp/segmentation-offload"]
 
 ## Enables UDP support.
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
