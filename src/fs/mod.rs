@@ -2,6 +2,8 @@ pub(crate) mod dev_directory;
 pub(crate) mod mem;
 #[cfg(feature = "uhyve")]
 pub(crate) mod uhyve;
+#[cfg(feature = "virtio-blk")]
+pub(crate) mod vfat;
 #[cfg(feature = "virtio-fs")]
 pub(crate) mod virtio_fs;
 
@@ -330,6 +332,9 @@ pub(crate) fn init() {
 
 	#[cfg(feature = "virtio-fs")]
 	virtio_fs::init();
+
+	#[cfg(feature = "virtio-blk")]
+	vfat::init();
 
 	#[cfg(feature = "uhyve")]
 	use crate::env::UhyveStartInfo;
