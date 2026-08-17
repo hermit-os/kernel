@@ -39,10 +39,6 @@ const AML_BYTEPREFIX: u8 = 0x0a;
 /// Bit to enable an ACPI Sleep State.
 const SLP_EN: u16 = 1 << 13;
 
-/// The MCFG table, to address PCIe configuration space
-#[cfg(feature = "pci")]
-static MCFG: OnceCell<AcpiTable<'_>> = OnceCell::new();
-
 /// The PM1A Control I/O Port for powering off the computer through ACPI.
 static PM1A_CNT_BLK: OnceCell<Port<u16>> = OnceCell::new();
 /// The Sleeping State Type code for powering off the computer through ACPI.
@@ -92,7 +88,7 @@ impl AcpiSdtHeader {
 /// A convenience structure to work with an ACPI table.
 /// Maps a single table to memory and frees the memory when a variable of this structure goes out of scope.
 #[derive(Debug)]
-pub struct AcpiTable<'a> {
+struct AcpiTable<'a> {
 	header: &'a AcpiSdtHeader,
 }
 
@@ -131,7 +127,7 @@ impl AcpiTable<'_> {
 		ptr::from_ref(self.header).addr()
 	}
 
-	pub fn table_start_address(&self) -> usize {
+	fn table_start_address(&self) -> usize {
 		self.header_start_address() + size_of::<AcpiSdtHeader>()
 	}
 
@@ -139,7 +135,7 @@ impl AcpiTable<'_> {
 		self.header_start_address() + self.header.length as usize
 	}
 
-	pub fn table_byte_len(&self) -> usize {
+	fn table_byte_len(&self) -> usize {
 		self.header.length as usize - size_of::<AcpiSdtHeader>()
 	}
 }
@@ -433,11 +429,6 @@ fn parse_ssdt(ssdt: AcpiTable<'_>) {
 	search_s5_in_table(ssdt);
 }
 
-#[cfg(feature = "pci")]
-pub fn get_mcfg_table() -> Option<&'static AcpiTable<'static>> {
-	MCFG.get()
-}
-
 pub fn poweroff() {
 	let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
 	else {
@@ -514,16 +505,6 @@ pub fn init() {
 				"SSDT at {table_physical_address:p} has invalid checksum"
 			);
 			parse_ssdt(table);
-		} else if table.header.signature() == "MCFG" {
-			#[cfg(feature = "pci")]
-			{
-				assert!(
-					verify_checksum(table.header_start_address(), table.header.length as usize)
-						.is_ok(),
-					"MCFG at {table_physical_address:p} has invalid checksum"
-				);
-				MCFG.set(table).unwrap();
-			}
 		}
 	}
 }
