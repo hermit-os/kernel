@@ -12,6 +12,7 @@ use volatile::VolatileRef;
 use crate::arch::kernel::interrupts::init_plic;
 #[cfg(all(
 	any(
+		feature = "virtio-blk",
 		feature = "virtio-fs",
 		feature = "virtio-rng",
 		feature = "virtio-vsock",
@@ -21,6 +22,7 @@ use crate::arch::kernel::interrupts::init_plic;
 use crate::arch::kernel::mmio::MmioDriver;
 #[cfg(all(
 	any(
+		feature = "virtio-blk",
 		feature = "virtio-fs",
 		feature = "virtio-rng",
 		feature = "virtio-vsock",
@@ -36,6 +38,7 @@ use crate::drivers::net::gem;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(all(
 	any(
+		feature = "virtio-blk",
 		feature = "virtio-console",
 		feature = "virtio-fs",
 		feature = "virtio-net",
@@ -282,6 +285,12 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					register_driver(MmioDriver::VirtioVsock(
 						hermit_sync::InterruptSpinMutex::new(*drv),
 					));
+				}
+				#[cfg(feature = "virtio-blk")]
+				Ok(VirtioDriver::Blk(drv)) => {
+					register_driver(MmioDriver::VirtioBlk(hermit_sync::InterruptSpinMutex::new(
+						*drv,
+					)));
 				}
 				Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(0))) => (),
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),

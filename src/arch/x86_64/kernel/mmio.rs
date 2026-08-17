@@ -6,6 +6,7 @@ use core::{ptr, str};
 use align_address::Align;
 use free_list::PageRange;
 #[cfg(any(
+	feature = "virtio-blk",
 	feature = "virtio-fs",
 	feature = "virtio-rng",
 	feature = "virtio-vsock",
@@ -18,6 +19,8 @@ use volatile::VolatileRef;
 use crate::arch::mm::paging;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::drivers::InterruptHandlerMap;
+#[cfg(feature = "virtio-blk")]
+use crate::drivers::blk::VirtioBlkDriver;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
@@ -26,6 +29,7 @@ use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::rng::VirtioRngDriver;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 #[cfg(any(
+	feature = "virtio-blk",
 	feature = "virtio-console",
 	feature = "virtio-fs",
 	feature = "virtio-net",
@@ -48,6 +52,8 @@ static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
 #[non_exhaustive]
 pub(crate) enum MmioDriver {
+	#[cfg(feature = "virtio-blk")]
+	VirtioBlk(InterruptTicketMutex<VirtioBlkDriver>),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-rng")]
@@ -57,6 +63,15 @@ pub(crate) enum MmioDriver {
 }
 
 impl MmioDriver {
+	#[cfg(feature = "virtio-blk")]
+	fn get_block_driver(&self) -> Option<&InterruptTicketMutex<VirtioBlkDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioBlk(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
 	#[cfg(feature = "virtio-fs")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		#[allow(unreachable_patterns)]
@@ -167,6 +182,7 @@ fn guess_device() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>
 }
 
 #[cfg(any(
+	feature = "virtio-blk",
 	feature = "virtio-fs",
 	feature = "virtio-rng",
 	feature = "virtio-vsock",
@@ -184,6 +200,14 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 		.get()?
 		.iter()
 		.find_map(|drv| drv.get_filesystem_driver())
+}
+
+#[cfg(feature = "virtio-blk")]
+pub(crate) fn get_block_driver() -> Option<&'static InterruptTicketMutex<VirtioBlkDriver>> {
+	MMIO_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_block_driver())
 }
 
 #[cfg(feature = "virtio-rng")]
@@ -211,6 +235,10 @@ fn register_mmio(
 		#[cfg(feature = "virtio-console")]
 		Ok(VirtioDriver::Console(drv)) => {
 			crate::console::switch_to_virtio(*drv);
+		}
+		#[cfg(feature = "virtio-blk")]
+		Ok(VirtioDriver::Blk(drv)) => {
+			register_driver(MmioDriver::VirtioBlk(InterruptTicketMutex::new(*drv)));
 		}
 		#[cfg(feature = "virtio-fs")]
 		Ok(VirtioDriver::Fs(drv)) => {
