@@ -105,11 +105,32 @@ pub fn shutdown() -> Option<!> {
 
 	let fadt = find_table::<Fadt>()?;
 
-	let fixed_registers = FixedRegisters::new(&fadt, fadt.handler.clone()).ok()?;
-	write_pm1x_cnt(&fixed_registers.pm1_control_registers.pm1a, &s5[0]).ok()?;
+	let fadt_flags = fadt.flags;
+	if fadt_flags.system_is_hw_reduced_acpi() {
+		debug!("HW-reduced ACPI platform.");
 
-	if let Some(pm1b_cnt) = &fixed_registers.pm1_control_registers.pm1b {
-		write_pm1x_cnt(pm1b_cnt, &s5[1]).ok()?;
+		let slp_typx = s5[0].as_integer().ok()?;
+
+		let sleep_control_register = fadt.sleep_control_register().ok()??;
+		let sleep_control_register =
+			unsafe { MappedGas::map_gas(sleep_control_register, &fadt.handler).ok()? };
+
+		let mut value = sleep_control_register.read().ok()?;
+		// SLP_TYPx
+		value.set_bits(2..5, slp_typx);
+		// SLP_EN
+		value.set_bit(5, true);
+		sleep_control_register.write(value).ok()?;
+	} else {
+		debug!("Not a HW-reduced ACPI platform.");
+
+		let fixed_registers = FixedRegisters::new(&fadt, fadt.handler.clone()).ok()?;
+
+		write_pm1x_cnt(&fixed_registers.pm1_control_registers.pm1a, &s5[0]).ok()?;
+
+		if let Some(pm1b_cnt) = &fixed_registers.pm1_control_registers.pm1b {
+			write_pm1x_cnt(pm1b_cnt, &s5[1]).ok()?;
+		}
 	}
 
 	None
