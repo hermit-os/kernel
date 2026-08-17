@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 #[cfg(any(
+	feature = "virtio-blk",
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
 	feature = "virtio-rng",
@@ -21,6 +22,8 @@ use crate::arch::kernel::pci::PciConfigRegion;
 #[allow(unused_imports)]
 use crate::drivers::Driver;
 use crate::drivers::InterruptHandlerMap;
+#[cfg(feature = "virtio-blk")]
+use crate::drivers::blk::VirtioBlkDriver;
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
@@ -362,6 +365,8 @@ pub(crate) fn print_information() {
 #[allow(clippy::enum_variant_names)]
 #[non_exhaustive]
 pub(crate) enum PciDriver {
+	#[cfg(feature = "virtio-blk")]
+	VirtioBlk(InterruptTicketMutex<VirtioBlkDriver>),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-rng")]
@@ -371,6 +376,15 @@ pub(crate) enum PciDriver {
 }
 
 impl PciDriver {
+	#[cfg(feature = "virtio-blk")]
+	fn get_block_driver(&self) -> Option<&InterruptTicketMutex<VirtioBlkDriver>> {
+		#[allow(unreachable_patterns)]
+		match self {
+			Self::VirtioBlk(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
 	#[cfg(feature = "virtio-rng")]
 	fn get_rng_driver(&self) -> Option<&InterruptTicketMutex<VirtioRngDriver>> {
 		#[allow(unreachable_patterns)]
@@ -408,6 +422,14 @@ pub(crate) type NetworkDevice = VirtioNetDriver;
 
 #[cfg(feature = "rtl8139")]
 pub(crate) type NetworkDevice = RTL8139Driver;
+
+#[cfg(feature = "virtio-blk")]
+pub(crate) fn get_block_driver() -> Option<&'static InterruptTicketMutex<VirtioBlkDriver>> {
+	PCI_DRIVERS
+		.get()?
+		.iter()
+		.find_map(|drv| drv.get_block_driver())
+}
 
 #[cfg(feature = "virtio-rng")]
 pub(crate) fn get_rng_driver() -> Option<&'static InterruptTicketMutex<VirtioRngDriver>> {
@@ -457,6 +479,10 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
 					crate::console::switch_to_virtio(*drv);
+				}
+				#[cfg(feature = "virtio-blk")]
+				Ok(VirtioDriver::Blk(drv)) => {
+					register_driver(PciDriver::VirtioBlk(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::Fs(drv)) => {

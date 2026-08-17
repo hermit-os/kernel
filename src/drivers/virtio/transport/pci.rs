@@ -21,6 +21,8 @@ use volatile::{VolatilePtr, VolatileRef};
 
 use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::InterruptHandlerMap;
+#[cfg(feature = "virtio-blk")]
+use crate::drivers::blk::VirtioBlkDriver;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
@@ -136,6 +138,11 @@ impl CapCfg for CommonCfg {
 
 impl CapCfg for IsrStatusRaw {
 	const TYPE: CapCfgType = CapCfgType::Isr;
+}
+
+#[cfg(feature = "virtio-blk")]
+impl CapCfg for virtio::blk::Config {
+	const TYPE: CapCfgType = CapCfgType::Device;
 }
 
 impl CapCfg for virtio::console::Config {
@@ -726,6 +733,7 @@ pub(crate) fn map_caps(
 #[cfg_attr(
 	not(any(
 		feature = "virtio-console",
+		feature = "virtio-blk",
 		feature = "virtio-fs",
 		all(
 			not(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci"))),
@@ -810,6 +818,19 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "virtio-blk")]
+		virtio::Id::Block => match init::<VirtioBlkDriver>(device, handlers) {
+			Ok(virt_blk_drv) => {
+				info!("Virtio block device driver initialized.");
+				Ok(VirtioDriver::Blk(alloc::boxed::Box::new(virt_blk_drv)))
+			}
+			Err(virtio_error) => {
+				error!(
+					"Virtio block device driver could not be initialized with device: {device_id:x}"
+				);
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "virtio-rng")]
 		virtio::Id::Rng => match init::<VirtioRngDriver>(device, handlers) {
 			Ok(virt_rng_drv) => {
@@ -850,6 +871,8 @@ pub(crate) fn init_device(
 }
 
 pub(crate) enum VirtioDriver {
+	#[cfg(feature = "virtio-blk")]
+	Blk(alloc::boxed::Box<VirtioBlkDriver>),
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-fs")]
