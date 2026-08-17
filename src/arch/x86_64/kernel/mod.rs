@@ -13,7 +13,7 @@ use crate::arch::kernel::core_local::*;
 use crate::env::{self, UhyveStartInfo};
 
 #[cfg(feature = "acpi")]
-pub mod acpi;
+mod acpi;
 pub mod apic;
 pub mod core_local;
 pub mod gdt;

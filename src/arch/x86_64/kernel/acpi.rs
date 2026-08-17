@@ -130,7 +130,7 @@ impl AcpiTable<'_> {
 		}
 	}
 
-	pub fn header_start_address(&self) -> usize {
+	fn header_start_address(&self) -> usize {
 		ptr::from_ref(self.header).addr()
 	}
 
