@@ -1,3 +1,5 @@
+#[cfg(feature = "virtio-blk")]
+pub(crate) use crate::arch::kernel::mmio::get_block_driver;
 #[cfg(feature = "virtio-fs")]
 pub(crate) use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "virtio-rng")]
