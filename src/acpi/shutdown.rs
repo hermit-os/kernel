@@ -21,8 +21,17 @@ pub fn shutdown() -> Option<!> {
 
 	let fadt = super::find_table::<Fadt>()?;
 
-	let fixed_registers = FixedRegisters::new(&fadt, fadt.handler.clone()).ok()?;
-	write_pm1x_cnt(&fixed_registers.pm1_control_registers.pm1a, slp_typa).ok()?;
+	let fadt_flags = fadt.flags;
+	if fadt_flags.system_is_hw_reduced_acpi() {
+		debug!("HW-reduced ACPI platform.");
+
+		write_sleep_control_reg(&fadt, slp_typa, &fadt.handler).ok()?;
+	} else {
+		debug!("Not a HW-reduced ACPI platform.");
+
+		let fixed_registers = FixedRegisters::new(&fadt, fadt.handler.clone()).ok()?;
+		write_pm1x_cnt(&fixed_registers.pm1_control_registers.pm1a, slp_typa).ok()?;
+	}
 
 	None
 }
@@ -57,6 +66,30 @@ fn write_pm1x_cnt<H: Handler>(pm1x_cnt: &MappedGas<H>, slp_typx: u8) -> Result<(
 	// SLP_EN
 	value.set_bit(13, true);
 	pm1x_cnt.write(value)?;
+
+	Ok(())
+}
+
+/// Writes the provided HW-reduced ACPI Sleep Type value and the SLP_EN bit to the Sleep Control Register.
+///
+/// For details, see [Sleep Control and Status Registers].
+///
+/// [Sleep Control and Status Registers]: https://uefi.org/specs/ACPI/6.6/04_ACPI_Hardware_Specification.html#sleep-control-and-status-registers
+fn write_sleep_control_reg<H: Handler>(
+	fadt: &Fadt,
+	slp_typx: u8,
+	handler: &H,
+) -> Result<(), AcpiError> {
+	let sleep_control_reg = fadt.sleep_control_register()?;
+	let sleep_control_reg = sleep_control_reg.ok_or(AcpiError::InvalidGenericAddress)?;
+	let sleep_control_reg = unsafe { MappedGas::map_gas(sleep_control_reg, handler)? };
+
+	let mut value = sleep_control_reg.read()?;
+	// SLP_TYPx
+	value.set_bits(2..5, u64::from(slp_typx));
+	// SLP_EN
+	value.set_bit(5, true);
+	sleep_control_reg.write(value)?;
 
 	Ok(())
 }
