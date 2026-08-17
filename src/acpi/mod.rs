@@ -108,6 +108,10 @@ pub fn shutdown() -> Option<!> {
 	let fixed_registers = FixedRegisters::new(&fadt, fadt.handler.clone()).ok()?;
 	write_pm1x_cnt(&fixed_registers.pm1_control_registers.pm1a, &s5[0]).ok()?;
 
+	if let Some(pm1b_cnt) = &fixed_registers.pm1_control_registers.pm1b {
+		write_pm1x_cnt(pm1b_cnt, &s5[1]).ok()?;
+	}
+
 	None
 }
 
