@@ -4,6 +4,7 @@
 )]
 
 mod handler;
+mod shutdown;
 mod spec;
 
 use core::num::NonZero;
@@ -13,6 +14,7 @@ use acpi::{AcpiTable, AcpiTables, Handler, PhysicalMapping};
 use hermit_sync::OnceCell;
 
 use self::handler::AcpiHandler;
+pub use self::shutdown::*;
 pub use self::spec::*;
 use crate::env::{self, StartInfo};
 

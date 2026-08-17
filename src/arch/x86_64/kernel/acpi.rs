@@ -1,9 +1,7 @@
 use core::{ptr, slice, str};
 
 use align_address::Align;
-use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
-use x86_64::instructions::port::Port;
 use x86_64::structures::paging::{PageTableFlags, PhysFrame};
 
 use crate::arch::mm::paging;
@@ -24,25 +22,6 @@ const RSDP_SEARCH_ADDRESS_HIGH: PhysAddr = PhysAddr::new(0xf_ffff);
 const RSDP_CHECKSUM_LENGTH: usize = 20;
 /// Length in byte sof the structure, over which the extended (ACPI 2.0+) checksum is calculated.
 const RSDP_XCHECKSUM_LENGTH: usize = 36;
-
-/// ACPI AML opcode indicating that a name follows.
-const AML_NAMEOP: u8 = 0x08;
-/// ACPI AML opcode indicating that a package follows.
-const AML_PACKAGEOP: u8 = 0x12;
-/// ACPI AML opcode indicating a single zero byte as the data.
-const AML_ZEROOP: u8 = 0x00;
-/// ACPI AML opcode indicating a single one byte as the data.
-const AML_ONEOP: u8 = 0x01;
-/// ACPI AML opcode indicating that a single byte with the data follows.
-const AML_BYTEPREFIX: u8 = 0x0a;
-
-/// Bit to enable an ACPI Sleep State.
-const SLP_EN: u16 = 1 << 13;
-
-/// The PM1A Control I/O Port for powering off the computer through ACPI.
-static PM1A_CNT_BLK: OnceCell<Port<u16>> = OnceCell::new();
-/// The Sleeping State Type code for powering off the computer through ACPI.
-static SLP_TYPA: OnceCell<u8> = OnceCell::new();
 
 /// The "Root System Description Pointer" structure providing pointers to all other ACPI tables.
 #[repr(C, packed)]
@@ -134,84 +113,6 @@ impl AcpiTable<'_> {
 	fn table_end_address(&self) -> usize {
 		self.header_start_address() + self.header.length as usize
 	}
-
-	fn table_byte_len(&self) -> usize {
-		self.header.length as usize - size_of::<AcpiSdtHeader>()
-	}
-}
-
-/// The ACPI Generic Address Structure (GAS).
-/// Described in ACPI Specification 6.2 A, 5.2.3.2 Generic Address Structure.
-#[repr(C, packed)]
-struct AcpiGenericAddress {
-	address_space: u8,
-	bit_width: u8,
-	bit_offset: u8,
-	access_size: u8,
-	address: u64,
-}
-
-const GENERIC_ADDRESS_IO_SPACE: u8 = 1;
-
-/// The "Fixed ACPI Description Table" (FADT), also called "Fixed ACPI Control Pointer" (FACP).
-/// Described in ACPI Specification 6.2 A, 5.2.9 Fixed ACPI Description Table (FADT).
-#[repr(C, packed)]
-struct AcpiFadt {
-	firmware_ctrl: u32,
-	dsdt: u32,
-	reserved1: u8,
-	preferred_pm_profile: u8,
-	sci_int: u16,
-	smi_cmd: u32,
-	acpi_enable: u8,
-	acpi_disable: u8,
-	s4bios_req: u8,
-	pstate_cnt: u8,
-	pm1a_evt_blk: u32,
-	pm1b_evt_blk: u32,
-	pm1a_cnt_blk: u32,
-	pm1b_cnt_blk: u32,
-	pm2_cnt_blk: u32,
-	pm_tmr_blk: u32,
-	gpe0_blk: u32,
-	gpe1_blk: u32,
-	pm1_evt_len: u8,
-	pm1_cnt_len: u8,
-	pm2_cnt_len: u8,
-	pm_tmr_len: u8,
-	gpe0_blk_len: u8,
-	gpe1_blk_len: u8,
-	gpe1_base: u8,
-	cst_cnt: u8,
-	p_lvl2_lat: u16,
-	p_lvl3_lat: u16,
-	flush_size: u16,
-	flush_stride: u16,
-	duty_offset: u8,
-	duty_width: u8,
-	day_alrm: u8,
-	mon_alrm: u8,
-	century: u8,
-	iapc_boot_arch: u16,
-	reserved2: u8,
-	flags: u32,
-	reset_reg: AcpiGenericAddress,
-	reset_value: u8,
-	arm_boot_arch: u16,
-	fadt_minor_version: u8,
-	x_firmware_ctrl: u64,
-	x_dsdt: u64,
-	x_pm1a_evt_blk: AcpiGenericAddress,
-	x_pm1b_evt_blk: AcpiGenericAddress,
-	x_pm1a_cnt_blk: AcpiGenericAddress,
-	x_pm1b_cnt_blk: AcpiGenericAddress,
-	x_pm2_cnt_blk: AcpiGenericAddress,
-	x_pm_tmr_blk: AcpiGenericAddress,
-	x_gpe0_blk: AcpiGenericAddress,
-	x_gpe1_blk: AcpiGenericAddress,
-	sleep_control_reg: AcpiGenericAddress,
-	sleep_status_reg: AcpiGenericAddress,
-	hypervisor_vendor_id: u64,
 }
 
 /// Verifies the checksum of an ACPI table.
@@ -319,130 +220,6 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 	Err(())
 }
 
-fn search_s5_in_table(table: AcpiTable<'_>) {
-	// Get the AML code.
-	// As we do not implement an AML interpreter, we search through the bytecode.
-	let aml = unsafe {
-		slice::from_raw_parts(
-			ptr::with_exposed_provenance(table.table_start_address()),
-			table.table_byte_len(),
-		)
-	};
-
-	// Find the "_S5_" object in the bytecode.
-	let s5 = [b'_', b'S', b'5', b'_', AML_PACKAGEOP];
-	let s5_position = aml.windows(s5.len()).position(|window| window == s5);
-	let Some(i) = s5_position else {
-		return;
-	};
-
-	// We have found an "_S5_" object that looks valid.
-	// To be sure, verify that it begins with an AML_NAMEOP or an AML_NAMEOP and a backslash.
-	if i > 2 && (aml[i - 1] == AML_NAMEOP || (aml[i - 2] == AML_NAMEOP && aml[i - 1] == b'\\')) {
-		// This is a valid "_S5_" object.
-		// It should be followed by this structure:
-		//    - single byte for PkgLength (index 5)
-		//    - single byte for NumElements (index 6)
-		let pkg_length = aml[i + 5];
-		let num_elements = aml[i + 6];
-
-		// Bits 6-7 of PkgLength are non-zero for larger packages, resulting in a different structure.
-		// This mustn't be the case for the "_S5_" object.
-		if pkg_length & 0b1100_0000 == 0 && num_elements > 0 {
-			// The next byte is an opcode describing the data.
-			// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
-			// However, if the data is a zero or one byte, this may also be indicated by the opcode.
-			let op = aml[i + 7];
-			let slp_typa = match op {
-				AML_ZEROOP => 0,
-				AML_ONEOP => 1,
-				AML_BYTEPREFIX => aml[i + 8],
-				_ => return,
-			};
-
-			// All assumptions are correct, so slp_typa is supposed to contain valid information.
-			// Now we have all information we need for powering off through ACPI.
-			//
-			// Note that Power Off may also be controlled through PM1B_CNT_BLK / SLP_TYPB
-			// according to the ACPI Specification. However, this has not yet been observed on real computers
-			// and therefore not implemented.
-			SLP_TYPA.set(slp_typa).unwrap();
-		}
-	}
-}
-
-fn parse_fadt(fadt: AcpiTable<'_>) {
-	// Get us a reference to the actual fields of the FADT table.
-	// Note that not all fields may be accessible depending on the ACPI revision of the computer.
-	// Always check fadt.table_end_address() when accessing an optional field!
-	let fadt_table =
-		unsafe { &*ptr::with_exposed_provenance::<AcpiFadt>(fadt.table_start_address()) };
-
-	// Check if the FADT is large enough to hold an x_pm1a_cnt_blk field and if this field is non-zero.
-	// In that case, it shall be preferred over the I/O port specified in pm1a_cnt_blk.
-	// As all PM1 control registers are supposed to be in I/O space, we can simply check the address_space field
-	// of x_pm1a_cnt_blk to determine the validity of x_pm1a_cnt_blk.
-	let x_pm1a_cnt_blk_field_address = ptr::from_ref(&fadt_table.x_pm1a_cnt_blk).addr();
-	let pm1a_cnt_blk = if x_pm1a_cnt_blk_field_address < fadt.table_end_address()
-		&& fadt_table.x_pm1a_cnt_blk.address_space == GENERIC_ADDRESS_IO_SPACE
-	{
-		fadt_table.x_pm1a_cnt_blk.address as u16
-	} else {
-		fadt_table.pm1a_cnt_blk as u16
-	};
-	PM1A_CNT_BLK.set(Port::new(pm1a_cnt_blk)).unwrap();
-
-	// Map the "Differentiated System Description Table" (DSDT).
-	let x_dsdt_field_address = (&raw const fadt_table.x_dsdt).addr();
-	let dsdt_address = if x_dsdt_field_address < fadt.table_end_address() && fadt_table.x_dsdt > 0 {
-		PhysAddr::new(fadt_table.x_dsdt)
-	} else {
-		PhysAddr::new(fadt_table.dsdt.into())
-	};
-	let dsdt = AcpiTable::map(dsdt_address);
-
-	// Check it.
-	assert!(
-		dsdt.header.signature() == "DSDT",
-		"DSDT at {:p} has invalid signature \"{}\"",
-		dsdt_address,
-		dsdt.header.signature()
-	);
-	assert!(
-		verify_checksum(dsdt.header_start_address(), dsdt.header.length as usize).is_ok(),
-		"DSDT at {dsdt_address:p} has invalid checksum"
-	);
-
-	// Try to find the "_S5_" object for SLP_TYPA in the DSDT AML bytecode.
-	// It may also be in an SSDT though.
-	search_s5_in_table(dsdt);
-}
-
-fn parse_ssdt(ssdt: AcpiTable<'_>) {
-	// We don't need to parse the SSDT if we already have information about the "_S5_" object
-	// (e.g. from the DSDT or a previous SSDT).
-	if SLP_TYPA.get().is_some() {
-		return;
-	}
-
-	// Otherwise, just try to find "_S5_" information in the AML bytecode of this SSDT.
-	search_s5_in_table(ssdt);
-}
-
-pub fn poweroff() {
-	let (Some(mut pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get().cloned(), SLP_TYPA.get())
-	else {
-		warn!("ACPI Power Off is not available");
-		return;
-	};
-
-	let bits = (u16::from(slp_typa) << 10) | SLP_EN;
-	debug!("Powering Off through ACPI (port {pm1a_cnt_blk:?}, bitmask {bits:#X})");
-	unsafe {
-		pm1a_cnt_blk.write(bits);
-	}
-}
-
 pub fn init() {
 	#[cfg(feature = "uhyve")]
 	use env::UhyveStartInfo;
@@ -490,21 +267,5 @@ pub fn init() {
 
 		let table = AcpiTable::map(table_physical_address);
 		debug!("Found ACPI table: {}", table.header.signature());
-
-		if table.header.signature() == "FACP" {
-			// The "Fixed ACPI Description Table" (FADT) aka "Fixed ACPI Control Pointer" (FACP)
-			// Check and parse this table for the poweroff() call.
-			assert!(
-				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"FADT at {table_physical_address:p} has invalid checksum"
-			);
-			parse_fadt(table);
-		} else if table.header.signature() == "SSDT" {
-			assert!(
-				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"SSDT at {table_physical_address:p} has invalid checksum"
-			);
-			parse_ssdt(table);
-		}
 	}
 }
