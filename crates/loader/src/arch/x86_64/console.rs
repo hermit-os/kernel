@@ -1,21 +1,25 @@
-use uart_16550::SerialPort;
+use uart_16550::backend::PioBackend;
+use uart_16550::{Config, Uart16550};
 
 pub struct Console {
-	serial_port: SerialPort,
+	uart: Uart16550<PioBackend>,
 }
 
 impl Console {
 	pub fn write_bytes(&mut self, bytes: &[u8]) {
-		for byte in bytes.iter().copied() {
-			self.serial_port.send(byte);
-		}
+		self.uart.send_bytes_exact(bytes);
 	}
 }
 
 impl Default for Console {
 	fn default() -> Self {
-		let mut serial_port = unsafe { SerialPort::new(0x3F8) };
-		serial_port.init();
-		Self { serial_port }
+		let base_port = 0x3f8;
+		let mut uart = unsafe { Uart16550::new_port(base_port).unwrap() };
+		uart.init(Config::default()).ok();
+		// Once we have a fallback destination for output,
+		// we should log any error above and run
+		// `test_loopback` and `check_connected` here.
+
+		Self { uart }
 	}
 }
