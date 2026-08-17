@@ -1,9 +1,10 @@
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
-	expect(dead_code)
+	expect(dead_code, unused_imports)
 )]
 
 mod handler;
+mod spec;
 
 use core::num::NonZero;
 
@@ -12,6 +13,7 @@ use acpi::{AcpiTable, AcpiTables, Handler, PhysicalMapping, aml};
 use hermit_sync::OnceCell;
 
 use self::handler::AcpiHandler;
+pub use self::spec::*;
 use crate::env::{self, StartInfo};
 
 static ACPI_PLATFORM: OnceCell<AcpiPlatform<AcpiHandler>> = OnceCell::new();
@@ -46,7 +48,6 @@ pub fn init() {
 		.unwrap_or_else(|_| panic!("AML interpreter should not be initialized"));
 }
 
-#[expect(dead_code)]
 pub fn find_table<T: AcpiTable>() -> Option<PhysicalMapping<AcpiHandler, T>> {
 	ACPI_PLATFORM.get()?.tables.find_table()
 }
