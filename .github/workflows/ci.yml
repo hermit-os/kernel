@@ -152,10 +152,10 @@ jobs:
       - name: Macro unit tests
         run: cargo test --package hermit-macro
       - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
+        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64-multiboot
       - run: rustup target add x86_64-unknown-none
       - name: Integration tests
-        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64
+        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64-multiboot
         env:
           RUSTFLAGS:
 

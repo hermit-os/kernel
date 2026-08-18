@@ -238,8 +238,7 @@ impl Qemu {
 	}
 
 	fn image_args(&self, image: &Path, arch: Arch) -> Result<Vec<String>> {
-		let exe_suffix = if self.uefi { ".efi" } else { "" };
-		let loader = format!("hermit-loader-{arch}{exe_suffix}");
+		let loader = self.loader_name(arch);
 
 		let image_args = if self.uefi {
 			let sh = crate::sh()?;
@@ -285,6 +284,20 @@ impl Qemu {
 		};
 
 		Ok(image_args)
+	}
+
+	fn loader_name(&self, arch: Arch) -> String {
+		if self.uefi {
+			return format!("hermit-loader-{arch}.efi");
+		}
+
+		let suffix = match arch {
+			Arch::Aarch64 | Arch::Aarch64Be => "elf",
+			Arch::Riscv64 => "sbi",
+			Arch::X86_64 => "multiboot",
+		};
+
+		format!("hermit-loader-{arch}-{suffix}")
 	}
 
 	fn is_mmio(&self) -> bool {
