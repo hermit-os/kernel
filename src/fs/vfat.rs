@@ -747,6 +747,11 @@ impl ObjectInterface for VfatFileHandle {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
 	}
+
+	async fn fsync(&self) -> io::Result<()> {
+		// currently, we can just sync the whole file system
+		volume()?.sync().await.map_err(map_err)
+	}
 }
 
 /// An open directory of the FAT file system.
@@ -821,4 +826,13 @@ impl ObjectInterface for VfatDirectoryHandle {
 	async fn fstat(&self) -> io::Result<FileAttr> {
 		Ok(file_attr(0, NodeKind::Directory))
 	}
+
+	async fn fsync(&self) -> io::Result<()> {
+		// currently, we can just sync the whole file system
+		volume()?.sync().await.map_err(map_err)
+	}
+}
+
+pub(crate) fn sync() -> io::Result<()> {
+	block_on(async { volume()?.sync().await.map_err(map_err) }, None)
 }

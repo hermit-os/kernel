@@ -341,6 +341,17 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
 	}
+
+	/// synchronize a file's in-core state with that on disk
+	async fn fsync(&self) -> io::Result<()> {
+		Ok(())
+	}
+}
+
+pub(crate) fn fsync(fd: RawFd) -> io::Result<()> {
+	let obj = get_object(fd)?;
+
+	block_on(async { obj.read().await.fsync().await }, None)
 }
 
 pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {

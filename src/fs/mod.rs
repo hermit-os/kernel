@@ -615,3 +615,11 @@ impl Drop for File {
 		}
 	}
 }
+
+/// force completion of pending disk writes (flush cache)
+pub(crate) fn sync() -> io::Result<()> {
+	#[cfg(feature = "virtio-blk")]
+	vfat::sync()?;
+
+	Ok(())
+}
