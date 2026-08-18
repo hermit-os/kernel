@@ -81,22 +81,22 @@ impl Arch {
 		match self {
 			Self::X86_64 => &[
 				"--target=x86_64-unknown-hermit",
-				"-Zbuild-std=core",
+				"-Zbuild-std=core,alloc",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
 			Self::Aarch64 => &[
 				"--target=aarch64-unknown-hermit",
-				"-Zbuild-std=core",
+				"-Zbuild-std=core,alloc",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
 			Self::Aarch64Be => &[
 				"--target=aarch64_be-unknown-hermit",
-				"-Zbuild-std=core",
+				"-Zbuild-std=core,alloc",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
 			Arch::Riscv64 => &[
 				"--target=riscv64gc-unknown-hermit",
-				"-Zbuild-std=core",
+				"-Zbuild-std=core,alloc",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
 		}
