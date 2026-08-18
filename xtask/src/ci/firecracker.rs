@@ -20,19 +20,33 @@ pub struct Firecracker {
 }
 
 impl Firecracker {
-	pub fn run(self, image: &Path, smp: usize) -> Result<()> {
+	pub fn run(self, image: &Path, features: &[String], smp: usize) -> Result<()> {
 		let sh = crate::sh()?;
 
 		let (firecracker_args, hermit_args) = ci::split_args(&self.firecracker_and_hermit_args);
 		let quoted_hermit_args = shlex::try_join(hermit_args.iter().map(AsRef::as_ref))?;
 
-		let config = format!(
-			include_str!("firecracker_vm_config.json"),
-			kernel_image_path = "hermit-loader-x86_64-fc",
-			initrd_path = image.display(),
-			boot_args = quoted_hermit_args,
-			vcpu_count = smp,
-		);
+		let loader = !features
+			.iter()
+			.flat_map(|s| s.split(&[' ', ','][..]))
+			.any(|feature| feature == "hermit/pvh");
+
+		let config = if loader {
+			format!(
+				include_str!("firecracker_vm_config_initrd.json"),
+				kernel_image_path = "hermit-loader-x86_64-fc",
+				initrd_path = image.display(),
+				boot_args = quoted_hermit_args,
+				vcpu_count = smp,
+			)
+		} else {
+			format!(
+				include_str!("firecracker_vm_config.json"),
+				kernel_image_path = image.display(),
+				boot_args = quoted_hermit_args,
+				vcpu_count = smp,
+			)
+		};
 		eprintln!("firecracker config");
 		eprintln!("{config}");
 		let config_path = Path::new("firecracker_vm_config.json");

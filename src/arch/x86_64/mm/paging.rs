@@ -120,6 +120,7 @@ pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 /// This is useful for compatibility with the Hermit loader version 0.5.6.
 // FIXME: Remove once we drop support for loader 0.5.6
 #[cfg(feature = "hermit-entry")]
+#[expect(dead_code)]
 pub fn is_recursive() -> bool {
 	use x86_64::structures::paging::PageTableIndex;
 

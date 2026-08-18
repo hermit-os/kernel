@@ -41,12 +41,10 @@ default = [
 	"dhcpv4",
 	"fsgsbase",
 	"kernel-stack",
-	"loader",
 	"pci-ids",
 	"pci",
 	"smp",
 	"tcp",
-	"uhyve",
 	"virtio-fs",
 	"virtio-net",
 	"virtio-vsock",
@@ -80,6 +78,23 @@ mman = []
 newlib = []
 
 #! ### Platform Features
+
+## Enables PVH boot support.
+##
+## This enables direct kernel boot on the following VMMs:
+## - QEMU
+## - Firecracker
+## - Cloud Hypervisor
+##
+## This feature is mutually exclusive with `loader` and `uhyve`.
+##
+## <div class="warning">
+##
+## The resulting images must be non-relocatable. When linking with Rust,
+## set RUSTFLAGS="-Crelocation-model=static". TODO: C
+##
+## </div>
+pvh = ["dep:pvh"]
 
 ## Enables [Hermit loader] support.
 ##
@@ -363,6 +378,7 @@ mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
 pci_types = { version = "0.10" }
 pci-ids = { version = "0.2", optional = true }
+pvh = { version = "0.1", optional = true }
 rand_chacha = { version = "0.10", default-features = false }
 shlex = { version = "2", default-features = false }
 simple-shell = { version = "0.0.1", optional = true }

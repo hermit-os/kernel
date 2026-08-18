@@ -148,10 +148,15 @@ impl Qemu {
 			smp
 		};
 
+		let loader = !features
+			.iter()
+			.flat_map(|s| s.split(&[' ', ','][..]))
+			.any(|feature| feature == "hermit/pvh");
+
 		let qemu = cmd!(sh, "{program} {arg...}")
 			.args(&["-display", "none"])
 			.args(self.serial_args())
-			.args(self.image_args(image, arch)?)
+			.args(self.image_args(image, arch, loader)?)
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
 			.args(&["-smp", &effective_smp.to_string()])
@@ -237,7 +242,14 @@ impl Qemu {
 		Ok(())
 	}
 
-	fn image_args(&self, image: &Path, arch: Arch) -> Result<Vec<String>> {
+	fn image_args(&self, image: &Path, arch: Arch, loader: bool) -> Result<Vec<String>> {
+		if !loader {
+			return Ok(vec![
+				"-kernel".to_owned(),
+				image.to_str().unwrap().to_owned(),
+			]);
+		}
+
 		let exe_suffix = if self.uefi { ".efi" } else { "" };
 		let loader = format!("hermit-loader-{arch}{exe_suffix}");
 

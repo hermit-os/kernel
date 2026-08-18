@@ -1,4 +1,8 @@
 cfg_select! {
+	all(feature = "pvh", target_arch = "x86_64") => {
+		mod pvh;
+		pub use self::pvh::*;
+	}
 	feature = "hermit-entry" => {
 		mod hermit_entry;
 		pub use self::hermit_entry::*;

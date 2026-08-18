@@ -155,7 +155,7 @@ jobs:
         run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
       - run: rustup target add x86_64-unknown-none
       - name: Integration tests
-        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64
+        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none --features loader -- --bootloader_path=hermit-loader-x86_64
         env:
           RUSTFLAGS:
 
@@ -177,7 +177,7 @@ jobs:
           - arch: x86_64
             packages: qemu-system-x86-hwe uftrace
             qemu_flags: --accel --sudo
-            rs_flags: --features hermit/loader
+            rs_flags: --features hermit/pvh
           - arch: aarch64
             packages: qemu-system-arm-hwe
             rs_flags: --features hermit/loader,hermit/semihosting
@@ -237,9 +237,13 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --no-default-features --smp 4 firecracker --sudo
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --features fs,hermit/uhyve uhyve --sudo
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs,hermit/uhyve uhyve --sudo
         if: matrix.arch == 'x86_64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --features fs,hermit/uhyve --smp 4 uhyve --sudo
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --features fs,hermit/uhyve --smp 4 uhyve --sudo
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features --features hermit/loader qemu --sudo
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} --package rusty_demo --no-default-features --features hermit/loader --smp 4 qemu --sudo
         if: matrix.arch == 'x86_64'
       - run: cargo clean
         working-directory: .
