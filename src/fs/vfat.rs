@@ -206,11 +206,7 @@ impl Write for FatStream {
 
 	async fn flush(&mut self) -> Result<(), IoError<Errno>> {
 		self.flush_all()?;
-
-		match with_driver(|drv| drv.flush()) {
-			Some(_) => Ok(()),
-			_ => Err(IoError::from_source(Errno::Nodev)),
-		}
+		Ok(with_driver(|drv| drv.flush()).ok_or(Errno::Nodev)??)
 	}
 }
 

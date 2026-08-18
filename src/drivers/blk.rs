@@ -130,11 +130,14 @@ impl VirtioBlkDriver {
 
 	/// Asks the device to write out its cache.
 	///
-	/// Returns `Errno::Nosys` if the device did not negotiate
-	/// `feature::FLUSH`.
+	/// Without `virtio::blk::F::FLUSH` this is a no-op. That feature is how a
+	/// device announces that it may hold writes in a volatile cache, so one
+	/// that withholds it has nothing left to write out once `dispatch`
+	/// returned. Reporting an error here would fail an `fsync` whose data did
+	/// reach the device.
 	pub fn flush(&mut self) -> Result<(), Errno> {
 		if !self.dev_cfg.features.contains(virtio::blk::F::FLUSH) {
-			return Err(Errno::Nosys);
+			return Ok(());
 		}
 
 		let send = single(BufferElem::Sized(Box::new_in(
