@@ -263,6 +263,11 @@ pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *co
 }
 
 pub(crate) fn shutdown(arg: i32) -> ! {
+	// force completion of pending disk writes
+	if fs::sync().is_err() {
+		error!("Unable to synchronize file system!");
+	}
+
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
