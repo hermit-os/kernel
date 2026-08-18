@@ -80,15 +80,16 @@ fn rsdp_paddr<H: Handler>(handler: &H) -> Option<NonZero<usize>> {
 
 /// Enters the ACPI S5 soft off system state.
 ///
-/// For details, see [16.1.7. Transitioning from the Working to the Soft Off State — 16. Waking and Sleeping — ACPI Specification 6.6 documentation].
+/// For details, see [Transitioning from the Working to the Soft Off State].
 ///
-/// [16.1.7. Transitioning from the Working to the Soft Off State — 16. Waking and Sleeping — ACPI Specification 6.6 documentation]: https://uefi.org/specs/ACPI/6.6/16_Waking_and_Sleeping.html#transitioning-from-the-working-to-the-soft-off-state
+/// [Transitioning from the Working to the Soft Off State]: https://uefi.org/specs/ACPI/6.6/16_Waking_and_Sleeping.html#transitioning-from-the-working-to-the-soft-off-state
 pub fn shutdown() -> Option<!> {
 	debug!("Entering ACPI S5 soft off state...");
 
 	let aml_interpreter = AML_INTERPRETER.get()?;
 
-	// Execute the \_PTS (Prepare To Sleep) control method if available.
+	// Execute the \_PTS (Prepare To Sleep) control method if available. It is defined in
+	// https://uefi.org/specs/ACPI/6.6/07_Power_and_Performance_Mgmt.html#pts-prepare-to-sleep
 	let pts_path = AmlName::from_str(r"\_PTS").ok()?;
 	let pts_args = vec![Object::Integer(5).wrap()];
 	if let Err(err) = aml_interpreter.evaluate(pts_path, pts_args) {
@@ -109,18 +110,7 @@ pub fn shutdown() -> Option<!> {
 	if fadt_flags.system_is_hw_reduced_acpi() {
 		debug!("HW-reduced ACPI platform.");
 
-		let slp_typx = s5[0].as_integer().ok()?;
-
-		let sleep_control_register = fadt.sleep_control_register().ok()??;
-		let sleep_control_register =
-			unsafe { MappedGas::map_gas(sleep_control_register, &fadt.handler).ok()? };
-
-		let mut value = sleep_control_register.read().ok()?;
-		// SLP_TYPx
-		value.set_bits(2..5, slp_typx);
-		// SLP_EN
-		value.set_bit(5, true);
-		sleep_control_register.write(value).ok()?;
+		write_sleep_control_reg(&fadt, &s5[0], &fadt.handler).ok()?;
 	} else {
 		debug!("Not a HW-reduced ACPI platform.");
 
@@ -136,6 +126,11 @@ pub fn shutdown() -> Option<!> {
 	None
 }
 
+/// Writes the provided SLP_TYPx with the SLP_ENx bit set into the provided PM1A_CNT register.
+///
+/// For details, see [PM1 Control Registers].
+///
+/// [PM1 Control Registers]: https://uefi.org/specs/ACPI/6.6/04_ACPI_Hardware_Specification.html#pm1-control-registers-2
 fn write_pm1x_cnt<H: Handler>(
 	pm1x_cnt: &MappedGas<H>,
 	slp_typx: &WrappedObject,
@@ -148,6 +143,32 @@ fn write_pm1x_cnt<H: Handler>(
 	// SLP_EN
 	value.set_bit(13, true);
 	pm1x_cnt.write(value)?;
+
+	Ok(())
+}
+
+/// Writes the provided HW-reduced ACPI Sleep Type value and the SLP_EN bit to the Sleep Control Register.
+///
+/// For details, see [Sleep Control and Status Registers].
+///
+/// [Sleep Control and Status Registers]: https://uefi.org/specs/ACPI/6.6/04_ACPI_Hardware_Specification.html#sleep-control-and-status-registers
+fn write_sleep_control_reg<H: Handler>(
+	fadt: &Fadt,
+	slp_typx: &WrappedObject,
+	handler: &H,
+) -> Result<(), AcpiError> {
+	let slp_typx = slp_typx.as_integer().map_err(AcpiError::Aml)?;
+
+	let sleep_control_reg = fadt.sleep_control_register()?;
+	let sleep_control_reg = sleep_control_reg.ok_or(AcpiError::InvalidGenericAddress)?;
+	let sleep_control_reg = unsafe { MappedGas::map_gas(sleep_control_reg, handler)? };
+
+	let mut value = sleep_control_reg.read()?;
+	// SLP_TYPx
+	value.set_bits(2..5, slp_typx);
+	// SLP_EN
+	value.set_bit(5, true);
+	sleep_control_reg.write(value)?;
 
 	Ok(())
 }
