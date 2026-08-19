@@ -284,9 +284,17 @@ mod tls_info {
 			pub const ELFOSABI_STANDALONE: u8 = 255;
 
 			let osabi = ident[abi::EI_OSABI];
-			// For some reason `x86_64-unknown-none` uses `ELFOSABI_GNU`.
-			// We need to allow this for `no_std` applications such as our integration tests.
-			assert!(osabi == ELFOSABI_STANDALONE || osabi == abi::ELFOSABI_GNU);
+			match osabi {
+				// `ELFOSABI_NONE` is used by `riscv64-hermit-gcc`.
+				// We should change that and remove the match here.
+				abi::ELFOSABI_NONE => debug!("ELFOSABI_NONE"),
+				// `ELFOSABI_GNU` is used by rustc's `x86_64-unknown-none` target.
+				// We need to allow this for `no_std` applications such as our integration tests.
+				abi::ELFOSABI_GNU => debug!("ELFOSABI_GNU"),
+				// This is our expected OS ABI.
+				ELFOSABI_STANDALONE => debug!("ELFOSABI_STANDALONE"),
+				osabi => warn!("ELFOSABI not expected: {osabi}"),
+			}
 
 			let abiversion = ident[abi::EI_ABIVERSION];
 			assert_eq!(abiversion, 0);
