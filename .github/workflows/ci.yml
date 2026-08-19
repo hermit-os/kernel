@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-hack
       - uses: mkroening/rust-toolchain-toml@main
@@ -103,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@v2.85.5
         with:
           tool: cargo-machete
       - run: cargo machete
