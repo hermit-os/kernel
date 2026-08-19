@@ -146,6 +146,7 @@ impl DescrRing {
 	}
 
 	fn dev_is_notif(&self) -> bool {
+		super::virtio_mem_barrier(BarrierType::General, self.order_platform);
 		!self.used_ring().flags.contains(virtq::UsedF::NO_NOTIFY)
 	}
 }
