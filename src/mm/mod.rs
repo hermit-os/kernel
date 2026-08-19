@@ -91,7 +91,7 @@ pub(crate) fn claim_initial_heap() {
 
 #[cfg(target_os = "none")]
 pub(crate) fn init() {
-	use crate::arch::mm::paging;
+	use arch::mm::paging;
 
 	unsafe {
 		arch::mm::init();

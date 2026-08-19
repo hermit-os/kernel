@@ -27,6 +27,21 @@
 //! cargo xtask build --help
 //! ```
 //!
+//! # Using an initramfs with Hermit
+//!
+//! When the `initramfs` feature is enabled, Hermit supports loading an initramfs,
+//! which is expected to be an uncompressed [tar file in UStar format](https://en.wikipedia.org/wiki/Tar_(computing)#UStar_format).
+//! It is expected to contain a `hermit.toml` file in the archive root,
+//! conforming to the format of [`hermit_entry::config::Config`](https://docs.rs/hermit-entry/latest/hermit_entry/config/enum.Config.html).
+//!
+//! When using [Uhyve], this file should be furthermore compressed using `gzip`,
+//! and passed instead of the kernel.
+//!
+//! The tar file can be created using a command line like:
+//! ```shell
+//! tar -czv -H ustar f some-image.hermit.gz hermit.toml $inputs
+//! ```
+//!
 //! # Features
 //!
 #![cfg_attr(
@@ -37,6 +52,7 @@
 //!
 //! [hermit-rs]: https://github.com/hermit-os/hermit-rs
 //! [hermit-c]: https://github.com/hermit-os/hermit-c
+//! [Uhyve]: https://github.com/hermit-os/uhyve
 
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(
