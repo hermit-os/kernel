@@ -77,8 +77,11 @@ impl Tls {
 				assert_eq!(mem::offset_of!(Tcb, thread_ptr), 0);
 
 				// In Variant II, the TCB comes after the TLS data.
-				let (tls_layout, tcb_offset) = tls_info.layout.extend(tcb_layout).unwrap();
-				(tls_layout.pad_to_align(), 0, tcb_offset)
+				let (tls_layout, _tcb_offset) = tls_info.layout.extend(tcb_layout).unwrap();
+				// FIXME: Currently, `x86_64-hermit-gcc` only aligns the TLS layout size to 4 instead of 8.
+				// We should make GCC align to 8 and use the properly aligned TCB offset here.
+				// This allows us to get rid of unaligned pointer writes further down.
+				(tls_layout.pad_to_align(), 0, tls_info.layout.size())
 			} else {
 				unimplemented!()
 			};
@@ -113,8 +116,14 @@ impl Tls {
 			dtv: ptr::null_mut(),
 			tcb_data: ptr::null_mut(),
 		};
-		unsafe {
-			tcb_ptr.write(tcb);
+		if cfg!(target_arch = "x86_64") {
+			unsafe {
+				tcb_ptr.write_unaligned(tcb);
+			}
+		} else {
+			unsafe {
+				tcb_ptr.write(tcb);
+			}
 		}
 
 		Self {
