@@ -856,8 +856,8 @@ dependencies = [
 
 [[package]]
 name = "hadris-common"
-version = "2.1.0"
-source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+version = "2.2.0"
+source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
 dependencies = [
  "hadris-fixed",
  "hadris-io",
@@ -868,8 +868,8 @@ dependencies = [
 
 [[package]]
 name = "hadris-fat"
-version = "2.1.0"
-source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+version = "2.2.0"
+source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
@@ -885,13 +885,13 @@ dependencies = [
 
 [[package]]
 name = "hadris-fixed"
-version = "2.1.0"
-source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+version = "2.2.0"
+source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
 
 [[package]]
 name = "hadris-io"
-version = "2.1.0"
-source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+version = "2.2.0"
+source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -901,16 +901,16 @@ dependencies = [
 
 [[package]]
 name = "hadris-macros"
-version = "2.1.0"
-source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+version = "2.2.0"
+source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
 dependencies = [
  "proc-macro2",
 ]
 
 [[package]]
 name = "hadris-path"
-version = "2.1.0"
-source = "git+https://github.com/stlankes/hadris.git?branch=sync#75efa1b78b1d551251c983ecc01a507f21905794"
+version = "2.2.0"
+source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
 
 [[package]]
 name = "hash32"
