@@ -1,6 +1,5 @@
 #![allow(clippy::type_complexity)]
 
-#[cfg(not(feature = "common-os"))]
 pub(crate) mod tls;
 
 use alloc::collections::{LinkedList, VecDeque};
@@ -16,7 +15,6 @@ use hashbrown::HashMap;
 use hermit_sync::{OnceCell, RwSpinLock};
 use memory_addresses::VirtAddr;
 
-#[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
 use crate::arch::kernel::core_local::*;
@@ -381,11 +379,7 @@ pub(crate) struct Task {
 	/// Mapping between file descriptor and the referenced IO interface
 	pub object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 	/// Task Thread-Local-Storage (TLS)
-	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Tls>,
-	// Physical address of the 1st level page table
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-	pub root_page_table: usize,
 }
 
 pub(crate) trait TaskFrame {
@@ -414,10 +408,7 @@ impl Task {
 			core_id,
 			stacks,
 			object_map,
-			#[cfg(not(feature = "common-os"))]
 			tls: None,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: crate::arch::mm::create_new_root_page_table(),
 		}
 	}
 
@@ -445,7 +436,6 @@ impl Task {
 			stdio::setup(&mut objmap.write());
 		}
 
-		#[cfg(not(feature = "common-os"))]
 		let tls = if cfg!(feature = "instrument-mcount") {
 			Tls::from_env().inspect(Tls::set_thread_ptr)
 		} else {
@@ -462,10 +452,7 @@ impl Task {
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
 			object_map: OBJECT_MAP.get().unwrap().clone(),
-			#[cfg(not(feature = "common-os"))]
 			tls,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 		}
 	}
 }

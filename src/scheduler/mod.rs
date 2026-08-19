@@ -463,33 +463,6 @@ impl PerCoreScheduler {
 		})
 	}
 
-	/// Creates a new map between file descriptor and their IO interface and
-	/// clone the standard descriptors.
-	#[cfg(feature = "common-os")]
-	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
-	pub fn recreate_objmap(&self) -> io::Result<()> {
-		let mut map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
-			RandomState::with_seeds(0, 0, 0, 0),
-		);
-
-		without_interrupts(|| {
-			let mut current_task = self.current_task.borrow_mut();
-			let object_map = current_task.object_map.read();
-
-			// clone standard file descriptors
-			for i in 0..3 {
-				if let Some(obj) = object_map.get(&i) {
-					map.insert(i, obj.clone());
-				}
-			}
-
-			drop(object_map);
-			current_task.object_map = Arc::new(RwSpinLock::new(map));
-		});
-
-		Ok(())
-	}
-
 	/// Insert a new IO interface and returns a file descriptor as
 	/// identifier to this object
 	pub fn insert_object(&self, obj: Arc<async_lock::RwLock<Fd>>) -> io::Result<RawFd> {
@@ -950,13 +923,4 @@ pub fn shutdown(arg: i32) -> ! {
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
 	TASKS.lock().get(&id).copied()
-}
-
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
-
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-pub(crate) fn get_root_page_table() -> usize {
-	let current_task_borrowed = core_scheduler().current_task.borrow_mut();
-	current_task_borrowed.root_page_table
 }
