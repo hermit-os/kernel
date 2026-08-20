@@ -14,7 +14,7 @@ use time::OffsetDateTime;
 
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio::get_block_driver;
-use crate::drivers::blk::{SECTOR_SIZE, with_driver};
+use crate::drivers::blk::{SECTOR_SIZE, driver, with_driver};
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_block_driver;
 use crate::errno::Errno;
@@ -84,27 +84,6 @@ impl FatStream {
 		}
 	}
 
-	/// Lends out one of the staging buffers for a multi-sector transfer.
-	///
-	/// The buffers are owned by the stream so that a transfer does not
-	/// allocate, but the driver call needs `&mut self` for the cache as well.
-	/// Taking the buffer out for the duration and putting it back keeps both
-	/// borrows disjoint.
-	fn with_run<T>(
-		&mut self,
-		pick: fn(&mut Self) -> &mut Vec<u8>,
-		sectors: usize,
-		f: impl FnOnce(&mut Self, &mut [u8]) -> T,
-	) -> T {
-		let mut run = core::mem::take(pick(self));
-		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
-
-		let result = f(self, &mut run[..sectors * SECTOR_SIZE]);
-
-		*pick(self) = run;
-		result
-	}
-
 	/// The number of sectors the device holds.
 	fn capacity(&self) -> Result<usize, Errno> {
 		with_driver(|drv| drv.capacity()).ok_or(Errno::Nodev)
@@ -114,7 +93,7 @@ impl FatStream {
 	///
 	/// `fill` requests the sector's current contents. A caller that overwrites
 	/// the whole sector can pass `false` and save the read.
-	fn slot(&mut self, sector: usize, fill: bool) -> Result<usize, Errno> {
+	async fn slot(&mut self, sector: usize, fill: bool) -> Result<usize, Errno> {
 		self.clock += 1;
 
 		if let Some(slot) = self.find(sector) {
@@ -123,46 +102,59 @@ impl FatStream {
 		}
 
 		if !fill {
-			return self.install(sector, &[0u8; SECTOR_SIZE]);
+			return self.install(sector, &[0u8; SECTOR_SIZE]).await;
 		}
 
 		// Fetch the requested sector together with the ones that follow it,
 		// bounded by the device. One request for the whole run costs about
 		// what a single-sector one would, and a file system reads forwards.
 		let sectors = RUN_SECTORS.min(self.capacity()? - sector);
-		self.with_run(
-			|this| &mut this.read_run,
-			sectors,
-			|this, run| {
-				with_driver(|drv| drv.read(sector, run)).ok_or(Errno::Nodev)??;
 
-				let mut requested = None;
-				for (index, data) in run.as_chunks::<SECTOR_SIZE>().0.iter().enumerate() {
-					// A sector already in the cache keeps its cached copy: that one
-					// may be dirty, and would then be newer than what the device
-					// just handed us.
-					if this
-						.cache
-						.iter()
-						.any(|entry| entry.sector == sector + index)
-					{
-						continue;
-					}
+		// The staging buffer is owned by the stream so that a transfer does
+		// not allocate, but the work below needs `&mut self` for the cache as
+		// well. Taking it out for the duration keeps the two borrows disjoint;
+		// the inner call may fail, so the buffer goes back either way.
+		let mut run = core::mem::take(&mut self.read_run);
+		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
 
-					let slot = this.install(sector + index, data)?;
-					if index == 0 {
-						requested = Some(slot);
-					}
-				}
+		let result = self
+			.fill_run(sector, &mut run[..sectors * SECTOR_SIZE])
+			.await;
 
-				match requested {
-					Some(slot) => Ok(slot),
-					// Only reachable if the requested sector was cached after all,
-					// which `slot` has already ruled out above.
-					None => this.find(sector).ok_or(Errno::Io),
-				}
-			},
-		)
+		self.read_run = run;
+		result
+	}
+
+	/// Reads a run of sectors into the cache and returns the slot holding
+	/// `sector`.
+	async fn fill_run(&mut self, sector: usize, run: &mut [u8]) -> Result<usize, Errno> {
+		driver().ok_or(Errno::Nodev)?.read(sector, run).await?;
+
+		let mut requested = None;
+		for (index, data) in run.as_chunks::<SECTOR_SIZE>().0.iter().enumerate() {
+			// A sector already in the cache keeps its cached copy: that one
+			// may be dirty, and would then be newer than what the device
+			// just handed us.
+			if self
+				.cache
+				.iter()
+				.any(|entry| entry.sector == sector + index)
+			{
+				continue;
+			}
+
+			let slot = self.install(sector + index, data).await?;
+			if index == 0 {
+				requested = Some(slot);
+			}
+		}
+
+		match requested {
+			Some(slot) => Ok(slot),
+			// Only reachable if the requested sector was cached after all,
+			// which `slot` has already ruled out above.
+			None => self.find(sector).ok_or(Errno::Io),
+		}
 	}
 
 	/// Returns the slot holding `sector`, if it is cached.
@@ -171,7 +163,7 @@ impl FatStream {
 	}
 
 	/// Puts `data` into a free or freshly evicted slot and returns it.
-	fn install(&mut self, sector: usize, data: &[u8]) -> Result<usize, Errno> {
+	async fn install(&mut self, sector: usize, data: &[u8]) -> Result<usize, Errno> {
 		let entry = CachedSector {
 			sector,
 			data: data.try_into().unwrap(),
@@ -201,7 +193,7 @@ impl FatStream {
 		// merge, and leaves every later eviction free until something is
 		// dirtied again.
 		if self.cache[victim].dirty {
-			self.flush_all()?;
+			self.flush_all().await?;
 		}
 
 		self.cache[victim] = entry;
@@ -215,7 +207,7 @@ impl FatStream {
 	/// chain and the directory entry naming it occupy runs of neighbours — so
 	/// sorting them and writing each run as a whole turns a flush of the
 	/// entire cache into a handful of requests.
-	fn flush_all(&mut self) -> Result<(), Errno> {
+	async fn flush_all(&mut self) -> Result<(), Errno> {
 		let mut dirty: Vec<usize> = (0..self.cache.len())
 			.filter(|&slot| self.cache[slot].dirty)
 			.collect();
@@ -238,24 +230,40 @@ impl FatStream {
 			let sector = self.cache[first].sector;
 			let group: Vec<usize> = group.to_vec();
 
-			self.with_run(
-				|this| &mut this.write_run,
-				len,
-				|this, run| {
-					for (index, &slot) in group.iter().enumerate() {
-						run[index * SECTOR_SIZE..(index + 1) * SECTOR_SIZE]
-							.copy_from_slice(&this.cache[slot].data);
-					}
+			// As in `slot`, the staging buffer is lent out for the duration so
+			// that the transfer does not allocate, and returned even when it
+			// fails.
+			let mut run = core::mem::take(&mut self.write_run);
+			run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
 
-					with_driver(|drv| drv.write(sector, run)).ok_or(Errno::Nodev)??;
+			let result = self
+				.write_run_group(sector, &group, &mut run[..len * SECTOR_SIZE])
+				.await;
 
-					for &slot in &group {
-						this.cache[slot].dirty = false;
-					}
+			self.write_run = run;
+			
+			result?;
+		}
 
-					Ok::<(), Errno>(())
-				},
-			)?;
+		Ok(())
+	}
+
+	/// Writes one run of adjacent dirty sectors and marks them clean.
+	async fn write_run_group(
+		&mut self,
+		sector: usize,
+		group: &[usize],
+		run: &mut [u8],
+	) -> Result<(), Errno> {
+		for (index, &slot) in group.iter().enumerate() {
+			run[index * SECTOR_SIZE..(index + 1) * SECTOR_SIZE]
+				.copy_from_slice(&self.cache[slot].data);
+		}
+
+		driver().ok_or(Errno::Nodev)?.write(sector, run).await?;
+
+		for &slot in group {
+			self.cache[slot].dirty = false;
 		}
 
 		Ok(())
@@ -284,7 +292,7 @@ impl Read for FatStream {
 			return Ok(0);
 		}
 
-		let slot = self.slot(sector, true)?;
+		let slot = self.slot(sector, true).await?;
 
 		// A single call never crosses a sector boundary. `Read::read` is
 		// permitted to return a short count, and the caller loops for the
@@ -319,7 +327,7 @@ impl Write for FatStream {
 
 		// A partial sector is read-modify-write; a full one is overwritten
 		// completely, so reading it first would be wasted.
-		let slot = self.slot(sector, n != SECTOR_SIZE)?;
+		let slot = self.slot(sector, n != SECTOR_SIZE).await?;
 
 		self.cache[slot].data[offset..offset + n].copy_from_slice(&buf[..n]);
 		self.cache[slot].dirty = true;
@@ -329,8 +337,10 @@ impl Write for FatStream {
 	}
 
 	async fn flush(&mut self) -> Result<(), IoError<Errno>> {
-		self.flush_all()?;
-		Ok(with_driver(|drv| drv.flush()).ok_or(Errno::Nodev)??)
+		self.flush_all().await?;
+		driver().ok_or(Errno::Nodev)?.flush().await?;
+
+		Ok(())
 	}
 }
 
