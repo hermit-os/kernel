@@ -6,6 +6,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
 use smallvec::SmallVec;
@@ -21,6 +22,7 @@ use crate::drivers::mmio::get_block_driver;
 use crate::drivers::pci::get_block_driver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
+use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
@@ -28,6 +30,11 @@ use crate::drivers::virtio::virtqueue::{
 use crate::drivers::{Driver, InterruptHandlerMap, InterruptLine};
 use crate::errno::Errno;
 use crate::mm::device_alloc::DeviceAlloc;
+
+/// The block device driver, if the system has one.
+pub(crate) fn driver() -> Option<&'static VirtioBlkDriver> {
+	get_block_driver()
+}
 
 /// Runs `f` on the block device driver, if the system has one.
 pub(crate) fn with_driver<T>(f: impl FnOnce(&VirtioBlkDriver) -> T) -> Option<T> {
@@ -69,7 +76,12 @@ fn single(elem: BufferElem) -> SmallVec<[BufferElem; 2]> {
 pub(crate) struct VirtioBlkDriver {
 	/// The request virtqueues, at least one. `Self::vq` picks one per
 	/// requesting core.
-	vqs: Vec<InterruptTicketMutex<VirtQueue>>,
+	///
+	/// The lock is asynchronous because it is held across the wait for the
+	/// device: a second task on the same queue then yields instead of
+	/// spinning, and the interrupt handler never takes it, so nothing here
+	/// needs interrupts masked.
+	vqs: Vec<async_lock::Mutex<VirtQueue>>,
 	/// Reached only by `Self::handle_interrupt` during operation; everything
 	/// else in here belongs to initialization.
 	caps: InterruptTicketMutex<UniCapsColl>,
@@ -100,7 +112,7 @@ impl VirtioBlkDriver {
 	}
 
 	/// Reads `buf.len() / SECTOR_SIZE` sectors starting at `sector`.
-	pub fn read(&self, sector: usize, buf: &mut [u8]) -> Result<(), Errno> {
+	pub async fn read(&self, sector: usize, buf: &mut [u8]) -> Result<(), Errno> {
 		let len = self.checked_len(sector, buf.len())?;
 
 		let send = single(BufferElem::Sized(Box::new_in(
@@ -112,7 +124,7 @@ impl VirtioBlkDriver {
 			BufferElem::Sized(Box::<u8, _>::new_uninit_in(DeviceAlloc)),
 		]);
 
-		let mut used = self.dispatch(send, recv)?;
+		let mut used = self.dispatch(send, recv).await?;
 
 		let data = used.used_recv_buff.pop_front_vec().ok_or(Errno::Io)?;
 		Self::check_status(&mut used)?;
@@ -126,7 +138,7 @@ impl VirtioBlkDriver {
 	}
 
 	/// Writes `buf.len() / SECTOR_SIZE` sectors starting at `sector`.
-	pub fn write(&self, sector: usize, buf: &[u8]) -> Result<(), Errno> {
+	pub async fn write(&self, sector: usize, buf: &[u8]) -> Result<(), Errno> {
 		let _len = self.checked_len(sector, buf.len())?;
 
 		if self.read_only {
@@ -145,7 +157,7 @@ impl VirtioBlkDriver {
 		]);
 		let recv = single(BufferElem::Sized(Box::<u8, _>::new_uninit_in(DeviceAlloc)));
 
-		let mut used = self.dispatch(send, recv)?;
+		let mut used = self.dispatch(send, recv).await?;
 		Self::check_status(&mut used)
 	}
 
@@ -156,7 +168,7 @@ impl VirtioBlkDriver {
 	/// that withholds it has nothing left to write out once `dispatch`
 	/// returned. Reporting an error here would fail an `fsync` whose data did
 	/// reach the device.
-	pub fn flush(&self) -> Result<(), Errno> {
+	pub async fn flush(&self) -> Result<(), Errno> {
 		if !self.features.contains(virtio::blk::F::FLUSH) {
 			return Ok(());
 		}
@@ -167,7 +179,7 @@ impl VirtioBlkDriver {
 		)));
 		let recv = single(BufferElem::Sized(Box::<u8, _>::new_uninit_in(DeviceAlloc)));
 
-		let mut used = self.dispatch(send, recv)?;
+		let mut used = self.dispatch(send, recv).await?;
 		Self::check_status(&mut used)
 	}
 
@@ -196,22 +208,44 @@ impl VirtioBlkDriver {
 	/// it. The modulo covers a device that offers fewer queues than the system
 	/// has cores — those cores then share a queue, which costs contention but
 	/// stays correct.
-	fn vq(&self) -> &InterruptTicketMutex<VirtQueue> {
+	fn vq(&self) -> &async_lock::Mutex<VirtQueue> {
 		let index = usize::try_from(core_id()).unwrap() % self.vqs.len();
 
 		&self.vqs[index]
 	}
 
-	fn dispatch(
+	/// Sends a request and waits for the device to complete it.
+	///
+	/// The queue lock is held for the whole exchange, which is what makes the
+	/// `try_recv` below unambiguous: the completion it finds can only be the
+	/// one this call put in. A second task wanting the same queue waits on the
+	/// lock, and because that lock is asynchronous it yields the core rather
+	/// than spinning on it.
+	async fn dispatch(
 		&self,
 		send: SmallVec<[BufferElem; 2]>,
 		recv: SmallVec<[BufferElem; 2]>,
 	) -> Result<crate::drivers::virtio::virtqueue::UsedBufferToken, Errno> {
 		let tkn = AvailBufferToken::new(send, recv).map_err(|_| Errno::Io)?;
-		self.vq()
-			.lock()
-			.dispatch_blocking(tkn, BufferType::Direct)
-			.map_err(|_| Errno::Io)
+		let mut vq = self.vq().lock().await;
+
+		vq.dispatch(tkn, false, BufferType::Direct)
+			.map_err(|_| Errno::Io)?;
+
+		core::future::poll_fn(|cx| match vq.try_recv() {
+			Ok(used) => Poll::Ready(Ok(used)),
+			Err(VirtqError::NoNewUsed) => {
+				// The device is still working. Ask to be polled again rather
+				// than spinning here: `block_on` runs the executor's other
+				// tasks between polls and puts the task to sleep once its
+				// backoff is exhausted, and interrupts stay unmasked
+				// throughout.
+				cx.waker().wake_by_ref();
+				Poll::Pending
+			}
+			Err(_) => Poll::Ready(Err(Errno::Io)),
+		})
+		.await
 	}
 
 	/// Acknowledges a device interrupt.
@@ -362,7 +396,7 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 			u32::try_from(SECTOR_SIZE).unwrap()
 		};
 		let read_only = features.contains(virtio::blk::F::RO);
-		let vqs: Vec<_> = queues.into_iter().map(InterruptTicketMutex::new).collect();
+		let vqs: Vec<_> = queues.into_iter().map(async_lock::Mutex::new).collect();
 
 		info!(
 			"virtio-blk: {capacity} sectors ({} MiB), block size {blk_size}, {} request queue(s){}",
