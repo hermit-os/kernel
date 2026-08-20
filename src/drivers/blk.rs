@@ -137,28 +137,16 @@ impl VirtioBlkDriver {
 		Ok(())
 	}
 
-	/// Writes `buf.len() / SECTOR_SIZE` sectors starting at `sector`.
-	pub async fn write(&self, sector: usize, buf: &[u8]) -> Result<(), Errno> {
-		let _len = self.checked_len(sector, buf.len())?;
-
-		if self.read_only {
-			return Err(Errno::Rofs);
+	/// Starts a set of requests that stay in flight together.
+	///
+	/// The queue is held for the lifetime of the batch, so the completions
+	/// collected by `Batch::finish` can only be the batch's own.
+	pub async fn batch(&self) -> Batch<'_> {
+		Batch {
+			driver: self,
+			vq: self.vq().lock().await,
+			outstanding: 0,
 		}
-
-		let mut data = Vec::with_capacity_in(buf.len(), DeviceAlloc);
-		data.extend_from_slice(buf);
-
-		let send = SmallVec::from_buf([
-			BufferElem::Sized(Box::new_in(
-				RequestHeader::new(RequestType::OUT, sector.try_into().unwrap()),
-				DeviceAlloc,
-			)),
-			BufferElem::Vector(data),
-		]);
-		let recv = single(BufferElem::Sized(Box::<u8, _>::new_uninit_in(DeviceAlloc)));
-
-		let mut used = self.dispatch(send, recv).await?;
-		Self::check_status(&mut used)
 	}
 
 	/// Asks the device to write out its cache.
@@ -286,6 +274,85 @@ impl VirtioBlkDriver {
 			// Either VIRTIO_BLK_S_IOERR or a status this driver does not know.
 			Err(Errno::Io)
 		}
+	}
+}
+
+/// Requests submitted together and awaited in one go.
+///
+/// One request per round trip leaves the device idle between them. Submitting
+/// a whole write-back and waiting once lets the device work through the queue
+/// while the driver is still filling it. The batch must be finished, even
+/// after a failed `Batch::write`, or its completions are left for whoever
+/// uses the queue next.
+pub(crate) struct Batch<'a> {
+	driver: &'a VirtioBlkDriver,
+	vq: async_lock::MutexGuard<'a, VirtQueue>,
+	outstanding: usize,
+}
+
+impl Batch<'_> {
+	/// Queues a write without waiting for it.
+	pub fn write(&mut self, sector: usize, buf: &[u8]) -> Result<(), Errno> {
+		self.driver.checked_len(sector, buf.len())?;
+
+		if self.driver.read_only {
+			return Err(Errno::Rofs);
+		}
+
+		let mut data = Vec::with_capacity_in(buf.len(), DeviceAlloc);
+		data.extend_from_slice(buf);
+
+		let send = SmallVec::from_buf([
+			BufferElem::Sized(Box::new_in(
+				RequestHeader::new(RequestType::OUT, sector.try_into().unwrap()),
+				DeviceAlloc,
+			)),
+			BufferElem::Vector(data),
+		]);
+		let recv = single(BufferElem::Sized(Box::<u8, _>::new_uninit_in(DeviceAlloc)));
+
+		let tkn = AvailBufferToken::new(send, recv).map_err(|_| Errno::Io)?;
+		self.vq
+			.dispatch(tkn, false, BufferType::Direct)
+			.map_err(|_| Errno::Io)?;
+		self.outstanding += 1;
+
+		Ok(())
+	}
+
+	/// Waits for every queued request and reports the first failure.
+	pub async fn finish(mut self) -> Result<(), Errno> {
+		let mut result = Ok(());
+
+		while self.outstanding > 0 {
+			let vq = &mut self.vq;
+			let used = core::future::poll_fn(|cx| match vq.try_recv() {
+				Ok(used) => Poll::Ready(Ok(used)),
+				Err(VirtqError::NoNewUsed) => {
+					cx.waker().wake_by_ref();
+					Poll::Pending
+				}
+				Err(_) => Poll::Ready(Err(Errno::Io)),
+			})
+			.await;
+
+			self.outstanding -= 1;
+
+			let status = match used {
+				Ok(mut used) => VirtioBlkDriver::check_status(&mut used),
+				// The queue itself failed, so the remaining completions are
+				// not going to arrive either.
+				Err(err) => return Err(err),
+			};
+
+			if let Err(err) = status
+				&& result.is_ok()
+			{
+				result = Err(err);
+			}
+		}
+
+		result
 	}
 }
 
