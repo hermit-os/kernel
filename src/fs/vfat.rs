@@ -33,11 +33,11 @@ use crate::time::SystemTime;
 /// transfers of a plain sequential read. The cache keeps the active FAT and
 /// directory sectors resident while data streams past, and has to be several
 /// times [`RUN_SECTORS`] so that one read-ahead cannot displace them.
-const CACHE_SECTORS: usize = 128;
+const CACHE_SECTORS: usize = 256;
 
 /// Number of sectors a cache miss fetches, and the largest write the cache
 /// coalesces adjacent dirty sectors into.
-const RUN_SECTORS: usize = 32;
+const RUN_SECTORS: usize = 64;
 
 /// One cached device sector.
 struct CachedSector {
@@ -211,7 +211,19 @@ impl FatStream {
 		let mut dirty: Vec<usize> = (0..self.cache.len())
 			.filter(|&slot| self.cache[slot].dirty)
 			.collect();
+		if dirty.is_empty() {
+			return Ok(());
+		}
 		dirty.sort_unstable_by_key(|&slot| self.cache[slot].sector);
+
+		// The staging buffer is lent out for the duration so that a transfer
+		// does not allocate, and returned even when one fails. `Batch::write`
+		// copies before it returns, so one buffer serves every run.
+		let mut run = core::mem::take(&mut self.write_run);
+		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
+
+		let mut batch = driver().ok_or(Errno::Nodev)?.batch().await;
+		let mut submitted = Ok(());
 
 		let mut rest = dirty.as_slice();
 		while let Some((&first, _)) = rest.split_first() {
@@ -227,42 +239,25 @@ impl FatStream {
 			let (group, tail) = rest.split_at(len);
 			rest = tail;
 
-			let sector = self.cache[first].sector;
-			let group: Vec<usize> = group.to_vec();
+			for (index, &slot) in group.iter().enumerate() {
+				run[index * SECTOR_SIZE..(index + 1) * SECTOR_SIZE]
+					.copy_from_slice(&self.cache[slot].data);
+			}
 
-			// As in `slot`, the staging buffer is lent out for the duration so
-			// that the transfer does not allocate, and returned even when it
-			// fails.
-			let mut run = core::mem::take(&mut self.write_run);
-			run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
-
-			let result = self
-				.write_run_group(sector, &group, &mut run[..len * SECTOR_SIZE])
-				.await;
-
-			self.write_run = run;
-
-			result?;
+			submitted = batch.write(self.cache[first].sector, &run[..len * SECTOR_SIZE]);
+			if submitted.is_err() {
+				break;
+			}
 		}
 
-		Ok(())
-	}
+		self.write_run = run;
 
-	/// Writes one run of adjacent dirty sectors and marks them clean.
-	async fn write_run_group(
-		&mut self,
-		sector: usize,
-		group: &[usize],
-		run: &mut [u8],
-	) -> Result<(), Errno> {
-		for (index, &slot) in group.iter().enumerate() {
-			run[index * SECTOR_SIZE..(index + 1) * SECTOR_SIZE]
-				.copy_from_slice(&self.cache[slot].data);
-		}
+		// The sectors stay dirty until the device has acknowledged all of
+		// them; marking them earlier would drop the data on a failed flush.
+		batch.finish().await?;
+		submitted?;
 
-		driver().ok_or(Errno::Nodev)?.write(sector, run).await?;
-
-		for &slot in group {
+		for &slot in &dirty {
 			self.cache[slot].dirty = false;
 		}
 
