@@ -12,8 +12,6 @@ use crate::arch::kernel::core_local::*;
 #[cfg(feature = "uhyve")]
 use crate::env::{self, UhyveStartInfo};
 
-#[cfg(feature = "acpi")]
-mod acpi;
 pub mod apic;
 pub mod core_local;
 pub mod gdt;
@@ -81,7 +79,7 @@ pub fn boot_processor_init() {
 	systemtime::init();
 
 	#[cfg(feature = "acpi")]
-	acpi::init();
+	crate::acpi::init();
 
 	#[cfg(feature = "pci")]
 	pci::init();
