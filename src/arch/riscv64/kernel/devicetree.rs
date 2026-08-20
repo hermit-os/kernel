@@ -288,9 +288,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				}
 				#[cfg(feature = "virtio-blk")]
 				Ok(VirtioDriver::Blk(drv)) => {
-					register_driver(MmioDriver::VirtioBlk(hermit_sync::InterruptSpinMutex::new(
-						*drv,
-					)));
+					register_driver(MmioDriver::VirtioBlk(*drv));
 				}
 				Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(0))) => (),
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),

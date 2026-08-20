@@ -4,10 +4,9 @@ use core::ptr::NonNull;
 use align_address::Align;
 use arm_gic::{IntId, Trigger};
 #[cfg(any(
-	feature = "virtio-blk",
 	feature = "virtio-fs",
 	feature = "virtio-rng",
-	feature = "virtio-vsock",
+	feature = "virtio-vsock"
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
@@ -49,7 +48,7 @@ pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::n
 #[non_exhaustive]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-blk")]
-	VirtioBlk(InterruptTicketMutex<VirtioBlkDriver>),
+	VirtioBlk(VirtioBlkDriver),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-rng")]
@@ -60,7 +59,7 @@ pub(crate) enum MmioDriver {
 
 impl MmioDriver {
 	#[cfg(feature = "virtio-blk")]
-	fn get_block_driver(&self) -> Option<&InterruptTicketMutex<VirtioBlkDriver>> {
+	fn get_block_driver(&self) -> Option<&VirtioBlkDriver> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioBlk(drv) => Some(drv),
@@ -118,7 +117,7 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 }
 
 #[cfg(feature = "virtio-blk")]
-pub(crate) fn get_block_driver() -> Option<&'static InterruptTicketMutex<VirtioBlkDriver>> {
+pub(crate) fn get_block_driver() -> Option<&'static VirtioBlkDriver> {
 	MMIO_DRIVERS
 		.get()?
 		.iter()
@@ -257,7 +256,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 						VirtioDriver::Console(drv) => crate::console::switch_to_virtio(*drv),
 						#[cfg(feature = "virtio-blk")]
 						VirtioDriver::Blk(drv) => {
-							register_driver(MmioDriver::VirtioBlk(InterruptTicketMutex::new(*drv)));
+							register_driver(MmioDriver::VirtioBlk(*drv));
 						}
 						#[cfg(feature = "virtio-fs")]
 						VirtioDriver::Fs(drv) => {
