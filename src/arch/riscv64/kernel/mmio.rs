@@ -1,10 +1,9 @@
 use alloc::vec::Vec;
 
 #[cfg(any(
-	feature = "virtio-blk",
 	feature = "virtio-fs",
 	feature = "virtio-rng",
-	feature = "virtio-vsock",
+	feature = "virtio-vsock"
 ))]
 use hermit_sync::InterruptSpinMutex;
 
@@ -28,7 +27,7 @@ pub(crate) static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::n
 #[non_exhaustive]
 pub(crate) enum MmioDriver {
 	#[cfg(feature = "virtio-blk")]
-	VirtioBlk(InterruptSpinMutex<VirtioBlkDriver>),
+	VirtioBlk(VirtioBlkDriver),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptSpinMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-rng")]
@@ -39,7 +38,7 @@ pub(crate) enum MmioDriver {
 
 impl MmioDriver {
 	#[cfg(feature = "virtio-blk")]
-	fn get_block_driver(&self) -> Option<&InterruptSpinMutex<VirtioBlkDriver>> {
+	fn get_block_driver(&self) -> Option<&VirtioBlkDriver> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioBlk(drv) => Some(drv),
@@ -100,7 +99,7 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptSpinMutex<Virt
 }
 
 #[cfg(feature = "virtio-blk")]
-pub(crate) fn get_block_driver() -> Option<&'static InterruptSpinMutex<VirtioBlkDriver>> {
+pub(crate) fn get_block_driver() -> Option<&'static VirtioBlkDriver> {
 	MMIO_DRIVERS
 		.get()?
 		.iter()

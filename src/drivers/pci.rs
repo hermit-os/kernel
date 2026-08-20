@@ -4,10 +4,9 @@ use alloc::vec::Vec;
 use core::fmt;
 
 #[cfg(any(
-	feature = "virtio-blk",
 	feature = "virtio-fs",
-	feature = "virtio-vsock",
 	feature = "virtio-rng",
+	feature = "virtio-vsock"
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
@@ -366,7 +365,7 @@ pub(crate) fn print_information() {
 #[non_exhaustive]
 pub(crate) enum PciDriver {
 	#[cfg(feature = "virtio-blk")]
-	VirtioBlk(InterruptTicketMutex<VirtioBlkDriver>),
+	VirtioBlk(VirtioBlkDriver),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(feature = "virtio-rng")]
@@ -377,7 +376,7 @@ pub(crate) enum PciDriver {
 
 impl PciDriver {
 	#[cfg(feature = "virtio-blk")]
-	fn get_block_driver(&self) -> Option<&InterruptTicketMutex<VirtioBlkDriver>> {
+	fn get_block_driver(&self) -> Option<&VirtioBlkDriver> {
 		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioBlk(drv) => Some(drv),
@@ -424,7 +423,7 @@ pub(crate) type NetworkDevice = VirtioNetDriver;
 pub(crate) type NetworkDevice = RTL8139Driver;
 
 #[cfg(feature = "virtio-blk")]
-pub(crate) fn get_block_driver() -> Option<&'static InterruptTicketMutex<VirtioBlkDriver>> {
+pub(crate) fn get_block_driver() -> Option<&'static VirtioBlkDriver> {
 	PCI_DRIVERS
 		.get()?
 		.iter()
@@ -482,7 +481,7 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 				}
 				#[cfg(feature = "virtio-blk")]
 				Ok(VirtioDriver::Blk(drv)) => {
-					register_driver(PciDriver::VirtioBlk(InterruptTicketMutex::new(*drv)));
+					register_driver(PciDriver::VirtioBlk(*drv));
 				}
 				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::Fs(drv)) => {
