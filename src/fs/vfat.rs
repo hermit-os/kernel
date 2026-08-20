@@ -241,7 +241,7 @@ impl FatStream {
 				.await;
 
 			self.write_run = run;
-			
+
 			result?;
 		}
 
@@ -415,7 +415,7 @@ pub(crate) fn init() {
 
 	info!("Mounting {} volume at {MOUNT_POINT}", volume.fat_type());
 
-	if VFAT.set(volume).is_err() {
+	if VFAT.set(async_lock::Mutex::new(volume)).is_err() {
 		error!("Unable to mount block device at {MOUNT_POINT}");
 		return;
 	}
@@ -472,7 +472,13 @@ static TIME_PROVIDER: HermitTimeProvider = HermitTimeProvider::new();
 // VFS integration
 // ---------------------------------------------------------------------------
 
-static VFAT: OnceCell<FatVolume<FatStream>> = OnceCell::new();
+static VFAT: OnceCell<async_lock::Mutex<FatVolume<FatStream>>> = OnceCell::new();
+
+// check if VFAT is Sync
+const _: () = {
+	const fn assert_sync<T: Sync>() {}
+	assert_sync::<async_lock::Mutex<FatVolume<FatStream>>>();
+};
 
 /// Where the FAT file system is attached in the VFS.
 const MOUNT_POINT: &str = "/root";
@@ -493,9 +499,16 @@ fn map_err(err: hadris_fat::error::Error) -> Errno {
 	}
 }
 
-/// The mounted volume.
-fn volume() -> io::Result<&'static FatVolume<FatStream>> {
-	VFAT.get().ok_or(Errno::Nodev)
+/// Locks the mounted volume for the duration of one file system operation.
+///
+/// `hadris-fat` locks its sector stream per access, not per operation, so a
+/// lookup and the write that follows it would otherwise be separate critical
+/// sections and two cores could pick the same free directory slot or cluster.
+/// Holding the volume itself is also what keeps that stream lock uncontended,
+/// which matters because it is a spin lock and the driver awaits the device
+/// underneath it.
+async fn volume() -> io::Result<async_lock::MutexGuard<'static, FatVolume<FatStream>>> {
+	Ok(VFAT.get().ok_or(Errno::Nodev)?.lock().await)
 }
 
 /// Joins the directory's own path with a path relative to it.
@@ -508,7 +521,7 @@ fn join(prefix: &str, path: &str) -> String {
 }
 
 /// Finds the entry called `name` directly below `dir`.
-async fn find(dir: &FatDir<'static, FatStream>, name: &str) -> io::Result<Option<FileEntry>> {
+async fn find(dir: &FatDir<'_, FatStream>, name: &str) -> io::Result<Option<FileEntry>> {
 	let mut entries = dir.entries();
 	while let Some(entry) = entries.next_entry().await {
 		let entry = entry.map_err(map_err)?;
@@ -524,8 +537,10 @@ async fn find(dir: &FatDir<'static, FatStream>, name: &str) -> io::Result<Option
 
 /// Walks `path` and returns the directory holding its last component together
 /// with that component's entry, if it exists.
-async fn resolve(path: &str) -> io::Result<(FatDir<'static, FatStream>, Option<FileEntry>)> {
-	let volume = volume()?;
+async fn resolve<'a>(
+	volume: &'a FatVolume<FatStream>,
+	path: &str,
+) -> io::Result<(FatDir<'a, FatStream>, Option<FileEntry>)> {
 	let mut dir = volume.root_dir();
 
 	let mut components = path.split('/').filter(|part| !part.is_empty()).peekable();
@@ -547,8 +562,11 @@ async fn resolve(path: &str) -> io::Result<(FatDir<'static, FatStream>, Option<F
 }
 
 /// Resolves `path` to a directory.
-async fn resolve_dir(path: &str) -> io::Result<FatDir<'static, FatStream>> {
-	let (parent, entry) = resolve(path).await?;
+async fn resolve_dir<'a>(
+	volume: &'a FatVolume<FatStream>,
+	path: &str,
+) -> io::Result<FatDir<'a, FatStream>> {
+	let (parent, entry) = resolve(volume, path).await?;
 
 	match entry {
 		Some(entry) => parent.open_entry(&entry).map_err(map_err),
@@ -558,8 +576,8 @@ async fn resolve_dir(path: &str) -> io::Result<FatDir<'static, FatStream>> {
 }
 
 /// Resolves `path` to an existing file entry.
-async fn resolve_file(path: &str) -> io::Result<FileEntry> {
-	let (_, entry) = resolve(path).await?;
+async fn resolve_file(volume: &FatVolume<FatStream>, path: &str) -> io::Result<FileEntry> {
+	let (_, entry) = resolve(volume, path).await?;
 	let entry = entry.ok_or(Errno::Noent)?;
 
 	if entry.is_directory() {
@@ -591,8 +609,11 @@ fn file_attr(size: u64, kind: NodeKind) -> FileAttr {
 }
 
 /// Lists the entries of the directory at `path`, relative to the FAT root.
-async fn readdir_at(path: String) -> io::Result<Vec<DirectoryEntry>> {
-	let dir = resolve_dir(&path).await?;
+async fn readdir_at(
+	volume: &FatVolume<FatStream>,
+	path: String,
+) -> io::Result<Vec<DirectoryEntry>> {
+	let dir = resolve_dir(volume, &path).await?;
 
 	let mut result = Vec::new();
 	let mut entries = dir.entries();
@@ -633,7 +654,16 @@ impl VfsNode for VfatDirectory {
 	}
 
 	fn traverse_readdir(&self, path: &str) -> io::Result<Vec<DirectoryEntry>> {
-		block_on(readdir_at(join(&self.prefix, path)), None)
+		let path = join(&self.prefix, path);
+
+		block_on(
+			async {
+				let volume = volume().await?;
+
+				readdir_at(&volume, path).await
+			},
+			None,
+		)
 	}
 
 	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
@@ -641,7 +671,9 @@ impl VfsNode for VfatDirectory {
 
 		block_on(
 			async {
-				let (_, entry) = resolve(&path).await?;
+				let volume = volume().await?;
+
+				let (_, entry) = resolve(&volume, &path).await?;
 				let Some(entry) = entry else {
 					// The root of the mounted volume.
 					return Ok(file_attr(0, NodeKind::Directory));
@@ -668,12 +700,14 @@ impl VfsNode for VfatDirectory {
 
 		block_on(
 			async {
-				let (parent, entry) = resolve(&path).await?;
+				let volume = volume().await?;
+
+				let (parent, entry) = resolve(&volume, &path).await?;
 				if entry.is_some() {
 					return Err(Errno::Exist);
 				}
 
-				volume()?.create_dir(&parent, name).await.map_err(map_err)?;
+				volume.create_dir(&parent, name).await.map_err(map_err)?;
 
 				Ok(())
 			},
@@ -684,7 +718,9 @@ impl VfsNode for VfatDirectory {
 	fn traverse_rmdir(&self, path: &str) -> io::Result<()> {
 		block_on(
 			async {
-				let entry = resolve(&join(&self.prefix, path))
+				let volume = volume().await?;
+
+				let entry = resolve(&volume, &join(&self.prefix, path))
 					.await?
 					.1
 					.ok_or(Errno::Noent)?;
@@ -692,7 +728,7 @@ impl VfsNode for VfatDirectory {
 					return Err(Errno::Notdir);
 				}
 
-				volume()?.delete(&entry).await.map_err(map_err)
+				volume.delete(&entry).await.map_err(map_err)
 			},
 			None,
 		)
@@ -701,9 +737,11 @@ impl VfsNode for VfatDirectory {
 	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
 		block_on(
 			async {
-				let entry = resolve_file(&join(&self.prefix, path)).await?;
+				let volume = volume().await?;
 
-				volume()?.delete(&entry).await.map_err(map_err)
+				let entry = resolve_file(&volume, &join(&self.prefix, path)).await?;
+
+				volume.delete(&entry).await.map_err(map_err)
 			},
 			None,
 		)
@@ -719,7 +757,9 @@ impl VfsNode for VfatDirectory {
 
 		block_on(
 			async {
-				let (parent, entry) = resolve(&full).await?;
+				let volume = volume().await?;
+
+				let (parent, entry) = resolve(&volume, &full).await?;
 
 				// A directory is opened as a directory handle, whatever the flags say.
 				if let Some(entry) = &entry
@@ -736,7 +776,7 @@ impl VfsNode for VfatDirectory {
 							return Err(Errno::Exist);
 						}
 						if opt.contains(OpenOption::O_TRUNC) {
-							volume()?.truncate(&entry, 0).await.map_err(map_err)?;
+							volume.truncate(&entry, 0).await.map_err(map_err)?;
 						}
 						entry
 					}
@@ -745,10 +785,7 @@ impl VfsNode for VfatDirectory {
 							return Err(Errno::Noent);
 						}
 						let name = full.rsplit('/').next().ok_or(Errno::Inval)?;
-						volume()?
-							.create_file(&parent, name)
-							.await
-							.map_err(map_err)?
+						volume.create_file(&parent, name).await.map_err(map_err)?
 					}
 				};
 
@@ -789,10 +826,11 @@ impl VfatFileHandle {
 
 impl ObjectInterface for VfatFileHandle {
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-		let entry = resolve_file(&self.path).await?;
+		let volume = volume().await?;
+		let entry = resolve_file(&volume, &self.path).await?;
 		let mut pos = self.pos.lock().await;
 
-		let mut reader = volume()?.read_file(&entry).map_err(map_err)?;
+		let mut reader = volume.read_file(&entry).map_err(map_err)?;
 
 		// Walks the FAT chain to the position without touching file data;
 		// positions at or past the end make the following read return 0.
@@ -805,13 +843,14 @@ impl ObjectInterface for VfatFileHandle {
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		let entry = resolve_file(&self.path).await?;
+		let volume = volume().await?;
+		let entry = resolve_file(&volume, &self.path).await?;
 		let mut pos = self.pos.lock().await;
 
 		// `FileWriter` rewrites the file from the start, so anything before the
 		// offset has to be carried over.
 		let prefix = if *pos > 0 {
-			let mut reader = volume()?.read_file(&entry).map_err(map_err)?;
+			let mut reader = volume.read_file(&entry).map_err(map_err)?;
 			let mut kept = Vec::with_capacity(usize::try_from(*pos).unwrap());
 			let mut scratch = [0u8; SECTOR_SIZE];
 			while u64::try_from(kept.len()).unwrap() < *pos {
@@ -831,7 +870,7 @@ impl ObjectInterface for VfatFileHandle {
 			Vec::new()
 		};
 
-		let mut writer = volume()?.write_file(&entry).map_err(map_err)?;
+		let mut writer = volume.write_file(&entry).map_err(map_err)?;
 		if !prefix.is_empty() {
 			writer.write(&prefix).await.map_err(map_err)?;
 		}
@@ -844,6 +883,7 @@ impl ObjectInterface for VfatFileHandle {
 	}
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		let volume = volume().await?;
 		let mut pos = self.pos.lock().await;
 		let offset = i64::try_from(offset).unwrap();
 
@@ -851,7 +891,7 @@ impl ObjectInterface for VfatFileHandle {
 			SeekWhence::Set => offset,
 			SeekWhence::Cur => i64::try_from(*pos).unwrap() + offset,
 			SeekWhence::End => {
-				let entry = resolve_file(&self.path).await?;
+				let entry = resolve_file(&volume, &self.path).await?;
 				i64::try_from(entry.len()).unwrap() + offset
 			}
 			_ => return Err(Errno::Inval),
@@ -867,15 +907,17 @@ impl ObjectInterface for VfatFileHandle {
 	}
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
-		let entry = resolve_file(&self.path).await?;
+		let volume = volume().await?;
+		let entry = resolve_file(&volume, &self.path).await?;
 
 		Ok(file_attr(entry.len(), NodeKind::File))
 	}
 
 	async fn truncate(&self, size: usize) -> io::Result<()> {
-		let entry = resolve_file(&self.path).await?;
+		let volume = volume().await?;
+		let entry = resolve_file(&volume, &self.path).await?;
 
-		volume()?.truncate(&entry, size).await.map_err(map_err)
+		volume.truncate(&entry, size).await.map_err(map_err)
 	}
 
 	async fn isatty(&self) -> io::Result<bool> {
@@ -883,8 +925,7 @@ impl ObjectInterface for VfatFileHandle {
 	}
 
 	async fn fsync(&self) -> io::Result<()> {
-		// currently, we can just sync the whole file system
-		volume()?.sync().await.map_err(map_err)
+		volume().await?.sync().await.map_err(map_err)
 	}
 }
 
@@ -907,7 +948,11 @@ impl VfatDirectoryHandle {
 
 impl ObjectInterface for VfatDirectoryHandle {
 	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let entries = readdir_at(self.prefix.clone()).await?;
+		let entries = {
+			let volume = volume().await?;
+
+			readdir_at(&volume, self.prefix.clone()).await?
+		};
 
 		let mut next = self.next.lock().await;
 		let mut offset = 0usize;
@@ -962,11 +1007,13 @@ impl ObjectInterface for VfatDirectoryHandle {
 	}
 
 	async fn fsync(&self) -> io::Result<()> {
-		// currently, we can just sync the whole file system
-		volume()?.sync().await.map_err(map_err)
+		volume().await?.sync().await.map_err(map_err)
 	}
 }
 
 pub(crate) fn sync() -> io::Result<()> {
-	block_on(async { volume()?.sync().await.map_err(map_err) }, None)
+	block_on(
+		async { volume().await?.sync().await.map_err(map_err) },
+		None,
+	)
 }
