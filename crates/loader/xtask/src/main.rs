@@ -6,6 +6,7 @@ mod build;
 mod ci;
 mod clippy;
 mod object;
+mod pe;
 mod target;
 
 use std::env;

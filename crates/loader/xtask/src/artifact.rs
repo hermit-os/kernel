@@ -76,6 +76,16 @@ impl Artifact {
 	fn release_args(&self) -> &'static [&'static str] {
 		if self.release { &["--release"] } else { &[] }
 	}
+
+	/// Applies any required post-build transformation on this artifact
+	pub fn post_build(&self) {
+		if self.target != Target::X86_64Uefi {
+			return;
+		}
+
+		// EFI files need to be transformed slightly to allow booting with `-kernel` in QEMU
+		super::pe::PEFile::load_from_path(self.build_object().as_ref()).rewrite();
+	}
 }
 
 pub trait CmdExt {

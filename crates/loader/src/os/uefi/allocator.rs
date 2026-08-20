@@ -49,7 +49,7 @@ static ALLOCATOR: LockedAllocator = LockedAllocator::uefi();
 pub fn exit_boot_services() {
 	assert!(matches!(*ALLOCATOR.0.lock(), GlobalAllocator::Uefi));
 
-	let mem = vec![MaybeUninit::uninit(); 4096].leak();
+	let mem = vec![MaybeUninit::uninit(); 0x2000].leak();
 
 	let bump = BumpAllocator::from(mem);
 

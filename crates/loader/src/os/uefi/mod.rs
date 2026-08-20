@@ -14,11 +14,12 @@ use hermit_entry::boot_info::{
 };
 use hermit_entry::elf::{KernelObject, LoadedKernel};
 use log::{error, info};
-use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE};
+use uefi::boot::{AllocateType, MemoryType, PAGE_SIZE, open_protocol_exclusive};
 use uefi::fs::{self, FileSystem, Path};
 use uefi::prelude::*;
+use uefi::proto::loaded_image::LoadedImage;
 use uefi::table::cfg::ConfigTableEntry;
-use uefi::{Guid, guid};
+use uefi::{CString16, Guid, guid};
 
 pub use self::console::CONSOLE;
 use crate::fdt::Fdt;
@@ -30,9 +31,18 @@ fn main() -> Status {
 	uefi::helpers::init().unwrap();
 	crate::log::init();
 
-	let mut esp = Esp::new().unwrap();
+	let kernel_args = KernelArguments::new().unwrap();
+	let mut esp = BootPartition::new().unwrap();
 
-	let kernel_image = esp.read_app();
+	let kernel_image = if let Some(path) = kernel_args
+		.as_ref()
+		.and_then(|arg| arg.initrd_path.as_ref())
+	{
+		esp.read_app_at(path.as_ref())
+			.expect("Could not open kernel image provided in initrd")
+	} else {
+		esp.read_app()
+	};
 	let kernel = KernelObject::parse(&kernel_image).unwrap();
 
 	let kernel_memory = alloc_page_slice(kernel.mem_size()).unwrap();
@@ -53,7 +63,9 @@ fn main() -> Status {
 		fdt = fdt.efi_sev_snp_cc_blob(cc_blob).unwrap()
 	};
 
-	if let Some(bootargs) = esp.read_bootargs() {
+	if let Some(kernel_args) = kernel_args {
+		fdt = fdt.bootargs(kernel_args.hermit_args).unwrap();
+	} else if let Some(bootargs) = esp.read_bootargs() {
 		fdt = fdt.bootargs(bootargs).unwrap();
 	}
 
@@ -127,11 +139,11 @@ fn rsdp() -> *const c_void {
 	})
 }
 
-pub struct Esp {
+pub struct BootPartition {
 	fs: FileSystem,
 }
 
-impl Esp {
+impl BootPartition {
 	pub fn new() -> uefi::Result<Self> {
 		let image_handle = boot::image_handle();
 		let fs = boot::get_image_file_system(image_handle)?;
@@ -211,4 +223,43 @@ fn detect_cc_blob() -> Option<u64> {
 				u64::try_from(entry.address.addr()).unwrap()
 			})
 	})
+}
+
+/// Reads arguments passed when using Kernel Direct Boot (`-kernel -initrd` arguments with UEFI
+/// support)
+#[derive(Debug)]
+struct KernelArguments {
+	/// Arguments that should be forwarded to Hermit
+	hermit_args: String,
+
+	/// Image path, overriding default option
+	initrd_path: Option<CString16>,
+}
+
+impl KernelArguments {
+	pub fn new() -> uefi::Result<Option<Self>> {
+		let image_handle = boot::image_handle();
+		let loaded_image = open_protocol_exclusive::<LoadedImage>(image_handle)?;
+		let Some(raw_options) = loaded_image.load_options_as_cstr16().ok() else {
+			return Ok(None);
+		};
+
+		let raw_options: String = raw_options.into();
+		let args = if let Some(rest) = raw_options.strip_prefix("initrd=") {
+			let (initrd, rest) = rest.split_once(' ').unwrap();
+			Self {
+				hermit_args: rest.into(),
+				initrd_path: Some(initrd.try_into().unwrap()),
+			}
+		} else {
+			Self {
+				hermit_args: raw_options,
+				initrd_path: None,
+			}
+		};
+
+		info!("Read QEMU kernel arguments: {args:?}");
+
+		Ok(Some(args))
+	}
 }

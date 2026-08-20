@@ -28,6 +28,11 @@ pub struct Qemu {
 	#[arg(long)]
 	u_boot: bool,
 
+	/// Run with an EFI System Partition.
+	/// Only used for x86_64-uefi
+	#[arg(long)]
+	esp: bool,
+
 	#[command(flatten)]
 	build: Build,
 
@@ -82,7 +87,7 @@ impl Qemu {
 		let sh = crate::sh()?;
 
 		match self.build.target() {
-			Target::X86_64Uefi => {
+			Target::X86_64Uefi if self.esp => {
 				sh.remove_path("target/esp")?;
 
 				// Spec: https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html#removable-media-boot-behavior
@@ -200,7 +205,7 @@ impl Qemu {
 								.unwrap(),
 						);
 					}
-					Target::X86_64Uefi => {
+					Target::X86_64Uefi if self.esp => {
 						use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
 
 						let prebuilt = Prebuilt::fetch(Source::LATEST, "target/ovmf")
@@ -220,6 +225,41 @@ impl Qemu {
 						));
 						cpu_args.push("-drive".to_string());
 						cpu_args.push("format=raw,file=fat:rw:target/esp".to_string());
+					}
+					Target::X86_64Uefi => {
+						use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
+
+						let prebuilt = Prebuilt::fetch(Source::LATEST, "target/ovmf")
+							.expect("failed to update prebuilt");
+						let code = prebuilt.get_file(Arch::X64, FileType::Code);
+						let vars = prebuilt.get_file(Arch::X64, FileType::Vars);
+
+						cpu_args.push("-drive".to_string());
+						cpu_args.push(format!(
+							"if=pflash,format=raw,readonly=on,file={}",
+							code.display()
+						));
+						cpu_args.push("-drive".to_string());
+						cpu_args.push(format!(
+							"if=pflash,format=raw,readonly=on,file={}",
+							vars.display()
+						));
+						cpu_args.push("-kernel".to_string());
+						cpu_args.push(
+							self.build
+								.dist_object()
+								.into_os_string()
+								.into_string()
+								.unwrap(),
+						);
+						cpu_args.push("-initrd".to_string());
+						cpu_args.push(
+							self.build
+								.ci_image(self.image.as_deref().unwrap())
+								.into_os_string()
+								.into_string()
+								.unwrap(),
+						);
 					}
 					_ => unreachable!(),
 				}

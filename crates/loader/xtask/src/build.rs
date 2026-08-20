@@ -30,6 +30,8 @@ impl Build {
 			.cargo_build_args(&self.artifact)
 			.run()?;
 
+		self.artifact.post_build();
+
 		let build_object = self.artifact.build_object();
 		let dist_object = self.artifact.dist_object();
 		eprintln!(
