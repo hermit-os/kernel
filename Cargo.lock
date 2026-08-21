@@ -147,9 +147,9 @@ dependencies = [
 
 [[package]]
 name = "arm-pl011-uart"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b24c708955a2b308f2ef06b78c1e676d69870773f78ccf78aff6ffdd6136d90"
+checksum = "da0601ab96b18e55589d286dc635d1aac547e266aeaf3393813bb37c79318a71"
 dependencies = [
  "bitflags 2.13.1",
  "safe-mmio",
@@ -1624,8 +1624,9 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "safe-mmio"
-version = "0.3.0"
-source = "git+https://github.com/hermit-os/safe-mmio?branch=0.3.x#161ce2de85c96f00e8ed9eaa0eb1b78c490220b2"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce5e4ed477d6ebc07e01ce97b87fe319e6b62d0ab2564594db6a8c4cdc29ffd9"
 dependencies = [
  "zerocopy",
 ]
@@ -2397,18 +2398,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.48"
+version = "0.8.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eed437bf9d6692032087e337407a86f04cd8d6a16a37199ed57949d415bd68e9"
+checksum = "556764e583adb45a9f8d413c2a147fa7e8d821e48e12b14fd560b607998b75eb"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.48"
+version = "0.8.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e3cd084b1788766f53af483dd21f93881ff30d7320490ec3ef7526d203bad4"
+checksum = "f2ab42fc20575779bd240faa45f94a74256f755c0fa9e89f0ede20d91d0cdfc1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2420,3 +2421,8 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+
+[[patch.unused]]
+name = "safe-mmio"
+version = "0.3.0"
+source = "git+https://github.com/hermit-os/safe-mmio?branch=0.3.x#161ce2de85c96f00e8ed9eaa0eb1b78c490220b2"
