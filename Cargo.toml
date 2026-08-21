@@ -374,6 +374,7 @@ time = { version = "0.3", default-features = false }
 uhyve-interface = { version = "0.3", optional = true }
 virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly", "zerocopy"] }
 volatile = "0.6"
+zeroize = "1.9.0"
 
 [dependencies.smoltcp]
 version = "0.14"
