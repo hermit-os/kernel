@@ -30,7 +30,11 @@ impl Arch {
 		rustup.args(["target", "add", self.triple()]);
 
 		eprintln!("$ {rustup:?}");
-		let status = rustup.status()?;
+		let status = match rustup.status() {
+			Ok(status) => status,
+			Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+			Err(err) => return Err(err),
+		};
 		assert!(status.success());
 
 		Ok(())
