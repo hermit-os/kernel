@@ -11,9 +11,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::cell::Cell;
 use core::ops;
-use core::sync::atomic::{Ordering, fence};
 
 use align_address::Align;
+use mem_barrier::BarrierType;
 #[cfg(not(feature = "pci"))]
 use virtio::mmio::NotificationData;
 #[cfg(feature = "pci")]
@@ -74,10 +74,13 @@ struct DescriptorRing {
 	poll_index: EventSuppressDesc,
 	/// This allocates available descriptors.
 	indexes: IndexAlloc,
+	/// Whether `VIRTIO_F_ORDER_PLATFORM` was negotiated, which decides
+	/// whether the barriers have to reach beyond the CPUs.
+	order_platform: bool,
 }
 
 impl DescriptorRing {
-	fn new(size: u16) -> Self {
+	fn new(size: u16, order_platform: bool) -> Self {
 		let ring = unsafe { Box::new_zeroed_slice_in(size.into(), DeviceAlloc).assume_init() };
 
 		// `Box` is not Clone, so neither is `None::<Box<_>>`. Hence, we need to produce `None`s with a closure.
@@ -93,6 +96,7 @@ impl DescriptorRing {
 		let poll_index = write_index;
 
 		DescriptorRing {
+			order_platform,
 			ring,
 			tkn_ref_ring,
 			write_index,
@@ -221,7 +225,7 @@ impl DescriptorRing {
 		self.tkn_ref_ring[usize::from(buff_id)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specification v1.1. - 2.7.21
-		fence(Ordering::SeqCst);
+		super::virtio_mem_barrier(BarrierType::Write, self.order_platform);
 		self.ring[usize::from(start)].flags = first_flags;
 	}
 
@@ -277,6 +281,13 @@ impl ReadCtrl<'_> {
 			return None;
 		}
 
+		// Seeing the used mark does not yet permit reading the rest of the
+		// descriptor: the device writes the buffer id and the written length
+		// before it marks the descriptor, but without a barrier this side may
+		// still observe the older values.
+		super::virtio_mem_barrier(BarrierType::Read, self.desc_ring.order_platform);
+
+		let desc = &self.desc_ring.ring[usize::from(self.position)];
 		let buff_id = desc.id.to_ne();
 		let tkn = self.desc_ring.tkn_ref_ring[usize::from(buff_id)]
 			.take()
@@ -431,6 +442,8 @@ struct DevNotif {
 	f_notif_idx: bool,
 	/// Actual structure to read from, if device wants notifs
 	raw: &'static mut pvirtq::EventSuppress,
+	/// Whether `VIRTIO_F_ORDER_PLATFORM` was negotiated.
+	order_platform: bool,
 }
 
 impl DrvNotif {
@@ -463,9 +476,18 @@ impl DevNotif {
 		self.f_notif_idx = true;
 	}
 
+	/// Orders a descriptor that was just made available against the reads
+	/// below.
+	#[inline]
+	fn order_against_avail(&self) {
+		super::virtio_mem_barrier(BarrierType::General, self.order_platform);
+	}
+
 	/// Reads notification bit (i.e. LSB) and returns value.
 	/// If notifications are enabled returns true, else false.
 	fn is_notif(&self) -> bool {
+		self.order_against_avail();
+
 		self.raw.flags.desc_event_flags() == RingEventFlags::Enable
 	}
 
@@ -473,6 +495,8 @@ impl DevNotif {
 		if !self.f_notif_idx {
 			return None;
 		}
+
+		self.order_against_avail();
 
 		if self.raw.flags.desc_event_flags() != RingEventFlags::Desc {
 			return None;
@@ -681,7 +705,9 @@ impl PackedVq {
 			vq_handler.set_vq_size(max_size)
 		};
 
-		let mut descr_ring = DescriptorRing::new(vq_size);
+		let order_platform = features.contains(virtio::F::ORDER_PLATFORM);
+
+		let mut descr_ring = DescriptorRing::new(vq_size, order_platform);
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
@@ -705,6 +731,7 @@ impl PackedVq {
 		};
 
 		let dev_event = DevNotif {
+			order_platform,
 			f_notif_idx: false,
 			raw: dev_event,
 		};
