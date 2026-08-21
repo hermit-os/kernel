@@ -31,6 +31,7 @@ impl VirtioIdExt for virtio::Id {
 	fn as_feature(&self) -> Option<&str> {
 		let feature = match self {
 			Self::Net => "virtio-net",
+			Self::Block => "virtio-blk",
 			Self::Console => "virtio-console",
 			Self::Fs => "virtio-fs",
 			Self::Vsock => "virtio-vsock",
@@ -273,6 +274,8 @@ where
 pub mod error {
 	use thiserror::Error;
 
+	#[cfg(feature = "virtio-blk")]
+	pub use crate::drivers::blk::error::VirtioBlkError;
 	#[cfg(feature = "virtio-console")]
 	pub use crate::drivers::console::error::VirtioConsoleError;
 	#[cfg(feature = "virtio-fs")]
@@ -343,5 +346,9 @@ pub mod error {
 		#[cfg(feature = "virtio-rng")]
 		#[error(transparent)]
 		RngDriver(#[from] VirtioRngError),
+
+		#[cfg(feature = "virtio-blk")]
+		#[error(transparent)]
+		BlkDriver(#[from] VirtioBlkError),
 	}
 }

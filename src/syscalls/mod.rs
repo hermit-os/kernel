@@ -263,6 +263,11 @@ pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *co
 }
 
 pub(crate) fn shutdown(arg: i32) -> ! {
+	// force completion of pending disk writes
+	if fs::sync().is_err() {
+		error!("Unable to synchronize file system!");
+	}
+
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
@@ -515,6 +520,13 @@ pub unsafe extern "C" fn sys_fchmod(fd: RawFd, mode: u32) -> i32 {
 pub extern "C" fn sys_close(fd: RawFd) -> i32 {
 	let obj = remove_object(fd);
 	obj.map_or_else(|e| -i32::from(e), |_| 0)
+}
+
+/// synchronize a file's in-core state with that on disk
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fsync(fd: RawFd) -> i32 {
+	fd::fsync(fd).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
 #[hermit_macro::system(errno)]

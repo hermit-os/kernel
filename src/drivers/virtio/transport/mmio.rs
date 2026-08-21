@@ -16,6 +16,8 @@ use virtio::{DeviceStatus, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
+#[cfg(feature = "virtio-blk")]
+use crate::drivers::blk::VirtioBlkDriver;
 #[cfg(feature = "virtio-console")]
 use crate::drivers::console::VirtioConsoleDriver;
 use crate::drivers::error::DriverError;
@@ -324,6 +326,8 @@ impl IsrStatus {
 }
 
 pub(crate) enum VirtioDriver {
+	#[cfg(feature = "virtio-blk")]
+	Blk(alloc::boxed::Box<VirtioBlkDriver>),
 	#[cfg(feature = "virtio-console")]
 	Console(alloc::boxed::Box<VirtioConsoleDriver>),
 	#[cfg(feature = "virtio-fs")]
@@ -392,6 +396,17 @@ pub(crate) fn init_device(
 			}
 			Err(virtio_error) => {
 				error!("Virtio network driver could not be initialized with device");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
+		#[cfg(feature = "virtio-blk")]
+		virtio::Id::Block => match init::<VirtioBlkDriver>(registers, irq_no, handlers) {
+			Ok(virt_blk_drv) => {
+				info!("Virtio block device driver initialized.");
+				Ok(VirtioDriver::Blk(alloc::boxed::Box::new(virt_blk_drv)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio block device driver could not be initialized with device");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
