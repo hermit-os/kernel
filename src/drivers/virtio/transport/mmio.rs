@@ -342,12 +342,10 @@ pub(crate) fn init_device(
 	irq_no: InterruptLine,
 	handlers: &mut InterruptHandlerMap,
 ) -> Result<VirtioDriver, DriverError> {
-	let dev_id: u16 = 0;
-
 	if registers.as_ptr().version().read().to_ne() == 0x1 {
 		error!("Legacy interface isn't supported!");
 		return Err(DriverError::InitVirtioDevFail(
-			VirtioError::DevNotSupported(dev_id),
+			VirtioError::DevNotSupported(0),
 		));
 	}
 
@@ -427,7 +425,7 @@ pub(crate) fn init_device(
 
 			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(dev_id),
+				VirtioError::DevNotSupported(u8::from(id).into()),
 			))
 		}
 	}
