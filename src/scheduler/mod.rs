@@ -20,6 +20,8 @@ use timer_interrupts::TimerList;
 
 use crate::arch::kernel;
 use crate::arch::kernel::core_local::*;
+#[cfg(feature = "preemptive")]
+use crate::arch::kernel::processor;
 use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(target_arch = "riscv64")]
 use crate::arch::kernel::switch::switch_to_task;
@@ -35,6 +37,11 @@ pub mod task;
 pub mod timer_interrupts;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
+/// Length of a preemptive scheduling time slice, in microseconds (10 ms). With
+/// rhyve's external-interrupt exiting this also bounds the guest VM-exit rate
+/// during contention (one exit per slice).
+#[cfg(feature = "preemptive")]
+const PREEMPTION_SLICE_US: u64 = 10_000;
 /// Map between Core ID and per-core scheduler
 #[cfg(feature = "smp")]
 static SCHEDULER_INPUTS: SpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
@@ -398,6 +405,14 @@ impl PerCoreScheduler {
 		without_interrupts(|| {
 			let task = self.blocked_tasks.custom_wakeup(task);
 			self.ready_queue.push(task);
+			// The woken task is now ready. Arm the preemption timer so the running
+			// task — which may be CPU-bound and never yield — is preempted soon and
+			// the newcomer gets to run.
+			#[cfg(feature = "preemptive")]
+			{
+				let deadline = processor::get_timer_ticks() + PREEMPTION_SLICE_US;
+				timer_interrupts::create_timer_abs(timer_interrupts::Source::Preemption, deadline);
+			}
 		});
 	}
 
@@ -407,6 +422,16 @@ impl PerCoreScheduler {
 			without_interrupts(|| {
 				let task = self.blocked_tasks.custom_wakeup(task);
 				self.ready_queue.push(task);
+				// The woken task is now ready on this core. Arm the preemption timer
+				// so the running (possibly non-yielding) task is preempted soon.
+				#[cfg(feature = "preemptive")]
+				{
+					let deadline = processor::get_timer_ticks() + PREEMPTION_SLICE_US;
+					timer_interrupts::create_timer_abs(
+						timer_interrupts::Source::Preemption,
+						deadline,
+					);
+				}
 			});
 		} else {
 			get_scheduler_input(task.get_core_id())
@@ -798,6 +823,16 @@ impl PerCoreScheduler {
 
 		if id == new_id {
 			return None;
+		}
+
+		// Preemptive round-robin: arm a one-shot time-slice timer for the task we
+		// are about to run, but only while other tasks are ready — with no
+		// contention the system stays tickless. When the slice expires, the timer
+		// interrupt's `reschedule()` switches to the next ready task.
+		#[cfg(feature = "preemptive")]
+		if !self.ready_queue.is_empty() {
+			let deadline = processor::get_timer_ticks() + PREEMPTION_SLICE_US;
+			timer_interrupts::create_timer_abs(timer_interrupts::Source::Preemption, deadline);
 		}
 
 		// Tell the scheduler about the new task.
