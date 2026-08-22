@@ -231,6 +231,12 @@ virtio-vsock = ["virtio"]
 ## This is only useful on PCs (x86-64).
 vga = []
 
+## Enables the _Bochs Graphics Adapter_ (BGA) driver.
+##
+## This provides a linear framebuffer for pixel graphics and is primarily useful in QEMU/Bochs environments (x86-64).
+## Any rendering has to be done by the application; the kernel itself does not output anything on the framebuffer.
+bga = ["pci"]
+
 #! ### Performance Features
 
 ## Disables putting the CPU to sleep.

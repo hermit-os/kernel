@@ -15,6 +15,8 @@ use crate::env::{self, UhyveStartInfo};
 #[cfg(feature = "acpi")]
 mod acpi;
 pub mod apic;
+#[cfg(feature = "bga")]
+pub mod bga;
 pub mod core_local;
 pub mod gdt;
 pub mod interrupts;
