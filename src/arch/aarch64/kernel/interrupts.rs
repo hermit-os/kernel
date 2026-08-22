@@ -8,7 +8,6 @@ use aarch64_cpu::registers::*;
 use ahash::RandomState;
 use arm_gic::gicv3::{GicCpuInterface, GicV3, SgiTarget, SgiTargetGroup};
 use arm_gic::{IntId, InterruptGroup, Trigger, UniqueMmioPointer};
-use fdt::standard_nodes::Compatible;
 use free_list::PageLayout;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
@@ -333,20 +332,6 @@ pub(crate) fn init() {
 
 	let cpu_id: usize = core_id().try_into().unwrap();
 
-	let compatible = intc_node
-		.compatible()
-		.map(Compatible::first)
-		.unwrap_or("unknown");
-	let is_gic_v4 = if compatible == "arm,gic-v4" {
-		info!("Found GIC v4 with {num_cpus} cpus");
-		true
-	} else if compatible == "arm,gic-v3" {
-		info!("Found GIC v3 with {num_cpus} cpus");
-		false
-	} else {
-		panic!("{compatible} isn't supported")
-	};
-
 	info!("Found GIC Distributor interface at {gicd_start:p} (size {gicd_size:#X})");
 	info!(
 		"Found generic interrupt controller redistributor at {gicr_start:p} (size {gicr_size:#X})"
@@ -380,7 +365,7 @@ pub(crate) fn init() {
 	let gicd = unsafe { UniqueMmioPointer::new(NonNull::new(gicd_address.as_mut_ptr()).unwrap()) };
 	let gicr = NonNull::new(gicr_address.as_mut_ptr()).unwrap();
 
-	let mut gic = unsafe { GicV3::new(gicd, gicr, num_cpus, is_gic_v4) };
+	let mut gic = unsafe { GicV3::new(gicd, gicr, num_cpus) }.unwrap();
 	gic.setup(cpu_id);
 	GicCpuInterface::set_priority_mask(0xff);
 
