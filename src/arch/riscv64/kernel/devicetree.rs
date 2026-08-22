@@ -190,6 +190,9 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 		// Init virtio-mmio
 		#[cfg(all(feature = "virtio", not(feature = "pci")))]
 		for virtio_node in fdt.all_nodes() {
+			use crate::drivers::error::DriverError;
+			use crate::drivers::virtio::error::VirtioError;
+
 			let is_virtio_mmio = virtio_node
 				.compatible()
 				.is_some_and(|c| c.all().any(|x| x == "virtio,mmio"));
@@ -280,6 +283,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 						hermit_sync::InterruptSpinMutex::new(*drv),
 					));
 				}
+				Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(0))) => (),
 				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
 			}
 		}
