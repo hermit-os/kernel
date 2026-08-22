@@ -416,11 +416,13 @@ pub(crate) fn init_device(
 			}
 		},
 		id => {
-			if let Some(feature) = id.as_feature() {
-				error!("Virtio driver {id:?} is currently not active.");
-				error!("To use the device, recompile the kernel with the {feature} feature.");
-			} else {
-				error!("Virtio device {id:?} is not supported!");
+			if id != virtio::Id::Reserved {
+				if let Some(feature) = id.as_feature() {
+					error!("Virtio driver {id:?} is currently not active.");
+					error!("To use the device, recompile the kernel with the {feature} feature.");
+				} else {
+					error!("Virtio device {id:?} is not supported!");
+				}
 			}
 
 			// Return driver error indicating device is not supported.
