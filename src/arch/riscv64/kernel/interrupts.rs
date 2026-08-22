@@ -7,6 +7,7 @@ use ahash::RandomState;
 use bit_field::BitField;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
+use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::asm::wfi;
 use riscv::interrupt::{Exception, Interrupt, Trap};
 use riscv::register::{scause, sie, sip, sstatus, stval};
@@ -14,6 +15,7 @@ use trapframe::TrapFrame;
 use volatile::access::{NoAccess, ReadOnly};
 use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef};
 
+use crate::arch::mm::paging::{self, PageSize};
 use crate::drivers::InterruptHandlerMap;
 use crate::scheduler;
 
@@ -120,9 +122,13 @@ pub(crate) fn install() {
 }
 
 /// Init PLIC
-pub(crate) fn init_plic(base: *const u8, context: u16) {
+pub(crate) fn init_plic(addr: PhysAddr, size: usize, context: u16) {
+	assert!(size < usize::try_from(paging::HugePageSize::SIZE).unwrap());
+	paging::identity_map::<paging::HugePageSize>(addr);
+	let base = VirtAddr::from(addr.as_u64());
+
 	*PLIC.lock() =
-		Some(unsafe { VolatileRef::new(NonNull::new(base.cast::<Plic>().cast_mut()).unwrap()) });
+		Some(unsafe { VolatileRef::new(NonNull::new(base.as_mut_ptr::<Plic>()).unwrap()) });
 	PLIC_CONTEXT.set(context).unwrap();
 }
 
