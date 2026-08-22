@@ -1,11 +1,12 @@
 //! Inspection and manipulation of the kernel's environment.
 
+#[cfg(feature = "net")]
+mod ip_config;
 mod start_info;
 
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::str;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -13,6 +14,8 @@ use hashbrown::hash_map::Iter;
 use hermit_sync::OnceCell;
 use shlex::Shlex;
 
+#[cfg(feature = "net")]
+pub use self::ip_config::*;
 pub use self::start_info::*;
 
 static CLI: OnceCell<Cli> = OnceCell::new();
@@ -27,6 +30,8 @@ struct Cli {
 	image_path: Option<String>,
 	#[cfg(not(target_arch = "riscv64"))]
 	freq: Option<u16>,
+	#[cfg(feature = "net")]
+	default_interface_config: IpConfig,
 	env_vars: HashMap<String, String, RandomState>,
 	args: Vec<String>,
 	#[allow(dead_code)]
@@ -52,12 +57,37 @@ impl Default for Cli {
 			})
 		};
 
+		#[cfg(feature = "net")]
+		let mut default_interface_config = None;
+
 		let mut args = Vec::new();
 		let mut mmio = Vec::new();
 		while let Some(word) = words.next() {
 			if word.as_str().starts_with("virtio_mmio.device=") {
 				let v: Vec<&str> = word.as_str().split('=').collect();
 				mmio.push(v[1].to_owned());
+				continue;
+			}
+
+			#[cfg_attr(not(feature = "net"), expect(unused_variables))]
+			if let Some(ip_config_str) = word.as_str().strip_prefix("ip=") {
+				#[cfg(feature = "net")]
+				match IpConfig::try_from(ip_config_str) {
+					Ok(config) => {
+						// This is the IP configuration for the default interface
+						// Once we support multiple interfaces, we need to support parsing multiple configurations
+						if default_interface_config.is_some() {
+							warn!("Duplicate ip= parameter passed, this is currently unsupported!");
+						}
+
+						default_interface_config = Some(config);
+					}
+					Err(e) => panic!("Could not parse configuration for default interface: {e}"),
+				}
+
+				#[cfg(not(feature = "net"))]
+				warn!("ip= parameter passed with networking support disabled, ignoring");
+
 				continue;
 			}
 
@@ -68,16 +98,25 @@ impl Default for Cli {
 					freq = Some(s.parse().unwrap());
 				}
 				"-ip" => {
-					let ip = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_IP"), ip);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -ip bootarg was removed in favor of the ip= parameter and has no effect anymore"
+					);
 				}
 				"-mask" => {
-					let mask = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_MASK"), mask);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -mask bootarg was removed in favor of including the prefix length in the IP as part of the ip= parameter and has no effect anymore"
+					);
 				}
 				"-gateway" => {
-					let gateway = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_GATEWAY"), gateway);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -gateway bootarg was removed in favor of the ip= parameter and has no effect anymore"
+					);
 				}
 				"-mount" => {
 					let gateway = expect_arg(words.next(), word.as_str());
@@ -107,6 +146,8 @@ impl Default for Cli {
 			image_path,
 			#[cfg(not(target_arch = "riscv64"))]
 			freq,
+			#[cfg(feature = "net")]
+			default_interface_config: default_interface_config.unwrap_or_default(),
 			env_vars,
 			args,
 			#[allow(dead_code)]
@@ -124,6 +165,12 @@ pub fn freq() -> Option<u16> {
 #[allow(dead_code)]
 pub fn var(key: &str) -> Option<&String> {
 	CLI.get().unwrap().env_vars.get(key)
+}
+
+/// Returns the default interface IP configuration specified via ip=.
+#[cfg(feature = "net")]
+pub fn default_interface_config() -> IpConfig {
+	CLI.get().unwrap().default_interface_config
 }
 
 pub fn vars() -> Iter<'static, String, String> {
