@@ -25,48 +25,50 @@ enum Ps2Command {
 const PS2_CNFG_ENABLE_KEYBOARD_INTERRUPT: u8 = 0x01;
 const PS2_BUFFER_FULL: u8 = 0x01;
 
-const BUFFER_SIZE: usize = 256;
+const MAX_INP_BUFFER_SIZE: usize = 256;
 static KEYBOARD_SEMAPHORE: Semaphore = Semaphore::new(0);
 
 struct Ps2;
 impl Ps2 {
 	pub fn read_status() -> u8 {
+		// SAFETY: Correct port access without safety related side-effects.
 		unsafe { Port::<u8>::new(PS2_CMD_PORT).read() }
 	}
 
 	pub fn write_cmd(cmd: Ps2Command) {
+		// SAFETY: Correct port access without memory safety related side-effects.
 		unsafe { Port::<u8>::new(PS2_CMD_PORT).write(cmd as u8) }
 	}
 
 	pub fn read_data() -> u8 {
+		// SAFETY: Correct port access without safety related side-effects.
 		unsafe { Port::<u8>::new(PS2_DATA_PORT).read() }
 	}
 
 	pub fn write_data(data: u8) {
+		// SAFETY: Correct port access without memory safety related side-effects.
 		unsafe { Port::<u8>::new(PS2_DATA_PORT).write(data) }
 	}
 }
 
 static KEYBOARD_BUFFER: Lazy<InterruptTicketMutex<VecDeque<NonZeroU8>>> =
-	Lazy::new(|| InterruptTicketMutex::new(VecDeque::with_capacity(BUFFER_SIZE)));
+	Lazy::new(|| InterruptTicketMutex::new(VecDeque::with_capacity(32)));
 
 fn keyboard_handler() {
 	let scancode = Ps2::read_data();
 	if let Some(valid_scancode) = NonZeroU8::new(scancode) {
-		let mut sem = true;
 		{
 			let mut buffer = KEYBOARD_BUFFER.lock();
 
 			// Pop the oldest scancode if the buffer is full.
-			if buffer.len() >= BUFFER_SIZE {
+			if buffer.len() >= MAX_INP_BUFFER_SIZE {
 				buffer.pop_front();
-				sem = false;
+				buffer.push_back(valid_scancode);
+				return;
 			}
 			buffer.push_back(valid_scancode);
 		}
-		if sem {
-			KEYBOARD_SEMAPHORE.release();
-		}
+		KEYBOARD_SEMAPHORE.release();
 	}
 }
 
