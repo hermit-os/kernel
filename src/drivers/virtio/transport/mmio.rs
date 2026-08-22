@@ -342,12 +342,10 @@ pub(crate) fn init_device(
 	irq_no: InterruptLine,
 	handlers: &mut InterruptHandlerMap,
 ) -> Result<VirtioDriver, DriverError> {
-	let dev_id: u16 = 0;
-
 	if registers.as_ptr().version().read().to_ne() == 0x1 {
 		error!("Legacy interface isn't supported!");
 		return Err(DriverError::InitVirtioDevFail(
-			VirtioError::DevNotSupported(dev_id),
+			VirtioError::DevNotSupported(0),
 		));
 	}
 
@@ -418,16 +416,18 @@ pub(crate) fn init_device(
 			}
 		},
 		id => {
-			if let Some(feature) = id.as_feature() {
-				error!("Virtio driver {id:?} is currently not active.");
-				error!("To use the device, recompile the kernel with the {feature} feature.");
-			} else {
-				error!("Virtio device {id:?} is not supported!");
+			if id != virtio::Id::Reserved {
+				if let Some(feature) = id.as_feature() {
+					error!("Virtio driver {id:?} is currently not active.");
+					error!("To use the device, recompile the kernel with the {feature} feature.");
+				} else {
+					error!("Virtio device {id:?} is not supported!");
+				}
 			}
 
 			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(dev_id),
+				VirtioError::DevNotSupported(u8::from(id).into()),
 			))
 		}
 	}
