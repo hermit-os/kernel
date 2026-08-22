@@ -28,6 +28,7 @@ use crate::arch::kernel::mmio::MmioDriver;
 	not(feature = "pci")
 ))]
 use crate::arch::kernel::mmio::register_driver;
+#[cfg(all(any(feature = "virtio", feature = "gem-net"), not(feature = "pci")))]
 use crate::arch::mm::paging::{self, PageSize};
 use crate::drivers::InterruptHandlerMap;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
@@ -71,14 +72,8 @@ pub fn init_interrupt_controller() {
 			.unwrap();
 
 		let plic_region_start = PhysAddr::from(plic_region.starting_address.addr());
-		debug!(
-			"Init PLIC at {:p}, size: {:x}",
-			plic_region_start,
-			plic_region.size.unwrap()
-		);
-		assert!(plic_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap());
-
-		paging::identity_map::<paging::HugePageSize>(plic_region_start);
+		let plic_region_size = plic_region.size.unwrap();
+		debug!("Init PLIC at {plic_region_start:p}, size: {plic_region_size:x}");
 
 		let model = fdt
 			.find_node("/")
@@ -107,7 +102,7 @@ pub fn init_interrupt_controller() {
 			Model::Virt | Model::Unknown => 1,
 			Model::Fux40 => 2,
 		};
-		init_plic(plic_region.starting_address, context);
+		init_plic(plic_region_start, plic_region_size, context);
 	} else {
 		warn!("No interrupt controller found");
 	}
