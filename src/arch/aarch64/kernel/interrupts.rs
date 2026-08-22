@@ -8,7 +8,6 @@ use aarch64_cpu::registers::*;
 use ahash::RandomState;
 use arm_gic::gicv3::{GicCpuInterface, GicV3, SgiTarget, SgiTargetGroup};
 use arm_gic::{IntId, InterruptGroup, Trigger, UniqueMmioPointer};
-use fdt::standard_nodes::Compatible;
 use free_list::PageLayout;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell, SpinMutex};
@@ -320,7 +319,7 @@ pub(crate) fn init() {
 
 	let fdt = env::start_info().fdt().unwrap();
 
-	let intc_node = fdt.find_node("/intc").unwrap();
+	let intc_node = fdt.find_compatible(&["arm,gic-v3", "arm,gic-v4"]).unwrap();
 	let mut reg_iter = intc_node.reg().unwrap();
 	let gicd_reg = reg_iter.next().unwrap();
 	let gicr_reg = reg_iter.next().unwrap();
@@ -332,20 +331,6 @@ pub(crate) fn init() {
 	let num_cpus = fdt.cpus().count();
 
 	let cpu_id: usize = core_id().try_into().unwrap();
-
-	let compatible = intc_node
-		.compatible()
-		.map(Compatible::first)
-		.unwrap_or("unknown");
-	let is_gic_v4 = if compatible == "arm,gic-v4" {
-		info!("Found GIC v4 with {num_cpus} cpus");
-		true
-	} else if compatible == "arm,gic-v3" {
-		info!("Found GIC v3 with {num_cpus} cpus");
-		false
-	} else {
-		panic!("{compatible} isn't supported")
-	};
 
 	info!("Found GIC Distributor interface at {gicd_start:p} (size {gicd_size:#X})");
 	info!(
@@ -380,7 +365,7 @@ pub(crate) fn init() {
 	let gicd = unsafe { UniqueMmioPointer::new(NonNull::new(gicd_address.as_mut_ptr()).unwrap()) };
 	let gicr = NonNull::new(gicr_address.as_mut_ptr()).unwrap();
 
-	let mut gic = unsafe { GicV3::new(gicd, gicr, num_cpus, is_gic_v4) };
+	let mut gic = unsafe { GicV3::new(gicd, gicr, num_cpus) }.unwrap();
 	gic.setup(cpu_id);
 	GicCpuInterface::set_priority_mask(0xff);
 
