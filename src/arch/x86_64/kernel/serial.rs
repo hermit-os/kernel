@@ -3,6 +3,7 @@ use alloc::collections::VecDeque;
 use embedded_io::{ErrorType, Read, ReadReady, Write};
 use hermit_sync::{InterruptTicketMutex, Lazy};
 use uart_16550::backend::PioBackend;
+use uart_16550::spec::registers::IER;
 use uart_16550::{Config, Uart16550};
 
 #[cfg(feature = "pci")]
@@ -24,7 +25,11 @@ impl UartDevice {
 	pub unsafe fn new() -> Self {
 		let base_port = 0x3f8;
 		let mut uart = unsafe { Uart16550::new_port(base_port).unwrap() };
-		uart.init(Config::default()).ok();
+		let config = Config {
+			interrupts: IER::DATA_READY,
+			..Default::default()
+		};
+		uart.init(config).ok();
 		// Once we have a fallback destination for output,
 		// we should log any error above and run
 		// `test_loopback` and `check_connected` here.
