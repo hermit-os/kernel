@@ -419,7 +419,8 @@ semihosting = { version = "0.1", optional = true }
 bitfield-struct = "0.13.0"
 fdt = { version = "0.1", features = ["pretty-printing"] }
 memory_addresses = { version = "0.4", default-features = false, features = ["riscv64"] }
-riscv = "0.16"
+#TODO: use upstream version once changes merged and published
+riscv = { version = "0.16", git = "https://github.com/rust-embedded/riscv", branch = "master" }
 sbi-rt = "0.0.4"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
