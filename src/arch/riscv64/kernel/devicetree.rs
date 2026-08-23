@@ -63,6 +63,31 @@ enum Model {
 	Unknown,
 }
 
+pub enum InterruptType {
+	/// Default or unspecified type
+	None = 0,
+	/// Low to high edge sensitive type enabled
+	LowToHighEdge = 1,
+	/// Active low level sensitive type enabled
+	ActiveLowLevel = 2,
+	/// Active high level sensitive type enabled
+	ActiveHighLevel = 4,
+	/// High to low edge sensitive type enabled
+	HighToLowEdge = 8,
+}
+impl From<u32> for InterruptType {
+	fn from(value: u32) -> Self {
+		match value {
+			0 => Self::None,
+			1 => Self::LowToHighEdge,
+			2 => Self::ActiveLowLevel,
+			4 => Self::ActiveHighLevel,
+			8 => Self::HighToLowEdge,
+			_ => panic!("invalid InterruptType bits"),
+		}
+	}
+}
+
 /// Inits variables based on the device tree
 /// This function should only be called once
 pub fn init_interrupt_controller() {
@@ -215,8 +240,8 @@ pub fn msi_supported_vectors() -> Option<usize> {
 fn find_imsic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
 	let mut node = fdt.find_compatible(&["riscv,imsics"])?;
 
-	// Different interrupts domains, including m-mode domains, show up as differnent nodes.
-	// We expect a hierachy of one m-mode domain and one s-mode domain as described in
+	// Different interrupts domains, including m-mode domains, show up as different nodes.
+	// We expect a hierarchy of one m-mode domain and one s-mode domain as described in
 	// 'The RISC-V Advanced Interrupt Architecture', Version 1, Figure 4.2
 	if node.property("status").and_then(|p| p.as_str()) == Some("disabled") {
 		let phandle = node.property("riscv,children")?.as_usize()?;
@@ -235,8 +260,8 @@ fn find_imsic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
 fn find_aplic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
 	let mut node = fdt.find_compatible(&["riscv,aplic"])?;
 
-	// Different interrupts domains, including m-mode domains, show up as differnent nodes.
-	// We expect a hierachy of one m-mode domain and one s-mode domain as described in
+	// Different interrupts domains, including m-mode domains, show up as different nodes.
+	// We expect a hierarchy of one m-mode domain and one s-mode domain as described in
 	// 'The RISC-V Advanced Interrupt Architecture', Version 1, Figure 4.2
 	if node.property("status").and_then(|p| p.as_str()) == Some("disabled") {
 		let phandle = node.property("riscv,children")?.as_usize()?;
@@ -330,7 +355,10 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 						.lock()
 						.as_mut()
 						.unwrap()
-						.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode);
+						.set_interrupt_source_mode(
+							irq_number.try_into().unwrap(),
+							source_mode.into(),
+						);
 					*NETWORK_DEVICE.lock() = Some(drv);
 				}
 				Err(err) => error!("Could not initialize GEM driver: {err}"),
@@ -436,7 +464,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				.lock()
 				.as_mut()
 				.unwrap()
-				.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode);
+				.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode.into());
 
 			match drv {
 				#[cfg(feature = "virtio-console")]

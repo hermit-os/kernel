@@ -15,7 +15,6 @@ use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 
 use free_list::PageLayout;
-use memory_addresses::VirtAddr;
 use riscv::register::sstatus;
 
 pub(crate) use self::processor::set_oneshot_timer;
@@ -31,10 +30,6 @@ use crate::mm::{FrameAlloc, PageRangeAllocator};
 // Used to store information about available harts. The index of the hart in the vector
 // represents its CpuId and does not need to match its hart_id
 pub(crate) static HARTS_AVAILABLE: InitCell<Vec<usize>> = InitCell::new(Vec::new());
-
-// Address of interrupt files for each hart index by hart_id.
-// Use HARTS_AVAILABLE to map CpuId to hart_id.
-pub(crate) static INTERRUPT_FILES: InitCell<Vec<VirtAddr>> = InitCell::new(Vec::new());
 
 /// Kernel header to announce machine features
 pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);

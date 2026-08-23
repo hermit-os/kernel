@@ -373,7 +373,7 @@ fn detect_interrupt_line(
 			.lock()
 			.as_mut()
 			.unwrap()
-			.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode);
+			.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode.into());
 
 		let key_interrupt_map = [
 			_child_unit_address_high & interrupt_map_mask[0],
