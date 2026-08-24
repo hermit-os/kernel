@@ -8,9 +8,8 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
-use core::{future, mem, ptr, slice};
+use core::{future, slice};
 
-use align_address::Align;
 use async_lock::Mutex;
 use embedded_io::{ErrorType, Read, Write};
 use fuse_abi::linux::*;
@@ -29,7 +28,7 @@ use crate::fs::{
 	SeekWhence, VfsNode,
 };
 use crate::mm::device_alloc::DeviceAlloc;
-use crate::syscalls::Dirent64;
+use crate::syscalls::DirentFormat;
 use crate::time::{time_t, timespec};
 use crate::{arch, io};
 
@@ -1035,7 +1034,11 @@ impl VirtioFsDirectoryHandle {
 }
 
 impl ObjectInterface for VirtioFsDirectoryHandle {
-	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn getdents(
+		&self,
+		buf: &mut [MaybeUninit<u8>],
+		format: DirentFormat,
+	) -> io::Result<usize> {
 		let path = if self.name.is_empty() {
 			CString::new("/").unwrap()
 		} else {
@@ -1082,8 +1085,6 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 			return Err(Errno::Noent);
 		}
 
-		let mut ret = 0;
-
 		while (rsp.headers.out_header.len as usize) - *rsp_offset > size_of::<fuse_dirent>() {
 			let dirent = unsafe {
 				&*rsp
@@ -1095,43 +1096,28 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 					.cast::<fuse_dirent>()
 			};
 
-			let dirent_len = mem::offset_of!(Dirent64, d_name) + dirent.namelen as usize + 1;
-			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
-
-			if next_dirent > buf.len() {
-				if ret == 0 {
+			let name = unsafe {
+				slice::from_raw_parts(dirent.name.as_ptr().cast::<u8>(), dirent.namelen as usize)
+			};
+			let Some(next_dirent) = format.write_entry(
+				buf,
+				buf_offset,
+				dirent.ino,
+				(dirent.type_ as u8).try_into().unwrap(),
+				name,
+			) else {
+				if buf_offset == 0 {
 					// Buffer too small to hold even one entry
 					return Err(Errno::Inval);
 				}
 				// Buffer full -> return bytes written so far; caller retries from rsp_offset
 				break;
-			}
-
-			// could be replaced with slice_as_ptr once maybe_uninit_slice is stabilized.
-			let target_dirent = buf[buf_offset].as_mut_ptr().cast::<Dirent64>();
-			unsafe {
-				target_dirent.write(Dirent64 {
-					d_ino: dirent.ino,
-					d_off: 0,
-					d_reclen: (dirent_len.align_up(align_of::<Dirent64>()))
-						.try_into()
-						.unwrap(),
-					d_type: (dirent.type_ as u8).try_into().unwrap(),
-					d_name: PhantomData {},
-				});
-				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				nameptr.copy_from_nonoverlapping(
-					dirent.name.as_ptr().cast::<u8>(),
-					dirent.namelen as usize,
-				);
-				nameptr.add(dirent.namelen as usize).write(0); // zero termination
-			}
+			};
 
 			*rsp_offset += size_of::<fuse_dirent>() + dirent.namelen as usize;
 			// Align to dirent struct
 			*rsp_offset = ((*rsp_offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 			buf_offset = next_dirent;
-			ret = buf_offset;
 		}
 
 		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
@@ -1140,7 +1126,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 			.lock()
 			.send_command(cmd, rsp_payload_len)?;
 
-		Ok(ret)
+		Ok(buf_offset)
 	}
 
 	async fn fsync(&self) -> io::Result<()> {
