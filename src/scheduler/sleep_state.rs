@@ -39,7 +39,7 @@ impl SleepState {
 
 	#[inline]
 	fn set_active(&self) {
-		self.0.store(Self::STATUS_ACTIVE, Ordering::SeqCst);
+		self.0.store(Self::STATUS_ACTIVE, Ordering::Relaxed);
 	}
 
 	/// Indicates that this core will go to HLT.
@@ -51,7 +51,7 @@ impl SleepState {
 			.compare_exchange(
 				Self::STATUS_ACTIVE,
 				Self::STATUS_IDLE,
-				Ordering::SeqCst,
+				Ordering::Relaxed,
 				Ordering::Relaxed,
 			)
 			.is_err()
@@ -84,7 +84,7 @@ impl SleepState {
 		// Ask the core not to sleep.
 		// This makes sure that if the two atomic operations become interleaved, the core will
 		// not go to sleep with us assuming it was running.
-		let previous_state = self.0.swap(Self::STATUS_DONT_SLEEP, Ordering::SeqCst);
+		let previous_state = self.0.swap(Self::STATUS_DONT_SLEEP, Ordering::Relaxed);
 
 		// If the core was idle, we can actually wake it up
 		if previous_state == Self::STATUS_IDLE {
