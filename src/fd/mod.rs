@@ -18,6 +18,7 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fs::{FileAttr, SeekWhence};
 use crate::io;
+use crate::syscalls::DirentFormat;
 
 mod delegate;
 mod eventfd;
@@ -234,12 +235,17 @@ pub(crate) trait ObjectInterface: Sync + Send {
 		Err(Errno::Inval)
 	}
 
-	/// `getdents` fills the given buffer `_buf` with [`Dirent64`](crate::syscalls::Dirent64)
-	/// formatted entries of a directory, imitating the Linux `getdents64` syscall.
+	/// `getdents` fills the given buffer `buf` with directory entries in the given
+	/// [`DirentFormat`](crate::syscalls::DirentFormat).
 	/// On success, the number of bytes read is returned.  On end of directory, 0 is returned.  On error, -1 is returned
-	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn getdents(
+		&self,
+		buf: &mut [MaybeUninit<u8>],
+		format: DirentFormat,
+	) -> io::Result<usize> {
 		let _buf = buf;
-		Err(Errno::Inval)
+		let _format = format;
+		Err(Errno::Notdir)
 	}
 
 	/// `accept` a connection on a socket

@@ -27,6 +27,7 @@ use crate::fs::uhyve::UhyveFileHandle;
 use crate::fs::virtio_fs::{VirtioFsDirectoryHandle, VirtioFsFileHandle};
 use crate::fs::{DirectoryReader, FileAttr, SeekWhence};
 use crate::io;
+use crate::syscalls::DirentFormat;
 
 pub(crate) enum Fd {
 	ConsoleStdin(ConsoleStdin),
@@ -142,7 +143,7 @@ impl ObjectInterface for Fd {
 			async fn write(&self, buf: &[u8]) -> io::Result<usize>;
 			async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize>;
 			async fn fstat(&self) -> io::Result<FileAttr>;
-			async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize>;
+			async fn getdents(&self, buf: &mut [MaybeUninit<u8>], format: DirentFormat) -> io::Result<usize>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
 			async fn accept(&mut self) -> io::Result<(Arc<async_lock::RwLock<Fd>>, Endpoint)>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
