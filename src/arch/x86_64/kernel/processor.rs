@@ -1088,7 +1088,7 @@ pub fn shutdown(error_code: i32) -> ! {
 
 	#[cfg(feature = "acpi")]
 	{
-		super::acpi::poweroff();
+		crate::acpi::shutdown();
 	}
 
 	triple_fault()
