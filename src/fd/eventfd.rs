@@ -152,7 +152,7 @@ impl ObjectInterface for EventFd {
 				let mut pinned = pin!(self.state.lock());
 				let mut guard = ready!(pinned.as_mut().poll(cx));
 				if event
-					.intersects(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDNORM)
+					.intersects(PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND)
 				{
 					guard.read_queue.push_back(cx.waker().clone());
 					Poll::Pending
