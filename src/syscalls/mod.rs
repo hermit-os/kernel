@@ -901,6 +901,13 @@ pub extern "C" fn sys_image_start_addr() -> usize {
 		.align_down(LargePageSize::SIZE as usize)
 }
 
+/// Flushes a file to the storage it lives on.
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fsync(fd: RawFd) -> i32 {
+	fd::fsync(fd).map_or_else(|e| -i32::from(e), |()| 0)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
