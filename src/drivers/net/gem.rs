@@ -689,7 +689,7 @@ pub fn init_device(
 			);
 
 			// Wait for AN to complete
-			while (phy_read(gem, phy_addr, PhyReg::Status) | PhyStatus::ANCompleteMask as u16) == 0
+			while (phy_read(gem, phy_addr, PhyReg::Status) & PhyStatus::ANCompleteMask as u16) == 0
 			{
 			}
 
