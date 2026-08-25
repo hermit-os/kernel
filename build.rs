@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use llvm_tools::LlvmTools;
 
 fn main() -> Result<()> {
