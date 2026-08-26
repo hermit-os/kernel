@@ -384,6 +384,32 @@ pub(crate) mod ops {
 	}
 
 	#[derive(Debug)]
+	pub(crate) struct Fsync;
+
+	impl Op for Fsync {
+		const OP_CODE: fuse_opcode = fuse_opcode::FUSE_FSYNC;
+		type InStruct = fuse_fsync_in;
+		type InPayload = ();
+		type OutStruct = ();
+		type OutPayload = ();
+	}
+
+	impl Fsync {
+		/// `datasync` skips the metadata, matching `fdatasync`.
+		pub(crate) fn create(nid: u64, fh: u64, datasync: bool) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::new(
+				nid,
+				fuse_fsync_in {
+					fh,
+					fsync_flags: if datasync { FUSE_FSYNC_FDATASYNC } else { 0 },
+					..Default::default()
+				},
+			);
+			(cmd, 0)
+		}
+	}
+
+	#[derive(Debug)]
 	pub(crate) struct Poll;
 
 	impl Op for Poll {
@@ -801,6 +827,34 @@ impl VirtioFsFileHandleInner {
 
 		Ok(rsp.headers.op_header.attr.into())
 	}
+
+	fn fsync(&mut self) -> io::Result<()> {
+		debug!("virtio-fs fsync");
+
+		let nid = self.fuse_nid.ok_or(Errno::Io)?;
+		let fh = self.fuse_fh.ok_or(Errno::Io)?;
+
+		let (cmd, rsp_payload_len) = ops::Fsync::create(nid, fh, false);
+		let rsp = get_filesystem_driver()
+			.ok_or(Errno::Nosys)?
+			.lock()
+			.send_command(cmd, rsp_payload_len)?;
+
+		fsync_result(rsp.headers.out_header.error)
+	}
+}
+
+/// Turns the answer to a `FUSE_FSYNC` or `FUSE_FSYNCDIR` into a result.
+///
+/// A host that does not implement the operation answers `ENOSYS`, which by
+/// FUSE convention means there was nothing to do rather than that the flush
+/// failed.
+fn fsync_result(error: i32) -> io::Result<()> {
+	match error {
+		0 => Ok(()),
+		error if error == -i32::from(Errno::Nosys) => Ok(()),
+		error => Err(Errno::try_from(-error).unwrap_or(Errno::Io)),
+	}
 }
 
 impl ErrorType for VirtioFsFileHandleInner {
@@ -953,6 +1007,10 @@ impl ObjectInterface for VirtioFsFileHandle {
 			.set_attr(attr, SetAttrValidFields::FATTR_MODE)
 			.map(|_| ())
 	}
+
+	async fn fsync(&self) -> io::Result<()> {
+		self.0.lock().await.fsync()
+	}
 }
 
 impl Clone for VirtioFsFileHandle {
@@ -1083,6 +1141,45 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 			.send_command(cmd, rsp_payload_len)?;
 
 		Ok(ret)
+	}
+
+	async fn fsync(&self) -> io::Result<()> {
+		let path = if self.name.is_empty() {
+			CString::new("/").unwrap()
+		} else {
+			CString::new(["/", &self.name].join("")).unwrap()
+		};
+
+		debug!("virtio-fs fsyncdir: {path:#?}");
+
+		let fuse_nid = lookup(path).ok_or(Errno::Noent)?;
+
+		// The handle is not kept anywhere, so it is opened and released around
+		// the flush. Flag 0x10000 is O_DIRECTORY, as in `getdents`.
+		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
+		cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
+		let rsp = get_filesystem_driver()
+			.ok_or(Errno::Nosys)?
+			.lock()
+			.send_command(cmd, rsp_payload_len)?;
+		let fuse_fh = rsp.headers.op_header.fh;
+
+		let (mut cmd, rsp_payload_len) = ops::Fsync::create(fuse_nid, fuse_fh, false);
+		cmd.headers.in_header.opcode = fuse_opcode::FUSE_FSYNCDIR as u32;
+		let rsp = get_filesystem_driver()
+			.ok_or(Errno::Nosys)?
+			.lock()
+			.send_command(cmd, rsp_payload_len)?;
+		let result = fsync_result(rsp.headers.out_header.error);
+
+		let (mut cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
+		cmd.headers.in_header.opcode = fuse_opcode::FUSE_RELEASEDIR as u32;
+		get_filesystem_driver()
+			.ok_or(Errno::Nosys)?
+			.lock()
+			.send_command(cmd, rsp_payload_len)?;
+
+		result
 	}
 
 	/// lseek for a directory entry is the equivalent for seekdir on linux. But on Hermit this is
