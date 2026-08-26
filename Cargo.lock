@@ -857,7 +857,8 @@ dependencies = [
 [[package]]
 name = "hadris-common"
 version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bde64f152bae3f3769ad9ea577d1dde2b53e6558f7e1d80a7db81357ba3b206c"
 dependencies = [
  "hadris-fixed",
  "hadris-io",
@@ -869,7 +870,8 @@ dependencies = [
 [[package]]
 name = "hadris-fat"
 version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8ae9e0e215766441538874f21f12340b6ae3edfb0f4f59b72794131d91bf01b"
 dependencies = [
  "bitflags 2.13.1",
  "bytemuck",
@@ -886,12 +888,14 @@ dependencies = [
 [[package]]
 name = "hadris-fixed"
 version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "180bcbed00c242dd5536dd3057f9f9a84364cf1ad066d78a2da5553c4a9d626c"
 
 [[package]]
 name = "hadris-io"
 version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "221c30d8f5ef8fd4ef384a28b92202c7952fd240e08b76501832550095d09c12"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -902,7 +906,8 @@ dependencies = [
 [[package]]
 name = "hadris-macros"
 version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8d9dd36e24610fa44d804c87762d641be064894b2513ce1dda3ce678a36ffe2"
 dependencies = [
  "proc-macro2",
 ]
@@ -910,7 +915,8 @@ dependencies = [
 [[package]]
 name = "hadris-path"
 version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36bd3d8b538a8115d802da9b1be12effb3cd3f2178be8ccab61079999adedb1f"
 
 [[package]]
 name = "hash32"

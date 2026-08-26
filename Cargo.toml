@@ -366,7 +366,7 @@ enum_dispatch = "0.3"
 env_filter = { version = "2.0.0", default-features = false }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
-hadris-fat = { version = "2.1.0", default-features = false, features = ["read", "write", "alloc", "lfn", "async"], optional = true }
+hadris-fat = { version = "2.2.0", default-features = false, features = ["read", "write", "alloc", "lfn", "async"], optional = true }
 hashbrown = { version = "0.17", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10", features = ["kernel"], optional = true }
@@ -482,7 +482,6 @@ unreadable_literal = "warn"
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "0.3.x" }
 virtio-spec = {	git = "https://github.com/stlankes/virtio-spec-rs", branch = "block" }
-hadris-fat = { git = "https://github.com/hxyulin/hadris.git", branch = "main" }
 
 [profile.dist]
 inherits = "release"
