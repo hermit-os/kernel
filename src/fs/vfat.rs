@@ -204,7 +204,7 @@ impl FatStream {
 	/// Writes every dirty sector back, merging adjacent ones into one request.
 	///
 	/// The dirty sectors of a single operation are rarely scattered — a FAT
-	/// chain and the directory entry naming it occupy runs of neighbours — so
+	/// chain and the directory entry naming it occupy runs of neighbors — so
 	/// sorting them and writing each run as a whole turns a flush of the
 	/// entire cache into a handful of requests.
 	async fn flush_all(&mut self) -> Result<(), Errno> {

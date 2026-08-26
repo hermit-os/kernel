@@ -864,8 +864,9 @@ dependencies = [
 
 [[package]]
 name = "hadris-common"
-version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2419641e2ce38205ac40e8c127d5d635f700f4b6bd79494f570141296b7682e9"
 dependencies = [
  "hadris-fixed",
  "hadris-io",
@@ -876,10 +877,11 @@ dependencies = [
 
 [[package]]
 name = "hadris-fat"
-version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e90944e25592823e8512521f20bad5984eeddc4d4b0d4a688c379a3860c9deb7"
 dependencies = [
- "bitflags 2.13.1",
+ "bitflags 2.13.2",
  "bytemuck",
  "chrono",
  "hadris-common",
@@ -893,13 +895,15 @@ dependencies = [
 
 [[package]]
 name = "hadris-fixed"
-version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2f979ce5abdf45f06df09e7fede7b7ac54aae20b63407e3f5f9595999f5cb96"
 
 [[package]]
 name = "hadris-io"
-version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85372a1e658e46128d98b0b2221485dd72ab6adaca1b643d7f9bfc0fa42bc290"
 dependencies = [
  "bytemuck",
  "cfg-if",
@@ -909,16 +913,18 @@ dependencies = [
 
 [[package]]
 name = "hadris-macros"
-version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "793233288d1b5f23451f75b2c57696808b544eabd45919cceed46b5403c7df8e"
 dependencies = [
  "proc-macro2",
 ]
 
 [[package]]
 name = "hadris-path"
-version = "2.2.0"
-source = "git+https://github.com/hxyulin/hadris.git?branch=main#b11106ee397dbc64b65c63c4d38b1138a541eacc"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af25620d0760ae6cdcf56a5c269d29f2e380a712355924143c199552cba895de"
 
 [[package]]
 name = "hash32"
