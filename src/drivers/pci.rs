@@ -430,14 +430,6 @@ pub(crate) fn get_rng_driver() -> Option<&'static InterruptTicketMutex<VirtioRng
 		.find_map(|drv| drv.get_rng_driver())
 }
 
-#[cfg(feature = "virtio-console")]
-pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
-	PCI_DRIVERS
-		.get()?
-		.iter()
-		.find_map(|drv| drv.get_rng_driver())
-}
-
 #[cfg(feature = "virtio-vsock")]
 pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioVsockDriver>> {
 	PCI_DRIVERS
