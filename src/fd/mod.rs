@@ -236,7 +236,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	}
 
 	/// `getdents` fills the given buffer `buf` with directory entries in the given
-	/// [`DirentFormat`](crate::syscalls::DirentFormat).
+	/// [`DirentFormat`].
 	/// On success, the number of bytes read is returned. On end of directory, 0 is returned.  On error, -1 is returned
 	async fn getdents(
 		&self,
