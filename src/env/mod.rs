@@ -2,7 +2,7 @@
 
 mod start_info;
 
-use alloc::borrow::ToOwned;
+use alloc::borrow::{Cow, ToOwned};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::str;
@@ -27,7 +27,7 @@ struct Cli {
 	image_path: Option<String>,
 	#[cfg(not(target_arch = "riscv64"))]
 	freq: Option<u16>,
-	env_vars: HashMap<String, String, RandomState>,
+	env_vars: HashMap<Cow<'static, str>, String, RandomState>,
 	args: Vec<String>,
 	#[allow(dead_code)]
 	mmio: Vec<String>,
@@ -38,7 +38,7 @@ impl Default for Cli {
 		let mut image_path = None;
 		#[cfg(not(target_arch = "riscv64"))]
 		let mut freq = None;
-		let mut env_vars = HashMap::<String, String, RandomState>::with_hasher(
+		let mut env_vars = HashMap::<Cow<'static, str>, String, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 
@@ -54,52 +54,50 @@ impl Default for Cli {
 
 		let mut args = Vec::new();
 		let mut mmio = Vec::new();
-		while let Some(word) = words.next() {
-			if word.as_str().starts_with("virtio_mmio.device=") {
-				let v: Vec<&str> = word.as_str().split('=').collect();
-				mmio.push(v[1].to_owned());
+		while let Some(word_owned) = words.next() {
+			let word = word_owned.as_str();
+
+			if let Some(arg) = word.strip_prefix("virtio_mmio.device=") {
+				mmio.push(arg.to_owned());
 				continue;
 			}
 
-			match word.as_str() {
+			match word {
 				#[cfg(not(target_arch = "riscv64"))]
 				"-freq" => {
-					let s = expect_arg(words.next(), word.as_str());
+					let s = expect_arg(words.next(), word);
 					freq = Some(s.parse().unwrap());
 				}
 				"-ip" => {
-					let ip = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_IP"), ip);
+					let ip = expect_arg(words.next(), word);
+					env_vars.insert(Cow::Borrowed("HERMIT_IP"), ip);
 				}
 				"-mask" => {
-					let mask = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_MASK"), mask);
+					let mask = expect_arg(words.next(), word);
+					env_vars.insert(Cow::Borrowed("HERMIT_MASK"), mask);
 				}
 				"-gateway" => {
-					let gateway = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("HERMIT_GATEWAY"), gateway);
+					let gateway = expect_arg(words.next(), word);
+					env_vars.insert(Cow::Borrowed("HERMIT_GATEWAY"), gateway);
 				}
 				"-mount" => {
-					let gateway = expect_arg(words.next(), word.as_str());
-					env_vars.insert(String::from("UHYVE_MOUNT"), gateway);
+					let gateway = expect_arg(words.next(), word);
+					env_vars.insert(Cow::Borrowed("UHYVE_MOUNT"), gateway);
 				}
 				"--" => args.extend(&mut words),
-				word if word.contains('=') => {
-					let (arg, value) = word.split_once('=').unwrap();
-
-					match arg {
-						"env" => {
-							let Some((key, value)) = value.split_once('=') else {
-								error!("could not parse bootarg: {word}");
-								continue;
-							};
-							env_vars.insert(key.to_owned(), value.to_owned());
-						}
-						_ => error!("could not parse bootarg: {word}"),
+				_ => {
+					if let Some(value) = word.strip_prefix("env=") {
+						let Some((key, value)) = value.split_once('=') else {
+							error!("could not parse bootarg: {word}");
+							continue;
+						};
+						env_vars.insert(Cow::Owned(key.to_owned()), value.to_owned());
+					} else if !word.contains('=') && image_path.is_none() {
+						image_path = Some(word_owned);
+					} else {
+						error!("could not parse bootarg: {word}");
 					}
 				}
-				_ if image_path.is_none() => image_path = Some(word),
-				word => error!("could not parse bootarg: {word}"),
 			};
 		}
 
@@ -126,7 +124,7 @@ pub fn var(key: &str) -> Option<&String> {
 	CLI.get()?.env_vars.get(key)
 }
 
-pub fn vars() -> Iter<'static, String, String> {
+pub fn vars() -> Iter<'static, Cow<'static, str>, String> {
 	CLI.get().unwrap().env_vars.iter()
 }
 
