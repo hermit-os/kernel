@@ -8,6 +8,8 @@ extern crate alloc;
 
 mod common;
 
+use alloc::ffi::CString;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ffi::CStr;
@@ -141,6 +143,79 @@ fn getdents() {
 	let len = unsafe { sys_posix_getdents(fd, buf.0.as_mut_ptr().cast(), buf.0.len(), 0) };
 	assert_eq!(len, -isize::try_from(ENOTDIR).unwrap());
 	assert_eq!(sys_close(fd), 0);
+}
+
+/// Reads the whole directory with repeated calls and returns the entries and the number of
+/// calls that returned data.
+fn collect_all(fd: i32, posix: bool) -> (Vec<(u64, u16, String)>, usize) {
+	let mut buf = Buf([0; 1024]);
+	let mut entries = Vec::new();
+	let mut calls = 0;
+	loop {
+		let len = if posix {
+			unsafe { sys_posix_getdents(fd, buf.0.as_mut_ptr().cast(), buf.0.len(), 0) }
+		} else {
+			unsafe { sys_getdents64(fd, buf.0.as_mut_ptr().cast(), buf.0.len()) }
+				.try_into()
+				.unwrap()
+		};
+		assert!(len >= 0);
+		if len == 0 {
+			break;
+		}
+		calls += 1;
+		let new_entries = if posix {
+			unsafe { parse_posix_dent(&buf, len.try_into().unwrap()) }
+		} else {
+			unsafe { parse_dirent64(&buf, len.try_into().unwrap()) }
+		};
+		assert!(!new_entries.is_empty());
+		entries.extend(new_entries);
+	}
+	(entries, calls)
+}
+
+fn check_large_dir_fd(fd: i32, expected: &[String]) {
+	for posix in [false, true] {
+		assert_eq!(sys_lseek(fd, 0, 0), 0);
+		let (entries, calls) = collect_all(fd, posix);
+		// The directory must not fit into a single 1024-byte buffer.
+		assert!(calls > 1);
+		let names: Vec<&str> = entries.iter().map(|(_, _, name)| name.as_str()).collect();
+		assert_eq!(
+			names,
+			expected.iter().map(String::as_str).collect::<Vec<_>>()
+		);
+	}
+	assert_eq!(sys_close(fd), 0);
+}
+
+#[test_case]
+fn getdents_large_directory() {
+	assert_eq!(unsafe { sys_mkdir(c"/tmp/gd_large".as_ptr(), 0o755) }, 0);
+
+	// 40 files with name lengths from 12 to 124 bytes, so that records of many different
+	// sizes cross the buffer boundary and multiple getdents calls are required.
+	let mut expected = Vec::new();
+	for i in 0..40 {
+		let name = format!("f{i:02}_{}", "x".repeat(8 + (i * 7) % 113));
+		let path = CString::new(format!("/tmp/gd_large/{name}")).unwrap();
+		let fd = unsafe { sys_open(path.as_ptr(), O_WRONLY | O_CREAT, 0o644) };
+		assert!(fd >= 0);
+		assert_eq!(sys_close(fd), 0);
+		expected.push(name);
+	}
+	expected.sort();
+
+	// Directory opened with opendir
+	let fd = unsafe { sys_opendir(c"/tmp/gd_large".as_ptr()) };
+	assert!(fd >= 0);
+	check_large_dir_fd(fd, &expected);
+
+	// Directory opened with O_DIRECTORY
+	let fd = unsafe { sys_open(c"/tmp/gd_large".as_ptr(), O_DIRECTORY, 0) };
+	assert!(fd >= 0);
+	check_large_dir_fd(fd, &expected);
 }
 
 #[unsafe(no_mangle)]
