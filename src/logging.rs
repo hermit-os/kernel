@@ -1,4 +1,4 @@
-use alloc::borrow::Cow;
+use alloc::borrow::{Cow, ToOwned};
 use core::fmt;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
@@ -9,6 +9,7 @@ use hermit_sync::OnceCell;
 use log::{Level, LevelFilter, Metadata, Record};
 
 use crate::arch::kernel::{core_local, processor};
+use crate::env::{StartInfo as _, start_info};
 
 pub static KERNEL_LOGGER: KernelLogger = KernelLogger::new();
 
@@ -123,7 +124,15 @@ fn no_color() -> bool {
 }
 
 pub unsafe fn init() {
-	let filter = hermit_var!("HERMIT_LOG_LEVEL_FILTER").unwrap_or(Cow::from("info"));
+	let mut filter = Cow::Borrowed("info");
+
+	for i in shlex::Shlex::new(start_info().bootargs().unwrap_or_default()) {
+		let i = i.as_str();
+		if let Some(new_log_level_filter) = i.strip_prefix("env=HERMIT_LOG_LEVEL_FILTER=") {
+			filter = Cow::Owned(new_log_level_filter.to_owned());
+			break;
+		}
+	}
 
 	let mut builder = Builder::new();
 	// The default. It may get overwritten by the parsed filter if it has a global level.

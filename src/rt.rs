@@ -106,7 +106,6 @@ pub fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	mm::claim_initial_heap();
 	hermit_sync::Lazy::force(&console::CONSOLE);
-	env::init();
 	unsafe {
 		logging::init();
 	}

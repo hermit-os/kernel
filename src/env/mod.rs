@@ -123,7 +123,7 @@ pub fn freq() -> Option<u16> {
 
 #[allow(dead_code)]
 pub fn var(key: &str) -> Option<&String> {
-	CLI.get().unwrap().env_vars.get(key)
+	CLI.get()?.env_vars.get(key)
 }
 
 pub fn vars() -> Iter<'static, String, String> {
