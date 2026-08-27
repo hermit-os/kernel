@@ -78,6 +78,9 @@
 #![feature(strict_provenance_lints)]
 #![warn(implicit_provenance_casts)]
 
+#[cfg(all(feature = "snapshot", feature = "write-pcap-file", not(doc)))]
+compile_error!("The `snapshot` feature is incompatible with the `write-pcap-file` feature.");
+
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;

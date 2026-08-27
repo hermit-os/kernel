@@ -132,7 +132,7 @@ fn detect_device(phys_addr: usize) -> Option<VolatileRef<'static, DeviceRegister
 }
 
 fn check_linux_args(
-	linux_mmio: &'static [String],
+	linux_mmio: &[String],
 ) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	linux_mmio
 		.iter()

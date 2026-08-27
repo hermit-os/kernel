@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 #[cfg(feature = "dns")]
 use alloc::vec::Vec;
 use core::future;
-use core::sync::atomic::{AtomicU16, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
@@ -79,6 +79,8 @@ static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(0);
 pub(crate) static NIC: InterruptTicketMutex<NetworkState<'_>> =
 	InterruptTicketMutex::new(NetworkState::Missing);
 
+static NETWORK_POLLER_STARTED: AtomicBool = AtomicBool::new(false);
+
 type MaybePcapDevice = cfg_select! {
 		feature = "write-pcap-file" => {
 			smoltcp::phy::PcapWriter<NetworkDevice, crate::executor::device::pcap_writer::FileSink>
@@ -138,9 +140,15 @@ pub(crate) fn now() -> Instant {
 	Instant::from_micros_const(systemtime::now_micros().try_into().unwrap())
 }
 
+/// Whether DHCP has configured the *current* network stack.
+///
+/// A new DHCP socket reports [`dhcpv4::Event::Deconfigured`] on its first poll,
+/// which must not tear down the configuration the stack was created with.
+#[cfg(feature = "dhcpv4")]
+static DHCP_WAS_EVER_CONFIGURED: AtomicBool = AtomicBool::new(false);
+
 #[cfg(feature = "dhcpv4")]
 async fn dhcpv4_run() {
-	let mut was_ever_configured = false;
 	future::poll_fn(|cx| {
 		let Some(mut guard) = NIC.try_lock() else {
 			// FIXME: only wake when progress can be made
@@ -148,7 +156,10 @@ async fn dhcpv4_run() {
 			return Poll::Pending;
 		};
 
-		let nic = guard.as_nic_mut().unwrap();
+		let Ok(nic) = guard.as_nic_mut() else {
+			NETWORK_WAKER.lock().register(cx.waker());
+			return Poll::Pending;
+		};
 		let dhcp_handle = nic.dhcp_handle;
 		let socket = nic.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp_handle);
 
@@ -192,10 +203,10 @@ async fn dhcpv4_run() {
 					nic.dns_handle = Some(nic.sockets.add(dns_socket));
 				}
 
-				was_ever_configured = true;
+				DHCP_WAS_EVER_CONFIGURED.store(true, Ordering::Relaxed);
 			}
 			Some(dhcpv4::Event::Deconfigured) => {
-				if !was_ever_configured {
+				if !DHCP_WAS_EVER_CONFIGURED.load(Ordering::Relaxed) {
 					// If there is a default configuration, we do not want to reset it. If there is not, there is not a need to reset it.
 					return Poll::Pending;
 				}
@@ -244,7 +255,7 @@ pub(crate) fn wake_network_waker() {
 }
 
 async fn network_run() {
-	future::poll_fn(|cx| {
+	future::poll_fn(|cx| -> Poll<()> {
 		let Some(mut guard) = NIC.try_lock() else {
 			// FIXME: only wake when progress can be made
 			cx.waker().wake_by_ref();
@@ -253,7 +264,8 @@ async fn network_run() {
 		};
 
 		let NetworkState::Initialized(nic) = &mut *guard else {
-			return Poll::Ready(());
+			NETWORK_WAKER.lock().register(cx.waker());
+			return Poll::Pending;
 		};
 
 		let now = now();
@@ -285,7 +297,10 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 			return Poll::Pending;
 		};
 
-		let nic = guard.as_nic_mut().unwrap();
+		let Ok(nic) = guard.as_nic_mut() else {
+			NETWORK_WAKER.lock().register(cx.waker());
+			return Poll::Pending;
+		};
 		let socket = nic.get_mut_dns_socket()?;
 		match socket.get_query_result(query) {
 			Ok(addrs) => {
@@ -309,6 +324,103 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 	.await
 }
 
+fn spawn_network_executor_tasks_once() {
+	if NETWORK_POLLER_STARTED
+		.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+		.is_ok()
+	{
+		spawn(network_run());
+		#[cfg(feature = "dhcpv4")]
+		spawn(dhcpv4_run());
+	}
+}
+
+/// Fully tears down the current [`NIC`] state, returns the hardware driver to
+/// [`super::device::NETWORK_DEVICE`] when applicable, and rebuilds the stack
+/// the same way as [`init`].
+///
+/// Handles of sockets that were open before the call do not refer to a valid
+/// socket afterwards.
+#[cfg(feature = "snapshot")]
+pub(crate) fn reinit() {
+	LOCAL_ENDPOINT.store(start_endpoint(), Ordering::Relaxed);
+	#[cfg(feature = "dhcpv4")]
+	DHCP_WAS_EVER_CONFIGURED.store(false, Ordering::Relaxed);
+
+	let mut guard = NIC.lock();
+	let old = core::mem::replace(&mut *guard, NetworkState::Missing);
+
+	if let NetworkState::Initialized(nic_box) = old {
+		cfg_select! {
+			any(
+				all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+				feature = "rtl8139",
+				feature = "virtio-net",
+			) => {
+				let dev = recycle_hardware_device(*nic_box);
+				*super::device::NETWORK_DEVICE.lock() = Some(dev);
+			}
+			_ => {
+				drop(nic_box);
+			}
+		}
+	}
+
+	*guard = NetworkInterface::create();
+
+	if let NetworkState::Initialized(_) = &*guard {
+		spawn_network_executor_tasks_once();
+	}
+
+	drop(guard);
+	wake_network_waker();
+}
+
+#[cfg(all(
+	feature = "snapshot",
+	any(
+		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "rtl8139",
+		feature = "virtio-net",
+	),
+))]
+fn recycle_hardware_device(nic: NetworkInterface<'_>) -> NetworkDevice {
+	use smoltcp::phy::{Device, RxToken};
+
+	/// Upper bound for the packets dropped by a single [`recycle_hardware_device`] call.
+	const DRAIN_LIMIT: usize = 256;
+
+	let NetworkInterface {
+		iface,
+		sockets,
+		device,
+		..
+	} = nic;
+	drop((iface, sockets));
+	let mut device = {
+		#[cfg(feature = "net-trace")]
+		let device = device.into_inner();
+		device
+	};
+
+	// The sockets these packets belong to are gone, so drop what the device
+	// still holds instead of feeding it to the new interface.
+	let now = now();
+	let mut dropped = 0;
+	while dropped < DRAIN_LIMIT {
+		let Some((rx, _tx)) = device.receive(now) else {
+			break;
+		};
+		rx.consume(|_| ());
+		dropped += 1;
+	}
+	if dropped > 0 {
+		debug!("Dropped {dropped} packets that were received before the reinit");
+	}
+
+	device
+}
+
 pub(crate) fn init() {
 	info!("Try to initialize network!");
 
@@ -320,9 +432,7 @@ pub(crate) fn init() {
 	*guard = NetworkInterface::create();
 
 	if let NetworkState::Initialized(_) = &mut *guard {
-		spawn(network_run());
-		#[cfg(feature = "dhcpv4")]
-		spawn(dhcpv4_run());
+		spawn_network_executor_tasks_once();
 	}
 }
 

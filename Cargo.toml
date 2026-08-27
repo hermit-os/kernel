@@ -1,6 +1,6 @@
 [package]
 name = "hermit-kernel"
-version = "0.13.0"
+version = "0.13.2"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
@@ -94,6 +94,12 @@ loader = ["hermit-entry"]
 ##
 ## [Uhyve]: https://github.com/hermit-os/uhyve
 uhyve = ["hermit-entry", "dep:uhyve-interface"]
+
+## Enables taking and restoring [Uhyve's](Uhyve) VM snapshots.
+##
+## This feature is incompatible with `write-pcap-file`.
+## [Uhyve]: https://github.com/hermit-os/uhyve
+snapshot = ["uhyve"]
 
 #! ### Hardware Features
 #!
@@ -380,7 +386,7 @@ take-static = "0.1"
 talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
-uhyve-interface = { version = "0.3", optional = true }
+uhyve-interface = {git = "https://github.com/hermit-os/uhyve.git", branch = "uhyve-if-snapshot", optional = true }
 virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly"] }
 volatile = "0.6"
 zeroize = "1.9.0"
