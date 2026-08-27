@@ -141,6 +141,7 @@ impl ObjectInterface for Fd {
 			async fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
 			async fn write(&self, buf: &[u8]) -> io::Result<usize>;
 			async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize>;
+			async fn fsync(&self) -> io::Result<()>;
 			async fn fstat(&self) -> io::Result<FileAttr>;
 			async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize>;
 			#[cfg(any(feature = "net", feature = "virtio-vsock"))]
