@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
-use core::str::FromStr;
+#[cfg(feature = "dns")]
+use alloc::vec::Vec;
 
 use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "net-trace")]
@@ -11,7 +12,7 @@ use smoltcp::phy::{PcapMode, PcapWriter};
 use smoltcp::socket::dhcpv4;
 #[cfg(feature = "dns")]
 use smoltcp::socket::dns;
-use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{EthernetAddress, HardwareAddress};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch::kernel::systemtime;
@@ -25,6 +26,7 @@ use crate::drivers::Driver;
 ))]
 use crate::drivers::net::NetworkDevice;
 use crate::drivers::net::NetworkDriver;
+use crate::env::{IpAddrConfig, default_interface_config};
 
 cfg_select! {
 	any(
@@ -101,47 +103,53 @@ impl<'a> NetworkInterface<'a> {
 		#[cfg_attr(all(not(feature = "dhcpv4"), not(feature = "dns")), expect(unused_mut))]
 		let mut sockets = SocketSet::new(vec![]);
 
+		#[cfg(feature = "dhcpv4")]
+		let mut dhcp_handle = None;
 		#[cfg(feature = "dns")]
 		let mut dns_handle = None;
 
-		#[cfg(feature = "dhcpv4")]
-		let dhcp_handle = {
-			if let Some(hermit_ip) = hermit_var!("HERMIT_IP") {
-				warn!("HERMIT_IP was set to {hermit_ip}, but Hermit was built with DHCPv4.");
-				warn!(
-					"HERMIT_IP will be overwritten if a DHCP configuration is acquired. If the provided configuration was not meant to be a fallback, disable the DHCP feature."
-				);
+		if hermit_var!("HERMIT_IP").is_some()
+			|| hermit_var!("HERMIT_GATEWAY").is_some()
+			|| hermit_var!("HERMIT_MASK").is_some()
+		{
+			warn!(
+				"HERMIT_IP, HERMIT_GATEWAY and HERMIT_MASK were removed in favor of the ip= parameter and have no effect anymore"
+			);
+		}
+
+		let if_config = default_interface_config();
+
+		match if_config.ip_and_gateway {
+			IpAddrConfig::None => {}
+			#[cfg(feature = "dhcpv4")]
+			IpAddrConfig::Dhcp => {
+				dhcp_handle = Some(sockets.add(dhcpv4::Socket::new()));
 			}
-			sockets.add(dhcpv4::Socket::new())
-		};
+			IpAddrConfig::Static {
+				ip_and_netmask,
+				gateway,
+			} => {
+				info!("IP address: {ip_and_netmask}");
 
-		if !cfg!(feature = "dhcpv4") || hermit_var!("HERMIT_IP").is_some() {
-			let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
-			let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
-			let mymask =
-				Ipv4Address::from_str(hermit_var_or!("HERMIT_MASK", "255.255.255.0")).unwrap();
+				iface.update_ip_addrs(|ip_addrs| {
+					ip_addrs.push(ip_and_netmask).unwrap();
+				});
 
-			let ip_addr = IpCidr::from(Ipv4Cidr::from_netmask(myip, mymask).unwrap());
-			info!("IP address: {ip_addr}");
-			info!("Gateway:    {mygw}");
+				if let Some(gateway) = gateway {
+					info!("Gateway:    {gateway}");
+					iface.routes_mut().add_default_ipv4_route(gateway).unwrap();
+				}
 
-			iface.update_ip_addrs(|ip_addrs| {
-				ip_addrs.push(ip_addr).unwrap();
-			});
-			iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
-
-			#[cfg(feature = "dns")]
-			{
-				// Quad9 DNS server
-				let mydns1 =
-					Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS1", "9.9.9.9")).unwrap();
-				// Cloudflare DNS server
-				let mydns2 =
-					Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS2", "1.1.1.1")).unwrap();
-				let servers = &[mydns1.into(), mydns2.into()];
-				let dns_socket = dns::Socket::new(servers, vec![]);
-				dns_handle = Some(sockets.add(dns_socket));
-			};
+				#[cfg(feature = "dns")]
+				{
+					let servers = &[if_config.dns0, if_config.dns1]
+						.into_iter()
+						.flat_map(|i| i.map(Into::into))
+						.collect::<Vec<_>>();
+					let dns_socket = dns::Socket::new(servers, vec![]);
+					dns_handle = Some(sockets.add(dns_socket));
+				};
+			}
 		}
 
 		NetworkState::Initialized(Box::new(Self {
