@@ -252,14 +252,14 @@ pub(crate) fn init() {
 		// No FDT -> Uhyve legacy mounting (to /root)
 		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/root").to_owned();
 		info!("Mounting uhyve filesystem at {mount_point}");
-		fs::FILESYSTEM
-			.get()
-			.unwrap()
-			.mount(
-				&mount_point,
-				Box::new(UhyveDirectory::new(mount_point.clone())),
-			)
-			.expect("Mount failed. Duplicate mount_point?");
+		if let Err(e) = fs::FILESYSTEM.get().unwrap().mount(
+			&mount_point,
+			Box::new(UhyveDirectory::new(mount_point.clone())),
+		) {
+			// Uhyve also doesn't pass anything whenthere are no mount points,
+			// e.g. if we use an initramfs.
+			error!("Mount failed. Duplicate mount_point? {e}");
+		};
 		return;
 	};
 
