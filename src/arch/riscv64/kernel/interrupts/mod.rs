@@ -10,22 +10,33 @@ use trapframe::TrapFrame;
 
 use crate::arch::kernel::HARTS_AVAILABLE;
 use crate::arch::kernel::devicetree::InterruptType as DeviceTreeInterruptType;
+#[cfg(not(feature = "riscv-plic"))]
 use crate::arch::riscv64::kernel::core_local::msi_controller;
+#[cfg(not(feature = "riscv-plic"))]
 use crate::arch::riscv64::kernel::devicetree::msi_supported_vectors;
 use crate::drivers::InterruptHandlerMap;
 use crate::scheduler;
 use crate::scheduler::CoreId;
 
+#[cfg(not(feature = "riscv-plic"))]
 mod imsic;
+#[cfg(not(feature = "riscv-plic"))]
 pub(crate) use imsic::init_interrupt_files;
+#[cfg(not(feature = "riscv-plic"))]
 use imsic::{Imsic, init_imsic};
 
+#[cfg(not(feature = "riscv-plic"))]
 mod aplic;
+#[cfg(not(feature = "riscv-plic"))]
 pub(crate) use aplic::init_aplic;
+#[cfg(not(feature = "riscv-plic"))]
 use aplic::{Aplic, SourceMode};
 
+#[cfg(feature = "riscv-plic")]
 mod plic;
+#[cfg(feature = "riscv-plic")]
 use plic::Plic;
+#[cfg(feature = "riscv-plic")]
 pub(crate) use plic::init_plic;
 
 pub(crate) static EXTERNAL_INTERRUPT_CONTROLLER: SpinMutex<Option<ExternalInterruptController>> =
@@ -33,19 +44,25 @@ pub(crate) static EXTERNAL_INTERRUPT_CONTROLLER: SpinMutex<Option<ExternalInterr
 
 static INTERRUPT_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 
+#[cfg(not(feature = "riscv-plic"))]
 const MSI_EIID_WAKEUP: u16 = 2;
 
+#[cfg(not(feature = "riscv-plic"))]
 pub type MsiController = Imsic;
 
 pub(crate) enum ExternalInterruptController {
+	#[cfg(feature = "riscv-plic")]
 	Plic(Plic),
+	#[cfg(not(feature = "riscv-plic"))]
 	Aplic(Aplic),
 }
 
 impl ExternalInterruptController {
 	fn enable_interrupt(&mut self, irq_number: u16) {
 		match self {
+			#[cfg(feature = "riscv-plic")]
 			Self::Plic(plic) => plic.set_enable_bit(irq_number, true),
+			#[cfg(not(feature = "riscv-plic"))]
 			Self::Aplic(aplic) => aplic.set_enable_bit(irq_number, true),
 		}
 	}
@@ -53,41 +70,51 @@ impl ExternalInterruptController {
 	#[cfg_attr(not(any(feature = "virtio", feature = "pci")), allow(dead_code))]
 	pub fn set_interrupt_source_mode(
 		&mut self,
-		irq_number: u16,
-		irq_type: DeviceTreeInterruptType,
+		_irq_number: u16,
+		_irq_type: DeviceTreeInterruptType,
 	) {
 		match self {
+			#[cfg(feature = "riscv-plic")]
 			Self::Plic(_plic) => { /* noop */ }
+			#[cfg(not(feature = "riscv-plic"))]
 			Self::Aplic(aplic) => {
-				aplic.set_interrupt_source_mode(irq_number, SourceMode::from(irq_type));
+				aplic.set_interrupt_source_mode(_irq_number, SourceMode::from(_irq_type));
 			}
 		}
 	}
 
 	fn set_interrupt_priority(&mut self, irq_number: u16, priority: u8) {
 		match self {
+			#[cfg(feature = "riscv-plic")]
 			Self::Plic(plic) => plic.set_interrupt_priority(irq_number, priority),
+			#[cfg(not(feature = "riscv-plic"))]
 			Self::Aplic(aplic) => aplic.set_interrupt_priority(irq_number, priority),
 		}
 	}
 
 	fn set_priority_threshold(&mut self, threshold: u8) {
 		match self {
+			#[cfg(feature = "riscv-plic")]
 			Self::Plic(plic) => plic.set_priority_threshold(threshold),
+			#[cfg(not(feature = "riscv-plic"))]
 			Self::Aplic(aplic) => aplic.set_priority_threshold(threshold),
 		}
 	}
 
 	fn claim_interrupt(&mut self) -> Option<NonZeroU16> {
 		match self {
+			#[cfg(feature = "riscv-plic")]
 			Self::Plic(plic) => plic.claim_interrupt(),
+			#[cfg(not(feature = "riscv-plic"))]
 			Self::Aplic(aplic) => aplic.claim_interrupt(),
 		}
 	}
 
 	fn complete_interrupt(&mut self, irq_number: u16) {
 		match self {
+			#[cfg(feature = "riscv-plic")]
 			Self::Plic(plic) => plic.complete_interrupt(irq_number),
+			#[cfg(not(feature = "riscv-plic"))]
 			Self::Aplic(aplic) => aplic.complete_interrupt(irq_number),
 		}
 	}
@@ -95,6 +122,7 @@ impl ExternalInterruptController {
 
 /// Init Interrupts
 pub(crate) fn install() {
+	#[cfg(not(feature = "riscv-plic"))]
 	if let Some(max_vectors) = msi_supported_vectors() {
 		init_imsic(max_vectors.try_into().unwrap());
 	}
@@ -182,7 +210,10 @@ pub(crate) fn disable() {
 }
 
 /// Currently not needed because we use the trapframe crate
-#[cfg_attr(not(feature = "smp"), expect(unused_mut))]
+#[cfg_attr(
+	not(all(not(feature = "riscv-plic"), feature = "smp")),
+	expect(unused_mut)
+)]
 pub(crate) fn install_handlers(mut handlers: InterruptHandlerMap) {
 	let mut ctrl_guard = EXTERNAL_INTERRUPT_CONTROLLER.lock();
 	let ctrl = ctrl_guard.as_mut().unwrap();
@@ -195,7 +226,7 @@ pub(crate) fn install_handlers(mut handlers: InterruptHandlerMap) {
 	ctrl.set_priority_threshold(0);
 
 	// Register MSI handler for IPIs
-	#[cfg(feature = "smp")]
+	#[cfg(all(not(feature = "riscv-plic"), feature = "smp"))]
 	if msi_controller().is_some() {
 		handlers
 			.entry(MSI_EIID_WAKEUP.try_into().unwrap())
@@ -280,9 +311,10 @@ pub(crate) fn print_statistics() {}
 pub fn wakeup_core(core_to_wakeup: CoreId) {
 	let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
 	debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
+	#[cfg(not(feature = "riscv-plic"))]
 	if let Some(imsic) = msi_controller() {
 		imsic.set_ipi(hart_id, NonZeroU16::new(MSI_EIID_WAKEUP).unwrap());
-	} else {
-		sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
+		return;
 	}
+	sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
 }
