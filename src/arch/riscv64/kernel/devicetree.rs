@@ -1,4 +1,6 @@
+#[cfg(not(feature = "riscv-plic"))]
 use alloc::collections::BTreeMap;
+#[cfg(not(feature = "riscv-plic"))]
 use alloc::vec::Vec;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use core::ptr::NonNull;
@@ -6,15 +8,18 @@ use core::ptr::NonNull;
 use memory_addresses::PhysAddr;
 #[cfg(all(feature = "gem-net", not(feature = "pci")))]
 use memory_addresses::VirtAddr;
+#[cfg(not(feature = "riscv-plic"))]
 use riscv::interrupt::Interrupt;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use virtio::mmio::{DeviceRegisters, DeviceRegistersVolatileFieldAccess};
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use volatile::VolatileRef;
 
-#[cfg(all(any(feature = "gem-net", feature = "virtio"), not(feature = "pci")))]
 use crate::arch::kernel::interrupts::EXTERNAL_INTERRUPT_CONTROLLER;
-use crate::arch::kernel::interrupts::{init_aplic, init_interrupt_files, init_plic};
+#[cfg(feature = "riscv-plic")]
+use crate::arch::kernel::interrupts::init_plic;
+#[cfg(not(feature = "riscv-plic"))]
+use crate::arch::kernel::interrupts::{init_aplic, init_interrupt_files};
 #[cfg(all(
 	any(
 		feature = "virtio-fs",
@@ -57,6 +62,7 @@ use crate::executor::device::NETWORK_DEVICE;
 #[cfg(all(feature = "virtio", not(feature = "pci")))]
 use crate::mm::PageRangeAllocator;
 
+#[cfg(feature = "riscv-plic")]
 enum Model {
 	Fux40,
 	Virt,
@@ -95,6 +101,7 @@ pub fn init_interrupt_controller() {
 		return;
 	};
 
+	#[cfg(not(feature = "riscv-plic"))]
 	if let Some(imsic_node) = find_imsic(&fdt) {
 		let imsic_region = imsic_node
 			.reg()
@@ -173,6 +180,7 @@ pub fn init_interrupt_controller() {
 		init_interrupt_files(addr, size, interrupt_file_indices);
 	}
 
+	#[cfg(not(feature = "riscv-plic"))]
 	if let Some(aplic_node) = find_aplic(&fdt) {
 		let aplic_region = aplic_node
 			.reg()
@@ -185,7 +193,10 @@ pub fn init_interrupt_controller() {
 
 		debug!("Found APLIC at {addr:p}, size: {size:#x}, msi_delivery: {msi_delivery:?}");
 		init_aplic(addr, size, msi_delivery);
-	} else if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
+	}
+
+	#[cfg(feature = "riscv-plic")]
+	if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
 		debug!("Found external interrupt controller");
 		let plic_region = plic_node
 			.reg()
@@ -225,11 +236,14 @@ pub fn init_interrupt_controller() {
 			Model::Fux40 => 2,
 		};
 		init_plic(plic_region_start, plic_region_size, context);
-	} else {
+	}
+
+	if EXTERNAL_INTERRUPT_CONTROLLER.lock().is_none() {
 		warn!("No external interrupt controller found");
 	}
 }
 
+#[cfg(not(feature = "riscv-plic"))]
 pub fn msi_supported_vectors() -> Option<usize> {
 	let fdt = env::start_info().fdt()?;
 	let imsic_node = find_imsic(&fdt)?;
@@ -237,6 +251,7 @@ pub fn msi_supported_vectors() -> Option<usize> {
 	imsic_node.property("riscv,num-ids")?.as_usize()
 }
 
+#[cfg(not(feature = "riscv-plic"))]
 fn find_imsic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
 	let mut node = fdt.find_compatible(&["riscv,imsics"])?;
 
@@ -257,6 +272,7 @@ fn find_imsic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
 	Some(node)
 }
 
+#[cfg(not(feature = "riscv-plic"))]
 fn find_aplic<'a>(fdt: &'a fdt::Fdt<'_>) -> Option<fdt::node::FdtNode<'a, 'a>> {
 	let mut node = fdt.find_compatible(&["riscv,aplic"])?;
 

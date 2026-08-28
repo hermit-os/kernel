@@ -10,6 +10,7 @@ use hermit_sync::InterruptTicketMutex;
 use hermit_sync::{RawRwSpinLock, RawSpinMutex};
 
 use crate::arch::kernel::CPU_ONLINE;
+#[cfg(not(feature = "riscv-plic"))]
 use crate::arch::kernel::interrupts::MsiController;
 #[cfg(feature = "smp")]
 use crate::scheduler::SchedulerInput;
@@ -27,6 +28,7 @@ pub struct CoreLocal {
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
+	#[cfg(not(feature = "riscv-plic"))]
 	msi_controller: Cell<*mut MsiController>,
 }
 
@@ -46,6 +48,7 @@ impl CoreLocal {
 				ex: StaticLocalExecutor::new(),
 				#[cfg(feature = "smp")]
 				scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
+				#[cfg(not(feature = "riscv-plic"))]
 				msi_controller: Cell::new(ptr::null_mut()),
 			};
 			let this = if core_id == 0 {
@@ -91,10 +94,12 @@ pub(crate) fn ex() -> &'static StaticLocalExecutor<RawSpinMutex, RawRwSpinLock> 
 	&CoreLocal::get().ex
 }
 
+#[cfg(not(feature = "riscv-plic"))]
 pub(crate) fn msi_controller() -> Option<&'static mut MsiController> {
 	unsafe { CoreLocal::get().msi_controller.get().as_mut() }
 }
 
+#[cfg(not(feature = "riscv-plic"))]
 pub(crate) fn set_msi_controller(msi_controller: *mut MsiController) {
 	CoreLocal::get().msi_controller.set(msi_controller);
 }
