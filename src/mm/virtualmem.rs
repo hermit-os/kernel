@@ -64,7 +64,7 @@ unsafe fn init() {
 /// End of the virtual memory address space reserved for kernel memory (inclusive).
 /// The virtual memory address space reserved for the task heap starts after this.
 #[inline]
-pub fn kernel_heap_end() -> VirtAddr {
+pub const fn kernel_heap_end() -> VirtAddr {
 	cfg_select! {
 		target_arch = "aarch64" => {
 			// maximum address, which can be supported by TTBR0
@@ -75,17 +75,13 @@ pub fn kernel_heap_end() -> VirtAddr {
 			VirtAddr::new(0x0040_0000_0000 - 1)
 		}
 		target_arch = "x86_64" => {
-			use x86_64::structures::paging::PageTableIndex;
-
 			let p4_index = if cfg!(feature = "common-os") {
-				PageTableIndex::new(1)
+				1u64
 			} else {
-				PageTableIndex::new(256)
+				256u64
 			};
 
-			let addr = u64::from(p4_index) << 39;
-			assert_eq!(VirtAddr::new_truncate(addr).p4_index(), p4_index);
-
+			let addr = p4_index << 39;
 			VirtAddr::new_truncate(addr - 1)
 		}
 	}
