@@ -354,7 +354,7 @@ fn detect_interrupt_line(
 		let interrupt_parent_phandle = u32::from_be_bytes(value_slice.try_into().unwrap());
 		let interrupt_parent_node = fdt.find_phandle(interrupt_parent_phandle).unwrap();
 		let parent_interrupt_cells = interrupt_parent_node.interrupt_cells().unwrap();
-		let (irq_number, source_mode) = match interrupt_parent_node.interrupt_cells().unwrap() {
+		let (irq_number, source_mode) = match parent_interrupt_cells {
 			1 => {
 				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u32>());
 				let irq_number = u32::from_be_bytes(value_slice.try_into().unwrap());

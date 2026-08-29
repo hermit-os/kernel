@@ -522,7 +522,7 @@ pub(crate) mod msix {
 		fn configure(&mut self, index: u16, vector: u8);
 	}
 
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(msix_supported)]
 	impl MsixTableVolatileElementAccess for volatile::VolatileRef<'_, [TableEntry]> {
 		/// Configures the [TableEntry] at the given index of the MSI-X table to trigger the vector provided.
 		///
@@ -532,8 +532,21 @@ pub(crate) mod msix {
 		fn configure(&mut self, index: u16, vector: u8) {
 			use bit_field::BitField;
 
+			#[cfg(target_arch = "x86_64")]
 			// Intel 64 and IA-32 Architectures Software Developer’s Manual volume 3 section 12.11.2.1.
 			core::assert_matches!(vector, 0x10..=VECTOR_MAX);
+
+			#[cfg(target_arch = "x86_64")]
+			// Format described in Intel 64 and IA-32 Architectures Software Developer’s Manual volume 3 section 12.11.2.
+			let addr = 0xfee0_0000u64;
+			#[cfg(target_arch = "riscv64")]
+			let addr = {
+				use crate::arch::kernel::core_local::msi_controller;
+				msi_controller()
+					.unwrap()
+					.get_physical_interrupt_file_address(0)
+					.as_u64()
+			};
 
 			let msix_entry = unsafe {
 				self.as_mut_ptr()
@@ -546,10 +559,12 @@ pub(crate) mod msix {
 				.vector_control()
 				.update(|mut control| *control.set_bit(0, true));
 
-			// Format described in Intel 64 and IA-32 Architectures Software Developer’s Manual volume 3 section 12.11.2.
 			msix_entry
 				.message_address()
-				.update(|mut addr_low| *addr_low.set_bits(20..32, 0xfee));
+				.update(|mut addr_low| *addr_low.set_bits(0..32, addr as u32));
+			msix_entry
+				.message_upper_address()
+				.update(|mut addr_high| *addr_high.set_bits(0..32, (addr >> 32) as u32));
 			msix_entry
 				.message_data()
 				.update(|mut data| *data.set_bits(0..8, u32::from(vector)));

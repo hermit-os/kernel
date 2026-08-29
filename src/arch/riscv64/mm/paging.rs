@@ -211,7 +211,6 @@ struct Page<S: PageSize> {
 	size: PhantomData<S>,
 }
 
-#[allow(dead_code)]
 impl<S: PageSize> Page<S> {
 	/// Return the stored virtual address.
 	fn address(&self) -> VirtAddr {
@@ -633,7 +632,6 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
 }
 
-#[allow(dead_code)]
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 	let range = AddrRange::new(phys_addr, phys_addr).unwrap();
 

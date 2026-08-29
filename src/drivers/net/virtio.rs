@@ -514,10 +514,7 @@ impl NetworkDriver for VirtioNetDriver {
 	}
 
 	fn handle_interrupt(&mut self) {
-		#[cfg_attr(
-			not(all(feature = "pci", target_arch = "x86_64")),
-			expect(irrefutable_let_patterns)
-		)]
+		#[cfg_attr(not(msix_supported), expect(irrefutable_let_patterns))]
 		let InterruptCapability::IsrStatus(isr_stat) = &mut self.caps_coll.int_cap else {
 			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
 		};
@@ -804,10 +801,7 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 			debug!("Using RX buffer size of {}", dev_spec_init.0.buf_size);
 			recv_vqs = Some(dev_spec_init.0);
 			send_vqs = Some(dev_spec_init.1);
-			#[cfg_attr(
-				not(all(feature = "pci", target_arch = "x86_64")),
-				expect(unused_variables)
-			)]
+			#[cfg_attr(not(msix_supported), expect(unused_variables))]
 			let num_vqs = dev_spec_init.2;
 			ctrl_vq = Some(dev_spec_init.3);
 			send_capacity = Some(dev_spec_init.4);
@@ -824,7 +818,7 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 					info!("Virtio interrupt handler at line {irq}");
 				}
-				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+				#[cfg(msix_supported)]
 				InterruptCapability::Msix(msix_table) => {
 					let recv_vqs = (0..num_vqs).step_by(2);
 					let send_vqs = (1..num_vqs).step_by(2);
