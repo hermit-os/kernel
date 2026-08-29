@@ -452,18 +452,9 @@ impl Aplic {
 		}
 
 		if let Some(msi_controller) = msi_controller() {
-			let target: u32 = unsafe {
-				self.control_region
-					.as_mut_ptr()
-					.target()
-					.map(|slice| {
-						slice
-							.cast()
-							.offset(isize::try_from(irq_number).unwrap() - 1)
-					})
-					.read()
-			};
-			let eiid = TargetMsiDelivery::from(target).eiid();
+			// As long as IRQ numbers are reused as EIID (external interrupt identifier), we can use
+			// the irq_number directly as EIID.
+			let eiid = irq_number;
 			msi_controller.set_interrupt_enable(NonZeroU16::new(eiid).unwrap(), value);
 		}
 	}
@@ -495,7 +486,6 @@ impl Aplic {
 
 	pub fn set_interrupt_priority(&mut self, irq_number: u16, priority: u8) {
 		let new_value = if msi_controller().is_some() {
-			warn!("APLIC interrupt priority is not supported in MSI delivery mode");
 			TargetMsiDelivery::new()
 				.with_hart_index(Aplic::get_hart_index())
 				.with_eiid(irq_number)

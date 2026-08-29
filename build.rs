@@ -10,6 +10,8 @@ use llvm_tools::LlvmTools;
 fn main() -> Result<()> {
 	built::write_built_file().unwrap();
 
+	configure_msix_support();
+
 	if env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "x86_64"
 		&& env::var_os("CARGO_FEATURE_SMP").is_some()
 	{
@@ -17,6 +19,18 @@ fn main() -> Result<()> {
 	}
 
 	Ok(())
+}
+
+fn configure_msix_support() {
+	println!("cargo:rustc-check-cfg=cfg(msix_supported)");
+
+	let has_pci = env::var_os("CARGO_FEATURE_PCI").is_some();
+	let has_plic = env::var_os("CARGO_FEATURE_RISCV_PLIC").is_some();
+	let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+
+	if has_pci && (target_arch == "x86_64" || (target_arch == "riscv64" && !has_plic)) {
+		println!("cargo:rustc-cfg=msix_supported");
+	}
 }
 
 fn assemble_x86_64_smp_boot() -> Result<()> {

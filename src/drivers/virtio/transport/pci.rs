@@ -19,6 +19,8 @@ use virtio::{DeviceStatus, le16, le32};
 use volatile::access::ReadOnly;
 use volatile::{VolatilePtr, VolatileRef};
 
+#[cfg(all(msix_supported, target_arch = "riscv64"))]
+use crate::arch::kernel::core_local::msi_controller;
 use crate::arch::kernel::pci::PciConfigRegion;
 use crate::drivers::InterruptHandlerMap;
 #[cfg(feature = "virtio-console")]
@@ -34,9 +36,9 @@ use crate::drivers::fs::VirtioFsDriver;
 use crate::drivers::net::virtio::VirtioNetDriver;
 use crate::drivers::pci::PciDevice;
 use crate::drivers::pci::error::PciError;
-#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+#[cfg(msix_supported)]
 use crate::drivers::pci::msix;
-#[cfg(target_arch = "x86_64")]
+#[cfg(msix_supported)]
 use crate::drivers::pci::msix::MsixTableVolatileElementAccess;
 #[cfg(feature = "virtio-rng")]
 use crate::drivers::rng::VirtioRngDriver;
@@ -181,7 +183,7 @@ pub struct VqCfgHandler<'a> {
 	raw: VolatileRef<'a, CommonCfg>,
 }
 
-#[cfg_attr(not(target_arch = "x86_64"), expect(unused))]
+#[cfg_attr(not(msix_supported), expect(unused))]
 pub(crate) const NO_VECTOR: u16 = 0xffff;
 
 impl VqCfgHandler<'_> {
@@ -235,7 +237,7 @@ impl VqCfgHandler<'_> {
 			.write(addr.as_u64().into());
 	}
 
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(msix_supported)]
 	fn set_queue_msix_vector(&mut self, index: u16) -> Result<(), ()> {
 		self.select_queue();
 		let queue_msix_vector = self.raw.as_mut_ptr().queue_msix_vector();
@@ -362,8 +364,7 @@ impl ComCfg {
 		status.contains(DeviceStatus::DEVICE_NEEDS_RESET)
 	}
 }
-
-#[cfg(target_arch = "x86_64")]
+#[cfg(msix_supported)]
 impl ComCfg {
 	fn set_config_msix_vector(&mut self, index: u16) -> Result<(), ()> {
 		let config_msix_vector = self.com_cfg.as_mut_ptr().config_msix_vector();
@@ -388,8 +389,13 @@ impl ComCfg {
 	) {
 		// One for the device config irq.
 		let needed_irqs = 1 + queue_handlers.len();
+
+		#[cfg(target_arch = "x86_64")]
 		// We will need to map the IRQ number to the vector number by adding 32.
 		const IRQ_RANGE: core::ops::RangeInclusive<u8> = 0..=(msix::VECTOR_MAX - 32);
+		#[cfg(target_arch = "riscv64")]
+		const IRQ_RANGE: core::ops::RangeInclusive<u8> = 1..=(msix::VECTOR_MAX);
+
 		let mut free_irqs = IRQ_RANGE
 			.filter(|v| !handlers.contains_key(v))
 			// If we do not have enough free IRQs, fall back to using any
@@ -405,6 +411,9 @@ impl ComCfg {
 			.entry(config_irq)
 			.or_default()
 			.push_back(config_handler);
+		#[cfg(not(target_arch = "x86_64"))]
+		msix_table.configure(TABLE_CONFIG_INDEX, config_irq);
+		#[cfg(target_arch = "x86_64")]
 		msix_table.configure(TABLE_CONFIG_INDEX, config_irq + 32);
 		self.set_config_msix_vector(TABLE_CONFIG_INDEX).unwrap();
 		crate::arch::kernel::interrupts::add_irq_name(config_irq, "virtio config");
@@ -413,6 +422,9 @@ impl ComCfg {
 		for (((queues, handler), irq), table_queue_index) in queue_handlers.zip(free_irqs).zip(1..)
 		{
 			handlers.entry(irq).or_default().push_back(handler);
+			#[cfg(not(target_arch = "x86_64"))]
+			msix_table.configure(table_queue_index, irq);
+			#[cfg(target_arch = "x86_64")]
 			msix_table.configure(table_queue_index, irq + 32);
 			for i in queues {
 				self.select_vq(i)
@@ -584,7 +596,7 @@ pub(crate) fn map_caps(
 	let mut notif_cfg = None;
 	let mut isr_cfg = None;
 	let mut dev_cfg_list = Vec::new();
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(msix_supported)]
 	let mut msix_table = None;
 
 	let bar_mappings = device.memory_map_bars(true);
@@ -641,7 +653,7 @@ pub(crate) fn map_caps(
 					CapCfgType::Isr => {
 						let cond = isr_cfg.is_none();
 						// We prefer MSI-X over ISR Status.
-						#[cfg(target_arch = "x86_64")]
+						#[cfg(msix_supported)]
 						let cond = cond && msix_table.is_none();
 						if cond {
 							match pci_cap.map_cap_cfg() {
@@ -665,9 +677,15 @@ pub(crate) fn map_caps(
 					_ => continue,
 				}
 			}
-			// We can currently only make use of MSI-X on x86_64.
-			#[cfg(target_arch = "x86_64")]
+			#[cfg(msix_supported)]
 			PciCapability::MsiX(mut msix_capability) => {
+				#[cfg(target_arch = "riscv64")]
+				{
+					if msi_controller().is_none() {
+						continue;
+					}
+				}
+
 				msix_capability.set_enabled(true, device.access());
 
 				// the capability should provide a valid BAR ID and "[t]he BAR [...] must map
@@ -693,9 +711,20 @@ pub(crate) fn map_caps(
 		}
 	}
 
-	let isr_cfg = cfg_select! {
-		target_arch = "x86_64" => msix_table.map(InterruptCapability::Msix),
-		_ => None,
+	let isr_cfg = {
+		#[cfg(msix_supported)]
+		{
+			#[cfg(target_arch = "riscv64")]
+			let has_msix = msi_controller().is_some();
+			#[cfg(not(target_arch = "riscv64"))]
+			let has_msix = true;
+
+			msix_table
+				.filter(|_| has_msix)
+				.map(InterruptCapability::Msix)
+		}
+		#[cfg(not(msix_supported))]
+		None
 	}
 	.or(isr_cfg.map(InterruptCapability::IsrStatus));
 
@@ -703,7 +732,7 @@ pub(crate) fn map_caps(
 		Some(InterruptCapability::IsrStatus(_)) => {
 			info!("The device will use legacy interrupts.");
 		}
-		#[cfg(target_arch = "x86_64")]
+		#[cfg(msix_supported)]
 		Some(InterruptCapability::Msix(_)) => {
 			info!("Found MSI-X capability. The device will use message signaled interrupts.");
 		}

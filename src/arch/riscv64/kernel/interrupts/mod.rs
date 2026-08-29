@@ -218,6 +218,9 @@ pub(crate) fn install_handlers(mut handlers: InterruptHandlerMap) {
 	let mut ctrl_guard = EXTERNAL_INTERRUPT_CONTROLLER.lock();
 	let ctrl = ctrl_guard.as_mut().unwrap();
 
+	// FIXME: For each MSI-X vector assigned to a pci device, the external interrupt with the same
+	// number is enabled too. This might incur unnecessary cpu traps.
+
 	for irq_number in handlers.keys() {
 		// Set priority to 255 (lowest priority)
 		ctrl.set_interrupt_priority(u16::from(*irq_number), u8::MAX);

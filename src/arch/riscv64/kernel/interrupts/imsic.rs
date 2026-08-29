@@ -8,17 +8,15 @@ use core::num::NonZeroU16;
 use core::ptr::NonNull;
 
 use align_address::Align;
-use free_list::PageLayout;
 use memory_addresses::{PhysAddr, VirtAddr};
 use riscv::register::{sireg, siselect, stopei};
 use volatile::access::{NoAccess, WriteOnly};
 use volatile::{VolatileFieldAccess, VolatileRef};
 
 use crate::arch::kernel::interrupts::MSI_EIID_WAKEUP;
-use crate::arch::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::mm::paging::{self, BasePageSize, PageSize};
 use crate::arch::riscv64::kernel::core_local::set_msi_controller;
 use crate::init_cell::InitCell;
-use crate::mm::{PageAlloc, PageRangeAllocator};
 
 // Address of interrupt files for each hart index by hart_id.
 // Use HARTS_AVAILABLE to map CpuId to hart_id.
@@ -154,6 +152,13 @@ impl Imsic {
 			.seteipnum_le()
 			.write(u32::from(eiid.get()));
 	}
+
+	#[cfg(all(msix_supported, feature = "virtio"))]
+	pub fn get_physical_interrupt_file_address(&mut self, hart_id: usize) -> PhysAddr {
+		// Interrupts files are identity mapped. Virtual address == physical address.
+		let interrupt_file_addr = INTERRUPT_FILES.get().unwrap()[hart_id];
+		PhysAddr::from(interrupt_file_addr.as_u64())
+	}
 }
 
 pub fn init_interrupt_files(addr: PhysAddr, size: usize, interrupt_file_indices: Vec<usize>) {
@@ -166,19 +171,14 @@ pub fn init_interrupt_files(addr: PhysAddr, size: usize, interrupt_file_indices:
 		"Imsic control region size is not a multiple of a page"
 	);
 
-	let layout = PageLayout::from_size(size).unwrap();
-	let page_range = PageAlloc::allocate(layout).unwrap();
-	let interrupt_file_base_addr = VirtAddr::from(page_range.start());
+	let page_size = usize::try_from(BasePageSize::SIZE).unwrap();
+	let num_pages = size / page_size;
+	for page in 0..num_pages {
+		let phys_addr = addr + page * page_size;
+		paging::identity_map::<BasePageSize>(phys_addr);
+	}
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().normal().writable().execute_disable();
-	paging::map::<BasePageSize>(
-		interrupt_file_base_addr,
-		addr,
-		size / usize::try_from(BasePageSize::SIZE).unwrap(),
-		flags,
-	);
-
+	let interrupt_file_base_addr = VirtAddr::from(addr.as_u64());
 	INTERRUPT_FILES.with(|files| {
 		*files.unwrap() = interrupt_file_indices
 			.into_iter()
