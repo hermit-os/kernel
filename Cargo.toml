@@ -207,6 +207,9 @@ virtio-net = ["net", "virtio"]
 ## Enables the RTL8139 network driver.
 rtl8139 = ["net", "pci", "volatile/derive", "endian-num"]
 
+## Enables the ixgbe network driver for the Intel X550.
+ixgbe = ["net", "pci", "volatile/derive"]
+
 ## Enables the Cadence Gigabit Ethernet MAC (GEM) network driver.
 gem-net = ["net", "dep:tock-registers"]
 
