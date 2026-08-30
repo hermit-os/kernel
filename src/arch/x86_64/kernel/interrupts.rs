@@ -160,6 +160,8 @@ pub(crate) fn install() {
 	}
 
 	IRQ_NAMES.lock().insert(7, "FPU");
+	#[cfg(feature = "common-os")]
+	IRQ_NAMES.lock().insert(14, "Page Fault");
 }
 
 #[allow(unused_mut)]

@@ -62,6 +62,9 @@ default = [
 ## Note that this feature is not complete yet.
 common-os = []
 
+## Enable the support of classical fork
+fork = ["common-os"]
+
 ## Enables support for memory management system calls.
 ##
 ## This feature enables functions similar to [sys/mman.h].
