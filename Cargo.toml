@@ -224,6 +224,9 @@ virtio-rng = ["virtio"]
 ## Enables the virtio-vsock driver.
 virtio-vsock = ["virtio"]
 
+## Enable preemptive scheduling
+preemptive = []
+
 #! ### Other Drivers
 
 ## Enables the _Video Graphics Array_ (VGA) driver.
