@@ -397,28 +397,26 @@ pub fn create_new_root_page_table() -> usize {
 
 	use x86_64::structures::paging::Size4KiB as BasePageSize;
 
-	use crate::mm::PageBox;
+	use crate::mm::MappedPageBox;
 
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
 
-	let layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtaddr = VirtAddr::from(page_range.start());
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 
 	let entry: u64 = unsafe {
 		let (frame, _flags) = Cr3::read();
-		map::<BasePageSize>(virtaddr, frame.start_address().into(), 1, flags);
-		let entry: &u64 = &*virtaddr.as_ptr();
+		let page_range =
+			MappedPageBox::map_phys(frame.start_address().into(), layout, flags).unwrap();
+		let entry: &u64 = &*VirtAddr::from(page_range.pages().start()).as_ptr();
 
 		*entry
 	};
 
-	let slice_addr = virtaddr + BasePageSize::SIZE;
-	map::<BasePageSize>(slice_addr, physaddr, 1, flags);
+	let page_range = unsafe { MappedPageBox::map_phys(physaddr, layout, flags).unwrap() };
+	let slice_addr = VirtAddr::from(page_range.pages().start());
 
 	unsafe {
 		let pml4 = slice::from_raw_parts_mut(slice_addr.as_mut_ptr(), 512);
@@ -433,8 +431,6 @@ pub fn create_new_root_page_table() -> usize {
 		// create self reference
 		pml4[511] = physaddr.as_u64() + 0x3; // PG_PRESENT | PG_RW
 	};
-
-	unmap::<BasePageSize>(virtaddr, 2);
 
 	physaddr.as_usize()
 }

@@ -41,6 +41,7 @@
 //! ```
 
 pub(crate) mod device_alloc;
+mod mapped_page_box;
 mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
@@ -57,6 +58,7 @@ use talc::TalcLock;
 #[cfg(target_os = "none")]
 use talc::source::Manual;
 
+pub use self::mapped_page_box::MappedPageBox;
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
 pub use self::physicalmem::{FrameAlloc, FrameBox};
 pub use self::virtualmem::{PageAlloc, PageBox};
