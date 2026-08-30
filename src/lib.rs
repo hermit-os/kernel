@@ -47,10 +47,7 @@
 #![feature(allocator_api)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(
-	all(
-		not(any(feature = "common-os", feature = "nostd")),
-		not(target_arch = "riscv64"),
-	),
+	all(not(feature = "nostd"), not(target_arch = "riscv64"),),
 	feature(linkage)
 )]
 #![feature(linked_list_cursors)]
@@ -60,10 +57,7 @@
 	feature(specialization)
 )]
 #![cfg_attr(
-	all(
-		not(any(feature = "common-os", feature = "nostd")),
-		not(target_arch = "riscv64"),
-	),
+	all(not(feature = "nostd"), not(target_arch = "riscv64"),),
 	feature(thread_local)
 )]
 #![cfg_attr(target_os = "none", no_std)]
@@ -96,8 +90,6 @@ mod macros;
 mod logging;
 
 pub mod arch;
-#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
-pub mod common_os;
 pub mod config;
 pub mod console;
 mod drivers;

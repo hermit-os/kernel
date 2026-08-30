@@ -54,14 +54,6 @@ default = [
 
 #! ### Syscall Features
 
-## Enables multiple address spaces.
-##
-## This feature makes Hermit use traditional system calls for communicating with the kernel
-## instead of using function calls.
-##
-## Note that this feature is not complete yet.
-common-os = []
-
 ## Enables support for memory management system calls.
 ##
 ## This feature enables functions similar to [sys/mman.h].

@@ -872,37 +872,6 @@ pub fn configure() {
 		}
 	}
 
-	// enable support of syscall and sysret
-	#[cfg(feature = "common-os")]
-	{
-		use x86_64::PrivilegeLevel;
-		use x86_64::registers::model_specific::{LStar, SFMask, Star};
-		use x86_64::registers::rflags::RFlags;
-		use x86_64::structures::gdt::SegmentSelector;
-
-		use crate::arch::kernel::syscall;
-
-		let has_syscall = match cpuid.get_extended_processor_and_feature_identifiers() {
-			Some(finfo) => finfo.has_syscall_sysret(),
-			None => false,
-		};
-
-		if has_syscall {
-			info!("Enable SYSCALL support");
-		} else {
-			panic!("Syscall support is missing");
-		}
-		let cs_sysret = SegmentSelector::new(5, PrivilegeLevel::Ring3);
-		let ss_sysret = SegmentSelector::new(4, PrivilegeLevel::Ring3);
-		let cs_syscall = SegmentSelector::new(1, PrivilegeLevel::Ring0);
-		let ss_syscall = SegmentSelector::new(2, PrivilegeLevel::Ring0);
-		Star::write(cs_sysret, ss_sysret, cs_syscall, ss_syscall).unwrap();
-		let syscall_handler_addr = syscall::syscall_handler as *const ();
-		let syscall_handler_addr = VirtAddr::from_ptr(syscall_handler_addr);
-		LStar::write(syscall_handler_addr);
-		SFMask::write(RFlags::INTERRUPT_FLAG); // clear IF flag during system call
-	}
-
 	// Initialize the FS register, which is later used for Thread-Local Storage.
 	writefs(0);
 
