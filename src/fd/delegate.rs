@@ -23,6 +23,8 @@ use crate::fd::{Endpoint, ListenEndpoint, SocketOption};
 use crate::fs::mem::{MemDirectoryInterface, RamFileInterface, RomFileInterface};
 #[cfg(feature = "uhyve")]
 use crate::fs::uhyve::UhyveFileHandle;
+#[cfg(feature = "virtio-blk")]
+use crate::fs::vfat::{VfatDirectoryHandle, VfatFileHandle};
 #[cfg(feature = "virtio-fs")]
 use crate::fs::virtio_fs::{VirtioFsDirectoryHandle, VirtioFsFileHandle};
 use crate::fs::{DirectoryReader, FileAttr, SeekWhence};
@@ -49,6 +51,10 @@ pub(crate) enum Fd {
 	VirtioFsFileHandle(VirtioFsFileHandle),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFsDirectoryHandle(VirtioFsDirectoryHandle),
+	#[cfg(feature = "virtio-blk")]
+	VfatFileHandle(VfatFileHandle),
+	#[cfg(feature = "virtio-blk")]
+	VfatDirectoryHandle(VfatDirectoryHandle),
 	RomFileInterface(RomFileInterface),
 	RamFileInterface(RamFileInterface),
 	MemDirectoryInterface(MemDirectoryInterface),
@@ -97,6 +103,10 @@ fd_from! {
 	VirtioFsFileHandle(VirtioFsFileHandle),
 	#[cfg(feature = "virtio-fs")]
 	VirtioFsDirectoryHandle(VirtioFsDirectoryHandle),
+	#[cfg(feature = "virtio-blk")]
+	VfatFileHandle(VfatFileHandle),
+	#[cfg(feature = "virtio-blk")]
+	VfatDirectoryHandle(VfatDirectoryHandle),
 	RomFileInterface(RomFileInterface),
 	RamFileInterface(RamFileInterface),
 	MemDirectoryInterface(MemDirectoryInterface),
@@ -129,6 +139,10 @@ impl ObjectInterface for Fd {
 			Self::VirtioFsFileHandle(fd) => fd,
 			#[cfg(feature = "virtio-fs")]
 			Self::VirtioFsDirectoryHandle(fd) => fd,
+			#[cfg(feature = "virtio-blk")]
+			Self::VfatFileHandle(fd) => fd,
+			#[cfg(feature = "virtio-blk")]
+			Self::VfatDirectoryHandle(fd) => fd,
 			Self::RomFileInterface(fd) => fd,
 			Self::RamFileInterface(fd) => fd,
 			Self::MemDirectoryInterface(fd) => fd,
