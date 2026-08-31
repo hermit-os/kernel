@@ -121,7 +121,24 @@ pub fn freq() -> Option<u16> {
 
 #[allow(dead_code)]
 pub fn var(key: &str) -> Option<&String> {
-	CLI.get()?.env_vars.get(key)
+	CLI.get().unwrap().env_vars.get(key)
+}
+
+#[allow(dead_code)]
+pub fn early_var(key: &str) -> Option<String> {
+	match CLI.get() {
+		Some(cli) => cli.env_vars.get(key).cloned(),
+		None => {
+			let prefix = format!("env={key}=");
+			for i in Shlex::new(start_info().bootargs().unwrap_or_default()) {
+				let i = i.as_str();
+				if let Some(value) = i.strip_prefix(&prefix) {
+					return Some(value.to_owned());
+				}
+			}
+			None
+		}
+	}
 }
 
 pub fn vars() -> Iter<'static, Cow<'static, str>, String> {

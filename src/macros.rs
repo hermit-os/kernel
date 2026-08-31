@@ -111,6 +111,30 @@ macro_rules! hermit_var {
 #[allow(unused_imports)]
 pub(crate) use hermit_var;
 
+/// Returns the value of the specified environment variable.
+///
+/// The value is fetched from the current runtime environment and, if not
+/// present, falls back to the same environment variable set at compile time
+/// (might not be present as well).
+///
+/// This additionally handles the case where the kernel command line isn't parsed yet.
+#[allow(unused_macros)]
+macro_rules! hermit_early_var {
+	($name:expr) => {
+		match $crate::env::early_var($name) {
+			::core::option::Option::Some(val) => {
+				::core::option::Option::Some(::alloc::borrow::Cow::from(val))
+			}
+			::core::option::Option::None => {
+				::core::option_env!($name).map(::alloc::borrow::Cow::Borrowed)
+			}
+		}
+	};
+}
+
+#[allow(unused_imports)]
+pub(crate) use hermit_early_var;
+
 /// Tries to fetch the specified environment variable with a default value.
 ///
 /// Fetches according to [`hermit_var`] or returns the specified default value.
