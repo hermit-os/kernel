@@ -41,7 +41,7 @@ jobs:
         with:
           toolchain-file: "kernel/rust-toolchain.toml"
       - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
+        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64-multiboot
       - name: Run benchmarks
         uses: hermit-os/hermit-bench@main
         id: run-bench

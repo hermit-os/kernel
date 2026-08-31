@@ -99,7 +99,9 @@ fn sanitize(cmd: &str) -> Command {
 	env::vars()
 		.filter(|(key, _value)| {
 			key.starts_with("CARGO") && !key.starts_with("CARGO_HOME")
-				|| key.starts_with("RUST") && !key.starts_with("RUSTUP_HOME")
+				|| key.starts_with("RUST")
+					&& !key.starts_with("RUSTUP_HOME")
+					&& !key.starts_with("RUSTC_BOOTSTRAP")
 		})
 		.for_each(|(key, _value)| {
 			cmd.env_remove(&key);

@@ -3,16 +3,17 @@ use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
-use free_list::{FreeList, PageLayout, PageRange, PageRangeError};
+use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
-use memory_addresses::{PhysAddr, VirtAddr};
+use memory_addresses::VirtAddr;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{self, HugePageSize, PageSize, PageTableEntryFlags};
-use crate::env;
+use crate::arch::mm::paging::{self, HugePageSize, LargePageSize, PageSize};
+use crate::env::{self, MemmapType, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
+use crate::page_range_ext::PageRangeExt;
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
@@ -61,7 +62,12 @@ pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "hermit-entry")]
 pub unsafe fn map_frame_range(frame_range: PageRange) {
+	use memory_addresses::PhysAddr;
+
+	use crate::arch::mm::paging::PageTableEntryFlags;
+
 	cfg_select! {
 		target_arch = "aarch64" => {
 			type IdentityPageSize = paging::BasePageSize;
@@ -70,7 +76,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 			type IdentityPageSize = HugePageSize;
 		}
 		target_arch = "x86_64" => {
-			type IdentityPageSize = paging::LargePageSize;
+			type IdentityPageSize = LargePageSize;
 		}
 	}
 
@@ -103,38 +109,45 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 	}
 }
 
-unsafe fn detect_from_fdt() -> Result<(), ()> {
-	let fdt = env::fdt().ok_or(())?;
-
-	let all_regions = fdt
-		.find_all_nodes("/memory")
-		.map(|m| m.reg().unwrap().next().unwrap());
-	if all_regions.count() == 0 {
-		return Err(());
-	}
-	let all_regions = fdt
-		.find_all_nodes("/memory")
-		.map(|m| m.reg().unwrap().next().unwrap());
-
-	for m in all_regions {
-		let start_address = m.starting_address.expose_provenance() as u64;
-		let size = m.size.unwrap() as u64;
-		let end_address = start_address + size;
-
-		if end_address <= super::kernel_end_address().as_u64() && !env::is_uefi() {
+unsafe fn detect_from_start_info() {
+	for memmap_entry in env::start_info().memmap() {
+		if memmap_entry.ty != MemmapType::Ram {
 			continue;
 		}
 
-		let start_address =
-			if start_address <= super::kernel_start_address().as_u64() && !env::is_uefi() {
-				super::kernel_end_address()
-			} else {
-				VirtAddr::new(start_address)
-			};
+		let mut start_addr = memmap_entry.phys_addr;
+		let mut end_addr = start_addr + memmap_entry.len;
 
-		let range = PageRange::new(start_address.as_usize(), end_address as usize).unwrap();
+		// Do not free any address in the real mode addressable range.
+		//
+		// When claiming physical memory, ignore all addresses below this one. This ensures we
+		// don't accidentally clash with hardcoded low addresses, such as `SMP_BOOT_CODE_ADDRESS`
+		// in x86_64 with SMP enabled. We use a 2MIB size for now, but this is arbitrary, and could
+		// likely be lowered.
+		start_addr = start_addr.max(LargePageSize::SIZE as usize);
+
+		#[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
+		if paging::is_recursive() {
+			start_addr = start_addr.max(elf_symbols::executable_end().addr());
+		}
+
+		if cfg!(target_arch = "aarch64") || cfg!(target_arch = "riscv64") {
+			start_addr = start_addr.max(elf_symbols::executable_end().addr());
+		}
+
+		start_addr = start_addr.align_up(0x1000);
+		end_addr = end_addr.align_down(0x1000);
+
+		if start_addr > end_addr {
+			continue;
+		}
+
+		let range = PageRange::new(start_addr, end_addr).unwrap();
 		unsafe {
 			FrameAlloc::deallocate(range);
+		}
+		#[cfg(feature = "hermit-entry")]
+		unsafe {
 			map_frame_range(range);
 		}
 		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
@@ -153,55 +166,37 @@ unsafe fn detect_from_fdt() -> Result<(), ()> {
 		}
 	};
 
-	for reservation in fdt.memory_reservations() {
-		let start = reservation.address().addr();
-		let end = start + reservation.size();
-		let reservation = PageRange::new(start, end).unwrap();
-		reserve(reservation);
-	}
-
-	let kernel_start = if env::is_uefi() {
-		super::kernel_start_address().as_usize()
-	} else {
-		// FIXME: Memory before the kernel causes trouble on non-uefi systems.
-		// It is unclear, which exact regions cause problems.
-		0
-	};
-	let kernel_end = super::kernel_end_address().as_usize();
-	let kernel_region = PageRange::new(kernel_start, kernel_end).unwrap();
+	let kernel_start = elf_symbols::executable_start().addr();
+	let kernel_end = elf_symbols::executable_end().addr();
+	let kernel_region = PageRange::containing(kernel_start, kernel_end).unwrap();
 	reserve(kernel_region);
 
-	let fdt_start = env::fdt_addr().unwrap().get();
-	let fdt_end = fdt_start + fdt.total_size();
-	let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
-	reserve(fdt_region);
-
-	Ok(())
-}
-
-// FIXME: upstream these
-trait PageRangeExt: Sized {
-	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError>;
-
-	fn and(self, rhs: Self) -> Option<Self>;
-}
-
-impl PageRangeExt for PageRange {
-	fn containing(start: usize, end: usize) -> Result<Self, PageRangeError> {
-		let start = start.align_down(free_list::PAGE_SIZE);
-		let end = end.align_up(free_list::PAGE_SIZE);
-		Self::new(start, end)
+	for module in env::start_info().modules() {
+		reserve(module.phys_frame_range());
 	}
 
-	fn and(self, rhs: Self) -> Option<Self> {
-		let start = self.start().max(rhs.start());
-		let end = self.end().min(rhs.end());
-		Self::new(start, end).ok()
+	#[cfg(feature = "hermit-entry")]
+	{
+		use crate::env::FdtStartInfo;
+
+		let fdt = env::start_info().fdt().unwrap();
+
+		for reservation in fdt.memory_reservations() {
+			let start = reservation.address().addr();
+			let end = start + reservation.size();
+			let reservation = PageRange::new(start, end).unwrap();
+			reserve(reservation);
+		}
+
+		let fdt_start = env::start_info().fdt_addr().unwrap().get();
+		let fdt_end = fdt_start + fdt.total_size();
+		let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
+		reserve(fdt_region);
 	}
 }
 
 unsafe fn init() {
-	if env::is_uefi() && DeviceAlloc.phys_offset() != VirtAddr::zero() {
+	if cfg!(target_arch = "x86_64") && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
 		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
 		let count = usize::try_from(count).unwrap();
@@ -209,6 +204,6 @@ unsafe fn init() {
 	}
 
 	unsafe {
-		detect_from_fdt().unwrap();
+		detect_from_start_info();
 	}
 }

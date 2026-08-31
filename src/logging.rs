@@ -30,6 +30,10 @@ impl KernelLogger {
 		self.time.load(Ordering::Relaxed)
 	}
 
+	#[cfg_attr(
+		all(target_arch = "riscv64", not(feature = "hermit-entry")),
+		expect(dead_code)
+	)]
 	pub fn set_time(&self, time: bool) {
 		self.time.store(time, Ordering::Relaxed);
 	}

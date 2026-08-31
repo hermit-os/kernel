@@ -687,6 +687,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 	Ok(())
 }
 
+#[allow(dead_code)]
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 	let virt_addr = VirtAddr::new(phys_addr.as_u64());
 	let flags = {

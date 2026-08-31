@@ -29,10 +29,6 @@ pub struct Qemu {
 	#[arg(long)]
 	sudo: bool,
 
-	/// Enable the `microvm` machine type.
-	#[arg(long)]
-	microvm: bool,
-
 	/// Enable PCIe support.
 	#[arg(long)]
 	pci_e: bool,
@@ -88,11 +84,30 @@ pub enum Device {
 	/// virtio-net via PCI.
 	VirtioNetPci,
 
+	/// virtio-rng via MMIO.
+	VirtioRngMmio,
+
+	/// virtio-rng via PCI.
+	VirtioRngPci,
+
 	/// virtio-vsock via MMIO.
 	VirtioVsockMmio,
 
 	/// virtio-vsock via PCI.
 	VirtioVsockPci,
+}
+
+impl Device {
+	fn is_mmio(&self) -> bool {
+		matches!(
+			self,
+			Self::VirtioConsoleMmio
+				| Self::VirtioFsMmio
+				| Self::VirtioNetMmio
+				| Self::VirtioRngMmio
+				| Self::VirtioVsockMmio
+		)
+	}
 }
 
 impl Qemu {
@@ -144,7 +159,7 @@ impl Qemu {
 			.args(&["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.device_args(memory))
 			.args(qemu_args)
-			.args(self.cmdline_args(image_name, hermit_args));
+			.args(self.cmdline_args(image_name, hermit_args, arch));
 
 		eprintln!("$ {qemu}");
 		let mut qemu = Command::from(qemu);
@@ -223,8 +238,7 @@ impl Qemu {
 	}
 
 	fn image_args(&self, image: &Path, arch: Arch) -> Result<Vec<String>> {
-		let exe_suffix = if self.uefi { ".efi" } else { "" };
-		let loader = format!("hermit-loader-{arch}{exe_suffix}");
+		let loader = self.loader_name(arch);
 
 		let image_args = if self.uefi {
 			let sh = crate::sh()?;
@@ -272,8 +286,26 @@ impl Qemu {
 		Ok(image_args)
 	}
 
+	fn loader_name(&self, arch: Arch) -> String {
+		if self.uefi {
+			return format!("hermit-loader-{arch}.efi");
+		}
+
+		let suffix = match arch {
+			Arch::Aarch64 | Arch::Aarch64Be => "elf",
+			Arch::Riscv64 => "sbi",
+			Arch::X86_64 => "multiboot",
+		};
+
+		format!("hermit-loader-{arch}-{suffix}")
+	}
+
+	fn is_mmio(&self) -> bool {
+		self.devices.iter().any(Device::is_mmio)
+	}
+
 	fn machine_args(&self, arch: Arch) -> Vec<String> {
-		if self.microvm {
+		if arch == Arch::X86_64 && self.is_mmio() {
 			vec![
 				"-M".to_owned(),
 				"microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off,acpi=off"
@@ -294,11 +326,23 @@ impl Qemu {
 			} else {
 				"virt"
 			};
+
+			let opensbi_paths = &[
+				"opensbi/generic/firmware/fw_jump.bin", // Local
+				"/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin", // Ubuntu
+				"/usr/share/opensbi/generic/firmware/fw_jump.bin", // Alpine
+			];
+			let opensbi_path = opensbi_paths
+				.iter()
+				.copied()
+				.find(|p| fs::exists(p).unwrap_or_default())
+				.expect("OpenSBI was not found");
+
 			vec![
 				"-machine".to_owned(),
 				machine.to_owned(),
 				"-bios".to_owned(),
-				"opensbi-1.7-rv-bin/share/opensbi/lp64/generic/firmware/fw_jump.bin".to_owned(),
+				opensbi_path.to_owned(),
 			]
 		} else {
 			vec![]
@@ -480,6 +524,15 @@ impl Qemu {
 						"virtconsole,chardev=char0".to_owned(),
 					]
 				}
+				device @ (Device::VirtioRngMmio | Device::VirtioRngPci) => {
+					let device_arg = match device {
+						Device::VirtioRngMmio => "virtio-rng-device",
+						Device::VirtioRngPci => "virtio-rng-pci,disable-legacy=on",
+						_ => unreachable!(),
+					};
+
+					vec!["-device".to_owned(), device_arg.to_owned()]
+				}
 				device @ (Device::VirtioVsockMmio | Device::VirtioVsockPci) => {
 					let device_arg = match device {
 						Device::VirtioVsockMmio => "vhost-vsock-device",
@@ -494,10 +547,10 @@ impl Qemu {
 			.collect()
 	}
 
-	fn cmdline_args(&self, image_name: &str, hermit_args: &[String]) -> Vec<String> {
+	fn cmdline_args(&self, image_name: &str, hermit_args: &[String], arch: Arch) -> Vec<String> {
 		let (user_kernel_args, user_app_args) = ci::split_args(hermit_args);
 
-		let mut cmdline = self.kernel_args();
+		let mut cmdline = self.kernel_args(arch);
 		cmdline.extend(user_kernel_args.iter().cloned());
 
 		let mut app_args = self.app_args(image_name);
@@ -514,9 +567,9 @@ impl Qemu {
 		vec!["-append".to_owned(), cmdline.join(" ")]
 	}
 
-	fn kernel_args(&self) -> Vec<String> {
+	fn kernel_args(&self, arch: Arch) -> Vec<String> {
 		let mut args = vec![];
-		if self.microvm {
+		if arch == Arch::X86_64 && self.is_mmio() {
 			let frequency = get_frequency();
 			args.extend(["-freq".to_owned(), frequency.to_string()]);
 		}
@@ -753,8 +806,8 @@ fn check_rftrace(image: &Path) -> Result<()> {
 	let sh = crate::sh()?;
 	let image_name = image.file_name().unwrap().to_str().unwrap();
 
-	let nm = crate::binutil("nm").unwrap();
-	let symbols = cmd!(sh, "{nm} --demangle --numeric-sort {image}")
+	let llvm_nm = crate::binutil("llvm-nm");
+	let symbols = cmd!(sh, "{llvm_nm} --demangle --numeric-sort {image}")
 		.output()?
 		.stdout;
 	sh.write_file(format!("shared/tracedir/{image_name}.sym"), symbols)?;

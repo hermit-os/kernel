@@ -8,6 +8,7 @@ use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::{ptr, slice};
 
+use align_address::Align;
 use dirent_display::Dirent64Display;
 
 pub use self::condvar::*;
@@ -266,7 +267,10 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 	crate::arch::kernel::print_statistics();
 
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	use crate::env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		crate::uhyve::shutdown(arg);
 	}
 
@@ -890,7 +894,18 @@ pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_image_start_addr() -> usize {
-	crate::mm::kernel_start_address().as_usize()
+	use crate::arch::mm::paging::{LargePageSize, PageSize};
+
+	elf_symbols::executable_start()
+		.addr()
+		.align_down(LargePageSize::SIZE as usize)
+}
+
+/// Flushes a file to the storage it lives on.
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fsync(fd: RawFd) -> i32 {
+	fd::fsync(fd).map_or_else(|e| -i32::from(e), |()| 0)
 }
 
 #[cfg(test)]

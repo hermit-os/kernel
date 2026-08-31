@@ -23,8 +23,6 @@ use x86_64::registers::xcontrol::{XCr0, XCr0Flags};
 use x86_64::structures::DescriptorTablePointer;
 use x86_64::{VirtAddr, instructions};
 
-#[cfg(feature = "acpi")]
-use crate::arch::kernel::acpi;
 use crate::arch::kernel::{interrupts, pic, pit};
 use crate::env;
 
@@ -354,8 +352,11 @@ impl CpuFrequency {
 		{
 			use core::num::NonZero;
 
+			use crate::env::FdtStartInfo;
+
 			fn mhz_from_fdt() -> Option<NonZero<u16>> {
-				let khz = env::fdt()?
+				let khz = env::start_info()
+					.fdt()?
 					.find_node("/hermit,tsc")?
 					.property("khz")?
 					.as_usize()?;
@@ -1087,7 +1088,7 @@ pub fn shutdown(error_code: i32) -> ! {
 
 	#[cfg(feature = "acpi")]
 	{
-		acpi::poweroff();
+		super::acpi::poweroff();
 	}
 
 	triple_fault()

@@ -54,21 +54,21 @@ impl Socket {
 	async fn write_with_meta(&self, buffer: &[u8], meta: &UdpMetadata) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if socket.is_open() {
-					if socket.can_send() {
-						Poll::Ready(
-							socket
-								.send_slice(buffer, *meta)
-								.map(|()| buffer.len())
-								.map_err(|_| Errno::Io),
-						)
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
-					}
-				} else {
-					Poll::Ready(Err(Errno::Io))
+				if !socket.is_open() {
+					return Poll::Ready(Err(Errno::Io));
 				}
+
+				if !socket.can_send() {
+					socket.register_recv_waker(cx.waker());
+					return Poll::Pending;
+				}
+
+				Poll::Ready(
+					socket
+						.send_slice(buffer, *meta)
+						.map(|()| buffer.len())
+						.map_err(|_| Errno::Io),
+				)
 			})
 		})
 		.await
@@ -157,25 +157,25 @@ impl ObjectInterface for Socket {
 	async fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if socket.is_open() {
-					if socket.can_recv() {
-						match socket.recv_slice(buf) {
-							Ok((len, meta)) => {
-								if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
-									Poll::Ready(Ok((len, meta.endpoint)))
-								} else {
-									socket.register_recv_waker(cx.waker());
-									Poll::Pending
-								}
-							}
-							_ => Poll::Ready(Err(Errno::Io)),
+				if !socket.is_open() {
+					return Poll::Ready(Err(Errno::Io));
+				}
+
+				if !socket.can_recv() {
+					socket.register_recv_waker(cx.waker());
+					return Poll::Pending;
+				}
+
+				match socket.recv_slice(buf) {
+					Ok((len, meta)) => {
+						if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
+							Poll::Ready(Ok((len, meta.endpoint)))
+						} else {
+							socket.register_recv_waker(cx.waker());
+							Poll::Pending
 						}
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
 					}
-				} else {
-					Poll::Ready(Err(Errno::Io))
+					_ => Poll::Ready(Err(Errno::Io)),
 				}
 			})
 		})
@@ -186,25 +186,25 @@ impl ObjectInterface for Socket {
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if socket.is_open() {
-					if socket.can_recv() {
-						match socket.recv_slice(buf) {
-							Ok((len, meta)) => {
-								if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
-									Poll::Ready(Ok(len))
-								} else {
-									socket.register_recv_waker(cx.waker());
-									Poll::Pending
-								}
-							}
-							_ => Poll::Ready(Err(Errno::Io)),
+				if !socket.is_open() {
+					return Poll::Ready(Err(Errno::Io));
+				}
+
+				if !socket.can_recv() {
+					socket.register_recv_waker(cx.waker());
+					return Poll::Pending;
+				}
+
+				match socket.recv_slice(buf) {
+					Ok((len, meta)) => {
+						if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
+							Poll::Ready(Ok(len))
+						} else {
+							socket.register_recv_waker(cx.waker());
+							Poll::Pending
 						}
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
 					}
-				} else {
-					Poll::Ready(Err(Errno::Io))
+					_ => Poll::Ready(Err(Errno::Io)),
 				}
 			})
 		})

@@ -23,6 +23,8 @@ use crate::drivers::error::DriverError;
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "virtio-net")]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::VirtioRngDriver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::{ControlRegisters, VirtioIdExt};
@@ -328,6 +330,8 @@ pub(crate) enum VirtioDriver {
 	Fs(alloc::boxed::Box<VirtioFsDriver>),
 	#[cfg(feature = "virtio-net")]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
+	#[cfg(feature = "virtio-rng")]
+	Rng(alloc::boxed::Box<VirtioRngDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 }
@@ -338,12 +342,10 @@ pub(crate) fn init_device(
 	irq_no: InterruptLine,
 	handlers: &mut InterruptHandlerMap,
 ) -> Result<VirtioDriver, DriverError> {
-	let dev_id: u16 = 0;
-
 	if registers.as_ptr().version().read().to_ne() == 0x1 {
 		error!("Legacy interface isn't supported!");
 		return Err(DriverError::InitVirtioDevFail(
-			VirtioError::DevNotSupported(dev_id),
+			VirtioError::DevNotSupported(0),
 		));
 	}
 
@@ -391,6 +393,17 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "virtio-rng")]
+		virtio::Id::Rng => match init::<VirtioRngDriver>(registers, irq_no, handlers) {
+			Ok(virt_rng_drv) => {
+				info!("Virtio rng driver initialized.");
+				Ok(VirtioDriver::Rng(alloc::boxed::Box::new(virt_rng_drv)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio rng driver could not be initialized with device");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match init::<VirtioVsockDriver>(registers, irq_no, handlers) {
 			Ok(virt_vsock_drv) => {
@@ -403,16 +416,18 @@ pub(crate) fn init_device(
 			}
 		},
 		id => {
-			if let Some(feature) = id.as_feature() {
-				error!("Virtio driver {id:?} is currently not active.");
-				error!("To use the device, recompile the kernel with the {feature} feature.");
-			} else {
-				error!("Virtio device {id:?} is not supported!");
+			if id != virtio::Id::Reserved {
+				if let Some(feature) = id.as_feature() {
+					error!("Virtio driver {id:?} is currently not active.");
+					error!("To use the device, recompile the kernel with the {feature} feature.");
+				} else {
+					error!("Virtio device {id:?} is not supported!");
+				}
 			}
 
 			// Return driver error indicating device is not supported.
 			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(dev_id),
+				VirtioError::DevNotSupported(u8::from(id).into()),
 			))
 		}
 	}

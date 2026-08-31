@@ -38,10 +38,10 @@ impl WakerRegistration {
 
 	/// Register a waker. Overwrites the previous waker, if any.
 	pub fn register(&mut self, w: &Waker) {
-		match self.waker {
+		match &self.waker {
 			// Optimization: If both the old and new Wakers wake the same task, we can simply
 			// keep the old waker, skipping the clone.
-			Some(ref w2) if (w2.will_wake(w)) => {}
+			Some(w2) if (w2.will_wake(w)) => {}
 			// In all other cases
 			// - we have no waker registered
 			// - we have a waker registered but it's for a different task.
@@ -147,19 +147,19 @@ where
 		// check future
 		let result = future.as_mut().poll(&mut cx);
 
-		// run background all tasks, which poll also the network device
-		run();
-
-		let now = crate::arch::kernel::systemtime::now_micros();
 		if let Poll::Ready(t) = result {
 			return t;
 		}
 
+		let now = crate::arch::kernel::systemtime::now_micros();
 		if let Some(duration) = timeout
 			&& Duration::from_micros(now - start) >= duration
 		{
 			return Err(Errno::Time);
 		}
+
+		// run background all tasks, which poll also the network device
+		run();
 
 		if backoff.is_completed() {
 			let wakeup_time =

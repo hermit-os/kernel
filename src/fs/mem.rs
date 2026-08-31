@@ -661,6 +661,10 @@ impl VfsNode for MemDirectory {
 			async {
 				let (component, rest) = path.split_once("/").unwrap_or((path, ""));
 
+				if component.is_empty() {
+					return Err(Errno::Exist);
+				}
+
 				if let Some(directory) = self.inner.read().await.get(component) {
 					return directory.traverse_mount(rest, obj);
 				}

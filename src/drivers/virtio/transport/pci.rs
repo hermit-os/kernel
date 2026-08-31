@@ -38,6 +38,8 @@ use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::msix;
 #[cfg(target_arch = "x86_64")]
 use crate::drivers::pci::msix::MsixTableVolatileElementAccess;
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::VirtioRngDriver;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
@@ -149,6 +151,10 @@ impl CapCfg for virtio::net::Config {
 }
 
 impl CapCfg for virtio::vsock::Config {
+	const TYPE: CapCfgType = CapCfgType::Device;
+}
+
+impl CapCfg for () {
 	const TYPE: CapCfgType = CapCfgType::Device;
 }
 
@@ -581,6 +587,8 @@ pub(crate) fn map_caps(
 	#[cfg(target_arch = "x86_64")]
 	let mut msix_table = None;
 
+	let bar_mappings = device.memory_map_bars(true);
+
 	// Reads all PCI capabilities, starting at the capabilities list pointer from the
 	// PCI device.
 	//
@@ -594,7 +602,7 @@ pub(crate) fn map_caps(
 					continue;
 				}
 				let slot = cap.bar;
-				let Some((addr, size)) = device.memory_map_bar(slot, true) else {
+				let Some((addr, size)) = bar_mappings[usize::from(slot)] else {
 					continue;
 				};
 				let Some(pci_cap) = PciCap::new(
@@ -661,9 +669,12 @@ pub(crate) fn map_caps(
 			#[cfg(target_arch = "x86_64")]
 			PciCapability::MsiX(mut msix_capability) => {
 				msix_capability.set_enabled(true, device.access());
-				let (base_addr, _) = device
-					.memory_map_bar(msix_capability.table_bar(), true)
-					.unwrap();
+
+				// the capability should provide a valid BAR ID and "[t]he BAR [...] must map
+				// Memory Space" (PCIe spec. 6.0 sec. 7.7.2) for the MSI-X capability
+				let (base_addr, _) =
+					bar_mappings[usize::from(msix_capability.table_bar())].unwrap();
+
 				let table_ptr = NonNull::slice_from_raw_parts(
 					NonNull::with_exposed_provenance(
 						core::num::NonZero::new(
@@ -721,6 +732,7 @@ pub(crate) fn map_caps(
 			not(feature = "rtl8139"),
 			feature = "virtio-net",
 		),
+		feature = "virtio-rng",
 		feature = "virtio-vsock"
 	)),
 	expect(unused_variables)
@@ -798,6 +810,17 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "virtio-rng")]
+		virtio::Id::Rng => match init::<VirtioRngDriver>(device, handlers) {
+			Ok(virt_rng_drv) => {
+				info!("Virtio rng driver initialized.");
+				Ok(VirtioDriver::Rng(alloc::boxed::Box::new(virt_rng_drv)))
+			}
+			Err(virtio_error) => {
+				error!("Virtio rng driver could not be initialized with device: {device_id:x}");
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match init::<VirtioVsockDriver>(device, handlers) {
 			Ok(virt_sock_drv) => {
@@ -837,6 +860,8 @@ pub(crate) enum VirtioDriver {
 		feature = "virtio-net",
 	))]
 	Net(alloc::boxed::Box<VirtioNetDriver>),
+	#[cfg(feature = "virtio-rng")]
+	Rng(alloc::boxed::Box<VirtioRngDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	Vsock(alloc::boxed::Box<VirtioVsockDriver>),
 }

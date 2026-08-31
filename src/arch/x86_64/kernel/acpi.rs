@@ -1,18 +1,14 @@
 use core::{ptr, slice, str};
 
 use align_address::Align;
-use free_list::{PageLayout, PageRange};
 use hermit_sync::OnceCell;
 use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::instructions::port::Port;
-use x86_64::structures::paging::PhysFrame;
+use x86_64::structures::paging::{PageTableFlags, PhysFrame};
 
 use crate::arch::mm::paging;
-use crate::arch::mm::paging::{
-	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
-};
-use crate::env;
-use crate::mm::{PageAlloc, PageRangeAllocator};
+use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
+use crate::env::{self, StartInfo};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr::new(0x0000_040e);
@@ -101,78 +97,40 @@ impl AcpiSdtHeader {
 #[derive(Debug)]
 pub struct AcpiTable<'a> {
 	header: &'a AcpiSdtHeader,
-	allocated_virtual_address: VirtAddr,
-	allocated_length: usize,
 }
 
 impl AcpiTable<'_> {
-	fn map(physical_address: PhysAddr) -> Self {
-		if env::is_uefi() {
-			// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
-			let allocated_virtual_address = VirtAddr::new(physical_address.as_u64());
-			let header = unsafe {
-				allocated_virtual_address
-					.as_ptr::<AcpiSdtHeader>()
-					.as_ref()
-					.unwrap()
-			};
-			let allocated_length = usize::try_from(header.length).unwrap();
+	fn map(phys_addr: PhysAddr) -> Self {
+		// Allocate at least two consecutive pages to ensure the `length` field is always readable, even when it is on the next page.
+		let page_count = 2;
+		let frame_start_addr = phys_addr.align_down(LargePageSize::SIZE);
 
-			return Self {
-				header,
-				allocated_virtual_address,
-				allocated_length,
-			};
-		}
+		for i in 0..page_count {
+			let virt_addr = VirtAddr::new(frame_start_addr.as_u64()) + i * LargePageSize::SIZE;
+			let phys_addr = paging::virtual_to_physical(virt_addr);
+			let expected_phys_addr = PhysAddr::new(virt_addr.as_u64());
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().read_only().execute_disable();
-
-		// Allocate two 4 KiB pages for the table and map it.
-		// This guarantees that we can access at least the "length" field of the table header when its physical address
-		// crosses a page boundary.
-		let mut allocated_length = 2 * BasePageSize::SIZE as usize;
-		let mut count = allocated_length / BasePageSize::SIZE as usize;
-
-		let physical_map_address = physical_address.align_down(BasePageSize::SIZE);
-		let offset = (physical_address - physical_map_address) as usize;
-		let layout = PageLayout::from_size(allocated_length).unwrap();
-		let page_range = PageAlloc::allocate(layout).unwrap();
-		let mut virtual_address = VirtAddr::from(page_range.start());
-		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
-
-		// Get a pointer to the header and query the table length.
-		let mut header_ptr: *const AcpiSdtHeader = (virtual_address + offset).as_ptr();
-		let table_length = unsafe { (*header_ptr).length } as usize;
-
-		// Remap if the length exceeds what we've allocated.
-		if table_length > allocated_length - offset {
-			let range =
-				PageRange::from_start_len(virtual_address.as_usize(), allocated_length).unwrap();
-			unsafe {
-				PageAlloc::deallocate(range);
+			// Does not use `paging::identity_map()` since this mapping should not be `WRITABLE` and be `NO_EXECUTE`.
+			if phys_addr != Some(expected_phys_addr) {
+				paging::map::<LargePageSize>(
+					virt_addr,
+					expected_phys_addr,
+					1,
+					PageTableFlags::NO_EXECUTE,
+				);
 			}
-
-			allocated_length = (table_length + offset).align_up(BasePageSize::SIZE as usize);
-			count = allocated_length / BasePageSize::SIZE as usize;
-
-			let layout = PageLayout::from_size(allocated_length).unwrap();
-			let page_range = PageAlloc::allocate(layout).unwrap();
-			virtual_address = VirtAddr::from(page_range.start());
-			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
-
-			header_ptr = (virtual_address + offset).as_ptr();
 		}
 
-		// Return the table.
+		let header_ptr = ptr::with_exposed_provenance::<AcpiSdtHeader>(phys_addr.as_usize());
+		let table_length = u64::from(unsafe { (*header_ptr).length });
+		assert!(phys_addr + table_length <= frame_start_addr + page_count * LargePageSize::SIZE);
+
 		Self {
 			header: unsafe { &*header_ptr },
-			allocated_virtual_address: virtual_address,
-			allocated_length,
 		}
 	}
 
-	pub fn header_start_address(&self) -> usize {
+	fn header_start_address(&self) -> usize {
 		ptr::from_ref(self.header).addr()
 	}
 
@@ -186,21 +144,6 @@ impl AcpiTable<'_> {
 
 	pub fn table_byte_len(&self) -> usize {
 		self.header.length as usize - size_of::<AcpiSdtHeader>()
-	}
-}
-
-impl Drop for AcpiTable<'_> {
-	fn drop(&mut self) {
-		if !env::is_uefi() {
-			let range = PageRange::from_start_len(
-				self.allocated_virtual_address.as_usize(),
-				self.allocated_length,
-			)
-			.unwrap();
-			unsafe {
-				PageAlloc::deallocate(range);
-			}
-		}
 	}
 }
 
@@ -348,10 +291,10 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
-	if let Some(rsdp) = env::rsdp() {
-		trace!("RSDP detected successfully at {rsdp:#x?}");
+	if let Some(rsdp_addr) = env::start_info().rsdp_addr() {
+		trace!("RSDP detected successfully at {rsdp_addr:#x?}");
 		let rsdp = unsafe {
-			ptr::with_exposed_provenance::<AcpiRsdp>(rsdp.get())
+			ptr::with_exposed_provenance::<AcpiRsdp>(rsdp_addr.get())
 				.as_ref()
 				.unwrap()
 		};
@@ -518,7 +461,10 @@ pub fn poweroff() {
 
 pub fn init() {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	use env::UhyveStartInfo;
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		return;
 	}
 

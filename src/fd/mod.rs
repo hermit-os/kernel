@@ -341,6 +341,11 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	async fn isatty(&self) -> io::Result<bool> {
 		Ok(false)
 	}
+
+	/// Flushes the object to the storage it lives on.
+	async fn fsync(&self) -> io::Result<()> {
+		Ok(())
+	}
 }
 
 pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
@@ -351,6 +356,13 @@ pub(crate) fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
 	}
 
 	block_on(async { obj.read().await.read(buf).await }, None)
+}
+
+/// Flushes a file to the storage it lives on.
+pub(crate) fn fsync(fd: RawFd) -> io::Result<()> {
+	let obj = get_object(fd)?;
+
+	block_on(async { obj.read().await.fsync().await }, None)
 }
 
 pub(crate) fn lseek(fd: RawFd, offset: isize, whence: SeekWhence) -> io::Result<isize> {
@@ -417,7 +429,7 @@ async fn poll_fds(fds: &mut [PollFd]) -> io::Result<u64> {
 /// of structs of `PollFd`.
 pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> io::Result<u64> {
 	let result = block_on(poll_fds(fds), timeout);
-	if let Err(ref e) = result
+	if let Err(e) = &result
 		&& timeout.is_some()
 	{
 		// A return value of zero indicates that the system call timed out

@@ -77,8 +77,11 @@ impl Tls {
 				assert_eq!(mem::offset_of!(Tcb, thread_ptr), 0);
 
 				// In Variant II, the TCB comes after the TLS data.
-				let (tls_layout, tcb_offset) = tls_info.layout.extend(tcb_layout).unwrap();
-				(tls_layout.pad_to_align(), 0, tcb_offset)
+				let (tls_layout, _tcb_offset) = tls_info.layout.extend(tcb_layout).unwrap();
+				// FIXME: Currently, `x86_64-hermit-gcc` only aligns the TLS layout size to 4 instead of 8.
+				// We should make GCC align to 8 and use the properly aligned TCB offset here.
+				// This allows us to get rid of unaligned pointer writes further down.
+				(tls_layout.pad_to_align(), 0, tls_info.layout.size())
 			} else {
 				unimplemented!()
 			};
@@ -113,8 +116,14 @@ impl Tls {
 			dtv: ptr::null_mut(),
 			tcb_data: ptr::null_mut(),
 		};
-		unsafe {
-			tcb_ptr.write(tcb);
+		if cfg!(target_arch = "x86_64") {
+			unsafe {
+				tcb_ptr.write_unaligned(tcb);
+			}
+		} else {
+			unsafe {
+				tcb_ptr.write(tcb);
+			}
 		}
 
 		Self {
@@ -284,9 +293,17 @@ mod tls_info {
 			pub const ELFOSABI_STANDALONE: u8 = 255;
 
 			let osabi = ident[abi::EI_OSABI];
-			// For some reason `x86_64-unknown-none` uses `ELFOSABI_GNU`.
-			// We need to allow this for `no_std` applications such as our integration tests.
-			assert!(osabi == ELFOSABI_STANDALONE || osabi == abi::ELFOSABI_GNU);
+			match osabi {
+				// `ELFOSABI_NONE` is used by `riscv64-hermit-gcc`.
+				// We should change that and remove the match here.
+				abi::ELFOSABI_NONE => debug!("ELFOSABI_NONE"),
+				// `ELFOSABI_GNU` is used by rustc's `x86_64-unknown-none` target.
+				// We need to allow this for `no_std` applications such as our integration tests.
+				abi::ELFOSABI_GNU => debug!("ELFOSABI_GNU"),
+				// This is our expected OS ABI.
+				ELFOSABI_STANDALONE => debug!("ELFOSABI_STANDALONE"),
+				osabi => warn!("ELFOSABI not expected: {osabi}"),
+			}
 
 			let abiversion = ident[abi::EI_ABIVERSION];
 			assert_eq!(abiversion, 0);

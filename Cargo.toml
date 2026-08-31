@@ -1,7 +1,6 @@
 [package]
 name = "hermit-kernel"
 version = "0.13.0"
-authors = ["The Hermit Project Developers"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
@@ -42,6 +41,7 @@ default = [
 	"dhcpv4",
 	"fsgsbase",
 	"kernel-stack",
+	"loader",
 	"pci-ids",
 	"pci",
 	"smp",
@@ -81,12 +81,19 @@ newlib = []
 
 #! ### Platform Features
 
+## Enables [Hermit loader] support.
+##
+## The Hermit loader is a bootloader that adapts to multiple platforms.
+##
+## [Hermit loader]: https://github.com/hermit-os/loader
+loader = ["hermit-entry"]
+
 ## Enables [Uhyve] support.
 ##
 ## Uhyve is a Hermit-specific _virtual machine monitor_ (VMM).
 ##
 ## [Uhyve]: https://github.com/hermit-os/uhyve
-uhyve = ["dep:uhyve-interface"]
+uhyve = ["hermit-entry", "dep:uhyve-interface"]
 
 #! ### Hardware Features
 #!
@@ -165,7 +172,12 @@ tcp = ["net", "smoltcp", "smoltcp/socket-tcp"]
 udp = ["net", "smoltcp", "smoltcp/socket-udp"]
 
 ## Enables DHCPv4 support.
-dhcpv4 = ["net", "smoltcp", "smoltcp/proto-dhcpv4", "smoltcp/socket-dhcpv4"]
+dhcpv4 = [
+	"net",
+	"smoltcp",
+	"smoltcp/proto-dhcpv4",
+	"smoltcp/socket-dhcpv4",
+]
 
 ## Enables DNS support.
 dns = ["net", "smoltcp", "smoltcp/socket-dns"]
@@ -209,6 +221,9 @@ virtio-console = ["virtio"]
 ## Enables the virtio-fs driver.
 virtio-fs = ["virtio", "dep:fuse-abi", "fuse-abi/num_enum"]
 
+## Enables the virtio-rng driver.
+virtio-rng = ["virtio"]
+
 ## Enables the virtio-vsock driver.
 virtio-vsock = ["virtio"]
 
@@ -218,6 +233,15 @@ virtio-vsock = ["virtio"]
 ##
 ## This is only useful on PCs (x86-64).
 vga = []
+
+## Enables the PS/2 keyboard driver.
+##
+## This feature initializes the PS/2 keyboard controller and installs a keyboard interrupt handler.
+## It also provides a system call to receive the last scancode from the internal keyboard buffer.
+## Note that this is not a complete keyboard driver and not needed for serial input/output.
+## It allows receiving scancodes from the PS/2 keyboard that can be used to port applications.
+## This is only useful on PCs (x86-64).
+pc-keyboard = []
 
 #! ### Performance Features
 
@@ -270,6 +294,11 @@ strace = []
 ## Documents the Cargo features in the crate docs.
 document-features = ["dep:document-features"]
 
+## Enables support for hermit-entry boot info.
+##
+## This is automatically enabled by the `loader` and `uhyve` features.
+hermit-entry = ["dep:hermit-entry", "dep:fdt"]
+
 ## Enables the network backend.
 ##
 ## This is automatically enabled by any network feature.
@@ -278,7 +307,11 @@ net = []
 ## Enables the virtio driver backend.
 ##
 ## This is automatically enabled by any virtio driver.
-virtio = ["dep:virtio", "dep:mem-barrier", "volatile/derive"]
+virtio = [
+	"dep:virtio",
+	"dep:mem-barrier",
+	"volatile/derive",
+]
 
 ## Enables a warning that this libhermit.a was prebuilt.
 warn-prebuilt = []
@@ -313,7 +346,7 @@ workspace = true
 
 [dependencies]
 hermit-macro = { version = "=0.1.0", path = "hermit-macro" }
-virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly", "zerocopy"] }
+
 ahash = { version = "0.8", default-features = false }
 align-address = "0.4"
 anstyle = { version = "1", default-features = false }
@@ -331,18 +364,17 @@ embedded-io = { version = "0.7", features = ["alloc"] }
 endian-num = { version = "0.2", optional = true, features = ["linux-types"] }
 enum_dispatch = "0.3"
 env_filter = { version = "2.0.0", default-features = false }
-fdt = { version = "0.1", features = ["pretty-printing"] }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
 hashbrown = { version = "0.17", default-features = false }
 heapless = "0.9"
-hermit-entry = { version = "0.10.10", features = ["kernel"] }
+hermit-entry = { version = "0.10", features = ["kernel"], optional = true }
 hermit-sync = "0.1"
 log = { version = "0.4", default-features = false }
 mem-barrier = { version = "0.1.0", optional = true, features = ["nightly"] }
 num_enum = { version = "0.7", default-features = false }
-pci-ids = { version = "0.2", optional = true }
 pci_types = { version = "0.10" }
+pci-ids = { version = "0.2", optional = true }
 rand_chacha = { version = "0.10", default-features = false }
 shlex = { version = "2", default-features = false }
 simple-shell = { version = "0.0.1", optional = true }
@@ -351,11 +383,13 @@ take-static = "0.1"
 talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
-volatile = "0.6"
 uhyve-interface = { version = "0.3", optional = true }
+virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly"] }
+volatile = "0.6"
+zeroize = "1.9.0"
 
 [dependencies.smoltcp]
-version = "0.13"
+version = "0.14"
 optional = true
 default-features = false
 features = [
@@ -369,33 +403,29 @@ features = [
 ]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
+fdt = { version = "0.1", features = ["pretty-printing"], optional = true }
 free-list = { version = "0.3", features = ["x86_64"] }
+memory_addresses = { version = "0.4", default-features = false, features = ["x86_64", "conv-x86_64"] }
 raw-cpuid = "11"
-uart_16550 = { version = "0.6", features = ["embedded-io"] }
+uart_16550 = { version = "0.8", features = ["embedded-io"] }
 x86_64 = { version = "0.15", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
-memory_addresses = { version = "0.4", default-features = false, features = [
-	"x86_64",
-	"conv-x86_64",
-] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
-arm-gic = { version = "0.8" }
+arm-gic = "0.9"
 arm-pl011-uart = { version = "0.5", default-features = false }
+fdt = { version = "0.1", features = ["pretty-printing"] }
+memory_addresses = { version = "0.4", default-features = false, features = ["aarch64"] }
 semihosting = { version = "0.1", optional = true }
-memory_addresses = { version = "0.4", default-features = false, features = [
-	"aarch64",
-] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
+fdt = { version = "0.1", features = ["pretty-printing"] }
+memory_addresses = { version = "0.4", default-features = false, features = ["riscv64"] }
 riscv = "0.16"
 sbi-rt = "0.0.4"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
 trapframe = "0.11"
-memory_addresses = { version = "0.4", default-features = false, features = [
-	"riscv64",
-] }
 volatile = { version = "0.6", features = ["derive"] }
 
 [dev-dependencies]
@@ -408,13 +438,8 @@ built = { version = "0.8", features = ["git2", "chrono"] }
 llvm-tools = "0.1"
 
 [workspace]
-members = [
-	"hermit-macro",
-	"xtask",
-]
-exclude = [
-	"hermit-builtins",
-]
+members = ["hermit-macro", "xtask"]
+exclude = ["hermit-builtins"]
 
 [workspace.lints.rust]
 # Lint groups
@@ -424,7 +449,7 @@ rust_2018_idioms = "warn"
 # Lints
 redundant_imports = "warn"
 single_use_lifetimes = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(careful)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(careful)"] }
 unsafe_op_in_unsafe_fn = "warn"
 unused_qualifications = "warn"
 

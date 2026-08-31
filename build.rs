@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use llvm_tools::LlvmTools;
 
 fn main() -> Result<()> {
@@ -27,8 +27,8 @@ fn assemble_x86_64_smp_boot() -> Result<()> {
 	let boot_bc = out_dir.join("boot.bc");
 	let boot_bin = out_dir.join("boot.bin");
 
-	let llvm_as = binutil("llvm-as")?;
-	let rust_lld = binutil("rust-lld")?;
+	let llvm_as = binutil("llvm-as");
+	let lld = lld();
 
 	let assembly = fs::read_to_string(boot_s)?;
 
@@ -55,7 +55,7 @@ module asm "
 		.with_context(|| format!("Failed to run llvm-as from {}", llvm_as.display()))?;
 	assert!(status.success());
 
-	let status = Command::new(&rust_lld)
+	let status = Command::new(&lld)
 		.arg("-flavor")
 		.arg("gnu")
 		.arg("--image-base=0x8000")
@@ -65,27 +65,32 @@ module asm "
 		.arg(&boot_bin)
 		.arg(&boot_bc)
 		.status()
-		.with_context(|| format!("Failed to run rust-lld from {}", rust_lld.display()))?;
+		.with_context(|| format!("Failed to run lld from {}", lld.display()))?;
 	assert!(status.success());
 
 	println!("cargo:rerun-if-changed={}", boot_s.display());
 	Ok(())
 }
 
-fn binutil(name: &str) -> Result<PathBuf> {
+fn lld() -> PathBuf {
+	let rust_lld = binutil("rust-lld");
+
+	if rust_lld.exists() {
+		return rust_lld;
+	}
+
+	binutil("lld")
+}
+
+fn binutil(name: &str) -> PathBuf {
 	let exe = format!("{name}{}", env::consts::EXE_SUFFIX);
 
-	let path = LlvmTools::new()
-		.map_err(|err| match err {
-			llvm_tools::Error::NotFound => anyhow!(
-				"Could not find llvm-tools component\n\
-				\n\
-				Maybe the rustup component `llvm-tools` is missing? Install it through: `rustup component add llvm-tools`"
-			),
-			err => anyhow!("{err:?}"),
-		})?
-		.tool(&exe)
-		.ok_or_else(|| anyhow!("could not find {exe}"))?;
+	if let Some(tool) = LlvmTools::new()
+		.ok()
+		.and_then(|llvm_tools| llvm_tools.tool(&exe))
+	{
+		return tool;
+	}
 
-	Ok(path)
+	PathBuf::from(exe)
 }

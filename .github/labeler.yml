@@ -1,0 +1,160 @@
+# Meta
+
+cargo:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Cargo.toml"
+          - "**/Cargo.lock"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+
+# Crates
+
+hermit-builtins:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "hermit-builtins/**"
+
+hermit-macro:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "hermit-macro/**"
+
+xtask:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "xtask/**"
+
+# Architectures
+
+aarch64:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/arch/aarch64/**"
+
+riscv64:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/arch/riscv64/**"
+
+x86_64:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/arch/x86_64/**"
+
+# Platforms
+
+uhyve:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/uhyve/**"
+          - "**/uhyve.rs"
+
+# Transports
+
+mmio:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/mmio/**"
+          - "**/mmio.rs*"
+
+pci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/pci/**"
+          - "**/pci.rs"
+
+# Drivers
+
+gem:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/net/gem.rs"
+
+loopback:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/net/loopback.rs"
+
+rtl8139:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/net/rtl8139.rs"
+
+virtio-console:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/console.rs"
+
+virtio-fs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/fs.rs"
+          - "src/fs/virtio_fs.rs"
+
+virtio-net:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/net/virtio.rs"
+
+virtio-rng:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/rng.rs"
+
+virtio-vsock:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/drivers/vsock.rs"
+          - "src/executor/vsock.rs"
+
+# Kernel modules
+
+env:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/env/**"
+
+executor:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/executor/**"
+
+fd:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/fd/**"
+
+fs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/fs/**"
+
+mm:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/mm/**"
+
+scheduler:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/scheduler/**"
+          - "**/scheduler.rs"
+
+synch:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/synch/**"
+
+syscalls:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/syscalls/**"

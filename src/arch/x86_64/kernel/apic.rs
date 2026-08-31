@@ -25,9 +25,9 @@ use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::swapgs;
-use crate::mm::{PageAlloc, PageBox, PageRangeAllocator};
+use crate::mm::PageBox;
 use crate::scheduler::CoreId;
-use crate::{arch, env, scheduler};
+use crate::{arch, scheduler};
 
 /// APIC Location and Status (R/W) See Table 35-2. See Section 10.4.4, Local APIC  Status and Location.
 const IA32_APIC_BASE: Msr = Msr::new(0x1b);
@@ -306,28 +306,11 @@ pub fn local_apic_id_count() -> u32 {
 }
 
 fn init_ioapic_address(phys_addr: PhysAddr) {
-	if env::is_uefi() {
-		// UEFI systems have already id mapped everything, so we can just set the physical address as the virtual one
-		IOAPIC_ADDRESS
-			.set(VirtAddr::new(phys_addr.as_u64()))
-			.unwrap();
-	} else {
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = PageAlloc::allocate(layout).unwrap();
-		let ioapic_address = VirtAddr::from(page_range.start());
-		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
-		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}");
+	paging::identity_map::<BasePageSize>(phys_addr);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
-	}
-}
-
-#[cfg(not(feature = "acpi"))]
-fn detect_from_acpi() -> Result<PhysAddr, ()> {
-	// dummy implementation if acpi support is disabled
-	Err(())
+	IOAPIC_ADDRESS
+		.set(VirtAddr::new(phys_addr.as_u64()))
+		.unwrap();
 }
 
 #[cfg(feature = "acpi")]
@@ -508,13 +491,23 @@ fn default_apic() -> PhysAddr {
 
 fn apic_addr() -> PhysAddr {
 	#[cfg(feature = "uhyve")]
-	if env::is_uhyve() {
+	use crate::env::{self, UhyveStartInfo};
+
+	#[cfg(feature = "uhyve")]
+	if env::start_info().is_uhyve() {
 		return default_apic();
 	}
 
-	detect_from_acpi()
-		.or_else(|()| detect_from_mp())
-		.unwrap_or_else(|()| default_apic())
+	#[cfg(feature = "acpi")]
+	if let Ok(apic_addr) = detect_from_acpi() {
+		return apic_addr;
+	}
+
+	if let Ok(apic_addr) = detect_from_mp() {
+		return apic_addr;
+	}
+
+	default_apic()
 }
 
 pub fn eoi() {
@@ -528,25 +521,12 @@ pub fn init() {
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	if processor::supports_x2apic() {
 		init_x2apic();
-	} else if env::is_uefi() {
-		// already id mapped in UEFI systems, just use the physical address as virtual one
+	} else {
+		paging::identity_map::<BasePageSize>(local_apic_physical_address);
+
 		LOCAL_APIC_ADDRESS
 			.set(VirtAddr::new(local_apic_physical_address.as_u64()))
 			.unwrap();
-	} else {
-		// We use the traditional xAPIC mode available on all x86-64 CPUs.
-		// It uses a mapped page for communication.
-		let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-		let page_range = PageAlloc::allocate(layout).unwrap();
-		let local_apic_address = VirtAddr::from(page_range.start());
-		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
-		debug!(
-			"Mapping Local APIC at {local_apic_physical_address:p} to virtual address {local_apic_address:p}"
-		);
-
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
@@ -608,6 +588,26 @@ fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
 		debug!("Disabling irq {irq}");
 		ioredirect_lower |= 1 << 16;
 	}
+
+	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
+	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
+}
+
+/// Reconfigures an interrupt line for a legacy PCI interrupt.
+///
+/// [`init_ioapic`] sets up every line for the edge triggered, active high
+/// behavior of the ISA interrupts. PCI signals its interrupts level triggered
+/// and active low instead.
+#[cfg(feature = "pci")]
+pub(crate) fn ioapic_set_pci_interrupt(irq: u8, apicid: u8) {
+	assert!(irq <= 24);
+
+	let off = u32::from(irq * 2);
+	let ioredirect_upper = u32::from(apicid) << 24;
+	// Vector, active low (bit 13) and level triggered (bit 15).
+	let ioredirect_lower = u32::from(0x20 + irq) | (1 << 13) | (1 << 15);
+
+	debug!("Configuring irq {irq} as level triggered, active low");
 
 	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
 	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
@@ -751,8 +751,6 @@ pub fn init_next_processor_variables() {
 /// This is partly confirmed by <https://wiki.osdev.org/Symmetric_Multiprocessing>
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn boot_application_processors() {
-	use x86_64::structures::paging::Translate;
-
 	use crate::arch::start::smp;
 
 	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
@@ -764,24 +762,19 @@ pub fn boot_application_processors() {
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 
-	if env::is_uefi() {
-		// Since UEFI already provides identity-mapped pagetables, we only have to sanity-check the identity mapping
-		let pt = unsafe { paging::identity_mapped_page_table() };
-		let virt_addr = SMP_BOOT_CODE_ADDRESS;
-		let phys_addr = pt.translate_addr(virt_addr.into()).unwrap();
-		assert_eq!(phys_addr.as_u64(), virt_addr.as_u64());
-	} else {
-		// Identity-map the boot code page and copy over the code.
-		debug!("Mapping SMP boot code to physical and virtual address {SMP_BOOT_CODE_ADDRESS:p}");
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable();
+	// Ensure identity mapping
+	// Does not use `paging::identity_map()` since this mapping must not be `NO_EXECUTE`.
+	let phys_addr = paging::virtual_to_physical(SMP_BOOT_CODE_ADDRESS);
+	let expected_phys_addr = PhysAddr::new(SMP_BOOT_CODE_ADDRESS.as_u64());
+	if phys_addr != Some(expected_phys_addr) {
 		paging::map::<BasePageSize>(
 			SMP_BOOT_CODE_ADDRESS,
-			PhysAddr::new(SMP_BOOT_CODE_ADDRESS.as_u64()),
+			expected_phys_addr,
 			1,
-			flags,
+			PageTableEntryFlags::WRITABLE,
 		);
 	}
+
 	unsafe {
 		// FIXME: do bounds checking. Better yet: do the copy via slices
 		SMP_BOOT_CODE_ADDRESS
@@ -893,7 +886,10 @@ pub fn ipi_tlb_flush() {
 #[allow(unused_variables)]
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
-	if core_id_to_wakeup != core_id() && !processor::supports_mwait() {
+	if core_id_to_wakeup != core_id()
+		&& !processor::supports_mwait()
+		&& scheduler::sleep_state::try_wake_up(core_id_to_wakeup)
+	{
 		without_interrupts(|| {
 			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 			let local_apic_id = apic_ids[core_id_to_wakeup as usize];

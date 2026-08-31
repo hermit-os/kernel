@@ -6,7 +6,7 @@ use core::fmt;
 #[cfg(any(
 	feature = "virtio-fs",
 	feature = "virtio-vsock",
-	feature = "virtio-console"
+	feature = "virtio-rng",
 ))]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::without_interrupts;
@@ -18,19 +18,17 @@ use pci_types::{
 };
 
 use crate::arch::kernel::pci::PciConfigRegion;
-#[cfg(feature = "virtio-console")]
-use crate::console::IoDevice;
 #[allow(unused_imports)]
 use crate::drivers::Driver;
 use crate::drivers::InterruptHandlerMap;
-#[cfg(feature = "virtio-console")]
-use crate::drivers::console::{VirtioConsoleDriver, VirtioUART};
 #[cfg(feature = "virtio-fs")]
 use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 use crate::drivers::net::virtio::VirtioNetDriver;
+#[cfg(feature = "virtio-rng")]
+use crate::drivers::rng::VirtioRngDriver;
 #[cfg(feature = "virtio")]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(feature = "virtio")]
@@ -73,9 +71,23 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 
 	/// Returns the bar at bar-register `slot`.
 	pub fn get_bar(&self, slot: u8) -> Option<Bar> {
-		let header = self.header();
-		let endpoint = EndpointHeader::from_header(header, &self.access)?;
-		endpoint.bar(slot, &self.access)
+		let endpoint = EndpointHeader::from_header(self.header(), &self.access)?;
+		let mut header = self.header();
+
+		// Determining the size of a bar writes all-ones into it and restores the
+		// old value afterwards. While decoding is enabled, the device decodes
+		// these intermediate values as real addresses and relocates itself. On a
+		// passed-through device the host follows that relocation and tries to map
+		// the bar at an address outside of the guest, which kills the VM. The PCI
+		// specification requires decoding to be disabled while sizing a bar.
+		let command = header.command(&self.access);
+		header.update_command(&self.access, |command| {
+			command & !(CommandRegister::IO_ENABLE | CommandRegister::MEMORY_ENABLE)
+		});
+		let bar = endpoint.bar(slot, &self.access);
+		header.update_command(&self.access, |_| command);
+
+		bar
 	}
 
 	/// Configure the bar at register `slot`
@@ -111,53 +123,65 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		}
 	}
 
-	/// Memory maps pci bar with specified index to identical location in virtual memory.
+	/// Memory maps pci BARs to identical location in virtual memory.
 	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
-	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
-	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(VirtAddr, usize)> {
-		let (address, size, prefetchable, _width) = match self.get_bar(index) {
-			Some(Bar::Io { .. }) => {
-				warn!("Cannot map IOBar!");
+	/// Element at index is [Some] if the mapping of the BAR at the same index is successful, else [None] (if bar non-existent or IOSpace)
+	pub fn memory_map_bars(&self, no_cache: bool) -> [Option<(VirtAddr, usize)>; MAX_BARS] {
+		let mut should_skip = false;
+		core::array::from_fn(|index| {
+			if should_skip {
+				should_skip = false;
 				return None;
 			}
-			Some(Bar::Memory32 {
-				address,
-				size,
-				prefetchable,
-			}) => (
-				u64::from(address),
-				usize::try_from(size).unwrap(),
-				prefetchable,
-				32,
-			),
-			Some(Bar::Memory64 {
-				address,
-				size,
-				prefetchable,
-			}) => (address, usize::try_from(size).unwrap(), prefetchable, 64),
-			_ => {
+
+			let index = u8::try_from(index).unwrap();
+			let (address, size, prefetchable, _width) = match self.get_bar(index) {
+				Some(Bar::Io { .. }) => {
+					warn!("Cannot map IOBar!");
+					return None;
+				}
+				Some(Bar::Memory32 {
+					address,
+					size,
+					prefetchable,
+				}) => (
+					u64::from(address),
+					usize::try_from(size).unwrap(),
+					prefetchable,
+					32,
+				),
+				Some(Bar::Memory64 {
+					address,
+					size,
+					prefetchable,
+				}) => {
+					should_skip = true;
+					(address, usize::try_from(size).unwrap(), prefetchable, 64)
+				}
+				_ => {
+					return None;
+				}
+			};
+
+			if address == 0 {
 				return None;
 			}
-		};
 
-		if address == 0 {
-			return None;
-		}
+			debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
 
-		debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
+			if !prefetchable {
+				warn!("Currently only mapping of prefetchable bars is supported!");
+			}
 
-		if !prefetchable {
-			warn!("Currently only mapping of prefetchable bars is supported!");
-		}
+			// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
+			// We therefore do not need to reserve any additional memory in our kernel.
+			// Map bar into RW^X virtual memory
+			let physical_address = address;
+			let virtual_address =
+				crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache);
 
-		// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
-		// We therefore do not need to reserve any additional memory in our kernel.
-		// Map bar into RW^X virtual memory
-		let physical_address = address;
-		let virtual_address =
-			crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache);
-
-		Some((virtual_address, size))
+			Some((virtual_address, size))
+		})
 	}
 
 	pub fn get_irq(&self) -> Option<InterruptLine> {
@@ -180,6 +204,15 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 					error!("Unknown IRQ line or no connection to the interrupt controller");
 					return None;
 				}
+
+				// A legacy PCI interrupt is signaled level triggered and active
+				// low, while the IOAPIC defaults to the edge triggered, active
+				// high behavior of the ISA interrupts. Without the correction a
+				// passed-through device stops delivering interrupts after its
+				// first one, because the host only unmasks the interrupt once the
+				// guest has completed a level triggered one.
+				#[cfg(target_arch = "x86_64")]
+				crate::arch::kernel::apic::ioapic_set_pci_interrupt(line, 0);
 
 				Some(line)
 			}
@@ -268,7 +301,7 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 
 			let mut slot: u8 = 0;
 			while usize::from(slot) < MAX_BARS {
-				if let Some(pci_bar) = endpoint.bar(slot, &self.access) {
+				if let Some(pci_bar) = self.get_bar(slot) {
 					match pci_bar {
 						Bar::Memory64 {
 							address,
@@ -331,18 +364,18 @@ pub(crate) fn print_information() {
 pub(crate) enum PciDriver {
 	#[cfg(feature = "virtio-fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
-	#[cfg(feature = "virtio-console")]
-	VirtioConsole(InterruptTicketMutex<VirtioConsoleDriver>),
+	#[cfg(feature = "virtio-rng")]
+	VirtioRng(InterruptTicketMutex<VirtioRngDriver>),
 	#[cfg(feature = "virtio-vsock")]
 	VirtioVsock(InterruptTicketMutex<VirtioVsockDriver>),
 }
 
 impl PciDriver {
-	#[cfg(feature = "virtio-console")]
-	fn get_console_driver(&self) -> Option<&InterruptTicketMutex<VirtioConsoleDriver>> {
+	#[cfg(feature = "virtio-rng")]
+	fn get_rng_driver(&self) -> Option<&InterruptTicketMutex<VirtioRngDriver>> {
 		#[allow(unreachable_patterns)]
 		match self {
-			Self::VirtioConsole(drv) => Some(drv),
+			Self::VirtioRng(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -376,12 +409,12 @@ pub(crate) type NetworkDevice = VirtioNetDriver;
 #[cfg(feature = "rtl8139")]
 pub(crate) type NetworkDevice = RTL8139Driver;
 
-#[cfg(feature = "virtio-console")]
-pub(crate) fn get_console_driver() -> Option<&'static InterruptTicketMutex<VirtioConsoleDriver>> {
+#[cfg(feature = "virtio-rng")]
+pub(crate) fn get_rng_driver() -> Option<&'static InterruptTicketMutex<VirtioRngDriver>> {
 	PCI_DRIVERS
 		.get()?
 		.iter()
-		.find_map(|drv| drv.get_console_driver())
+		.find_map(|drv| drv.get_rng_driver())
 }
 
 #[cfg(feature = "virtio-vsock")]
@@ -423,15 +456,15 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 			match pci_virtio::init_device(adapter, handlers) {
 				#[cfg(feature = "virtio-console")]
 				Ok(VirtioDriver::Console(drv)) => {
-					register_driver(PciDriver::VirtioConsole(InterruptTicketMutex::new(*drv)));
-					info!("Switch to virtio console");
-					crate::console::CONSOLE
-						.lock()
-						.replace_device(IoDevice::Virtio(VirtioUART::new()));
+					crate::console::switch_to_virtio(*drv);
 				}
 				#[cfg(feature = "virtio-fs")]
 				Ok(VirtioDriver::Fs(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(*drv)));
+				}
+				#[cfg(feature = "virtio-rng")]
+				Ok(VirtioDriver::Rng(drv)) => {
+					register_driver(PciDriver::VirtioRng(InterruptTicketMutex::new(*drv)));
 				}
 				#[cfg(all(not(feature = "rtl8139"), feature = "virtio-net"))]
 				Ok(VirtioDriver::Net(drv)) => *NETWORK_DEVICE.lock() = Some(*drv),
