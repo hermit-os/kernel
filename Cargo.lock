@@ -762,9 +762,9 @@ dependencies = [
 
 [[package]]
 name = "generic_once_cell"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c27ddeab45f9c2238a860db235b3e80ce23651fa8293b6f7f53fb72cbb5ce539"
+checksum = "2c68077b018781ddfbc95f9d333ddacd1c8c1da4f331407c5cecc63f53733eab"
 dependencies = [
  "lock_api",
 ]
