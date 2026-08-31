@@ -9,8 +9,10 @@ use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
 use crate::arch::kernel::core_local::*;
+#[cfg(any(target_os = "none", feature = "uhyve"))]
+use crate::env;
 #[cfg(feature = "uhyve")]
-use crate::env::{self, UhyveStartInfo};
+use crate::env::UhyveStartInfo;
 
 #[cfg(feature = "acpi")]
 mod acpi;
@@ -70,6 +72,7 @@ pub fn boot_processor_init() {
 	crate::mm::init();
 	crate::mm::print_information();
 	CoreLocal::get().add_irq_counter();
+	env::init();
 	gdt::add_current_core();
 	interrupts::load_idt();
 	pic::init();

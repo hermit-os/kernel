@@ -119,11 +119,11 @@ impl fmt::Display for ColorLevel {
 }
 
 fn no_color() -> bool {
-	hermit_var!("NO_COLOR").is_some_and(|val| !val.is_empty())
+	hermit_early_var!("NO_COLOR").is_some_and(|val| !val.is_empty())
 }
 
 pub unsafe fn init() {
-	let filter = hermit_var!("HERMIT_LOG_LEVEL_FILTER").unwrap_or(Cow::from("info"));
+	let filter = hermit_early_var!("HERMIT_LOG_LEVEL_FILTER").unwrap_or(Cow::Borrowed("info"));
 
 	let mut builder = Builder::new();
 	// The default. It may get overwritten by the parsed filter if it has a global level.
