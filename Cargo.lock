@@ -1835,9 +1835,9 @@ dependencies = [
 
 [[package]]
 name = "talc"
-version = "5.0.4"
+version = "5.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a5888b3189a89207eea4190e74387b5db3150d213f84186cac637dcd55259d"
+checksum = "49661c532dfd6e4f570ef10a45cb92f6f4fce5a28245558ae48307b57b40a5b4"
 dependencies = [
  "allocator-api2 0.4.0",
  "lock_api",
