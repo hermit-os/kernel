@@ -54,7 +54,6 @@
 	feature(linkage)
 )]
 #![feature(linked_list_cursors)]
-#![feature(never_type)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
 	feature(specialization)
