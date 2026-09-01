@@ -149,14 +149,14 @@ impl Qemu {
 		};
 
 		let qemu = cmd!(sh, "{program} {arg...}")
-			.args(&["-display", "none"])
+			.args(["-display", "none"])
 			.args(self.serial_args())
 			.args(self.image_args(image, arch)?)
 			.args(self.machine_args(arch))
 			.args(self.cpu_args(arch))
-			.args(&["-smp", &effective_smp.to_string()])
-			.args(&["-m".to_owned(), format!("{memory}M")])
-			.args(&["-global", "virtio-mmio.force-legacy=off"])
+			.args(["-smp", &effective_smp.to_string()])
+			.args(["-m".to_owned(), format!("{memory}M")])
+			.args(["-global", "virtio-mmio.force-legacy=off"])
 			.args(self.device_args(memory))
 			.args(qemu_args)
 			.args(self.cmdline_args(image_name, hermit_args, arch));
