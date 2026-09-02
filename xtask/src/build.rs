@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::env::{self, VarError};
 
 use anyhow::Result;
@@ -38,7 +37,31 @@ impl Build {
 		}
 
 		self.cargo_build.artifact.arch.install_for_build()?;
+		let dist_archive = self.cargo_build.artifact.dist_archive();
+		sh.create_dir(dist_archive.as_ref().parent().unwrap())?;
+		sh.remove_path(&dist_archive)?;
+		dist_archive.create()?;
 
+		if self
+			.cargo_build
+			.features()
+			.any(|feature| feature == "masos")
+		{
+			self.build_builtins(true)?;
+		} else {
+			self.build_kernel()?;
+
+			self.build_builtins(false)?;
+		}
+
+		eprintln!("Setting OSABI");
+		dist_archive.set_osabi()?;
+
+		eprintln!("Kernel available at {}", dist_archive.as_ref().display());
+		Ok(())
+	}
+
+	fn build_kernel(&self) -> Result<()> {
 		let careful = match env::var_os("HERMIT_CAREFUL") {
 			Some(val) if val == "1" => &["careful"][..],
 			_ => &[],
@@ -60,17 +83,14 @@ impl Build {
 
 		let build_archive = self.cargo_build.artifact.build_archive();
 		let dist_archive = self.cargo_build.artifact.dist_archive();
-		eprintln!(
-			"Copying {} to {}",
-			build_archive.as_ref().display(),
-			dist_archive.as_ref().display()
-		);
-		sh.create_dir(dist_archive.as_ref().parent().unwrap())?;
-		sh.copy_file(&build_archive, &dist_archive)?;
 
-		eprintln!("Exporting symbols");
-		self.export_syms()?;
+		build_archive.retain_kernel_symbols()?;
+		dist_archive.append(&build_archive)?;
 
+		Ok(())
+	}
+
+	fn build_builtins(&self, masos: bool) -> Result<()> {
 		eprintln!("Building hermit-builtins");
 		let mut cargo = crate::cargo();
 		cargo
@@ -80,22 +100,24 @@ impl Build {
 			.arg(self.cargo_build.artifact.builtins_profile_path_component())
 			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
 			.args(self.cargo_build.builtins_target_dir_arg());
+		if masos {
+			cargo.arg("--features=masos");
+		}
 
 		eprintln!("$ {cargo:?}");
 		let status = cargo.status()?;
 		assert!(status.success());
 
-		eprintln!("Exporting hermit-builtins symbols");
-		let builtins = self.cargo_build.artifact.builtins_archive();
-		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
-		builtins.retain_symbols(builtin_symbols.lines().collect::<HashSet<_>>())?;
+		let builtins_archive = self.cargo_build.artifact.builtins_archive();
+		let dist_archive = self.cargo_build.artifact.dist_archive();
 
-		dist_archive.append(&builtins)?;
+		if masos {
+			builtins_archive.retain_masos_symbols()?;
+		} else {
+			builtins_archive.retain_builtin_symbols()?;
+		}
+		dist_archive.append(&builtins_archive)?;
 
-		eprintln!("Setting OSABI");
-		dist_archive.set_osabi()?;
-
-		eprintln!("Kernel available at {}", dist_archive.as_ref().display());
 		Ok(())
 	}
 
@@ -130,18 +152,5 @@ impl Build {
 		rustflags.extend(self.cargo_build.artifact.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
-	}
-
-	fn export_syms(&self) -> Result<()> {
-		let archive = self.cargo_build.artifact.dist_archive();
-
-		let syscall_symbols = archive.syscall_symbols()?;
-		let explicit_exports = ["_start", "__bss_start", "mcount", "runtime_entry"].into_iter();
-
-		let symbols = explicit_exports.chain(syscall_symbols.iter().map(String::as_str));
-
-		archive.retain_symbols(symbols.collect::<HashSet<_>>())?;
-
-		Ok(())
 	}
 }
