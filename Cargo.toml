@@ -239,6 +239,11 @@ vga = []
 ## It allows receiving scancodes from the PS/2 keyboard that can be used to port applications.
 ## This is only useful on PCs (x86-64).
 pc-keyboard = []
+## Enables the _Bochs Graphics Adapter_ (BGA) driver.
+##
+## This provides a linear framebuffer for pixel graphics and is primarily useful in QEMU/Bochs environments (x86-64).
+## Any rendering has to be done by the application; the kernel itself does not output anything on the framebuffer.
+bga = ["pci"]
 
 #! ### Performance Features
 
