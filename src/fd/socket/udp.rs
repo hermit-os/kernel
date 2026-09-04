@@ -9,7 +9,9 @@ use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC, wake_network_waker};
-use crate::fd::{self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption};
+use crate::fd::{
+	self, Endpoint, ListenEndpoint, ObjectInterface, PollEvent, SocketOption, SocketOptionSocket,
+};
 use crate::io;
 use crate::syscalls::socket::Af;
 
@@ -245,9 +247,13 @@ impl ObjectInterface for Socket {
 			.get_mut_socket::<udp::Socket<'_>>(self.handle);
 
 		match opt {
-			SocketOption::TcpNodelay => Err(Errno::Inval),
-			SocketOption::SoSndbuf => Ok(c_int::try_from(socket.payload_send_capacity()).unwrap()),
-			SocketOption::SoRcvbuf => Ok(c_int::try_from(socket.payload_recv_capacity()).unwrap()),
+			SocketOption::SocketOption(SocketOptionSocket::SoSndbuf) => {
+				Ok(c_int::try_from(socket.payload_send_capacity()).unwrap())
+			}
+			SocketOption::SocketOption(SocketOptionSocket::SoRcvbuf) => {
+				Ok(c_int::try_from(socket.payload_recv_capacity()).unwrap())
+			}
+			_ => Err(Errno::Inval),
 		}
 	}
 }
