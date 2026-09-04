@@ -5,7 +5,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::hint::spin_loop;
-use core::mem::ManuallyDrop;
 use core::ptr::NonNull;
 
 use endian_num::{le16, le32, le64};
@@ -470,7 +469,6 @@ struct TxFields {
 	tx_in_use: [bool; NO_TX_BUFFERS],
 	tx_counter: usize,
 	txbuffer: Box<[u8], DeviceAlloc>,
-	remaining_bufs: usize,
 }
 
 /// RealTek RTL8139 network driver struct.
@@ -531,20 +529,12 @@ pub struct TxToken<'a> {
 	tx_fields: &'a mut TxFields,
 }
 
-impl Drop for TxToken<'_> {
-	// For when the token is dropped without being used. When the token is consumed, the remaining buffer
-	// count should only be increased after we receive confirmation of the actual transmission (i.e. TOK).
-	fn drop(&mut self) {
-		self.tx_fields.remaining_bufs += 1;
-	}
-}
-
 impl smoltcp::phy::TxToken for TxToken<'_> {
 	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		let mut token = ManuallyDrop::new(self);
+		let token = self;
 		let id = token.tx_fields.tx_counter % NO_TX_BUFFERS;
 
 		assert!(
@@ -586,6 +576,12 @@ impl smoltcp::phy::Device for RTL8139Driver {
 			return None;
 		}
 
+		// The receive token is only useful together with the transmit token,
+		// so both have to be available.
+		if !self.reclaim_next_tx_buffer() {
+			return None;
+		}
+
 		self.rx_fields.rx_in_use = true;
 		let regs = self.regs.as_mut_ptr();
 
@@ -605,7 +601,7 @@ impl smoltcp::phy::Device for RTL8139Driver {
 	}
 
 	fn transmit(&mut self, _: smoltcp::time::Instant) -> Option<TxToken<'_>> {
-		if self.tx_fields.remaining_bufs == 0 {
+		if !self.reclaim_next_tx_buffer() {
 			return None;
 		}
 
@@ -716,6 +712,7 @@ impl RTL8139Driver {
 
 				if (txstatus & (TSD_TABT | TSD_OWC)) > 0 {
 					error!("RTL8139: major error");
+					self.tx_fields.tx_in_use[i] = false;
 					continue;
 				}
 
@@ -725,10 +722,19 @@ impl RTL8139Driver {
 
 				if (txstatus & TSD_TOK) == TSD_TOK {
 					self.tx_fields.tx_in_use[i] = false;
-					self.tx_fields.remaining_bufs += 1;
 				}
 			}
 		}
+	}
+
+	fn reclaim_next_tx_buffer(&mut self) -> bool {
+		let id = self.tx_fields.tx_counter % NO_TX_BUFFERS;
+
+		if self.tx_fields.tx_in_use[id] {
+			self.tx_handler();
+		}
+
+		!self.tx_fields.tx_in_use[id]
 	}
 }
 
@@ -899,7 +905,6 @@ pub(crate) fn init_device(
 			tx_in_use: [false; NO_TX_BUFFERS],
 			tx_counter: 0,
 			txbuffer,
-			remaining_bufs: NO_TX_BUFFERS,
 		},
 	})
 }
