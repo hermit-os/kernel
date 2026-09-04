@@ -310,7 +310,6 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package testudp --no-default-features --features hermit/udp,hermit/dhcpv4,hermit/gem-net qemu ${{ matrix.qemu_flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package miotcp --features hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
-        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package miotcp --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.qemu_flags }} --devices rtl8139
         if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package miotcp --no-default-features --features hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.qemu_flags }} --devices cadence-gem
