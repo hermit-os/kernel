@@ -52,6 +52,37 @@ pub struct Qemu {
 	/// Arguments to pass to QEMU and Hermit, separated by another `--`.
 	#[arg(last = true)]
 	qemu_and_hermit_args: Vec<String>,
+
+	/// Select the RISC-V machine type.
+	#[arg(long, value_enum, default_value_t = RiscvMachine::VirtAiaAplicImsic)]
+	machine: RiscvMachine,
+}
+
+#[derive(ValueEnum, PartialEq, Eq, Clone, Copy)]
+#[value(rename_all = "kebab-case")]
+pub enum RiscvMachine {
+	/// QEMU `sifive_u`, used for CadenceGem.
+	SifiveU,
+
+	/// QEMU `virt`, which exercises the legacy PLIC path.
+	Virt,
+
+	/// QEMU `virt,aia=aplic`, which exercises the APLIC path.
+	VirtAiaAplic,
+
+	/// QEMU `virt,aia=aplic,imsic`, which exercises the APLIC in msi-delivery mode.
+	VirtAiaAplicImsic,
+}
+
+impl RiscvMachine {
+	fn qemu_machine(self) -> &'static str {
+		match self {
+			Self::SifiveU => "sifive_u",
+			Self::Virt => "virt",
+			Self::VirtAiaAplic => "virt,aia=aplic",
+			Self::VirtAiaAplicImsic => "virt,aia=aplic-imsic",
+		}
+	}
 }
 
 #[derive(ValueEnum, PartialEq, Eq, Clone, Copy)]
@@ -322,9 +353,9 @@ impl Qemu {
 		} else if arch == Arch::Riscv64 {
 			// CadenceGem requires sifive_u
 			let machine = if self.devices.contains(&Device::CadenceGem) {
-				"sifive_u"
+				RiscvMachine::SifiveU.qemu_machine()
 			} else {
-				"virt"
+				self.machine.qemu_machine()
 			};
 
 			let opensbi_paths = &[
@@ -398,7 +429,8 @@ impl Qemu {
 					// possibly because it requires sifive_u as the machine.
 					if !self.devices.contains(&Device::CadenceGem) {
 						cpu_args.push("-cpu".to_owned());
-						cpu_args.push("rv64".to_owned());
+						// FIXME: replace with rva23s64 once ci reaches qemu 10.1
+						cpu_args.push("max".to_owned());
 					}
 				}
 

@@ -17,9 +17,10 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use free_list::PageLayout;
 use riscv::register::sstatus;
 
-pub(crate) use self::processor::{set_oneshot_timer, wakeup_core};
+pub(crate) use self::processor::set_oneshot_timer;
 use crate::arch::kernel::core_local::core_id;
 pub use crate::arch::kernel::devicetree::init_drivers;
+pub use crate::arch::kernel::interrupts::wakeup_core;
 use crate::arch::kernel::processor::lsb;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::env::{self, FdtStartInfo};
@@ -79,10 +80,10 @@ pub fn get_current_boot_id() -> u32 {
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
-	devicetree::init();
 	crate::mm::init();
 	crate::mm::print_information();
 	env::init();
+	devicetree::init_interrupt_controller();
 	interrupts::install();
 	#[cfg(feature = "pci")]
 	pci::init();

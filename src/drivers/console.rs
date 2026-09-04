@@ -217,10 +217,7 @@ impl VirtioConsoleDriver {
 
 	/// Handle interrupt and acknowledge interrupt
 	pub fn handle_interrupt(&mut self) {
-		#[cfg_attr(
-			not(all(feature = "pci", target_arch = "x86_64")),
-			expect(irrefutable_let_patterns)
-		)]
+		#[cfg_attr(not(msix_supported), expect(irrefutable_let_patterns))]
 		let InterruptCapability::IsrStatus(isr_stat) = &mut self.caps_coll.int_cap else {
 			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
 		};
@@ -306,7 +303,7 @@ impl super::virtio::VirtioDriver for VirtioConsoleDriver {
 					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
 					info!("Virtio interrupt handler at line {irq}");
 				}
-				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+				#[cfg(msix_supported)]
 				InterruptCapability::Msix(msix_table) => caps_coll.com_cfg.register_msix_vectors(
 					msix_table,
 					handlers,
