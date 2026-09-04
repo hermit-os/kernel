@@ -46,13 +46,7 @@
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(
-	all(
-		not(any(feature = "common-os", feature = "nostd")),
-		not(target_arch = "riscv64"),
-	),
-	feature(linkage)
-)]
+#![cfg_attr(not(any(feature = "common-os", feature = "nostd")), feature(linkage))]
 #![feature(linked_list_cursors)]
 #![feature(never_type)]
 #![cfg_attr(
@@ -60,10 +54,7 @@
 	feature(specialization)
 )]
 #![cfg_attr(
-	all(
-		not(any(feature = "common-os", feature = "nostd")),
-		not(target_arch = "riscv64"),
-	),
+	not(any(feature = "common-os", feature = "nostd")),
 	feature(thread_local)
 )]
 #![cfg_attr(target_os = "none", no_std)]
