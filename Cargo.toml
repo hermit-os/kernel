@@ -2,7 +2,6 @@
 name = "hermit-kernel"
 version = "0.13.0"
 license = "MIT OR Apache-2.0"
-readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
 repository = "https://github.com/hermit-os/kernel"
