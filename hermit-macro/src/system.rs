@@ -59,8 +59,8 @@ fn parse_sig(sig: &Signature) -> Result<ParsedSig> {
 
 	for arg in &sig.inputs {
 		let pat = match arg {
-			syn::FnArg::Receiver(_) => bail!(arg, "#[system] functions cannot take `self`"),
-			syn::FnArg::Typed(pat) => pat,
+			FnArg::Receiver(_) => bail!(arg, "#[system] functions cannot take `self`"),
+			FnArg::Typed(pat) => pat,
 		};
 		if let Pat::Ident(pat) = &*pat.pat {
 			args.push(pat.ident.clone());
@@ -128,7 +128,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 				Pat::Ident(pat_ident) => &pat_ident.ident,
 				_ => unreachable!(),
 			},
-			_ => unreachable!(),
+			FnArg::Receiver(_) => unreachable!(),
 		})
 		.collect::<Vec<_>>();
 	#[allow(clippy::literal_string_with_formatting_args)]

@@ -6,8 +6,7 @@ on:
 
 env:
   GH_TOKEN: ${{ github.token }}
-  RUSTFLAGS: -Dwarnings
-  RUSTDOCFLAGS: -Dwarnings
+  CARGO_BUILD_WARNINGS: deny
 
 defaults:
   run:
@@ -148,7 +147,7 @@ jobs:
       - name: Unit tests
         run: cargo test --lib
         env:
-          RUSTFLAGS: -Awarnings
+          CARGO_BUILD_WARNINGS: warn
       - name: Macro unit tests
         run: cargo test --package hermit-macro
       - name: Download loader
@@ -157,7 +156,7 @@ jobs:
       - name: Integration tests
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64-multiboot
         env:
-          RUSTFLAGS:
+          CARGO_BUILD_WARNINGS: warn
 
   run-hermit:
     name: Run
