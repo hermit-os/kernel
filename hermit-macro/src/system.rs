@@ -128,7 +128,7 @@ fn emit_func(func: ItemFn, sig: &ParsedSig, errno: bool) -> Result<ItemFn> {
 				Pat::Ident(pat_ident) => &pat_ident.ident,
 				_ => unreachable!(),
 			},
-			_ => unreachable!(),
+			FnArg::Receiver(_) => unreachable!(),
 		})
 		.collect::<Vec<_>>();
 	#[allow(clippy::literal_string_with_formatting_args)]
