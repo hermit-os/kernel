@@ -25,7 +25,7 @@ use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::swapgs;
-use crate::mm::PageBox;
+use crate::mm::{MappedPageBox, PageBox};
 use crate::scheduler::CoreId;
 use crate::{arch, scheduler};
 
@@ -420,18 +420,13 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		info!("Virtual-Wire mode implemented");
 	}
 
-	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
-	let page_range = PageBox::new(layout).unwrap();
-	let virtual_address = VirtAddr::from(page_range.start());
-
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
-	paging::map::<BasePageSize>(
-		virtual_address,
-		PhysAddr::from((mp_float.mp_config as usize).align_down(BasePageSize::SIZE as usize)),
-		1,
-		flags,
-	);
+	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let phys_addr =
+		PhysAddr::from((mp_float.mp_config as usize).align_down(BasePageSize::SIZE as usize));
+	let page_range = unsafe { MappedPageBox::map_phys(phys_addr, layout, flags).unwrap() };
+	let virtual_address = VirtAddr::from(page_range.pages().start());
 
 	let mut addr: usize =
 		(virtual_address | (u64::from(mp_float.mp_config) & (BasePageSize::SIZE - 1))) as usize;
