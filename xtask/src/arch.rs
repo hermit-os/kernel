@@ -159,7 +159,11 @@ impl Arch {
 		match self {
 			Self::X86_64 => &[],
 			Self::Aarch64 | Self::Aarch64Be => &["-Crelocation-model=pic"],
-			Self::Riscv64 => &["-Cno-redzone", "-Crelocation-model=pic"],
+			Self::Riscv64 => &[
+				"-Cno-redzone",
+				"-Crelocation-model=pic",
+				"-Ztls-model=local-exec",
+			],
 		}
 	}
 
