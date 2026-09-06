@@ -14,8 +14,6 @@ use crate::env;
 #[cfg(feature = "uhyve")]
 use crate::env::UhyveStartInfo;
 
-#[cfg(feature = "acpi")]
-mod acpi;
 pub mod apic;
 #[cfg(all(target_arch = "x86_64", feature = "bga"))]
 pub mod bga;
@@ -88,7 +86,7 @@ pub fn boot_processor_init() {
 	systemtime::init();
 
 	#[cfg(feature = "acpi")]
-	acpi::init();
+	crate::acpi::init();
 
 	#[cfg(feature = "pci")]
 	pci::init();
