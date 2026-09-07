@@ -57,6 +57,19 @@ enum Model {
 	Unknown,
 }
 
+pub fn detect_timebase_frequency() -> u64 {
+	let fdt = env::start_info().fdt().unwrap();
+
+	let cpus_node = fdt
+		.find_node("/cpus")
+		.expect("cpus node missing or invalid");
+	cpus_node
+		.property("timebase-frequency")
+		.expect("timebase-frequency node not found in /cpus")
+		.as_usize()
+		.unwrap() as u64
+}
+
 /// Inits variables based on the device tree
 /// This function should only be called once
 pub fn init() {

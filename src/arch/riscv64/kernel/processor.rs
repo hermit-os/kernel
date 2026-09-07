@@ -1,10 +1,15 @@
 use core::arch::asm;
 use core::num::NonZeroU64;
 
+use hermit_sync::{Lazy, without_interrupts};
+#[cfg(not(feature = "riscv-legacy-timer"))]
+use riscv::register::stimecmp;
 use riscv::register::{sie, sstatus, time};
 
-use crate::arch::kernel::{HARTS_AVAILABLE, get_timebase_freq};
+use crate::arch::kernel::{HARTS_AVAILABLE, detect_timebase_frequency};
 use crate::scheduler::CoreId;
+
+static TIMEBASE_FREQUENCY: Lazy<u64> = Lazy::new(detect_timebase_frequency);
 
 /// Current FPU state. Saved at context switch when changed
 #[repr(C, packed)]
@@ -254,7 +259,7 @@ pub fn get_timer_ticks() -> u64 {
 
 /// Returns the timer frequency in MHz
 pub fn get_frequency() -> u16 {
-	(get_timebase_freq() / 1_000_000).try_into().unwrap()
+	(*TIMEBASE_FREQUENCY / 1_000_000).try_into().unwrap()
 }
 
 #[inline]
@@ -270,21 +275,34 @@ pub fn supports_2mib_pages() -> bool {
 	true
 }
 
-pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+#[inline]
+pub fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	let Some(wt) = wakeup_time else {
 		// Disable the Timer (and clear a pending interrupt)
-		debug!("Stopping Timer");
+		#[cfg(not(feature = "riscv-legacy-timer"))]
+		unsafe {
+			stimecmp::write(usize::MAX);
+		}
+		#[cfg(feature = "riscv-legacy-timer")]
 		sbi_rt::set_timer(u64::MAX);
 		return;
 	};
 
-	debug!("Starting Timer: {:x}", get_timestamp());
 	unsafe {
 		sie::set_stimer();
 	}
 	let next_time = wt * u64::from(get_frequency());
 
+	#[cfg(not(feature = "riscv-legacy-timer"))]
+	unsafe {
+		stimecmp::write(next_time.try_into().unwrap());
+	}
+	#[cfg(feature = "riscv-legacy-timer")]
 	sbi_rt::set_timer(next_time);
+}
+
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	without_interrupts(|| __set_oneshot_timer(wakeup_time));
 }
 
 pub fn wakeup_core(core_to_wakeup: CoreId) {

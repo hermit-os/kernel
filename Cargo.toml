@@ -163,6 +163,15 @@ semihosting = ["dep:semihosting"]
 ## _application processor_s (AP) from the _boot-strap processor_ (BSP).
 smp = ["acpi"]
 
+## Enables timer management via SBI.
+##
+## This allows hardware without Sstc support to manage timers.
+## E.g. SiFive Freedom U740
+## If this flag is not set, timers will be managed using the Sstc extension.
+##
+## This flag is only evaluated for riscv64.
+riscv-legacy-timer = []
+
 #! ### Network Features
 
 ## Enables TCP support.
@@ -418,7 +427,8 @@ semihosting = { version = "0.1", optional = true }
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 fdt = { version = "0.1", features = ["pretty-printing"] }
 memory_addresses = { version = "0.4", default-features = false, features = ["riscv64"] }
-riscv = "0.16"
+#TODO: use upstream version once changes merged and published
+riscv = { version = "0.16", git = "https://github.com/rust-embedded/riscv", branch = "master" }
 sbi-rt = "0.0.4"
 semihosting = { version = "0.1", optional = true }
 tock-registers = { version = "0.10", optional = true }
