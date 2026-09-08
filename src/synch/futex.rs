@@ -1,5 +1,4 @@
-use alloc::collections::LinkedList;
-use alloc::collections::linked_list::CursorMut;
+use alloc::collections::BTreeMap;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering::SeqCst;
 
@@ -11,83 +10,42 @@ use crate::errno::Errno;
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::scheduler::task::{TaskHandle, TaskHandlePriorityQueue};
 
-struct BucketElem(usize, TaskHandlePriorityQueue);
-
 type Bucket = InterruptSpinMutex<TaskListBucket>;
 
 #[repr(transparent)]
-struct TaskListBucket(LinkedList<BucketElem>);
-
-struct WrappedCursor<'a>(CursorMut<'a, BucketElem>);
-
-impl WrappedCursor<'_> {
-	pub fn pop(&mut self) -> Option<TaskHandle> {
-		match self.0.current() {
-			None => None,
-			Some(task_list) => {
-				let task = task_list.1.pop();
-
-				if task_list.1.is_empty() {
-					self.0.remove_current();
-				}
-
-				task
-			}
-		}
-	}
-}
+struct TaskListBucket(BTreeMap<usize, TaskHandlePriorityQueue>);
 
 impl TaskListBucket {
 	pub fn insert_task(&mut self, address: usize, handle: TaskHandle) {
-		for elem in self.0.iter_mut() {
-			if elem.0 == address {
-				elem.1.push(handle);
-				return;
-			}
-		}
-
-		let mut task_list = TaskHandlePriorityQueue::new();
-		task_list.push(handle);
-		self.0.push_front(BucketElem(address, task_list));
+		self.0.entry(address).or_default().push(handle);
 	}
 
 	pub fn contains_task(&self, address: usize, handle: TaskHandle) -> bool {
-		for elem in self.0.iter() {
-			if elem.0 == address {
-				return elem.1.contains(handle);
-			}
-		}
-		false
+		self.0
+			.get(&address)
+			.is_some_and(|queue| queue.contains(handle))
 	}
 
 	/// Removes a task from this bucket, and returns a boolean indicating if it was present.
 	pub fn remove_task(&mut self, address: usize, task: TaskHandle) -> bool {
-		let mut cursor = self.0.cursor_front_mut();
-		while let Some(elem) = cursor.current() {
-			if elem.0 == address {
-				let was_present = elem.1.remove(task);
+		let Some(queue) = self.0.get_mut(&address) else {
+			return false;
+		};
 
-				if elem.1.is_empty() {
-					cursor.remove_current();
-				}
-
-				return was_present;
-			}
-			cursor.move_next();
+		let was_present = queue.remove(task);
+		if queue.is_empty() {
+			self.0.remove(&address);
 		}
 
-		false
+		was_present
 	}
 
-	fn get_pop_list(&mut self, address: usize) -> Option<WrappedCursor<'_>> {
-		let mut cursor = self.0.cursor_front_mut();
-		while let Some(elem) = cursor.current() {
-			if elem.0 == address {
-				return Some(WrappedCursor(cursor));
-			}
-			cursor.move_next();
-		}
-		None
+	fn get_queue(&mut self, address: usize) -> Option<&mut TaskHandlePriorityQueue> {
+		self.0.get_mut(&address)
+	}
+
+	fn remove_queue(&mut self, address: usize) {
+		self.0.remove(&address);
 	}
 }
 
@@ -95,7 +53,7 @@ struct BucketList<const N: usize>([Bucket; N]);
 
 impl<const N: usize> BucketList<N> {
 	pub const fn new() -> Self {
-		Self([const { InterruptSpinMutex::new(TaskListBucket(LinkedList::new())) }; N])
+		Self([const { InterruptSpinMutex::new(TaskListBucket(BTreeMap::new())) }; N])
 	}
 
 	fn hash_key(v: usize) -> usize {
@@ -269,7 +227,7 @@ pub(crate) fn futex_wake(address: *const AtomicU32, count: i32) -> i32 {
 
 	let address_usize = address.addr();
 	let mut parking_lot = PARKING_LOT.lock_bucket(address_usize);
-	let Some(mut queue) = parking_lot.get_pop_list(address_usize) else {
+	let Some(queue) = parking_lot.get_queue(address_usize) else {
 		return 0;
 	};
 
@@ -281,6 +239,10 @@ pub(crate) fn futex_wake(address: *const AtomicU32, count: i32) -> i32 {
 			None => break,
 		}
 		woken = woken.saturating_add(1);
+	}
+
+	if queue.is_empty() {
+		parking_lot.remove_queue(address_usize);
 	}
 
 	woken
@@ -297,7 +259,7 @@ pub(crate) fn futex_wake_or_set(address: &AtomicU32, count: i32, new_value: u32)
 
 	let address_usize = addr(address);
 	let mut parking_lot = PARKING_LOT.lock_bucket(address_usize);
-	let Some(mut queue) = parking_lot.get_pop_list(address_usize) else {
+	let Some(queue) = parking_lot.get_queue(address_usize) else {
 		address.store(new_value, SeqCst);
 		return 0;
 	};
@@ -310,6 +272,10 @@ pub(crate) fn futex_wake_or_set(address: &AtomicU32, count: i32, new_value: u32)
 			None => break,
 		}
 		woken = woken.saturating_add(1);
+	}
+
+	if queue.is_empty() {
+		parking_lot.remove_queue(address_usize);
 	}
 
 	if woken == 0 {
