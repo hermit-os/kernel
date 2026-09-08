@@ -331,6 +331,7 @@ impl Qemu {
 				"opensbi/generic/firmware/fw_jump.bin", // Local
 				"/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_jump.bin", // Ubuntu
 				"/usr/share/opensbi/generic/firmware/fw_jump.bin", // Alpine
+				"/usr/share/opensbi/lp64/generic/firmware/fw_jump.bin", // Arch
 			];
 			let opensbi_path = opensbi_paths
 				.iter()
