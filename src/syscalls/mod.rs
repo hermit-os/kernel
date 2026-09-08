@@ -6,7 +6,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{CStr, c_char};
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
-use core::{ptr, slice};
+use core::{mem, ptr, slice};
 
 use align_address::Align;
 use dirent_display::Dirent64Display;
@@ -798,6 +798,90 @@ mod dirent_display {
 	}
 }
 
+/// Directory entry as defined by POSIX.1-2024 (`struct posix_dent`).
+#[repr(C)]
+pub struct PosixDent {
+	/// File serial number
+	pub d_ino: u64,
+	/// Length of this entry, including trailing padding
+	pub d_reclen: u16,
+	/// File type or unknown-file-type indication
+	pub d_type: fs::FileType,
+	/// Filename string of this entry (null-terminated)
+	pub d_name: PhantomData<c_char>,
+}
+
+/// Format of the directory entries written by [`ObjectInterface::getdents`].
+#[derive(Clone, Copy)]
+pub(crate) enum DirentFormat {
+	/// Linux `struct linux_dirent64` entries for [`sys_getdents64`]
+	Dirent64,
+	/// POSIX `struct posix_dent` entries for [`sys_posix_getdents`]
+	PosixDent,
+}
+
+impl DirentFormat {
+	/// Writes one directory entry into `buf` at `offset`.
+	///
+	/// Returns the offset of the next entry or [`None`] if the entry does not fit into `buf`.
+	pub(crate) fn write_entry(
+		self,
+		buf: &mut [MaybeUninit<u8>],
+		offset: usize,
+		d_ino: u64,
+		d_type: fs::FileType,
+		name: &[u8],
+	) -> Option<usize> {
+		let (header_len, align) = match self {
+			Self::Dirent64 => (mem::offset_of!(Dirent64, d_name), align_of::<Dirent64>()),
+			Self::PosixDent => (mem::offset_of!(PosixDent, d_name), align_of::<PosixDent>()),
+		};
+		let entry_len = header_len + name.len() + 1;
+		let next_entry = (offset + entry_len).align_up(align);
+
+		if next_entry > buf.len() {
+			return None;
+		}
+
+		let d_reclen = entry_len.align_up(align).try_into().unwrap();
+
+		let entry_ptr = buf[offset].as_mut_ptr();
+		let name_ptr = match self {
+			Self::Dirent64 => {
+				let dirent = entry_ptr.cast::<Dirent64>();
+				unsafe {
+					dirent.write(Dirent64 {
+						d_ino,
+						d_off: 0,
+						d_reclen,
+						d_type,
+						d_name: PhantomData {},
+					});
+					(&raw mut (*dirent).d_name).cast::<u8>()
+				}
+			}
+			Self::PosixDent => {
+				let dirent = entry_ptr.cast::<PosixDent>();
+				unsafe {
+					dirent.write(PosixDent {
+						d_ino,
+						d_reclen,
+						d_type,
+						d_name: PhantomData {},
+					});
+					(&raw mut (*dirent).d_name).cast::<u8>()
+				}
+			}
+		};
+		unsafe {
+			name_ptr.copy_from_nonoverlapping(name.as_ptr(), name.len());
+			name_ptr.add(name.len()).write(0); // zero termination
+		}
+
+		Some(next_entry)
+	}
+}
+
 /// Read the entries of a directory.
 /// Similar as the Linux system-call, this reads up to `count` bytes and returns the number of
 /// bytes written. If the size was not sufficient to list all directory entries, subsequent calls
@@ -828,8 +912,67 @@ pub unsafe extern "C" fn sys_getdents64(fd: RawFd, dirp: *mut Dirent64, count: u
 	obj.map_or_else(
 		|_| (-i32::from(Errno::Inval)).into(),
 		|v| {
-			block_on(async { v.read().await.getdents(slice).await }, None)
-				.map_or_else(|e| (-i32::from(e)).into(), |cnt| cnt as i64)
+			block_on(
+				async { v.read().await.getdents(slice, DirentFormat::Dirent64).await },
+				None,
+			)
+			.map_or_else(|e| (-i32::from(e)).into(), |cnt| cnt as i64)
+		},
+	)
+}
+
+/// Read the entries of a directory as defined by POSIX.1-2024, [`posix_getdents`].
+///
+/// This reads up to `nbyte` bytes of [`PosixDent`] entries into `buf` and returns the number of
+/// bytes written. If the size was not sufficient to list all directory entries, subsequent calls
+/// to this fn return the next entries.
+///
+/// Parameters:
+///
+/// - `fd`: File Descriptor of the directory in question.
+/// - `buf`: Memory for the kernel to store the filled `PosixDent` objects including the c-strings with the filenames to.
+/// - `nbyte`: Size of the memory region described by `buf` in bytes.
+/// - `flags`: Must be zero; no flags are supported yet.
+///
+/// Return:
+///
+/// The number of bytes read into `buf` on success. Zero indicates that the end of the directory
+/// was reached. Negative numbers encode errors.
+///
+/// [`posix_getdents`]: https://pubs.opengroup.org/onlinepubs/9799919799/functions/posix_getdents.html
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sys_posix_getdents(
+	fd: RawFd,
+	buf: *mut PosixDent,
+	nbyte: usize,
+	flags: i32,
+) -> isize {
+	debug!("posix_getdents for fd {fd:?} - nbyte: {nbyte}, flags: {flags}");
+	// POSIX doesn't define any mandatory flags as of now
+	if buf.is_null() || nbyte == 0 || flags != 0 {
+		return isize::try_from(-i32::from(Errno::Inval)).unwrap();
+	}
+
+	let slice = unsafe { slice::from_raw_parts_mut(buf.cast(), nbyte) };
+
+	let obj = get_object(fd);
+	obj.map_or_else(
+		|e| isize::try_from(-i32::from(e)).unwrap(),
+		|v| {
+			block_on(
+				async {
+					v.read()
+						.await
+						.getdents(slice, DirentFormat::PosixDent)
+						.await
+				},
+				None,
+			)
+			.map_or_else(
+				|e| isize::try_from(-i32::from(e)).unwrap(),
+				|cnt| isize::try_from(cnt).unwrap(),
+			)
 		},
 	)
 }

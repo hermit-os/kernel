@@ -23,6 +23,7 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption, insert_object, remove_object};
 use crate::io;
+use crate::syscalls::DirentFormat;
 use crate::time::{SystemTime, timespec};
 
 static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
@@ -123,20 +124,53 @@ pub(crate) trait VfsNode: Send + Sync + fmt::Debug {
 	}
 }
 
-#[derive(Clone)]
-pub(crate) struct DirectoryReader(Vec<DirectoryEntry>);
+pub(crate) struct DirectoryReader {
+	entries: Vec<DirectoryEntry>,
+	read_idx: async_lock::Mutex<usize>,
+}
 
 impl DirectoryReader {
-	pub fn new(data: Vec<DirectoryEntry>) -> Self {
-		Self(data)
+	pub fn new(entries: Vec<DirectoryEntry>) -> Self {
+		Self {
+			entries,
+			read_idx: async_lock::Mutex::new(0),
+		}
 	}
 }
 
 impl ObjectInterface for DirectoryReader {
-	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let _buf = buf;
-		let _ = &self.0; // Dummy statement to avoid warning for the moment
-		unimplemented!()
+	async fn getdents(
+		&self,
+		buf: &mut [MaybeUninit<u8>],
+		format: DirentFormat,
+	) -> io::Result<usize> {
+		let mut buf_offset: usize = 0;
+		let mut read_idx = self.read_idx.lock().await;
+		for entry in self.entries.iter().skip(*read_idx) {
+			let Some(next_dirent) =
+				format.write_entry(buf, buf_offset, 1, FileType::Unknown, entry.name.as_bytes())
+			else {
+				if buf_offset == 0 {
+					// Buffer too small to hold even one entry
+					return Err(Errno::Inval);
+				}
+				// Buffer full -> return bytes written so far; caller retries from read_idx
+				break;
+			};
+
+			*read_idx += 1;
+			buf_offset = next_dirent;
+		}
+		Ok(buf_offset)
+	}
+
+	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
+		if whence != SeekWhence::Set && offset != 0 {
+			error!("Invalid offset for directory lseek ({offset})");
+			return Err(Errno::Inval);
+		}
+		*self.read_idx.lock().await = offset as usize;
+		Ok(offset)
 	}
 }
 

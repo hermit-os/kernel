@@ -6,18 +6,15 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::marker::PhantomData;
 use core::mem::MaybeUninit;
-use core::{mem, ptr};
 
-use align_address::Align;
 use async_lock::{Mutex, RwLock};
 
 use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, FileType, NodeKind, SeekWhence, VfsNode};
-use crate::syscalls::Dirent64;
+use crate::syscalls::DirentFormat;
 use crate::time::timespec;
 use crate::{arch, io};
 
@@ -386,49 +383,33 @@ impl MemDirectoryInterface {
 }
 
 impl ObjectInterface for MemDirectoryInterface {
-	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
+	async fn getdents(
+		&self,
+		buf: &mut [MaybeUninit<u8>],
+		format: DirentFormat,
+	) -> io::Result<usize> {
 		let mut buf_offset: usize = 0;
-		let mut ret = 0;
 		let mut read_idx = self.read_idx.lock().await;
 		for name in self.inner.read().await.keys().skip(*read_idx) {
-			let namelen = name.len();
-
-			let dirent_len = mem::offset_of!(Dirent64, d_name) + namelen + 1;
-			let next_dirent = (buf_offset + dirent_len).align_up(align_of::<Dirent64>());
-
-			if next_dirent > buf.len() {
-				if ret == 0 {
+			let Some(next_dirent) = format.write_entry(
+				buf,
+				buf_offset,
+				1, // TODO: we don't have inodes in the mem filesystem. Maybe this could lead to problems
+				FileType::Unknown, // TODO: Proper filetype
+				name.as_bytes(),
+			) else {
+				if buf_offset == 0 {
 					// Buffer too small to hold even one entry
 					return Err(Errno::Inval);
 				}
 				// Buffer full -> return bytes written so far; caller retries from rsp_offset
 				break;
-			}
+			};
 
 			*read_idx += 1;
-
-			// could be replaced with slice_as_ptr once maybe_uninit_slice is stabilized.
-			let target_dirent = buf[buf_offset].as_mut_ptr().cast::<Dirent64>();
-
-			unsafe {
-				target_dirent.write(Dirent64 {
-					d_ino: 1, // TODO: we don't have inodes in the mem filesystem. Maybe this could lead to problems
-					d_off: 0,
-					d_reclen: (dirent_len.align_up(align_of::<Dirent64>()))
-						.try_into()
-						.unwrap(),
-					d_type: FileType::Unknown, // TODO: Proper filetype
-					d_name: PhantomData {},
-				});
-				let nameptr = ptr::from_mut(&mut (*(target_dirent)).d_name).cast::<u8>();
-				nameptr.copy_from_nonoverlapping(name.as_bytes().as_ptr().cast::<u8>(), namelen);
-				nameptr.add(namelen).write(0); // zero termination
-			}
-
 			buf_offset = next_dirent;
-			ret = buf_offset;
 		}
-		Ok(ret)
+		Ok(buf_offset)
 	}
 
 	/// lseek for a directory entry is the equivalent for seekdir on linux. But on Hermit this is
@@ -602,6 +583,12 @@ impl VfsNode for MemDirectory {
 					let directory = inner.get(component).ok_or(Errno::Badf)?;
 					return directory.traverse_readdir(rest);
 				};
+
+				if !path.is_empty() {
+					let inner = self.inner.read().await;
+					let directory = inner.get(path).ok_or(Errno::Badf)?;
+					return directory.traverse_readdir("");
+				}
 
 				let mut entries = Vec::new();
 				for name in self.inner.read().await.keys() {
