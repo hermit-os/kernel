@@ -1,6 +1,5 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ffi::c_void;
 use core::future;
 use core::task::Poll;
 
@@ -490,7 +489,7 @@ impl ObjectInterface for Socket {
 		.await
 	}
 
-	async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: *mut c_void) -> io::Result<()> {
+	async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: &mut [u8]) -> io::Result<()> {
 		crate::socket_handle_ioctl!(self, cmd, argp)
 	}
 }

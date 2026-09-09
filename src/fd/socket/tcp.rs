@@ -1,6 +1,6 @@
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
-use core::ffi::{c_int, c_void};
+use core::ffi::c_int;
 use core::future;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
@@ -493,7 +493,7 @@ impl ObjectInterface for Socket {
 		Ok(())
 	}
 
-	async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: *mut c_void) -> io::Result<()> {
+	async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: &mut [u8]) -> io::Result<()> {
 		crate::socket_handle_ioctl!(self, cmd, argp)
 	}
 }

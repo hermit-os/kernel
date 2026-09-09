@@ -653,8 +653,14 @@ pub unsafe extern "C" fn sys_writev(fd: RawFd, iov: *const iovec, iovcnt: usize)
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn sys_ioctl(fd: RawFd, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
-	let cmd = cmd as u32;
-	let cmd = IoCtlCall::from_bits(cmd);
+	let cmd = IoCtlCall::from_bits(cmd as u32);
+	let call_size = cmd.call_size() as usize;
+
+	let argp = unsafe {
+		// SAFETY: the function is unsafe already
+		// Safety is upheld by caller, who ensures `argp`'s sizes matches the value specified as part of the ioctl number
+		slice::from_raw_parts_mut(argp.cast::<u8>(), call_size)
+	};
 
 	let obj = get_object(fd);
 	obj.map_or_else(

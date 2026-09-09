@@ -487,11 +487,7 @@ pub(crate) trait ObjectInterface: Sync + Send {
 	}
 
 	/// Handles an ioctl
-	async fn handle_ioctl(
-		&mut self,
-		_cmd: IoCtlCall,
-		_argp: *mut core::ffi::c_void,
-	) -> io::Result<()> {
+	async fn handle_ioctl(&mut self, _cmd: IoCtlCall, _argp: &mut [u8]) -> io::Result<()> {
 		Err(Errno::Nosys)
 	}
 

@@ -30,7 +30,8 @@ macro_rules! socket_handle_ioctl {
 		const FIONBIO: IoCtlCall = IoCtlCall::from_bits(0x8008_667eu32);
 
 		if $cmd == FIONBIO {
-			let value = unsafe { *($argp as *const i32) };
+			let value: [u8; 4] = [$argp[0], $argp[1], $argp[2], $argp[3]];
+			let value = i32::from_ne_bytes(value);
 			let status_flags = if value != 0 {
 				StatusFlags::O_NONBLOCK
 			} else {
