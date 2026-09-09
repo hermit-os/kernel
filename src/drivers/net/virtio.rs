@@ -910,11 +910,12 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 						.features
 						.contains(virtio::net::F::CTRL_VQ)
 						.then_some(num_vqs);
+					let wake_network_waker: fn() = wake_network_waker;
 					caps_coll.com_cfg.register_msix_vectors(
 						msix_table,
 						handlers,
 						crate::executor::network::network_device_configuration_handler,
-						[(recv_vqs, wake_network_waker as fn())].into_iter(),
+						[(recv_vqs, wake_network_waker)].into_iter(),
 						send_vqs.chain(ctrl_vq),
 					);
 				}
