@@ -93,8 +93,23 @@ pub(crate) fn claim_initial_heap() {
 pub(crate) fn init() {
 	use crate::arch::mm::paging;
 
+	#[cfg(not(target_arch = "riscv64"))]
 	unsafe {
-		arch::mm::init();
+		paging::init();
+	}
+	unsafe {
+		FrameAlloc::init();
+	}
+	#[cfg(target_arch = "x86_64")]
+	unsafe {
+		paging::log_page_tables();
+	}
+	unsafe {
+		PageAlloc::init();
+	}
+	#[cfg(target_arch = "riscv64")]
+	unsafe {
+		paging::enable_page_table();
 	}
 
 	let total_mem = physicalmem::total_memory_size();
