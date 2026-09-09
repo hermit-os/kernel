@@ -17,7 +17,7 @@ use crate::fd::socket::vsock;
 use crate::fd::stdio::{ConsoleStderr, ConsoleStdin, ConsoleStdout};
 #[cfg(feature = "uhyve")]
 use crate::fd::stdio::{UhyveStderr, UhyveStdin, UhyveStdout};
-use crate::fd::{AccessPermission, ObjectInterface, PollEvent, StatusFlags};
+use crate::fd::{AccessPermission, IoCtlCall, ObjectInterface, PollEvent, StatusFlags};
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use crate::fd::{Endpoint, ListenEndpoint, SocketOption, SocketOptionValue};
 use crate::fs::mem::{MemDirectoryInterface, RamFileInterface, RomFileInterface};
@@ -173,6 +173,8 @@ impl ObjectInterface for Fd {
 			async fn truncate(&self, _size: usize) -> io::Result<()>;
 			async fn chmod(&self, _access_permission: AccessPermission) -> io::Result<()>;
 			async fn isatty(&self) -> io::Result<bool>;
+			async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: &mut [u8]) -> io::Result<()>;
+
 		}
 	}
 }

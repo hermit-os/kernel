@@ -16,7 +16,7 @@ use crate::errno::Errno;
 use crate::executor::block_on;
 use crate::executor::network::{Handle, NIC, wake_network_waker};
 use crate::fd::{
-	self, Endpoint, Fd, ListenEndpoint, ObjectInterface, PollEvent, SocketOption,
+	self, Endpoint, Fd, IoCtlCall, ListenEndpoint, ObjectInterface, PollEvent, SocketOption,
 	SocketOptionSocket, SocketOptionTcp, SocketOptionValue,
 };
 use crate::io;
@@ -491,6 +491,10 @@ impl ObjectInterface for Socket {
 	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
 		self.is_nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
 		Ok(())
+	}
+
+	async fn handle_ioctl(&mut self, cmd: IoCtlCall, argp: &mut [u8]) -> io::Result<()> {
+		crate::socket_handle_ioctl!(self, cmd, argp)
 	}
 }
 
