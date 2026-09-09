@@ -154,6 +154,12 @@ pub(crate) enum SocketOptionSocket {
 	SoSndbuf = 0x1001,
 	#[doc(alias = "SO_RCVBUF")]
 	SoRcvbuf = 0x1002,
+	#[doc(alias = "SO_SNDTIMEO")]
+	SoSndtimeo = 0x1005,
+	#[doc(alias = "SO_RCVTIMEO")]
+	SoRcvtimeo = 0x1006,
+	#[doc(alias = "SO_ERROR")]
+	SoError = 0x1007,
 }
 
 pub(crate) type RawFd = i32;
