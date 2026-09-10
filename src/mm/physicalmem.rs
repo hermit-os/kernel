@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use core::alloc::AllocError;
 use core::fmt;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -145,12 +146,6 @@ unsafe fn detect_from_start_info() {
 		unsafe {
 			FrameAlloc::deallocate(range);
 		}
-		#[cfg(feature = "hermit-entry")]
-		unsafe {
-			map_frame_range(range);
-		}
-		TOTAL_MEMORY.fetch_add(range.len().get(), Ordering::Relaxed);
-		debug!("Claimed physical memory: {range:#x?}");
 	}
 
 	let reserve = |reservation: PageRange| {
@@ -192,6 +187,18 @@ unsafe fn detect_from_start_info() {
 		let fdt_region = PageRange::containing(fdt_start, fdt_end).unwrap();
 		reserve(fdt_region);
 	}
+
+	let frame_ranges = PHYSICAL_FREE_LIST.lock().iter().collect::<Vec<_>>();
+
+	for frame_range in frame_ranges {
+		#[cfg(feature = "hermit-entry")]
+		unsafe {
+			map_frame_range(frame_range);
+		}
+		debug!("Claimed physical memory: {frame_range:#x?}");
+	}
+
+	TOTAL_MEMORY.store(PHYSICAL_FREE_LIST.lock().free_space(), Ordering::Relaxed);
 }
 
 unsafe fn init() {
