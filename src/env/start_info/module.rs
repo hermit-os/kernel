@@ -50,7 +50,7 @@ impl Module {
 	}
 
 	/// The module as a readable slice.
-	#[expect(dead_code)]
+	#[cfg_attr(not(feature = "initramfs"), expect(dead_code))]
 	pub fn as_slice(&self) -> &'static [u8] {
 		// We require this to be identity-mapped at boot time for now.
 		let virt_addr = self.phys_addr;
