@@ -18,11 +18,7 @@ pub extern "C" fn sys_alloc(size: usize, align: usize) -> *mut u8 {
 		return ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
-	let ptr = unsafe { ALLOCATOR.alloc(layout) };
-
-	trace!("__sys_alloc: allocate memory at {ptr:p} (size {size:#x}, align {align:#x})");
-
-	ptr
+	unsafe { ALLOCATOR.alloc(layout) }
 }
 
 #[hermit_macro::system]
@@ -36,11 +32,7 @@ pub extern "C" fn sys_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
 		return ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
-	let ptr = unsafe { ALLOCATOR.alloc_zeroed(layout) };
-
-	trace!("__sys_alloc_zeroed: allocate memory at {ptr:p} (size {size:#x}, align {align:#x})");
-
-	ptr
+	unsafe { ALLOCATOR.alloc_zeroed(layout) }
 }
 
 #[hermit_macro::system]
@@ -52,11 +44,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 		return ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
-	let ptr = unsafe { ALLOCATOR.alloc(layout) };
-
-	trace!("__sys_malloc: allocate memory at {ptr:p} (size {size:#x}, align {align:#x})");
-
-	ptr
+	unsafe { ALLOCATOR.alloc(layout) }
 }
 
 /// Shrink or grow a block of memory to the given `new_size`. The block is described by the given
@@ -101,8 +89,6 @@ pub unsafe extern "C" fn sys_realloc(
 			debug!(
 				"__sys_realloc failed to resize ptr {ptr:p} with size {size:#x}, align {align:#x}, new_size {new_size:#x} !"
 			);
-		} else {
-			trace!("__sys_realloc: resized memory at {ptr:p}, new address {new_ptr:p}");
 		}
 		new_ptr
 	}
@@ -129,8 +115,6 @@ pub unsafe extern "C" fn sys_dealloc(ptr: *mut u8, size: usize, align: usize) {
 			);
 			debug_assert!(layout_res.is_err(), "__sys_dealloc error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_dealloc error: size cannot be 0");
-		} else {
-			trace!("sys_free: deallocate memory at {ptr:p} (size {size:#x})");
 		}
 		let layout = layout_res.unwrap();
 		ALLOCATOR.dealloc(ptr, layout);
@@ -146,8 +130,6 @@ pub unsafe extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 			warn!("__sys_free called with size {size:#x}, align {align:#x} is an invalid layout!");
 			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
-		} else {
-			trace!("sys_free: deallocate memory at {ptr:p} (size {size:#x})");
 		}
 		let layout = layout_res.unwrap();
 		ALLOCATOR.dealloc(ptr, layout);
