@@ -1557,8 +1557,7 @@ dependencies = [
 [[package]]
 name = "riscv"
 version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e42cdafa0aa3f0f956b7993cace26de5dafff7bb4f2c5b1dcb2c3723f4267a4f"
+source = "git+https://github.com/rust-embedded/riscv?branch=master#ac863e802243fed2ff2ee754a92bf1aef2889bcf"
 dependencies = [
  "critical-section",
  "embedded-hal",
@@ -1570,8 +1569,7 @@ dependencies = [
 [[package]]
 name = "riscv-macros"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ad9f6dda08d90d091bc0743967cab369b8fe39ea74b26783ba2ca5c0ce39e86"
+source = "git+https://github.com/rust-embedded/riscv?branch=master#ac863e802243fed2ff2ee754a92bf1aef2889bcf"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1581,8 +1579,7 @@ dependencies = [
 [[package]]
 name = "riscv-types"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3f2ad9f15a07f4a0e1677124f9120ce7e83ab7e1ca7186af0ca9da529b62e80"
+source = "git+https://github.com/rust-embedded/riscv?branch=master#ac863e802243fed2ff2ee754a92bf1aef2889bcf"
 
 [[package]]
 name = "rustix"
