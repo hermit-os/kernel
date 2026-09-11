@@ -285,22 +285,32 @@ fn external_handler() {
 	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
-	// Claim interrupt
-	let Some(irq) = EXTERNAL_INTERRUPT_CONTROLLER
-		.lock()
-		.as_mut()
-		.unwrap()
-		.claim_interrupt()
-	else {
-		return;
+	let irq = {
+		#[cfg(not(feature = "riscv-plic"))]
+		if let Some(msi) = msi_controller() {
+			msi.claim_interrupt()
+		} else {
+			EXTERNAL_INTERRUPT_CONTROLLER
+				.lock()
+				.as_mut()
+				.unwrap()
+				.claim_interrupt()
+		}
+
+		#[cfg(feature = "riscv-plic")]
+		EXTERNAL_INTERRUPT_CONTROLLER
+			.lock()
+			.as_mut()
+			.unwrap()
+			.claim_interrupt()
 	};
+	let Some(irq) = irq else { return };
 
-	let irq = irq.get();
-	warn!("External INT: {irq}");
-
+	let irq_number = irq.get();
+	debug!("External INT: {irq_number}");
 	if let Some(handlers) = INTERRUPT_HANDLERS.get()
-		&& let Ok(irq) = u8::try_from(irq)
-		&& let Some(queue) = handlers.get(&irq)
+		&& let Ok(irq_u8) = u8::try_from(irq_number)
+		&& let Some(queue) = handlers.get(&irq_u8)
 	{
 		for handler in queue.iter() {
 			handler();
@@ -309,11 +319,22 @@ fn external_handler() {
 
 	crate::executor::run();
 
+	#[cfg(not(feature = "riscv-plic"))]
+	if let Some(msi) = msi_controller() {
+		msi.complete_interrupt(irq);
+	} else {
+		EXTERNAL_INTERRUPT_CONTROLLER
+			.lock()
+			.as_mut()
+			.unwrap()
+			.complete_interrupt(irq_number);
+	}
+	#[cfg(feature = "riscv-plic")]
 	EXTERNAL_INTERRUPT_CONTROLLER
 		.lock()
 		.as_mut()
 		.unwrap()
-		.complete_interrupt(irq);
+		.complete_interrupt(irq_number);
 
 	core_scheduler().reschedule();
 }
