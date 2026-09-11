@@ -11,6 +11,7 @@ use pci_types::{
 	PciHeader,
 };
 
+use crate::arch::riscv64::kernel::interrupts::EXTERNAL_INTERRUPT_CONTROLLER;
 use crate::arch::riscv64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::drivers::pci::{PCI_DEVICES, PciDevice};
 use crate::env::{self, FdtStartInfo};
@@ -229,7 +230,7 @@ impl PciSpaceAllocator {
 
 /// Iterator for PCI Device Enumeration
 ///
-/// Reference: PCI LOCAL BUS SPECIFICATION, REV. 3.0, Chapter 6
+// Reference: PCI LOCAL BUS SPECIFICATION, REV. 3.0, Chapter 6
 struct PciDeviceIterator<'a, T: ConfigRegionAccess> {
 	access: &'a T,
 	max_bus: u16,
@@ -352,11 +353,27 @@ fn detect_interrupt_line(
 		(value_slice, residual_slice) = residual_slice.split_at(size_of::<u32>());
 		let interrupt_parent_phandle = u32::from_be_bytes(value_slice.try_into().unwrap());
 		let interrupt_parent_node = fdt.find_phandle(interrupt_parent_phandle).unwrap();
-		assert!(interrupt_parent_node.cell_sizes().address_cells == 0);
-		assert!(interrupt_parent_node.interrupt_cells().unwrap() == 1);
-
-		(value_slice, residual_slice) = residual_slice.split_at(size_of::<u32>());
-		let parent_interrupt_specifier = u32::from_be_bytes(value_slice.try_into().unwrap());
+		let parent_interrupt_cells = interrupt_parent_node.interrupt_cells().unwrap();
+		let (irq_number, source_mode) = match parent_interrupt_cells {
+			1 => {
+				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u32>());
+				let irq_number = u32::from_be_bytes(value_slice.try_into().unwrap());
+				(irq_number, 0)
+			}
+			2 => {
+				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u32>());
+				let irq_number = u32::from_be_bytes(value_slice.try_into().unwrap());
+				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u32>());
+				let source_mode = u32::from_be_bytes(value_slice.try_into().unwrap());
+				(irq_number, source_mode)
+			}
+			_ => panic!("Unsupported #interrupt-cells value: {parent_interrupt_cells}"),
+		};
+		EXTERNAL_INTERRUPT_CONTROLLER
+			.lock()
+			.as_mut()
+			.unwrap()
+			.set_interrupt_source_mode(irq_number.try_into().unwrap(), source_mode.into());
 
 		let key_interrupt_map = [
 			_child_unit_address_high & interrupt_map_mask[0],
@@ -371,7 +388,7 @@ fn detect_interrupt_line(
 			u32::from(interrupt_pin),
 		];
 		if key_interrupt_map == key_device {
-			return Some(InterruptLine::try_from(parent_interrupt_specifier).unwrap());
+			return Some(InterruptLine::try_from(irq_number).unwrap());
 		}
 	}
 

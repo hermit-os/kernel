@@ -52,12 +52,7 @@ pub(crate) fn network_handler() {
 	}
 }
 
-#[cfg(all(
-	feature = "virtio-net",
-	not(feature = "rtl8139"),
-	feature = "pci",
-	target_arch = "x86_64"
-))]
+#[cfg(all(feature = "virtio-net", not(feature = "rtl8139"), msix_supported))]
 pub(crate) fn network_device_configuration_handler() {
 	if let Ok(nic) = NIC.lock().as_nic_mut() {
 		nic.handle_device_configuration_interrupt();
@@ -404,12 +399,7 @@ impl<'a> NetworkInterface<'a> {
 		self.get_inner_device().handle_interrupt();
 	}
 
-	#[cfg(all(
-		feature = "virtio-net",
-		not(feature = "rtl8139"),
-		feature = "pci",
-		target_arch = "x86_64"
-	))]
+	#[cfg(all(feature = "virtio-net", not(feature = "rtl8139"), msix_supported))]
 	fn handle_device_configuration_interrupt(&mut self) {
 		self.get_inner_device()
 			.handle_device_configuration_interrupt();

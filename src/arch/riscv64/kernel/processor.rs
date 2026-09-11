@@ -3,8 +3,7 @@ use core::num::NonZeroU64;
 
 use riscv::register::{sie, sstatus, time};
 
-use crate::arch::kernel::{HARTS_AVAILABLE, get_timebase_freq};
-use crate::scheduler::CoreId;
+use crate::arch::kernel::get_timebase_freq;
 
 /// Current FPU state. Saved at context switch when changed
 #[repr(C, packed)]
@@ -285,10 +284,4 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 	let next_time = wt * u64::from(get_frequency());
 
 	sbi_rt::set_timer(next_time);
-}
-
-pub fn wakeup_core(core_to_wakeup: CoreId) {
-	let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
-	debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
-	sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
 }
