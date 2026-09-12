@@ -126,8 +126,7 @@ mod control_registers_access {
 pub trait ControlRegisters<'a>: control_registers_access::ControlRegistersAccess<'a> {
 	fn negotiate_features<DF>(self, driver_features: DF) -> DF
 	where
-		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
-		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>;
+		DF: FeatureBits + fmt::Debug + Copy;
 }
 
 impl<'a, T> ControlRegisters<'a> for T
@@ -136,8 +135,7 @@ where
 {
 	fn negotiate_features<DF>(self, driver_features: DF) -> DF
 	where
-		DF: FeatureBits + From<virtio::F> + AsRef<virtio::F> + AsMut<virtio::F> + fmt::Debug + Copy,
-		virtio::F: From<DF> + AsRef<DF> + AsMut<DF>,
+		DF: FeatureBits + fmt::Debug + Copy,
 	{
 		let device_features = DF::from(self.read_device_features());
 		info!("device_features = {device_features:?}");

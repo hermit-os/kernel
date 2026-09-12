@@ -568,7 +568,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index)
+				.with_vq_notif_config_data(self.index)
 				.with_next_off(next_idx.desc_event_off())
 				.with_next_wrap(next_idx.desc_event_wrap());
 			self.notif_ctrl.notify_dev(notification_data);
@@ -603,7 +603,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() | notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index)
+				.with_vq_notif_config_data(self.index)
 				.with_next_off(next_idx.desc_event_off())
 				.with_next_wrap(next_idx.desc_event_wrap());
 			self.notif_ctrl.notify_dev(notification_data);
@@ -634,7 +634,7 @@ impl Virtq for PackedVq {
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index)
+				.with_vq_notif_config_data(self.index)
 				.with_next_off(next_idx.desc_event_off())
 				.with_next_wrap(next_idx.desc_event_wrap());
 			self.notif_ctrl.notify_dev(notification_data);
