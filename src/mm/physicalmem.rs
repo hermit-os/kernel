@@ -13,7 +13,6 @@ use crate::arch::mm::paging::{self, HugePageSize, LargePageSize, PageSize};
 use crate::env::{self, MemmapType, StartInfo};
 use crate::mm::device_alloc::DeviceAlloc;
 use crate::mm::{PageRangeAllocator, PageRangeBox};
-use crate::page_range_ext::PageRangeExt;
 
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
