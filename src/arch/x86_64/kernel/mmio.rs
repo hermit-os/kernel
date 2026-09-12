@@ -41,8 +41,6 @@ use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
-pub const MAGIC_VALUE: u32 = 0x7472_6976;
-
 static MMIO_DRIVERS: InitCell<Vec<MmioDriver>> = InitCell::new(Vec::new());
 
 #[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
@@ -89,10 +87,10 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 	// Verify the first register value to find out if this is really an MMIO magic-value.
 	let mmio = unsafe { VolatileRef::new(NonNull::new(ptr.cast::<DeviceRegisters>()).unwrap()) };
 
-	let magic = mmio.as_ptr().magic_value().read().to_ne();
+	let magic = mmio.as_ptr().magic_value().read();
 	let version = mmio.as_ptr().version().read().to_ne();
 
-	if magic != MAGIC_VALUE {
+	if magic != virtio::mmio::MAGIC_VALUE {
 		trace!("It's not a MMIO-device at {mmio:p}");
 		return None;
 	}
