@@ -178,7 +178,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			// Map bar into RW^X virtual memory
 			let physical_address = address;
 			let virtual_address =
-				crate::mm::map(PhysAddr::new(physical_address), size, true, true, no_cache);
+				crate::mm::device_map(PhysAddr::new(physical_address), size, true, true, no_cache);
 
 			Some((virtual_address, size))
 		})

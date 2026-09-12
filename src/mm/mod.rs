@@ -298,7 +298,7 @@ pub(crate) fn print_information() {
 
 /// Maps a given physical address and size in virtual space and returns address.
 #[cfg(feature = "pci")]
-pub(crate) fn map(
+pub(crate) fn device_map(
 	physical_address: PhysAddr,
 	size: usize,
 	writable: bool,
