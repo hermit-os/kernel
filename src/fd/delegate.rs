@@ -7,6 +7,7 @@ use core::mem::MaybeUninit;
 use delegate::delegate;
 
 use crate::fd::eventfd::EventFd;
+use crate::fd::null_file::NullFile;
 use crate::fd::random_file::RandomFile;
 #[cfg(feature = "tcp")]
 use crate::fd::socket::tcp;
@@ -57,6 +58,7 @@ pub(crate) enum Fd {
 	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
 	RandomFile(RandomFile),
+	NullFile(NullFile),
 }
 
 macro_rules! fd_from {
@@ -105,6 +107,7 @@ fd_from! {
 	#[cfg(feature = "uhyve")]
 	UhyveFileHandle(UhyveFileHandle),
 	RandomFile(RandomFile),
+	NullFile(NullFile),
 }
 
 impl ObjectInterface for Fd {
@@ -137,6 +140,7 @@ impl ObjectInterface for Fd {
 			#[cfg(feature = "uhyve")]
 			Self::UhyveFileHandle(fd) => fd,
 			Self::RandomFile(fd) => fd,
+			Self::NullFile(fd) => fd,
 		} {
 			async fn poll(&self, event: PollEvent) -> io::Result<PollEvent>;
 			async fn read(&self, buf: &mut [u8]) -> io::Result<usize>;
