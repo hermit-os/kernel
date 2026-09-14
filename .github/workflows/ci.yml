@@ -2,6 +2,22 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - "src/**"
+      - "hermit-builtins/**"
+      - "hermit-macro/**"
+      - "xtask/**"
+      - "tests/**"
+      - "build.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - "deny.toml"
+      - "clippy.toml"
+      - "rustfmt.toml"
+      - "typos.toml"
+      - ".github/workflows/ci.yml"
   merge_group:
 
 env:

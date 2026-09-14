@@ -2,9 +2,21 @@ name: Benchmark
 
 on:
   pull_request:
+    paths: &code-paths
+      - "src/**"
+      - "hermit-builtins/**"
+      - "hermit-macro/**"
+      - "build.rs"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/**"
+      - ".github/benchmarks/**"
+      - ".github/workflows/benchmark.yml"
   push:
     branches:
       - main
+    paths: *code-paths
 
 env:
   GH_TOKEN: ${{ github.token }}
