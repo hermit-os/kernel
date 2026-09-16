@@ -29,52 +29,50 @@ jobs:
           command: check ${{ matrix.checks }}
 
   clippy:
-    name: Clippy
+    name: Clippy (${{ matrix.arch }})
     runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-unknown-none
+            features: tcp,rtl8139
+            exclude-features: gem-net,virtio-net
+          - arch: aarch64
+            target: aarch64-unknown-none-softfloat
+            features: tcp,rtl8139
+            exclude-features: gem-net,virtio-net
+          - arch: riscv64
+            target: riscv64gc-unknown-none-elf
+            features: tcp,gem-net
+            exclude-features: rtl8139,virtio-net
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
       - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64gc-unknown-none-elf
+      - run: rustup target add ${{ matrix.target }}
       - run: rustup component add clippy
       - name: cargo clippy
         run: |
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target x86_64-unknown-none --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target x86_64-unknown-none --no-default-features
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target aarch64-unknown-none-softfloat --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target aarch64-unknown-none-softfloat --no-default-features
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target riscv64gc-unknown-none-elf --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target riscv64gc-unknown-none-elf --no-default-features
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target ${{ matrix.target }} --all-targets
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target ${{ matrix.target }} --no-default-features
       - name: cargo clippy (hermit-builtins)
+        if: matrix.arch == 'x86_64'
         run: cargo clippy --target x86_64-unknown-hermit -Zbuild-std=core
         working-directory: hermit-builtins
-      - run: cargo clippy --package xtask
-      - name: cargo hack clippy (x86_64)
+      - name: cargo clippy (xtask)
+        if: matrix.arch == 'x86_64'
+        run: cargo clippy --package xtask
+      - name: cargo hack clippy
         run: |
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,virtio-net --features tcp,rtl8139
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
-      - name: cargo hack clippy (aarch64)
-        run: |
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features tcp,rtl8139
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
-      - name: cargo hack clippy (riscv64)
-        run: |
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features rtl8139,virtio-net --features tcp,gem-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features rtl8139,virtio-net --features pci,tcp,gem-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features gem-net,rtl8139 --features tcp,virtio-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features ${{ matrix.exclude-features }} --features ${{ matrix.features }}
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features ${{ matrix.exclude-features }} --features pci,${{ matrix.features }}
 
   format:
     name: Format
