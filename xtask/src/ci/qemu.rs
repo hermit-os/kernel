@@ -1,5 +1,5 @@
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::from_utf8;
@@ -16,11 +16,20 @@ use xshell::cmd;
 use crate::arch::Arch;
 use crate::ci;
 
-const DEFAULT_GUEST_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 3));
-const DEFAULT_GUEST_PREFIX_LEN: u8 = 24;
-const DEFAULT_GUEST_GATEWAY: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 1));
-const DEFAULT_GUEST_DNS0: IpAddr = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
-const DEFAULT_GUEST_DNS1: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+const DEFAULT_GUEST_IPV4: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 3));
+const DEFAULT_GUEST_IPV6: IpAddr =
+	IpAddr::V6(Ipv6Addr::new(0xfdfb, 0x5494, 0x2d56, 0, 0, 0, 0, 0x3));
+const DEFAULT_GUEST_IPV4_PREFIX_LEN: u8 = 24;
+const DEFAULT_GUEST_IPV6_PREFIX_LEN: u8 = 48;
+const DEFAULT_GUEST_IPV4_GATEWAY: IpAddr = IpAddr::V4(Ipv4Addr::new(10, 0, 5, 1));
+const DEFAULT_GUEST_IPV6_GATEWAY: IpAddr =
+	IpAddr::V6(Ipv6Addr::new(0xfdfb, 0x5494, 0x2d56, 0, 0, 0, 0, 0x1));
+const DEFAULT_GUEST_IPV4_DNS0: IpAddr = IpAddr::V4(Ipv4Addr::new(9, 9, 9, 9));
+const DEFAULT_GUEST_IPV4_DNS1: IpAddr = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+const DEFAULT_GUEST_IPV6_DNS0: IpAddr =
+	IpAddr::V6(Ipv6Addr::new(0x2620, 0xfe, 0, 0, 0, 0, 0, 0xfe));
+const DEFAULT_GUEST_IPV6_DNS1: IpAddr =
+	IpAddr::V6(Ipv6Addr::new(0x2606, 0x4700, 0x4700, 0, 0, 0, 0, 0x1111));
 
 /// Run image on QEMU.
 #[derive(Args)]
@@ -580,7 +589,10 @@ impl Qemu {
 		}
 		if self.tap {
 			args.push(format!(
-				"ip={DEFAULT_GUEST_IP}/{DEFAULT_GUEST_PREFIX_LEN}:{DEFAULT_GUEST_GATEWAY}::::{DEFAULT_GUEST_DNS0}:{DEFAULT_GUEST_DNS1}"
+				"ip={DEFAULT_GUEST_IPV4}/{DEFAULT_GUEST_IPV4_PREFIX_LEN}:{DEFAULT_GUEST_IPV4_GATEWAY}::::{DEFAULT_GUEST_IPV4_DNS0}:{DEFAULT_GUEST_IPV4_DNS1}"
+			));
+			args.push(format!(
+				"ip=[{DEFAULT_GUEST_IPV6}]/{DEFAULT_GUEST_IPV6_PREFIX_LEN}:[{DEFAULT_GUEST_IPV6_GATEWAY}]::::[{DEFAULT_GUEST_IPV6_DNS0}]:[{DEFAULT_GUEST_IPV6_DNS1}]"
 			));
 		}
 		args
@@ -606,8 +618,10 @@ impl Qemu {
 	}
 
 	fn guest_ip(&self) -> IpAddr {
+		// FIXME: We want to also test IPv6, but the current test setup is not really
+		// suitable for dual-stack
 		if self.tap {
-			DEFAULT_GUEST_IP
+			DEFAULT_GUEST_IPV4
 		} else {
 			Ipv4Addr::LOCALHOST.into()
 		}
@@ -716,7 +730,11 @@ fn test_vsock_server() -> Result<()> {
 
 fn test_http_server(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let url = format!("http://{guest_ip}:9975");
+	let url = if guest_ip.is_ipv4() {
+		format!("http://{guest_ip}:9975")
+	} else {
+		format!("http://[{guest_ip}]:9975")
+	};
 	eprintln!("[CI] GET {url}");
 	let body = ureq::get(url)
 		.config()
@@ -732,7 +750,11 @@ fn test_http_server(guest_ip: IpAddr) -> Result<()> {
 
 fn test_httpd(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let url = format!("http://{guest_ip}:9975");
+	let url = if guest_ip.is_ipv4() {
+		format!("http://{guest_ip}:9975")
+	} else {
+		format!("http://[{guest_ip}]:9975")
+	};
 	eprintln!("[CI] GET {url}");
 	let body = ureq::get(url)
 		.config()
