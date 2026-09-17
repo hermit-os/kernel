@@ -223,9 +223,11 @@ jobs:
           $HOME/.local/bin/firecracker --version
           echo "FIRECRACKER=$HOME/.local/bin/firecracker" >> "$GITHUB_ENV"
         if: matrix.arch == 'x86_64'
-      - run: |
-          cargo +stable install --locked uhyve
-          echo "UHYVE=$CARGO_HOME/bin/uhyve" >> "$GITHUB_ENV"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: uhyve
+        if: matrix.arch == 'x86_64'
+      - run: echo "UHYVE=$CARGO_HOME/bin/uhyve" >> "$GITHUB_ENV"
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
       - uses: taiki-e/install-action@cargo-careful
