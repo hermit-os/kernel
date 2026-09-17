@@ -51,12 +51,13 @@
 //!
 //! - **`HERMIT_MTU`** — Sets the *maximum transmission unit* (MTU). Defaults to `1500`.
 //! - **`HERMIT_MRG_RXBUF_SIZE`** — Sets the receive buffer size. Useful for testing receive buffer merging of virtio-net devices when the feature `VIRTIO_NET_F_MRG_RXBUF` is negotiated. Defaults to unset.
-//! - **`HERMIT_IP`** — Sets the IPv4 address. Defaults to `10.0.5.3`.
-//! - **`HERMIT_GATEWAY`** — Sets the gateway IPv4 address. Defaults to `10.0.5.1`. Is only used when DHCP is not successful.
-//! - **`HERMIT_MASK`** — Sets the network mask. Defaults to `255.255.255.0`. Is only used when DHCP is not successful.
-//! - **`HERMIT_DNS1`** — Sets the first DNS server. Defaults to `9.9.9.9`. Is only used when DHCP is not successful.
-//! - **`HERMIT_DNS2`** — Sets the second DNS server. Defaults to `1.1.1.1`. Is only used when DHCP is not successful.
 //! - **`HERMIT_PCAP_PATH`** — Sets the packet capture file path. Defaults to `/root/`. See the `write-pcap-file` feature for details.
+//!
+//! IP address, gateway and DNS are configured via the `ip=` command-line parameter for the kernel and do not have a default value:
+//!
+//! - `ip=none` or `ip=off` do not configure a network interface.
+//! - `ip=dhcp` uses DHCPv4 for configuring the network interface.
+//! - `ip=10.0.5.3/24:10.0.5.1::::1.1.1.1:1.0.0.1` would configure the static IP address `10.0.5.3`, set the gateway as `10.0.5.1` and configure two DNS servers.
 //!
 //! ## Output environment variables
 //!
