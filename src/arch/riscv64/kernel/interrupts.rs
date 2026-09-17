@@ -262,7 +262,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 
 /// Handles external interrupts
 fn external_handler() {
-	use crate::arch::kernel::core_local::core_scheduler;
+	use crate::arch::kernel::core_local::{core_id, core_scheduler};
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	// Claim interrupt
@@ -290,7 +290,11 @@ fn external_handler() {
 				handler();
 			}
 		}
-		crate::executor::run();
+		if core_id() == 0 {
+			crate::executor::run();
+		} else {
+			crate::arch::kernel::wakeup_core(0);
+		}
 
 		core_scheduler().reschedule();
 
