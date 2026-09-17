@@ -1,7 +1,7 @@
-use core::net::Ipv4Addr;
+use core::net::{AddrParseError, IpAddr, Ipv4Addr, Ipv6Addr};
 use core::{fmt, str};
 
-use smoltcp::wire::{IpCidr, Ipv4Cidr};
+use smoltcp::wire::IpCidr;
 
 /// IP configuration as passed via ip= to the kernel commandline.
 ///
@@ -19,10 +19,57 @@ pub struct IpConfig {
 	// device is omitted
 	// autoconf is omitted
 	#[cfg(feature = "dns")]
-	pub dns0: Option<Ipv4Addr>,
+	pub dns0: Option<IpAddr>,
 	#[cfg(feature = "dns")]
-	pub dns1: Option<Ipv4Addr>,
+	pub dns1: Option<IpAddr>,
 	// ntp0 is omitted
+}
+
+// Tiny helper method that lets us split the parameter list by all colons that
+// are not within brackets (i.e. not part of an IPv6 address).
+fn split_outside_brackets(s: &str) -> impl Iterator<Item = &str> {
+	let mut in_brackets = false;
+	let mut start = 0;
+	let mut finished = false;
+
+	core::iter::from_fn(move || {
+		if finished {
+			return None;
+		}
+
+		for (i, c) in s[start..].char_indices() {
+			match c {
+				'[' => in_brackets = true,
+				']' => in_brackets = false,
+				':' if !in_brackets => {
+					let end = start + i;
+					let part = &s[start..end];
+					start = end + 1;
+					return Some(part);
+				}
+				_ => {}
+			}
+		}
+
+		finished = true;
+
+		Some(&s[start..])
+	})
+}
+
+// Helper method to parse an IP address that is either a plain IPv4 address or
+// an IPv6 address enclosed in [].
+fn parse_ip(input: &str) -> Result<IpAddr, AddrParseError> {
+	// Check if it is enclosed in []
+	if input.starts_with('[') && input.ends_with(']') {
+		// Then attempt to parse it as an IPv6 address
+		return input[1..input.len() - 1]
+			.parse::<Ipv6Addr>()
+			.map(IpAddr::from);
+	}
+
+	// Try to parse it as an IPv4 address
+	input.parse::<Ipv4Addr>().map(IpAddr::from)
 }
 
 impl TryFrom<&str> for IpConfig {
@@ -30,7 +77,7 @@ impl TryFrom<&str> for IpConfig {
 
 	fn try_from(value: &str) -> Result<Self, Self::Error> {
 		let mut ret = Self::default();
-		let mut parts = value.split(':');
+		let mut parts = split_outside_brackets(value);
 
 		// The IP configuration is mandatory
 		ret.ip_and_gateway = IpAddrConfig::parse_from_parts(&mut parts)?;
@@ -53,7 +100,7 @@ impl TryFrom<&str> for IpConfig {
 		};
 		#[cfg(feature = "dns")]
 		if !dns0_ip_str.is_empty() {
-			ret.dns0 = Some(dns0_ip_str.parse().map_err(|_| Self::Error::InvalidDns)?);
+			ret.dns0 = Some(parse_ip(dns0_ip_str).map_err(|_| Self::Error::InvalidDns)?);
 		}
 		#[cfg(not(feature = "dns"))]
 		if !dns0_ip_str.is_empty() {
@@ -65,7 +112,7 @@ impl TryFrom<&str> for IpConfig {
 		};
 		#[cfg(feature = "dns")]
 		if !dns1_ip_str.is_empty() {
-			ret.dns1 = Some(dns1_ip_str.parse().map_err(|_| Self::Error::InvalidDns)?);
+			ret.dns1 = Some(parse_ip(dns1_ip_str).map_err(|_| Self::Error::InvalidDns)?);
 		}
 		#[cfg(not(feature = "dns"))]
 		if !dns1_ip_str.is_empty() {
@@ -120,12 +167,14 @@ pub enum IpAddrConfig {
 	Dhcp,
 	Static {
 		ip_and_netmask: IpCidr,
-		gateway: Option<Ipv4Addr>,
+		gateway: Option<IpAddr>,
 	},
 }
 
 impl IpAddrConfig {
-	fn parse_from_parts(parts: &mut str::Split<'_, char>) -> Result<Self, IpConfigParseError> {
+	fn parse_from_parts<'a>(
+		parts: &mut impl Iterator<Item = &'a str>,
+	) -> Result<Self, IpConfigParseError> {
 		let ip_or_type = parts.next().ok_or(IpConfigParseError::MissingIpOrMethod)?;
 
 		match ip_or_type {
@@ -143,28 +192,28 @@ impl IpAddrConfig {
 			// Anything else must be an IP with a prefix length
 			ip_and_prefix => {
 				let mut ip_and_prefix_parts = ip_and_prefix.split('/');
-				// We only support IPv4 for now
-				let ip = ip_and_prefix_parts
-					.next()
-					// split always has at least one item
-					.unwrap()
-					.parse()
-					.map_err(|_| IpConfigParseError::InvalidIp)?;
+				let ip = parse_ip(
+					ip_and_prefix_parts
+						.next()
+						// split always has at least one item
+						.unwrap(),
+				)
+				.map_err(|_| IpConfigParseError::InvalidIp)?;
 				let prefix_len = ip_and_prefix_parts
 					.next()
 					.ok_or(IpConfigParseError::MissingPrefixLen)?
 					.parse()
 					.map_err(|_| IpConfigParseError::InvalidPrefixLen)?;
+				let ip_and_netmask = IpCidr::new(ip.into(), prefix_len);
 
 				// The gateway is optional since you can technically not specify one
 				let gateway = parts.next().map_or(Ok(None), |ip_str| {
-					ip_str
-						.parse()
+					parse_ip(ip_str)
 						.map_or(Err(IpConfigParseError::InvalidGateway), |ip| Ok(Some(ip)))
 				})?;
 
 				Ok(Self::Static {
-					ip_and_netmask: IpCidr::from(Ipv4Cidr::new(ip, prefix_len)),
+					ip_and_netmask,
 					gateway,
 				})
 			}

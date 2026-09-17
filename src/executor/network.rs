@@ -94,7 +94,7 @@ type MaybeTracerDevice = cfg_select! {
 };
 
 pub(crate) struct NetworkInterface<'a> {
-	pub(super) iface: smoltcp::iface::Interface,
+	pub(crate) iface: smoltcp::iface::Interface,
 	pub(super) sockets: SocketSet<'a>,
 	pub(super) device: MaybeTracerDevice,
 	#[cfg(feature = "dhcpv4")]
