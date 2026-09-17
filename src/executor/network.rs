@@ -260,7 +260,17 @@ async fn network_run() {
 
 		if nic.poll_common(now) == PollResult::SocketStateChanged || cfg!(feature = "idle-poll") {
 			// Progress was made or we want to poll when idle.
+			// This will result in the task getting polled again the next
+			// time the kernel is entered
 			cx.waker().wake_by_ref();
+			// Enter polling mode temporarily
+			// FIXME: maybe not on every state change
+			nic.set_polling_mode(true);
+			// FIXME: Maybe use a different source
+			// Set a timer for 1 second to ensure we end up in the kernel
+			// again in the next second to poll the interface once
+			create_timer(Source::Network, 1000 * 1000);
+			trace!("Enabled polling mode and configured network interrupt for 1 second");
 		} else {
 			// Very likely no progress can be made, so set up a timer interrupt to wake the waker
 			NETWORK_WAKER.lock().register(cx.waker());
