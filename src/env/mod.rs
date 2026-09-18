@@ -31,7 +31,7 @@ struct Cli {
 	#[cfg(not(target_arch = "riscv64"))]
 	freq: Option<u16>,
 	#[cfg(feature = "net")]
-	default_interface_config: IpConfig,
+	interface_configs: Vec<IpConfig>,
 	env_vars: HashMap<Cow<'static, str>, String, RandomState>,
 	args: Vec<String>,
 	#[allow(dead_code)]
@@ -58,7 +58,7 @@ impl Default for Cli {
 		};
 
 		#[cfg(feature = "net")]
-		let mut default_interface_config = None;
+		let mut interface_configs = Vec::new();
 
 		let mut args = Vec::new();
 		let mut mmio = Vec::new();
@@ -74,16 +74,8 @@ impl Default for Cli {
 			if let Some(ip_config_str) = word.strip_prefix("ip=") {
 				#[cfg(feature = "net")]
 				match IpConfig::try_from(ip_config_str) {
-					Ok(config) => {
-						// This is the IP configuration for the default interface
-						// Once we support multiple interfaces, we need to support parsing multiple configurations
-						if default_interface_config.is_some() {
-							warn!("Duplicate ip= parameter passed, this is currently unsupported!");
-						}
-
-						default_interface_config = Some(config);
-					}
-					Err(e) => panic!("Could not parse configuration for default interface: {e}"),
+					Ok(config) => interface_configs.push(config),
+					Err(e) => panic!("Could not parse network interface configuration: {e}"),
 				}
 
 				#[cfg(not(feature = "net"))]
@@ -140,12 +132,18 @@ impl Default for Cli {
 			};
 		}
 
+		// If no interface config is supplied, use a default
+		#[cfg(feature = "net")]
+		if interface_configs.is_empty() {
+			interface_configs.push(IpConfig::default());
+		}
+
 		Self {
 			image_path,
 			#[cfg(not(target_arch = "riscv64"))]
 			freq,
 			#[cfg(feature = "net")]
-			default_interface_config: default_interface_config.unwrap_or_default(),
+			interface_configs,
 			env_vars,
 			args,
 			#[allow(dead_code)]
@@ -182,10 +180,10 @@ pub fn early_var(key: &str) -> Option<String> {
 	}
 }
 
-/// Returns the default interface IP configuration specified via ip=.
+/// Returns all interface IP configurations specified via ip=.
 #[cfg(feature = "net")]
-pub fn default_interface_config() -> IpConfig {
-	CLI.get().unwrap().default_interface_config
+pub fn interface_configs() -> &'static [IpConfig] {
+	CLI.get().unwrap().interface_configs.as_slice()
 }
 
 pub fn vars() -> Iter<'static, Cow<'static, str>, String> {
