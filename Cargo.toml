@@ -400,6 +400,7 @@ default-features = false
 features = [
 	"alloc",
 	"async",
+	"iface-max-addr-count-3",
 	"medium-ethernet",
 	"proto-ipv4",
 	"proto-ipv6",
