@@ -44,6 +44,8 @@ pub(crate) mod device_alloc;
 mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
+#[cfg(feature = "common-os")]
+pub(crate) mod vma;
 
 use core::alloc::Layout;
 use core::mem::MaybeUninit;
@@ -58,7 +60,11 @@ use talc::TalcLock;
 use talc::source::Manual;
 
 pub use self::page_range_alloc::{PageRangeAllocator, PageRangeBox};
+#[cfg(feature = "common-os")]
+pub use self::physicalmem::copy_page;
 pub use self::physicalmem::{FrameAlloc, FrameBox};
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use self::physicalmem::{frame_ref_dec, frame_ref_inc};
 pub use self::virtualmem::{PageAlloc, PageBox};
 use crate::arch;
 #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
@@ -110,6 +116,13 @@ pub(crate) fn init() {
 	#[cfg(target_arch = "riscv64")]
 	unsafe {
 		paging::enable_page_table();
+	}
+	#[cfg(all(target_arch = "riscv64", feature = "common-os"))]
+	{
+		paging::prepopulate_kernel_root();
+		crate::scheduler::BOOT_ROOT_PAGE_TABLE
+			.set(paging::kernel_root_page_table())
+			.unwrap();
 	}
 
 	let total_mem = physicalmem::total_memory_size();

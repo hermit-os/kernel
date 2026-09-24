@@ -81,7 +81,9 @@
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(not(any(feature = "common-os", feature = "nostd")), feature(linkage))]
+// `#[linkage = "weak"]` is used by the syscall table (common-os, all
+// architectures) and by `sys_errno_location` (unikernel).
+#![cfg_attr(not(feature = "nostd"), feature(linkage))]
 #![feature(linked_list_cursors)]
 #![cfg_attr(
 	any(target_arch = "aarch64", target_arch = "riscv64"),
@@ -121,7 +123,14 @@ mod macros;
 mod logging;
 
 pub mod arch;
-#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+#[cfg(all(
+	feature = "common-os",
+	any(
+		target_arch = "x86_64",
+		target_arch = "aarch64",
+		target_arch = "riscv64"
+	)
+))]
 pub mod common_os;
 pub mod config;
 pub mod console;
