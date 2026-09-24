@@ -1,15 +1,19 @@
 pub(crate) mod paging;
 
 #[cfg(feature = "common-os")]
-use memory_addresses::arch::x86_64::PhysAddr;
-#[cfg(feature = "common-os")]
-pub use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
-
+use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use paging::copy_kernel_stack_to;
 /// Copy the kernel stack pages of the current task to a new base address.
 #[cfg(feature = "common-os")]
 pub use paging::{clear_user_space, create_new_root_page_table, drop_user_space};
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub use paging::copy_kernel_stack_to;
+#[cfg(feature = "common-os")]
+pub use x86_64::structures::paging::{PageSize, Size4KiB as BasePageSize};
+
+#[cfg(feature = "common-os")]
+use crate::arch::mm::paging::{PageTableEntryFlags, PageTableEntryFlagsExt};
+#[cfg(feature = "common-os")]
+use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 /// Returns the physical address of the current task's root page table (PML4).
 #[allow(dead_code)]
@@ -220,4 +224,3 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 		thread_ptr
 	}
 }
-

@@ -214,13 +214,12 @@ pub fn halt() {
 	aarch64_cpu::asm::wfi();
 }
 
-/// Shutdown the system.
+/// Shutdown the system
 ///
 /// We try PSCI first, with semihosting as a fallback. Rationale:
 ///
-/// * **PSCI `SYSTEM_OFF`** is implemented by QEMU's `virt` machine for
-///   both `accel=tcg` and `accel=hvf`/`accel=kvm`, and by real-hardware
-///   firmware. It is the most portable shutdown primitive on AArch64.
+/// * **PSCI `SYSTEM_OFF`** is the most portable shutdown primitive
+///   on AArch64.
 ///
 /// * **AArch64 semihosting** uses `HLT #0xf000`. On `accel=tcg`, QEMU
 ///   intercepts that instruction and exits with the supplied code.
@@ -228,8 +227,7 @@ pub fn halt() {
 ///   as an UNDEF exception (`EC=0x0`) because hardware virtualisation
 ///   does not trap it — so semihosting is *not* a viable shutdown
 ///   primitive in a virtualised guest. We therefore use it only as a
-///   fallback for the `_exit(error_code)` semantic when PSCI declines
-///   to terminate (e.g. on platforms without a PSCI dispatcher).
+///   fallback.
 #[allow(unused_variables)]
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");

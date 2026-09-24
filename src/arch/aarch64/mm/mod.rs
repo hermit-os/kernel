@@ -22,7 +22,7 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 
 	use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 	#[cfg(feature = "fork")]
-	use crate::mm::frame_ref_inc;
+	use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator, frame_ref_inc};
 
 	let tcb_size = 2 * size_of::<*mut ()>();
 	let total = (tcb_size + template.size).align_up(BasePageSize::SIZE as usize);
@@ -61,4 +61,3 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	// Variant I: TPIDR_EL0 is the start of the TCB block.
 	virt_addr.as_u64()
 }
-

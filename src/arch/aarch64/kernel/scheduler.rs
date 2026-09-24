@@ -451,7 +451,7 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 		if cur_pt != new_pt {
 			use aarch64_cpu::asm::barrier::{ISH, ISHST, dsb};
 
-			// Memory-barrier sequence per ARM ARM D8.13.2: DSB ISHST
+			// Memory-barrier sequence per ARM D8.13.2: DSB ISHST
 			// ensures all prior PT updates are observable; the MSR
 			// installs the new translation base; ISB flushes the
 			// pipeline so subsequent instructions use the new table.
@@ -472,14 +472,13 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 
 /// Prepare the child's stack and root page table for a fork(), AArch64.
 ///
-/// Mirrors the role of the x86_64 `prepare_fork_child_stack`, but does not
-/// need a naked-asm child-entry stub: when the SVC trapped into EL1, the
-/// hardware-supplied `trap_entry` macro pushed a complete `State` struct
-/// at the top of the parent's kernel stack. Copying the kernel stack page
-/// for the child duplicates that `State`; if we then patch `x0 = 0` in
-/// the child's copy, the existing trap-exit machinery will `eret` it
-/// straight back to the user-space instruction after the SVC with the
-/// fork-returns-zero contract satisfied.
+/// Mirrors the role of the x86_64 `prepare_fork_child_stack`: when the
+/// SVC trapped into EL1, the hardware-supplied `trap_entry` macro pushed
+/// a complete `State` struct at the top of the parent's kernel stack.
+/// Copying the kernel stack page for the child duplicates that `State`;
+/// if we then patch `x0 = 0` in the child's copy, the existing trap-exit
+/// machinery will `eret` it straight back to the user-space instruction
+/// after the SVC with the fork-returns-zero contract satisfied.
 ///
 /// Operations performed (in order; ordering matters):
 /// 1. Copy the parent's kernel stack pages into `new_stack_addr`. This

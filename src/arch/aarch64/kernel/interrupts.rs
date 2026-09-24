@@ -30,9 +30,8 @@ const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
 /// Synthetic IRQ slot used for page-fault accounting. The number does not
-/// correspond to any GIC interrupt — it is purely a bookkeeping ID for
-/// `IrqStatistics` so the page-fault count shows up in `print_statistics`
-/// alongside the real interrupts.
+/// correspond to any GIC interrupt. It is purely a bookkeeping ID for
+/// `IrqStatistics`.
 #[cfg(feature = "common-os")]
 pub(crate) const PAGE_FAULT_IRQ: u8 = 14;
 
@@ -200,8 +199,6 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 	// from the user stack. The trap frame we crafted in
 	// `Task::create_user_stack_frame` zeroed every register, so LR=0
 	// and the implicit branch lands at PC 0 — there is no code there.
-	// Mirror the x86_64 page-fault handler and treat this as a clean
-	// thread exit instead of crashing the whole process.
 	#[cfg(feature = "common-os")]
 	if ec == ESR_EL1::EC::Value::InstrAbortLowerEL && ELR_EL1.get() == 0 {
 		use crate::scheduler::PerCoreSchedulerExt;
