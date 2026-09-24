@@ -1,8 +1,6 @@
 use alloc::vec::Vec;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
-#[cfg(feature = "acpi")]
-use core::fmt;
 use core::hint::spin_loop;
 use core::{cmp, ptr};
 
@@ -15,8 +13,6 @@ use x86_64::registers::control::Cr3;
 use x86_64::registers::model_specific::Msr;
 
 use super::interrupts::IDT;
-#[cfg(feature = "acpi")]
-use crate::arch::kernel::acpi;
 #[cfg(feature = "smp")]
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::{interrupts, processor};
@@ -194,63 +190,6 @@ struct ApicIoEntry {
 	addr: u32,
 }
 
-#[cfg(feature = "acpi")]
-#[repr(C, packed)]
-struct AcpiMadtHeader {
-	local_apic_address: u32,
-	flags: u32,
-}
-
-#[cfg(feature = "acpi")]
-#[repr(C, packed)]
-struct AcpiMadtRecordHeader {
-	entry_type: u8,
-	length: u8,
-}
-
-#[cfg(feature = "acpi")]
-#[repr(C, packed)]
-struct ProcessorLocalApicRecord {
-	acpi_processor_id: u8,
-	apic_id: u8,
-	flags: u32,
-}
-
-#[cfg(feature = "acpi")]
-impl fmt::Display for ProcessorLocalApicRecord {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{{ acpi_processor_id: {}, ", { self.acpi_processor_id })?;
-		write!(f, "apic_id: {}, ", { self.apic_id })?;
-		write!(f, "flags: {} }}", { self.flags })?;
-		Ok(())
-	}
-}
-
-#[cfg(feature = "acpi")]
-const CPU_FLAG_ENABLED: u32 = 1 << 0;
-
-#[cfg(feature = "acpi")]
-#[repr(C, packed)]
-struct IoApicRecord {
-	id: u8,
-	reserved: u8,
-	address: u32,
-	global_system_interrupt_base: u32,
-}
-
-#[cfg(feature = "acpi")]
-impl fmt::Display for IoApicRecord {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{{ id: {}, ", { self.id })?;
-		write!(f, "reserved: {}, ", { self.reserved })?;
-		write!(f, "address: {:#X}, ", { self.address })?;
-		write!(f, "global_system_interrupt_base: {} }}", {
-			self.global_system_interrupt_base
-		})?;
-		Ok(())
-	}
-}
-
 #[cfg(feature = "smp")]
 extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	swapgs(&stack_frame);
@@ -315,51 +254,30 @@ fn init_ioapic_address(phys_addr: PhysAddr) {
 
 #[cfg(feature = "acpi")]
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
-	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
-	let madt = acpi::get_madt().ok_or(())?;
-	let madt_header =
-		unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtHeader>(madt.table_start_address())) };
+	use acpi::sdt::madt::{Madt, MadtEntry};
 
-	// Jump to the actual table entries (after the table header).
-	let mut current_address = madt.table_start_address() + size_of::<AcpiMadtHeader>();
+	use crate::acpi::MultipleApicFlags;
 
-	// Loop through all table entries.
-	while current_address < madt.table_end_address() {
-		let record =
-			unsafe { &*(ptr::with_exposed_provenance::<AcpiMadtRecordHeader>(current_address)) };
-		current_address += size_of::<AcpiMadtRecordHeader>();
+	let madt = crate::acpi::find_table::<Madt>().ok_or(())?;
 
-		match record.entry_type {
-			0 => {
-				// Processor Local APIC
-				let processor_local_apic_record = unsafe {
-					&*(ptr::with_exposed_provenance::<ProcessorLocalApicRecord>(current_address))
-				};
-				debug!("Found Processor Local APIC record: {processor_local_apic_record}");
-
-				if processor_local_apic_record.flags & CPU_FLAG_ENABLED > 0 {
-					add_local_apic_id(processor_local_apic_record.apic_id);
+	for entry in madt.get().entries() {
+		debug!("MADT entry: {entry:?}");
+		match entry {
+			MadtEntry::LocalApic(local_apic_entry) => {
+				let flags = MultipleApicFlags::from_bits_retain(local_apic_entry.flags);
+				if flags.contains(MultipleApicFlags::PCAT_COMPAT) {
+					add_local_apic_id(local_apic_entry.apic_id);
 				}
 			}
-			1 => {
-				// I/O APIC
-				let ioapic_record =
-					unsafe { &*(ptr::with_exposed_provenance::<IoApicRecord>(current_address)) };
-				debug!("Found I/O APIC record: {ioapic_record}");
-
-				init_ioapic_address(PhysAddr::new(ioapic_record.address.into()));
+			MadtEntry::IoApic(io_apic_entry) => {
+				let paddr = PhysAddr::new(io_apic_entry.io_apic_address.into());
+				init_ioapic_address(paddr);
 			}
-			_ => {
-				// Just ignore other entries for now.
-			}
+			_ => (),
 		}
-
-		current_address += record.length as usize - size_of::<AcpiMadtRecordHeader>();
 	}
 
-	// Successfully derived all information from the MADT.
-	// Return the physical address of the Local APIC.
-	Ok(PhysAddr::new(madt_header.local_apic_address.into()))
+	Ok(PhysAddr::new(madt.get().local_apic_address.into()))
 }
 
 /// Search Floating Pointer Structure of the Multiprocessing Specification

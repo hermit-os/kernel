@@ -15,7 +15,7 @@ const CONFIG_DATA: Port<u32> = Port::new(0xcfc);
 pub enum PciConfigRegion {
 	Pci(LegacyPciConfigRegion),
 	#[cfg(feature = "acpi")]
-	PciE(pcie::McfgEntry),
+	PciE(pcie::McfgConfigRegion),
 }
 
 impl ConfigRegionAccess for PciConfigRegion {
@@ -123,13 +123,11 @@ fn scan_bus(bus_range: impl IntoIterator<Item = u8> + Debug, pci_config: PciConf
 
 #[cfg(feature = "acpi")]
 mod pcie {
-	use core::{ptr, slice};
-
+	use acpi::sdt::mcfg::{Mcfg, McfgEntry};
 	use memory_addresses::{PhysAddr, VirtAddr};
 	use pci_types::{ConfigRegionAccess, PciAddress};
 
 	use super::{PCI_MAX_BUS_NUMBER, PciConfigRegion};
-	use crate::arch::kernel::acpi;
 	use crate::arch::mm::paging::{
 		self, LargePageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 	};
@@ -138,39 +136,28 @@ mod pcie {
 	use crate::mm::device_alloc::DeviceAlloc;
 
 	pub fn init_pcie() -> bool {
-		let Some(table) = acpi::get_mcfg_table() else {
+		let Some(mcfg) = crate::acpi::find_table::<Mcfg>() else {
 			return false;
 		};
 
-		let start = ptr::with_exposed_provenance::<McfgEntry>(table.table_start_address() + 8);
-		let len = table.table_byte_len() / size_of::<McfgEntry>();
-		let entries = unsafe { slice::from_raw_parts(start, len) };
+		let mut found = false;
 
-		if entries.is_empty() {
-			return false;
-		}
-
-		for entry in entries {
-			if !entry.is_base_address_valid() {
+		for mcfg_entry in mcfg.entries() {
+			if !McfgConfigRegion(*mcfg_entry).is_base_address_valid() {
 				continue;
 			}
-			init_pcie_bus(entry);
+			init_pcie_bus(mcfg_entry);
+			found = true;
 		}
 
-		true
+		found
 	}
 
 	#[derive(Clone, Copy, Debug)]
-	#[repr(C, packed)]
-	pub struct McfgEntry {
-		pub base_address: u64,
-		pub pci_segment_group: u16,
-		pub bus_number_start: u8,
-		pub bus_number_end: u8,
-		_reserved: u32,
-	}
+	#[repr(transparent)]
+	pub struct McfgConfigRegion(McfgEntry);
 
-	impl McfgEntry {
+	impl McfgConfigRegion {
 		pub fn pci_config_space_address(
 			&self,
 			bus_number: u8,
@@ -178,7 +165,7 @@ mod pcie {
 			function: u8,
 		) -> PhysAddr {
 			PhysAddr::new(
-				self.base_address
+				self.0.base_address
 					+ ((u64::from(bus_number) << 20)
 						| ((u64::from(device) & 0x1f) << 15)
 						| ((u64::from(function) & 0x7) << 12)),
@@ -209,11 +196,11 @@ mod pcie {
 		}
 	}
 
-	impl ConfigRegionAccess for McfgEntry {
+	impl ConfigRegionAccess for McfgConfigRegion {
 		unsafe fn read(&self, address: PciAddress, offset: u16) -> u32 {
-			assert!(address.segment() == self.pci_segment_group);
-			assert!(address.bus() >= self.bus_number_start);
-			assert!(address.bus() <= self.bus_number_end);
+			assert!(address.segment() == self.0.pci_segment_group);
+			assert!(address.bus() >= self.0.bus_number_start);
+			assert!(address.bus() <= self.0.bus_number_end);
 
 			let phys_addr =
 				self.pci_config_space_address(address.bus(), address.device(), address.function())
@@ -224,9 +211,9 @@ mod pcie {
 		}
 
 		unsafe fn write(&self, address: PciAddress, offset: u16, value: u32) {
-			assert!(address.segment() == self.pci_segment_group);
-			assert!(address.bus() >= self.bus_number_start);
-			assert!(address.bus() <= self.bus_number_end);
+			assert!(address.segment() == self.0.pci_segment_group);
+			assert!(address.bus() >= self.0.bus_number_start);
+			assert!(address.bus() <= self.0.bus_number_end);
 
 			let phys_addr =
 				self.pci_config_space_address(address.bus(), address.device(), address.function())
@@ -259,7 +246,7 @@ mod pcie {
 
 		super::scan_bus(
 			bus_entry.bus_number_start..=bus_entry.bus_number_end,
-			PciConfigRegion::PciE(*bus_entry),
+			PciConfigRegion::PciE(McfgConfigRegion(*bus_entry)),
 		);
 	}
 }
