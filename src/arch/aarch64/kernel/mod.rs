@@ -190,18 +190,14 @@ pub(crate) const USER_START: VirtAddr = VirtAddr::new(0x0100_0000_0000);
 // Place the user stack at the top of the L0 slot that backs USER_START
 // (L0[USER_L0_INDEX] = L0[2], spanning 0x0100_0000_0000..0x0180_0000_0000).
 // Only this slot is deep-copied by `create_new_root_page_table`; every
-// other L0 entry is inherited verbatim from the parent, so a stack
-// outside L0[2] would share its L1/L2/L3 tables with the spawning
-// process and the first `paging::map` call from the child would
-// silently overwrite the parent's stack mapping.
+// other L0 entry is inherited verbatim from the parent.
 #[cfg(feature = "common-os")]
 const USER_STACK: VirtAddr = VirtAddr::new(0x0180_0000_0000 - USER_STACK_SIZE as u64);
 #[cfg(feature = "common-os")]
 const USER_STACK_SIZE: usize = 0x8000;
 
 /// Map the user-mode binary into the address space and run the ELF-loader
-/// closure against the freshly-mapped pages. Mirrors the x86_64 sibling
-/// (`arch::x86_64::kernel::load_application`).
+/// closure against the freshly-mapped pages.
 #[allow(clippy::result_unit_err)]
 #[cfg(feature = "common-os")]
 pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
@@ -275,7 +271,7 @@ where
 		// the TCB; the TLS image follows immediately after a two-word reserved
 		// area (`tcb[0] = dtv`, `tcb[1]` reserved). We allocate the TCB plus
 		// the TLS image as one contiguous block so a single `msr tpidr_el0`
-		// suffices and the layout matches what musl/glibc expect.
+		// suffices.
 		let tcb_size = 2 * size_of::<*mut ()>();
 		let tls_offset = tcb_size;
 
@@ -343,10 +339,7 @@ where
 		Ok(())
 	} else {
 		// No TLS in the freshly loaded image. We must still reset TPIDR_EL0
-		// because an `exec()` re-enters this path: a stale value left over
-		// from the previous program's TLS would otherwise persist across
-		// the image swap and corrupt unrelated user-mode state on the
-		// next thread-local access.
+		// because an `exec()` re-enters this path.
 		set_user_tpidr_el0(0);
 		func(code_slice, None)?;
 		Ok(())
@@ -354,15 +347,6 @@ where
 }
 
 /// Set the user-space `TPIDR_EL0` value for the *current* task.
-///
-/// The naive `msr tpidr_el0, xN` only changes the live register. When this
-/// helper is called from inside an SVC handler — as it always is on the
-/// `load_application` / `exec` path — `trap_exit` would later overwrite
-/// `tpidr_el0` again from the value `trap_entry` saved in the on-stack
-/// `State` struct (the trap-frame's `tpidr_el0` field). To make the new
-/// thread pointer survive the trap-exit we therefore *also* update the
-/// saved trap frame in place. The `State` lives at the very top of the
-/// current kernel stack (`stack_top - MARKER_SIZE - sizeof(State)`).
 #[cfg(feature = "common-os")]
 fn set_user_tpidr_el0(value: u64) {
 	use crate::arch::aarch64::kernel::scheduler::{State, TaskStacks};
@@ -391,10 +375,6 @@ fn set_user_tpidr_el0(value: u64) {
 }
 
 /// Drop into EL0, executing the freshly-loaded user binary at `entry_point`.
-///
-/// `iretq` on x86_64 corresponds to `eret` on AArch64: ELR_EL1 supplies the
-/// new PC, SPSR_EL1 the new PSTATE (mode bits select EL0t), and SP_EL0 the
-/// user stack. Per AAPCS64, `argc` lives in `x0` and `argv` in `x1`.
 #[cfg(feature = "common-os")]
 pub unsafe fn jump_to_user_land(
 	entry_point: usize,
@@ -509,7 +489,7 @@ pub unsafe fn jump_to_user_land(
 			"mov x14, xzr", "mov x15, xzr", "mov x16, xzr", "mov x17, xzr",
 			"mov x18, xzr", "mov x29, xzr", "mov x30, xzr",
 			"eret",
-			// Speculation barrier behind ERET (Spectre-v1 mitigation).
+			// Speculation barrier behind ERET
 			"dsb nsh",
 			"isb",
 			sp   = in(reg) stack_pointer,

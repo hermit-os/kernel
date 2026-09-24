@@ -68,16 +68,6 @@ const SYSNO_DUP: usize = 27;
 const SYSNO_IOCTL: usize = 28;
 /// number of the system call `poll`
 const SYSNO_POLL: usize = 29;
-/// number of the system call `notify`
-const SYSNO_NOTIFY: usize = 30;
-/// number of the system call `add_queue`
-const SYSNO_ADD_QUEUE: usize = 31;
-/// number of the system call `wait`
-const SYSNO_WAIT: usize = 32;
-/// number of the system call `init_queue`
-const SYSNO_INIT_QUEUE: usize = 33;
-/// number of the system call `destroy_queue`
-const SYSNO_DESTROY_QUEUE: usize = 34;
 /// number of the system call `block_current_task`
 const SYSNO_BLOCK_CURRENT_TASK: usize = 35;
 /// number of the system call `block_current_task_with_timeout`
@@ -239,11 +229,6 @@ impl SyscallTable {
 		table.handle[SYSNO_DUP] = sys_dup as *const _;
 		table.handle[SYSNO_IOCTL] = sys_ioctl as *const _;
 		table.handle[SYSNO_POLL] = sys_poll as *const _;
-		table.handle[SYSNO_NOTIFY] = sys_notify as *const _;
-		table.handle[SYSNO_ADD_QUEUE] = sys_add_queue as *const _;
-		table.handle[SYSNO_WAIT] = sys_wait as *const _;
-		table.handle[SYSNO_INIT_QUEUE] = sys_init_queue as *const _;
-		table.handle[SYSNO_DESTROY_QUEUE] = sys_destroy_queue as *const _;
 		table.handle[SYSNO_BLOCK_CURRENT_TASK] = sys_block_current_task as *const _;
 		table.handle[SYSNO_BLOCK_CURRENT_TASK_WITH_TIMEOUT] =
 			sys_block_current_task_with_timeout as *const _;

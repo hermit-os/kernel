@@ -156,10 +156,6 @@ impl PageTableEntryFlags {
 	}
 }
 
-/// Extension trait that mirrors the x86_64 `PageTableEntryFlagsExt` API for the
-/// common-os layer. On AArch64 the `PageTableEntryFlags` type already carries
-/// the same helpers as inherent methods; this trait exists only so that
-/// architecture-independent callers can be written in terms of a single API.
 #[cfg(feature = "common-os")]
 #[allow(dead_code)]
 pub trait PageTableEntryFlagsExt {
@@ -822,15 +818,10 @@ fn flush_tlb_one(virt: VirtAddr) {
 ///
 /// The page-fault handler in `interrupts::do_sync` calls this on a write
 /// permission-fault (`ESR_EL1.EC = 0x24/0x25`, `ISS.WnR = 1`,
-/// `ISS.DFSC = 0b001100..0b001111` — permission fault). Returns `true` if
+/// `ISS.DFSC = 0b001100..0b001111` - permission fault). Returns `true` if
 /// the fault was a genuine COW miss and was handled (the trapped
 /// instruction will be retried after `eret`); `false` if the entry is not
 /// a COW page (caller falls back to the abort path).
-///
-/// Behavior mirrors `arch::x86_64::mm::paging::page_fault_handler`'s COW
-/// branch: drop this task's COW reference, then either flip the existing
-/// frame back to writable if we were the last sharer, or allocate a new
-/// frame and copy the contents.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 	use aarch64_cpu::registers::TTBR0_EL1;
@@ -891,13 +882,13 @@ pub fn do_cow_fault(faulting_addr: VirtAddr) -> bool {
 
 	let last_ref = crate::mm::frame_ref_dec(src_phys);
 	if last_ref {
-		// We were the only remaining sharer — keep the frame, flip flags.
+		// We were the only remaining sharer - keep the frame, flip flags.
 		// frame_ref_dec removed the entry; reinstate it so future forks
 		// of this task continue to refcount correctly.
 		crate::mm::frame_ref_inc(src_phys);
 		l3_entry.set(src_phys, new_flags);
 	} else {
-		// Other tasks still share the source frame — give this task its
+		// Other tasks still share the source frame - give this task its
 		// own copy so it can write without disturbing the others.
 		let new_phys = crate::mm::copy_page(src_phys);
 		crate::mm::frame_ref_inc(new_phys);
@@ -933,8 +924,8 @@ pub fn mark_user_pages_copy_on_write() {
 				l0_entry.address().as_usize(),
 			)
 		};
-		for l1_idx in 0..512usize {
-			let l1_entry = &mut l1.entries[l1_idx];
+
+		for l1_entry in &mut l1.entries {
 			if !l1_entry.is_present() {
 				continue;
 			}
@@ -947,8 +938,8 @@ pub fn mark_user_pages_copy_on_write() {
 					l1_entry.address().as_usize(),
 				)
 			};
-			for l2_idx in 0..512usize {
-				let l2_entry = &mut l2.entries[l2_idx];
+
+			for l2_entry in &mut l2.entries {
 				if !l2_entry.is_present() {
 					continue;
 				}
@@ -961,8 +952,8 @@ pub fn mark_user_pages_copy_on_write() {
 						l2_entry.address().as_usize(),
 					)
 				};
-				for l3_idx in 0..512usize {
-					let l3_entry = &mut l3.entries[l3_idx];
+
+				for l3_entry in &mut l3.entries {
 					let flags = PageTableEntryFlags::from_bits_truncate(
 						l3_entry.physical_address_and_flags,
 					);
@@ -1025,8 +1016,7 @@ fn clear_l0(l0_phys: usize) {
 		let l1_phys = l0_entry.address().as_usize();
 		let l1 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L1Table>>(l1_phys) };
 
-		for l1_idx in 0..512usize {
-			let l1_entry = &mut l1.entries[l1_idx];
+		for l1_entry in &mut l1.entries {
 			if !l1_entry.is_present() {
 				continue;
 			}
@@ -1038,8 +1028,7 @@ fn clear_l0(l0_phys: usize) {
 			let l2 =
 				unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L2Table>>(l2_phys) };
 
-			for l2_idx in 0..512usize {
-				let l2_entry = &mut l2.entries[l2_idx];
+			for l2_entry in &mut l2.entries {
 				if !l2_entry.is_present() {
 					continue;
 				}
@@ -1052,8 +1041,7 @@ fn clear_l0(l0_phys: usize) {
 					&mut *ptr::with_exposed_provenance_mut::<PageTable<L3Table>>(l3_phys)
 				};
 
-				for l3_idx in 0..512usize {
-					let l3_entry = &mut l3.entries[l3_idx];
+				for l3_entry in &mut l3.entries {
 					let flags = PageTableEntryFlags::from_bits_truncate(
 						l3_entry.physical_address_and_flags,
 					);
@@ -1158,12 +1146,12 @@ pub fn create_new_root_page_table() -> usize {
 		unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable<L0Table>>(new_l0_phys) };
 
 	// Inherit every L0 entry from the current (kernel) page table EXCEPT
-	// the user-space slot — that one is left empty so the new task starts
+	// the user-space slot - that one is left empty so the new task starts
 	// with a clean user address space.
 	//
 	// Sharing the kernel L0 entries means we share the L1/L2/L3 tables
 	// underneath. That is intentional: kernel mappings (kernel image,
-	// heap, per-CPU stacks, …) are global and must
+	// heap, per-CPU stacks,...) are global and must
 	// stay in sync across every common-os task. Without sharing, the
 	// kernel would lose access to its own heap as soon as the scheduler
 	// switches TTBR0_EL1 to this task's PT.

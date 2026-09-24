@@ -480,7 +480,7 @@ pub(crate) struct TlsTemplate {
 pub(crate) struct Task {
 	/// The ID of this context
 	pub id: TaskId,
-	/// Process ID — equal to `id` for the main thread of a process, and
+	/// Process ID  is equal to `id` for the main thread of a process, and
 	/// inherited from the spawning thread for every additional thread of
 	/// the same process. After `fork()` the child's `pid` equals the
 	/// child's `id` (it becomes its own process).
@@ -705,11 +705,11 @@ impl Task {
 	}
 }
 
-impl Drop for Task {
+/*impl Drop for Task {
 	fn drop(&mut self) {
-		//debug!("Drop task {}", self.id);
+		debug!("Drop task {}", self.id);
 	}
-}
+}*/
 
 struct BlockedTask {
 	task: Rc<RefCell<Task>>,

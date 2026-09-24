@@ -752,7 +752,7 @@ pub(crate) fn kernel_root_page_table() -> usize {
 /// root *by value* into each new process root, so both share the same L1
 /// subtables. Kernel mappings created later (task stacks, TLS blocks,
 /// heap growth) modify those shared subtables and become visible in all
-/// address spaces — but only if the root slot already existed at copy
+/// address spaces - but only if the root slot already existed at copy
 /// time. Allocating all 64 kernel L1 tables up front closes that hole.
 #[cfg(feature = "common-os")]
 pub fn prepopulate_kernel_root() {

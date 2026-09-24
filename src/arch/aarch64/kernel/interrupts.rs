@@ -30,9 +30,8 @@ const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
 /// Synthetic IRQ slot used for page-fault accounting. The number does not
-/// correspond to any GIC interrupt — it is purely a bookkeeping ID for
-/// `IrqStatistics` so the page-fault count shows up in `print_statistics`
-/// alongside the real interrupts.
+/// correspond to any GIC interrupt. It is purely a bookkeeping ID for
+/// `IrqStatistics`.
 #[cfg(feature = "common-os")]
 pub(crate) const PAGE_FAULT_IRQ: u8 = 14;
 
@@ -200,8 +199,6 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 	// from the user stack. The trap frame we crafted in
 	// `Task::create_user_stack_frame` zeroed every register, so LR=0
 	// and the implicit branch lands at PC 0 — there is no code there.
-	// Mirror the x86_64 page-fault handler and treat this as a clean
-	// thread exit instead of crashing the whole process.
 	#[cfg(feature = "common-os")]
 	if ec == ESR_EL1::EC::Value::InstrAbortLowerEL && ELR_EL1.get() == 0 {
 		use crate::scheduler::PerCoreSchedulerExt;
@@ -333,8 +330,7 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 }
 
 /// Convert the 6-bit DFSC (Data Fault Status Code) of `ESR_EL1.ISS` into
-/// a short human-readable label for diagnostics. Mapping per ARM ARM
-/// D24.2.45 (ESR_EL1, Data Abort).
+/// a short human-readable label for diagnostics.
 fn dfsc_kind(dfsc: u64) -> &'static str {
 	match dfsc {
 		0b00_0000..=0b00_0011 => "address size fault",
@@ -361,11 +357,10 @@ fn dfsc_kind(dfsc: u64) -> &'static str {
 ///   - return value in `x0`
 ///
 /// The handler entries in `SYSHANDLER_TABLE` are typed for the SystemV
-/// x86_64 ABI but are reachable just as well via the AAPCS64 ABI: in both
-/// cases the first six 64-bit args land in the first six argument
+/// x86_64 ABI: the first six 64-bit args land in the first six argument
 /// registers and the return value goes into the first return register.
 /// Registers in `state` were saved by `trap_entry` and are restored by
-/// `trap_exit` — writing back `state.x0` is what propagates the return
+/// `trap_exit` - writing back `state.x0` is what propagates the return
 /// value to user-space.
 #[cfg(feature = "common-os")]
 fn dispatch_svc64(state: &mut State) {

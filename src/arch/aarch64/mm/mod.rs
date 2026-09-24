@@ -5,8 +5,6 @@ pub use paging::{copy_current_root_page_table, copy_kernel_stack_to, prepare_mem
 #[cfg(feature = "common-os")]
 pub use paging::{create_new_root_page_table, drop_user_space};
 
-/// AArch64 sibling of the x86_64 [`allocate_thread_tls`].
-///
 /// Allocates a fresh user-accessible TLS region in the currently active
 /// (shared) root page table and returns the value to install in
 /// `TPIDR_EL0` for the new thread. AArch64 uses TLS Variant I: the
@@ -23,6 +21,8 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 	#[cfg(feature = "fork")]
 	use crate::mm::frame_ref_inc;
+	use crate::mm::page_range_alloc::PageRangeAllocator;
+	use crate::mm::{FrameAlloc, PageAlloc};
 
 	let tcb_size = 2 * size_of::<*mut ()>();
 	let total = (tcb_size + template.size).align_up(BasePageSize::SIZE as usize);
@@ -61,4 +61,3 @@ pub fn allocate_thread_tls(template: &crate::scheduler::task::TlsTemplate) -> u6
 	// Variant I: TPIDR_EL0 is the start of the TCB block.
 	virt_addr.as_u64()
 }
-

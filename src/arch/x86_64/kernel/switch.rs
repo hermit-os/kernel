@@ -221,26 +221,24 @@ pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new
 	);
 }
 
-// ── Fork support ─────────────────────────────────────────────────────────────
-
 /// Entry point for the child task after a fork.
 ///
 /// `switch_to_task` restores the saved context and `ret`s here. Instead
 /// of unwinding the whole kernel call-chain (which is fragile), we jump
 /// directly to user space, mirroring `syscall_handler`'s return path:
-///   • The 14 user-side registers (`rcx`, `rdx`, `rbx`, `rbp`, `rsi`,
+///   - The 14 user-side registers (`rcx`, `rdx`, `rbx`, `rbp`, `rsi`,
 ///     `rdi`, `r8`..`r15`) sit at the top of the child's kernel stack
 ///     because `copy_kernel_stack_to` copied them across when the
 ///     parent ran `prepare_fork_child_stack`. `rcx` holds the user
 ///     RIP and `r11` the user RFLAGS — the `syscall` instruction
 ///     stashed them there before `syscall_handler` even started.
-///   • The user RSP for the child is in the unused MARKER_SIZE pad of
+///   - The user RSP for the child is in the unused MARKER_SIZE pad of
 ///     the kernel stack at `kernel_top - 8`.
 ///     `prepare_fork_child_stack` writes it there from the per-CPU
 ///     `user_stack` slot at fork time, so we get a snapshot that
 ///     survives any other syscall taking place between the parent's
 ///     fork() and the child being scheduled.
-///   • `rax = 0` (fork returns 0 in the child), `swapgs` restores the
+///   - `rax = 0` (fork returns 0 in the child), `swapgs` restores the
 ///     user GS base, `sysretq` jumps back to user mode.
 #[cfg(all(feature = "common-os", feature = "fork"))]
 #[unsafe(naked)]

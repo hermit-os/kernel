@@ -283,8 +283,8 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 }
 
 /// Handles external interrupts
-fn external_handler() {
-	use crate::arch::kernel::core_local::{core_id, core_scheduler};
+pub(crate) fn external_handler() {
+	use crate::arch::kernel::core_local::core_scheduler;
 	use crate::scheduler::PerCoreSchedulerExt;
 
 	// Claim interrupt

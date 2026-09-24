@@ -207,8 +207,7 @@ static USER_TP: hermit_sync::InterruptTicketMutex<
 > = hermit_sync::InterruptTicketMutex::new(alloc::collections::BTreeMap::new());
 
 /// Map the user-mode binary into the address space and run the ELF-loader
-/// closure against the freshly-mapped pages. Mirrors the x86_64/aarch64
-/// siblings.
+/// closure against the freshly-mapped pages.
 #[allow(clippy::result_unit_err)]
 #[cfg(feature = "common-os")]
 pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
@@ -439,9 +438,8 @@ pub(crate) fn do_user_page_fault(fault_addr: usize) -> bool {
 
 /// Dispatch a system call raised by `ecall` from user mode.
 ///
-/// Calling convention (mirrors the x86_64/aarch64 variants of this
-/// kernel): syscall number in `a7`, up to six arguments in `a0`..`a5`,
-/// return value in `a0`.
+/// Calling convention: syscall number in `a7`, up to six
+/// arguments in `a0`..`a5`, return value in `a0`.
 #[cfg(feature = "common-os")]
 fn dispatch_syscall(ctx: &mut trapframe::UserContext) {
 	use crate::syscalls::table::{NO_SYSCALLS, SYSHANDLER_TABLE, sys_invalid};

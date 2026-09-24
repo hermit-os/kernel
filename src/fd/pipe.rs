@@ -2,11 +2,10 @@
 //!
 //! A pipe couples a read end ([`PipeReceiver`]) and a write end
 //! ([`PipeSender`]) through a single shared, bounded ring buffer. Both
-//! endpoints are ordinary [`Fd`](crate::fd::Fd) objects, so they live
+//! endpoints are ordinary `Fd` objects, so they live
 //! behind `Arc<RwLock<Fd>>` in the per-process object map. `fork` clones
 //! those `Arc`s into the child's object map, which means a pipe created
-//! before the fork is transparently shared between parent and child —
-//! the classic Unix way for two processes to communicate.
+//! before the fork is transparently shared between parent and child.
 //!
 //! Lifetime of the endpoints is tracked by the `Arc` refcount of the
 //! shared state: once the last reference to an endpoint is dropped, its

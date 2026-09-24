@@ -10,13 +10,13 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use x86_64::registers::control::{Cr0, Cr4};
 
 pub(crate) use self::apic::{set_oneshot_timer, wakeup_core};
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use self::switch::prepare_fork_child_stack;
 use crate::arch::x86_64::kernel::core_local::*;
 #[cfg(any(target_os = "none", feature = "uhyve"))]
 use crate::env;
 #[cfg(feature = "uhyve")]
 use crate::env::UhyveStartInfo;
-#[cfg(all(feature = "common-os", feature = "fork"))]
-pub use self::switch::prepare_fork_child_stack;
 
 #[cfg(feature = "acpi")]
 mod acpi;

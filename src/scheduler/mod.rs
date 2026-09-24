@@ -1360,11 +1360,10 @@ pub unsafe fn fork() -> TaskId {
 /// Fork the current task from its saved user-mode context (riscv64).
 ///
 /// On riscv64 the user-mode dispatcher (`user_loop`) owns the complete
-/// trap context, so — unlike the x86_64/aarch64 path — no kernel stack
-/// has to be cloned: the child gets a fresh kernel stack and re-enters
-/// user mode through its own `user_loop_resume`, seeded with a copy of
-/// the parent's `UserContext` in which `a0` (the fork return value) is
-/// set to 0.
+/// trap context, so no kernel stack has to be cloned: the child gets
+/// a fresh kernel stack and re-enters user mode through its own
+/// `user_loop_resume`, seeded with a copy of the parent's `UserContext`
+/// in which `a0` (the fork return value) is set to 0.
 ///
 /// Returns the child's `TaskId`; only the parent executes this function.
 #[cfg(all(target_arch = "riscv64", feature = "common-os", feature = "fork"))]

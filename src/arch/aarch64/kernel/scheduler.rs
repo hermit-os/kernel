@@ -158,9 +158,7 @@ impl TaskStacks {
 		// crafting argv during jump_to_user_land) and EL0 (the running
 		// thread), so it must carry USER_ACCESSIBLE. Without this, a
 		// freshly spawned user thread (`scheduler::spawn_thread`) faults
-		// as soon as it touches its own stack — TaskStacks::new is the
-		// only path that allocates a user stack outside the LOADER_START
-		// region, so the bug only manifests on the thread-spawn path.
+		// as soon as it touches its own stack.
 		#[cfg(feature = "common-os")]
 		let user_flags = {
 			let mut f = PageTableEntryFlags::empty();
@@ -284,12 +282,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-/*
- * https://fuchsia.dev/fuchsia-src/development/kernel/threads/tls and
- * and https://uclibc.org/docs/tls.pdf is used to understand variant 1
- * of the TLS implementations.
- */
-
 extern "C" fn thread_exit(status: i32) -> ! {
 	debug!("Exit thread with error code {status}!");
 	core_scheduler().exit(status)
@@ -317,11 +309,9 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 #[cfg(feature = "common-os")]
 impl Task {
 	/// Build the initial trap frame for a freshly spawned user-space
-	/// thread. Mirrors the role of the x86_64 sibling: when the scheduler
-	/// first picks this task, the standard `trap_exit` machinery pops the
-	/// `State` we craft here and `eret`s straight into ring 3 at
-	/// `func(arg)` on the new user stack — so no naked-asm "task_start_user"
-	/// trampoline is needed on AArch64.
+	/// thread. When the scheduler first picks this task, the standard
+	/// `trap_exit` machinery pops the `State` we craft here and `eret`s
+	/// straight into ring 3 at `func(arg)` on the new user stack.
 	///
 	/// `tls_thread_ptr` is the value that should be installed in
 	/// `TPIDR_EL0` for the new thread (the per-thread TLS thread pointer
@@ -339,18 +329,13 @@ impl Task {
 				- TaskStacks::MARKER_SIZE;
 			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
 
-			// Allocate space for the trap frame and zero it. Anything we
-			// don't touch below stays zero on entry to user space, which
-			// keeps any leftover kernel state out of EL0's general-purpose
-			// register file.
+			// Allocate space for the trap frame and zero it.
 			stack -= size_of::<State>();
 			let state = stack.as_mut_ptr::<State>();
 			state.cast::<u8>().write_bytes(0, size_of::<State>());
 
 			// Initial user stack: top of the user-stack region with the
-			// usual debug marker. AAPCS64 doesn't require any extra slop
-			// (no red zone, no shadow space), so the user starts at SP
-			// pointing at the byte immediately above the marker.
+			// usual debug marker.
 			self.user_stack_pointer = self.stacks.get_user_stack()
 				+ self.stacks.get_user_stack_size()
 				- TaskStacks::MARKER_SIZE;
@@ -435,11 +420,7 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 	// Switch TTBR0_EL1 to the new task's root page table when the address
 	// space changes between two `common-os` processes. The IRQ-driven
 	// context switch (see `start.s`) calls this helper after the scheduler
-	// has already promoted `current_task` to the new task; if we leave
-	// TTBR0_EL1 pointing at the previous process's table, the new task
-	// runs in the OLD address space — which becomes catastrophic the
-	// moment that task issues `clear_user_space` (it clears the wrong
-	// mapping) or its user code touches its own TLS.
+	// has already promoted `current_task` to the new task.
 	#[cfg(feature = "common-os")]
 	{
 		let new_pt = scheduler
@@ -451,7 +432,7 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 		if cur_pt != new_pt {
 			use aarch64_cpu::asm::barrier::{ISH, ISHST, dsb};
 
-			// Memory-barrier sequence per ARM ARM D8.13.2: DSB ISHST
+			// Memory-barrier sequence per ARM D8.13.2: DSB ISHST
 			// ensures all prior PT updates are observable; the MSR
 			// installs the new translation base; ISB flushes the
 			// pipeline so subsequent instructions use the new table.
@@ -470,16 +451,15 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 	scheduler.get_last_stack_pointer().as_u64()
 }
 
-/// Prepare the child's stack and root page table for a fork(), AArch64.
+/// Prepare the child's stack and root page table for a fork().
 ///
-/// Mirrors the role of the x86_64 `prepare_fork_child_stack`, but does not
-/// need a naked-asm child-entry stub: when the SVC trapped into EL1, the
-/// hardware-supplied `trap_entry` macro pushed a complete `State` struct
-/// at the top of the parent's kernel stack. Copying the kernel stack page
-/// for the child duplicates that `State`; if we then patch `x0 = 0` in
-/// the child's copy, the existing trap-exit machinery will `eret` it
-/// straight back to the user-space instruction after the SVC with the
-/// fork-returns-zero contract satisfied.
+/// When the SVC trapped into EL1, the hardware-supplied `trap_entry`
+/// macro pushed a complete `State` struct at the top of the parent's
+/// kernel stack. Copying the kernel stack page for the child duplicates
+/// that `State`; if we then patch `x0 = 0` in the child's copy, the
+/// existing trap-exit machinery will `eret` it straight back to the
+/// user-space instruction after the SVC with the fork-returns-zero
+/// contract satisfied.
 ///
 /// Operations performed (in order; ordering matters):
 /// 1. Copy the parent's kernel stack pages into `new_stack_addr`. This
@@ -492,9 +472,7 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 /// 4. Compute the child's saved kernel-SP (the address of the child's
 ///    `State` copy) and store it through `stack_pointer`.
 ///
-/// Returns `false` (the parent path); the child path becomes reachable
-/// once the scheduler context-switches to the new task and the existing
-/// IRQ trap-exit pops the child's `State` and `eret`s.
+/// Returns `false` (the parent path)
 #[cfg(all(feature = "common-os", feature = "fork"))]
 pub unsafe fn prepare_fork_child_stack(
 	stack_pointer: *mut usize,

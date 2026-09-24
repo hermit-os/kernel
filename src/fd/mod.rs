@@ -593,9 +593,9 @@ pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<RawFd> {
 ///
 /// Returns a pair of file descriptors `(read_fd, write_fd)` referring to
 /// the read and write ends of a fresh in-kernel pipe. Bytes written to
-/// `write_fd` can be read — in order — from `read_fd`. Because both ends
-/// are inherited across [`fork`](crate::scheduler::fork), a pipe set up
-/// before forking lets a parent and child process communicate.
+/// `write_fd` can be read - in order - from `read_fd`. Because both ends
+/// are inherited across `fork`, a pipe set up before forking lets a parent
+/// and child process communicate.
 #[cfg(feature = "common-os")]
 pub(crate) fn pipe() -> io::Result<(RawFd, RawFd)> {
 	let (receiver, sender) = pipe::pipe();
