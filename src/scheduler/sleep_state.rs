@@ -52,7 +52,7 @@ impl SleepState {
 				Self::STATUS_ACTIVE,
 				Self::STATUS_IDLE,
 				Ordering::Relaxed,
-				Ordering::Relaxed,
+				Ordering::Acquire,
 			)
 			.is_err()
 		{
@@ -84,7 +84,7 @@ impl SleepState {
 		// Ask the core not to sleep.
 		// This makes sure that if the two atomic operations become interleaved, the core will
 		// not go to sleep with us assuming it was running.
-		let previous_state = self.0.swap(Self::STATUS_DONT_SLEEP, Ordering::Relaxed);
+		let previous_state = self.0.swap(Self::STATUS_DONT_SLEEP, Ordering::Release);
 
 		// If the core was idle, we can actually wake it up
 		if previous_state == Self::STATUS_IDLE {

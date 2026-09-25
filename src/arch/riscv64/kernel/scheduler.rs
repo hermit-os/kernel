@@ -339,9 +339,6 @@ pub fn wakeup_handler() {
 	//increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();
-	unsafe {
-		riscv::register::sie::clear_ssoft();
-	}
 	if core_scheduler.is_scheduling() {
 		core_scheduler.scheduler();
 	}
