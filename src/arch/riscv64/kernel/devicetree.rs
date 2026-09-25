@@ -49,48 +49,6 @@ use crate::env::{self, FdtStartInfo};
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
 
-static mut PLATFORM_MODEL: Model = Model::Unknown;
-
-enum Model {
-	Fux40,
-	Virt,
-	Unknown,
-}
-
-/// Inits variables based on the device tree
-/// This function should only be called once
-pub fn init() {
-	debug!("Init devicetree");
-	let Some(fdt) = env::start_info().fdt() else {
-		return;
-	};
-
-	let model = fdt
-		.find_node("/")
-		.unwrap()
-		.property("compatible")
-		.expect("compatible not found in FDT")
-		.as_str()
-		.unwrap();
-
-	let platform_model = if model.contains("riscv-virtio") {
-		Model::Virt
-	} else if model.contains("sifive,hifive-unmatched-a00")
-		|| model.contains("sifive,hifive-unleashed-a00")
-		|| model.contains("sifive,fu740")
-		|| model.contains("sifive,fu540")
-	{
-		Model::Fux40
-	} else {
-		warn!("Unknown platform, guessing PLIC context 1");
-		Model::Unknown
-	};
-	unsafe {
-		PLATFORM_MODEL = platform_model;
-	}
-	info!("Model: {model}");
-}
-
 #[cfg_attr(
 	any(not(any(feature = "gem-net", feature = "virtio")), feature = "pci"),
 	expect(unused_variables)
@@ -123,13 +81,11 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 			paging::identity_map::<paging::HugePageSize>(plic_region_start);
 
-			// TODO: Determine correct context via devicetree and allow more than one context
-			let context = unsafe {
-				match PLATFORM_MODEL {
-					Model::Virt | Model::Unknown => 1,
-					Model::Fux40 => 2,
-				}
-			};
+			// Route interrupts to the boot hart, which runs the async executor
+			let boot_hart_id = super::HARTS_AVAILABLE.finalize()[0];
+			let context = plic_context(&fdt, plic_node, boot_hart_id)
+				.expect("No S-mode PLIC context found for boot hart in FDT");
+			debug!("Using PLIC context {context} for hart {boot_hart_id}");
 			init_plic(plic_region.starting_address, context);
 		}
 
@@ -290,4 +246,45 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 	#[cfg(all(any(feature = "virtio", feature = "gem-net"), not(feature = "pci")))]
 	super::mmio::MMIO_DRIVERS.finalize();
+}
+
+/// Returns the PLIC context that delivers supervisor external interrupts to `hart_id`.
+///
+/// Each entry of the PLIC's `interrupts-extended` property describes one context:
+/// the `i`-th entry references the `riscv,cpu-intc` of the target hart and the
+/// interrupt it raises there.
+///
+/// Reference: <https://github.com/torvalds/linux/blob/5bfc75d92efd494db37f5c4c173d3639d4772966/Documentation/devicetree/bindings/interrupt-controller/sifive%2Cplic-1.0.0.yaml#L62-L67>
+fn plic_context(
+	fdt: &fdt::Fdt<'_>,
+	plic_node: fdt::node::FdtNode<'_, '_>,
+	hart_id: usize,
+) -> Option<u16> {
+	use riscv::interrupt::Interrupt;
+
+	let cpu_node = fdt
+		.find_node("/cpus")?
+		.children()
+		.find(|node| node.property("reg").and_then(|reg| reg.as_usize()) == Some(hart_id))?;
+	let intc_node = cpu_node.children().find(|node| {
+		node.compatible()
+			.is_some_and(|compatible| compatible.all().any(|c| c == "riscv,cpu-intc"))
+	})?;
+	let intc_phandle = u32::try_from(intc_node.property("phandle")?.as_usize()?).ok()?;
+
+	assert!(
+		plic_node
+			.property("#interrupt-cells")
+			.and_then(|prop| prop.as_usize())
+			== Some(1)
+	);
+	let interrupts_extended = plic_node.property("interrupts-extended")?.value;
+	let (cells, _) = interrupts_extended.as_chunks::<{ size_of::<u32>() }>();
+	let (entries, _) = cells.as_chunks::<2>();
+	let context = entries.iter().position(|&[phandle, irq]| {
+		u32::from_be_bytes(phandle) == intc_phandle
+			&& u32::from_be_bytes(irq) == Interrupt::SupervisorExternal as u32
+	})?;
+
+	Some(u16::try_from(context).unwrap())
 }
