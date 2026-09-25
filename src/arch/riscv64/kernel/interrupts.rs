@@ -7,9 +7,12 @@ use ahash::RandomState;
 use bit_field::BitField;
 use hashbrown::HashMap;
 use hermit_sync::{InterruptTicketMutex, OnceCell, SpinMutex};
+#[cfg(not(feature = "idle-poll"))]
 use riscv::asm::wfi;
 use riscv::interrupt::{Exception, Interrupt, Trap};
-use riscv::register::{scause, sie, sip, sstatus, stval};
+#[cfg(any(feature = "smp", not(feature = "idle-poll")))]
+use riscv::register::sip;
+use riscv::register::{scause, sie, sstatus, stval};
 use trapframe::TrapFrame;
 use volatile::access::{NoAccess, ReadOnly};
 use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef};
@@ -148,43 +151,51 @@ pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
 
 /// Waits for the next software, external or timer interrupt and calls the specific handler.
 /// Returns immediately if another core requested this core to stay awake.
+///
+/// With `idle-poll`, this only issues a spin-loop hint and returns without sleeping.
 #[inline]
 pub(crate) fn enable_and_wait() {
-	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
-	if !scheduler::sleep_state::try_sleep() {
-		return;
-	}
+	#[cfg(feature = "idle-poll")]
+	core::hint::spin_loop();
 
-	debug!("Wait {:x?}", sie::read());
-	loop {
-		wfi();
-		// Interrupts are disabled at this point, so a pending interrupt will
-		// resume the execution. We still have to check if a interrupt is pending
-		// because the WFI instruction could be implemented as NOP (The RISC-V Instruction Set ManualVolume II: Privileged Architecture)
-
-		let pending_interrupts = sip::read();
-
-		// trace!("sip: {:x?}", pending_interrupts);
+	#[cfg(not(feature = "idle-poll"))]
+	{
 		#[cfg(feature = "smp")]
-		if pending_interrupts.ssoft() {
-			//Clear Supervisor-level software interrupt
-			unsafe { sip::clear_ssoft() };
-			trace!("SOFT");
-			crate::arch::kernel::scheduler::wakeup_handler();
-			break;
+		if !scheduler::sleep_state::try_sleep() {
+			return;
 		}
 
-		if pending_interrupts.sext() {
-			trace!("EXT");
-			external_handler();
-			break;
-		}
+		debug!("Wait {:x?}", sie::read());
+		loop {
+			wfi();
+			// Interrupts are disabled at this point, so a pending interrupt will
+			// resume the execution. We still have to check if a interrupt is pending
+			// because the WFI instruction could be implemented as NOP (The RISC-V Instruction Set ManualVolume II: Privileged Architecture)
 
-		if pending_interrupts.stimer() {
-			debug!("sip: {pending_interrupts:x?}");
-			trace!("TIMER");
-			crate::arch::kernel::scheduler::timer_handler();
-			break;
+			let pending_interrupts = sip::read();
+
+			// trace!("sip: {:x?}", pending_interrupts);
+			#[cfg(feature = "smp")]
+			if pending_interrupts.ssoft() {
+				//Clear Supervisor-level software interrupt
+				unsafe { sip::clear_ssoft() };
+				trace!("SOFT");
+				crate::arch::kernel::scheduler::wakeup_handler();
+				break;
+			}
+
+			if pending_interrupts.sext() {
+				trace!("EXT");
+				external_handler();
+				break;
+			}
+
+			if pending_interrupts.stimer() {
+				debug!("sip: {pending_interrupts:x?}");
+				trace!("TIMER");
+				crate::arch::kernel::scheduler::timer_handler();
+				break;
+			}
 		}
 	}
 }
