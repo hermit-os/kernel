@@ -3,8 +3,10 @@ use core::num::NonZeroU64;
 
 use riscv::register::{sie, sstatus, time};
 
-use crate::arch::kernel::{HARTS_AVAILABLE, get_timebase_freq};
+use crate::arch::kernel::{HARTS_AVAILABLE, core_id, get_timebase_freq};
 use crate::scheduler::CoreId;
+#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
+use crate::scheduler::sleep_state;
 
 /// Current FPU state. Saved at context switch when changed
 #[repr(C, packed)]
@@ -288,6 +290,13 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn wakeup_core(core_to_wakeup: CoreId) {
+	if core_to_wakeup == core_id() {
+		return;
+	}
+	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
+	if !sleep_state::try_wake_up(core_to_wakeup) {
+		return;
+	}
 	let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
 	debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
 	sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
