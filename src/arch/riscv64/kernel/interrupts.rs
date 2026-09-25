@@ -116,6 +116,9 @@ pub(crate) fn install() {
 		trapframe::init();
 		// Enable external interrupts
 		sie::set_sext();
+		// Enable software interrupts, used for IPIs via SBI
+		#[cfg(feature = "smp")]
+		sie::set_ssoft();
 	}
 }
 
@@ -143,53 +146,45 @@ pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
 	IRQ_NAMES.lock().insert(irq_number, name);
 }
 
-/// Waits for the next interrupt (Only Supervisor-level software/timer interrupt for now)
-/// and calls the specific handler
+/// Waits for the next software, external or timer interrupt and calls the specific handler.
+/// Returns immediately if another core requested this core to stay awake.
 #[inline]
 pub(crate) fn enable_and_wait() {
-	unsafe {
-		//Enable Supervisor-level software interrupts
-		sie::set_ssoft();
-		//sie::set_sext();
-		debug!("Wait {:x?}", sie::read());
-		loop {
-			wfi();
-			// Interrupts are disabled at this point, so a pending interrupt will
-			// resume the execution. We still have to check if a interrupt is pending
-			// because the WFI instruction could be implemented as NOP (The RISC-V Instruction Set ManualVolume II: Privileged Architecture)
+	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
+	if !scheduler::sleep_state::try_sleep() {
+		return;
+	}
 
-			let pending_interrupts = sip::read();
+	debug!("Wait {:x?}", sie::read());
+	loop {
+		wfi();
+		// Interrupts are disabled at this point, so a pending interrupt will
+		// resume the execution. We still have to check if a interrupt is pending
+		// because the WFI instruction could be implemented as NOP (The RISC-V Instruction Set ManualVolume II: Privileged Architecture)
 
-			// trace!("sip: {:x?}", pending_interrupts);
-			#[cfg(feature = "smp")]
-			if pending_interrupts.ssoft() {
-				//Clear Supervisor-level software interrupt
-				core::arch::asm!(
-					"csrc sip, {ssoft_mask}",
-					ssoft_mask = in(reg) 0x2,
-				);
-				trace!("SOFT");
-				//Disable Supervisor-level software interrupt
-				sie::clear_ssoft();
-				crate::arch::kernel::scheduler::wakeup_handler();
-				break;
-			}
+		let pending_interrupts = sip::read();
 
-			if pending_interrupts.sext() {
-				trace!("EXT");
-				external_handler();
-				break;
-			}
+		// trace!("sip: {:x?}", pending_interrupts);
+		#[cfg(feature = "smp")]
+		if pending_interrupts.ssoft() {
+			//Clear Supervisor-level software interrupt
+			unsafe { sip::clear_ssoft() };
+			trace!("SOFT");
+			crate::arch::kernel::scheduler::wakeup_handler();
+			break;
+		}
 
-			if pending_interrupts.stimer() {
-				// // Disable Supervisor-level software interrupt, wakeup not needed
-				// sie::clear_ssoft();
+		if pending_interrupts.sext() {
+			trace!("EXT");
+			external_handler();
+			break;
+		}
 
-				debug!("sip: {pending_interrupts:x?}");
-				trace!("TIMER");
-				crate::arch::kernel::scheduler::timer_handler();
-				break;
-			}
+		if pending_interrupts.stimer() {
+			debug!("sip: {pending_interrupts:x?}");
+			trace!("TIMER");
+			crate::arch::kernel::scheduler::timer_handler();
+			break;
 		}
 	}
 }
@@ -243,6 +238,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 		Trap::Interrupt(Interrupt::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
 		Trap::Interrupt(Interrupt::SupervisorSoft) => {
+			unsafe { sip::clear_ssoft() };
 			crate::arch::kernel::scheduler::wakeup_handler();
 		}
 		Trap::Interrupt(Interrupt::SupervisorTimer) => {
