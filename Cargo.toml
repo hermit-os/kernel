@@ -414,7 +414,7 @@ free-list = { version = "0.3", features = ["x86_64"] }
 memory_addresses = { version = "0.4", default-features = false, features = ["x86_64", "conv-x86_64"] }
 raw-cpuid = "11"
 uart_16550 = { version = "0.8", features = ["embedded-io"] }
-x86_64 = { version = "0.15", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
+x86_64 = { version = "0.16.0-rc.0", default-features = false, features = ["instructions", "abi_x86_interrupt"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
