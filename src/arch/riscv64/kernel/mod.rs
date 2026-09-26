@@ -82,6 +82,7 @@ pub fn boot_processor_init() {
 	crate::mm::init();
 	crate::mm::print_information();
 	env::init();
+	devicetree::init_interrupt_controller();
 	interrupts::install();
 	#[cfg(feature = "pci")]
 	pci::init();
