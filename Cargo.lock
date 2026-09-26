@@ -881,6 +881,7 @@ dependencies = [
  "async-executor",
  "async-lock",
  "bit_field",
+ "bitfield-struct",
  "bitflags 2.13.1",
  "build-time",
  "built",
