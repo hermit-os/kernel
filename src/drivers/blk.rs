@@ -10,7 +10,8 @@ use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
 use smallvec::SmallVec;
-use virtio::blk::{ConfigVolatileFieldAccess, RequestHeader, RequestType, Status};
+use virtio::blk::{ConfigVolatileFieldAccess, S, T};
+use virtio::{le32, le64};
 use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
@@ -46,6 +47,25 @@ pub(crate) fn with_driver<T>(f: impl FnOnce(&VirtioBlkDriver) -> T) -> Option<T>
 /// This is fixed by the specification and unrelated to
 /// `VirtioBlkDriver::block_size`, which merely reports the optimal I/O size.
 pub(crate) const SECTOR_SIZE: usize = 512;
+
+/// The fixed-size header that starts every request.
+#[doc(alias = "virtio_blk_req")]
+#[repr(C)]
+struct RequestHeader {
+	type_: le32,
+	reserved: le32,
+	sector: le64,
+}
+
+impl RequestHeader {
+	fn new(type_: T, sector: u64) -> Self {
+		Self {
+			type_: le32::from_ne(type_.into()),
+			reserved: le32::from_ne(0),
+			sector: le64::from_ne(sector),
+		}
+	}
+}
 
 /// The number of cores that may ever issue a request.
 ///
@@ -116,7 +136,7 @@ impl VirtioBlkDriver {
 		let len = self.checked_len(sector, buf.len())?;
 
 		let send = single(BufferElem::Sized(Box::new_in(
-			RequestHeader::new(RequestType::IN, sector.try_into().unwrap()),
+			RequestHeader::new(T::In, sector.try_into().unwrap()),
 			DeviceAlloc,
 		)));
 		let recv = SmallVec::from_buf([
@@ -162,7 +182,7 @@ impl VirtioBlkDriver {
 		}
 
 		let send = single(BufferElem::Sized(Box::new_in(
-			RequestHeader::new(RequestType::FLUSH, 0),
+			RequestHeader::new(T::Flush, 0),
 			DeviceAlloc,
 		)));
 		let recv = single(BufferElem::Sized(Box::<u8, _>::new_uninit_in(DeviceAlloc)));
@@ -258,7 +278,7 @@ impl VirtioBlkDriver {
 	fn check_status(
 		used: &mut crate::drivers::virtio::virtqueue::UsedBufferToken,
 	) -> Result<(), Errno> {
-		// The byte is taken as a `u8` rather than as a `Status`, because the
+		// The byte is taken as a `u8` rather than as an `S`, because the
 		// device is free to write any value.
 		let status = unsafe { used.used_recv_buff.pop_front_downcast::<u8>() };
 		let Some(status) = status.as_deref().copied() else {
@@ -266,9 +286,9 @@ impl VirtioBlkDriver {
 			return Err(Errno::Io);
 		};
 
-		if status == u8::from(Status::OK) {
+		if status == u8::from(S::Ok) {
 			Ok(())
-		} else if status == u8::from(Status::UNSUPP) {
+		} else if status == u8::from(S::Unsupp) {
 			Err(Errno::Nosys)
 		} else {
 			// Either VIRTIO_BLK_S_IOERR or a status this driver does not know.
@@ -304,7 +324,7 @@ impl Batch<'_> {
 
 		let send = SmallVec::from_buf([
 			BufferElem::Sized(Box::new_in(
-				RequestHeader::new(RequestType::OUT, sector.try_into().unwrap()),
+				RequestHeader::new(T::Out, sector.try_into().unwrap()),
 				DeviceAlloc,
 			)),
 			BufferElem::Vector(data),
@@ -387,7 +407,7 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 			// device without it exposes exactly one request queue.
 			let features: virtio::blk::F = dev_cfg.features;
 			let offered = if features.contains(virtio::blk::F::MQ) {
-				dev_cfg.raw.as_ptr().num_queues().read().to_ne()
+				dev_cfg.raw.as_ptr().num_queues().read()
 			} else {
 				1
 			};

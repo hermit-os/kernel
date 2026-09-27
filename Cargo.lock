@@ -2518,8 +2518,3 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
-
-[[patch.unused]]
-name = "virtio-spec"
-version = "0.3.2"
-source = "git+https://github.com/stlankes/virtio-spec-rs?branch=block#94d7608884052f55d0ee869fb6b274d20f14853f"
