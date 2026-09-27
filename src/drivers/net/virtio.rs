@@ -41,11 +41,13 @@ use crate::mm::device_alloc::DeviceAlloc;
 
 type NetDevCfg = crate::drivers::virtio::DevCfg<VirtioNetDriver>;
 
-fn determine_mtu(dev_cfg: &NetDevCfg) -> u16 {
+/// Returns the maximum Ethernet frame size, including the Ethernet header.
+fn ethernet_frame_size(dev_cfg: &NetDevCfg) -> u16 {
 	// If VIRTIO_NET_F_MTU is negotiated, "the driver uses mtu as the maximum MTU value"
 	// (VirtIO specification, 5.1.3, "Feature bits")
 	if dev_cfg.features.contains(virtio::net::F::MTU) {
-		dev_cfg.raw.as_ptr().mtu().read().to_ne()
+		// virtio's device mtu excludes the Ethernet header
+		dev_cfg.raw.as_ptr().mtu().read().to_ne() + u16::try_from(ETHERNET_HEADER_LEN).unwrap()
 	} else {
 		// Otherwise, we can just use the MTU we want to use
 		mtu()
@@ -55,8 +57,7 @@ fn determine_mtu(dev_cfg: &NetDevCfg) -> u16 {
 fn determine_rx_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 	// See Virtio specification v1.1 - 5.1.6.3.1 and 5.1.4.2
 
-	// Our desired minimum buffer size - we want it to be at least the MTU generally
-	let mut min_buf_size = determine_mtu(dev_cfg).into();
+	let mut min_buf_size = u32::from(ethernet_frame_size(dev_cfg));
 
 	// If VIRTIO_NET_F_MRG_RXBUF is negotiated, each buffer MUST be at least the size of the struct virtio_net_hdr.
 	// We just use MTU in that case, but otherwise...
@@ -186,7 +187,7 @@ impl TxQueues {
 		{
 			MAX_TSO_BUFFER_SIZE.try_into().unwrap()
 		} else {
-			determine_mtu(dev_cfg).into()
+			ethernet_frame_size(dev_cfg).into()
 		};
 		Self { vqs, buf_size }
 	}
@@ -877,7 +878,7 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 		let mut send_capacity = None;
 
 		let dev_cfg = match caps_coll.init_caps(dev_cfg_raw, |caps_coll, dev_cfg| {
-			mtu = Some(determine_mtu(dev_cfg));
+			mtu = Some(ethernet_frame_size(dev_cfg));
 			let dev_spec_init = Self::dev_spec_init(caps_coll, dev_cfg)?;
 			debug!("Using RX buffer size of {}", dev_spec_init.0.buf_size);
 			recv_vqs = Some(dev_spec_init.0);
