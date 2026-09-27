@@ -415,10 +415,10 @@ impl ObjectInterface for Socket {
 
 		match opt {
 			SocketOption::TcpOption(SocketOptionTcp::TcpNoDelay) => {
-				let is_enabled = (&optval).try_into()?;
+				let nodelay: bool = (&optval).try_into()?;
 				for handle in self.handle.iter().copied() {
 					let socket = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
-					socket.set_nagle_enabled(is_enabled);
+					socket.set_nagle_enabled(!nodelay);
 				}
 				Ok(())
 			}
@@ -451,7 +451,7 @@ impl ObjectInterface for Socket {
 
 		match opt {
 			SocketOption::TcpOption(SocketOptionTcp::TcpNoDelay) => {
-				Ok(socket.nagle_enabled().into())
+				Ok((!socket.nagle_enabled()).into())
 			}
 			SocketOption::SocketOption(SocketOptionSocket::KeepAlive) => {
 				Ok(socket.keep_alive().is_some().into())
