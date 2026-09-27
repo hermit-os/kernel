@@ -22,7 +22,7 @@ use crate::executor::block_on;
 use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption};
 use crate::fs::{self, DirectoryEntry, FileAttr, FileType, NodeKind, SeekWhence, VfsNode};
 use crate::io;
-use crate::syscalls::Dirent64;
+use crate::syscalls::{Dirent64, DirentFormat};
 use crate::time::SystemTime;
 
 /// Number of sectors `FatStream` keeps in memory.
@@ -942,50 +942,59 @@ impl VfatDirectoryHandle {
 }
 
 impl ObjectInterface for VfatDirectoryHandle {
-	async fn getdents(&self, buf: &mut [MaybeUninit<u8>]) -> io::Result<usize> {
-		let entries = {
-			let volume = volume().await?;
+	async fn getdents(
+		&self,
+		buf: &mut [MaybeUninit<u8>],
+		format: DirentFormat,
+	) -> io::Result<usize> {
+		match format {
+			DirentFormat::PosixDent => unimplemented!("POSIX dirent currently not supported"),
+			DirentFormat::Dirent64 => {
+				let entries = {
+					let volume = volume().await?;
 
-			readdir_at(&volume, self.prefix.clone()).await?
-		};
+					readdir_at(&volume, self.prefix.clone()).await?
+				};
 
-		let mut next = self.next.lock().await;
-		let mut offset = 0usize;
+				let mut next = self.next.lock().await;
+				let mut offset = 0usize;
 
-		while let Some(entry) = entries.get(*next) {
-			let name = entry.name.as_bytes();
-			let len = core::mem::offset_of!(Dirent64, d_name) + name.len() + 1;
-			let reclen = len.next_multiple_of(align_of::<Dirent64>());
+				while let Some(entry) = entries.get(*next) {
+					let name = entry.name.as_bytes();
+					let len = core::mem::offset_of!(Dirent64, d_name) + name.len() + 1;
+					let reclen = len.next_multiple_of(align_of::<Dirent64>());
 
-			if offset + reclen > buf.len() {
-				if offset == 0 {
-					// Not even one entry fits.
-					return Err(Errno::Inval);
+					if offset + reclen > buf.len() {
+						if offset == 0 {
+							// Not even one entry fits.
+							return Err(Errno::Inval);
+						}
+						break;
+					}
+
+					let target = buf[offset].as_mut_ptr().cast::<Dirent64>();
+					// SAFETY: the bounds check above guarantees that the entry and its
+					// trailing zero byte fit into `buf`.
+					unsafe {
+						target.write(Dirent64 {
+							d_ino: 0,
+							d_off: 0,
+							d_reclen: u16::try_from(reclen).unwrap(),
+							d_type: FileType::Unknown,
+							d_name: core::marker::PhantomData {},
+						});
+						let name_ptr = core::ptr::from_mut(&mut (*target).d_name).cast::<u8>();
+						name_ptr.copy_from_nonoverlapping(name.as_ptr(), name.len());
+						name_ptr.add(name.len()).write(0);
+					}
+
+					offset += reclen;
+					*next += 1;
 				}
-				break;
-			}
 
-			let target = buf[offset].as_mut_ptr().cast::<Dirent64>();
-			// SAFETY: the bounds check above guarantees that the entry and its
-			// trailing zero byte fit into `buf`.
-			unsafe {
-				target.write(Dirent64 {
-					d_ino: 0,
-					d_off: 0,
-					d_reclen: u16::try_from(reclen).unwrap(),
-					d_type: FileType::Unknown,
-					d_name: core::marker::PhantomData {},
-				});
-				let name_ptr = core::ptr::from_mut(&mut (*target).d_name).cast::<u8>();
-				name_ptr.copy_from_nonoverlapping(name.as_ptr(), name.len());
-				name_ptr.add(name.len()).write(0);
+				Ok(offset)
 			}
-
-			offset += reclen;
-			*next += 1;
 		}
-
-		Ok(offset)
 	}
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
