@@ -7,6 +7,8 @@ use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{PollResult, SocketHandle, SocketSet};
+#[cfg(feature = "tcp")]
+use smoltcp::phy::Device;
 use smoltcp::socket::AnySocket;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
@@ -345,8 +347,12 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(feature = "tcp")]
 	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
-		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 0x10000]);
-		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 0x10000]);
+		let buf_size = usize::max(
+			0x10000,
+			4 * self.device.capabilities().max_transmission_unit,
+		);
+		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; buf_size]);
+		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; buf_size]);
 		let mut tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 		tcp_socket.set_nagle_enabled(true);
 		let tcp_handle = self.sockets.add(tcp_socket);
