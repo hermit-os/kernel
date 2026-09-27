@@ -213,9 +213,7 @@ impl VirtioBlkDriver {
 	///
 	/// Sharing one queue between cores would make them contend for its lock;
 	/// mapping each core to its own keeps a request on the core that issued
-	/// it. The modulo covers a device that offers fewer queues than the system
-	/// has cores — those cores then share a queue, which costs contention but
-	/// stays correct.
+	/// it.
 	fn vq(&self) -> &async_lock::Mutex<VirtQueue> {
 		let index = usize::try_from(core_id()).unwrap() % self.vqs.len();
 
@@ -223,12 +221,6 @@ impl VirtioBlkDriver {
 	}
 
 	/// Sends a request and waits for the device to complete it.
-	///
-	/// The queue lock is held for the whole exchange, which is what makes the
-	/// `try_recv` below unambiguous: the completion it finds can only be the
-	/// one this call put in. A second task wanting the same queue waits on the
-	/// lock, and because that lock is asynchronous it yields the core rather
-	/// than spinning on it.
 	async fn dispatch(
 		&self,
 		send: SmallVec<[BufferElem; 2]>,
@@ -259,7 +251,7 @@ impl VirtioBlkDriver {
 	/// Acknowledges a device interrupt.
 	///
 	/// The driver completes requests by polling, so nothing has to be done
-	/// with the information — but the ISR status register *must* be read.
+	/// with the information - but the ISR status register *must* be read.
 	pub fn handle_interrupt(&self) {
 		let mut caps = self.caps.lock();
 

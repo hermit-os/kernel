@@ -188,10 +188,9 @@ impl FatStream {
 			.unwrap();
 
 		// Writing just the victim back would issue one request per evicted
-		// sector, and a sequential write dirties the whole cache — that was
-		// the bulk of the traffic. Flushing everything instead lets the runs
-		// merge, and leaves every later eviction free until something is
-		// dirtied again.
+		// sector, and a sequential write dirties the whole cache. Flushing
+		// everything instead lets the runs merge, and leaves every later
+		// eviction free until something is dirtied again.
 		if self.cache[victim].dirty {
 			self.flush_all().await?;
 		}
@@ -203,8 +202,7 @@ impl FatStream {
 
 	/// Writes every dirty sector back, merging adjacent ones into one request.
 	///
-	/// The dirty sectors of a single operation are rarely scattered — a FAT
-	/// chain and the directory entry naming it occupy runs of neighbors — so
+	/// The dirty sectors of a single operation are rarely scattered so
 	/// sorting them and writing each run as a whole turns a flush of the
 	/// entire cache into a handful of requests.
 	async fn flush_all(&mut self) -> Result<(), Errno> {
@@ -356,8 +354,6 @@ impl Seek for FatStream {
 		// it only fails once something is actually read or written there.
 		let new = new.filter(|new| *new >= 0).ok_or(Errno::Inval)?;
 
-		// The cache stays valid — it is keyed by sector index, independent of
-		// where the stream happens to point.
 		self.pos = usize::try_from(new).unwrap();
 
 		Ok(new as u64)
@@ -488,8 +484,7 @@ fn map_err(err: hadris_fat::error::Error) -> Errno {
 		Error::NotAFile => Errno::Isdir,
 		Error::NoFreeSpace => Errno::Nospc,
 		Error::InvalidPath | Error::InvalidShortFilename => Errno::Inval,
-		// Everything else — corrupt structures, cluster-chain damage, and the
-		// underlying block device's own errors — surfaces as an I/O error.
+		// Everything else surfaces as an I/O error.
 		_ => Errno::Io,
 	}
 }
