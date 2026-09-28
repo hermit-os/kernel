@@ -1,0 +1,192 @@
+use alloc::borrow::ToOwned;
+use core::ptr::write_bytes;
+use core::sync::atomic::{AtomicPtr, Ordering};
+use core::{mem, ptr, slice};
+
+use align_address::Align;
+use hermit_entry::boot_info::{
+	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
+};
+use hermit_entry::elf::LoadedKernel;
+use log::info;
+use multiboot::information::{MemoryManagement, MemoryType, Multiboot, MultibootInfo, PAddr};
+use vm_fdt::FdtWriterResult;
+use x86_64::structures::paging::{PageSize, Size2MiB, Size4KiB};
+
+use crate::BootInfoExt;
+use crate::arch::x86_64::physicalmem::PhysAlloc;
+use crate::arch::x86_64::{KERNEL_STACK_SIZE, SERIAL_IO_PORT, page_tables};
+use crate::fdt::Fdt;
+
+#[allow(bad_asm_style)]
+mod entry {
+	core::arch::global_asm!(
+		include_str!("entry.s"),
+		rust_start = sym super::rust_start,
+		stack = sym crate::arch::x86_64::stack::STACK,
+		stack_top_offset = const crate::arch::x86_64::stack::Stack::top_offset(),
+		level_4_table = sym crate::arch::x86_64::page_tables::LEVEL_4_TABLE,
+		gdt_ptr = sym crate::arch::x86_64::gdt::GDT_PTR,
+		kernel_code_selector = const crate::arch::x86_64::gdt::Gdt::kernel_code_selector().0,
+		kernel_data_selector = const crate::arch::x86_64::gdt::Gdt::kernel_data_selector().0,
+	);
+}
+
+static MB_INFO: AtomicPtr<MultibootInfo> = AtomicPtr::new(ptr::null_mut());
+
+unsafe extern "C" fn rust_start(mb_info: *mut MultibootInfo) -> ! {
+	crate::log::init();
+	MB_INFO.store(mb_info, Ordering::Relaxed);
+
+	let mut mem = Mem;
+	let multiboot = unsafe { Multiboot::from_ref(&mut *mb_info, &mut mem) };
+	let highest_address = multiboot.find_highest_address().align_up(Size2MiB::SIZE) as usize;
+	// Memory after the highest end address is unused and available for the physical memory manager.
+	PhysAlloc::init(highest_address);
+
+	let max_phys_addr = multiboot
+		.memory_regions()
+		.unwrap()
+		.filter(|memory_region| memory_region.memory_type() == MemoryType::Available)
+		.map(|memory_region| memory_region.base_address() + memory_region.length())
+		.max()
+		.unwrap();
+
+	unsafe {
+		page_tables::init(max_phys_addr.try_into().unwrap());
+	}
+
+	unsafe {
+		crate::os::loader_main();
+	}
+}
+
+struct Mem;
+
+impl MemoryManagement for Mem {
+	unsafe fn paddr_to_slice<'a>(&self, p: PAddr, sz: usize) -> Option<&'static [u8]> {
+		let ptr = ptr::with_exposed_provenance(p as usize);
+		unsafe { Some(slice::from_raw_parts(ptr, sz)) }
+	}
+
+	// If you only want to read fields, you can simply return `None`.
+	unsafe fn allocate(&mut self, _length: usize) -> Option<(PAddr, &mut [u8])> {
+		None
+	}
+
+	unsafe fn deallocate(&mut self, addr: PAddr) {
+		if addr != 0 {
+			unimplemented!()
+		}
+	}
+}
+
+pub struct DeviceTree;
+
+impl DeviceTree {
+	pub fn create() -> FdtWriterResult<&'static [u8]> {
+		let mb_info = MB_INFO.load(Ordering::Relaxed);
+		let mut mem = Mem;
+		let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+
+		let memory_regions = multiboot
+			.memory_regions()
+			.expect("Could not find a memory map in the Multiboot information");
+
+		let mut fdt = Fdt::new("multiboot")?.memory_regions(memory_regions)?;
+
+		if let Some(cmdline) = multiboot.command_line() {
+			fdt = fdt.bootargs(cmdline.to_owned())?;
+		}
+
+		let fdt = fdt.finish()?;
+
+		Ok(fdt.leak())
+	}
+}
+
+pub fn find_kernel() -> &'static [u8] {
+	let mb_info = MB_INFO.load(Ordering::Relaxed);
+	assert!(!mb_info.is_null(), "Could not find Multiboot information");
+	info!("Found Multiboot information at {mb_info:p}");
+
+	let mut mem = Mem;
+	let multiboot = unsafe { Multiboot::from_ref(&mut *mb_info, &mut mem) };
+
+	// Iterate through all modules.
+	// Collect the start address of the first module and the highest end address of all modules.
+	let mut module_iter = multiboot
+		.modules()
+		.expect("Could not find a memory map in the Multiboot information");
+
+	let first_module = module_iter
+		.next()
+		.expect("Could not find a single module in the Multiboot information");
+	info!(
+		"Found an ELF module at [{:#x} - {:#x}]",
+		first_module.start, first_module.end
+	);
+	let elf_start = first_module.start as usize;
+	let elf_len = (first_module.end - first_module.start) as usize;
+	info!("Module length: {elf_len:#x}");
+
+	unsafe { slice::from_raw_parts(ptr::with_exposed_provenance(elf_start), elf_len) }
+}
+
+pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
+	let LoadedKernel {
+		load_info,
+		entry_point,
+	} = kernel_info;
+
+	let mut mem = Mem;
+	let mb_info = MB_INFO.load(Ordering::Relaxed);
+	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut mem).unwrap() };
+
+	// determine boot stack address
+	let loader_end = elf_symbols::executable_end();
+	let mut new_stack = loader_end.addr().align_up(Size4KiB::SIZE as usize);
+
+	if new_stack + KERNEL_STACK_SIZE as usize > mb_info.addr() {
+		new_stack = (mb_info.addr() + mem::size_of::<Multiboot<'_, '_>>())
+			.align_up(Size4KiB::SIZE as usize);
+	}
+
+	let command_line = multiboot.command_line();
+	if let Some(command_line) = command_line {
+		let cmdline = command_line.as_ptr() as usize;
+		let cmdsize = command_line.len();
+		if new_stack + KERNEL_STACK_SIZE as usize > cmdline {
+			new_stack = (cmdline + cmdsize).align_up(Size4KiB::SIZE as usize);
+		}
+	}
+
+	let stack = loader_end.with_addr(new_stack).cast::<u8>();
+
+	// clear stack
+	unsafe {
+		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());
+	}
+
+	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
+	let device_tree =
+		DeviceTreeAddress::new(u64::try_from(device_tree.as_ptr().expose_provenance()).unwrap());
+
+	let boot_info = BootInfo {
+		hardware_info: HardwareInfo {
+			phys_addr_range: 0..0,
+			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
+			device_tree,
+		},
+		load_info,
+		platform_info: PlatformInfo::Multiboot {
+			command_line,
+			multiboot_info_addr: (mb_info as u64).try_into().unwrap(),
+		},
+	};
+
+	let entry = ptr::with_exposed_provenance(entry_point.try_into().unwrap());
+	let raw_boot_info = boot_info.write();
+
+	unsafe { crate::arch::x86_64::enter_kernel(stack, entry, raw_boot_info) }
+}
