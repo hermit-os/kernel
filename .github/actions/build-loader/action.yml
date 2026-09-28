@@ -28,7 +28,13 @@ runs:
       run: |
         mkdir -p dist
         for target in ${{ inputs.targets }}; do
-          cargo xtask build --release --target "$target"
+          # Nightly emits calls to wcslen, which x86_64-unknown-uefi does not provide.
+          if [ "$target" = x86_64-uefi ]; then
+            toolchain=+stable
+          else
+            toolchain=
+          fi
+          cargo $toolchain xtask build --release --target "$target"
         done
         cp target/release/hermit-loader-* dist/
     - name: Install loader
