@@ -1,6 +1,5 @@
 use alloc::borrow::ToOwned;
 use core::ffi::CStr;
-use core::ptr::write_bytes;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{ptr, slice};
 
@@ -85,7 +84,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let stack = loader_end.with_addr(stack).cast::<u8>();
 	// clear stack
 	unsafe {
-		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());
+		stack.write_bytes(0, KERNEL_STACK_SIZE.try_into().unwrap());
 	}
 
 	let mut fdt = Fdt::new("linux").unwrap();

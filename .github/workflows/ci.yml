@@ -65,6 +65,10 @@ jobs:
       - name: cargo clippy (xtask)
         if: matrix.arch == 'x86_64'
         run: cargo clippy --package xtask
+      - name: cargo clippy (loader)
+        if: matrix.arch == 'x86_64'
+        run: cargo xtask clippy
+        working-directory: crates/loader
       - name: cargo hack clippy
         run: |
           cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
@@ -84,6 +88,7 @@ jobs:
       - run: |
           cargo fmt --all --check
           cargo fmt --all --check --manifest-path hermit-builtins/Cargo.toml
+          cargo fmt --all --check --manifest-path crates/loader/Cargo.toml
 
   lock-file:
     name: Lock file
