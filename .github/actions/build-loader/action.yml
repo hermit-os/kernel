@@ -25,6 +25,8 @@ runs:
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       working-directory: ${{ inputs.kernel-dir }}/crates/loader
+      env:
+        CARGO_BUILD_WARNINGS: warn
       run: |
         mkdir -p dist
         for target in ${{ inputs.targets }}; do
