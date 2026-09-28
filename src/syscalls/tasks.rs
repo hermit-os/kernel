@@ -14,11 +14,75 @@ use crate::{arch, scheduler};
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = i32;
+pub type Pid = i32;
+
+/// Fork the current process.
+/// Returns the child's PID to the parent, and 0 to the child.
+///
+/// On riscv64 fork is dispatched directly by the user-mode trap loop
+/// (`user_loop`), which owns the saved user context; this table entry is
+/// only a fallback and reports `ENOSYS`.
+#[cfg(feature = "common-os")]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fork() -> i32 {
+	#[cfg(all(feature = "fork", any(target_arch = "x86_64", target_arch = "aarch64")))]
+	unsafe {
+		scheduler::fork().into()
+	}
+
+	#[cfg(not(all(feature = "fork", any(target_arch = "x86_64", target_arch = "aarch64"))))]
+	{
+		-i32::from(Errno::Nosys)
+	}
+}
+
+/// Fork the current process.
+/// In case of a unikernel, this system call always fail.
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fork() -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
+/// Waitpid block the current process until termination of process `pid`.
+/// Returns 0 is the process terminates
+#[cfg(feature = "common-os")]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_waitpid(pid: Pid) -> i32 {
+	match scheduler::join(TaskId::from(pid)) {
+		Ok(()) => 0,
+		_ => -i32::from(Errno::Inval),
+	}
+}
+
+/// Waitpid block the current process until termination of process `pid`.
+/// In case of a unikernel, this system call always fail.
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_waitpid(_pid: Pid) -> i32 {
+	-i32::from(Errno::Nosys)
+}
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_getpid() -> Tid {
-	0
+pub extern "C" fn sys_getpid() -> Pid {
+	#[cfg(not(feature = "common-os"))]
+	{
+		// an unikernel doesn't have a pid => return always 0
+		0
+	}
+
+	#[cfg(feature = "common-os")]
+	{
+		// Return the process ID — equal for every thread of the same
+		// process, set by `Task::new_thread` from the spawning thread's
+		// `pid` and reset to the new `tid` on fork.
+		core_scheduler().get_current_task().borrow().pid.into()
+	}
 }
 
 #[cfg(feature = "newlib")]
@@ -43,7 +107,11 @@ pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 fn exit(arg: i32) -> ! {
 	debug!("Exit program with error code {arg}!");
-	super::shutdown(arg)
+	if cfg!(not(feature = "common-os")) {
+		super::shutdown(arg)
+	} else {
+		core_scheduler().exit(arg)
+	}
 }
 
 #[hermit_macro::system]
@@ -132,7 +200,7 @@ pub unsafe extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg
 	0
 }
 
-#[hermit_macro::system(errno)]
+#[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_yield() {
 	core_scheduler().reschedule();
@@ -163,7 +231,16 @@ pub unsafe extern "C" fn sys_spawn2(
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
+	#[cfg(feature = "common-os")]
+	{
+		unsafe {
+			scheduler::spawn_thread(func, arg, Priority::from(prio), stack_size, selector).into()
+		}
+	}
+	#[cfg(not(feature = "common-os"))]
+	{
+		unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
+	}
 }
 
 #[hermit_macro::system]
@@ -175,8 +252,16 @@ pub unsafe extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	let new_id = unsafe {
-		scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+	let new_id = {
+		#[cfg(feature = "common-os")]
+		unsafe {
+			scheduler::spawn_thread(func, arg, Priority::from(prio), USER_STACK_SIZE, selector)
+				.into()
+		}
+		#[cfg(not(feature = "common-os"))]
+		unsafe {
+			scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+		}
 	};
 
 	if !id.is_null() {
