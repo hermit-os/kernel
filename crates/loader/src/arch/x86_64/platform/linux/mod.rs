@@ -40,7 +40,7 @@ unsafe extern "C" fn rust_start(boot_params: *mut BootParams) -> ! {
 	let loader_end = elf_symbols::executable_end();
 	let free_addr = loader_end.addr().align_up(Size2MiB::SIZE as usize);
 	// Memory after the highest end address is unused and available for the physical memory manager.
-	info!("Intializing PhysAlloc with {free_addr:#x}");
+	info!("Initializing PhysAlloc with {free_addr:#x}");
 	PhysAlloc::init(free_addr);
 
 	let boot_params_ref = unsafe { BootParams::get() };

@@ -116,8 +116,8 @@ struct PageTable([*mut (); 512]);
 ///
 /// For reference, see <https://developer.arm.com/documentation/ddi0487/mb/-Part-D-The-AArch64-System-Level-Architecture/-Chapter-D8-The-AArch64-Virtual-Memory-System-Architecture/-D8-3-Translation-table-descriptor-formats/-D8-3-1-VMSAv8-64-descriptor-formats>.
 mod descr {
-	pub const NORMAL: usize = AF | SH_INNER | attr_indx(4) | TABLE | VALID;
-	pub const NON_CACHEABLE: usize = AF | SH_INNER | attr_indx(3) | TABLE | VALID;
+	pub const NORMAL: usize = AF | SH_INNER | attr_index(4) | TABLE | VALID;
+	pub const NON_CACHEABLE: usize = AF | SH_INNER | attr_index(3) | TABLE | VALID;
 
 	/// Valid descriptor
 	const VALID: usize = 1;
@@ -128,9 +128,9 @@ mod descr {
 	/// Attribute index
 	///
 	/// Selects the corresponding `MAIR` memory region attributes.
-	const fn attr_indx(indx: u8) -> usize {
-		assert!(indx < 1 << 5);
-		(indx as usize) << 2
+	const fn attr_index(index: u8) -> usize {
+		assert!(index < 1 << 5);
+		(index as usize) << 2
 	}
 
 	/// Shareability
