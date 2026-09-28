@@ -206,7 +206,7 @@ impl Virtq for SplitVq {
 
 		if self.ring.dev_is_notif() {
 			let notification_data = NotificationData::new()
-				.with_vqn(self.index)
+				.with_vq_notif_config_data(self.index)
 				.with_next_idx(next_idx);
 			self.notif_ctrl.notify_dev(notification_data);
 		}

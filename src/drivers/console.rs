@@ -307,17 +307,20 @@ impl super::virtio::VirtioDriver for VirtioConsoleDriver {
 					info!("Virtio interrupt handler at line {irq}");
 				}
 				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
-				InterruptCapability::Msix(msix_table) => caps_coll.com_cfg.register_msix_vectors(
-					msix_table,
-					handlers,
-					|| {
-						if let IoDevice::Virtio(driver) = &mut CONSOLE.lock().device {
-							driver.handle_device_configuration_interrupt();
-						};
-					},
-					[(0..2u16, Self::handle_queue_interrupt as fn())].into_iter(),
-					[],
-				),
+				InterruptCapability::Msix(msix_table) => {
+					let handle_queue_interrupt: fn() = Self::handle_queue_interrupt;
+					caps_coll.com_cfg.register_msix_vectors(
+						msix_table,
+						handlers,
+						|| {
+							if let IoDevice::Virtio(driver) = &mut CONSOLE.lock().device {
+								driver.handle_device_configuration_interrupt();
+							};
+						},
+						[(0..2u16, handle_queue_interrupt)].into_iter(),
+						[],
+					);
+				}
 			}
 			Ok(())
 		}) {

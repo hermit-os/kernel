@@ -164,11 +164,10 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					let ptr = virtio_region.starting_address as *mut DeviceRegisters;
 					let mmio = unsafe { VolatileRef::new(NonNull::new(ptr).unwrap()) };
 
-					let magic = mmio.as_ptr().magic_value().read().to_ne();
+					let magic = mmio.as_ptr().magic_value().read();
 					let version = mmio.as_ptr().version().read().to_ne();
 
-					const MMIO_MAGIC_VALUE: u32 = 0x7472_6976;
-					if magic != MMIO_MAGIC_VALUE {
+					if magic != virtio::mmio::MAGIC_VALUE {
 						error!("It's not a MMIO-device at {mmio:p}");
 					}
 

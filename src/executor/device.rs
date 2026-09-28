@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
-use core::str::FromStr;
+#[cfg(feature = "dns")]
+use alloc::vec::Vec;
+use core::net::{IpAddr, Ipv6Addr};
 
 use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "net-trace")]
@@ -11,7 +13,7 @@ use smoltcp::phy::{PcapMode, PcapWriter};
 use smoltcp::socket::dhcpv4;
 #[cfg(feature = "dns")]
 use smoltcp::socket::dns;
-use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address, Ipv4Cidr};
+use smoltcp::wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr};
 
 use super::network::{NetworkInterface, NetworkState};
 use crate::arch::kernel::systemtime;
@@ -25,6 +27,7 @@ use crate::drivers::Driver;
 ))]
 use crate::drivers::net::NetworkDevice;
 use crate::drivers::net::NetworkDriver;
+use crate::env::{IpAddrConfig, interface_configs};
 
 cfg_select! {
 	any(
@@ -39,6 +42,40 @@ cfg_select! {
 	_ => {
 		use crate::drivers::net::loopback::LoopbackDriver;
 	}
+}
+
+fn mac_to_eui64(mac: [u8; 6]) -> u64 {
+	let mut bytes = [0u8; 8];
+
+	bytes[0] = mac[0] ^ 0x02;
+	bytes[1] = mac[1];
+	bytes[2] = mac[2];
+	bytes[3] = 0xff;
+	bytes[4] = 0xfe;
+	bytes[5] = mac[3];
+	bytes[6] = mac[4];
+	bytes[7] = mac[5];
+
+	u64::from_be_bytes(bytes)
+}
+
+fn mac_to_link_local(mac: [u8; 6]) -> Ipv6Addr {
+	if mac == [0, 0, 0, 0, 0, 0] {
+		return Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1);
+	}
+
+	let interface_id = mac_to_eui64(mac);
+
+	Ipv6Addr::new(
+		0xfe80,
+		0,
+		0,
+		0,
+		(interface_id >> 48) as u16,
+		(interface_id >> 32) as u16,
+		(interface_id >> 16) as u16,
+		interface_id as u16,
+	)
 }
 
 impl<'a> NetworkInterface<'a> {
@@ -101,48 +138,92 @@ impl<'a> NetworkInterface<'a> {
 		#[cfg_attr(all(not(feature = "dhcpv4"), not(feature = "dns")), expect(unused_mut))]
 		let mut sockets = SocketSet::new(vec![]);
 
-		#[cfg(feature = "dns")]
-		let mut dns_handle = None;
-
+		// FIXME: We only support one DHCP handle, but that's currently okay
+		// because we only support DHCPv4 and a single interface for now
 		#[cfg(feature = "dhcpv4")]
-		let dhcp_handle = {
-			if let Some(hermit_ip) = hermit_var!("HERMIT_IP") {
-				warn!("HERMIT_IP was set to {hermit_ip}, but Hermit was built with DHCPv4.");
-				warn!(
-					"HERMIT_IP will be overwritten if a DHCP configuration is acquired. If the provided configuration was not meant to be a fallback, disable the DHCP feature."
-				);
-			}
-			sockets.add(dhcpv4::Socket::new())
-		};
+		let mut dhcp_handle = None;
 
-		if !cfg!(feature = "dhcpv4") || hermit_var!("HERMIT_IP").is_some() {
-			let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
-			let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
-			let mymask =
-				Ipv4Address::from_str(hermit_var_or!("HERMIT_MASK", "255.255.255.0")).unwrap();
-
-			let ip_addr = IpCidr::from(Ipv4Cidr::from_netmask(myip, mymask).unwrap());
-			info!("IP address: {ip_addr}");
-			info!("Gateway:    {mygw}");
-
-			iface.update_ip_addrs(|ip_addrs| {
-				ip_addrs.push(ip_addr).unwrap();
-			});
-			iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
-
-			#[cfg(feature = "dns")]
-			{
-				// Quad9 DNS server
-				let mydns1 =
-					Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS1", "9.9.9.9")).unwrap();
-				// Cloudflare DNS server
-				let mydns2 =
-					Ipv4Address::from_str(hermit_var_or!("HERMIT_DNS2", "1.1.1.1")).unwrap();
-				let servers = &[mydns1.into(), mydns2.into()];
-				let dns_socket = dns::Socket::new(servers, vec![]);
-				dns_handle = Some(sockets.add(dns_socket));
-			};
+		if hermit_var!("HERMIT_IP").is_some()
+			|| hermit_var!("HERMIT_GATEWAY").is_some()
+			|| hermit_var!("HERMIT_MASK").is_some()
+		{
+			warn!(
+				"HERMIT_IP, HERMIT_GATEWAY and HERMIT_MASK were removed in favor of the ip= parameter and have no effect anymore"
+			);
 		}
+
+		let if_configs = interface_configs();
+
+		#[cfg(feature = "dns")]
+		let mut dns_servers = Vec::new();
+
+		for if_config in if_configs {
+			match if_config.ip_and_gateway {
+				IpAddrConfig::None => {}
+				#[cfg(feature = "dhcpv4")]
+				IpAddrConfig::Dhcp => {
+					dhcp_handle = Some(sockets.add(dhcpv4::Socket::new()));
+				}
+				IpAddrConfig::Static {
+					ip_and_netmask,
+					gateway,
+				} => {
+					info!("IP address: {ip_and_netmask}");
+
+					// We must always configure an IPv6 link local for IPv6 to work
+					if let IpCidr::Ipv6(_) = ip_and_netmask
+						&& iface.ipv6_addr().is_none()
+					{
+						// FIXME: Ideally we would generate a link-local using a persistent random identifier in accordance with RFC7217,
+						// but we currently have no way to persistently store this secret, so we use the MAC address
+						iface.update_ip_addrs(|ip_addrs| {
+							ip_addrs
+								.push(IpCidr::new(IpAddress::from(mac_to_link_local(mac)), 64))
+								.unwrap();
+						});
+					}
+
+					iface.update_ip_addrs(|ip_addrs| {
+						ip_addrs.push(ip_and_netmask).unwrap();
+					});
+
+					if let Some(gateway) = gateway {
+						info!("Gateway:    {gateway}");
+
+						match gateway {
+							IpAddr::V4(gateway_v4) => {
+								iface
+									.routes_mut()
+									.add_default_ipv4_route(gateway_v4)
+									.unwrap();
+							}
+							IpAddr::V6(gateway_v6) => {
+								iface
+									.routes_mut()
+									.add_default_ipv6_route(gateway_v6)
+									.unwrap();
+							}
+						}
+					}
+
+					#[cfg(feature = "dns")]
+					{
+						if let Some(dns0) = if_config.dns0 {
+							dns_servers.push(dns0.into());
+						}
+						if let Some(dns1) = if_config.dns1 {
+							dns_servers.push(dns1.into());
+						}
+					};
+				}
+			}
+		}
+
+		#[cfg(feature = "dns")]
+		let dns_handle = {
+			let dns_socket = dns::Socket::new(&dns_servers, vec![]);
+			Some(sockets.add(dns_socket))
+		};
 
 		NetworkState::Initialized(Box::new(Self {
 			iface,

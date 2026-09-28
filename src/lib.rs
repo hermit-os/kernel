@@ -35,6 +35,41 @@
 )]
 #![cfg_attr(feature = "document-features", doc = document_features::document_features!())]
 //!
+//! # Compile-time environment variables
+//!
+//! Compile-time environment variables are read from the build environment.
+//!
+//! - **`HERMIT_CAREFUL`** — Compiles the kernel with [`cargo careful`].
+//!
+//! [`cargo careful`]: https://github.com/RalfJung/cargo-careful
+//!
+//! # Run-time environment variables
+//!
+//! Run-time environment variables can be set via `env=KEY=VALUE` kernel args.
+//!
+//! ## Network environment variables
+//!
+//! - **`HERMIT_MTU`** — Sets the *maximum transmission unit* (MTU). Defaults to `1500`.
+//! - **`HERMIT_MRG_RXBUF_SIZE`** — Sets the receive buffer size. Useful for testing receive buffer merging of virtio-net devices when the feature `VIRTIO_NET_F_MRG_RXBUF` is negotiated. Defaults to unset.
+//! - **`HERMIT_PCAP_PATH`** — Sets the packet capture file path. Defaults to `/root/`. See the `write-pcap-file` feature for details.
+//!
+//! IP address, gateway and DNS are configured via the `ip=` command-line parameter for the kernel and do not have a default value:
+//!
+//! - `ip=none` or `ip=off` do not configure a network interface.
+//! - `ip=dhcp` uses DHCPv4 for configuring the network interface.
+//! - `ip=10.0.5.3/24:10.0.5.1::::1.1.1.1:1.0.0.1` would configure the static IP address `10.0.5.3`, set the gateway as `10.0.5.1` and configure two DNS servers.
+//!
+//! ## Output environment variables
+//!
+//! - **`NO_COLOR`** — Prevents the addition of ANSI colors to the kernel output. Defaults to unset. For details, see [`NO_COLOR`].
+//! - **`HERMIT_LOG_LEVEL_FILTER`** — Sets the lowest log level to print. Defaults to `info`.
+//!
+//! [`NO_COLOR`]: https://no-color.org/
+//!
+//! ## Deprecated environment variables
+//!
+//! - **`UHYVE_MOUNT`** — Sets the Uhyve mount point. Defaults to `/root`. Nowadays Uhyve supplies this to the kernel.
+//!
 //! [hermit-rs]: https://github.com/hermit-os/hermit-rs
 //! [hermit-c]: https://github.com/hermit-os/hermit-c
 
@@ -101,7 +136,6 @@ mod init_buf;
 mod init_cell;
 pub mod io;
 pub mod mm;
-mod page_range_ext;
 #[cfg(target_os = "none")]
 pub mod rt;
 pub mod scheduler;

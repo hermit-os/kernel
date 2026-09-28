@@ -378,6 +378,9 @@ impl super::virtio::VirtioDriver for VirtioVsockDriver {
 				}
 				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
 				InterruptCapability::Msix(msix_table) => {
+					// The no-op handler allows the processor to receive an interrupt and reschedule.
+					// FIXME: replace with a function to wake the vsock task waker once it is not woken unconditionally.
+					let handler: fn() = || ();
 					caps_coll.com_cfg.register_msix_vectors(
 						msix_table,
 						handlers,
@@ -386,9 +389,7 @@ impl super::virtio::VirtioDriver for VirtioVsockDriver {
 								driver.lock().handle_device_configuration_interrupt();
 							};
 						},
-						// The no-op handler allows the processor to receive an interrupt and reschedule.
-						// FIXME: replace with a function to wake the vsock task waker once it is not woken unconditionally.
-						[([0], (|| {}) as fn())].into_iter(),
+						[([0], handler)].into_iter(),
 						1..3,
 					);
 				}

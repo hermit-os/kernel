@@ -29,52 +29,50 @@ jobs:
           command: check ${{ matrix.checks }}
 
   clippy:
-    name: Clippy
+    name: Clippy (${{ matrix.arch }})
     runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-unknown-none
+            features: tcp,rtl8139
+            exclude-features: gem-net,virtio-net
+          - arch: aarch64
+            target: aarch64-unknown-none-softfloat
+            features: tcp,rtl8139
+            exclude-features: gem-net,virtio-net
+          - arch: riscv64
+            target: riscv64gc-unknown-none-elf
+            features: tcp,gem-net
+            exclude-features: rtl8139,virtio-net
     steps:
       - uses: actions/checkout@v7
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
       - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat riscv64gc-unknown-none-elf
+      - run: rustup target add ${{ matrix.target }}
       - run: rustup component add clippy
       - name: cargo clippy
         run: |
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target x86_64-unknown-none --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target x86_64-unknown-none --no-default-features
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target aarch64-unknown-none-softfloat --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target aarch64-unknown-none-softfloat --no-default-features
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target riscv64gc-unknown-none-elf --all-targets
-          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target riscv64gc-unknown-none-elf --no-default-features
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target ${{ matrix.target }} --all-targets
+          cargo clippy --features tcp,virtio-console,virtio-fs,virtio-net,virtio-rng,virtio-vsock,vga --target ${{ matrix.target }} --no-default-features
       - name: cargo clippy (hermit-builtins)
+        if: matrix.arch == 'x86_64'
         run: cargo clippy --target x86_64-unknown-hermit -Zbuild-std=core
         working-directory: hermit-builtins
-      - run: cargo clippy --package xtask
-      - name: cargo hack clippy (x86_64)
+      - name: cargo clippy (xtask)
+        if: matrix.arch == 'x86_64'
+        run: cargo clippy --package xtask
+      - name: cargo hack clippy
         run: |
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,virtio-net --features tcp,rtl8139
-          cargo hack clippy --each-feature --no-dev-deps --target x86_64-unknown-none --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
-      - name: cargo hack clippy (aarch64)
-        run: |
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features tcp,rtl8139
-          cargo hack clippy --each-feature --no-dev-deps --target aarch64-unknown-none-softfloat --exclude-features gem-net,virtio-net --features pci,tcp,rtl8139
-      - name: cargo hack clippy (riscv64)
-        run: |
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features rtl8139,virtio-net --features tcp,gem-net
-          cargo hack clippy --each-feature --no-dev-deps --target riscv64gc-unknown-none-elf --exclude-features rtl8139,virtio-net --features pci,tcp,gem-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net --features pci
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features gem-net,rtl8139 --features tcp,virtio-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features gem-net,rtl8139 --features pci,tcp,virtio-net
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features ${{ matrix.exclude-features }} --features ${{ matrix.features }}
+          cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features ${{ matrix.exclude-features }} --features pci,${{ matrix.features }}
 
   format:
     name: Format
@@ -112,7 +110,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
-      - uses: crate-ci/typos@master
+      - uses: crate-ci/typos@main
 
   doc:
     name: Doc
@@ -225,9 +223,11 @@ jobs:
           $HOME/.local/bin/firecracker --version
           echo "FIRECRACKER=$HOME/.local/bin/firecracker" >> "$GITHUB_ENV"
         if: matrix.arch == 'x86_64'
-      - run: |
-          cargo +stable install --locked uhyve
-          echo "UHYVE=$CARGO_HOME/bin/uhyve" >> "$GITHUB_ENV"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: uhyve
+        if: matrix.arch == 'x86_64'
+      - run: echo "UHYVE=$CARGO_HOME/bin/uhyve" >> "$GITHUB_ENV"
         if: matrix.arch == 'x86_64'
       - run: cargo +stable install --locked virtiofsd
       - uses: taiki-e/install-action@cargo-careful
@@ -240,8 +240,6 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rusty_demo --features fs,hermit/uhyve --smp 4 uhyve --sudo
         if: matrix.arch == 'x86_64'
-      - run: cargo clean
-        working-directory: .
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hello_world qemu ${{ matrix.qemu_flags }}
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hello_world qemu ${{ matrix.qemu_flags }} --uefi
         if: matrix.arch == 'x86_64'
@@ -276,8 +274,6 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package rftrace-example qemu ${{ matrix.qemu_flags }} --devices virtio-fs-pci
         if: matrix.arch == 'x86_64'
-      - run: cargo clean
-        working-directory: .
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --no-default-features qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-mmio
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package vsock --features client qemu ${{ matrix.qemu_flags }} --sudo --devices virtio-vsock-pci
@@ -298,27 +294,18 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-mmio
         if: matrix.arch == 'x86_64' || matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --features ci,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.qemu_flags }} --devices rtl8139
-        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package httpd --no-default-features --features ci,hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.qemu_flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
-      - run: cargo clean
-        working-directory: .
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package testudp --features hermit/udp,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package testudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.qemu_flags }} --devices rtl8139
-        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package testudp --no-default-features --features hermit/udp,hermit/dhcpv4,hermit/gem-net qemu ${{ matrix.qemu_flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package miotcp --features hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package miotcp --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.qemu_flags }} --devices rtl8139
-        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package miotcp --no-default-features --features hermit/dhcpv4,hermit/tcp,hermit/gem-net qemu ${{ matrix.qemu_flags }} --devices cadence-gem
         if: matrix.arch == 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package poll --features hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package poll --features hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.qemu_flags }} --devices rtl8139
-        if: matrix.arch != 'riscv64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/virtio-net qemu ${{ matrix.qemu_flags }} --devices virtio-net-pci
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package mioudp --features hermit/udp,hermit/dhcpv4,hermit/rtl8139 qemu ${{ matrix.qemu_flags }} --devices rtl8139
-        if: matrix.arch != 'riscv64'
-      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package loopback qemu ${{ matrix.qemu_flags }}
-        env:
-          HERMIT_IP: 127.0.0.1
+      - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package loopback qemu ${{ matrix.qemu_flags }} -- -- ip=127.0.0.1/8 ip=[::1]/96

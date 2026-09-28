@@ -79,7 +79,6 @@ pub fn get_current_boot_id() -> u32 {
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
-	devicetree::init();
 	crate::mm::init();
 	crate::mm::print_information();
 	env::init();

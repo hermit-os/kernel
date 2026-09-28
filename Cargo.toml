@@ -223,6 +223,9 @@ virtio-rng = ["virtio"]
 ## Enables the virtio-vsock driver.
 virtio-vsock = ["virtio"]
 
+## Enable preemptive scheduling
+preemptive = []
+
 #! ### Other Drivers
 
 ## Enables the _Video Graphics Array_ (VGA) driver.
@@ -385,7 +388,7 @@ talc = { version = "5" }
 thiserror = { version = "2", default-features = false }
 time = { version = "0.3", default-features = false }
 uhyve-interface = { version = "0.3", optional = true }
-virtio = { package = "virtio-spec", version = "0.3", optional = true, features = ["alloc", "mmio", "nightly"] }
+virtio = { package = "virtio-spec", version = "0.4", optional = true, features = ["alloc", "mmio", "nightly"] }
 volatile = "0.6"
 zeroize = "1.9.0"
 zerocopy = "0.8.56"
@@ -397,6 +400,7 @@ default-features = false
 features = [
 	"alloc",
 	"async",
+	"iface-max-addr-count-3",
 	"medium-ethernet",
 	"proto-ipv4",
 	"proto-ipv6",
@@ -449,10 +453,17 @@ let_underscore = "warn"
 rust_2018_idioms = "warn"
 
 # Lints
+non_ascii_idents = "warn"
 redundant_imports = "warn"
+redundant_lifetimes = "warn"
 single_use_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(careful)"] }
+unit_bindings = "warn"
 unsafe_op_in_unsafe_fn = "warn"
+unused_extern_crates = "warn"
+unused_lifetimes = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]

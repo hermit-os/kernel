@@ -2,8 +2,6 @@ use core::{ptr, slice};
 
 use free_list::PageRange;
 
-use crate::page_range_ext::PageRangeExt;
-
 /// A boot-protocol module that is passed to the kernel at start.
 ///
 /// This is a blob that is loaded into physical memory by the bootloader or VMM and is described via the start info.

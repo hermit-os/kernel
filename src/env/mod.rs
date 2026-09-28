@@ -1,11 +1,12 @@
 //! Inspection and manipulation of the kernel's environment.
 
+#[cfg(feature = "net")]
+mod ip_config;
 mod start_info;
 
 use alloc::borrow::{Cow, ToOwned};
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::str;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -13,6 +14,8 @@ use hashbrown::hash_map::Iter;
 use hermit_sync::OnceCell;
 use shlex::Shlex;
 
+#[cfg(feature = "net")]
+pub use self::ip_config::*;
 pub use self::start_info::*;
 
 static CLI: OnceCell<Cli> = OnceCell::new();
@@ -27,6 +30,8 @@ struct Cli {
 	image_path: Option<String>,
 	#[cfg(not(target_arch = "riscv64"))]
 	freq: Option<u16>,
+	#[cfg(feature = "net")]
+	interface_configs: Vec<IpConfig>,
 	env_vars: HashMap<Cow<'static, str>, String, RandomState>,
 	args: Vec<String>,
 	#[allow(dead_code)]
@@ -52,6 +57,9 @@ impl Default for Cli {
 			})
 		};
 
+		#[cfg(feature = "net")]
+		let mut interface_configs = Vec::new();
+
 		let mut args = Vec::new();
 		let mut mmio = Vec::new();
 		while let Some(word_owned) = words.next() {
@@ -62,6 +70,20 @@ impl Default for Cli {
 				continue;
 			}
 
+			#[cfg_attr(not(feature = "net"), expect(unused_variables))]
+			if let Some(ip_config_str) = word.strip_prefix("ip=") {
+				#[cfg(feature = "net")]
+				match IpConfig::try_from(ip_config_str) {
+					Ok(config) => interface_configs.push(config),
+					Err(e) => panic!("Could not parse network interface configuration: {e}"),
+				}
+
+				#[cfg(not(feature = "net"))]
+				warn!("ip= parameter passed with networking support disabled, ignoring");
+
+				continue;
+			}
+
 			match word {
 				#[cfg(not(target_arch = "riscv64"))]
 				"-freq" => {
@@ -69,16 +91,25 @@ impl Default for Cli {
 					freq = Some(s.parse().unwrap());
 				}
 				"-ip" => {
-					let ip = expect_arg(words.next(), word);
-					env_vars.insert(Cow::Borrowed("HERMIT_IP"), ip);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -ip bootarg was removed in favor of the ip= parameter and has no effect anymore"
+					);
 				}
 				"-mask" => {
-					let mask = expect_arg(words.next(), word);
-					env_vars.insert(Cow::Borrowed("HERMIT_MASK"), mask);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -mask bootarg was removed in favor of including the prefix length in the IP as part of the ip= parameter and has no effect anymore"
+					);
 				}
 				"-gateway" => {
-					let gateway = expect_arg(words.next(), word);
-					env_vars.insert(Cow::Borrowed("HERMIT_GATEWAY"), gateway);
+					// Ignore the argument value
+					drop(words.next());
+					warn!(
+						"The -gateway bootarg was removed in favor of the ip= parameter and has no effect anymore"
+					);
 				}
 				"-mount" => {
 					let gateway = expect_arg(words.next(), word);
@@ -101,10 +132,18 @@ impl Default for Cli {
 			};
 		}
 
+		// If no interface config is supplied, use a default
+		#[cfg(feature = "net")]
+		if interface_configs.is_empty() {
+			interface_configs.push(IpConfig::default());
+		}
+
 		Self {
 			image_path,
 			#[cfg(not(target_arch = "riscv64"))]
 			freq,
+			#[cfg(feature = "net")]
+			interface_configs,
 			env_vars,
 			args,
 			#[allow(dead_code)]
@@ -139,6 +178,12 @@ pub fn early_var(key: &str) -> Option<String> {
 			None
 		}
 	}
+}
+
+/// Returns all interface IP configurations specified via ip=.
+#[cfg(feature = "net")]
+pub fn interface_configs() -> &'static [IpConfig] {
+	CLI.get().unwrap().interface_configs.as_slice()
 }
 
 pub fn vars() -> Iter<'static, Cow<'static, str>, String> {

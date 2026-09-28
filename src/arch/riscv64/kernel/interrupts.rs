@@ -290,6 +290,7 @@ fn external_handler() {
 				handler();
 			}
 		}
+
 		crate::executor::run();
 
 		core_scheduler().reschedule();

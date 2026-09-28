@@ -54,9 +54,9 @@ impl VqCfgHandler<'_> {
 		self.select_queue();
 		let ptr = self.raw.as_mut_ptr();
 
-		let num_max = ptr.queue_num_max().read().to_ne();
+		let num_max = ptr.queue_size_max().read().to_ne();
 		let size = max_size.min(num_max);
-		ptr.queue_num().write(size.into());
+		ptr.queue_size().write(size.into());
 		size
 	}
 
@@ -137,7 +137,7 @@ impl ComCfg {
 	pub fn get_max_queue_size(&mut self, sel: u16) -> u16 {
 		let ptr = self.com_cfg.as_mut_ptr();
 		ptr.queue_sel().write(sel.into());
-		ptr.queue_num_max().read().to_ne()
+		ptr.queue_size_max().read().to_ne()
 	}
 
 	/// Resets the device status field to zero.
@@ -288,7 +288,7 @@ impl NotifCtrl {
 		let notification_data = if self.f_notif_data {
 			data.into_bits()
 		} else {
-			u32::from(data.vqn()).into()
+			u32::from(data.vq_notif_config_data()).into()
 		};
 
 		unsafe {

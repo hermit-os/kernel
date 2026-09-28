@@ -10,6 +10,8 @@ use core::{fmt, ptr};
 use num_enum::{IntoPrimitive, TryFromPrimitive, TryFromPrimitiveError};
 
 use super::{Af, Ipproto, Sock, SockFlags, sockaddr, sockaddrBox, sockaddrRef, socklen_t};
+#[cfg(feature = "net")]
+use crate::executor::network::NIC;
 
 #[repr(C)]
 #[derive(Default)]
@@ -429,14 +431,19 @@ fn getaddrinfo_node(
 	};
 
 	if ai_flags.contains(Ai::ADDRCONFIG) {
-		if want_ipv4 {
-			// Currently, Hermit always has an IPv4 address
-			want_ipv4 = true;
+		#[cfg(feature = "net")]
+		{
+			let mut guard = NIC.lock();
+			let nic = guard.as_nic_mut().unwrap();
+
+			want_ipv4 = want_ipv4 && nic.iface.ipv4_addr().is_some();
+			want_ipv6 = want_ipv6 && nic.iface.ipv6_addr().is_some();
 		}
-		if want_ipv6 {
-			// Currently, Hermit never has an IPv4 address
+
+		#[cfg(not(feature = "net"))]
+		{
+			want_ipv4 = false;
 			want_ipv6 = false;
-			error!("getaddrinfo(AI_ADDRCONFIG) was called wanting an IPv6 address");
 		}
 	}
 
@@ -494,7 +501,7 @@ fn resolve(
 
 	use crate::errno::ToErrno;
 	use crate::executor::block_on;
-	use crate::executor::network::{self, NIC, get_query_result};
+	use crate::executor::network::{self, get_query_result};
 
 	macro_rules! try_io {
 		($expr:expr $(,)?) => {

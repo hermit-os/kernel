@@ -4,4 +4,5 @@
 # Usage: .. -netdev tap,script=hermit-ifup,..
 
 ip address add dev "$1" local 10.0.5.1/24 broadcast 10.0.5.255
+ip address add dev "$1" local fdfb:5494:2d56::1/48
 ip link set "$1" up

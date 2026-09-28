@@ -520,7 +520,7 @@ impl NotifCtrl {
 			unsafe {
 				self.notif_addr
 					.cast::<le16>()
-					.write_volatile(data.vqn().into());
+					.write_volatile(data.vq_notif_config_data().into());
 			}
 		}
 	}

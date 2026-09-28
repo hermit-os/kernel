@@ -2,6 +2,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 use crate::errno::Errno;
+use crate::fd::null_file::NullFile;
 use crate::fd::random_file::RandomFile;
 use crate::fd::{AccessPermission, Fd, OpenOption};
 use crate::fs::{NodeKind, VfsNode};
@@ -33,6 +34,7 @@ impl VfsNode for DevDirectory {
 			"urandom" | "random" => Ok(Arc::new(async_lock::RwLock::new(Fd::RandomFile(
 				RandomFile,
 			)))),
+			"null" => Ok(Arc::new(async_lock::RwLock::new(Fd::NullFile(NullFile)))),
 			_ => Err(Errno::Noent),
 		}
 	}
