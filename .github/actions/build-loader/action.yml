@@ -1,0 +1,36 @@
+name: Build loader
+description: Build hermit-loader from crates/loader, reusing a cached build if the sources are unchanged
+
+inputs:
+  targets:
+    description: Space-separated loader targets, e.g. "x86_64-multiboot aarch64-elf"
+    required: true
+  kernel-dir:
+    description: Path of the kernel checkout, relative to the workspace
+    default: .
+  destination:
+    description: Directory that receives the loader images
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - name: Restore loader
+      id: cache
+      uses: actions/cache@v5
+      with:
+        path: ${{ inputs.kernel-dir }}/crates/loader/dist
+        key: loader-${{ runner.os }}-${{ runner.arch }}-${{ inputs.targets }}-${{ hashFiles(format('{0}/crates/loader/**', inputs.kernel-dir), format('{0}/rust-toolchain.toml', inputs.kernel-dir)) }}
+    - name: Build loader
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: ${{ inputs.kernel-dir }}/crates/loader
+      run: |
+        mkdir -p dist
+        for target in ${{ inputs.targets }}; do
+          cargo xtask build --release --target "$target"
+        done
+        cp target/release/hermit-loader-* dist/
+    - name: Install loader
+      shell: bash
+      run: cp ${{ inputs.kernel-dir }}/crates/loader/dist/hermit-loader-* ${{ inputs.destination }}/
