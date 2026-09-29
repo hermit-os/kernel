@@ -1,5 +1,6 @@
 use core::marker::PhantomData;
 use core::ptr;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use align_address::Align;
 use free_list::PageLayout;
@@ -11,6 +12,7 @@ use riscv::register::satp;
 use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
+pub(crate) static SATP_VALUE: AtomicUsize = AtomicUsize::new(0);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -659,4 +661,9 @@ pub unsafe fn enable_page_table() {
 		satp::set(mode, asid, ppn);
 		asm::sfence_vma_all();
 	}
+
+	SATP_VALUE.store(
+		((mode as usize) << 60) | (asid << 44) | ppn,
+		Ordering::Relaxed,
+	);
 }

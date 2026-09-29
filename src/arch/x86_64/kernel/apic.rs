@@ -731,18 +731,16 @@ pub fn init_x2apic() {
 /// Initialize the required `smp::start` variables for the next CPU to be booted.
 #[cfg(feature = "smp")]
 pub fn init_next_processor_variables() {
-	use alloc::alloc::alloc;
-	use core::alloc::Layout;
 	use core::sync::atomic::Ordering;
 
-	use crate::arch::kernel::CURRENT_STACK_ADDRESS;
+	use crate::arch::x86_64::kernel::{CURRENT_STACK, CURRENT_STACK_ADDRESS};
 	use crate::config::KERNEL_STACK_SIZE;
+	use crate::mm::stack_alloc::allocate_stack;
 
 	// Allocate stack for the CPU and pass the addresses.
-	let layout = Layout::from_size_align(KERNEL_STACK_SIZE, BasePageSize::SIZE as usize).unwrap();
-	let stack = unsafe { alloc(layout) };
-	assert!(!stack.is_null());
-	CURRENT_STACK_ADDRESS.store(stack, Ordering::Relaxed);
+	let stack = allocate_stack(KERNEL_STACK_SIZE);
+	CURRENT_STACK_ADDRESS.store(stack.stack_start().as_mut_ptr(), Ordering::Relaxed);
+	let _ = CURRENT_STACK.lock().insert(stack);
 }
 
 /// Boot all Application Processors
