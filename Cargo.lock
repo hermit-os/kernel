@@ -34,14 +34,15 @@ dependencies = [
 [[package]]
 name = "acpi"
 version = "6.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b763acdc1d85c36d61acf97a59938f23202d0e8efe45e8759de10c02db242744"
+source = "git+https://github.com/mkroening/acpi.git?branch=unaligned-table-entries#3bcb979e77dca871cd4dea9c3e287fac937855fc"
 dependencies = [
  "bit_field",
  "bitflags 2.13.1",
  "byteorder",
+ "lock_api",
  "log",
  "pci_types",
+ "smallvec",
  "spinning_top",
 ]
 

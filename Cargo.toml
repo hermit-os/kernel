@@ -498,6 +498,7 @@ unreadable_literal = "warn"
 unused_dependencies = "allow"
 
 [patch.crates-io]
+acpi = { git = "https://github.com/mkroening/acpi.git", branch = "unaligned-table-entries" }
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "0.3.x" }
 
 [profile.dist]

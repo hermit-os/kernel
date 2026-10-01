@@ -56,7 +56,7 @@ fn rsdp_paddr<H: Handler>(handler: &H) -> Option<NonZero<usize>> {
 
 	#[cfg(target_arch = "x86_64")]
 	if let Ok(rsdp) = unsafe { acpi::rsdp::Rsdp::search_for_on_bios(handler.clone()) } {
-		let rsdp_paddr = rsdp.virtual_start.addr();
+		let rsdp_paddr = rsdp.raw.virtual_start.addr();
 		info!("Found RSDP paddr by searching on BIOS systems: {rsdp_paddr:#x}");
 		return Some(rsdp_paddr);
 	}
