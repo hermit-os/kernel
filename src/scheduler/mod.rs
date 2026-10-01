@@ -33,7 +33,11 @@ use crate::fd::{Fd, RawFd};
 use crate::io;
 use crate::scheduler::task::*;
 
-#[cfg(all(target_arch = "x86_64", feature = "smp", not(feature = "idle-poll")))]
+#[cfg(all(
+	any(target_arch = "x86_64", target_arch = "riscv64"),
+	feature = "smp",
+	not(feature = "idle-poll")
+))]
 pub mod sleep_state;
 pub mod task;
 pub mod timer_interrupts;
@@ -927,7 +931,10 @@ pub(crate) fn add_current_core() {
 			core_id.try_into().unwrap(),
 			&CoreLocal::get().scheduler_input,
 		);
-		#[cfg(all(target_arch = "x86_64", not(feature = "idle-poll")))]
+		#[cfg(all(
+			any(target_arch = "x86_64", target_arch = "riscv64"),
+			not(feature = "idle-poll")
+		))]
 		sleep_state::install_for_core(core_id);
 	}
 }
