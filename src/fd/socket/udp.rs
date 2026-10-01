@@ -29,7 +29,7 @@ impl Socket {
 		} else if domain == Af::Inet6 {
 			IpEndpoint::new(Ipv6Address::UNSPECIFIED.into(), 0)
 		} else {
-			panic!("Unsupported domain for TCP socket: {domain:?}");
+			panic!("Unsupported domain for UDP socket: {domain:?}");
 		};
 
 		Self {
@@ -61,7 +61,7 @@ impl Socket {
 				}
 
 				if !socket.can_send() {
-					socket.register_recv_waker(cx.waker());
+					socket.register_send_waker(cx.waker());
 					return Poll::Pending;
 				}
 
