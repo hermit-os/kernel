@@ -79,7 +79,7 @@
 	allow(incomplete_features)
 )]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
-#![feature(allocator_api)]
+#![cfg_attr(any(feature = "virtio", feature = "rtl8139"), feature(allocator_ext))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(any(feature = "common-os", feature = "nostd")), feature(linkage))]
 #![feature(linked_list_cursors)]
