@@ -1,0 +1,24 @@
+name: Release loader
+
+on:
+  push:
+    tags:
+      - "loader-v*.*.*"
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: mkroening/rust-toolchain-toml@main
+      - uses: ./.github/actions/build-loader
+        with:
+          targets: aarch64-elf aarch64_be-elf riscv64-sbi x86_64-linux x86_64-multiboot x86_64-uefi
+      - run: gh release create "$GITHUB_REF_NAME" --draft --title "hermit-loader ${GITHUB_REF_NAME#loader-v}" hermit-loader-*

@@ -65,6 +65,10 @@ jobs:
       - name: cargo clippy (xtask)
         if: matrix.arch == 'x86_64'
         run: cargo clippy --package xtask
+      - name: cargo clippy (loader)
+        if: matrix.arch == 'x86_64'
+        run: cargo xtask clippy
+        working-directory: crates/loader
       - name: cargo hack clippy
         run: |
           cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features dhcpv4,dns,gem-net,net,rtl8139,virtio-net
@@ -84,6 +88,7 @@ jobs:
       - run: |
           cargo fmt --all --check
           cargo fmt --all --check --manifest-path hermit-builtins/Cargo.toml
+          cargo fmt --all --check --manifest-path crates/loader/Cargo.toml
 
   lock-file:
     name: Lock file
@@ -148,8 +153,9 @@ jobs:
           CARGO_BUILD_WARNINGS: warn
       - name: Macro unit tests
         run: cargo test --package hermit-macro
-      - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64-multiboot
+      - uses: ./.github/actions/build-loader
+        with:
+          targets: x86_64-multiboot
       - run: rustup target add x86_64-unknown-none
       - name: Integration tests
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64-multiboot
@@ -175,17 +181,21 @@ jobs:
             packages: qemu-system-x86-hwe uftrace
             qemu_flags: --accel --sudo
             rs_flags: --features hermit/loader
+            loader_targets: x86_64-multiboot x86_64-linux x86_64-uefi
           - arch: aarch64
             packages: qemu-system-arm-hwe
             rs_flags: --features hermit/loader,hermit/semihosting
+            loader_targets: aarch64-elf
           # FIXME: enable semihosting once it works with QEMU
           # See https://github.com/taiki-e/semihosting/issues/18.
           - arch: aarch64_be
             packages: qemu-system-arm-hwe
             rs_flags: --features hermit/loader
+            loader_targets: aarch64_be-elf
           - arch: riscv64
             packages: qemu-system-riscv-hwe
             rs_flags: --features hermit/loader,hermit/semihosting
+            loader_targets: riscv64-sbi
 
     steps:
       - name: Checkout hermit-rs
@@ -209,8 +219,11 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
         with:
           toolchain-file: "kernel/rust-toolchain.toml"
-      - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern 'hermit-loader-${{ matrix.arch }}*'
+      - uses: ./kernel/.github/actions/build-loader
+        with:
+          targets: ${{ matrix.loader_targets }}
+          kernel-dir: kernel
+          destination: kernel
       - name: Install Firecracker
         run: |
           gh release download --repo firecracker-microvm/firecracker v1.12.0 --pattern "firecracker-*-${{ matrix.arch }}.tgz"
