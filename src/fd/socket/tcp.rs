@@ -123,7 +123,8 @@ impl ObjectInterface for Socket {
 						let available = PollEvent::POLLOUT
 							| PollEvent::POLLWRNORM
 							| PollEvent::POLLWRBAND
-							| PollEvent::POLLIN | PollEvent::POLLRDNORM
+							| PollEvent::POLLIN
+							| PollEvent::POLLRDNORM
 							| PollEvent::POLLRDBAND;
 
 						let ret = event & available;

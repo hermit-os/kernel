@@ -491,6 +491,10 @@ transmute_ptr_to_ptr = "warn"
 uninlined_format_args = "warn"
 unreadable_literal = "warn"
 
+[workspace.lints.cargo]
+# FIXME:
+unused_dependencies = "allow"
+
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "0.3.x" }
 

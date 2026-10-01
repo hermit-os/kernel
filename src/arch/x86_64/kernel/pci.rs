@@ -191,7 +191,8 @@ mod pcie {
 			let pci_start = self.pci_config_space_address(0, 0, 0).as_u64();
 			let pci_end = self
 				.pci_config_space_address(PCI_MAX_BUS_NUMBER, u8::MAX, u8::MAX)
-				.as_u64() + 0x1000;
+				.as_u64()
+				+ 0x1000;
 
 			for mem_region in env::start_info().memmap() {
 				let region_start = u64::try_from(mem_region.phys_addr).unwrap();
