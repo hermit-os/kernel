@@ -37,6 +37,10 @@ struct DescrRing {
 	avail_ring_cell: Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
 	used_ring_cell: Box<UnsafeCell<virtq::Used>, DeviceAlloc>,
 	order_platform: bool,
+	/// Whether `VIRTIO_F_EVENT_IDX` was negotiated. If so, the driver must
+	/// publish `used_event` when enabling notifications; the device only
+	/// interrupts when the used index crosses it.
+	event_idx: bool,
 }
 
 impl DescrRing {
@@ -134,9 +138,26 @@ impl DescrRing {
 	}
 
 	fn drv_enable_notif(&mut self) {
+		// With VIRTIO_F_EVENT_IDX negotiated, the device does not look at
+		// `AvailF::NO_INTERRUPT`; it only interrupts when the used index
+		// crosses the `used_event` value we publish. We must therefore set
+		// `used_event` to the index of the next buffer we will consume
+		// (`read_idx`) so the device notifies us for it. Failing to do so
+		// leaves `used_event` stale and lets the device suppress the interrupt
+		// for an already-delivered buffer, which is a lost wakeup.
+		if self.event_idx {
+			let used_event = self.read_idx;
+			*self
+				.avail_ring_mut()
+				.used_event_mut(true)
+				.expect("avail ring was allocated with `has_event_idx`") = le16::from_ne(used_event);
+		}
 		self.avail_ring_mut()
 			.flags
 			.remove(virtq::AvailF::NO_INTERRUPT);
+		// Make the notification configuration (including `used_event`) visible
+		// to the device before it can observe a subsequent used-ring read.
+		super::virtio_mem_barrier(BarrierType::General, self.order_platform);
 	}
 
 	fn drv_disable_notif(&mut self) {
@@ -296,6 +317,7 @@ impl SplitVq {
 		vq_handler.set_dev_ctrl_addr(DeviceAlloc.phys_addr_from(used_ring_cell.as_mut()));
 
 		let order_platform = features.contains(virtio::F::ORDER_PLATFORM);
+		let event_idx = features.contains(virtio::F::EVENT_IDX);
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
@@ -309,6 +331,7 @@ impl SplitVq {
 			avail_ring_cell,
 			used_ring_cell,
 			order_platform,
+			event_idx,
 		};
 
 		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));
