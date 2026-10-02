@@ -222,6 +222,7 @@ impl Virtq for SplitVq {
 	}
 
 	fn has_used_buffers(&self) -> bool {
+		super::virtio_mem_barrier(BarrierType::General, self.ring.order_platform);
 		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
 	}
 }

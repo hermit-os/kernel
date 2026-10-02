@@ -269,6 +269,12 @@ async fn network_run() {
 			// Very likely no progress can be made, so set up a timer interrupt to wake the waker
 			NETWORK_WAKER.lock().register(cx.waker());
 			nic.set_polling_mode(false);
+
+			if nic.has_packet() {
+				cx.waker().wake_by_ref();
+				return Poll::Pending;
+			}
+
 			if let Some(wakeup_time) = nic.poll_delay(now).map(|d| d.total_micros()) {
 				create_timer(Source::Network, wakeup_time);
 				trace!("Configured an interrupt for {wakeup_time:?}");
@@ -421,6 +427,10 @@ impl<'a> NetworkInterface<'a> {
 
 	pub(crate) fn set_polling_mode(&mut self, value: bool) {
 		self.get_inner_device().set_polling_mode(value);
+	}
+
+	pub(crate) fn has_packet(&mut self) -> bool {
+		self.get_inner_device().has_packet()
 	}
 
 	/// Gets the device inside the [smoltcp::phy::Tracer] and [smoltcp::phy::PcapWriter] layers.

@@ -652,6 +652,7 @@ impl Virtq for PackedVq {
 	}
 
 	fn has_used_buffers(&self) -> bool {
+		super::virtio_mem_barrier(BarrierType::General, self.descr_ring.order_platform);
 		let desc = &self.descr_ring.ring[usize::from(self.descr_ring.poll_index.desc_event_off())];
 		self.descr_ring.is_marked_used(desc.flags)
 	}
