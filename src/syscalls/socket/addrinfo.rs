@@ -15,7 +15,7 @@ use crate::executor::network::NIC;
 
 #[repr(C)]
 #[derive(Default)]
-struct addrinfo {
+pub(crate) struct addrinfo {
 	ai_flags: Ai,
 	ai_family: i32,
 	ai_socktype: i32,
@@ -91,7 +91,7 @@ impl Drop for addrinfo {
 
 #[derive(Default)]
 #[repr(transparent)]
-struct addrinfoList(Option<Box<addrinfo>>);
+pub(crate) struct addrinfoList(Option<Box<addrinfo>>);
 
 impl addrinfoList {
 	fn is_empty(&self) -> bool {
@@ -134,7 +134,7 @@ impl FromIterator<addrinfo> for addrinfoList {
 	}
 }
 
-struct addrinfoIter<'a>(Option<&'a addrinfo>);
+pub(crate) struct addrinfoIter<'a>(Option<&'a addrinfo>);
 
 impl<'a> Iterator for addrinfoIter<'a> {
 	type Item = &'a addrinfo;

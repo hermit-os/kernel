@@ -10,8 +10,6 @@ use crate::env;
 
 /// Current FPU state. Saved at context switch when changed.
 ///
-/// AArch64 mandates 32 NEON SIMD registers, which are named v0-v32.
-///
 /// See the Arm documentation for more information:
 /// <https://developer.arm.com/documentation/102374/0103/Registers-in-AArch64---general-purpose-registers>
 ///
@@ -20,11 +18,11 @@ use crate::env;
 /// condition. These are callee-saved bits.
 #[derive(Clone, Copy, Debug)]
 pub struct FPUState {
-	/// Advanced SIMD 128-bit vector registers.
+	/// Advanced SIMD 128-bit vector registers
 	q: [u128; 32],
-	/// FPCR register.
+	/// FPCR register
 	fpcr: u64,
-	/// FPSR register.
+	/// FPSR register
 	fpsr: u64,
 }
 
@@ -215,6 +213,19 @@ pub fn halt() {
 }
 
 /// Shutdown the system
+///
+/// We try PSCI first, with semihosting as a fallback. Rationale:
+///
+/// * **PSCI `SYSTEM_OFF`** is the most portable shutdown primitive
+///   on AArch64.
+///
+/// * **AArch64 semihosting** uses `HLT #0xf000`. On `accel=tcg`, QEMU
+///   intercepts that instruction and exits with the supplied code.
+///   Under `accel=hvf`/`accel=kvm` the HLT goes straight to the guest
+///   as an UNDEF exception (`EC=0x0`) because hardware virtualisation
+///   does not trap it — so semihosting is *not* a viable shutdown
+///   primitive in a virtualised guest. We therefore use it only as a
+///   fallback.
 #[allow(unused_variables)]
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
@@ -226,11 +237,11 @@ pub fn shutdown(error_code: i32) -> ! {
 				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
 				// call hypervisor to shut down the system
 				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+			}
 
-				// we should never reach this point
-				loop {
-					aarch64_cpu::asm::wfe();
-				}
+			// Last resort: park the CPU forever.
+			loop {
+				aarch64_cpu::asm::wfe();
 			}
 		}
 	}

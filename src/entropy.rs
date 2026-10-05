@@ -96,7 +96,7 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> io::Result<usize> {
 		Some(pool) if now.saturating_sub(pool.last_reseed) <= RESEED_INTERVAL => pool,
 		Some(pool) => {
 			// If the underlying RNG becomes unavailable, continue to generate
-			// bytes with the existing state – the only benefit of reseeding
+			// bytes with the existing state - the only benefit of reseeding
 			// is recovery from state compromise. However, we'll continue
 			// to make requests on every call until the RNG comes back so
 			// that recovery will happen as soon as the RNG becomes available.
