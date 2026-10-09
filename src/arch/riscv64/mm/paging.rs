@@ -213,6 +213,7 @@ struct Page<S: PageSize> {
 
 impl<S: PageSize> Page<S> {
 	/// Return the stored virtual address.
+	#[cfg_attr(not(feature = "riscv-plic"), allow(dead_code))]
 	fn address(&self) -> VirtAddr {
 		self.virtual_address
 	}
@@ -632,6 +633,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
 }
 
+#[cfg_attr(not(feature = "riscv-plic"), allow(dead_code))]
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 	let range = AddrRange::new(phys_addr, phys_addr).unwrap();
 
