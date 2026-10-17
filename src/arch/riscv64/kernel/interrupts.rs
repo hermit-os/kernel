@@ -166,37 +166,16 @@ pub(crate) fn enable_and_wait() {
 		}
 
 		debug!("Wait {:x?}", sie::read());
-		loop {
-			wfi();
-			// Interrupts are disabled at this point, so a pending interrupt will
-			// resume the execution. We still have to check if a interrupt is pending
-			// because the WFI instruction could be implemented as NOP (The RISC-V Instruction Set ManualVolume II: Privileged Architecture)
 
-			let pending_interrupts = sip::read();
-
-			// trace!("sip: {:x?}", pending_interrupts);
-			#[cfg(feature = "smp")]
-			if pending_interrupts.ssoft() {
-				//Clear Supervisor-level software interrupt
-				unsafe { sip::clear_ssoft() };
-				trace!("SOFT");
-				crate::arch::kernel::scheduler::wakeup_handler();
-				break;
-			}
-
-			if pending_interrupts.sext() {
-				trace!("EXT");
-				external_handler();
-				break;
-			}
-
-			if pending_interrupts.stimer() {
-				debug!("sip: {pending_interrupts:x?}");
-				trace!("TIMER");
-				crate::arch::kernel::scheduler::timer_handler();
-				break;
-			}
-		}
+		// Enable interrupts and wait for one to arrive, matching the idle
+		// behavior of the other architectures (x86 `sti; hlt`, aarch64
+		// `daifclr; wfi`) and Linux's `arch_cpu_idle`. The interrupt is taken
+		// as a real trap and dispatched by `trap_handler`, which is more
+		// robust than waking on a pending bit with interrupts disabled: it
+		// guarantees the handler runs even if a notification edge is missed.
+		enable();
+		wfi();
+		disable();
 	}
 }
 

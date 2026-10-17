@@ -539,7 +539,6 @@ impl NetworkDriver for VirtioNetDriver {
 		}
 	}
 
-	#[allow(dead_code)]
 	fn has_packet(&self) -> bool {
 		self.recv_vqs.has_packet()
 	}
