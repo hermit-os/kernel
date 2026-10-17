@@ -1,8 +1,8 @@
 use x86_64::registers::control::{Cr0, Cr0Flags};
 
 use crate::arch::kernel::CURRENT_STACK_ADDRESS;
-use crate::arch::kernel::scheduler::TaskStacks;
 use crate::config::KERNEL_STACK_SIZE;
+use crate::mm::stack_alloc;
 
 #[unsafe(naked)]
 pub unsafe extern "C" fn smp_start() -> ! {
@@ -18,7 +18,7 @@ pub unsafe extern "C" fn smp_start() -> ! {
 		"jmp {smp_start_rust}",
 
 		current_stack_address = sym CURRENT_STACK_ADDRESS,
-		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+		stack_top_offset = const KERNEL_STACK_SIZE - stack_alloc::MARKER_SIZE,
 		smp_start_rust = sym smp_start_rust,
 	)
 }
