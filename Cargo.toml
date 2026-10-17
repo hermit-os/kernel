@@ -259,6 +259,11 @@ idle-poll = []
 ## Enables regularly printing allocation statistics.
 alloc-stats = ["talc/counters"]
 
+## Record kernel events and log at shutdown.
+##
+## So far this feature is only used by riscv64.
+event-log = []
+
 ## Inserts function instrument code for mcount-based tracing.
 ##
 ## This allows instrumentation-based profiling of the kernel.

@@ -6,6 +6,10 @@ use riscv::register::{sie, sstatus, time};
 use crate::arch::kernel::get_timebase_freq;
 #[cfg(all(feature = "smp", not(feature = "idle-poll")))]
 use crate::arch::kernel::{HARTS_AVAILABLE, core_id};
+#[cfg(all(feature = "event-log", feature = "smp", not(feature = "idle-poll")))]
+use crate::event_log::{self, Event};
+#[cfg(feature = "event-log")]
+use crate::event_log::{self, Event};
 use crate::scheduler::CoreId;
 #[cfg(all(feature = "smp", not(feature = "idle-poll")))]
 use crate::scheduler::sleep_state;
@@ -287,8 +291,18 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 		sie::set_stimer();
 	}
 	let next_time = wt * u64::from(get_frequency());
+	#[cfg(feature = "event-log")]
+	let armed = get_timestamp();
 
 	sbi_rt::set_timer(next_time);
+
+	#[cfg(feature = "event-log")]
+	event_log::record_at(
+		armed,
+		Event::TimerArm {
+			deadline: next_time,
+		},
+	);
 }
 
 /// Send an inter-processor interrupt to wake up a hart that is in a WFI state.
@@ -298,6 +312,15 @@ pub fn wakeup_core(core_to_wakeup: CoreId) {
 	if core_to_wakeup != core_id() && sleep_state::try_wake_up(core_to_wakeup) {
 		let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
 		debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
+		#[cfg(feature = "event-log")]
+		let sent = crate::arch::kernel::processor::get_timestamp();
 		sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
+		#[cfg(feature = "event-log")]
+		event_log::record_at(
+			sent,
+			Event::IpiSend {
+				target: core_to_wakeup,
+			},
+		);
 	}
 }

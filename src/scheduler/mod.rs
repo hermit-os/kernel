@@ -892,6 +892,9 @@ pub(crate) fn abort() -> ! {
 
 /// Add a per-core scheduler for the current core.
 pub(crate) fn add_current_core() {
+	#[cfg(feature = "event-log")]
+	crate::event_log::init();
+
 	// Create an idle task for this core.
 	let core_id = core_id();
 	let tid = get_tid();

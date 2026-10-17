@@ -131,6 +131,8 @@ mod drivers;
 mod entropy;
 mod env;
 pub mod errno;
+#[cfg(feature = "event-log")]
+mod event_log;
 mod executor;
 pub mod fd;
 pub mod fs;

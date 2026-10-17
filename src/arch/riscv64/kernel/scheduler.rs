@@ -5,6 +5,8 @@ use memory_addresses::{PhysAddr, VirtAddr};
 use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::config::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+#[cfg(feature = "event-log")]
+use crate::event_log::{self, Event};
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
@@ -327,6 +329,9 @@ unsafe extern "C" fn task_start(func: extern "C" fn(usize), arg: usize, user_sta
 }
 
 pub fn timer_handler() {
+	#[cfg(feature = "event-log")]
+	event_log::record(Event::TimerInterrupt);
+
 	debug!("Handle timer interrupt");
 	timer_interrupts::clear_active_and_set_next();
 	core_scheduler().handle_waiting_tasks();
@@ -335,6 +340,9 @@ pub fn timer_handler() {
 
 #[cfg(feature = "smp")]
 pub fn wakeup_handler() {
+	#[cfg(feature = "event-log")]
+	event_log::record(Event::IpiReceive);
+
 	debug!("Received Wakeup Interrupt");
 	//increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
