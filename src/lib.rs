@@ -51,6 +51,7 @@
 //!
 //! - **`HERMIT_MTU`** — Sets the *maximum transmission unit* (MTU). Defaults to `1500`.
 //! - **`HERMIT_MRG_RXBUF_SIZE`** — Sets the receive buffer size. Useful for testing receive buffer merging of virtio-net devices when the feature `VIRTIO_NET_F_MRG_RXBUF` is negotiated. Defaults to unset.
+//! - **`HERMIT_SOCKET_BUF_SIZE`** — Sets the size in bytes of the receive and transmit buffers of each TCP and UDP socket. Defaults to `65536`.
 //! - **`HERMIT_PCAP_PATH`** — Sets the packet capture file path. Defaults to `/root/`. See the `write-pcap-file` feature for details.
 //!
 //! IP address, gateway and DNS are configured via the `ip=` command-line parameter for the kernel and do not have a default value:

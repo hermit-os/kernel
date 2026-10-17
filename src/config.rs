@@ -12,6 +12,10 @@ pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = if cfg!(feature = "pci") { 2048 } 
 #[cfg(feature = "tcp")]
 pub(crate) const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 75000;
 
+/// Default size of the receive and transmit buffers of TCP and UDP sockets in bytes
+#[cfg(any(feature = "tcp", feature = "udp"))]
+pub(crate) const DEFAULT_SOCKET_BUF_SIZE: usize = 0x10000;
+
 #[cfg(feature = "virtio-vsock")]
 pub(crate) const VSOCK_PACKET_SIZE: u32 = 8192;
 

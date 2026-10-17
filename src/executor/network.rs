@@ -23,6 +23,8 @@ use smoltcp::wire::{DnsQueryType, IpAddress};
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch::kernel::systemtime;
+#[cfg(any(feature = "tcp", feature = "udp"))]
+use crate::config::DEFAULT_SOCKET_BUF_SIZE;
 use crate::drivers::net::{NetworkDevice, NetworkDriver};
 #[cfg(feature = "dns")]
 use crate::errno::Errno;
@@ -330,13 +332,23 @@ pub(crate) fn init() {
 	}
 }
 
+#[cfg(any(feature = "tcp", feature = "udp"))]
+fn socket_buf_size() -> usize {
+	use core::str::FromStr;
+
+	hermit_var!("HERMIT_SOCKET_BUF_SIZE").map_or(DEFAULT_SOCKET_BUF_SIZE, |size| {
+		usize::from_str(&size).unwrap()
+	})
+}
+
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "udp")]
 	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
+		let buf_size = socket_buf_size();
 		let udp_rx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0x10000]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; buf_size]);
 		let udp_tx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0x10000]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; buf_size]);
 		let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
 		let udp_handle = self.sockets.add(udp_socket);
 
@@ -345,8 +357,9 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(feature = "tcp")]
 	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
-		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 0x10000]);
-		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 0x10000]);
+		let buf_size = socket_buf_size();
+		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; buf_size]);
+		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; buf_size]);
 		let mut tcp_socket = tcp::Socket::new(tcp_rx_buffer, tcp_tx_buffer);
 		tcp_socket.set_nagle_enabled(true);
 		let tcp_handle = self.sockets.add(tcp_socket);
