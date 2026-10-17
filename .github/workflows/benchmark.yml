@@ -40,8 +40,10 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
         with:
           toolchain-file: "kernel/rust-toolchain.toml"
-      - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64-multiboot
+      - uses: ./kernel/.github/actions/build-loader
+        with:
+          targets: x86_64-multiboot
+          kernel-dir: kernel
       - name: Run benchmarks
         uses: hermit-os/hermit-bench@main
         id: run-bench
