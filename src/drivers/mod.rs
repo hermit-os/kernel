@@ -35,12 +35,15 @@ pub mod error {
 	#[cfg(any(
 		feature = "virtio",
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "ixgbe",
 		feature = "rtl8139",
 	))]
 	use thiserror::Error;
 
 	#[cfg(all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")))]
 	use crate::drivers::net::gem::GEMError;
+	#[cfg(feature = "ixgbe")]
+	use crate::drivers::net::ixgbe::IxgbeError;
 	#[cfg(feature = "rtl8139")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	#[cfg(feature = "virtio")]
@@ -49,6 +52,7 @@ pub mod error {
 	#[cfg(any(
 		feature = "virtio",
 		all(target_arch = "riscv64", feature = "gem-net", not(feature = "pci")),
+		feature = "ixgbe",
 		feature = "rtl8139",
 	))]
 	#[derive(Error, Debug)]
@@ -56,6 +60,10 @@ pub mod error {
 		#[cfg(feature = "virtio")]
 		#[error("Virtio driver failed: {0:?}")]
 		InitVirtioDevFail(#[from] VirtioError),
+
+		#[cfg(feature = "ixgbe")]
+		#[error("ixgbe driver failed: {0:?}")]
+		InitIxgbeDevFail(#[from] IxgbeError),
 
 		#[cfg(feature = "rtl8139")]
 		#[error("RTL8139 driver failed: {0:?}")]
