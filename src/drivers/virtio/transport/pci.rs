@@ -129,8 +129,9 @@ impl CapCfg for CommonCfg {
 	const TYPE: CapCfgType = CapCfgType::Common;
 
 	fn min_size() -> usize {
-		// `CommonCfg::queue_notify_data` and `CommonCfg::queue_reset` are optional.
-		size_of::<Self>() - size_of::<[le16; 2]>()
+		// `CommonCfg::queue_notify_data`, `CommonCfg::queue_reset`, `CommonCfg::admin_queue_index`
+		// and `CommonCfg::admin_queue_num` are optional.
+		size_of::<Self>() - size_of::<[le16; 4]>()
 	}
 }
 
