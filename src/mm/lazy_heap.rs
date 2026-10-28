@@ -10,6 +10,7 @@ use talc::source::Source;
 use super::ALLOCATOR;
 use crate::arch::kernel::processor;
 use crate::arch::mm::paging::{self, BasePageSize, LargePageSize, PageSize};
+use crate::console;
 
 const GROW_STEP: usize = LargePageSize::SIZE as usize;
 
@@ -51,6 +52,9 @@ unsafe impl Source for LazyHeap {
 		// Map one step more than needed, so that subsequent allocations don't grow again immediately.
 		let size = (needed + GROW_STEP).min(limit - current_end);
 
+		// Printing while growing may deadlock, if the allocation was caused by a
+		// user holding the console. So we switch to nonblocking prints here.
+		let _nonblocking_print = console::nonblocking_print();
 		let mapped = map_heap(VirtAddr::new(current_end as u64), size);
 		if mapped == 0 {
 			return Err(());
