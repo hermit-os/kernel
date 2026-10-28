@@ -197,7 +197,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 				current_task_borrowed.id, exit_code
 			);
 			current_task_borrowed.status = TaskStatus::Finished;
-			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
+			let remaining_tasks = NO_TASKS.fetch_sub(1, Ordering::SeqCst) - 1;
 
 			let current_id = current_task_borrowed.id;
 			drop(current_task_borrowed);
@@ -210,6 +210,10 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 			}
 
 			TASKS.lock().remove(&current_id);
+
+			if remaining_tasks == 0 {
+				panic!("Last task exited with exit code {exit_code}");
+			}
 		});
 
 		self.reschedule();
