@@ -888,7 +888,8 @@ fn get_tid() -> TaskId {
 
 #[inline]
 pub(crate) fn abort() -> ! {
-	core_scheduler().exit(-1)
+	error!("Aborting kernel execution");
+	shutdown(-1);
 }
 
 /// Add a per-core scheduler for the current core.
