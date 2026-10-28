@@ -11,13 +11,18 @@ pub struct ConsoleStdin;
 
 impl ObjectInterface for ConsoleStdin {
 	async fn poll(&self, event: PollEvent) -> io::Result<PollEvent> {
-		let available = if CONSOLE.lock().read_ready()? {
-			PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND
-		} else {
-			PollEvent::empty()
-		};
-
-		Ok(event & available)
+		future::poll_fn(|cx| {
+			CONSOLE_WAKER.lock().register(cx.waker());
+			if CONSOLE.lock().read_ready()? {
+				Poll::Ready(Ok(event
+					& (PollEvent::POLLIN
+						| PollEvent::POLLRDNORM
+						| PollEvent::POLLRDBAND)))
+			} else {
+				Poll::Pending
+			}
+		})
+		.await
 	}
 
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
