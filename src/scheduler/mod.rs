@@ -893,7 +893,16 @@ fn get_tid() -> TaskId {
 
 #[inline]
 pub(crate) fn abort() -> ! {
-	core_scheduler().exit(-1)
+	cfg_select! {
+		feature = "common-os" => {
+			error!("Aborting tread execution");
+			core_scheduler().exit(-1)
+		}
+		_ => {
+			error!("Aborting kernel execution");
+			shutdown(-1);
+		}
+	}
 }
 
 /// Add a per-core scheduler for the current core.
