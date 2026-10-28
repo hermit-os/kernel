@@ -182,8 +182,8 @@ where
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable().user().execute_enable();
+	let mut flags = PageTableEntryFlags::normal();
+	flags.user().set_execute(true);
 	paging::map::<BasePageSize>(
 		VirtAddr::from(LOADER_START),
 		physaddr,
@@ -207,8 +207,8 @@ where
 		let frame_range = FrameAlloc::allocate(layout).unwrap();
 		let physaddr = PhysAddr::from(frame_range.start());
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().user().execute_disable();
+		let mut flags = PageTableEntryFlags::normal();
+		flags.user();
 		let tls_virt = VirtAddr::from(LOADER_START + code_size + BasePageSize::SIZE as usize);
 		paging::map::<BasePageSize>(
 			tls_virt,

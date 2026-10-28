@@ -94,11 +94,7 @@ pub unsafe fn map_frame_range(frame_range: PageRange) {
 
 	// Map the physical memory again if DeviceAlloc operates at an offset
 	if DeviceAlloc.phys_offset() != VirtAddr::zero() {
-		let flags = {
-			let mut flags = PageTableEntryFlags::empty();
-			flags.normal().writable().execute_disable();
-			flags
-		};
+		let flags = PageTableEntryFlags::normal();
 		(start..end)
 			.step_by(IdentityPageSize::SIZE.try_into().unwrap())
 			.for_each(|addr| {

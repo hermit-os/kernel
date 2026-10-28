@@ -57,16 +57,10 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal();
-	if prot_flags.contains(MemoryProtection::Write) {
-		flags.writable();
-	} else {
-		flags.read_only();
-	}
-	if !prot_flags.contains(MemoryProtection::Exec) {
-		flags.execute_disable();
-	}
+	let mut flags = PageTableEntryFlags::normal();
+	flags
+		.set_writable(prot_flags.contains(MemoryProtection::Write))
+		.set_execute(prot_flags.contains(MemoryProtection::Exec));
 
 	paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
@@ -113,16 +107,10 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProtection) -> i32 {
 	let count = size / BasePageSize::SIZE as usize;
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal();
-	if prot_flags.contains(MemoryProtection::Write) {
-		flags.writable();
-	} else {
-		flags.read_only();
-	}
-	if !prot_flags.contains(MemoryProtection::Exec) {
-		flags.execute_disable();
-	}
+	let mut flags = PageTableEntryFlags::normal();
+	flags
+		.set_writable(prot_flags.contains(MemoryProtection::Write))
+		.set_execute(prot_flags.contains(MemoryProtection::Exec));
 
 	let virtual_address = VirtAddr::from_ptr(ptr);
 

@@ -125,8 +125,7 @@ impl TaskStacks {
 			total_size >> 10
 		);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
+		let flags = PageTableEntryFlags::normal();
 
 		// map IST0 into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(

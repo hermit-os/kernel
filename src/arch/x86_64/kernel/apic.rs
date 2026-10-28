@@ -287,8 +287,7 @@ fn search_mp_floating(memory_range: AddrRange<PhysAddr>) -> Result<&'static Apic
 	let virtual_address = VirtAddr::from(page_range.start());
 
 	for current_address in memory_range.iter().step_by(BasePageSize::SIZE as usize) {
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable();
+		let flags = PageTableEntryFlags::normal();
 		paging::map::<BasePageSize>(
 			virtual_address,
 			current_address.align_down(BasePageSize::SIZE),
@@ -338,8 +337,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		info!("Virtual-Wire mode implemented");
 	}
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
+	let flags = PageTableEntryFlags::normal();
 	let layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
 	let phys_addr =
 		PhysAddr::from((mp_float.mp_config as usize).align_down(BasePageSize::SIZE as usize));
@@ -680,12 +678,9 @@ pub fn boot_application_processors() {
 	let phys_addr = paging::virtual_to_physical(SMP_BOOT_CODE_ADDRESS);
 	let expected_phys_addr = PhysAddr::new(SMP_BOOT_CODE_ADDRESS.as_u64());
 	if phys_addr != Some(expected_phys_addr) {
-		paging::map::<BasePageSize>(
-			SMP_BOOT_CODE_ADDRESS,
-			expected_phys_addr,
-			1,
-			PageTableEntryFlags::WRITABLE,
-		);
+		let mut flags = PageTableEntryFlags::normal();
+		flags.set_execute(true);
+		paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, expected_phys_addr, 1, flags);
 	}
 
 	unsafe {

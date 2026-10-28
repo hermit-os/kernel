@@ -84,8 +84,7 @@ fn mmap_ecam(pci_node: FdtNode<'_, '_>) -> (VirtAddr, u64) {
 		"Mapping PCI Enhanced Configuration Space interface to virtual address {ecam_address:p} (size {size:#X})"
 	);
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().normal().writable().execute_disable();
+	let flags = PageTableEntryFlags::device();
 	paging::map::<BasePageSize>(
 		ecam_address,
 		addr,

@@ -342,8 +342,7 @@ pub(crate) fn init() {
 	let gicd_address = VirtAddr::from(page_range.start());
 	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}");
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().writable().execute_disable();
+	let flags = PageTableEntryFlags::device();
 	paging::map::<BasePageSize>(
 		gicd_address,
 		gicd_start,

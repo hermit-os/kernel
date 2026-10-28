@@ -314,17 +314,12 @@ pub(crate) fn map(
 	let size = size.align_up(BasePageSize::SIZE as usize);
 	let count = size / BasePageSize::SIZE as usize;
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal();
-	if writable {
-		flags.writable();
-	}
-	if no_execution {
-		flags.execute_disable();
-	}
-	if no_cache {
-		flags.device();
-	}
+	let mut flags = if no_cache {
+		PageTableEntryFlags::device()
+	} else {
+		PageTableEntryFlags::normal()
+	};
+	flags.set_writable(writable).set_execute(!no_execution);
 
 	let layout = PageLayout::from_size(size).unwrap();
 	let page_range = PageAlloc::allocate(layout).unwrap();
