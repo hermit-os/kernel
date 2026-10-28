@@ -37,7 +37,6 @@ pub trait PageTableEntryFlagsExt {
 
 	fn normal(&mut self) -> &mut Self;
 
-	#[expect(dead_code)]
 	fn read_only(&mut self) -> &mut Self;
 
 	fn writable(&mut self) -> &mut Self;

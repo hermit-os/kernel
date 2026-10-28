@@ -58,9 +58,11 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
+	flags.normal();
 	if prot_flags.contains(MemoryProtection::Write) {
 		flags.writable();
+	} else {
+		flags.read_only();
 	}
 	if !prot_flags.contains(MemoryProtection::Exec) {
 		flags.execute_disable();
@@ -112,9 +114,11 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProtection) -> i32 {
 	let count = size / BasePageSize::SIZE as usize;
 	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
+	flags.normal();
 	if prot_flags.contains(MemoryProtection::Write) {
 		flags.writable();
+	} else {
+		flags.read_only();
 	}
 	if !prot_flags.contains(MemoryProtection::Exec) {
 		flags.execute_disable();
