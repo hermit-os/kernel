@@ -13,6 +13,7 @@ use talc::source::Manual;
 use super::ALLOCATOR;
 use crate::arch::kernel::processor;
 use crate::arch::mm::paging::{self, BasePageSize, LargePageSize, PageSize};
+use crate::console;
 
 const GROW_STEP: usize = LargePageSize::SIZE as usize;
 
@@ -113,6 +114,9 @@ unsafe impl GlobalAlloc for LazyHeap {
 			return ptr;
 		}
 
+		// Printing while growing may deadlock, if the allocation was caused by a
+		// user holding the console. So we switch to nonblocking prints here.
+		let _nonblocking_print = console::nonblocking_print();
 		if !self.grow(&mut heap_range, layout) {
 			return ptr::null_mut();
 		}
