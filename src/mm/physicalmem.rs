@@ -177,7 +177,14 @@ pub struct FrameAlloc;
 
 impl PageRangeAllocator for FrameAlloc {
 	unsafe fn init() -> usize {
-		unsafe { init() }
+		if cfg!(target_arch = "x86_64") && DeviceAlloc.phys_offset() != VirtAddr::zero() {
+			let start = DeviceAlloc.phys_offset();
+			let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
+			let count = usize::try_from(count).unwrap();
+			paging::unmap::<HugePageSize>(start, count);
+		}
+
+		unsafe { detect_from_start_info() }
 	}
 
 	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
@@ -389,18 +396,6 @@ unsafe fn detect_from_start_info() -> usize {
 
 	let free_frames = PHYSICAL_FRAMES.lock().bits().count_ones();
 	free_frames * FRAME_SIZE
-}
-
-/// returns the available physical memory after the initialization in Bytes.
-unsafe fn init() -> usize {
-	if cfg!(target_arch = "x86_64") && DeviceAlloc.phys_offset() != VirtAddr::zero() {
-		let start = DeviceAlloc.phys_offset();
-		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
-		let count = usize::try_from(count).unwrap();
-		paging::unmap::<HugePageSize>(start, count);
-	}
-
-	unsafe { detect_from_start_info() }
 }
 
 #[cfg(all(test, not(target_os = "none")))]
