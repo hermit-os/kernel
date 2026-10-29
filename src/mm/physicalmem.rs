@@ -1,5 +1,4 @@
 use core::alloc::AllocError;
-use core::sync::atomic::{AtomicUsize, Ordering};
 use core::{fmt, iter, ptr, slice};
 
 use align_address::Align;
@@ -26,7 +25,6 @@ const WORDS_PER_BLOCK: usize = FRAMES_PER_BLOCK / u64::BITS as usize;
 
 static PHYSICAL_FRAMES: InterruptTicketMutex<FrameBitmap<'static>> =
 	InterruptTicketMutex::new(FrameBitmap::empty());
-pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 /// Bitmap of physical frames, where a set bit marks a free frame.
 /// Optimized for fast finding of the next free page and the next free "Block" (HugePage)
@@ -178,10 +176,8 @@ impl<'a> FrameBitmap<'a> {
 pub struct FrameAlloc;
 
 impl PageRangeAllocator for FrameAlloc {
-	unsafe fn init() {
-		unsafe {
-			init();
-		}
+	unsafe fn init() -> usize {
+		unsafe { init() }
 	}
 
 	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
@@ -209,10 +205,6 @@ impl fmt::Display for FrameAlloc {
 }
 
 pub type FrameBox = PageRangeBox<FrameAlloc>;
-
-pub fn total_memory_size() -> usize {
-	TOTAL_MEMORY.load(Ordering::Relaxed)
-}
 
 #[cfg(feature = "hermit-entry")]
 pub unsafe fn map_frame_range(frame_range: PageRange) {
@@ -345,7 +337,8 @@ fn free_ranges() -> impl Iterator<Item = PageRange> {
 	})
 }
 
-unsafe fn detect_from_start_info() {
+/// returns the available memory (excluding the bitmap) in Bytes.
+unsafe fn detect_from_start_info() -> usize {
 	for reservation in reservations() {
 		debug!("Memory reservation: {reservation:#x?}");
 	}
@@ -395,10 +388,11 @@ unsafe fn detect_from_start_info() {
 	}
 
 	let free_frames = PHYSICAL_FRAMES.lock().bits().count_ones();
-	TOTAL_MEMORY.store(free_frames * FRAME_SIZE, Ordering::Relaxed);
+	free_frames * FRAME_SIZE
 }
 
-unsafe fn init() {
+/// returns the available physical memory after the initialization in Bytes.
+unsafe fn init() -> usize {
 	if cfg!(target_arch = "x86_64") && DeviceAlloc.phys_offset() != VirtAddr::zero() {
 		let start = DeviceAlloc.phys_offset();
 		let count = DeviceAlloc.phys_offset().as_u64() / HugePageSize::SIZE;
@@ -406,9 +400,7 @@ unsafe fn init() {
 		paging::unmap::<HugePageSize>(start, count);
 	}
 
-	unsafe {
-		detect_from_start_info();
-	}
+	unsafe { detect_from_start_info() }
 }
 
 #[cfg(all(test, not(target_os = "none")))]
