@@ -14,7 +14,16 @@ pub struct PageAlloc;
 
 impl PageRangeAllocator for PageAlloc {
 	unsafe fn init() -> usize {
-		unsafe { init() }
+		let range = PageRange::new(
+			kernel_heap_end().as_usize().div_ceil(2),
+			kernel_heap_end().as_usize() + 1,
+		)
+		.unwrap();
+
+		unsafe {
+			PageAlloc::deallocate(range);
+		}
+		range.len().get()
 	}
 
 	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
@@ -46,20 +55,6 @@ impl fmt::Display for PageAlloc {
 }
 
 pub type PageBox = PageRangeBox<PageAlloc>;
-
-/// Initialize the heap allocator. Returns the size of the heap in Bytes.
-unsafe fn init() -> usize {
-	let range = PageRange::new(
-		kernel_heap_end().as_usize().div_ceil(2),
-		kernel_heap_end().as_usize() + 1,
-	)
-	.unwrap();
-
-	unsafe {
-		PageAlloc::deallocate(range);
-	}
-	range.len().get()
-}
 
 /// End of the virtual memory address space reserved for kernel memory (inclusive).
 /// The virtual memory address space reserved for the task heap starts after this.
