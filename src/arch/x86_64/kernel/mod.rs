@@ -293,7 +293,7 @@ pub unsafe fn jump_to_user_land(entry_point: usize, code_size: usize, arg: &[&st
 			in(reg) entry_point,
 			in(reg) argv.len(),
 			in(reg) argv.as_ptr(),
-			options(nostack, noreturn)
+			options(noreturn)
 		);
 	}
 }
