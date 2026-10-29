@@ -232,11 +232,7 @@ mod pcie {
 		let virt_addr = VirtAddr::from_ptr(DeviceAlloc.ptr_from::<()>(phys_addr));
 		if paging::virtual_to_physical(virt_addr) != Some(phys_addr) {
 			debug!("Mapping PCIe memory");
-			let flags = {
-				let mut flags = PageTableEntryFlags::empty();
-				flags.normal().writable().execute_disable();
-				flags
-			};
+			let flags = PageTableEntryFlags::device();
 			paging::map::<LargePageSize>(
 				virt_addr,
 				phys_addr,

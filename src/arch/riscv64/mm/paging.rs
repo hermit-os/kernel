@@ -61,28 +61,31 @@ bitflags! {
 
 #[allow(dead_code)]
 impl PageTableEntryFlags {
-	pub fn device(&mut self) -> &mut Self {
+	/// Writable, non-executable memory.
+	pub fn normal() -> Self {
+		PageTableEntryFlags::READABLE | PageTableEntryFlags::WRITABLE
+	}
+
+	/// Writable, non-executable device memory.
+	pub fn device() -> Self {
+		PageTableEntryFlags::READABLE | PageTableEntryFlags::WRITABLE
+	}
+
+	pub fn set_writable(&mut self, writable: bool) -> &mut Self {
+		if writable {
+			self.insert(PageTableEntryFlags::WRITABLE);
+		} else {
+			self.remove(PageTableEntryFlags::WRITABLE);
+		}
 		self
 	}
 
-	pub fn normal(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::EXECUTABLE);
-		self.insert(PageTableEntryFlags::READABLE);
-		self
-	}
-
-	pub fn read_only(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::WRITABLE);
-		self
-	}
-
-	pub fn writable(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::WRITABLE);
-		self
-	}
-
-	pub fn execute_disable(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::EXECUTABLE);
+	pub fn set_execute(&mut self, execute: bool) -> &mut Self {
+		if execute {
+			self.insert(PageTableEntryFlags::EXECUTABLE);
+		} else {
+			self.remove(PageTableEntryFlags::EXECUTABLE);
+		}
 		self
 	}
 }
@@ -602,11 +605,7 @@ pub fn map<S: PageSize>(
 }
 
 pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), usize> {
-	let flags = {
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
-		flags
-	};
+	let flags = PageTableEntryFlags::normal();
 
 	let virt_addrs = (0..count as u64).map(|n| virt_addr + n * S::SIZE);
 
@@ -639,8 +638,12 @@ pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 	let last_page = Page::<S>::including_address(VirtAddr::new(range.end.as_u64()));
 
 	let range = Page::<S>::range(first_page, last_page);
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
+	// FIXME: Identity mappings must stay executable for now, because `ROOT_PAGETABLE` contains no
+	// separate mapping of the kernel image. The image is only reachable through the huge-page
+	// identity mapping of RAM, so application processors would fault on their first
+	// instruction.
+	let mut flags = PageTableEntryFlags::normal();
+	flags.set_execute(true);
 	ROOT_PAGETABLE
 		.lock()
 		.map_pages(range, PhysAddr::new(first_page.address().as_u64()), flags);

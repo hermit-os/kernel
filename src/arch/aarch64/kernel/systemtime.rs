@@ -71,8 +71,7 @@ fn boot_time() -> OffsetDateTime {
 	PL031_ADDRESS.set(pl031_address).unwrap();
 	debug!("Mapping RTC to virtual address {pl031_address:p}");
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().writable().execute_disable();
+	let flags = PageTableEntryFlags::device();
 	paging::map::<BasePageSize>(
 		pl031_address,
 		addr,

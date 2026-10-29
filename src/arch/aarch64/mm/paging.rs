@@ -84,36 +84,37 @@ impl PageTableEntryFlags {
 		self
 	}
 
-	pub fn device(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::NORMAL);
-		self.remove(PageTableEntryFlags::NORMAL_NC);
-		self.remove(PageTableEntryFlags::DEVICE_NGNRE);
-		self.remove(PageTableEntryFlags::DEVICE_GRE);
-		self.insert(PageTableEntryFlags::DEVICE_NGNRNE);
+	/// Cacheable, writable, non-executable memory.
+	pub fn normal() -> Self {
+		PageTableEntryFlags::NORMAL
+			| PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER
+			| PageTableEntryFlags::UNPRIVILEGED_EXECUTE_NEVER
+	}
+
+	/// Device (nGnRnE), writable, non-executable memory.
+	pub fn device() -> Self {
+		PageTableEntryFlags::DEVICE_NGNRNE
+			| PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER
+			| PageTableEntryFlags::UNPRIVILEGED_EXECUTE_NEVER
+	}
+
+	pub fn set_writable(&mut self, writable: bool) -> &mut Self {
+		if writable {
+			self.remove(PageTableEntryFlags::READ_ONLY);
+		} else {
+			self.insert(PageTableEntryFlags::READ_ONLY);
+		}
 		self
 	}
 
-	pub fn normal(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::NORMAL_NC);
-		self.remove(PageTableEntryFlags::DEVICE_NGNRE);
-		self.remove(PageTableEntryFlags::DEVICE_GRE);
-		self.insert(PageTableEntryFlags::NORMAL);
-		self
-	}
-
-	pub fn read_only(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::READ_ONLY);
-		self
-	}
-
-	pub fn writable(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::READ_ONLY);
-		self
-	}
-
-	pub fn execute_disable(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER);
-		self.insert(PageTableEntryFlags::UNPRIVILEGED_EXECUTE_NEVER);
+	pub fn set_execute(&mut self, execute: bool) -> &mut Self {
+		let execute_never = PageTableEntryFlags::PRIVILEGED_EXECUTE_NEVER
+			| PageTableEntryFlags::UNPRIVILEGED_EXECUTE_NEVER;
+		if execute {
+			self.remove(execute_never);
+		} else {
+			self.insert(execute_never);
+		}
 		self
 	}
 }
@@ -651,11 +652,7 @@ pub fn map<S: PageSize>(
 /// Maps `nr_pages` pages at address `virt_addr`. If the allocation of a physical memory failed,
 /// the number of successful mapped pages are returned as error value.
 pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(), usize> {
-	let flags = {
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
-		flags
-	};
+	let flags = PageTableEntryFlags::normal();
 	let mut map_counter = 0;
 
 	while map_counter < nr_pages {
@@ -688,11 +685,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 #[allow(dead_code)]
 pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 	let virt_addr = VirtAddr::new(phys_addr.as_u64());
-	let flags = {
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
-		flags
-	};
+	let flags = PageTableEntryFlags::normal();
 
 	map::<S>(virt_addr, phys_addr, 1, flags);
 }

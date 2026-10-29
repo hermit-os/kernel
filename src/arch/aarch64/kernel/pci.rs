@@ -236,8 +236,7 @@ pub fn init() {
 			"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"
 		);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
+		let flags = PageTableEntryFlags::device();
 		paging::map::<BasePageSize>(
 			pci_address,
 			addr,

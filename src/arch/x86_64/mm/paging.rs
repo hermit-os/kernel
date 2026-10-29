@@ -32,20 +32,18 @@ unsafe impl FrameAllocator<Size4KiB> for FrameAlloc {
 }
 
 pub trait PageTableEntryFlagsExt {
+	/// Cached, writable, non-executable memory.
+	fn normal() -> Self;
+
+	/// Uncached, writable, non-executable memory.
 	#[cfg_attr(not(any(feature = "pci", feature = "vga")), expect(dead_code))]
-	fn device(&mut self) -> &mut Self;
+	fn device() -> Self;
 
-	fn normal(&mut self) -> &mut Self;
+	#[allow(dead_code)]
+	fn set_writable(&mut self, writable: bool) -> &mut Self;
 
-	#[expect(dead_code)]
-	fn read_only(&mut self) -> &mut Self;
-
-	fn writable(&mut self) -> &mut Self;
-
-	fn execute_disable(&mut self) -> &mut Self;
-
-	#[cfg(feature = "common-os")]
-	fn execute_enable(&mut self) -> &mut Self;
+	#[allow(dead_code)]
+	fn set_execute(&mut self, execute: bool) -> &mut Self;
 
 	#[cfg(feature = "common-os")]
 	fn user(&mut self) -> &mut Self;
@@ -56,34 +54,31 @@ pub trait PageTableEntryFlagsExt {
 }
 
 impl PageTableEntryFlagsExt for PageTableEntryFlags {
-	fn device(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::NO_CACHE);
+	fn normal() -> Self {
+		PageTableEntryFlags::WRITABLE | PageTableEntryFlags::NO_EXECUTE
+	}
+
+	fn device() -> Self {
+		PageTableEntryFlags::WRITABLE
+			| PageTableEntryFlags::NO_EXECUTE
+			| PageTableEntryFlags::NO_CACHE
+	}
+
+	fn set_writable(&mut self, writable: bool) -> &mut Self {
+		if writable {
+			self.insert(PageTableEntryFlags::WRITABLE);
+		} else {
+			self.remove(PageTableEntryFlags::WRITABLE);
+		}
 		self
 	}
 
-	fn normal(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::NO_CACHE);
-		self
-	}
-
-	fn read_only(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::WRITABLE);
-		self
-	}
-
-	fn writable(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::WRITABLE);
-		self
-	}
-
-	fn execute_disable(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::NO_EXECUTE);
-		self
-	}
-
-	#[cfg(feature = "common-os")]
-	fn execute_enable(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::NO_EXECUTE);
+	fn set_execute(&mut self, execute: bool) -> &mut Self {
+		if execute {
+			self.remove(PageTableEntryFlags::NO_EXECUTE);
+		} else {
+			self.insert(PageTableEntryFlags::NO_EXECUTE);
+		}
 		self
 	}
 
@@ -225,11 +220,7 @@ where
 	S: PageSize + fmt::Debug,
 	for<'a> OffsetPageTable<'a>: Mapper<S>,
 {
-	let flags = {
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
-		flags
-	};
+	let flags = PageTableEntryFlags::normal();
 
 	let virt_addrs = (0..count).map(|n| virt_addr + n as u64 * S::SIZE);
 
@@ -403,8 +394,7 @@ pub fn create_new_root_page_table() -> usize {
 	let frame_range = FrameAlloc::allocate(layout).unwrap();
 	let physaddr = PhysAddr::from(frame_range.start());
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
+	let flags = PageTableEntryFlags::normal();
 
 	let entry: u64 = unsafe {
 		let (frame, _flags) = Cr3::read();

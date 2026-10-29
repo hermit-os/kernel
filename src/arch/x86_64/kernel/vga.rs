@@ -58,8 +58,7 @@ impl VgaScreen {
 
 	fn init(&mut self) {
 		// Identity map the VGA buffer. We only need the first page.
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
+		let flags = PageTableEntryFlags::device();
 		paging::map::<BasePageSize>(
 			VirtAddr::new(VGA_BUFFER_ADDRESS.as_u64()),
 			VGA_BUFFER_ADDRESS,

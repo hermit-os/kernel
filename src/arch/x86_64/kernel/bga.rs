@@ -147,8 +147,7 @@ pub fn init_device(adapter: &PciDevice<PciConfigRegion>) {
 	);
 	let page_count = size / 4096;
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().writable().execute_disable();
+	let flags = PageTableEntryFlags::device();
 	paging::map::<BasePageSize>(
 		VirtAddr::new(phys_addr),
 		PhysAddr::new(phys_addr),
