@@ -13,10 +13,17 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 pub struct PageAlloc;
 
 impl PageRangeAllocator for PageAlloc {
-	unsafe fn init() {
+	unsafe fn init() -> usize {
+		let range = PageRange::new(
+			kernel_heap_end().as_usize().div_ceil(2),
+			kernel_heap_end().as_usize() + 1,
+		)
+		.unwrap();
+
 		unsafe {
-			init();
+			PageAlloc::deallocate(range);
 		}
+		range.len().get()
 	}
 
 	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError> {
@@ -48,18 +55,6 @@ impl fmt::Display for PageAlloc {
 }
 
 pub type PageBox = PageRangeBox<PageAlloc>;
-
-unsafe fn init() {
-	let range = PageRange::new(
-		kernel_heap_end().as_usize().div_ceil(2),
-		kernel_heap_end().as_usize() + 1,
-	)
-	.unwrap();
-
-	unsafe {
-		PageAlloc::deallocate(range);
-	}
-}
 
 /// End of the virtual memory address space reserved for kernel memory (inclusive).
 /// The virtual memory address space reserved for the task heap starts after this.

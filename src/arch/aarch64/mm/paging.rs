@@ -655,7 +655,7 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 	let flags = PageTableEntryFlags::normal();
 	let mut map_counter = 0;
 
-	while map_counter < nr_pages {
+	'outer: while map_counter < nr_pages {
 		let size = (nr_pages - map_counter) * S::SIZE as usize;
 		for i in (S::SIZE as usize..=size).rev().step_by(S::SIZE as usize) {
 			let layout = PageLayout::from_size_align(i, S::SIZE as usize).unwrap();
@@ -670,9 +670,10 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, nr_pages: usize) -> Result<(),
 					flags,
 				);
 				map_counter += i / S::SIZE as usize;
-				break;
+				continue 'outer;
 			}
 		}
+		break;
 	}
 
 	if map_counter < nr_pages {
