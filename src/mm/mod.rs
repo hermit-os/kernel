@@ -51,7 +51,7 @@ use core::mem::MaybeUninit;
 
 use align_address::Align;
 use free_list::{PageLayout, PageRange};
-use hermit_sync::RawInterruptTicketMutex;
+use hermit_sync::RawInterruptSpinMutex;
 pub use memory_addresses::{PhysAddr, VirtAddr};
 #[cfg(target_os = "none")]
 use talc::TalcLock;
@@ -70,7 +70,7 @@ use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize};
 
 #[cfg(target_os = "none")]
 #[global_allocator]
-pub(crate) static ALLOCATOR: TalcLock<RawInterruptTicketMutex, Manual> = TalcLock::new(Manual);
+pub(crate) static ALLOCATOR: TalcLock<RawInterruptSpinMutex, Manual> = TalcLock::new(Manual);
 
 #[cfg(target_os = "none")]
 pub(crate) fn claim_initial_heap() {
