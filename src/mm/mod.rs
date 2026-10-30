@@ -99,27 +99,22 @@ pub(crate) fn init() {
 	unsafe {
 		paging::init();
 	}
-	unsafe {
-		FrameAlloc::init();
-	}
+	let avail_frames = unsafe { FrameAlloc::init() };
 	#[cfg(target_arch = "x86_64")]
 	unsafe {
 		paging::log_page_tables();
 	}
-	unsafe {
-		PageAlloc::init();
-	}
+	let _avail_pages = unsafe { PageAlloc::init() };
 	#[cfg(target_arch = "riscv64")]
 	unsafe {
 		paging::enable_page_table();
 	}
 
-	let total_mem = physicalmem::total_memory_size();
-	info!("Total memory size: {} MiB", total_mem >> 20);
+	info!("Total memory size: {} MiB", avail_frames >> 20);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
-	let npages = total_mem / BasePageSize::SIZE as usize;
+	let npages = avail_frames / BasePageSize::SIZE as usize;
 	let npage_div = BasePageSize::SIZE as usize / align_of::<usize>();
 	let npage_3tables = npages / npage_div + 1;
 	let npage_2tables = npage_3tables / npage_div + 1;
@@ -131,7 +126,7 @@ pub(crate) fn init() {
 	let has_2mib_pages = arch::kernel::processor::supports_2mib_pages();
 
 	info!("Minimum memory size: {} MiB", min_mem >> 20);
-	let avail_mem = total_mem
+	let avail_mem = avail_frames
 		.checked_sub(min_mem)
 		.unwrap_or_else(|| panic!("Not enough memory available!"))
 		.align_down(LargePageSize::SIZE as usize);
