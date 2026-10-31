@@ -42,10 +42,7 @@ pub(crate) fn with_driver<T>(f: impl FnOnce(&VirtioBlkDriver) -> T) -> Option<T>
 	get_block_driver().map(f)
 }
 
-/// The unit in which the device addresses its storage.
-///
-/// This is fixed by the specification and unrelated to
-/// `VirtioBlkDriver::block_size`, which merely reports the optimal I/O size.
+/// Addressing unit of the device, fixed by the specification.
 pub(crate) const SECTOR_SIZE: usize = 512;
 
 /// The fixed-size header that starts every request.
@@ -69,9 +66,7 @@ impl RequestHeader {
 
 /// The number of cores that may ever issue a request.
 ///
-/// Deliberately not `get_processor_count`: that one counts the cores which
-/// have finished starting, and at driver initialization time only the boot
-/// processor has, so sizing the queues by it would always settle on one.
+/// `get_processor_count` would return 1 during driver initialization.
 fn possible_cores() -> usize {
 	#[cfg(feature = "smp")]
 	let count = crate::arch::kernel::get_possible_cpus();
@@ -90,22 +85,15 @@ fn single(elem: BufferElem) -> SmallVec<[BufferElem; 2]> {
 
 /// Driver for a virtio block device.
 ///
-/// Requests are dispatched one at a time and awaited by polling the used ring,
-/// so the driver needs no interrupt handler and keeps device notifications
+/// Requests are awaited by polling the used ring, device notifications stay
 /// disabled.
 pub(crate) struct VirtioBlkDriver {
-	/// The request virtqueues, at least one. `Self::vq` picks one per
-	/// requesting core.
-	///
-	/// The lock is asynchronous because it is held across the wait for the
-	/// device: a second task on the same queue then yields instead of
-	/// spinning, and the interrupt handler never takes it, so nothing here
-	/// needs interrupts masked.
+	/// Request queues, one per core at most. The lock is held while waiting
+	/// for the device, so it is asynchronous.
 	vqs: Vec<async_lock::Mutex<VirtQueue>>,
-	/// Reached only by `Self::handle_interrupt` during operation; everything
-	/// else in here belongs to initialization.
+	/// Used by `Self::handle_interrupt` only after initialization.
 	caps: InterruptTicketMutex<UniCapsColl>,
-	/// Negotiated feature set, fixed once the device is live.
+	/// Negotiated features.
 	features: virtio::blk::F,
 	capacity: usize,
 	blk_size: u32,
@@ -159,8 +147,7 @@ impl VirtioBlkDriver {
 
 	/// Starts a set of requests that stay in flight together.
 	///
-	/// The queue is held for the lifetime of the batch, so the completions
-	/// collected by `Batch::finish` can only be the batch's own.
+	/// The queue stays locked until the batch is finished.
 	pub async fn batch(&self) -> Batch<'_> {
 		Batch {
 			driver: self,
@@ -171,11 +158,8 @@ impl VirtioBlkDriver {
 
 	/// Asks the device to write out its cache.
 	///
-	/// Without `virtio::blk::F::FLUSH` this is a no-op. That feature is how a
-	/// device announces that it may hold writes in a volatile cache, so one
-	/// that withholds it has nothing left to write out once `dispatch`
-	/// returned. Reporting an error here would fail an `fsync` whose data did
-	/// reach the device.
+	/// Without `virtio::blk::F::FLUSH` the device has no volatile cache, so
+	/// this is a no-op.
 	pub async fn flush(&self) -> Result<(), Errno> {
 		if !self.features.contains(virtio::blk::F::FLUSH) {
 			return Ok(());
@@ -209,11 +193,7 @@ impl VirtioBlkDriver {
 		Ok(len)
 	}
 
-	/// Picks the virtqueue for a request issued on the current core.
-	///
-	/// Sharing one queue between cores would make them contend for its lock;
-	/// mapping each core to its own keeps a request on the core that issued
-	/// it.
+	/// Picks the virtqueue of the current core.
 	fn vq(&self) -> &async_lock::Mutex<VirtQueue> {
 		let index = usize::try_from(core_id()).unwrap() % self.vqs.len();
 
@@ -235,11 +215,7 @@ impl VirtioBlkDriver {
 		core::future::poll_fn(|cx| match vq.try_recv() {
 			Ok(used) => Poll::Ready(Ok(used)),
 			Err(VirtqError::NoNewUsed) => {
-				// The device is still working. Ask to be polled again rather
-				// than spinning here: `block_on` runs the executor's other
-				// tasks between polls and puts the task to sleep once its
-				// backoff is exhausted, and interrupts stay unmasked
-				// throughout.
+				// Yield to other tasks instead of spinning.
 				cx.waker().wake_by_ref();
 				Poll::Pending
 			}
@@ -248,10 +224,7 @@ impl VirtioBlkDriver {
 		.await
 	}
 
-	/// Acknowledges a device interrupt.
-	///
-	/// The driver completes requests by polling, so nothing has to be done
-	/// with the information - but the ISR status register *must* be read.
+	/// Acknowledges a device interrupt by reading the ISR status register.
 	pub fn handle_interrupt(&self) {
 		let mut caps = self.caps.lock();
 
@@ -270,11 +243,10 @@ impl VirtioBlkDriver {
 	fn check_status(
 		used: &mut crate::drivers::virtio::virtqueue::UsedBufferToken,
 	) -> Result<(), Errno> {
-		// The byte is taken as a `u8` rather than as an `S`, because the
-		// device is free to write any value.
+		// SAFETY: every request ends with a `Box<u8>` for the status. It is
+		// read as `u8` rather than `S`, because the device may write any value.
 		let status = unsafe { used.used_recv_buff.pop_front_downcast::<u8>() };
 		let Some(status) = status.as_deref().copied() else {
-			// The device did not write the status byte at all.
 			return Err(Errno::Io);
 		};
 
@@ -283,7 +255,6 @@ impl VirtioBlkDriver {
 		} else if status == u8::from(S::Unsupp) {
 			Err(Errno::Nosys)
 		} else {
-			// Either VIRTIO_BLK_S_IOERR or a status this driver does not know.
 			Err(Errno::Io)
 		}
 	}
@@ -291,11 +262,8 @@ impl VirtioBlkDriver {
 
 /// Requests submitted together and awaited in one go.
 ///
-/// One request per round trip leaves the device idle between them. Submitting
-/// a whole write-back and waiting once lets the device work through the queue
-/// while the driver is still filling it. The batch must be finished, even
-/// after a failed `Batch::write`, or its completions are left for whoever
-/// uses the queue next.
+/// Must be finished even after a failed `Batch::write`, otherwise its
+/// completions are left in the queue.
 pub(crate) struct Batch<'a> {
 	driver: &'a VirtioBlkDriver,
 	vq: async_lock::MutexGuard<'a, VirtQueue>,
@@ -352,8 +320,6 @@ impl Batch<'_> {
 
 			let status = match used {
 				Ok(mut used) => VirtioBlkDriver::check_status(&mut used),
-				// The queue itself failed, so the remaining completions are
-				// not going to arrive either.
 				Err(err) => return Err(err),
 			};
 
@@ -395,8 +361,7 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 		let mut queues = Vec::new();
 
 		let dev_cfg = match caps_coll.init_caps::<Self>(dev_cfg_raw, |caps_coll, dev_cfg| {
-			// `num_queues` only carries a meaning once MQ was negotiated; a
-			// device without it exposes exactly one request queue.
+			// `num_queues` is only valid with MQ.
 			let features: virtio::blk::F = dev_cfg.features;
 			let offered = if features.contains(virtio::blk::F::MQ) {
 				dev_cfg.raw.as_ptr().num_queues().read()
@@ -404,10 +369,7 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 				1
 			};
 
-			// More queues than cores would stay idle, since a queue is chosen
-			// by the core issuing the request. A device is free to offer up to
-			// 65535 of them, so the clamp also bounds the memory the rings
-			// take.
+			// More queues than cores would stay idle.
 			let count = usize::from(offered.max(1)).min(possible_cores());
 
 			for index in 0..count {
@@ -423,8 +385,7 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 				));
 			}
 
-			// The driver never waits for interrupts, but the ISR status still
-			// has to be acknowledged on every interrupt
+			// The ISR status has to be acknowledged on every interrupt.
 			match &mut caps_coll.int_cap {
 				InterruptCapability::IsrStatus(_) => {
 					let irq = irq.unwrap();
@@ -460,7 +421,6 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 			Err(err) => return Err((err, caps_coll)),
 		};
 
-		// Requests are awaited by polling, so the device never has to notify us.
 		for vq in &mut queues {
 			vq.disable_notifs();
 		}

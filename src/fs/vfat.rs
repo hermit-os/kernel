@@ -3,7 +3,10 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
+use core::sync::atomic::{AtomicU64, Ordering};
 
+use hadris_fat::r#async::read::FileReader;
+use hadris_fat::r#async::write::FileWriter;
 use hadris_fat::r#async::{
 	Error as IoError, FatDir, FatVolume, FatVolumeReadExt, FatVolumeWriteExt, FileEntry, Read,
 	Seek, SeekFrom, Write,
@@ -22,54 +25,42 @@ use crate::executor::block_on;
 use crate::fd::{AccessPermission, Fd, ObjectInterface, OpenOption};
 use crate::fs::{self, DirectoryEntry, FileAttr, FileType, NodeKind, SeekWhence, VfsNode};
 use crate::io;
-use crate::syscalls::{Dirent64, DirentFormat};
+use crate::syscalls::DirentFormat;
 use crate::time::SystemTime;
 
 /// Number of sectors `FatStream` keeps in memory.
 ///
-/// A FAT walk, the file data it addresses and the directory entry naming the
-/// file live in three different regions of the device. With a single staging
-/// sector they evict each other at every step, which roughly doubles the
-/// transfers of a plain sequential read. The cache keeps the active FAT and
-/// directory sectors resident while data streams past, and has to be several
-/// times [`RUN_SECTORS`] so that one read-ahead cannot displace them.
+/// Several times [`RUN_SECTORS`], so that a read-ahead does not evict the
+/// FAT and directory sectors in use.
 const CACHE_SECTORS: usize = 256;
 
-/// Number of sectors a cache miss fetches, and the largest write the cache
-/// coalesces adjacent dirty sectors into.
+/// Sectors fetched per cache miss and maximum length of a merged write.
 const RUN_SECTORS: usize = 64;
 
 /// One cached device sector.
 struct CachedSector {
 	/// Sector index on the device.
 	sector: usize,
-	/// internal buffer to cache sectors
+	/// Sector content.
 	data: [u8; SECTOR_SIZE],
-	/// Whether `data` holds changes that are not on the device yet.
+	/// Modified, but not yet written back.
 	dirty: bool,
-	/// Value of `FatStream::clock` at the last access, for LRU eviction.
+	/// Last access time for LRU eviction.
 	used: u64,
 }
 
-/// Byte-granular, cached view of the block device for `hadris-fat`.
-///
-/// The device transfers whole sectors, so this stages them and serves the
-/// byte-wise `Read`/`Write`/`Seek` the file system expects. Writes are cached
-/// and reach the device on eviction or on an explicit flush.
+/// Sector cache providing byte-wise `Read`/`Write`/`Seek` on the block
+/// device for `hadris-fat`. Writes reach the device on eviction or flush.
 struct FatStream {
-	/// Sector cache
 	cache: Vec<CachedSector>,
-	/// Monotonic access counter driving LRU eviction.
+	/// Access counter for LRU eviction.
 	clock: u64,
-	/// Absolute byte position of the stream within the device.
+	/// Byte position on the device.
 	pos: usize,
-	/// Staging buffer for read-ahead, see `FatStream::with_run`.
+	/// Staging buffer for read-ahead.
 	read_run: Vec<u8>,
-	/// Staging buffer for coalesced write-back.
-	///
-	/// Separate from `read_run` because a read-ahead that has to evict a dirty
-	/// sector flushes from inside its own transfer, and the two would
-	/// otherwise contend for one buffer.
+	/// Staging buffer for write-back. Separate from `read_run`, because an
+	/// eviction may flush during a read-ahead.
 	write_run: Vec<u8>,
 }
 
@@ -89,10 +80,10 @@ impl FatStream {
 		with_driver(|drv| drv.capacity()).ok_or(Errno::Nodev)
 	}
 
-	/// Returns the slot holding `sector`, reading it in if it is not cached.
+	/// Returns the slot holding `sector` and loads it on a miss.
 	///
-	/// `fill` requests the sector's current contents. A caller that overwrites
-	/// the whole sector can pass `false` and save the read.
+	/// With `fill == false` the sector is not read, because the caller
+	/// overwrites it completely.
 	async fn slot(&mut self, sector: usize, fill: bool) -> Result<usize, Errno> {
 		self.clock += 1;
 
@@ -105,15 +96,10 @@ impl FatStream {
 			return self.install(sector, &[0u8; SECTOR_SIZE]).await;
 		}
 
-		// Fetch the requested sector together with the ones that follow it,
-		// bounded by the device. One request for the whole run costs about
-		// what a single-sector one would, and a file system reads forwards.
+		// Read ahead, bounded by the device.
 		let sectors = RUN_SECTORS.min(self.capacity()? - sector);
 
-		// The staging buffer is owned by the stream so that a transfer does
-		// not allocate, but the work below needs `&mut self` for the cache as
-		// well. Taking it out for the duration keeps the two borrows disjoint;
-		// the inner call may fail, so the buffer goes back either way.
+		// Take the buffer out to avoid borrowing `self` twice.
 		let mut run = core::mem::take(&mut self.read_run);
 		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
 
@@ -132,9 +118,7 @@ impl FatStream {
 
 		let mut requested = None;
 		for (index, data) in run.as_chunks::<SECTOR_SIZE>().0.iter().enumerate() {
-			// A sector already in the cache keeps its cached copy: that one
-			// may be dirty, and would then be newer than what the device
-			// just handed us.
+			// Keep cached copies, they may be dirty.
 			if self
 				.cache
 				.iter()
@@ -151,8 +135,6 @@ impl FatStream {
 
 		match requested {
 			Some(slot) => Ok(slot),
-			// Only reachable if the requested sector was cached after all,
-			// which `slot` has already ruled out above.
 			None => self.find(sector).ok_or(Errno::Io),
 		}
 	}
@@ -176,9 +158,7 @@ impl FatStream {
 			return Ok(self.cache.len() - 1);
 		}
 
-		// Evict the least recently used sector. The sectors installed earlier
-		// in this run carry the current clock value and are therefore never
-		// the victim.
+		// LRU eviction; sectors of the current run are never chosen.
 		let victim = self
 			.cache
 			.iter()
@@ -187,10 +167,7 @@ impl FatStream {
 			.map(|(slot, _)| slot)
 			.unwrap();
 
-		// Writing just the victim back would issue one request per evicted
-		// sector, and a sequential write dirties the whole cache. Flushing
-		// everything instead lets the runs merge, and leaves every later
-		// eviction free until something is dirtied again.
+		// Flush all dirty sectors at once, so that adjacent ones are merged.
 		if self.cache[victim].dirty {
 			self.flush_all().await?;
 		}
@@ -200,11 +177,7 @@ impl FatStream {
 		Ok(victim)
 	}
 
-	/// Writes every dirty sector back, merging adjacent ones into one request.
-	///
-	/// The dirty sectors of a single operation are rarely scattered so
-	/// sorting them and writing each run as a whole turns a flush of the
-	/// entire cache into a handful of requests.
+	/// Writes all dirty sectors back and merges adjacent ones into one request.
 	async fn flush_all(&mut self) -> Result<(), Errno> {
 		let mut dirty: Vec<usize> = (0..self.cache.len())
 			.filter(|&slot| self.cache[slot].dirty)
@@ -214,9 +187,7 @@ impl FatStream {
 		}
 		dirty.sort_unstable_by_key(|&slot| self.cache[slot].sector);
 
-		// The staging buffer is lent out for the duration so that a transfer
-		// does not allocate, and returned even when one fails. `Batch::write`
-		// copies before it returns, so one buffer serves every run.
+		// `Batch::write` copies the data, so one buffer serves every run.
 		let mut run = core::mem::take(&mut self.write_run);
 		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
 
@@ -225,7 +196,7 @@ impl FatStream {
 
 		let mut rest = dirty.as_slice();
 		while let Some((&first, _)) = rest.split_first() {
-			// Longest prefix of consecutive sectors that still fits the buffer.
+			// Longest run of consecutive sectors that fits the buffer.
 			let len = rest
 				.iter()
 				.enumerate()
@@ -250,8 +221,7 @@ impl FatStream {
 
 		self.write_run = run;
 
-		// The sectors stay dirty until the device has acknowledged all of
-		// them; marking them earlier would drop the data on a failed flush.
+		// Keep the sectors dirty until the device has acknowledged them.
 		batch.finish().await?;
 		submitted?;
 
@@ -280,16 +250,13 @@ impl Read for FatStream {
 		let sector = self.pos / SECTOR_SIZE;
 		let offset = self.pos % SECTOR_SIZE;
 
-		// Reading past the last sector is end of stream, not a failure.
 		if sector >= self.capacity()? {
 			return Ok(0);
 		}
 
 		let slot = self.slot(sector, true).await?;
 
-		// A single call never crosses a sector boundary. `Read::read` is
-		// permitted to return a short count, and the caller loops for the
-		// remainder, so there is no reason to chain sectors here.
+		// Short reads are allowed, so stay within one sector.
 		let n = usize::min(buf.len(), SECTOR_SIZE - offset);
 		buf[..n].copy_from_slice(&self.cache[slot].data[offset..offset + n]);
 		self.pos += n;
@@ -309,17 +276,13 @@ impl Write for FatStream {
 		let sector = self.pos / SECTOR_SIZE;
 		let offset = self.pos % SECTOR_SIZE;
 
-		// The device has a fixed size, so there is nothing to grow into.
 		if sector >= self.capacity()? {
 			return Err(IoError::from_source(Errno::Nospc));
 		}
 
-		// Like `read`, a single call stays within one sector and the caller
-		// loops for the remainder.
 		let n = usize::min(buf.len(), SECTOR_SIZE - offset);
 
-		// A partial sector is read-modify-write; a full one is overwritten
-		// completely, so reading it first would be wasted.
+		// Only a partial sector has to be read first.
 		let slot = self.slot(sector, n != SECTOR_SIZE).await?;
 
 		self.cache[slot].data[offset..offset + n].copy_from_slice(&buf[..n]);
@@ -350,8 +313,7 @@ impl Seek for FatStream {
 			SeekFrom::End(offset) => end.checked_add(offset),
 		};
 
-		// Seeking before 0 is an error. Seeking past the end is not:
-		// it only fails once something is actually read or written there.
+		// Seeking past the end is allowed, accessing it is not.
 		let new = new.filter(|new| *new >= 0).ok_or(Errno::Inval)?;
 
 		self.pos = usize::try_from(new).unwrap();
@@ -392,7 +354,7 @@ pub(crate) fn init() {
 		)
 	);
 
-	let volume = block_on(
+	match block_on(
 		async {
 			FatVolume::builder(stream)
 				.time_provider(&TIME_PROVIDER)
@@ -401,22 +363,26 @@ pub(crate) fn init() {
 				.map_err(map_err)
 		},
 		None,
-	)
-	.expect("Unable to create FAT volume");
+	) {
+		Ok(volume) => {
+			info!("Mounting {} volume at {MOUNT_POINT}", volume.fat_type());
 
-	info!("Mounting {} volume at {MOUNT_POINT}", volume.fat_type());
+			if VFAT.set(SharedVolume(volume)).is_err() {
+				error!("Unable to mount block device at {MOUNT_POINT}");
+				return;
+			}
 
-	if VFAT.set(async_lock::Mutex::new(volume)).is_err() {
-		error!("Unable to mount block device at {MOUNT_POINT}");
-		return;
-	}
-
-	if let Err(err) = fs::FILESYSTEM
-		.get()
-		.unwrap()
-		.mount(MOUNT_POINT, Box::new(VfatDirectory::new(String::new())))
-	{
-		error!("Unable to mount block device at {MOUNT_POINT}: {err:?}");
+			if let Err(err) = fs::FILESYSTEM
+				.get()
+				.unwrap()
+				.mount(MOUNT_POINT, Box::new(VfatDirectory::new(String::new())))
+			{
+				error!("Unable to mount block device at {MOUNT_POINT}: {err:?}");
+			}
+		}
+		Err(_) => {
+			warn!("Unable to create FAT volume");
+		}
 	}
 }
 
@@ -447,8 +413,7 @@ impl TimeProvider for HermitTimeProvider {
 			now.second(),
 		);
 
-		// `time_tenth` counts 10 ms units on top of the two-second resolution
-		// of the `time` field, so the odd second has to be folded back in.
+		// `time_tenth` holds the odd second and the 10 ms units.
 		date_time.time_tenth =
 			u8::try_from((u16::from(now.second() % 2) * 100 + now.millisecond() / 10).min(199))
 				.unwrap();
@@ -463,13 +428,23 @@ static TIME_PROVIDER: HermitTimeProvider = HermitTimeProvider::new();
 // VFS integration
 // ---------------------------------------------------------------------------
 
-static VFAT: OnceCell<async_lock::Mutex<FatVolume<FatStream>>> = OnceCell::new();
+/// `FatVolume` is not `Sync`, because it keeps counters in `Cell`s.
+struct SharedVolume(FatVolume<FatStream>);
 
-// check if VFAT is Sync
-const _: () = {
-	const fn assert_sync<T: Sync>() {}
-	assert_sync::<async_lock::Mutex<FatVolume<FatStream>>>();
-};
+// SAFETY: the volume is only accessed while `VFAT_LOCK` is held, see `volume`.
+unsafe impl Sync for SharedVolume {}
+
+static VFAT: OnceCell<SharedVolume> = OnceCell::new();
+
+/// Serializes file system operations, see [`volume`].
+static VFAT_LOCK: async_lock::Mutex<()> = async_lock::Mutex::new(());
+
+/// Incremented on every modification, invalidates cached readers.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+fn modified() {
+	GENERATION.fetch_add(1, Ordering::Relaxed);
+}
 
 /// Where the FAT file system is attached in the VFS.
 const MOUNT_POINT: &str = "/root";
@@ -484,21 +459,33 @@ fn map_err(err: hadris_fat::error::Error) -> Errno {
 		Error::NotAFile => Errno::Isdir,
 		Error::NoFreeSpace => Errno::Nospc,
 		Error::InvalidPath | Error::InvalidShortFilename => Errno::Inval,
-		// Everything else surfaces as an I/O error.
 		_ => Errno::Io,
 	}
 }
 
-/// Locks the mounted volume for the duration of one file system operation.
+/// Locks the volume for one complete file system operation.
 ///
-/// `hadris-fat` locks its sector stream per access, not per operation, so a
-/// lookup and the write that follows it would otherwise be separate critical
-/// sections and two cores could pick the same free directory slot or cluster.
-/// Holding the volume itself is also what keeps that stream lock uncontended,
-/// which matters because it is a spin lock and the driver awaits the device
-/// underneath it.
-async fn volume() -> io::Result<async_lock::MutexGuard<'static, FatVolume<FatStream>>> {
-	Ok(VFAT.get().ok_or(Errno::Nodev)?.lock().await)
+/// `hadris-fat` locks only single accesses, so a lookup and the following
+/// write could otherwise race on another core.
+async fn volume() -> io::Result<Volume> {
+	let fs = &VFAT.get().ok_or(Errno::Nodev)?.0;
+	let _guard = VFAT_LOCK.lock().await;
+
+	Ok(Volume { fs, _guard })
+}
+
+/// The mounted volume, locked for one operation.
+struct Volume {
+	fs: &'static FatVolume<FatStream>,
+	_guard: async_lock::MutexGuard<'static, ()>,
+}
+
+impl core::ops::Deref for Volume {
+	type Target = FatVolume<FatStream>;
+
+	fn deref(&self) -> &Self::Target {
+		self.fs
+	}
 }
 
 /// Joins the directory's own path with a path relative to it.
@@ -542,12 +529,10 @@ async fn resolve<'a>(
 			return Ok((dir, entry));
 		}
 
-		// An intermediate component has to exist and be a directory.
 		let entry = entry.ok_or(Errno::Noent)?;
 		dir = dir.open_entry(&entry).map_err(map_err)?;
 	}
 
-	// The path named the root directory itself.
 	Ok((dir, None))
 }
 
@@ -560,9 +545,14 @@ async fn resolve_dir<'a>(
 
 	match entry {
 		Some(entry) => parent.open_entry(&entry).map_err(map_err),
-		// No trailing component left: `parent` already is the directory.
-		None => Ok(parent),
+		None if is_root(path) => Ok(parent),
+		None => Err(Errno::Noent),
 	}
+}
+
+/// Whether `path` names the root of the volume.
+fn is_root(path: &str) -> bool {
+	path.split('/').all(str::is_empty)
 }
 
 /// Resolves `path` to an existing file entry.
@@ -577,9 +567,7 @@ async fn resolve_file(volume: &FatVolume<FatStream>, path: &str) -> io::Result<F
 	Ok(entry)
 }
 
-/// Builds a `FileAttr` from what FAT can tell us.
-///
-/// FAT has no ownership or link count, so those stay at their defaults.
+/// Builds a `FileAttr`; FAT has no ownership or link count.
 fn file_attr(size: u64, kind: NodeKind) -> FileAttr {
 	let mode = match kind {
 		NodeKind::Directory => {
@@ -665,8 +653,11 @@ impl VfsNode for VfatDirectory {
 
 				let (_, entry) = resolve(&volume, &path).await?;
 				let Some(entry) = entry else {
-					// The root of the mounted volume.
-					return Ok(file_attr(0, NodeKind::Directory));
+					return if is_root(&path) {
+						Ok(file_attr(0, NodeKind::Directory))
+					} else {
+						Err(Errno::Noent)
+					};
 				};
 
 				if entry.is_directory() {
@@ -680,7 +671,7 @@ impl VfsNode for VfatDirectory {
 	}
 
 	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
-		// FAT has no symbolic links, so `lstat` and `stat` cannot differ.
+		// FAT has no symbolic links.
 		self.traverse_stat(path)
 	}
 
@@ -718,6 +709,7 @@ impl VfsNode for VfatDirectory {
 					return Err(Errno::Notdir);
 				}
 
+				modified();
 				volume.delete(&entry).await.map_err(map_err)
 			},
 			None,
@@ -731,6 +723,7 @@ impl VfsNode for VfatDirectory {
 
 				let entry = resolve_file(&volume, &join(&self.prefix, path)).await?;
 
+				modified();
 				volume.delete(&entry).await.map_err(map_err)
 			},
 			None,
@@ -751,9 +744,10 @@ impl VfsNode for VfatDirectory {
 
 				let (parent, entry) = resolve(&volume, &full).await?;
 
-				// A directory is opened as a directory handle, whatever the flags say.
-				if let Some(entry) = &entry
-					&& entry.is_directory()
+				// Directories are always opened as directory handle.
+				if entry
+					.as_ref()
+					.map_or(is_root(&full), FileEntry::is_directory)
 				{
 					return Ok(Arc::new(async_lock::RwLock::new(
 						VfatDirectoryHandle::new(full.clone()).into(),
@@ -766,6 +760,7 @@ impl VfsNode for VfatDirectory {
 							return Err(Errno::Exist);
 						}
 						if opt.contains(OpenOption::O_TRUNC) {
+							modified();
 							volume.truncate(&entry, 0).await.map_err(map_err)?;
 						}
 						entry
@@ -796,20 +791,37 @@ impl VfsNode for VfatDirectory {
 
 /// An open file of the FAT file system.
 ///
-/// The handle keeps only the path and the offset. Readers and writers borrow
-/// the volume and cannot be parked in a long lived file descriptor, so every
-/// operation resolves the path again.
-#[derive(Debug)]
+/// Keeps the reader of the last `read`, so that sequential reads continue
+/// at the current cluster instead of resolving the path and walking the
+/// FAT chain again.
 pub(crate) struct VfatFileHandle {
 	path: String,
-	pos: async_lock::Mutex<u64>,
+	state: async_lock::Mutex<FileState>,
+}
+
+struct FileState {
+	pos: u64,
+	/// Reader and the [`GENERATION`] it was created in.
+	reader: Option<(u64, FileReader<'static, FatStream>)>,
+}
+
+// SAFETY: the reader borrows the volume, but is only used in
+// `VfatFileHandle::read` while `VFAT_LOCK` is held, and has no `Drop`.
+unsafe impl Send for FileState {}
+
+impl core::fmt::Debug for VfatFileHandle {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		f.debug_struct("VfatFileHandle")
+			.field("path", &self.path)
+			.finish_non_exhaustive()
+	}
 }
 
 impl VfatFileHandle {
 	pub fn new(path: String, pos: u64) -> Self {
 		Self {
 			path,
-			pos: async_lock::Mutex::new(pos),
+			state: async_lock::Mutex::new(FileState { pos, reader: None }),
 		}
 	}
 }
@@ -817,69 +829,95 @@ impl VfatFileHandle {
 impl ObjectInterface for VfatFileHandle {
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		let volume = volume().await?;
-		let entry = resolve_file(&volume, &self.path).await?;
-		let mut pos = self.pos.lock().await;
+		let mut state = self.state.lock().await;
+		let generation = GENERATION.load(Ordering::Relaxed);
 
-		let mut reader = volume.read_file(&entry).map_err(map_err)?;
-
-		// Walks the FAT chain to the position without touching file data;
-		// positions at or past the end make the following read return 0.
-		reader.seek(SeekFrom::Start(*pos)).await.map_err(map_err)?;
+		let mut reader = match state.reader.take() {
+			Some((created, reader)) if created == generation && reader.position() == state.pos => {
+				reader
+			}
+			_ => {
+				let entry = resolve_file(volume.fs, &self.path).await?;
+				let mut reader = volume
+					.fs
+					.read_file(&entry)
+					.map_err(map_err)?
+					.with_cached_chain()
+					.await
+					.map_err(map_err)?;
+				reader
+					.seek(SeekFrom::Start(state.pos))
+					.await
+					.map_err(map_err)?;
+				reader
+			}
+		};
 
 		let read = reader.read(buf).await.map_err(map_err)?;
-		*pos += u64::try_from(read).unwrap();
+		state.pos += u64::try_from(read).unwrap();
+		state.reader = Some((generation, reader));
 
 		Ok(read)
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
-		let volume = volume().await?;
-		let entry = resolve_file(&volume, &self.path).await?;
-		let mut pos = self.pos.lock().await;
-
-		// `FileWriter` rewrites the file from the start, so anything before the
-		// offset has to be carried over.
-		let prefix = if *pos > 0 {
-			let mut reader = volume.read_file(&entry).map_err(map_err)?;
-			let mut kept = Vec::with_capacity(usize::try_from(*pos).unwrap());
-			let mut scratch = [0u8; SECTOR_SIZE];
-			while u64::try_from(kept.len()).unwrap() < *pos {
-				let want = usize::try_from(*pos - u64::try_from(kept.len()).unwrap())
-					.unwrap()
-					.min(SECTOR_SIZE);
-				let read = reader.read(&mut scratch[..want]).await.map_err(map_err)?;
-				if read == 0 {
-					// Writing past the end pads the gap with zeros.
-					kept.resize(usize::try_from(*pos).unwrap(), 0);
-					break;
-				}
-				kept.extend_from_slice(&scratch[..read]);
-			}
-			kept
-		} else {
-			Vec::new()
-		};
-
-		let mut writer = volume.write_file(&entry).map_err(map_err)?;
-		if !prefix.is_empty() {
-			writer.write(&prefix).await.map_err(map_err)?;
+		if buf.is_empty() {
+			return Ok(0);
 		}
-		let written = writer.write(buf).await.map_err(map_err)?;
+
+		let volume = volume().await?;
+		let mut entry = resolve_file(&volume, &self.path).await?;
+		let mut state = self.state.lock().await;
+		state.reader = None;
+		modified();
+
+		let start = usize::try_from(state.pos).map_err(|_| Errno::Fbig)?;
+		let end = start.checked_add(buf.len()).ok_or(Errno::Fbig)?;
+		let old_len = usize::try_from(entry.len()).map_err(|_| Errno::Fbig)?;
+
+		// `FileWriter` only appends, so data behind `start` is cut off and
+		// written again after `buf`.
+		let mut tail = Vec::new();
+		let mut gap = Vec::new();
+		if start < old_len {
+			if end < old_len {
+				let mut reader = volume.read_file(&entry).map_err(map_err)?;
+				reader
+					.seek(SeekFrom::Start(u64::try_from(end).unwrap()))
+					.await
+					.map_err(map_err)?;
+				tail = reader.read_to_vec().await.map_err(map_err)?;
+			}
+
+			volume.truncate(&entry, start).await.map_err(map_err)?;
+			entry = resolve_file(&volume, &self.path).await?;
+		} else {
+			gap.resize(start - old_len, 0);
+		}
+
+		let mut writer = FileWriter::new_append(&volume, &entry)
+			.await
+			.map_err(map_err)?;
+		for part in [gap.as_slice(), buf, tail.as_slice()] {
+			if !part.is_empty() {
+				writer.write(part).await.map_err(map_err)?;
+			}
+		}
 		writer.finish().await.map_err(map_err)?;
 
-		*pos += u64::try_from(written).unwrap();
+		state.pos = u64::try_from(end).unwrap();
 
-		Ok(written)
+		Ok(buf.len())
 	}
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
 		let volume = volume().await?;
-		let mut pos = self.pos.lock().await;
+		let mut state = self.state.lock().await;
 		let offset = i64::try_from(offset).unwrap();
 
 		let new = match whence {
 			SeekWhence::Set => offset,
-			SeekWhence::Cur => i64::try_from(*pos).unwrap() + offset,
+			SeekWhence::Cur => i64::try_from(state.pos).unwrap() + offset,
 			SeekWhence::End => {
 				let entry = resolve_file(&volume, &self.path).await?;
 				i64::try_from(entry.len()).unwrap() + offset
@@ -891,7 +929,7 @@ impl ObjectInterface for VfatFileHandle {
 			return Err(Errno::Inval);
 		}
 
-		*pos = u64::try_from(new).unwrap();
+		state.pos = u64::try_from(new).unwrap();
 
 		Ok(isize::try_from(new).unwrap())
 	}
@@ -907,6 +945,7 @@ impl ObjectInterface for VfatFileHandle {
 		let volume = volume().await?;
 		let entry = resolve_file(&volume, &self.path).await?;
 
+		modified();
 		volume.truncate(&entry, size).await.map_err(map_err)
 	}
 
@@ -942,54 +981,29 @@ impl ObjectInterface for VfatDirectoryHandle {
 		buf: &mut [MaybeUninit<u8>],
 		format: DirentFormat,
 	) -> io::Result<usize> {
-		match format {
-			DirentFormat::PosixDent => unimplemented!("POSIX dirent currently not supported"),
-			DirentFormat::Dirent64 => {
-				let entries = {
-					let volume = volume().await?;
+		let entries = {
+			let volume = volume().await?;
+			readdir_at(&volume, self.prefix.clone()).await?
+		};
 
-					readdir_at(&volume, self.prefix.clone()).await?
-				};
+		let mut next = self.next.lock().await;
+		let mut offset = 0;
 
-				let mut next = self.next.lock().await;
-				let mut offset = 0usize;
-
-				while let Some(entry) = entries.get(*next) {
-					let name = entry.name.as_bytes();
-					let len = core::mem::offset_of!(Dirent64, d_name) + name.len() + 1;
-					let reclen = len.next_multiple_of(align_of::<Dirent64>());
-
-					if offset + reclen > buf.len() {
-						if offset == 0 {
-							// Not even one entry fits.
-							return Err(Errno::Inval);
-						}
-						break;
-					}
-
-					let target = buf[offset].as_mut_ptr().cast::<Dirent64>();
-					// SAFETY: the bounds check above guarantees that the entry and its
-					// trailing zero byte fit into `buf`.
-					unsafe {
-						target.write(Dirent64 {
-							d_ino: 0,
-							d_off: 0,
-							d_reclen: u16::try_from(reclen).unwrap(),
-							d_type: FileType::Unknown,
-							d_name: core::marker::PhantomData {},
-						});
-						let name_ptr = core::ptr::from_mut(&mut (*target).d_name).cast::<u8>();
-						name_ptr.copy_from_nonoverlapping(name.as_ptr(), name.len());
-						name_ptr.add(name.len()).write(0);
-					}
-
-					offset += reclen;
-					*next += 1;
+		while let Some(entry) = entries.get(*next) {
+			let Some(next_offset) =
+				format.write_entry(buf, offset, 0, FileType::Unknown, entry.name.as_bytes())
+			else {
+				if offset == 0 {
+					return Err(Errno::Inval);
 				}
+				break;
+			};
 
-				Ok(offset)
-			}
+			offset = next_offset;
+			*next += 1;
 		}
+
+		Ok(offset)
 	}
 
 	async fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
@@ -1012,7 +1026,12 @@ impl ObjectInterface for VfatDirectoryHandle {
 
 pub(crate) fn sync() -> io::Result<()> {
 	block_on(
-		async { volume().await?.sync().await.map_err(map_err) },
+		async {
+			match volume().await {
+				Ok(v) => v.sync().await.map_err(map_err),
+				Err(_) => Ok(()),
+			}
+		},
 		None,
 	)
 }
