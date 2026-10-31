@@ -381,7 +381,7 @@ pub(crate) fn init() {
 		enable_timer_irq(&mut gic, cpu_id, irqtype, irq, irqflags);
 	}
 
-	if let Some(uart_node) = fdt.find_compatible(&["arm,pl011"]) {
+	if let Some(uart_node) = fdt.find_compatible(&["arm,pl011", "ns16550a"]) {
 		let irq_slice = uart_node.property("interrupts").unwrap().value;
 		let (irqtype, irq_slice) = irq_slice.split_at(size_of::<u32>());
 		let (irq, irq_slice) = irq_slice.split_at(size_of::<u32>());
