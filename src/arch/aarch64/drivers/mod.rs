@@ -33,7 +33,9 @@ pub fn get_device<'a>(node: FdtNode<'_, 'a>) -> Option<SerialPort> {
 	let reg = node.reg()?.next()?;
 
 	for id in compat.all() {
-		if id == "arm,pl011" {
+		// Writing a byte to offset 0 transmits it on both, so the PL011
+		// driver also serves the 16550 of Firecracker.
+		if id == "arm,pl011" || id == "ns16550a" {
 			return Some(SerialPort::Qemu(QemuSerial::from_addr(
 				NonZeroU32::new(reg.starting_address as u32).unwrap(),
 			)));

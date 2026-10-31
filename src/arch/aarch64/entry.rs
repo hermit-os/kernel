@@ -19,14 +19,100 @@ global_asm!(
 	start_rust = sym start_rust,
 );
 
+// Header of the arm64 Linux boot protocol, see
+// <https://docs.kernel.org/arch/arm64/booting.html>
+#[cfg(feature = "linux")]
+global_asm!(
+	".section .text.head, \"ax\"",
+	"0:",
+	"b _start",            // code0
+	".long 0",             // code1
+	".quad 0",             // text_offset
+	".quad _end - 0b",     // image_size
+	".quad 0b0010",        // little endian, 4 KiB pages
+	".quad 0",             // res2
+	".quad 0",             // res3
+	".quad 0",             // res4
+	".ascii \"ARM\\x64\"", // magic
+	".long 0",             // res5
+);
+
+/// Address of the UART used by the exception handler below, 0 if unknown.
+#[cfg(feature = "linux")]
+pub static mut EXCEPTION_UART: usize = 0;
+
+// Prints ESR, ELR and FAR of an unexpected exception and powers off.
+#[cfg(feature = "linux")]
+global_asm!(
+	".section .text",
+	".balign 2048",
+	"early_vectors:",
+	".rept 16",
+	".balign 128",
+	"b 5f",
+	".endr",
+	"5:",
+	"adrp x9, {uart}",
+	"ldr x9, [x9, #:lo12:{uart}]",
+	"cbz x9, 6f",
+	"mov w11, #'E'",
+	"strb w11, [x9]",
+	"mrs x10, esr_el1",
+	"bl 2f",
+	"mrs x10, elr_el1",
+	"bl 2f",
+	"mrs x10, far_el1",
+	"bl 2f",
+	"mov w11, #'\\n'",
+	"strb w11, [x9]",
+	// PSCI SYSTEM_OFF
+	"6: movz x0, #0x8400, lsl #16",
+	"movk x0, #0x0008",
+	"hvc #0",
+	"3: wfe",
+	"b 3b",
+	"2: mov x12, #60",
+	"1: lsr x13, x10, x12",
+	"and x13, x13, #0xf",
+	"cmp x13, #10",
+	"b.lt 4f",
+	"add x13, x13, #39",
+	"4: add x13, x13, #48",
+	"strb w13, [x9]",
+	"subs x12, x12, #4",
+	"b.ge 1b",
+	"mov w13, #' '",
+	"strb w13, [x9]",
+	"ret",
+	uart = sym EXCEPTION_UART,
+);
+
+/// Entered with the address of the device tree in `x0`.
 #[inline(never)]
-pub unsafe fn start_rust() -> ! {
-	unsafe { pre_init() }
+pub unsafe extern "C" fn start_rust(device_tree: u64) -> ! {
+	#[cfg(feature = "linux")]
+	unsafe {
+		asm!(
+			"adr {tmp}, early_vectors",
+			"msr vbar_el1, {tmp}",
+			"isb",
+			tmp = out(reg) _,
+			options(nostack),
+		);
+	}
+	unsafe {
+		super::set_device_tree(device_tree);
+		pre_init()
+	}
 }
 
 unsafe fn pre_init() -> ! {
-	crate::log::init();
-	info!("Enter startup code");
+	// Logging uses atomics, which need the MMU under KVM.
+	#[cfg(not(feature = "linux"))]
+	{
+		crate::log::init();
+		info!("Enter startup code");
+	}
 
 	/* disable interrupts */
 	/*
@@ -141,6 +227,15 @@ unsafe fn pre_init() -> ! {
 			+ SCTLR_EL1::M::Disable
 			+ endian,
 	);
+
+	#[cfg(feature = "linux")]
+	{
+		unsafe {
+			super::page_tables::enable_early();
+		}
+		crate::log::init();
+		info!("Enter startup code");
+	}
 
 	// Enter loader
 	unsafe {

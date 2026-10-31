@@ -23,20 +23,59 @@ use crate::os::CONSOLE;
 use crate::{BootInfoExt, stack};
 
 /// start address of the RAM at Qemu's virt emulation
+#[cfg(not(feature = "linux"))]
 const RAM_START: u64 = 0x40000000;
+/// start address of the RAM at Firecracker
+#[cfg(feature = "linux")]
+const RAM_START: u64 = 0x80000000;
+
+/// Address of the device tree.
+///
 /// Qemu assumes for ELF kernel that the fdt is located at
-/// start of RAM (0x4000_0000)
-/// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
-const DEVICE_TREE: u64 = RAM_START;
+/// start of RAM (0x4000_0000), see
+/// <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>.
+/// The Linux boot protocol passes it in `x0` instead.
+static mut DEVICE_TREE: u64 = RAM_START;
+
+unsafe fn set_device_tree(addr: u64) {
+	if cfg!(feature = "linux") {
+		unsafe { ptr::write_volatile(&raw mut DEVICE_TREE, addr) }
+	}
+}
+
+fn device_tree() -> u64 {
+	unsafe { ptr::read_volatile(&raw const DEVICE_TREE) }
+}
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	let loader_end = elf_symbols::executable_end();
-	(loader_end.expose_provenance() as u64).align_up(LargePageSize::SIZE as u64)
+	let loader_end = (loader_end.expose_provenance() as u64).align_up(LargePageSize::SIZE as u64);
+
+	if cfg!(feature = "linux") {
+		// The device tree lies at the end of RAM, which the page tables do
+		// not cover, so it is moved behind the loader.
+		let fdt = unsafe {
+			Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
+				.expect(".fdt file has invalid header")
+		};
+		let size = fdt.total_size();
+		unsafe {
+			ptr::copy_nonoverlapping(
+				ptr::with_exposed_provenance::<u8>(device_tree() as usize),
+				ptr::with_exposed_provenance_mut::<u8>(loader_end as usize),
+				size,
+			);
+			set_device_tree(loader_end);
+		}
+		return (loader_end + size as u64).align_up(LargePageSize::SIZE as u64);
+	}
+
+	loader_end
 }
 
 pub fn find_kernel() -> &'static [u8] {
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
 			.expect(".fdt file has invalid header")
 	};
 
@@ -50,8 +89,13 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point,
 	} = kernel_info;
 
+	#[cfg(feature = "linux")]
+	unsafe {
+		sync_icache(load_info.kernel_image_addr_range.clone());
+	}
+
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
 			.expect(".fdt file has invalid header")
 	};
 	let cpus = fdt.cpus().count();
@@ -69,9 +113,13 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	unsafe {
 		page_tables::enable();
 	}
+	#[cfg(feature = "linux")]
+	unsafe {
+		ptr::write_volatile(&raw mut entry::EXCEPTION_UART, 0x1000);
+	}
 
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(DEVICE_TREE as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
 			.expect(".fdt file has invalid header")
 	};
 
@@ -94,7 +142,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		hardware_info: HardwareInfo {
 			phys_addr_range: ram_start..ram_start + ram_size,
 			serial_port_base: SerialPortBase::new(0x1000),
-			device_tree: core::num::NonZeroU64::new(DEVICE_TREE),
+			device_tree: core::num::NonZeroU64::new(device_tree()),
 		},
 		load_info,
 		platform_info: PlatformInfo::LinuxBoot,
@@ -105,6 +153,28 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let raw_boot_info = boot_info.write();
 
 	unsafe { enter_kernel(stack, entry, raw_boot_info) }
+}
+
+/// Makes code written through the data cache visible to instruction fetches.
+#[cfg(feature = "linux")]
+unsafe fn sync_icache(range: core::ops::Range<u64>) {
+	let ctr: u64;
+	unsafe {
+		asm!("mrs {}, ctr_el0", out(reg) ctr, options(nomem, nostack));
+	}
+	let line = 4u64 << ((ctr >> 16) & 0xf);
+
+	let mut addr = range.start & !(line - 1);
+	while addr < range.end {
+		unsafe {
+			asm!("dc cvau, {}", in(reg) addr, options(nostack));
+		}
+		addr += line;
+	}
+
+	unsafe {
+		asm!("dsb ish", "ic iallu", "dsb ish", "isb", options(nostack));
+	}
 }
 
 unsafe fn enter_kernel(stack: *mut u8, entry: *const (), raw_boot_info: &'static RawBootInfo) -> ! {

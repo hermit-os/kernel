@@ -31,4 +31,12 @@ impl Object {
 		cmd!(sh, "{objcopy} --output-target elf32-i386 {object}").run()?;
 		Ok(())
 	}
+
+	pub fn convert_to_binary(&self) -> Result<()> {
+		let sh = crate::sh()?;
+		let objcopy = crate::binutil("objcopy")?;
+		let object = self.as_ref();
+		cmd!(sh, "{objcopy} --output-target binary {object}").run()?;
+		Ok(())
+	}
 }

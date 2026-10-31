@@ -12,6 +12,7 @@ fn set_linker_script() {
 
 	let linker_script = match cfg_target_arch.as_str() {
 		"x86_64" if cfg_feature.contains("multiboot") => "platform/multiboot/link.ld",
+		"aarch64" if cfg_feature.contains("linux") => "linux.ld",
 		_ => return,
 	};
 

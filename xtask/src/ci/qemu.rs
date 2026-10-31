@@ -265,7 +265,7 @@ impl Qemu {
 				}
 				cpu_args
 			}
-			Target::X86_64Linux => panic!("unsupported"),
+			Target::X86_64Linux | Target::Aarch64Linux => panic!("unsupported"),
 			Target::Aarch64Elf | Target::Aarch64BeElf => {
 				let mut cpu_args = if self.accel {
 					todo!()

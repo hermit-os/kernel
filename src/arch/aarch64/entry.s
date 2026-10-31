@@ -5,6 +5,9 @@
 .section .text
 
 _start:
+	// Keep the device tree address the Linux boot protocol passes in x0.
+	mov	x19, x0
+
 	// Only proceed on the boot core. Park it otherwise.
 	mrs	x1, mpidr_el1
 	and	x1, x1, _core_id_mask
@@ -70,6 +73,7 @@ el_2_entry:
 
 	// Jump to Rust code.
 el_1_entry:
+	mov	x0, x19
 	b	{start_rust}
 
 	// Infinitely wait for events (aka "park the core").

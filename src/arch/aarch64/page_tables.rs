@@ -27,7 +27,7 @@ static mut LEVEL_1_TABLE: PageTable = {
 	table[0] = (&raw mut LEVEL_2_TABLE_SERIAL)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
-	table[1] = (&raw mut LEVEL_2_TABLE_RAM)
+	table[(RAM_START >> 30) as usize] = (&raw mut LEVEL_2_TABLE_RAM)
 		.wrapping_byte_add(descr::NORMAL)
 		.cast();
 
@@ -94,10 +94,60 @@ pub unsafe fn init(uart_address: u32) {
 	}
 }
 
+/// Identity mapping of the first 4 GiB in 1 GiB blocks, RAM as normal memory.
+///
+/// Without the MMU, every access is a device access, which faults on
+/// unaligned and exclusive accesses under KVM.
+#[cfg(feature = "linux")]
+static mut EARLY_LEVEL_0_TABLE: PageTable = {
+	let mut table = [ptr::null_mut(); _];
+
+	table[0] = (&raw mut EARLY_LEVEL_1_TABLE)
+		.wrapping_byte_add(descr::NORMAL)
+		.cast();
+
+	PageTable(table)
+};
+
+#[cfg(feature = "linux")]
+static mut EARLY_LEVEL_1_TABLE: PageTable = {
+	let mut table = [ptr::null_mut(); _];
+
+	let mut i = 0;
+	while i < 4 {
+		let addr = i << 30;
+		let attr = if addr as u64 >= RAM_START {
+			descr::BLOCK_NORMAL
+		} else {
+			descr::BLOCK_DEVICE
+		};
+		table[i] = ptr::with_exposed_provenance_mut::<()>(addr).wrapping_byte_add(attr);
+		i += 1;
+	}
+
+	PageTable(table)
+};
+
+#[cfg(feature = "linux")]
+pub unsafe fn enable_early() {
+	TTBR1_EL1.set(0);
+	TTBR0_EL1.set((&raw mut EARLY_LEVEL_0_TABLE).expose_provenance() as u64);
+	dsb(SY);
+	isb(SY);
+
+	SCTLR_EL1.modify(SCTLR_EL1::M::Enable);
+	isb(SY);
+}
+
 pub unsafe fn enable() {
 	// Set Translation Table Base Registers (TTBR)
 	TTBR1_EL1.set(0);
 	TTBR0_EL1.set((&raw mut LEVEL_0_TABLE).expose_provenance() as u64);
+	dsb(SY);
+	// Drop the translations of the early tables, if any.
+	unsafe {
+		core::arch::asm!("tlbi vmalle1", options(nostack));
+	}
 	dsb(SY);
 	isb(SY);
 
@@ -118,6 +168,18 @@ struct PageTable([*mut (); 512]);
 mod descr {
 	pub const NORMAL: usize = AF | SH_INNER | attr_indx(4) | TABLE | VALID;
 	pub const NON_CACHEABLE: usize = AF | SH_INNER | attr_indx(3) | TABLE | VALID;
+	#[cfg(feature = "linux")]
+	pub const BLOCK_NORMAL: usize = AF | SH_INNER | attr_indx(4) | VALID;
+	#[cfg(feature = "linux")]
+	pub const BLOCK_DEVICE: usize = AF | attr_indx(0) | PXN | UXN | VALID;
+
+	/// Privileged execute-never
+	#[cfg(feature = "linux")]
+	const PXN: usize = 1 << 53;
+
+	/// Unprivileged execute-never
+	#[cfg(feature = "linux")]
+	const UXN: usize = 1 << 54;
 
 	/// Valid descriptor
 	const VALID: usize = 1;
