@@ -119,7 +119,7 @@ impl ObjectInterface for Socket {
 			for handle in self.handle.iter() {
 				let socket = nic.get_mut_socket::<tcp::Socket<'_>>(*handle);
 				match socket.state() {
-					tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+					tcp::State::Closed | tcp::State::Closing => {
 						let available = PollEvent::POLLOUT
 							| PollEvent::POLLWRNORM
 							| PollEvent::POLLWRBAND
@@ -145,7 +145,10 @@ impl ObjectInterface for Socket {
 					_ => {
 						let mut available = PollEvent::empty();
 
-						if socket.can_recv() || socket.may_recv() && self.is_listen {
+						if socket.can_recv()
+							|| socket.may_recv() && self.is_listen
+							|| socket.state() == tcp::State::CloseWait
+						{
 							// In case, we just establish a fresh connection in non-blocking mode, we try to read data.
 							available.insert(
 								PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
@@ -221,9 +224,7 @@ impl ObjectInterface for Socket {
 			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
 					match socket.state() {
-						tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
-							Poll::Ready(Ok(0))
-						}
+						tcp::State::Closed | tcp::State::Closing => Poll::Ready(Ok(0)),
 						tcp::State::FinWait1
 						| tcp::State::FinWait2
 						| tcp::State::Listen
