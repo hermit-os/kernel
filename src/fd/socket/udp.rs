@@ -1,6 +1,7 @@
 use core::ffi::c_int;
 use core::future;
-use core::task::Poll;
+use core::sync::atomic::{AtomicU16, Ordering};
+use core::task::{Context, Poll};
 
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
@@ -15,9 +16,19 @@ use crate::fd::{
 use crate::io;
 use crate::syscalls::socket::Af;
 
+/// Returns the next ephemeral port.
+///
+/// smoltcp does not check whether a port is already bound by another UDP
+/// socket, so the returned port may collide with an explicitly bound one.
+fn get_ephemeral_port() -> u16 {
+	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
+
+	LOCAL_ENDPOINT.fetch_add(1, Ordering::SeqCst)
+}
+
 pub struct Socket {
 	handle: Handle,
-	nonblocking: bool,
+	is_nonblocking: bool,
 	local_endpoint: IpEndpoint,
 	remote_endpoint: Option<IpEndpoint>,
 }
@@ -34,7 +45,7 @@ impl Socket {
 
 		Self {
 			handle,
-			nonblocking: false,
+			is_nonblocking: false,
 			local_endpoint,
 			remote_endpoint: None,
 		}
@@ -61,6 +72,9 @@ impl Socket {
 				}
 
 				if !socket.can_send() {
+					if self.is_nonblocking {
+						return Poll::Ready(Err(Errno::Again));
+					}
 					socket.register_send_waker(cx.waker());
 					return Poll::Pending;
 				}
@@ -74,6 +88,47 @@ impl Socket {
 			})
 		})
 		.await
+	}
+
+	/// Returns whether a datagram can be received.
+	///
+	/// A connected socket drops queued datagrams of other peers.
+	fn has_datagram(&self, socket: &mut udp::Socket<'_>) -> bool {
+		while let Ok((_, meta)) = socket.peek() {
+			if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
+				return true;
+			}
+			let _ = socket.recv();
+		}
+		false
+	}
+
+	/// Receives a datagram and truncates it to the size of `buf`.
+	fn poll_recv(
+		&self,
+		cx: &mut Context<'_>,
+		buf: &mut [u8],
+	) -> Poll<io::Result<(usize, IpEndpoint)>> {
+		self.with(|socket| {
+			if !socket.is_open() {
+				return Poll::Ready(Err(Errno::Io));
+			}
+
+			if !self.has_datagram(socket) {
+				if self.is_nonblocking {
+					return Poll::Ready(Err(Errno::Again));
+				}
+				socket.register_recv_waker(cx.waker());
+				return Poll::Pending;
+			}
+
+			let Ok((data, meta)) = socket.recv() else {
+				return Poll::Ready(Err(Errno::Io));
+			};
+			let len = data.len().min(buf.len());
+			buf[..len].copy_from_slice(&data[..len]);
+			Poll::Ready(Ok((len, meta.endpoint)))
+		})
 	}
 }
 
@@ -90,7 +145,7 @@ impl ObjectInterface for Socket {
 						);
 					}
 
-					if socket.can_recv() {
+					if self.has_datagram(socket) {
 						avail.insert(
 							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
 						);
@@ -129,6 +184,11 @@ impl ObjectInterface for Socket {
 			return Err(Errno::Io);
 		};
 
+		let mut endpoint = endpoint;
+		if endpoint.port == 0 {
+			endpoint.port = get_ephemeral_port();
+		}
+
 		self.local_endpoint.port = endpoint.port;
 		if let Some(addr) = endpoint.addr {
 			self.local_endpoint.addr = addr;
@@ -157,60 +217,15 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn recvfrom(&self, buf: &mut [u8]) -> io::Result<(usize, Endpoint)> {
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if !socket.is_open() {
-					return Poll::Ready(Err(Errno::Io));
-				}
-
-				if !socket.can_recv() {
-					socket.register_recv_waker(cx.waker());
-					return Poll::Pending;
-				}
-
-				match socket.recv_slice(buf) {
-					Ok((len, meta)) => {
-						if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
-							Poll::Ready(Ok((len, meta.endpoint)))
-						} else {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
-						}
-					}
-					_ => Poll::Ready(Err(Errno::Io)),
-				}
-			})
-		})
-		.await
-		.map(|(len, endpoint)| (len, Endpoint::Ip(endpoint)))
+		future::poll_fn(|cx| self.poll_recv(cx, buf))
+			.await
+			.map(|(len, endpoint)| (len, Endpoint::Ip(endpoint)))
 	}
 
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if !socket.is_open() {
-					return Poll::Ready(Err(Errno::Io));
-				}
-
-				if !socket.can_recv() {
-					socket.register_recv_waker(cx.waker());
-					return Poll::Pending;
-				}
-
-				match socket.recv_slice(buf) {
-					Ok((len, meta)) => {
-						if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
-							Poll::Ready(Ok(len))
-						} else {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
-						}
-					}
-					_ => Poll::Ready(Err(Errno::Io)),
-				}
-			})
-		})
-		.await
+		future::poll_fn(|cx| self.poll_recv(cx, buf))
+			.await
+			.map(|(len, _)| len)
 	}
 
 	async fn write(&self, buf: &[u8]) -> io::Result<usize> {
@@ -221,7 +236,7 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn status_flags(&self) -> io::Result<fd::StatusFlags> {
-		let status_flags = if self.nonblocking {
+		let status_flags = if self.is_nonblocking {
 			fd::StatusFlags::O_NONBLOCK
 		} else {
 			fd::StatusFlags::empty()
@@ -231,7 +246,7 @@ impl ObjectInterface for Socket {
 	}
 
 	async fn set_status_flags(&mut self, status_flags: fd::StatusFlags) -> io::Result<()> {
-		self.nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
+		self.is_nonblocking = status_flags.contains(fd::StatusFlags::O_NONBLOCK);
 		Ok(())
 	}
 
