@@ -27,13 +27,13 @@ impl ObjectInterface for ConsoleStdin {
 
 	async fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
 		future::poll_fn(|cx| {
+			CONSOLE_WAKER.lock().register(cx.waker());
 			let read_bytes = CONSOLE.lock().read(buf)?;
 			if read_bytes > 0 {
 				CONSOLE.lock().write_all(&buf[..read_bytes])?;
 				CONSOLE.lock().flush()?;
 				Poll::Ready(Ok(read_bytes))
 			} else {
-				CONSOLE_WAKER.lock().register(cx.waker());
 				Poll::Pending
 			}
 		})
