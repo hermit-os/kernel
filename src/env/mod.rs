@@ -7,6 +7,8 @@ mod start_info;
 use alloc::borrow::{Cow, ToOwned};
 use alloc::string::String;
 use alloc::vec::Vec;
+#[cfg(feature = "net")]
+use core::str::FromStr;
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -73,7 +75,7 @@ impl Default for Cli {
 			#[cfg_attr(not(feature = "net"), expect(unused_variables))]
 			if let Some(ip_config_str) = word.strip_prefix("ip=") {
 				#[cfg(feature = "net")]
-				match IpConfig::try_from(ip_config_str) {
+				match IpConfig::from_str(ip_config_str) {
 					Ok(config) => interface_configs.push(config),
 					Err(e) => panic!("Could not parse network interface configuration: {e}"),
 				}
