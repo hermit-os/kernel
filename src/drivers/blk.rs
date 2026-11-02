@@ -16,6 +16,7 @@ use volatile::VolatileRef;
 use volatile::access::ReadOnly;
 
 use crate::arch::kernel::core_local::core_id;
+use crate::arch::kernel::get_processor_count;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_block_driver;
@@ -62,18 +63,6 @@ impl RequestHeader {
 			sector: le64::from_ne(sector),
 		}
 	}
-}
-
-/// The number of cores that may ever issue a request.
-///
-/// `get_processor_count` would return 1 during driver initialization.
-fn possible_cores() -> usize {
-	#[cfg(feature = "smp")]
-	let count = crate::arch::kernel::get_possible_cpus();
-	#[cfg(not(feature = "smp"))]
-	let count = 1;
-
-	usize::try_from(count).unwrap()
 }
 
 /// Wraps a single buffer element in the [`SmallVec`] the virtqueue expects.
@@ -370,7 +359,7 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 			};
 
 			// More queues than cores would stay idle.
-			let count = usize::from(offered.max(1)).min(possible_cores());
+			let count = usize::from(offered.max(1)).min(get_processor_count().try_into().unwrap());
 
 			for index in 0..count {
 				queues.push(VirtQueue::Split(
