@@ -1,8 +1,8 @@
 use core::ffi::c_int;
 use core::future;
-use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::{Context, Poll};
 
+use hermit_sync::SpinMutex;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::wire::{IpEndpoint, Ipv4Address, Ipv6Address};
@@ -21,9 +21,14 @@ use crate::syscalls::socket::Af;
 /// smoltcp does not check whether a port is already bound by another UDP
 /// socket, so the returned port may collide with an explicitly bound one.
 fn get_ephemeral_port() -> u16 {
-	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
+	static LOCAL_ENDPOINT_LOCK: SpinMutex<u16> = SpinMutex::new(49152);
 
-	LOCAL_ENDPOINT.fetch_add(1, Ordering::SeqCst)
+	let mut guard = LOCAL_ENDPOINT_LOCK.lock();
+	*guard += 1;
+	if *guard == 0 {
+		*guard += 1;
+	}
+	*guard
 }
 
 pub struct Socket {
@@ -93,7 +98,7 @@ impl Socket {
 	/// Returns whether a datagram can be received.
 	///
 	/// A connected socket drops queued datagrams of other peers.
-	fn has_datagram(&self, socket: &mut udp::Socket<'_>) -> bool {
+	fn can_datagram(&self, socket: &mut udp::Socket<'_>) -> bool {
 		while let Ok((_, meta)) = socket.peek() {
 			if self.remote_endpoint.is_none_or(|ep| ep == meta.endpoint) {
 				return true;
@@ -114,7 +119,7 @@ impl Socket {
 				return Poll::Ready(Err(Errno::Io));
 			}
 
-			if !self.has_datagram(socket) {
+			if !self.can_datagram(socket) {
 				if self.is_nonblocking {
 					return Poll::Ready(Err(Errno::Again));
 				}
@@ -145,7 +150,7 @@ impl ObjectInterface for Socket {
 						);
 					}
 
-					if self.has_datagram(socket) {
+					if self.can_datagram(socket) {
 						avail.insert(
 							PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDBAND,
 						);
