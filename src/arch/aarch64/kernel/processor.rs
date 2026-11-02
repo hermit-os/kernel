@@ -274,6 +274,17 @@ pub fn configure() {
 		return;
 	}
 
+	// Firecracker does not expose a PMU by default.
+	let id_aa64dfr0_el1: u64;
+	unsafe {
+		asm!("mrs {}, id_aa64dfr0_el1", out(reg) id_aa64dfr0_el1, options(nostack, nomem));
+	}
+	let pmu_version = (id_aa64dfr0_el1 >> 8) & 0xf;
+	if pmu_version == 0 || pmu_version == 0xf {
+		debug!("No PMU available");
+		return;
+	}
+
 	// TODO: PMCCNTR_EL0 is the best replacement for RDTSC on AArch64.
 	// However, this test code showed that it's apparently not supported under uhyve yet.
 	// Finish the boot loader for QEMU first and then run this code under QEMU, where it should be supported.
