@@ -1,4 +1,5 @@
 use core::net::{AddrParseError, IpAddr, Ipv4Addr, Ipv6Addr};
+use core::str::FromStr;
 use core::{fmt, str};
 
 use smoltcp::wire::IpCidr;
@@ -72,10 +73,10 @@ fn parse_ip(input: &str) -> Result<IpAddr, AddrParseError> {
 	input.parse::<Ipv4Addr>().map(IpAddr::from)
 }
 
-impl TryFrom<&str> for IpConfig {
-	type Error = IpConfigParseError;
+impl FromStr for IpConfig {
+	type Err = IpConfigParseError;
 
-	fn try_from(value: &str) -> Result<Self, Self::Error> {
+	fn from_str(value: &str) -> Result<Self, Self::Err> {
 		let mut ret = Self::default();
 		let mut parts = split_outside_brackets(value);
 
@@ -100,7 +101,7 @@ impl TryFrom<&str> for IpConfig {
 		};
 		#[cfg(feature = "dns")]
 		if !dns0_ip_str.is_empty() {
-			ret.dns0 = Some(parse_ip(dns0_ip_str).map_err(|_| Self::Error::InvalidDns)?);
+			ret.dns0 = Some(parse_ip(dns0_ip_str).map_err(|_| Self::Err::InvalidDns)?);
 		}
 		#[cfg(not(feature = "dns"))]
 		if !dns0_ip_str.is_empty() {
@@ -112,7 +113,7 @@ impl TryFrom<&str> for IpConfig {
 		};
 		#[cfg(feature = "dns")]
 		if !dns1_ip_str.is_empty() {
-			ret.dns1 = Some(parse_ip(dns1_ip_str).map_err(|_| Self::Error::InvalidDns)?);
+			ret.dns1 = Some(parse_ip(dns1_ip_str).map_err(|_| Self::Err::InvalidDns)?);
 		}
 		#[cfg(not(feature = "dns"))]
 		if !dns1_ip_str.is_empty() {

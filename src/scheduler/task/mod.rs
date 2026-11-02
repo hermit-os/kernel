@@ -576,9 +576,7 @@ impl BlockedTaskQueue {
 				// If this is the first task, adjust the One-Shot Timer to fire at the
 				// next task's wakeup time (if any).
 				if first_task
-					&& let Some(wakeup) = cursor
-						.current()
-						.map_or_else(|| None, |node| node.wakeup_time)
+					&& let Some(wakeup) = cursor.current().and_then(|node| node.wakeup_time)
 				{
 					create_timer_abs(Source::Scheduler, wakeup);
 				}

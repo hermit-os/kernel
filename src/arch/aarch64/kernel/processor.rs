@@ -221,18 +221,16 @@ pub fn shutdown(error_code: i32) -> ! {
 
 	cfg_select! {
 		feature = "semihosting" => semihosting::process::exit(error_code),
-		_ => {
-			unsafe {
-				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
-				// call hypervisor to shut down the system
-				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+		_ => {unsafe {
+			const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
+			// call hypervisor to shut down the system
+			asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
 
-				// we should never reach this point
-				loop {
-					aarch64_cpu::asm::wfe();
-				}
+			// we should never reach this point
+			loop {
+				aarch64_cpu::asm::wfe();
 			}
-		}
+		}}
 	}
 }
 
