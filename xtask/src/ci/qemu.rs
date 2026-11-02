@@ -1,5 +1,5 @@
 use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpStream, UdpSocket};
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::str::from_utf8;
@@ -750,21 +750,20 @@ fn test_http_server(guest_ip: IpAddr) -> Result<()> {
 
 fn test_httpd(guest_ip: IpAddr) -> Result<()> {
 	thread::sleep(Duration::from_secs(10));
-	let url = if guest_ip.is_ipv4() {
-		format!("http://{guest_ip}:9975")
-	} else {
-		format!("http://[{guest_ip}]:9975")
-	};
-	eprintln!("[CI] GET {url}");
-	let body = ureq::get(url)
-		.config()
-		.timeout_global(Some(Duration::from_secs(3)))
-		.build()
-		.call()?
-		.into_body()
-		.read_to_string()?;
-	eprintln!("[CI] {body}");
-	assert_eq!(body.lines().next(), Some("Hello from Hermit! 🦀"));
+	let socket_addr = SocketAddr::new(guest_ip, 9975);
+	eprintln!("[CI] GET / via TCP to {socket_addr}, then shut down writing");
+	let mut stream = TcpStream::connect(socket_addr)?;
+	stream.set_read_timeout(Some(Duration::from_secs(3)))?;
+	stream.write_all(b"GET / HTTP/1.0\r\n\r\n")?;
+	stream.shutdown(Shutdown::Write)?;
+	let mut response = String::new();
+	stream.read_to_string(&mut response)?;
+	eprintln!("[CI] {response}");
+	let body = response.split_once("\r\n\r\n").map(|(_, body)| body);
+	assert_eq!(
+		body.and_then(|body| body.lines().next()),
+		Some("Hello from Hermit! 🦀")
+	);
 	Ok(())
 }
 
