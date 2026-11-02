@@ -336,7 +336,7 @@ impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "udp")]
 	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
 		let udp_rx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0x10000]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 64], vec![0; 0x10000]);
 		let udp_tx_buffer =
 			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 0x10000]);
 		let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
