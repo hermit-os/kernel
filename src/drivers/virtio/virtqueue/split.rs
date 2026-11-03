@@ -97,11 +97,17 @@ impl DescrRing {
 		Ok(next_idx)
 	}
 
+	/// Reads `used.idx`. Volatile, so polling loops re-read what the device writes.
+	fn used_idx(&self) -> u16 {
+		unsafe { (&raw const (*self.used_ring_cell.get()).idx).read_volatile() }.to_ne()
+	}
+
 	fn try_recv(&mut self) -> Result<UsedBufferToken, VirtqError> {
-		super::virtio_mem_barrier(BarrierType::Read, self.order_platform);
-		if self.read_idx == self.used_ring().idx.to_ne() {
+		if self.read_idx == self.used_idx() {
 			return Err(VirtqError::NoNewUsed);
 		}
+		// The used element may only be read after `used.idx` shows it.
+		super::virtio_mem_barrier(BarrierType::Read, self.order_platform);
 		let cur_ring_index = self.read_idx as usize % self.token_ring.len();
 		let used_elem = self.used_ring().ring()[cur_ring_index];
 
@@ -222,7 +228,7 @@ impl Virtq for SplitVq {
 	}
 
 	fn has_used_buffers(&self) -> bool {
-		self.ring.read_idx != self.ring.used_ring().idx.to_ne()
+		self.ring.read_idx != self.ring.used_idx()
 	}
 }
 
