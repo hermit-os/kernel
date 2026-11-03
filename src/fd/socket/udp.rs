@@ -26,7 +26,7 @@ fn get_ephemeral_port() -> u16 {
 	let mut guard = LOCAL_ENDPOINT_LOCK.lock();
 	*guard += 1;
 	if *guard == 0 {
-		*guard += 1;
+		*guard = 1024;
 	}
 	*guard
 }
