@@ -137,12 +137,44 @@ fn check_linux_args(
 	})
 }
 
+/// Returns the virtio-mmio devices (`LNRO0005`) described by ACPI,
+/// or `None` if there are no ACPI tables.
+#[cfg(feature = "acpi")]
+fn acpi_devices() -> Option<Vec<(VolatileRef<'static, DeviceRegisters>, u8)>> {
+	use acpi::aml::resource::{MemoryRangeDescriptor, Resource};
+
+	let devices = crate::acpi::find_devices("LNRO0005")?
+		.into_iter()
+		.filter_map(|resources| {
+			let base = resources.iter().find_map(|resource| match resource {
+				Resource::MemoryRange(MemoryRangeDescriptor::FixedLocation {
+					base_address,
+					..
+				}) => Some(*base_address),
+				_ => None,
+			})?;
+			let irq = resources.iter().find_map(|resource| match resource {
+				Resource::Irq(irq) => Some(irq.irq),
+				_ => None,
+			})?;
+			let irq = u8::try_from(irq).ok()?;
+			detect_device(usize::try_from(base).unwrap()).map(|mmio| (mmio, irq))
+		})
+		.collect();
+	Some(devices)
+}
+
+#[cfg(not(feature = "acpi"))]
+fn acpi_devices() -> Option<Vec<(VolatileRef<'static, DeviceRegisters>, u8)>> {
+	None
+}
+
 fn guess_device() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	// From https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/include/hw/i386/microvm.h#L53.
 	const VIRTIO_MMIO_BASE: usize = 0xfeb0_0000;
-	// Although these values are not constants in reality, those are the values
-	// that we have for our configuration at the time of writing, based on
+	// The layout of QEMU's microvm without ACPI, from
 	// https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/i386/microvm.c#L188-204.
+	// With ACPI, the devices are found through the DSDT.
 	const VIRTIO_IRQ_BASE: u8 = 5;
 	const VIRTIO_NUM_TRANSPORTS: u8 = 8;
 
@@ -223,7 +255,8 @@ pub(crate) fn init_drivers(handlers: &mut InterruptHandlerMap) {
 		let linux_mmio = env::mmio();
 
 		if linux_mmio.is_empty() {
-			for (mmio, irq) in guess_device() {
+			let devices = acpi_devices().unwrap_or_else(|| guess_device().collect());
+			for (mmio, irq) in devices {
 				register_mmio(mmio, irq, handlers);
 			}
 		} else {

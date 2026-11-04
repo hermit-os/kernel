@@ -3,6 +3,8 @@
 	expect(dead_code, unused_imports)
 )]
 
+#[cfg(all(target_arch = "x86_64", not(feature = "pci"), feature = "virtio"))]
+mod aml;
 mod handler;
 mod shutdown;
 mod spec;
@@ -13,6 +15,8 @@ use acpi::platform::AcpiPlatform;
 use acpi::{AcpiTable, AcpiTables, Handler, PhysicalMapping};
 use hermit_sync::OnceCell;
 
+#[cfg(all(target_arch = "x86_64", not(feature = "pci"), feature = "virtio"))]
+pub use self::aml::find_devices;
 use self::handler::AcpiHandler;
 pub use self::shutdown::*;
 pub use self::spec::*;
