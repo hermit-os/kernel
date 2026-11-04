@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
+use core::ops::Range;
 use core::{cmp, ptr};
 
 use align_address::Align;
@@ -103,6 +104,8 @@ const IOAPIC_REG_VER: u32 = 0x0001;
 /// Redirection table base
 const IOAPIC_REG_TABLE: u32 = 0x0010;
 
+/// The local APIC's interrupts use the vectors from here up.
+const LOCAL_APIC_VECTORS_START: u32 = 112;
 #[cfg(feature = "smp")]
 const TLB_FLUSH_INTERRUPT_NUMBER: u8 = 112;
 #[cfg(feature = "smp")]
@@ -129,7 +132,7 @@ const SMP_BOOT_CODE_OFFSET_PML4: u64 = SMP_BOOT_CODE_OFFSET_CPU_ID + 0x04;
 const X2APIC_ENABLE: u64 = 1 << 10;
 
 static LOCAL_APIC_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
-static IOAPIC_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
+static IOAPICS: SpinMutex<Vec<IoApic>> = SpinMutex::new(Vec::new());
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).
@@ -244,12 +247,59 @@ pub fn local_apic_id_count() -> u32 {
 	CPU_LOCAL_APIC_IDS.lock().len() as u32
 }
 
-fn init_ioapic_address(phys_addr: PhysAddr) {
+/// An IOAPIC and the global system interrupts (GSIs) on its input pins.
+struct IoApic {
+	addr: VirtAddr,
+	gsis: Range<u32>,
+}
+
+impl IoApic {
+	fn read(&self, reg: u32) -> u32 {
+		unsafe {
+			self.addr.as_mut_ptr::<u32>().write_volatile(reg);
+			(self.addr + 4 * size_of::<u32>())
+				.as_ptr::<u32>()
+				.read_volatile()
+		}
+	}
+
+	fn write(&self, reg: u32, value: u32) {
+		unsafe {
+			self.addr.as_mut_ptr::<u32>().write_volatile(reg);
+			(self.addr + 4 * size_of::<u32>())
+				.as_mut_ptr::<u32>()
+				.write_volatile(value);
+		}
+	}
+
+	fn version(&self) -> u32 {
+		self.read(IOAPIC_REG_VER) & 0xff
+	}
+
+	fn pins(&self) -> u32 {
+		((self.read(IOAPIC_REG_VER) >> 16) & 0xff) + 1
+	}
+
+	fn set_redirection(&self, gsi: u32, lower: u32, upper: u32) {
+		let off = 2 * (gsi - self.gsis.start);
+		self.write(IOAPIC_REG_TABLE + off, lower);
+		self.write(IOAPIC_REG_TABLE + off + 1, upper);
+	}
+}
+
+/// Registers the IOAPIC at `phys_addr`, whose first pin is GSI `gsi_base`, and returns its GSIs.
+fn add_ioapic(phys_addr: PhysAddr, gsi_base: u32) -> Range<u32> {
 	paging::identity_map::<BasePageSize>(phys_addr);
 
-	IOAPIC_ADDRESS
-		.set(VirtAddr::new(phys_addr.as_u64()))
-		.unwrap();
+	let mut ioapic = IoApic {
+		addr: VirtAddr::new(phys_addr.as_u64()),
+		gsis: gsi_base..gsi_base,
+	};
+	ioapic.gsis.end += ioapic.pins();
+
+	let gsis = ioapic.gsis.clone();
+	IOAPICS.lock().push(ioapic);
+	gsis
 }
 
 #[cfg(feature = "acpi")]
@@ -271,7 +321,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 			}
 			MadtEntry::IoApic(io_apic_entry) => {
 				let paddr = PhysAddr::new(io_apic_entry.io_apic_address.into());
-				init_ioapic_address(paddr);
+				add_ioapic(paddr, io_apic_entry.global_system_interrupt_base);
 			}
 			_ => (),
 		}
@@ -356,8 +406,10 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		warn!("No MP table entries, guessing IOAPIC...");
 		let default_address = PhysAddr::new(0xfec0_0000);
 
-		init_ioapic_address(default_address);
+		add_ioapic(default_address, 0);
 	} else {
+		// MP tables don't number interrupts; IOAPICs take consecutive GSIs, as in Linux.
+		let mut gsi_base = 0;
 		// entries starts directly after the config table
 		addr += size_of::<ApicConfigTable>();
 		for _i in 0..mp_config.entry_count {
@@ -375,9 +427,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(ptr::with_exposed_provenance(addr)) };
 					let ioapic = PhysAddr::new(io_entry.addr.into());
-					info!("IOAPIC found at {ioapic:p}");
-
-					init_ioapic_address(ioapic);
+					gsi_base = add_ioapic(ioapic, gsi_base).end;
 
 					addr += size_of::<ApicIoEntry>();
 				}
@@ -396,7 +446,7 @@ fn default_apic() -> PhysAddr {
 	let default_local = PhysAddr::new(0xfee0_0000);
 	let default_ioapic = PhysAddr::new(0xfec0_0000);
 	warn!("Using default APIC addresses: local: {default_local:p}, I/O: {default_ioapic:p}");
-	init_ioapic_address(default_ioapic);
+	add_ioapic(default_ioapic, 0);
 	default_local
 }
 
@@ -477,31 +527,37 @@ pub fn init() {
 }
 
 fn init_ioapic() {
-	let max_entry = ioapic_max_redirection_entry() + 1;
-	info!("IOAPIC v{} has {} entries", ioapic_version(), max_entry);
+	let ioapics = IOAPICS.lock();
+	for ioapic in ioapics.iter() {
+		info!(
+			"IOAPIC v{} at {:p} handles GSIs {:?}",
+			ioapic.version(),
+			ioapic.addr,
+			ioapic.gsis
+		);
 
-	// now lets turn everything else on
-	for i in 0..max_entry {
-		// Turn off the Programmable Interrupt Timer Interrupt (IRQ 0) and
-		// the Real Time Clock (IRQ 2).
-		let enabled = !matches!(i, 0 | 2);
-		ioapic_set_interrupt(i, 0, enabled);
+		for gsi in ioapic.gsis.clone() {
+			// Turn off the Programmable Interrupt Timer Interrupt (IRQ 0),
+			// the Real Time Clock (IRQ 2), and GSIs without a free vector.
+			let vector = 0x20 + gsi;
+			let mut lower = vector & 0xff;
+			if matches!(gsi, 0 | 2) || vector >= LOCAL_APIC_VECTORS_START {
+				debug!("Disabling irq {gsi}");
+				lower |= 1 << 16;
+			}
+			ioapic.set_redirection(gsi, lower, 0);
+		}
 	}
 }
 
-fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
-	assert!(irq <= 24);
-
-	let off = u32::from(irq * 2);
-	let ioredirect_upper = u32::from(apicid) << 24;
-	let mut ioredirect_lower = u32::from(0x20 + irq);
-	if !enabled {
-		debug!("Disabling irq {irq}");
-		ioredirect_lower |= 1 << 16;
+/// Programs the redirection entry of `gsi`, on whichever IOAPIC handles it.
+#[cfg(feature = "pci")]
+fn ioapic_set_redirection(gsi: u32, lower: u32, upper: u32) {
+	let ioapics = IOAPICS.lock();
+	match ioapics.iter().find(|ioapic| ioapic.gsis.contains(&gsi)) {
+		Some(ioapic) => ioapic.set_redirection(gsi, lower, upper),
+		None => warn!("No IOAPIC handles GSI {gsi}"),
 	}
-
-	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
-	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
 }
 
 /// Reconfigures an interrupt line for a legacy PCI interrupt.
@@ -511,17 +567,13 @@ fn ioapic_set_interrupt(irq: u8, apicid: u8, enabled: bool) {
 /// and active low instead.
 #[cfg(feature = "pci")]
 pub(crate) fn ioapic_set_pci_interrupt(irq: u8, apicid: u8) {
-	assert!(irq <= 24);
-
-	let off = u32::from(irq * 2);
 	let ioredirect_upper = u32::from(apicid) << 24;
 	// Vector, active low (bit 13) and level triggered (bit 15).
 	let ioredirect_lower = u32::from(0x20 + irq) | (1 << 13) | (1 << 15);
 
 	debug!("Configuring irq {irq} as level triggered, active low");
 
-	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
-	ioapic_write(IOAPIC_REG_TABLE + off + 1, ioredirect_upper);
+	ioapic_set_redirection(irq.into(), ioredirect_lower, ioredirect_upper);
 }
 
 pub fn init_local_apic() {
@@ -826,46 +878,6 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 	} else {
 		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_ptr::<u32>()) }
 	}
-}
-
-fn ioapic_write(reg: u32, value: u32) {
-	unsafe {
-		IOAPIC_ADDRESS
-			.get()
-			.unwrap()
-			.as_mut_ptr::<u32>()
-			.write_volatile(reg);
-
-		(*IOAPIC_ADDRESS.get().unwrap() + 4 * size_of::<u32>())
-			.as_mut_ptr::<u32>()
-			.write_volatile(value);
-	}
-}
-
-fn ioapic_read(reg: u32) -> u32 {
-	let value;
-
-	unsafe {
-		IOAPIC_ADDRESS
-			.get()
-			.unwrap()
-			.as_mut_ptr::<u32>()
-			.write_volatile(reg);
-
-		value = (*IOAPIC_ADDRESS.get().unwrap() + 4 * size_of::<u32>())
-			.as_ptr::<u32>()
-			.read_volatile();
-	}
-
-	value
-}
-
-fn ioapic_version() -> u32 {
-	ioapic_read(IOAPIC_REG_VER) & 0xff
-}
-
-fn ioapic_max_redirection_entry() -> u8 {
-	((ioapic_read(IOAPIC_REG_VER) >> 16) & 0xff) as u8
 }
 
 fn local_apic_write(x2apic_msr: u32, value: u64) {
