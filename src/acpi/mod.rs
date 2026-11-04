@@ -35,12 +35,12 @@ pub fn init() {
 		return;
 	};
 
-	info!("Reading ACPI tables...");
+	info!("reading ACPI tables...");
 	let tables = unsafe { AcpiTables::from_rsdp(handler.clone(), rsdp_paddr.get()).unwrap() };
 	let platform = AcpiPlatform::new(tables, handler).unwrap();
 	ACPI_PLATFORM
 		.set(platform)
-		.unwrap_or_else(|_| panic!("ACPI platform should not be initialized"));
+		.unwrap_or_else(|_| panic!("platform should not be initialized!"));
 }
 
 pub fn find_table<T: AcpiTable>() -> Option<PhysicalMapping<AcpiHandler, T>> {
@@ -50,17 +50,17 @@ pub fn find_table<T: AcpiTable>() -> Option<PhysicalMapping<AcpiHandler, T>> {
 #[cfg_attr(not(target_arch = "x86_64"), expect(unused_variables))]
 fn rsdp_paddr<H: Handler>(handler: &H) -> Option<NonZero<usize>> {
 	if let Some(rsdp_paddr) = env::start_info().rsdp_addr() {
-		info!("Found RSDP paddr in start info: {rsdp_paddr:#x}");
+		info!("found RSDP paddr in start info: {rsdp_paddr:#x}");
 		return Some(rsdp_paddr);
 	}
 
 	#[cfg(target_arch = "x86_64")]
 	if let Ok(rsdp) = unsafe { acpi::rsdp::Rsdp::search_for_on_bios(handler.clone()) } {
 		let rsdp_paddr = rsdp.virtual_start.addr();
-		info!("Found RSDP paddr by searching on BIOS systems: {rsdp_paddr:#x}");
+		info!("found RSDP paddr by searching on BIOS systems: {rsdp_paddr:#x}");
 		return Some(rsdp_paddr);
 	}
 
-	warn!("Could not find RSDP paddr.");
+	warn!("could not find RSDP paddr");
 	None
 }

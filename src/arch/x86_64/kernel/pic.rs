@@ -96,13 +96,13 @@ pub fn init() {
 
 extern "x86-interrupt" fn spurious_interrupt_on_master(stack_frame: ExceptionStackFrame) {
 	swapgs(&stack_frame);
-	debug!("Spurious Interrupt on Master PIC (IRQ7)");
+	debug!("pic: spurious interrupt on master PIC (IRQ7)");
 	scheduler::abort();
 }
 
 extern "x86-interrupt" fn spurious_interrupt_on_slave(stack_frame: ExceptionStackFrame) {
 	swapgs(&stack_frame);
-	debug!("Spurious Interrupt on Slave PIC (IRQ15)");
+	debug!("pic: spurious interrupt on slave PIC (IRQ15)");
 
 	// As this is an interrupt forwarded by the master, we have to acknowledge it on the master
 	// (but not on the slave as with all spurious interrupts).

@@ -124,7 +124,7 @@ impl<'a> NetworkInterface<'a> {
 
 		info!("MAC address: {hardware_addr}");
 		let capabilities = device.capabilities();
-		info!("{:?}", capabilities.checksum);
+		info!("Capabilities checksum: {:?}", capabilities.checksum);
 		info!("MTU: {} bytes", capabilities.max_transmission_unit);
 
 		// use the current time based on the wall-clock time as seed
@@ -148,7 +148,7 @@ impl<'a> NetworkInterface<'a> {
 			|| hermit_var!("HERMIT_MASK").is_some()
 		{
 			warn!(
-				"HERMIT_IP, HERMIT_GATEWAY and HERMIT_MASK were removed in favor of the ip= parameter and have no effect anymore"
+				"device: HERMIT_IP, HERMIT_GATEWAY and HERMIT_MASK were removed in favor of the ip= parameter and have no effect anymore"
 			);
 		}
 

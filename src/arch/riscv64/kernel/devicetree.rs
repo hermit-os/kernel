@@ -58,20 +58,20 @@ use crate::executor::device::NETWORK_DEVICE;
 pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	// TODO: Implement devicetree correctly
 	if let Some(fdt) = env::start_info().fdt() {
-		debug!("Init drivers using devicetree");
+		debug!("initializing drivers using devicetree");
 
 		// Init PLIC first
 		if let Some(plic_node) = fdt.find_compatible(&["sifive,plic-1.0.0"]) {
-			debug!("Found interrupt controller");
+			debug!("found interrupt controller");
 			let plic_region = plic_node
 				.reg()
-				.expect("Reg property for PLIC not found in FDT")
+				.expect("reg property for PLIC not found in FDT")
 				.next()
 				.unwrap();
 
 			let plic_region_start = PhysAddr::from(plic_region.starting_address.addr());
 			debug!(
-				"Init PLIC at {:p}, size: {:x}",
+				"initializing PLIC at {:p} (size: {:x})",
 				plic_region_start,
 				plic_region.size.unwrap()
 			);
@@ -84,15 +84,15 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 			// Route interrupts to the boot hart, which runs the async executor
 			let boot_hart_id = super::HARTS_AVAILABLE.finalize()[0];
 			let context = plic_context(&fdt, plic_node, boot_hart_id)
-				.expect("No S-mode PLIC context found for boot hart in FDT");
-			debug!("Using PLIC context {context} for hart {boot_hart_id}");
+				.expect("no S-mode PLIC context found for boot hart in FDT");
+			debug!("using PLIC context {context} for hart {boot_hart_id}");
 			init_plic(plic_region.starting_address, context);
 		}
 
 		// Init GEM
 		#[cfg(all(feature = "gem-net", not(feature = "pci")))]
 		if let Some(gem_node) = fdt.find_compatible(&["sifive,fu540-c000-gem"]) {
-			debug!("Found Ethernet controller");
+			debug!("found ethernet controller");
 
 			let gem_region = gem_node
 				.reg()
@@ -108,7 +108,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				.property("local-mac-address")
 				.expect("local-mac-address property for GEM not found in FDT")
 				.value;
-			debug!("Local MAC address: {mac:x?}");
+			debug!("local MAC address: {mac:x?}");
 			let mut phy_addr = u32::MAX;
 
 			let phy_node = gem_node
@@ -122,11 +122,14 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					.as_usize()
 					.unwrap() as u32;
 			} else {
-				warn!("Expected ethernet-phy node, found something else");
+				warn!(
+					"expected ethernet-phy node, found something else (name: {})",
+					phy_node.name
+				);
 			}
 
 			let gem_region_start = PhysAddr::from(gem_region.starting_address.expose_provenance());
-			debug!("Init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
+			debug!("init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
 			assert!(
 				gem_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
 			);
@@ -139,7 +142,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				handlers,
 			) {
 				Ok(drv) => *NETWORK_DEVICE.lock() = Some(drv),
-				Err(err) => error!("Could not initialize GEM driver: {err}"),
+				Err(err) => error!("could not initialize GEM driver: {err}"),
 			}
 		}
 
@@ -155,23 +158,23 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 			if !is_virtio_mmio {
 				continue;
 			}
-			debug!("Found virtio mmio device");
+			debug!("found virtio-mmio device");
 
 			let virtio_region = virtio_node
 				.reg()
-				.expect("reg property for virtio mmio not found in FDT")
+				.expect("reg property for virtio-mmio not found in FDT")
 				.next()
 				.unwrap();
 			let irq = virtio_node
 				.interrupts()
-				.expect("interrupts property for virtio mmio not found in FDT")
+				.expect("interrupts property for virtio-mmio not found in FDT")
 				.next()
 				.unwrap();
 
 			let virtio_region_start =
 				PhysAddr::from(virtio_region.starting_address.expose_provenance());
 
-			debug!("Init virtio_mmio at {virtio_region_start:p}, irq: {irq}");
+			debug!("initializing virtio-mmio at {virtio_region_start:p} (irq: {irq})");
 			assert!(
 				virtio_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
 			);
@@ -185,16 +188,16 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 			let version = mmio.as_ptr().version().read().to_ne();
 
 			if magic != virtio::mmio::MAGIC_VALUE {
-				error!("It's not a MMIO-device at {mmio:p}");
+				error!("no virtio-mmio device present at {mmio:p}");
 			}
 
 			if version != 2 {
-				warn!("Found a legacy device, which isn't supported");
+				warn!("found unsupported legacy device (version: {version})");
 				return;
 			}
 
 			// We found a MMIO-device (whose 512-bit address in this structure).
-			trace!("Found a MMIO-device at {mmio:p}");
+			trace!("device found at {mmio:p}");
 
 			// Verify the device-ID to find the network card
 			let id = mmio.as_ptr().device_id().read();
@@ -211,7 +214,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				FrameAlloc::allocate_at(frame_range).unwrap_err();
 			}
 
-			debug!("Found virtio {id:?} at {mmio:p}");
+			debug!("found virtio device with ID {id:?} at {mmio:p}");
 
 			match mmio_virtio::init_device(mmio, irq.try_into().unwrap(), handlers) {
 				#[cfg(feature = "virtio-console")]
@@ -239,7 +242,9 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					));
 				}
 				Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(0))) => (),
-				Err(err) => error!("Could not initialize virtio-mmio device: {err}"),
+				Err(err) => {
+					error!("could not initialize virtio-mmio device with ID {id:?}: {err}");
+				}
 			}
 		}
 	}

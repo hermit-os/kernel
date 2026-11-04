@@ -88,7 +88,7 @@ impl ConfigRegionAccess for LegacyPciConfigRegion {
 pub(crate) fn init() {
 	#[cfg(feature = "acpi")]
 	if pcie::init_pcie() {
-		info!("Initialized PCIe");
+		info!("pcie initialized");
 		return;
 	}
 
@@ -97,11 +97,11 @@ pub(crate) fn init() {
 		0..PCI_MAX_BUS_NUMBER,
 		PciConfigRegion::Pci(LegacyPciConfigRegion::new()),
 	);
-	info!("Initialized PCI");
+	info!("pci initialized");
 }
 
 fn scan_bus(bus_range: impl IntoIterator<Item = u8> + Debug, pci_config: PciConfigRegion) {
-	debug!("Scanning PCI buses {bus_range:?}");
+	debug!("scanning bus range {bus_range:?}");
 
 	// Hermit only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.

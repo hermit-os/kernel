@@ -91,12 +91,12 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 	let version = mmio.as_ptr().version().read().to_ne();
 
 	if magic != virtio::mmio::MAGIC_VALUE {
-		trace!("It's not a MMIO-device at {mmio:p}");
+		trace!("no virtio-mmio device present at {mmio:p}");
 		return None;
 	}
 
 	if version != 2 {
-		trace!("Found a legacy device, which isn't supported");
+		trace!("found unsupported legacy device (version: {version})");
 		return None;
 	}
 
@@ -106,7 +106,7 @@ unsafe fn check_ptr(ptr: *mut u8) -> Option<VolatileRef<'static, DeviceRegisters
 		return None;
 	}
 
-	info!("Found Virtio {id:?} device: {mmio:p}");
+	info!("found virtio device with ID {id:?} at {mmio:p}");
 	Some(mmio)
 }
 
@@ -143,7 +143,7 @@ fn check_linux_args(
 				let irq: u8 = v[1].parse::<u8>().unwrap();
 				detect_device(phys_addr).map(|mmio| (mmio, irq))
 			} else {
-				warn!("Invalid prefix in {arg}");
+				warn!("invalid prefix in {arg}");
 				None
 			}
 		})

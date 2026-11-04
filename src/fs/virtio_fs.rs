@@ -1014,7 +1014,7 @@ impl ObjectInterface for VirtioFsFileHandle {
 
 impl Clone for VirtioFsFileHandle {
 	fn clone(&self) -> Self {
-		warn!("VirtioFsFileHandle: clone not tested");
+		warn!("virtio-fs: VirtioFsFileHandle: clone not tested");
 		Self(self.0.clone())
 	}
 }
@@ -1366,7 +1366,7 @@ impl VfsNode for VirtioFsDirectory {
 		if opt.contains(OpenOption::O_DIRECTORY) {
 			if opt.contains(OpenOption::O_CREAT) {
 				// See https://lwn.net/Articles/926782/
-				warn!("O_DIRECTORY and O_CREAT are together invalid as open options.");
+				warn!("virtio-fs: O_DIRECTORY and O_CREAT are together invalid as open options.");
 				return Err(Errno::Inval);
 			}
 
@@ -1412,7 +1412,7 @@ impl VfsNode for VirtioFsDirectory {
 			file_guard.fuse_nid = lookup(path);
 
 			if file_guard.fuse_nid.is_none() {
-				warn!("virtio-fs lookup seems to have failed!");
+				warn!("virtio-fs: lookup failed!");
 				return Err(Errno::Noent);
 			}
 
@@ -1576,9 +1576,7 @@ pub(crate) fn init() {
 	entries.retain(|x| x != "..");
 	entries.retain(|x| x != "tmp");
 	entries.retain(|x| x != "proc");
-	warn!(
-		"virtio-fs don't mount the host directories 'tmp' and 'proc' into the guest file system!"
-	);
+	warn!("virtio-fs: host directories 'tmp' and 'proc' not mounted in guest file system!");
 
 	for entry in entries {
 		let i_cstr = CString::new(entry.as_str()).unwrap();
@@ -1597,9 +1595,9 @@ pub(crate) fn init() {
 				.get()
 				.unwrap()
 				.mount(&path, Box::new(VirtioFsDirectory::new(path.clone())))
-				.expect("Mount failed. Invalid mount_point?");
+				.expect("virtio-fs: mount failed, invalid mount_point?");
 		} else {
-			warn!("virtio-fs don't mount {entry}. It isn't a directory!");
+			warn!("virtio-fs: '{entry}' not mounted, as it is not a directory!");
 		}
 	}
 }

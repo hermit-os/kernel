@@ -303,7 +303,7 @@ impl super::virtio::VirtioDriver for VirtioConsoleDriver {
 						}
 					});
 					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
-					info!("Virtio interrupt handler at line {irq}");
+					info!("console: virtio interrupt handler at line {irq}");
 				}
 				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
 				InterruptCapability::Msix(msix_table) => {
@@ -377,7 +377,7 @@ pub mod error {
 	pub enum VirtioConsoleError {
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio console device driver failed, for device {0:x}, due to a missing or malformed device config!"
+			"virtio-console: driver failed for device with ID {0:x} due to missing/malformed device config!"
 		)]
 		NoDevCfg(u16),
 	}

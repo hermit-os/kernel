@@ -145,7 +145,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 #[allow(dead_code)]
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\" for interrupt {irq_number}");
+	debug!("assigning register name \"{name}\" for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(irq_number, name);
 }
 
@@ -284,7 +284,7 @@ fn external_handler() {
 		let mut cur_int = CURRENT_INTERRUPTS.lock();
 		cur_int.push(irq);
 		if cur_int.len() > 1 {
-			warn!("More than one external interrupt is pending!");
+			warn!("more than one pending external interrupt!");
 		}
 		// Release lock early
 		drop(cur_int);
@@ -310,7 +310,7 @@ fn external_handler() {
 		if let Some(active_irq) = cur_int.pop()
 			&& active_irq != irq
 		{
-			warn!("Interrupt mismatch during EOI!");
+			warn!("interrupt mismatch during EOI!");
 		}
 	}
 }

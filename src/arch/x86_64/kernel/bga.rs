@@ -172,7 +172,7 @@ pub fn set_resolution(width: u16, height: u16, bpp: u16) {
 		info.height = height;
 		info.bpp = bpp;
 	} else {
-		error!("BGA is not initialized");
+		error!("BGA: not initialized.");
 	}
 }
 

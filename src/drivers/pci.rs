@@ -137,7 +137,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			let index = u8::try_from(index).unwrap();
 			let (address, size, prefetchable, _width) = match self.get_bar(index) {
 				Some(Bar::Io { .. }) => {
-					warn!("Cannot map IOBar!");
+					warn!("cannot map IO bar!");
 					return None;
 				}
 				Some(Bar::Memory32 {
@@ -170,7 +170,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			debug!("Mapping bar {index} at {address:#x} with length {size:#x}");
 
 			if !prefetchable {
-				warn!("Currently only mapping of prefetchable bars is supported!");
+				warn!("mapping of non-prefetchable bars currently unsupported!");
 			}
 
 			// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
@@ -191,7 +191,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		// PCIe specification v5 section 7.5.1.1.13 (Interrupt Pin Register)
 		match pin {
 			0 => {
-				warn!("The function uses no legacy interrupt message(s).");
+				warn!("function uses no legacy interrupt message(s).");
 				None
 			}
 			1..=4 => {
@@ -445,7 +445,7 @@ pub(crate) fn init(handlers: &mut InterruptHandlerMap) {
 			vendor_id == 0x1af4 && (0x1000..=0x107f).contains(&device_id)
 		}) {
 			info!(
-				"Found virtio device with device id {:#x}",
+				"found virtio device with device ID {:#x}",
 				adapter.device_id()
 			);
 
@@ -584,16 +584,16 @@ pub(crate) mod error {
 	/// typically carrying the device's id as an u16.
 	#[derive(Error, Debug)]
 	pub enum PciError {
-		#[error("Driver failed to initialize device with id: {0:#x}. Due to unknown reasosn!")]
+		#[error("Driver failed to initialize device with ID {0:#x}. Reason: Unknown!")]
 		General(u16),
-		#[error("Driver failed to initialize device with id: {0:#x}. Reason: No BAR's found.")]
+		#[error("Driver failed to initialize device with ID {0:#x}. Reason: No BARs found.")]
 		NoBar(u16),
 		#[error(
-			"Driver failed to initialize device with id: {0:#x}. Reason: No Capabilities pointer found."
+			"Driver failed to initialize device with ID {0:#x}. Reason: No Capabilities pointer found."
 		)]
 		NoCapPtr(u16),
 		#[error(
-			"Driver failed to initialize device with id: {0:#x}. Reason: No Virtio capabilities were found."
+			"Driver failed to initialize device with ID {0:#x}. Reason: No Virtio capabilities found."
 		)]
 		NoVirtioCaps(u16),
 	}

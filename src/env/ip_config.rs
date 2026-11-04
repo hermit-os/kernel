@@ -105,7 +105,7 @@ impl FromStr for IpConfig {
 		}
 		#[cfg(not(feature = "dns"))]
 		if !dns0_ip_str.is_empty() {
-			warn!("DNS 0 IP specified without enabling the dns feature, ignoring");
+			warn!("ip_config: DNS 0 IP specified without the 'dns' feature enabled, ignoring...");
 		}
 
 		let Some(dns1_ip_str) = parts.next() else {
@@ -117,7 +117,7 @@ impl FromStr for IpConfig {
 		}
 		#[cfg(not(feature = "dns"))]
 		if !dns1_ip_str.is_empty() {
-			warn!("DNS 1 IP specified without enabling the dns feature, ignoring");
+			warn!("ip_config: DNS 1 IP specified without the 'dns' feature enabled, ignoring...");
 		}
 
 		let Some(_ntp0_ip) = parts.next() else {

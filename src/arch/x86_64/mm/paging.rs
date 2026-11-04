@@ -194,7 +194,7 @@ pub fn map<S>(
 			if let Ok((_frame, flush)) = unmap {
 				unmapped = true;
 				flush.flush();
-				debug!("Had to unmap page {page:?} before mapping.");
+				debug!("had to unmap page {page:?} before mapping.");
 			}
 			let map = unsafe { mapper.map_to(page, frame, flags, &mut FrameAlloc) };
 			match map {
@@ -277,7 +277,7 @@ where
 			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
 			// We should handle this case there instead of here.
 			Err(UnmapError::PageNotMapped) => {
-				debug!("Tried to unmap {page:?}, which was not mapped.");
+				debug!("tried to unmap {page:?}, which was not mapped.");
 			}
 			Err(err) => panic!("{err:?}"),
 		}
@@ -353,7 +353,7 @@ fn ensure_p4_writable() {
 		return;
 	}
 
-	debug!("Making P4 table writable...");
+	debug!("making P4 table writable...");
 
 	let make_writable = || unsafe {
 		let flags = flags | PageTableEntryFlags::WRITABLE;
@@ -961,7 +961,7 @@ pub mod mapped_page_table_iter {
 				let frame = match PhysFrame::from_start_address(p1_entry.addr()) {
 					Ok(frame) => frame,
 					Err(AddressNotAligned) => {
-						warn!("Invalid frame address: {:p}", p1_entry.addr());
+						warn!("invalid frame address: {:p}", p1_entry.addr());
 						self.increment_p1_index()?;
 						continue;
 					}

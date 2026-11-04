@@ -191,7 +191,7 @@ pub mod error {
 	pub enum VirtioRngError {
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio rng device driver failed, for device {0:x}, due to a missing or malformed device config!"
+			"virtio-rng: driver failed for device {0:x} due to missing/malformed device config!"
 		)]
 		NoDevCfg(u16),
 	}

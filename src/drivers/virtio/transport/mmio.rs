@@ -343,7 +343,7 @@ pub(crate) fn init_device(
 	handlers: &mut InterruptHandlerMap,
 ) -> Result<VirtioDriver, DriverError> {
 	if registers.as_ptr().version().read().to_ne() == 0x1 {
-		error!("Legacy interface isn't supported!");
+		error!("legacy interface not supported, skipping!");
 		return Err(DriverError::InitVirtioDevFail(
 			VirtioError::DevNotSupported(0),
 		));
@@ -354,13 +354,13 @@ pub(crate) fn init_device(
 		#[cfg(feature = "virtio-console")]
 		virtio::Id::Console => match init::<VirtioConsoleDriver>(registers, irq_no, handlers) {
 			Ok(virt_console_drv) => {
-				info!("Virtio console driver initialized.");
+				info!("virtio-console driver initialized");
 				Ok(VirtioDriver::Console(alloc::boxed::Box::new(
 					virt_console_drv,
 				)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio console driver could not be initialized with device");
+				error!("virtio-console driver could not be initialized for virtio device");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
@@ -370,11 +370,11 @@ pub(crate) fn init_device(
 			// TODO: proper error handling on driver creation fail
 			match init::<VirtioFsDriver>(registers, irq_no, handlers) {
 				Ok(virt_fs_drv) => {
-					info!("Virtio filesystem driver initialized.");
+					info!("virtio-fs driver initialized");
 					Ok(VirtioDriver::Fs(alloc::boxed::Box::new(virt_fs_drv)))
 				}
 				Err(virtio_error) => {
-					error!("Virtio fs driver could not be initialized with device");
+					error!("virtio-fs driver could not be initialized for virtio device!");
 					Err(DriverError::InitVirtioDevFail(virtio_error))
 				}
 			}
@@ -382,46 +382,51 @@ pub(crate) fn init_device(
 		#[cfg(feature = "virtio-net")]
 		virtio::Id::Net => match init::<VirtioNetDriver>(registers, irq_no, handlers) {
 			Ok(virt_net_drv) => {
-				if virt_net_drv.dev_status() == virtio::net::S::LINK_UP {
-					info!("The link of the network device is up!");
-				}
-				info!("Virtio network driver initialized.");
+				let link_status = if virt_net_drv.dev_status() == virtio::net::S::LINK_UP {
+					"up"
+				} else {
+					"down"
+				};
+				info!("virtio-net driver initialized with link status {link_status}");
 				Ok(VirtioDriver::Net(alloc::boxed::Box::new(virt_net_drv)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio network driver could not be initialized with device");
+				error!("virtio-net driver could not be initialized for virtio device!");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		#[cfg(feature = "virtio-rng")]
 		virtio::Id::Rng => match init::<VirtioRngDriver>(registers, irq_no, handlers) {
 			Ok(virt_rng_drv) => {
-				info!("Virtio rng driver initialized.");
+				info!("virtio-rng driver initialized");
 				Ok(VirtioDriver::Rng(alloc::boxed::Box::new(virt_rng_drv)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio rng driver could not be initialized with device");
+				error!("virtio-rng driver could not be initialized for virtio device!");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		#[cfg(feature = "virtio-vsock")]
 		virtio::Id::Vsock => match init::<VirtioVsockDriver>(registers, irq_no, handlers) {
 			Ok(virt_vsock_drv) => {
-				info!("Virtio sock driver initialized.");
+				info!(
+					"virtio-vsock driver initialized with cid {:x}",
+					virt_vsock_drv.get_cid()
+				);
 				Ok(VirtioDriver::Vsock(alloc::boxed::Box::new(virt_vsock_drv)))
 			}
 			Err(virtio_error) => {
-				error!("Virtio sock driver could not be initialized with device");
+				error!("virtio-vsock driver could not be initialized for virtio device!");
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
 		id => {
 			if id != virtio::Id::Reserved {
 				if let Some(feature) = id.as_feature() {
-					error!("Virtio driver {id:?} is currently not active.");
-					error!("To use the device, recompile the kernel with the {feature} feature.");
+					error!("virtio driver {id:?} not currently active.");
+					error!("to use the device, recompile the kernel with the feature '{feature}'.");
 				} else {
-					error!("Virtio device {id:?} is not supported!");
+					error!("virtio device with driver id {id:?} not supported!");
 				}
 			}
 

@@ -106,7 +106,7 @@ impl super::virtio::VirtioDriver for VirtioFsDriver {
 						};
 					});
 					crate::arch::kernel::interrupts::add_irq_name(irq, "virtio");
-					info!("Virtio interrupt handler at line {irq}");
+					info!("console: virtio interrupt handler at line {irq}");
 				}
 				#[cfg(all(feature = "pci", target_arch = "x86_64"))]
 				InterruptCapability::Msix(msix_table) => {
@@ -274,7 +274,7 @@ pub mod error {
 	pub enum VirtioFsInitError {
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio filesystem driver failed, for device {0:x}, due to a missing or malformed device config!"
+			"virtio-fs: driver failed for device {0:x} due to missing/malformed device config!"
 		)]
 		NoDevCfg(u16),
 

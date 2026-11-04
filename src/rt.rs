@@ -18,7 +18,7 @@ hermit_entry::define_entry_version!();
 #[cfg(test)]
 #[unsafe(no_mangle)]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
-	println!("Executing hermit unittests. Any arguments are dropped");
+	println!("rt: executing hermit unittests. any arguments will be dropped.");
 	crate::test_main();
 	core_scheduler().exit(0)
 }
@@ -26,7 +26,7 @@ extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *c
 //https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
-	println!("Running {} tests", tests.len());
+	println!("rt: running {} tests...", tests.len());
 	for test in tests {
 		test();
 	}

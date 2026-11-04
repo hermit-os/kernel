@@ -297,7 +297,7 @@ pub fn wakeup_core(core_to_wakeup: CoreId) {
 	#[cfg(all(feature = "smp", not(feature = "idle-poll")))]
 	if core_to_wakeup != core_id() && sleep_state::try_wake_up(core_to_wakeup) {
 		let hart_id = HARTS_AVAILABLE.finalize()[core_to_wakeup as usize];
-		debug!("Wakeup core: {core_to_wakeup} , hart_id: {hart_id}");
+		debug!("Wakeup core: {core_to_wakeup}, hart_id: {hart_id}");
 		sbi_rt::send_ipi(sbi_rt::HartMask::from_mask_base(0b1, hart_id));
 	}
 }

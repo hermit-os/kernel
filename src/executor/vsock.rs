@@ -197,7 +197,7 @@ async fn vsock_run() {
 					raw.rx_waker.wake();
 					raw.tx_waker.wake();
 				} else {
-					trace!("Receive message from invalid source {header_cid}");
+					trace!("vsock: message received from invalid source {header_cid}");
 				}
 			} else if op == Op::Rst {
 				// A reset must come from the exact endpoint this socket is
@@ -209,7 +209,7 @@ async fn vsock_run() {
 					raw.rx_waker.wake();
 					raw.tx_waker.wake();
 				} else {
-					trace!("Receive message from invalid source {header_cid}");
+					trace!("vsock: message received from invalid source {header_cid}");
 				}
 			} else if op == Op::Response && type_ == Type::Stream {
 				if raw.remote_cid == header_cid
@@ -388,7 +388,7 @@ impl VsockMap {
 }
 
 pub(crate) fn init() {
-	info!("Try to initialize vsock interface!");
+	info!("vsock: attempting interface initialization...");
 
 	spawn(vsock_run());
 }
