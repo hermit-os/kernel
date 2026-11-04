@@ -605,23 +605,21 @@ pub fn map<S: PageSize>(
 		"Mapping virtual address {virtual_address:p} to physical address {physical_address:p} ({count} pages)"
 	);
 
+	let group_bytes = GROUP_SIZE * S::SIZE as usize;
+
 	if count < GROUP_SIZE {
 		let range = get_page_range::<S>(virtual_address, count);
 		let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 		root_pagetable.map_pages(range, physical_address, flags);
 	} else {
 		// map to GROUP_SIZE*S:SIZE boundary
-		let offset = virtual_address.as_usize() % (GROUP_SIZE * S::SIZE as usize);
+		let offset = virtual_address.as_usize() % group_bytes;
 		if offset > 0 {
-			map::<S>(
-				virtual_address,
-				physical_address,
-				offset / S::SIZE as usize,
-				flags,
-			);
-			virtual_address += offset;
-			physical_address += offset;
-			count -= offset / S::SIZE as usize;
+			let head_pages = (group_bytes - offset) / S::SIZE as usize;
+			map::<S>(virtual_address, physical_address, head_pages, flags);
+			virtual_address += head_pages * S::SIZE as usize;
+			physical_address += head_pages * S::SIZE as usize;
+			count -= head_pages;
 		}
 
 		// map with contiguous bit
