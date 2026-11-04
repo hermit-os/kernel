@@ -605,9 +605,12 @@ pub fn map<S: PageSize>(
 		"Mapping virtual address {virtual_address:p} to physical address {physical_address:p} ({count} pages)"
 	);
 
+	// The contiguous bit requires the virtual and physical address to share the same alignment within a group.
 	let group_bytes = GROUP_SIZE * S::SIZE as usize;
+	let congruent =
+		(virtual_address.as_usize() ^ physical_address.as_usize()).is_multiple_of(group_bytes);
 
-	if count < GROUP_SIZE {
+	if count < GROUP_SIZE || !congruent {
 		let range = get_page_range::<S>(virtual_address, count);
 		let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 		root_pagetable.map_pages(range, physical_address, flags);
