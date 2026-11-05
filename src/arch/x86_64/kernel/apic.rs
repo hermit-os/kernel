@@ -6,7 +6,7 @@ use core::{cmp, ptr};
 
 use align_address::Align;
 use free_list::PageLayout;
-use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
+use hermit_sync::{InterruptSpinMutex, OnceCell, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
 use x86_64::registers::control::Cr3;
@@ -133,7 +133,7 @@ static IOAPIC_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).
-static CPU_LOCAL_APIC_IDS: SpinMutex<Vec<u8>> = SpinMutex::new(Vec::new());
+static CPU_LOCAL_APIC_IDS: InterruptSpinMutex<Vec<u8>> = InterruptSpinMutex::new(Vec::new());
 
 /// After calibration, initialize the APIC Timer with this counter value to let it fire an interrupt
 /// after 1 microsecond.
