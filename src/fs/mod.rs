@@ -464,17 +464,20 @@ where
 		return callback(name);
 	}
 
-	let cwd = WORKING_DIRECTORY.lock();
+	let path = {
+		let cwd = WORKING_DIRECTORY.lock();
 
-	let Some(cwd) = cwd.as_ref() else {
-		// Relative path with no CWD, this is weird/impossible
-		return Err(Errno::Badf);
+		let Some(cwd) = cwd.as_ref() else {
+			// Relative path with no CWD, this is weird/impossible
+			return Err(Errno::Badf);
+		};
+
+		let mut path = String::with_capacity(cwd.len() + name.len() + 1);
+		path.push_str(cwd);
+		path.push('/');
+		path.push_str(name);
+		path
 	};
-
-	let mut path = String::with_capacity(cwd.len() + name.len() + 1);
-	path.push_str(cwd);
-	path.push('/');
-	path.push_str(name);
 
 	callback(&path)
 }
