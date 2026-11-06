@@ -581,17 +581,21 @@ impl PerCoreScheduler {
 	}
 
 	pub fn dup_object2(&self, fd1: RawFd, fd2: RawFd) -> io::Result<RawFd> {
-		without_interrupts(|| {
+		// Closing the replaced object may block, so drop it only after
+		// releasing the object map and the current task.
+		let replaced = without_interrupts(|| -> io::Result<_> {
 			let current_task = self.current_task.borrow();
 			let mut object_map = current_task.object_map.write();
 
 			let obj = object_map.get(&fd1).cloned().ok_or(Errno::Badf)?;
 
-			if object_map.insert(fd2, obj).is_some() {
-				debug!("dup2({fd1}, {fd2}): replaced previously open fd {fd2}");
-			}
-			Ok(fd2)
-		})
+			Ok(object_map.insert(fd2, obj))
+		})?;
+
+		if replaced.is_some() {
+			debug!("dup2({fd1}, {fd2}): replaced previously open fd {fd2}");
+		}
+		Ok(fd2)
 	}
 
 	/// Remove a IO interface, which is named by the file descriptor
