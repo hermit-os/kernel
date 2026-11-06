@@ -19,6 +19,7 @@ use crossbeam_utils::Backoff;
 use hermit_sync::without_interrupts;
 
 use crate::arch::kernel::core_local;
+use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::Errno;
 use crate::executor::task::AsyncTask;
 use crate::io;
@@ -73,12 +74,12 @@ impl TaskNotify {
 		}
 	}
 
-	pub fn wait(&self, timeout: Option<u64>) {
+	pub fn wait(&self, deadline: Option<u64>) {
 		// Wait for a futex and reset the value to zero. If the value
 		// is not zero, someone already wanted to wakeup a task and stored another
 		// value to the futex address. In this case, the function directly returns
 		// and doesn't block.
-		let _ = futex_wait_and_set(&self.futex, 0, timeout, Flags::RELATIVE, 0);
+		let _ = futex_wait_and_set(&self.futex, 0, deadline, Flags::empty(), 0);
 	}
 }
 
@@ -137,7 +138,11 @@ where
 	F: Future<Output = io::Result<T>>,
 {
 	let backoff = Backoff::new();
-	let start = crate::arch::kernel::systemtime::now_micros();
+	let deadline = timeout.and_then(|duration| {
+		u64::try_from(duration.as_micros())
+			.ok()
+			.and_then(|us| get_timer_ticks().checked_add(us))
+	});
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.clone().into();
 	let mut cx = Context::from_waker(&waker);
@@ -151,10 +156,7 @@ where
 			return t;
 		}
 
-		let now = crate::arch::kernel::systemtime::now_micros();
-		if let Some(duration) = timeout
-			&& Duration::from_micros(now - start) >= duration
-		{
+		if deadline.is_some_and(|deadline| get_timer_ticks() >= deadline) {
 			return Err(Errno::Time);
 		}
 
@@ -162,11 +164,8 @@ where
 		run();
 
 		if backoff.is_completed() {
-			let wakeup_time =
-				timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
-
 			// switch to another task
-			task_notify.wait(wakeup_time);
+			task_notify.wait(deadline);
 
 			// restore default values
 			backoff.reset();
