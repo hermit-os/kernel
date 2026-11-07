@@ -1,7 +1,6 @@
-use alloc::string::String;
 use alloc::vec::Vec;
+use core::ptr;
 use core::ptr::NonNull;
-use core::{ptr, str};
 
 use align_address::Align;
 use free_list::PageRange;
@@ -35,7 +34,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
-use crate::env;
+use crate::env::{self, VirtioMmioDevice};
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -130,23 +129,12 @@ fn detect_device(phys_addr: usize) -> Option<VolatileRef<'static, DeviceRegister
 }
 
 fn check_linux_args(
-	linux_mmio: &'static [String],
+	devices: &'static [VirtioMmioDevice],
 ) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
-	linux_mmio
-		.iter()
-		.inspect(|arg| trace!("Checking Linux parameter {arg}..."))
-		.flat_map(move |arg| {
-			if let Some(arg) = arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
-				let v: Vec<&str> = arg.trim().split(':').collect();
-				let without_prefix = v[0].trim_start_matches("0x");
-				let phys_addr = usize::from_str_radix(without_prefix, 16).unwrap();
-				let irq: u8 = v[1].parse::<u8>().unwrap();
-				detect_device(phys_addr).map(|mmio| (mmio, irq))
-			} else {
-				warn!("Invalid prefix in {arg}");
-				None
-			}
-		})
+	devices.iter().filter_map(|device| {
+		let phys_addr = usize::try_from(device.base).ok()?;
+		detect_device(phys_addr).map(|mmio| (mmio, device.irq))
+	})
 }
 
 fn guess_device() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
