@@ -218,6 +218,9 @@ gem-net = ["net", "dep:tock-registers"]
 
 #! ### Virtio Drivers
 
+## Enables the virtio-blk driver.
+virtio-blk = ["virtio", "hadris-fat"]
+
 ## Enables the virtio-console driver.
 virtio-console = ["virtio"]
 
@@ -379,6 +382,7 @@ env_filter = { version = "2.0.0", default-features = false }
 free-list = "0.3"
 fuse-abi = { version = "0.2", optional = true, features = ["linux"] }
 goblin = { version = "0.10", optional = true, default-features = false, features = ["elf64"] }
+hadris-fat = { version = "2.5.0", default-features = false, features = ["read", "write", "alloc", "lfn", "async"], optional = true }
 hashbrown = { version = "0.17", default-features = false }
 heapless = "0.9"
 hermit-entry = { version = "0.10", features = ["kernel"], optional = true }
