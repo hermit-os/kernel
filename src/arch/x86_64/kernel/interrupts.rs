@@ -24,6 +24,9 @@ static IRQ_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
+/// IRQ `n` arrives at vector `PIC1_OFFSET + n`, which leaves the vectors from 112 on to the local APIC.
+const IRQ_COUNT: u8 = 80;
+
 pub(crate) const IST_ENTRIES: usize = 4;
 pub(crate) const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
 
@@ -92,11 +95,15 @@ pub(crate) fn install() {
 	let mut idt = IDT.lock();
 
 	set_general_handler!(&mut *idt, abort, 0..PIC1_OFFSET);
-	set_general_handler!(&mut *idt, handle_interrupt, PIC1_OFFSET..PIC1_OFFSET + 16);
-	set_general_handler!(&mut *idt, abort, PIC1_OFFSET + 16..);
+	set_general_handler!(
+		&mut *idt,
+		handle_interrupt,
+		PIC1_OFFSET..PIC1_OFFSET + IRQ_COUNT
+	);
+	set_general_handler!(&mut *idt, abort, PIC1_OFFSET + IRQ_COUNT..);
 
 	unsafe {
-		for i in PIC1_OFFSET..PIC1_OFFSET + 16 {
+		for i in PIC1_OFFSET..PIC1_OFFSET + IRQ_COUNT {
 			let addr = idt[i].handler_addr();
 			idt[i].set_handler_addr(addr).set_stack_index(0);
 		}

@@ -1,7 +1,6 @@
-use alloc::string::String;
 use alloc::vec::Vec;
+use core::ptr;
 use core::ptr::NonNull;
-use core::{ptr, str};
 
 use align_address::Align;
 use free_list::PageRange;
@@ -35,7 +34,7 @@ use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::VirtioDriver;
 #[cfg(feature = "virtio-vsock")]
 use crate::drivers::vsock::VirtioVsockDriver;
-use crate::env;
+use crate::env::{self, VirtioMmioDevice};
 #[cfg(any(feature = "rtl8139", feature = "virtio-net"))]
 use crate::executor::device::NETWORK_DEVICE;
 use crate::init_cell::InitCell;
@@ -130,31 +129,49 @@ fn detect_device(phys_addr: usize) -> Option<VolatileRef<'static, DeviceRegister
 }
 
 fn check_linux_args(
-	linux_mmio: &'static [String],
+	devices: &'static [VirtioMmioDevice],
 ) -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
-	linux_mmio
-		.iter()
-		.inspect(|arg| trace!("Checking Linux parameter {arg}..."))
-		.flat_map(move |arg| {
-			if let Some(arg) = arg.trim().trim_matches(char::from(0)).strip_prefix("4K@") {
-				let v: Vec<&str> = arg.trim().split(':').collect();
-				let without_prefix = v[0].trim_start_matches("0x");
-				let phys_addr = usize::from_str_radix(without_prefix, 16).unwrap();
-				let irq: u8 = v[1].parse::<u8>().unwrap();
-				detect_device(phys_addr).map(|mmio| (mmio, irq))
-			} else {
-				warn!("Invalid prefix in {arg}");
-				None
-			}
+	devices.iter().filter_map(|device| {
+		let phys_addr = usize::try_from(device.base).ok()?;
+		detect_device(phys_addr).map(|mmio| (mmio, device.irq))
+	})
+}
+
+/// Returns the virtio-mmio devices (`LNRO0005`) described by ACPI.
+#[cfg(feature = "acpi")]
+fn acpi_devices() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+	use acpi::aml::resource::{MemoryRangeDescriptor, Resource};
+
+	crate::acpi::find_devices("LNRO0005")
+		.into_iter()
+		.filter_map(|resources| {
+			let base = resources.iter().find_map(|resource| match resource {
+				Resource::MemoryRange(MemoryRangeDescriptor::FixedLocation {
+					base_address,
+					..
+				}) => Some(*base_address),
+				_ => None,
+			})?;
+			let irq = resources.iter().find_map(|resource| match resource {
+				Resource::Irq(irq) => Some(irq.irq),
+				_ => None,
+			})?;
+			let irq = u8::try_from(irq).ok()?;
+			detect_device(usize::try_from(base).unwrap()).map(|mmio| (mmio, irq))
 		})
+}
+
+#[cfg(not(feature = "acpi"))]
+fn acpi_devices() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
+	core::iter::empty()
 }
 
 fn guess_device() -> impl Iterator<Item = (VolatileRef<'static, DeviceRegisters>, u8)> {
 	// From https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/include/hw/i386/microvm.h#L53.
 	const VIRTIO_MMIO_BASE: usize = 0xfeb0_0000;
-	// Although these values are not constants in reality, those are the values
-	// that we have for our configuration at the time of writing, based on
+	// The layout of QEMU's microvm without ACPI, from
 	// https://gitlab.com/qemu-project/qemu/-/blob/v10.2.2/hw/i386/microvm.c#L188-204.
+	// With ACPI, the devices are found through the DSDT.
 	const VIRTIO_IRQ_BASE: u8 = 5;
 	const VIRTIO_NUM_TRANSPORTS: u8 = 8;
 
@@ -235,7 +252,11 @@ pub(crate) fn init_drivers(handlers: &mut InterruptHandlerMap) {
 		let linux_mmio = env::mmio();
 
 		if linux_mmio.is_empty() {
-			for (mmio, irq) in guess_device() {
+			let mut devices = acpi_devices().collect::<Vec<_>>();
+			if devices.is_empty() {
+				devices.extend(guess_device());
+			}
+			for (mmio, irq) in devices {
 				register_mmio(mmio, irq, handlers);
 			}
 		} else {

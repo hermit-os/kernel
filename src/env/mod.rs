@@ -3,6 +3,7 @@
 #[cfg(feature = "net")]
 mod ip_config;
 mod start_info;
+mod virtio_mmio;
 
 use alloc::borrow::{Cow, ToOwned};
 use alloc::string::String;
@@ -19,6 +20,7 @@ use shlex::Shlex;
 #[cfg(feature = "net")]
 pub use self::ip_config::*;
 pub use self::start_info::*;
+pub use self::virtio_mmio::*;
 
 static CLI: OnceCell<Cli> = OnceCell::new();
 
@@ -37,7 +39,7 @@ struct Cli {
 	env_vars: HashMap<Cow<'static, str>, String, RandomState>,
 	args: Vec<String>,
 	#[allow(dead_code)]
-	mmio: Vec<String>,
+	mmio: Vec<VirtioMmioDevice>,
 }
 
 impl Default for Cli {
@@ -68,7 +70,10 @@ impl Default for Cli {
 			let word = word_owned.as_str();
 
 			if let Some(arg) = word.strip_prefix("virtio_mmio.device=") {
-				mmio.push(arg.to_owned());
+				match arg.parse() {
+					Ok(device) => mmio.push(device),
+					Err(err) => warn!("Ignoring virtio_mmio.device={arg}: {err}"),
+				}
 				continue;
 			}
 
@@ -199,6 +204,6 @@ pub fn args() -> &'static [String] {
 
 /// Returns the configuration of all mmio devices
 #[allow(dead_code)]
-pub fn mmio() -> &'static [String] {
+pub fn mmio() -> &'static [VirtioMmioDevice] {
 	CLI.get().unwrap().mmio.as_slice()
 }
