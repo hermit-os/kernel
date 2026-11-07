@@ -25,6 +25,9 @@ const CMOS_24_HOUR_FORMAT_FLAG: u8 = 1 << 1;
 const CMOS_BINARY_FORMAT_FLAG: u8 = 1 << 2;
 const CMOS_12_HOUR_PM_FLAG: u8 = 0x80;
 
+/// How long to try for a consistent read. An update takes about 2 ms.
+const RTC_READ_TIMEOUT_MICROS: u64 = 100_000;
+
 struct Rtc {
 	cmos_format: u8,
 }
@@ -143,13 +146,19 @@ impl Rtc {
 		Self::microseconds_from_date(year, month, day, hour, minute, second)
 	}
 
-	pub fn get_microseconds_since_epoch(&self) -> u64 {
-		loop {
+	fn update_in_progress() -> bool {
+		Self::read_cmos_register(CMOS_STATUS_REGISTER_A) & CMOS_UPDATE_IN_PROGRESS_FLAG > 0
+	}
+
+	/// Returns `None` if no consistent time could be read in time, which is
+	/// the case if there is no RTC and every register reads 0xff.
+	pub fn get_microseconds_since_epoch(&self) -> Option<u64> {
+		let deadline = processor::get_timer_ticks() + RTC_READ_TIMEOUT_MICROS;
+		while processor::get_timer_ticks() < deadline {
 			// If a clock update is currently in progress, wait until it is finished.
-			while Self::read_cmos_register(CMOS_STATUS_REGISTER_A) & CMOS_UPDATE_IN_PROGRESS_FLAG
-				> 0
-			{
+			if Self::update_in_progress() {
 				spin_loop();
+				continue;
 			}
 
 			// Get the current time in microseconds since the epoch.
@@ -157,7 +166,7 @@ impl Rtc {
 
 			// If the clock is already updating the time again, the read values may be inconsistent
 			// and we have to repeat this process.
-			if Self::read_cmos_register(CMOS_STATUS_REGISTER_A) & CMOS_UPDATE_IN_PROGRESS_FLAG > 0 {
+			if Self::update_in_progress() {
 				continue;
 			}
 
@@ -165,9 +174,11 @@ impl Rtc {
 			let microseconds_since_epoch_2 = self.read_all_values();
 			if microseconds_since_epoch_1 == microseconds_since_epoch_2 {
 				// Both times are identical, so we have read consistent values and can exit the loop.
-				return microseconds_since_epoch_1;
+				return Some(microseconds_since_epoch_1);
 			}
 		}
+
+		None
 	}
 }
 
@@ -184,7 +195,11 @@ fn boot_time() -> OffsetDateTime {
 
 	// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 	// Subtract the timer ticks to get the actual time when Hermit was booted.
-	let current_time = without_interrupts(|| Rtc::new().get_microseconds_since_epoch());
+	let Some(current_time) = without_interrupts(|| Rtc::new().get_microseconds_since_epoch())
+	else {
+		warn!("Could not read the RTC, using the Unix epoch as boot time");
+		return OffsetDateTime::UNIX_EPOCH;
+	};
 	let boot_micros = current_time - processor::get_timer_ticks();
 	let boot_nanos = i128::from(boot_micros) * 1000;
 	OffsetDateTime::from_unix_timestamp_nanos(boot_nanos).unwrap()
