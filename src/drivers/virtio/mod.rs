@@ -213,7 +213,7 @@ impl UniCapsColl {
 			.negotiate_features(T::MINIMAL_FEATURES.union(T::OPTIONAL_FEATURES));
 
 		if !negotiated_features.contains(T::MINIMAL_FEATURES) {
-			error!("Device features set, does not satisfy minimal features needed. Aborting!");
+			error!("virtio: set device features do not satisfy minimum set of features, aborting!");
 			return Err(VirtioError::FailFeatureNeg);
 		}
 
@@ -224,7 +224,7 @@ impl UniCapsColl {
 		// Checks if the device has accepted final set. This finishes feature negotiation.
 		let mut dev_cfg = if self.com_cfg.check_features() {
 			info!(
-				"Features have been negotiated between {} device and driver.",
+				"virtio: features between device {} and driver have been negotiated.",
 				T::get_name()
 			);
 			// Set feature set in device config for future use.
@@ -233,7 +233,7 @@ impl UniCapsColl {
 				features: negotiated_features,
 			}
 		} else {
-			error!("The device does not support our subset of features.");
+			error!("virtio: device does not support our feature subset!");
 			return Err(VirtioError::FailFeatureNeg);
 		};
 
@@ -296,26 +296,28 @@ pub mod error {
 
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio driver failed, for device {0:x}, due to a missing or malformed common config!"
+			"virtio: driver failed for device with ID {0:x} due to missing/malformed common config!"
 		)]
 		NoComCfg(u16),
 
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio driver failed, for device {0:x}, due to a missing or malformed ISR status config!"
+			"virtio: driver failed for device with ID {0:x} due to missing/malformed ISR status config!"
 		)]
 		NoIsrCfg(u16),
 
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio driver failed, for device {0:x}, due to a missing or malformed notification config!"
+			"virtio: driver failed for device with ID {0:x} due to missing/malformed notification config!"
 		)]
 		NoNotifCfg(u16),
 
-		#[error("Device with id {0:#x} not supported.")]
+		#[error("virtio: device with ID {0:x} not supported.")]
 		DevNotSupported(u16),
 
-		#[error("Virtio driver failed, device did not acknowledge negotiated feature set!")]
+		#[error(
+			"virtio: driver failed, as the device did not acknowledge the negotiated feature set!"
+		)]
 		FailFeatureNeg,
 
 		#[cfg(all(

@@ -914,7 +914,7 @@ pub unsafe extern "C" fn sys_getsockname(
 				#[cfg(feature = "virtio-vsock")]
 				Endpoint::Vsock(_) => {
 					if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
-						warn!("unsupported device");
+						warn!("socket: unsupported device");
 						0
 					} else {
 						-i32::from(Errno::Inval)
@@ -1046,7 +1046,7 @@ pub unsafe extern "C" fn sys_getpeername(
 				#[cfg(feature = "virtio-vsock")]
 				Endpoint::Vsock(_) => {
 					if *addrlen >= u32::try_from(size_of::<sockaddr_vm>()).unwrap() {
-						warn!("unsupported device");
+						warn!("socket: unsupported device");
 					} else {
 						return -i32::from(Errno::Inval);
 					}

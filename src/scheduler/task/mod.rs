@@ -402,7 +402,7 @@ impl Task {
 		stacks: TaskStacks,
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 	) -> Task {
-		debug!("Creating new task {tid} on core {core_id}");
+		debug!("task: creating new task {tid} on core {core_id}");
 
 		Task {
 			id: tid,
@@ -422,7 +422,7 @@ impl Task {
 	}
 
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
-		debug!("Creating idle task {tid}");
+		debug!("task: creating idle task {tid}");
 
 		/// All cores use the same mapping between file descriptor and the referenced object
 		static OBJECT_MAP: OnceCell<
@@ -501,7 +501,7 @@ impl BlockedTaskQueue {
 	fn mark_ready(task: &RefCell<Task>) {
 		let mut borrowed = task.borrow_mut();
 		debug!(
-			"Waking up task {} on core {}",
+			"task: waking up task {} on core {}",
 			borrowed.id, borrowed.core_id
 		);
 
@@ -526,7 +526,7 @@ impl BlockedTaskQueue {
 		{
 			// Set the task status to Blocked.
 			let mut borrowed = task.borrow_mut();
-			debug!("Blocking task {}", borrowed.id);
+			debug!("task: blocking task {}", borrowed.id);
 
 			assert_eq!(
 				borrowed.status,

@@ -259,7 +259,7 @@ impl<S: PageSize> Page<S> {
 	fn including_address(virtual_address: VirtAddr) -> Self {
 		assert!(
 			Self::is_valid_address(virtual_address),
-			"Virtual address {virtual_address:p} is invalid"
+			"virtual address {virtual_address:p} is invalid"
 		);
 
 		Self {
@@ -691,7 +691,7 @@ pub fn identity_map<S: PageSize>(phys_addr: PhysAddr) {
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
-	trace!("Unmapping virtual address {virtual_address:p} ({count} pages)");
+	trace!("unmapping virtual address {virtual_address:p} ({count} pages)");
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };

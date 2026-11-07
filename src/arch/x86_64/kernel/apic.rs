@@ -193,7 +193,7 @@ struct ApicIoEntry {
 #[cfg(feature = "smp")]
 extern "x86-interrupt" fn tlb_flush_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	swapgs(&stack_frame);
-	debug!("Received TLB Flush Interrupt");
+	debug!("apic: received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER);
 	let (frame, val) = Cr3::read_raw();
 	unsafe {
@@ -478,7 +478,11 @@ pub fn init() {
 
 fn init_ioapic() {
 	let max_entry = ioapic_max_redirection_entry() + 1;
-	info!("IOAPIC v{} has {} entries", ioapic_version(), max_entry);
+	info!(
+		"apic: IOAPIC v{} has {} entries",
+		ioapic_version(),
+		max_entry
+	);
 
 	// now lets turn everything else on
 	for i in 0..max_entry {
@@ -628,7 +632,7 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn init_x2apic() {
-	debug!("Enable x2APIC support");
+	debug!("apic: initializing x2APIC support");
 	// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
 	// Enable it.
 	let mut msr = IA32_APIC_BASE;
@@ -671,7 +675,7 @@ pub fn boot_application_processors() {
 		smp_boot_code.len() <= BasePageSize::SIZE as usize,
 		"SMP Boot Code is larger than a page"
 	);
-	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
+	debug!("apic: SMP boot code is {} bytes long", smp_boot_code.len());
 
 	// Ensure identity mapping
 	// Does not use `paging::identity_map()` since this mapping must not be `NO_EXECUTE`.
@@ -698,7 +702,7 @@ pub fn boot_application_processors() {
 			value.try_into().unwrap();
 		// Set entry point
 		debug!(
-			"Set entry point for application processor to {:p}",
+			"apic: Set entry point for application processor to {:p}",
 			smp::smp_start as *const ()
 		);
 		(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY)
@@ -719,7 +723,7 @@ pub fn boot_application_processors() {
 			}
 			let destination = u64::from(apic_id) << 32;
 
-			debug!("Waking up CPU {core_id_to_boot} with Local APIC ID {apic_id}");
+			debug!("apic: CPU {core_id_to_boot}: waking up with local APIC ID {apic_id}");
 			init_next_processor_variables();
 
 			// Save the current number of initialized CPUs.
@@ -748,7 +752,7 @@ pub fn boot_application_processors() {
 					| APIC_ICR_DELIVERY_MODE_STARTUP
 					| ((SMP_BOOT_CODE_ADDRESS.as_u64()) >> 12),
 			);
-			debug!("Waiting for it to respond");
+			debug!("apic: CPU {core_id_to_boot}: waiting for response...");
 
 			// Wait until the application processor has finished initializing.
 			// It will indicate this by counting up cpu_online.

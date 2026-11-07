@@ -38,8 +38,7 @@ fn fill_queue(vq: &mut VirtQueue, num_packets: u16, packet_size: u32) {
 		) {
 			Ok(tkn) => tkn,
 			Err(_vq_err) => {
-				error!("Setup of network queue failed, which should not happen!");
-				panic!("setup of network queue failed!");
+				panic!("vsock: setup of network queue failed!");
 			}
 		};
 
@@ -70,7 +69,7 @@ impl RxQueue {
 	pub fn add(&mut self, mut vq: VirtQueue) {
 		const BUFF_PER_PACKET: u16 = 2;
 		let num_packets = vq.size() / BUFF_PER_PACKET;
-		info!("num_packets {num_packets}");
+		info!("vsock: num_packets {num_packets}");
 		fill_queue(&mut vq, num_packets, self.packet_size);
 
 		self.vq = Some(vq);
@@ -109,7 +108,10 @@ impl RxQueue {
 			};
 			let packet = buffer_tkn.used_recv_buff.pop_front_vec().unwrap();
 
-			let vq = self.vq.as_mut().expect("Invalid length of receive queue");
+			let vq = self
+				.vq
+				.as_mut()
+				.expect("vsock: invalid length of receive queue");
 
 			f(&header, &packet[..]);
 
@@ -171,7 +173,7 @@ impl TxQueue {
 		// We need to poll to get the queue to remove elements from the table and make space for
 		// what we are about to add
 		self.poll();
-		let vq = self.vq.as_mut().expect("Unable to get send queue");
+		let vq = self.vq.as_mut().expect("vsock: unable to get send queue");
 
 		assert!(len < usize::try_from(self.packet_length).unwrap());
 		let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
@@ -278,7 +280,9 @@ impl VirtioVsockDriver {
 			expect(irrefutable_let_patterns)
 		)]
 		let InterruptCapability::IsrStatus(isr_stat) = &mut self.caps_coll.int_cap else {
-			panic!("MSI-X vectors should be configured to the interrupt type-specific handlers.")
+			panic!(
+				"vsock: MSI-X vectors should be configured to the interrupt type-specific handlers."
+			)
 		};
 
 		let status = isr_stat.acknowledge();
@@ -447,23 +451,19 @@ pub mod error {
 	#[derive(Error, Debug, Copy, Clone)]
 	#[allow(clippy::enum_variant_names)]
 	pub enum VirtioVsockError {
-		#[error(
-			"Virtio socket device driver failed, for device {0:x}, due to a missing or malformed device config!"
-		)]
+		#[error("vsock: driver failed for device {0:x} due to missing/malformed device config!")]
 		NoDevCfg(u16),
 
-		#[error(
-			"Virtio socket device driver failed, for device {0:x}, due to a missing or malformed common config!"
-		)]
+		#[error("vsock: driver failed for device {0:x} due to missing/malformed common config!")]
 		NoComCfg(u16),
 
 		#[error(
-			"Virtio socket device driver failed, for device {0:x}, due to a missing or malformed ISR status config!"
+			"vsock: driver failed for device {0:x} due to missing/malformed ISR status config!"
 		)]
 		NoIsrCfg(u16),
 
 		#[error(
-			"Virtio socket device driver failed, for device {0:x}, due to a missing or malformed notification config!"
+			"vsock: driver failed for device {0:x} due to missing/malformed notification config!"
 		)]
 		NoNotifCfg(u16),
 	}

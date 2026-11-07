@@ -120,7 +120,7 @@ pub(crate) fn get_vsock_driver() -> Option<&'static InterruptTicketMutex<VirtioV
 pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 	without_interrupts(|| {
 		let Some(fdt) = crate::env::start_info().fdt() else {
-			error!("No device tree found, cannot initialize MMIO drivers");
+			error!("Device tree not found: MMIO drivers cannot be initialized.");
 			return;
 		};
 
@@ -168,15 +168,15 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					let version = mmio.as_ptr().version().read().to_ne();
 
 					if magic != virtio::mmio::MAGIC_VALUE {
-						error!("It's not a MMIO-device at {mmio:p}");
+						error!("no virtio-mmio device present at {mmio:p}");
 					}
 
 					if version != 2 {
-						warn!("Found a legacy device, which isn't supported");
+						warn!("found an unsupported legacy device (version: {version})");
 					}
 
 					// We found a MMIO-device (whose 512-bit address in this structure).
-					trace!("Found a MMIO-device at {mmio:p}");
+					trace!("device found at {mmio:p}");
 
 					// Verify the device-ID to find the network card
 					let id = mmio.as_ptr().device_id().read();
@@ -187,7 +187,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					}
 
 					debug!(
-						"Found {id:?} card at {mmio:p}, irq: {irq}, type: {irqtype}, flags: {irqflags}"
+						"card with ID {id:?} found at {mmio:p} (irq: {irq}, type: {irqtype}, flags: {irqflags})"
 					);
 
 					let drv =
@@ -211,7 +211,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 					} else if irqtype == 0 {
 						IntId::spi(irq)
 					} else {
-						panic!("Invalid interrupt type");
+						panic!("gic: invalid interrupt type {irqtype}!");
 					};
 					gic.set_interrupt_priority(virtio_irqid, Some(cpu_id), 0x00)
 						.unwrap();

@@ -112,7 +112,7 @@ fn finish_processor_init() {
 
 	// Add hart to HARTS_AVAILABLE, the hart id is stored in current_boot_id
 	HARTS_AVAILABLE.with(|harts_available| harts_available.unwrap().push(current_hart_id));
-	info!("Initialized CPU with hart_id {current_hart_id}");
+	info!("CPU {current_hart_id}: Initialized.");
 
 	crate::scheduler::add_current_core();
 
@@ -128,7 +128,7 @@ pub fn boot_next_processor() {
 	let next_hart_index = lsb(new_hart_mask);
 
 	let Some(next_hart_id) = next_hart_index else {
-		info!("All processors are initialized");
+		info!("All CPUs are initialized.");
 		CPU_ONLINE.fetch_add(1, Ordering::Release);
 		return;
 	};

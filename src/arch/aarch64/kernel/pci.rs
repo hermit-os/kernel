@@ -28,7 +28,7 @@ impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
 		assert!(
 			addr.as_u64() & 0x0fff_ffff == 0,
-			"Unaligned PCI Config Space"
+			"unaligned PCI Config Space"
 		);
 		Self(addr)
 	}
@@ -79,11 +79,11 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 		let _low = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		match high.get_bits(24..=25) {
-			0b00 => debug!("Configuration space"),
+			0b00 => debug!("configuration space detected"),
 			0b01 => {
-				debug!("IO space");
+				debug!("IO space detected");
 				if io_start != 0 {
-					warn!("Found already IO space");
+					warn!("IO space already found");
 				}
 
 				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u64>());
@@ -91,9 +91,9 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 			}
 			0b10 => {
 				let prefetchable = high.get_bit(30);
-				debug!("32 bit memory space: prefetchable {prefetchable}");
+				debug!("32-bit memory space detected (prefetchable: {prefetchable})");
 				if mem32_start != 0 {
-					warn!("Found already 32 bit memory space");
+					warn!("32-bit memory space already found (mem32_start: {mem32_start:#x}");
 				}
 
 				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u64>());
@@ -101,15 +101,15 @@ fn detect_pci_regions(pci_node: FdtNode<'_, '_>) -> (u64, u64, u64) {
 			}
 			0b11 => {
 				let prefetchable = high.get_bit(30);
-				debug!("64 bit memory space: prefetchable {prefetchable}");
+				debug!("64-bit memory space detected (prefetchable: {prefetchable})");
 				if mem64_start != 0 {
-					warn!("Found already 64 bit memory space");
+					warn!("64-bit memory space already found (mem64_start: {mem64_start:#x}");
 				}
 
 				(value_slice, residual_slice) = residual_slice.split_at(size_of::<u64>());
 				mem64_start = u64::from_be_bytes(value_slice.try_into().unwrap());
 			}
-			_ => panic!("Unknown space code"),
+			_ => panic!("unknown space code"),
 		}
 
 		// currently, the size is ignores
@@ -233,7 +233,7 @@ pub fn init() {
 		let page_range = PageAlloc::allocate(layout).unwrap();
 		let pci_address = VirtAddr::from(page_range.start());
 		info!(
-			"Mapping PCI Enhanced Configuration Space interface to virtual address {pci_address:p} (size {size:#X})"
+			"mapping Enhanced Configuration Space interface to virtual address {pci_address:p} (size: {size:#X})"
 		);
 
 		let flags = PageTableEntryFlags::device();
@@ -246,9 +246,9 @@ pub fn init() {
 
 		let (mut io_start, mut mem32_start, mut mem64_start) = detect_pci_regions(pci_node);
 
-		debug!("IO address space starts at {io_start:#X}");
-		debug!("Memory32 address space starts at {mem32_start:#X}");
-		debug!("Memory64 address space starts {mem64_start:#X}");
+		debug!("IO space: starts at {io_start:#X}");
+		debug!("32-bit memory space: starts at {mem32_start:#X}");
+		debug!("64-bit memory space: starts at {mem64_start:#X}");
 		assert!(io_start > 0);
 		assert!(mem32_start > 0);
 		assert!(mem64_start > 0);
@@ -257,7 +257,7 @@ pub fn init() {
 			/ (u64::from(PCI_MAX_DEVICE_NUMBER)
 				* u64::from(PCI_MAX_FUNCTION_NUMBER)
 				* BasePageSize::SIZE);
-		info!("Scanning PCI Busses 0 to {}", max_bus_number - 1);
+		info!("scanning {max_bus_number} buses (zero-indexed)");
 
 		let pci_config = PciConfigRegion::new(pci_address);
 		for bus in 0..max_bus_number {
@@ -332,7 +332,7 @@ pub fn init() {
 						detect_interrupt(bus.try_into().unwrap(), device.into(), fdt, pci_node)
 					{
 						debug!(
-							"Initialize interrupt pin {pin} and line {line} for device {device_id}"
+							"Device {device_id}: Initialize interrupt pin {pin} and line {line}"
 						);
 						dev.set_irq(pin, line);
 					}
@@ -344,8 +344,8 @@ pub fn init() {
 
 		return;
 	} else if let Some(_pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
-		warn!("Currently, pci-host-cam-generic isn't supported!");
+		warn!("pci-host-cam-generic not currently supported!");
 	}
 
-	warn!("Unable to find PCI bus");
+	warn!("unable to find PCI bus");
 }

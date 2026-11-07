@@ -70,7 +70,7 @@ impl<'a> NetworkState<'a> {
 	pub fn as_nic_mut(&mut self) -> Result<&mut NetworkInterface<'a>, &'static str> {
 		match self {
 			NetworkState::Initialized(nic) => Ok(nic),
-			_ => Err("Network is not initialized!"),
+			_ => Err("network: not initialized!"),
 		}
 	}
 }
@@ -166,7 +166,9 @@ async fn dhcpv4_run() {
 				info!("DHCP config acquired!");
 				nic.iface.update_ip_addrs(|addrs| {
 					if let Some(dest) = addrs.iter_mut().next() {
-						warn!("Overwriting the default network interface configuration.");
+						warn!(
+							"network: overwriting the default network interface configuration..."
+						);
 						*dest = IpCidr::Ipv4(config.address);
 					} else if addrs.push(IpCidr::Ipv4(config.address)).is_err() {
 						info!("Unable to update IP address");
@@ -307,7 +309,7 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 				Poll::Pending
 			}
 			Err(e) => {
-				warn!("DNS query failed: {e:?}");
+				warn!("network: DNS query failed: {e:?}");
 				Poll::Ready(Err(Errno::Noent))
 			}
 		}
@@ -316,7 +318,7 @@ pub(crate) async fn get_query_result(query: QueryHandle) -> io::Result<Vec<IpAdd
 }
 
 pub(crate) fn init() {
-	info!("Try to initialize network!");
+	info!("network: attempting interface initialization...");
 
 	// initialize variable, which contains the next local endpoint
 	LOCAL_ENDPOINT.store(start_endpoint(), Ordering::Relaxed);

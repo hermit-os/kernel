@@ -344,7 +344,7 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 }
 
 pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
-	debug!("Register name \"{name}\" for interrupt {irq_number}");
+	debug!("assigning register name \"{name}\" for interrupt {irq_number}");
 	IRQ_NAMES.lock().insert(PIC1_OFFSET + irq_number, name);
 }
 

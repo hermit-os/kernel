@@ -29,7 +29,7 @@ impl PciConfigRegion {
 	pub fn new(start: VirtAddr, size: u64) -> Self {
 		assert!(
 			start.as_u64() & 0x0fff_ffff == 0,
-			"Unaligned PCI Config Space"
+			"unaligned PCI Config Space"
 		);
 		Self {
 			start,
@@ -81,7 +81,7 @@ fn mmap_ecam(pci_node: FdtNode<'_, '_>) -> (VirtAddr, u64) {
 	let ecam_address = VirtAddr::from(page_range.start());
 
 	info!(
-		"Mapping PCI Enhanced Configuration Space interface to virtual address {ecam_address:p} (size {size:#X})"
+		"mapping Enhanced Configuration Space interface to virtual address {ecam_address:p} (size: {size:#X})"
 	);
 
 	let flags = PageTableEntryFlags::device();
@@ -145,29 +145,29 @@ impl PciSpaceAllocator {
 			let size = u64::from_be_bytes(entry[20..28].try_into().unwrap());
 
 			match child_bus_address_high.get_bits(24..=25) {
-				PCI_SPACE_CODE_CONFIG => debug!("Configuration space"),
+				PCI_SPACE_CODE_CONFIG => debug!("configuration space detected"),
 				PCI_SPACE_CODE_IO => {
-					assert!(io_start == 0, "Found already IO space");
+					assert!(io_start == 0, "IO space already found");
 					io_start = parent_bus_address;
 					io_end = io_start + size;
 				}
 				PCI_SPACE_CODE_MEM32 => {
-					assert!(mem32_start == 0, "Found already 32 bit memory space");
+					assert!(mem32_start == 0, "32-bit memory space already found");
 					mem32_start = parent_bus_address;
 					mem32_end = mem32_start + size;
 				}
 				PCI_SPACE_CODE_MEM64 => {
-					assert!(mem64_start == 0, "Found already 64 bit memory space");
+					assert!(mem64_start == 0, "64-bit memory space already found");
 					mem64_start = parent_bus_address;
 					mem64_end = mem64_start + size;
 				}
-				_ => panic!("Unknown space code"),
+				_ => panic!("unknown space code"),
 			}
 		}
 
 		assert!(io_start != 0, "IO space not found");
-		assert!(mem32_start != 0, "32 bit memory space not found");
-		assert!(mem64_start != 0, "64 bit memory space not found");
+		assert!(mem32_start != 0, "32-bit memory space not found");
+		assert!(mem64_start != 0, "64-bit memory space not found");
 
 		Self {
 			io_start: io_start.try_into().unwrap(),
@@ -461,17 +461,15 @@ pub fn init() {
 				fdt,
 				pci_node,
 			) {
-				debug!(
-					"Initialize interrupt pin {interrupt_pin} and line {interrupt_line} for device {dev}"
-				);
+				debug!("Initialize interrupt pin {interrupt_pin} and line {interrupt_line}");
 				dev.set_irq(interrupt_pin, interrupt_line);
 			}
 
 			PCI_DEVICES.with(|pci_devices| pci_devices.unwrap().push(dev));
 		}
 	} else if let Some(_pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
-		warn!("Currently, pci-host-cam-generic isn't supported!");
+		warn!("pci-host-cam-generic is not currently supported!");
 	} else {
-		warn!("Unable to find PCI bus");
+		warn!("unable to find bus");
 	}
 }

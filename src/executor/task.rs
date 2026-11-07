@@ -40,7 +40,7 @@ impl Future for AsyncTask {
 	type Output = ();
 
 	fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-		trace!("Run async task {}", self.id);
+		trace!("task: run async task {}", self.id);
 		self.as_mut().future.as_mut().poll(cx)
 	}
 }

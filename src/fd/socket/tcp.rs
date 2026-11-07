@@ -445,7 +445,7 @@ impl ObjectInterface for Socket {
 				Ok(())
 			}
 			other => {
-				warn!("TCP: unsupported option {other:?}");
+				warn!("tcp: unsupported option {other:?}");
 				Err(Errno::Inval)
 			}
 		}
@@ -470,7 +470,7 @@ impl ObjectInterface for Socket {
 				Ok(c_int::try_from(socket.recv_capacity()).unwrap())
 			}
 			other => {
-				warn!("TCP: unsupported option {other:?}");
+				warn!("tcp: unsupported option {other:?}");
 				Err(Errno::Inval)
 			}
 		}

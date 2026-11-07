@@ -371,7 +371,7 @@ impl RxToken<'_> {
 				if ip_packet.more_frags() || ip_packet.frag_offset() != 0 {
 					// The packet is part of a fragmented IP packet (RFC 791 page 8). We could check its checksum only
 					// if we reassembled it, so we discard it instead.
-					warn!("packet is fragmented, discarding!");
+					warn!("virtio-net: packet is fragmented, discarding!");
 					return false;
 				}
 
@@ -397,7 +397,7 @@ impl RxToken<'_> {
 				if next_header == IpProtocol::Ipv6Frag {
 					// The packet is part of a fragmented IP packet. We could check its checksum only if we reassembled
 					// it, so we discard it instead.
-					warn!("packet is fragmented, discarding!");
+					warn!("virtio-net: packet is fragmented, discarding!");
 					return false;
 				}
 
@@ -505,7 +505,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 		let res = if self.is_ethernet_frame_passable(&first_header, &combined_packets) {
 			f(&combined_packets)
 		} else {
-			warn!("Frame with invalid checksum received");
+			warn!("virtio-net: frame with invalid checksum received!");
 			f(&[])
 		};
 
@@ -879,7 +879,10 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 		let dev_cfg = match caps_coll.init_caps(dev_cfg_raw, |caps_coll, dev_cfg| {
 			mtu = Some(ethernet_frame_size(dev_cfg));
 			let dev_spec_init = Self::dev_spec_init(caps_coll, dev_cfg)?;
-			debug!("Using RX buffer size of {}", dev_spec_init.0.buf_size);
+			debug!(
+				"virtio-net: using RX buffer size of {}",
+				dev_spec_init.0.buf_size
+			);
 			recv_vqs = Some(dev_spec_init.0);
 			send_vqs = Some(dev_spec_init.1);
 			#[cfg_attr(
@@ -890,7 +893,7 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 			ctrl_vq = Some(dev_spec_init.3);
 			send_capacity = Some(dev_spec_init.4);
 
-			info!("Device specific initialization for Virtio network device finished");
+			info!("virtio-net: device specific initialization for Virtio network device finished");
 
 			match &mut caps_coll.int_cap {
 				InterruptCapability::IsrStatus(_) => {
@@ -973,7 +976,7 @@ impl VirtioNetDriver {
 	) -> Result<(RxQueues, TxQueues, u16, Option<VirtQueue>, u32), VirtioNetError> {
 		let (recv_vqs, send_vqs, num_vqs, send_capacity) =
 			Self::virtqueue_init(caps_coll, dev_cfg)?;
-		info!("Network driver successfully initialized virtqueues.");
+		info!("virtio-net: network driver successfully initialized virtqueues");
 
 		// Add a control if feature is negotiated
 		let ctrl_vq = dev_cfg.features.contains(virtio::net::F::CTRL_VQ).then(|| {
@@ -1121,7 +1124,7 @@ pub mod error {
 	pub enum VirtioNetError {
 		#[cfg(feature = "pci")]
 		#[error(
-			"Virtio network driver failed, for device {0:x}, due to a missing or malformed device config!"
+			"virtio-net: driver failed for device {0:x} due to missing/malformed device config!"
 		)]
 		NoDevCfg(u16),
 	}

@@ -308,7 +308,7 @@ impl TxFields {
 			}
 
 			// handle incoming packets
-			warn!("Interrupt is received but 'user space' will not be notified.");
+			warn!("network: interrupt is received but 'user space' will not be notified.");
 		}
 	}
 }
@@ -448,13 +448,13 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 	where
 		F: FnOnce(&[u8]) -> R,
 	{
-		debug!("receive_rx_buffer");
+		debug!("net: gem: receive_rx_buffer");
 
 		let word1_addr = self.rx_fields.rxbuffer_list + u64::from(self.buffer_index * 8 + 4);
 		let word1_entry = unsafe { word1_addr.as_mut_ptr::<u32>().read_volatile() };
 		let length = word1_entry & 0x1fff;
 		debug!(
-			"Received frame in buffer {}, length: {length}",
+			"net: gem: received frame in buffer {}, length: {length}",
 			self.buffer_index
 		);
 
@@ -482,7 +482,7 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		debug!("get_tx_buffer");
+		debug!("net: gem: get_tx_buffer");
 
 		assert!(len as u32 <= TX_BUF_LEN, "TX buffer is too small");
 
@@ -503,7 +503,7 @@ impl smoltcp::phy::TxToken for TxToken<'_> {
 		let buffer = unsafe { slice::from_raw_parts_mut(buffer, len) };
 		let result = f(buffer);
 
-		debug!("send_tx_buffer");
+		debug!("net: gem: send_tx_buffer");
 
 		// Address of word[1] of the buffer descriptor
 		let word1_addr = (self.tx_fields.txbuffer_list + u64::from(self.buffer_index * 8 + 4))
@@ -547,7 +547,7 @@ impl Drop for TxToken<'_> {
 
 impl Drop for GEMDriver {
 	fn drop(&mut self) {
-		debug!("Dropping GEMDriver!");
+		debug!("net: gem: dropping driver!");
 
 		unsafe {
 			// Software reset
@@ -570,7 +570,7 @@ pub fn init_device(
 	mac: [u8; 6],
 	handlers: &mut InterruptHandlerMap,
 ) -> Result<GEMDriver, DriverError> {
-	debug!("Init GEM at {gem_base:p}");
+	debug!("gem: initializing at virtual address {gem_base:p}");
 
 	let gem = gem_base.as_mut_ptr::<Registers>();
 
@@ -651,13 +651,13 @@ pub fn init_device(
 		let mut phy_addr = phy_addr;
 		if phy_addr == u32::MAX {
 			// Detect PHY
-			warn! {"No PHY address provided. Trying to find PHY ..."}
+			warn!("network: no PHY address provided. Trying to discover PHY...");
 			for i in 0..32 {
 				match phy_read(gem, i, PhyReg::Control) {
 					0xffff | 0x0 => (), //Invalid
 					_ => {
 						phy_addr = i;
-						warn!("PHY found with address {phy_addr}");
+						warn!("network: discovered PHY with address {phy_addr}");
 						break;
 					}
 				}
@@ -674,7 +674,7 @@ pub fn init_device(
 
 		// Check for auto-negotiation ability
 		if (phy_status & PhyStatus::ANCapMask as u16) == 0 {
-			warn!("PHY does not support auto-negotiation");
+			warn!("network: gem: PHY does not support autonegotiation");
 		// TODO
 		//return Err(DriverError::InitGEMDevFail(GEMError::NoPhyFound));
 		} else {
@@ -700,7 +700,9 @@ pub fn init_device(
 			// TODO - Next Page does not seem to be emulated by QEMU
 
 			//info!("PHY auto-negotiation completed:\n Speed: {}\nDuplex");
-			debug!("PHY auto-negotiation completed: Partner Ability {partner_ability:x}");
+			debug!(
+				"network: gem: PHY auto-negotiation completed: Partner Ability {partner_ability:x}"
+			);
 		}
 	}
 
@@ -724,7 +726,7 @@ pub fn init_device(
 		return Err(DriverError::InitGEMDevFail(GEMError::Unknown));
 	}
 
-	debug!("Allocate TxBuffer at 0x{txbuffer:x} and RxBuffer at 0x{rxbuffer:x}");
+	debug!("net: gem: allocating TxBuffer at {txbuffer:#x} and RxBuffer at {rxbuffer:#x}");
 
 	unsafe {
 		// Init Receive Buffer Descriptor List

@@ -143,7 +143,7 @@ pub fn clear_active_and_set_next() {
 		_ => {} // no-op, we always poll after a timer interrupt
 	}
 
-	trace!("Cleared active timer {lowest_timer:?}");
+	trace!("cleared active timer {lowest_timer:?}");
 
 	let prev_wakeup_time = mem::replace(&mut lowest_timer.wakeup_time, u64::MAX);
 

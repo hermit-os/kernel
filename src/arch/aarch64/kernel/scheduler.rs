@@ -131,11 +131,11 @@ impl TaskStacks {
 		let virt_addr = VirtAddr::from(page_range.start());
 		let frame_layout = PageLayout::from_size(total_size).unwrap();
 		let frame_range = FrameAlloc::allocate(frame_layout)
-			.expect("Failed to allocate Physical Memory for TaskStacks");
+			.expect("failed to allocate physical memory for task stacks");
 		let phys_addr = PhysAddr::from(frame_range.start());
 
 		debug!(
-			"Create stacks at {:p} with a size of {} KB",
+			"task stacks: create at virtual address {:p} (size: {}KB)",
 			virt_addr,
 			total_size >> 10
 		);
@@ -174,7 +174,7 @@ impl TaskStacks {
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let stack = VirtAddr::from_ptr(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
-		debug!("Using boot stack {stack:p}");
+		debug!("task stacks: deriving from boot stack {stack:p}");
 
 		TaskStacks::Boot(BootStack { stack })
 	}
@@ -217,7 +217,7 @@ impl Drop for TaskStacks {
 			TaskStacks::Boot(_) => {}
 			TaskStacks::Common(stacks) => {
 				debug!(
-					"Deallocating stacks at {:p} with a size of {} KB",
+					"task stacks: deallocating at {:p} (size: {}KB)",
 					stacks.virt_addr,
 					stacks.total_size >> 10,
 				);

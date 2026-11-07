@@ -94,7 +94,7 @@ impl Console {
 
 #[cfg(feature = "virtio-console")]
 pub(crate) fn switch_to_virtio(device: VirtioConsoleDriver) {
-	info!("Switch to virtio console");
+	info!("console: Switching to virtio-based console");
 	CONSOLE.lock().device = IoDevice::Virtio(Box::new(device));
 }
 

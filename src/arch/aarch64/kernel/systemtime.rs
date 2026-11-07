@@ -63,13 +63,13 @@ fn boot_time() -> OffsetDateTime {
 	let addr = PhysAddr::from(reg.starting_address.addr());
 	let size = u64::try_from(reg.size.unwrap()).unwrap();
 
-	debug!("Found RTC at {addr:p} (size {size:#X})");
+	debug!("systemtime: found rtc clock at {addr:p} (size: {size:#X})");
 
 	let layout = PageLayout::from_size(size.try_into().unwrap()).unwrap();
 	let page_range = PageAlloc::allocate(layout).unwrap();
 	let pl031_address = VirtAddr::from(page_range.start());
 	PL031_ADDRESS.set(pl031_address).unwrap();
-	debug!("Mapping RTC to virtual address {pl031_address:p}");
+	debug!("systemtime: mapping rtc to virtual address {pl031_address:p}");
 
 	let flags = PageTableEntryFlags::device();
 	paging::map::<BasePageSize>(

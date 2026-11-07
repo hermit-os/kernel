@@ -644,7 +644,7 @@ impl NetworkDriver for RTL8139Driver {
 				return true;
 			} else {
 				warn!(
-					"RTL8192: invalid header {:#x}, rx_pos {}\n",
+					"network: rtl8192: invalid header {:#x}, rx_pos {}\n",
 					header, self.rx_fields.rxpos
 				);
 			}

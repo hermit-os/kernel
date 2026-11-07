@@ -654,7 +654,7 @@ impl PerCoreScheduler {
 			let other_core = false;
 
 			if other_core {
-				warn!("Have to change the priority on another core");
+				warn!("have to change the priority on another core!");
 			} else if self.current_task.borrow().id == task.get_id() {
 				self.current_task.borrow_mut().prio = prio;
 			} else {
@@ -910,7 +910,7 @@ pub(crate) fn add_current_core() {
 		),
 	);
 	// Initialize a scheduler for this core.
-	debug!("Initializing scheduler for core {core_id} with idle task {tid}");
+	debug!("CPU {core_id}: Initializing scheduler with idle task {tid}");
 	let boxed_scheduler = Box::new(PerCoreScheduler {
 		#[cfg(feature = "smp")]
 		core_id,
