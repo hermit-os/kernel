@@ -85,7 +85,6 @@ pub(crate) struct VirtioBlkDriver {
 	/// Negotiated features.
 	features: virtio::blk::F,
 	capacity: usize,
-	blk_size: u32,
 	read_only: bool,
 }
 
@@ -95,22 +94,12 @@ impl VirtioBlkDriver {
 		self.capacity
 	}
 
-	/// The optimal I/O size in bytes, or `SECTOR_SIZE` if the device does not
-	/// report one.
-	#[allow(dead_code)]
-	pub fn block_size(&self) -> u32 {
-		self.blk_size
-	}
-
-	/// Whether the device refuses writes.
-	#[allow(dead_code)]
-	pub fn is_read_only(&self) -> bool {
-		self.read_only
-	}
-
 	/// Reads `buf.len() / SECTOR_SIZE` sectors starting at `sector`.
 	pub async fn read(&self, sector: usize, buf: &mut [u8]) -> Result<(), Errno> {
-		let len = self.checked_len(sector, buf.len())?;
+		if !self.is_valid_transfer(sector, buf.len()) {
+			return Err(Errno::Inval);
+		}
+		let len = buf.len();
 
 		let send = single(BufferElem::Sized(Box::new_in(
 			RequestHeader::new(T::In, sector.try_into().unwrap()),
@@ -164,22 +153,14 @@ impl VirtioBlkDriver {
 		Self::check_status(&mut used)
 	}
 
-	/// Validates a transfer against the sector size and the device capacity and
-	/// returns its length in bytes.
-	fn checked_len(&self, sector: usize, len: usize) -> Result<usize, Errno> {
-		if len == 0 || !len.is_multiple_of(SECTOR_SIZE) {
-			return Err(Errno::Inval);
-		}
-
-		let sectors = len / SECTOR_SIZE;
-		if sector
-			.checked_add(sectors)
-			.is_none_or(|end| end > self.capacity)
-		{
-			return Err(Errno::Inval);
-		}
-
-		Ok(len)
+	/// Whether a transfer of `len` bytes starting at `sector` consists of
+	/// whole sectors and lies within the device.
+	fn is_valid_transfer(&self, sector: usize, len: usize) -> bool {
+		len != 0
+			&& len.is_multiple_of(SECTOR_SIZE)
+			&& sector
+				.checked_add(len / SECTOR_SIZE)
+				.is_some_and(|end| end <= self.capacity)
 	}
 
 	/// Picks the virtqueue of the current core.
@@ -262,7 +243,9 @@ pub(crate) struct Batch<'a> {
 impl Batch<'_> {
 	/// Queues a write without waiting for it.
 	pub fn write(&mut self, sector: usize, buf: &[u8]) -> Result<(), Errno> {
-		self.driver.checked_len(sector, buf.len())?;
+		if !self.driver.is_valid_transfer(sector, buf.len()) {
+			return Err(Errno::Inval);
+		}
 
 		if self.driver.read_only {
 			return Err(Errno::Rofs);
@@ -438,7 +421,6 @@ impl super::virtio::VirtioDriver for VirtioBlkDriver {
 			caps: InterruptTicketMutex::new(caps_coll),
 			features,
 			capacity: capacity.try_into().unwrap(),
-			blk_size,
 			read_only,
 		})
 	}

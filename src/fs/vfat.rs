@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -70,8 +71,8 @@ impl FatStream {
 			cache: Vec::with_capacity(CACHE_SECTORS),
 			clock: 0,
 			pos: 0,
-			read_run: Vec::new(),
-			write_run: Vec::new(),
+			read_run: vec![0; RUN_SECTORS * SECTOR_SIZE],
+			write_run: vec![0; RUN_SECTORS * SECTOR_SIZE],
 		}
 	}
 
@@ -101,8 +102,6 @@ impl FatStream {
 
 		// Take the buffer out to avoid borrowing `self` twice.
 		let mut run = core::mem::take(&mut self.read_run);
-		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
-
 		let result = self
 			.fill_run(sector, &mut run[..sectors * SECTOR_SIZE])
 			.await;
@@ -189,7 +188,6 @@ impl FatStream {
 
 		// `Batch::write` copies the data, so one buffer serves every run.
 		let mut run = core::mem::take(&mut self.write_run);
-		run.resize(RUN_SECTORS * SECTOR_SIZE, 0);
 
 		let mut batch = driver().ok_or(Errno::Nodev)?.batch().await;
 		let mut submitted = Ok(());
@@ -243,25 +241,30 @@ impl Read for FatStream {
 	type Error = Errno;
 
 	async fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError<Errno>> {
-		if buf.is_empty() {
-			return Ok(0);
+		let capacity = self.capacity()?;
+		let mut done = 0;
+
+		while done < buf.len() {
+			let sector = self.pos / SECTOR_SIZE;
+			let offset = self.pos % SECTOR_SIZE;
+
+			if sector >= capacity {
+				break;
+			}
+
+			let slot = match self.slot(sector, true).await {
+				Ok(slot) => slot,
+				Err(err) if done == 0 => return Err(err.into()),
+				Err(_) => break,
+			};
+
+			let n = usize::min(buf.len() - done, SECTOR_SIZE - offset);
+			buf[done..done + n].copy_from_slice(&self.cache[slot].data[offset..offset + n]);
+			self.pos += n;
+			done += n;
 		}
 
-		let sector = self.pos / SECTOR_SIZE;
-		let offset = self.pos % SECTOR_SIZE;
-
-		if sector >= self.capacity()? {
-			return Ok(0);
-		}
-
-		let slot = self.slot(sector, true).await?;
-
-		// Short reads are allowed, so stay within one sector.
-		let n = usize::min(buf.len(), SECTOR_SIZE - offset);
-		buf[..n].copy_from_slice(&self.cache[slot].data[offset..offset + n]);
-		self.pos += n;
-
-		Ok(n)
+		Ok(done)
 	}
 }
 
@@ -269,27 +272,36 @@ impl Write for FatStream {
 	type Error = Errno;
 
 	async fn write(&mut self, buf: &[u8]) -> Result<usize, IoError<Errno>> {
-		if buf.is_empty() {
-			return Ok(0);
+		let capacity = self.capacity()?;
+		let mut done = 0;
+
+		while done < buf.len() {
+			let sector = self.pos / SECTOR_SIZE;
+			let offset = self.pos % SECTOR_SIZE;
+
+			if sector >= capacity {
+				if done == 0 {
+					return Err(IoError::from_source(Errno::Nospc));
+				}
+				break;
+			}
+
+			let n = usize::min(buf.len() - done, SECTOR_SIZE - offset);
+
+			// Only a partial sector has to be read first.
+			let slot = match self.slot(sector, n != SECTOR_SIZE).await {
+				Ok(slot) => slot,
+				Err(err) if done == 0 => return Err(err.into()),
+				Err(_) => break,
+			};
+
+			self.cache[slot].data[offset..offset + n].copy_from_slice(&buf[done..done + n]);
+			self.cache[slot].dirty = true;
+			self.pos += n;
+			done += n;
 		}
 
-		let sector = self.pos / SECTOR_SIZE;
-		let offset = self.pos % SECTOR_SIZE;
-
-		if sector >= self.capacity()? {
-			return Err(IoError::from_source(Errno::Nospc));
-		}
-
-		let n = usize::min(buf.len(), SECTOR_SIZE - offset);
-
-		// Only a partial sector has to be read first.
-		let slot = self.slot(sector, n != SECTOR_SIZE).await?;
-
-		self.cache[slot].data[offset..offset + n].copy_from_slice(&buf[..n]);
-		self.cache[slot].dirty = true;
-		self.pos += n;
-
-		Ok(n)
+		Ok(done)
 	}
 
 	async fn flush(&mut self) -> Result<(), IoError<Errno>> {
@@ -323,17 +335,17 @@ impl Seek for FatStream {
 }
 
 fn format_file_size(size: u64) -> String {
-	const KB: u64 = 1024;
-	const MB: u64 = 1024 * KB;
-	const GB: u64 = 1024 * MB;
-	if size < KB {
-		format!("{size}B")
-	} else if size < MB {
-		format!("{}KB", size / KB)
-	} else if size < GB {
-		format!("{}MB", size / MB)
+	const KIB: u64 = 1024;
+	const MIB: u64 = 1024 * KIB;
+	const GIB: u64 = 1024 * MIB;
+	if size < KIB {
+		format!("{size} B")
+	} else if size < MIB {
+		format!("{} KiB", size / KIB)
+	} else if size < GIB {
+		format!("{} MiB", size / MIB)
 	} else {
-		format!("{}GB", size / GB)
+		format!("{} GiB", size / GIB)
 	}
 }
 
@@ -388,15 +400,15 @@ pub(crate) fn init() {
 
 /// Stamps directory entries with the system's wall-clock time.
 #[derive(Debug)]
-struct HermitTimeProvider;
+struct FatTimeProvider;
 
-impl HermitTimeProvider {
+impl FatTimeProvider {
 	pub const fn new() -> Self {
 		Self {}
 	}
 }
 
-impl TimeProvider for HermitTimeProvider {
+impl TimeProvider for FatTimeProvider {
 	fn now(&self) -> FatDateTime {
 		let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
 		let Ok(now) = OffsetDateTime::from_unix_timestamp_nanos(now.as_nanos().cast_signed())
@@ -422,7 +434,7 @@ impl TimeProvider for HermitTimeProvider {
 	}
 }
 
-static TIME_PROVIDER: HermitTimeProvider = HermitTimeProvider::new();
+static TIME_PROVIDER: FatTimeProvider = FatTimeProvider::new();
 
 // ---------------------------------------------------------------------------
 // VFS integration
