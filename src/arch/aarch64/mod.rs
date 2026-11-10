@@ -37,10 +37,9 @@ const RAM_START: u64 = 0x80000000;
 /// The Linux boot protocol passes it in `x0` instead.
 static mut DEVICE_TREE: u64 = RAM_START;
 
+#[cfg(feature = "linux")]
 unsafe fn set_device_tree(addr: u64) {
-	if cfg!(feature = "linux") {
-		unsafe { ptr::write_volatile(&raw mut DEVICE_TREE, addr) }
-	}
+	unsafe { ptr::write_volatile(&raw mut DEVICE_TREE, addr) }
 }
 
 fn device_tree() -> u64 {
@@ -51,9 +50,10 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	let loader_end = elf_symbols::executable_end();
 	let loader_end = (loader_end.expose_provenance() as u64).align_up(LargePageSize::SIZE as u64);
 
-	if cfg!(feature = "linux") {
-		// The device tree lies at the end of RAM, which the page tables do
-		// not cover, so it is moved behind the loader.
+	// The device tree lies at the end of RAM, which the page tables do
+	// not cover, so it is moved behind the loader.
+	#[cfg(feature = "linux")]
+	let loader_end = {
 		let fdt = unsafe {
 			Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
 				.expect(".fdt file has invalid header")
@@ -67,8 +67,8 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 			);
 			set_device_tree(loader_end);
 		}
-		return (loader_end + size as u64).align_up(LargePageSize::SIZE as u64);
-	}
+		(loader_end + size as u64).align_up(LargePageSize::SIZE as u64)
+	};
 
 	loader_end
 }

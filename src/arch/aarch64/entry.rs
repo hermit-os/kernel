@@ -89,7 +89,9 @@ global_asm!(
 
 /// Entered with the address of the device tree in `x0`.
 #[inline(never)]
-pub unsafe extern "C" fn start_rust(device_tree: u64) -> ! {
+pub unsafe extern "C" fn start_rust(
+	#[cfg_attr(not(feature = "linux"), expect(unused_variables))] device_tree: u64,
+) -> ! {
 	#[cfg(feature = "linux")]
 	unsafe {
 		asm!(
@@ -99,11 +101,9 @@ pub unsafe extern "C" fn start_rust(device_tree: u64) -> ! {
 			tmp = out(reg) _,
 			options(nostack),
 		);
-	}
-	unsafe {
 		super::set_device_tree(device_tree);
-		pre_init()
 	}
+	unsafe { pre_init() }
 }
 
 unsafe fn pre_init() -> ! {
