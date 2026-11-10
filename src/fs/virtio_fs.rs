@@ -4,6 +4,7 @@ use alloc::ffi::CString;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ffi::CStr;
 use core::marker::PhantomData;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -123,15 +124,20 @@ pub(crate) mod ops {
 
 	impl Create {
 		#[allow(clippy::self_named_constructors)]
-		pub(crate) fn create(path: CString, flags: u32, mode: u32) -> (Cmd<Self>, u32) {
+		pub(crate) fn create(
+			parent: u64,
+			name: CString,
+			flags: u32,
+			mode: u32,
+		) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(
-				FUSE_ROOT_ID,
+				parent,
 				fuse_create_in {
 					flags,
 					mode,
 					..Default::default()
 				},
-				path,
+				name,
 			);
 			(cmd, 0)
 		}
@@ -446,14 +452,14 @@ pub(crate) mod ops {
 	}
 
 	impl Mkdir {
-		pub(crate) fn create(path: CString, mode: u32) -> (Cmd<Self>, u32) {
+		pub(crate) fn create(parent: u64, name: CString, mode: u32) -> (Cmd<Self>, u32) {
 			let cmd = Cmd::with_cstring(
-				FUSE_ROOT_ID,
+				parent,
 				fuse_mkdir_in {
 					mode,
 					..Default::default()
 				},
-				path,
+				name,
 			);
 			(cmd, 0)
 		}
@@ -471,8 +477,8 @@ pub(crate) mod ops {
 	}
 
 	impl Unlink {
-		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
+		pub(crate) fn create(parent: u64, name: CString) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::with_cstring(parent, (), name);
 			(cmd, 0)
 		}
 	}
@@ -489,8 +495,8 @@ pub(crate) mod ops {
 	}
 
 	impl Rmdir {
-		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
+		pub(crate) fn create(parent: u64, name: CString) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::with_cstring(parent, (), name);
 			(cmd, 0)
 		}
 	}
@@ -507,8 +513,8 @@ pub(crate) mod ops {
 	}
 
 	impl Lookup {
-		pub(crate) fn create(name: CString) -> (Cmd<Self>, u32) {
-			let cmd = Cmd::with_cstring(FUSE_ROOT_ID, (), name);
+		pub(crate) fn create(parent: u64, name: CString) -> (Cmd<Self>, u32) {
+			let cmd = Cmd::with_cstring(parent, (), name);
 			(cmd, 0)
 		}
 	}
@@ -666,13 +672,40 @@ impl From<VirtioFsError> for Errno {
 }
 
 fn lookup(name: CString) -> Option<u64> {
-	let (cmd, rsp_payload_len) = ops::Lookup::create(name);
+	let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, name);
 	let rsp = get_filesystem_driver()
 		.unwrap()
 		.lock()
 		.send_command(cmd, rsp_payload_len)
 		.ok()?;
 	Some(rsp.headers.op_header.nodeid)
+}
+
+/// Looks up the parent directory of `path` component by component and
+/// returns its node id and the last component.
+///
+/// virtiofsd resolves the names of `unlink`, `rmdir` and `mkdir` with `*at`
+/// system calls relative to the parent node, so an absolute name below the
+/// root node refers to the root of the host.
+fn resolve_parent(path: &CStr) -> io::Result<(u64, CString)> {
+	let path = path.to_str().map_err(|_| Errno::Inval)?;
+	let mut components = path.split('/').filter(|component| !component.is_empty());
+	let name = components.next_back().ok_or(Errno::Inval)?;
+
+	let mut nid = FUSE_ROOT_ID;
+	for component in components {
+		let component = CString::new(component).map_err(|_| Errno::Inval)?;
+		let (cmd, rsp_payload_len) = ops::Lookup::create(nid, component);
+		nid = get_filesystem_driver()
+			.ok_or(Errno::Nosys)?
+			.lock()
+			.send_command(cmd, rsp_payload_len)?
+			.headers
+			.op_header
+			.nodeid;
+	}
+
+	Ok((nid, CString::new(name).map_err(|_| Errno::Inval)?))
 }
 
 fn readlink(nid: u64) -> io::Result<String> {
@@ -1319,7 +1352,7 @@ impl VfsNode for VirtioFsDirectory {
 		debug!("virtio-fs stat: {path:#?}");
 
 		// Is there a better way to implement this?
-		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
+		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path);
 		let rsp = get_filesystem_driver()
 			.unwrap()
 			.lock()
@@ -1345,7 +1378,7 @@ impl VfsNode for VirtioFsDirectory {
 
 		debug!("virtio-fs lstat: {path:#?}");
 
-		let (cmd, rsp_payload_len) = ops::Lookup::create(path);
+		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path);
 		let rsp = get_filesystem_driver()
 			.unwrap()
 			.lock()
@@ -1370,7 +1403,7 @@ impl VfsNode for VirtioFsDirectory {
 				return Err(Errno::Inval);
 			}
 
-			let (cmd, rsp_payload_len) = ops::Lookup::create(path.clone());
+			let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path.clone());
 			let rsp = get_filesystem_driver()
 				.unwrap()
 				.lock()
@@ -1397,8 +1430,9 @@ impl VfsNode for VirtioFsDirectory {
 		// Differentiate between opening and creating new file, since FUSE does not support O_CREAT on open.
 		if opt.contains(OpenOption::O_CREAT) {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
+			let (parent, name) = resolve_parent(&path)?;
 			let (cmd, rsp_payload_len) =
-				ops::Create::create(path, opt.bits().try_into().unwrap(), mode.bits());
+				ops::Create::create(parent, name, opt.bits().try_into().unwrap(), mode.bits());
 			let rsp = get_filesystem_driver()
 				.ok_or(Errno::Nosys)?
 				.lock()
@@ -1434,7 +1468,8 @@ impl VfsNode for VirtioFsDirectory {
 	fn traverse_unlink(&self, path: &str) -> io::Result<()> {
 		let path = self.traversal_path(path);
 
-		let (cmd, rsp_payload_len) = ops::Unlink::create(path);
+		let (parent, name) = resolve_parent(&path)?;
+		let (cmd, rsp_payload_len) = ops::Unlink::create(parent, name);
 		let rsp = get_filesystem_driver()
 			.ok_or(Errno::Nosys)?
 			.lock()
@@ -1447,7 +1482,8 @@ impl VfsNode for VirtioFsDirectory {
 	fn traverse_rmdir(&self, path: &str) -> io::Result<()> {
 		let path = self.traversal_path(path);
 
-		let (cmd, rsp_payload_len) = ops::Rmdir::create(path);
+		let (parent, name) = resolve_parent(&path)?;
+		let (cmd, rsp_payload_len) = ops::Rmdir::create(parent, name);
 		let rsp = get_filesystem_driver()
 			.ok_or(Errno::Nosys)?
 			.lock()
@@ -1459,7 +1495,8 @@ impl VfsNode for VirtioFsDirectory {
 
 	fn traverse_mkdir(&self, path: &str, mode: AccessPermission) -> io::Result<()> {
 		let path = self.traversal_path(path);
-		let (cmd, rsp_payload_len) = ops::Mkdir::create(path, mode.bits());
+		let (parent, name) = resolve_parent(&path)?;
+		let (cmd, rsp_payload_len) = ops::Mkdir::create(parent, name, mode.bits());
 
 		let rsp = get_filesystem_driver()
 			.ok_or(Errno::Nosys)?
@@ -1582,7 +1619,7 @@ pub(crate) fn init() {
 
 	for entry in entries {
 		let i_cstr = CString::new(entry.as_str()).unwrap();
-		let (cmd, rsp_payload_len) = ops::Lookup::create(i_cstr);
+		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, i_cstr);
 		let rsp = get_filesystem_driver()
 			.unwrap()
 			.lock()
