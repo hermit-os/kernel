@@ -58,11 +58,6 @@ struct FatStream {
 	clock: u64,
 	/// Byte position on the device.
 	pos: usize,
-	/// Staging buffer for read-ahead.
-	read_run: Vec<u8>,
-	/// Staging buffer for write-back. Separate from `read_run`, because an
-	/// eviction may flush during a read-ahead.
-	write_run: Vec<u8>,
 }
 
 impl FatStream {
@@ -71,8 +66,6 @@ impl FatStream {
 			cache: Vec::with_capacity(CACHE_SECTORS),
 			clock: 0,
 			pos: 0,
-			read_run: vec![0; RUN_SECTORS * SECTOR_SIZE],
-			write_run: vec![0; RUN_SECTORS * SECTOR_SIZE],
 		}
 	}
 
@@ -100,14 +93,8 @@ impl FatStream {
 		// Read ahead, bounded by the device.
 		let sectors = RUN_SECTORS.min(self.capacity()? - sector);
 
-		// Take the buffer out to avoid borrowing `self` twice.
-		let mut run = core::mem::take(&mut self.read_run);
-		let result = self
-			.fill_run(sector, &mut run[..sectors * SECTOR_SIZE])
-			.await;
-
-		self.read_run = run;
-		result
+		let mut run = vec![0; sectors * SECTOR_SIZE];
+		self.fill_run(sector, &mut run).await
 	}
 
 	/// Reads a run of sectors into the cache and returns the slot holding
@@ -187,7 +174,7 @@ impl FatStream {
 		dirty.sort_unstable_by_key(|&slot| self.cache[slot].sector);
 
 		// `Batch::write` copies the data, so one buffer serves every run.
-		let mut run = core::mem::take(&mut self.write_run);
+		let mut run = vec![0; RUN_SECTORS * SECTOR_SIZE];
 
 		let mut batch = driver().ok_or(Errno::Nodev)?.batch().await;
 		let mut submitted = Ok(());
@@ -216,8 +203,6 @@ impl FatStream {
 				break;
 			}
 		}
-
-		self.write_run = run;
 
 		// Keep the sectors dirty until the device has acknowledged them.
 		batch.finish().await?;
