@@ -47,6 +47,11 @@ impl Build {
 			dist_object.convert_to_elf32_i386()?;
 		}
 
+		if self.artifact.target == Target::Aarch64Linux {
+			eprintln!("Converting object to a flat image");
+			dist_object.convert_to_binary()?;
+		}
+
 		eprintln!("Loader available at {}", dist_object.as_ref().display());
 		Ok(())
 	}

@@ -17,11 +17,15 @@ fn stdout() -> SerialPort {
 	const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 
 	let fdt = unsafe {
-		Fdt::from_ptr(ptr::with_exposed_provenance(super::DEVICE_TREE as usize))
+		Fdt::from_ptr(ptr::with_exposed_provenance(super::device_tree() as usize))
 			.expect(".fdt file has invalid header")
 	};
 
-	let property = fdt.chosen().stdout();
+	// Firecracker does not set `stdout-path`.
+	let property = fdt
+		.chosen()
+		.stdout()
+		.or_else(|| fdt.find_compatible(&["ns16550a"]));
 	property
 		.and_then(|node| get_device(node))
 		.unwrap_or(SerialPort::Qemu(QemuSerial::from_addr(
@@ -60,6 +64,13 @@ impl Console {
 impl Default for Console {
 	fn default() -> Self {
 		let stdout = stdout();
+		#[cfg(feature = "linux")]
+		unsafe {
+			ptr::write_volatile(
+				&raw mut super::entry::EXCEPTION_UART,
+				stdout.get_addr() as usize,
+			);
+		}
 		Self { stdout }
 	}
 }

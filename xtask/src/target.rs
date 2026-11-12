@@ -9,6 +9,7 @@ pub enum Target {
 	X86_64Multiboot,
 	X86_64Uefi,
 	Aarch64Elf,
+	Aarch64Linux,
 	Aarch64BeElf,
 	Riscv64Sbi,
 }
@@ -22,7 +23,7 @@ impl Target {
 			cmd!(sh, "rustup target add {triple}").run()?;
 		}
 
-		if self == &Self::X86_64Multiboot {
+		if matches!(self, Self::X86_64Multiboot | Self::Aarch64Linux) {
 			cmd!(sh, "rustup component add llvm-tools-preview").run()?;
 		}
 
@@ -35,7 +36,7 @@ impl Target {
 			Self::X86_64Linux => "x86_64",
 			Self::X86_64Multiboot => "x86_64",
 			Self::X86_64Uefi => "x86_64",
-			Self::Aarch64Elf => "aarch64",
+			Self::Aarch64Elf | Self::Aarch64Linux => "aarch64",
 			Self::Aarch64BeElf => "aarch64_be",
 			Self::Riscv64Sbi => "riscv64",
 		}
@@ -46,7 +47,7 @@ impl Target {
 			Self::X86_64Linux => "x86_64-unknown-none",
 			Self::X86_64Multiboot => "x86_64-unknown-none",
 			Self::X86_64Uefi => "x86_64-unknown-uefi",
-			Self::Aarch64Elf => "aarch64-unknown-none-softfloat",
+			Self::Aarch64Elf | Self::Aarch64Linux => "aarch64-unknown-none-softfloat",
 			Self::Aarch64BeElf => "aarch64_be-unknown-none-softfloat",
 			Self::Riscv64Sbi => "riscv64imac-unknown-none-elf",
 		}
@@ -64,7 +65,7 @@ impl Target {
 			Self::X86_64Linux => &["--target=x86_64-unknown-none"],
 			Self::X86_64Multiboot => &["--target=x86_64-unknown-none"],
 			Self::X86_64Uefi => &["--target=x86_64-unknown-uefi"],
-			Self::Aarch64Elf => &["--target=aarch64-unknown-none-softfloat"],
+			Self::Aarch64Elf | Self::Aarch64Linux => &["--target=aarch64-unknown-none-softfloat"],
 			Self::Aarch64BeElf => &[
 				"--target=aarch64_be-unknown-none-softfloat",
 				"-Zbuild-std=core,alloc,panic_abort",
@@ -84,7 +85,9 @@ impl Target {
 				"-Clink-arg=--image-base=0x801ffe00",
 				"-Clink-arg=--section-start=.init=0x80200000",
 			],
-			Self::X86_64Linux | Self::X86_64Multiboot => &["-Crelocation-model=static"],
+			Self::X86_64Linux | Self::X86_64Multiboot | Self::Aarch64Linux => {
+				&["-Crelocation-model=static"]
+			}
 			_ => &[],
 		}
 	}
@@ -94,6 +97,7 @@ impl Target {
 			Self::X86_64Linux => &["--features=x86_64-linux"],
 			Self::X86_64Multiboot => &["--features=x86_64-multiboot"],
 			Self::Aarch64Elf | Self::Aarch64BeElf => &["--features=elf"],
+			Self::Aarch64Linux => &["--features=linux"],
 			Self::Riscv64Sbi => &["--features=sbi"],
 			_ => &[],
 		}
@@ -112,6 +116,7 @@ impl Target {
 			Self::X86_64Multiboot => "hermit-loader-x86_64-multiboot",
 			Self::X86_64Uefi => "hermit-loader-x86_64.efi",
 			Self::Aarch64Elf => "hermit-loader-aarch64-elf",
+			Self::Aarch64Linux => "hermit-loader-aarch64-linux",
 			Self::Aarch64BeElf => "hermit-loader-aarch64_be-elf",
 			Self::Riscv64Sbi => "hermit-loader-riscv64-sbi",
 		}
@@ -121,7 +126,7 @@ impl Target {
 	pub fn qemu(&self) -> &'static str {
 		match self {
 			Self::X86_64Linux | Self::X86_64Multiboot | Self::X86_64Uefi => "x86_64",
-			Self::Aarch64Elf | Self::Aarch64BeElf => "aarch64",
+			Self::Aarch64Elf | Self::Aarch64Linux | Self::Aarch64BeElf => "aarch64",
 			Self::Riscv64Sbi => "riscv64",
 		}
 	}
@@ -136,6 +141,7 @@ impl FromStr for Target {
 			"x86_64-multiboot" => Ok(Self::X86_64Multiboot),
 			"x86_64-uefi" => Ok(Self::X86_64Uefi),
 			"aarch64-elf" => Ok(Self::Aarch64Elf),
+			"aarch64-linux" => Ok(Self::Aarch64Linux),
 			"aarch64_be-elf" => Ok(Self::Aarch64BeElf),
 			"riscv64-sbi" => Ok(Self::Riscv64Sbi),
 			s => Err(anyhow!("Unsupported target: {s}")),
