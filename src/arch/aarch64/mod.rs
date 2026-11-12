@@ -48,29 +48,33 @@ fn device_tree() -> u64 {
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	let loader_end = elf_symbols::executable_end();
-	let loader_end = (loader_end.expose_provenance() as u64).align_up(LargePageSize::SIZE as u64);
+	let free_start = (loader_end.expose_provenance() as u64).align_up(LargePageSize::SIZE as u64);
 
-	// The device tree lies at the end of RAM, which the page tables do
-	// not cover, so it is moved behind the loader.
 	#[cfg(feature = "linux")]
-	let loader_end = {
-		let fdt = unsafe {
-			Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
-				.expect(".fdt file has invalid header")
-		};
-		let size = fdt.total_size();
-		unsafe {
-			ptr::copy_nonoverlapping(
-				ptr::with_exposed_provenance::<u8>(device_tree() as usize),
-				ptr::with_exposed_provenance_mut::<u8>(loader_end as usize),
-				size,
-			);
-			set_device_tree(loader_end);
-		}
-		(loader_end + size as u64).align_up(LargePageSize::SIZE as u64)
-	};
+	let free_start = unsafe { relocate_device_tree(free_start) };
 
-	loader_end
+	free_start
+}
+
+/// Moves the device tree to `dst` and returns the first free address behind it.
+///
+/// The device tree lies at the end of RAM, which the page tables do not cover.
+#[cfg(feature = "linux")]
+unsafe fn relocate_device_tree(dst: u64) -> u64 {
+	let fdt = unsafe {
+		Fdt::from_ptr(ptr::with_exposed_provenance(device_tree() as usize))
+			.expect(".fdt file has invalid header")
+	};
+	let size = fdt.total_size();
+	unsafe {
+		ptr::copy_nonoverlapping(
+			ptr::with_exposed_provenance::<u8>(device_tree() as usize),
+			ptr::with_exposed_provenance_mut::<u8>(dst as usize),
+			size,
+		);
+		set_device_tree(dst);
+	}
+	(dst + size as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub fn find_kernel() -> &'static [u8] {
