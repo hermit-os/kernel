@@ -9,8 +9,9 @@ use hermit_entry::boot_info::{
 	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, SerialPortBase,
 };
 use hermit_entry::elf::LoadedKernel;
-use linux_boot_params::{BootE820Entry, BootParams};
+use linux_boot_params::{BootE820Entry, BootParams, E820Type};
 use log::{error, info};
+use vm_fdt::FdtReserveEntry;
 use x86_64::structures::paging::{PageSize, Size2MiB, Size4KiB};
 
 use crate::BootInfoExt;
@@ -88,7 +89,17 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());
 	}
 
-	let mut fdt = Fdt::new("linux").unwrap();
+	// The kernel keeps using our page tables and its boot stack.
+	let reserved_start = elf_symbols::executable_start().addr();
+	let reserved_end =
+		PhysAlloc::end().max(stack.addr() + usize::try_from(KERNEL_STACK_SIZE).unwrap());
+	info!("Reserving loader memory: {reserved_start:#x}..{reserved_end:#x}");
+	let loader_reservation = FdtReserveEntry::new(
+		reserved_start.try_into().unwrap(),
+		(reserved_end - reserved_start).try_into().unwrap(),
+	)
+	.unwrap();
+	let mut fdt = Fdt::new("linux", &[loader_reservation]).unwrap();
 
 	let e820_entries = boot_params_ref.e820_entries();
 	assert!(!e820_entries.is_empty());
@@ -96,6 +107,9 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	for entry in e820_entries.iter().copied() {
 		let BootE820Entry { addr, size, typ } = entry;
 		info!("E820 memory region: addr = {addr:>#11x}, size = {size:>#11x}, type = {typ:?}");
+		if typ != E820Type::Ram {
+			continue;
+		}
 		let memory = addr..addr + size;
 		fdt = fdt.memory(memory).unwrap();
 	}

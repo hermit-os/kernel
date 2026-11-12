@@ -3,7 +3,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::Range;
 
-use vm_fdt::{FdtWriter, FdtWriterNode, FdtWriterResult};
+use vm_fdt::{FdtReserveEntry, FdtWriter, FdtWriterNode, FdtWriterResult};
 
 pub struct Fdt {
 	writer: FdtWriter,
@@ -12,8 +12,8 @@ pub struct Fdt {
 }
 
 impl Fdt {
-	pub fn new(platform: &str) -> FdtWriterResult<Self> {
-		let mut writer = FdtWriter::new()?;
+	pub fn new(platform: &str, mem_reservations: &[FdtReserveEntry]) -> FdtWriterResult<Self> {
+		let mut writer = FdtWriter::new_with_mem_reserv(mem_reservations)?;
 
 		let root_node = writer.begin_node("")?;
 		writer.property_string("compatible", &format!("hermit,{platform}"))?;

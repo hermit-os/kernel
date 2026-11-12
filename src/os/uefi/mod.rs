@@ -54,7 +54,7 @@ fn main() -> Status {
 
 	drop(kernel_image);
 
-	let mut fdt = Fdt::new("uefi")
+	let mut fdt = Fdt::new("uefi", &[])
 		.unwrap()
 		.rsdp(u64::try_from(rsdp.expose_provenance()).unwrap())
 		.unwrap();

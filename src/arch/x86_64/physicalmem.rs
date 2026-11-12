@@ -36,6 +36,12 @@ impl PhysAlloc {
 	pub fn allocate(size: usize) -> usize {
 		PHYS_ALLOC.lock().as_mut().unwrap().allocate(size)
 	}
+
+	/// Returns the end of the allocated memory.
+	#[cfg(feature = "linux")]
+	pub fn end() -> usize {
+		PHYS_ALLOC.lock().as_ref().unwrap().next.get()
+	}
 }
 
 unsafe impl<S: PageSize> FrameAllocator<S> for PhysAlloc {

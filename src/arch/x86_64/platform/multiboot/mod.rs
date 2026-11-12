@@ -93,7 +93,7 @@ impl DeviceTree {
 			.memory_regions()
 			.expect("Could not find a memory map in the Multiboot information");
 
-		let mut fdt = Fdt::new("multiboot")?.memory_regions(memory_regions)?;
+		let mut fdt = Fdt::new("multiboot", &[])?.memory_regions(memory_regions)?;
 
 		if let Some(cmdline) = multiboot.command_line() {
 			fdt = fdt.bootargs(cmdline.to_owned())?;
