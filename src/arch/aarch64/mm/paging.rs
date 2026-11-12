@@ -598,55 +598,54 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 pub fn map<S: PageSize>(
 	mut virtual_address: VirtAddr,
 	mut physical_address: PhysAddr,
-	mut count: usize,
+	count: usize,
 	flags: PageTableEntryFlags,
 ) {
 	trace!(
 		"Mapping virtual address {virtual_address:p} to physical address {physical_address:p} ({count} pages)"
 	);
 
-	if count < GROUP_SIZE {
-		let range = get_page_range::<S>(virtual_address, count);
-		let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
-		root_pagetable.map_pages(range, physical_address, flags);
-	} else {
-		// map to GROUP_SIZE*S:SIZE boundary
-		let offset = virtual_address.as_usize() % (GROUP_SIZE * S::SIZE as usize);
-		if offset > 0 {
-			map::<S>(
-				virtual_address,
-				physical_address,
-				offset / S::SIZE as usize,
-				flags,
-			);
-			virtual_address += offset;
-			physical_address += offset;
-			count -= offset / S::SIZE as usize;
-		}
+	let (head, body, tail) = split_contiguous::<S>(virtual_address, physical_address, count);
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 
-		// map with contiguous bit
-		if count >= GROUP_SIZE {
-			let map_pages = count.align_down(GROUP_SIZE);
-			let range = get_page_range::<S>(virtual_address, map_pages);
-			let root_pagetable =
-				unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
-
-			trace!("Mapping {map_pages} pages with contiguous bit");
-			root_pagetable.map_pages(
-				range,
-				physical_address,
-				flags | PageTableEntryFlags::CONTIGUOUS,
-			);
-			virtual_address += map_pages * S::SIZE as usize;
-			physical_address += map_pages * S::SIZE as usize;
-			count -= map_pages;
+	for (pages, extra_flags) in [
+		(head, PageTableEntryFlags::empty()),
+		(body, PageTableEntryFlags::CONTIGUOUS),
+		(tail, PageTableEntryFlags::empty()),
+	] {
+		if pages == 0 {
+			continue;
 		}
-
-		// map the remaining pages
-		if count > 0 {
-			map::<S>(virtual_address, physical_address, count, flags);
-		}
+		let range = get_page_range::<S>(virtual_address, pages);
+		root_pagetable.map_pages(range, physical_address, flags | extra_flags);
+		virtual_address += pages * S::SIZE as usize;
+		physical_address += pages * S::SIZE as usize;
 	}
+}
+
+/// Splits a mapping of `count` pages into `(head, body, tail)` page counts, where `body`
+/// is `GROUP_SIZE * S::SIZE`-aligned and may use the contiguous bit.
+fn split_contiguous<S: PageSize>(
+	virtual_address: VirtAddr,
+	physical_address: PhysAddr,
+	count: usize,
+) -> (usize, usize, usize) {
+	let group_bytes = GROUP_SIZE * S::SIZE as usize;
+	let congruent =
+		(virtual_address.as_usize() ^ physical_address.as_usize()).is_multiple_of(group_bytes);
+	if !congruent {
+		// virt. and phys. addresses don't align -> can't be set contiguous
+		return (count, 0, 0);
+	}
+
+	let offset = virtual_address.as_usize() % group_bytes;
+	let head = if offset == 0 {
+		0
+	} else {
+		((group_bytes - offset) / S::SIZE as usize).min(count)
+	};
+	let body = (count - head).align_down(GROUP_SIZE);
+	(head, body, count - head - body)
 }
 
 /// Maps `nr_pages` pages at address `virt_addr`. If the allocation of a physical memory failed,
@@ -728,4 +727,36 @@ pub unsafe fn init() {
 	assert!(t_gran4);
 
 	// page tables are already initialized, we have just to remove obsolete entries
+}
+
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn split_aligned() {
+		fn split(
+			virtual_address: u64,
+			physical_address: u64,
+			count: usize,
+		) -> (usize, usize, usize) {
+			split_contiguous::<BasePageSize>(
+				VirtAddr::new(virtual_address),
+				PhysAddr::new(physical_address),
+				count,
+			)
+		}
+		// aligned
+		assert_eq!(split(0x1_0000, 0x4001_0000, 40), (0, 32, 8));
+
+		// unaligned_start
+		assert_eq!(split(0x3000, 0x4000_3000, 40), (13, 16, 11));
+
+		// shorter_than_group
+		assert_eq!(split(0x3000, 0x4000_3000, 5), (5, 0, 0));
+		assert_eq!(split(0x1_0000, 0x4001_0000, 15), (0, 0, 15));
+
+		// incongruent
+		assert_eq!(split(0x8000_0000_0000, 0x6_d4d1_2000, 40), (40, 0, 0));
+	}
 }

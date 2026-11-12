@@ -132,7 +132,7 @@ jobs:
           cargo xtask build --arch aarch64 --no-default-features
           cargo xtask build --arch aarch64_be --no-default-features
 
-  test:
+  test-x86_64:
     name: Test
     runs-on: ubuntu-26.04
     steps:
@@ -153,6 +153,17 @@ jobs:
       - run: rustup target add x86_64-unknown-none
       - name: Integration tests
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64-multiboot
+        env:
+          CARGO_BUILD_WARNINGS: warn
+
+  test-aarch64:
+    name: Test (aarch64)
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mkroening/rust-toolchain-toml@main
+      - name: Unit tests
+        run: cargo test --lib
         env:
           CARGO_BUILD_WARNINGS: warn
 
