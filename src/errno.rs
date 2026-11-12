@@ -677,6 +677,14 @@ impl From<Infallible> for Errno {
 	}
 }
 
+#[cfg(feature = "uhyve")]
+impl From<uhyve_interface::v3::util::Errno> for Errno {
+	fn from(value: uhyve_interface::v3::util::Errno) -> Self {
+		// `get()` is guaranteed to be in `1..=i32::MAX`.
+		Errno::try_from(value.get() as i32).unwrap_or(Errno::Io)
+	}
+}
+
 /// Returns the pointer to `errno`.
 #[cfg(not(any(feature = "common-os", feature = "nostd")))]
 #[unsafe(no_mangle)]
