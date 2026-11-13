@@ -58,7 +58,7 @@ where
 			const SIZE: usize = 4 * 1024;
 			const BYTE: MaybeUninit<u8> = MaybeUninit::uninit();
 			take_static! {
-				/// The actual memory of the boostrap allocator.
+				/// The actual memory of the bootstrap allocator.
 				static MEM: [MaybeUninit<u8>; SIZE] = [BYTE; SIZE];
 			}
 			MEM.take().unwrap()

@@ -15,7 +15,7 @@ use crate::bump_allocator::BumpAllocator;
 struct GlobalAllocator {
 	/// The bootstrap allocator, which is available immediately.
 	///
-	/// It allows allocations before the heap has been initalized.
+	/// It allows allocations before the heap has been initialized.
 	bootstrap_allocator: Option<BootstrapAllocator<BumpAllocator>>,
 }
 
