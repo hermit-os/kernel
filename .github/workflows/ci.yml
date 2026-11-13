@@ -111,3 +111,7 @@ jobs:
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci firecracker --target ${{ matrix.arch }}-linux --sudo --release
         if: matrix.arch == 'x86_64'
+      - run: cargo xtask build --target ${{ matrix.arch }}-linux
+        if: matrix.arch == 'aarch64'
+      - run: cargo xtask build --target ${{ matrix.arch }}-linux --release
+        if: matrix.arch == 'aarch64'

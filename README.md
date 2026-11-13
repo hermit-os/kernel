@@ -19,7 +19,8 @@ You can download prebuilt OVMF images from [rust-osdev/ovmf-prebuilt](https://gi
 cargo xtask build --target <TARGET> --release
 ```
 
-With `<TARGET>` being either `x86_64-linux`, `x86_64-multiboot`, `x86_64-uefi`, `aarch64-elf`, or `riscv64-sbi`.
+With `<TARGET>` being either `x86_64-linux`, `x86_64-multiboot`, `x86_64-uefi`, `aarch64-elf`, `aarch64-linux`, `aarch64_be-elf`, or `riscv64-sbi`.
+The `aarch64_be-elf` target requires a nightly toolchain with the `rust-src` component.
 
 Afterward, the loader is located in `target/release`.
 
@@ -94,6 +95,40 @@ qemu-system-aarch64 \
                   -display none -serial stdio \
                   -kernel <LOADER> \
                   -device guest-loader,addr=0x48000000,initrd=<APP>
+```
+
+### Firecracker
+
+The `x86_64-linux` and `aarch64-linux` loaders can be booted with [Firecracker] on a host of the same architecture with KVM.
+Firecracker provides neither PCI nor ACPI, so the application has to be built without the `pci` and `acpi` features of the kernel.
+
+[Firecracker]: https://github.com/firecracker-microvm/firecracker
+
+Create a configuration file `vm_config.json`:
+
+```json
+{
+  "boot-source": {
+    "kernel_image_path": "<LOADER>",
+    "initrd_path": "<APP>",
+    "boot_args": "console=ttyS0"
+  },
+  "drives": [],
+  "machine-config": {
+    "vcpu_count": 1,
+    "mem_size_mib": 256,
+    "smt": false
+  }
+}
+```
+
+On AArch64, Firecracker only creates the serial device if `boot_args` contains `console=`.
+Without it, Hermit runs without any output.
+
+Then start Firecracker:
+
+```bash
+firecracker --no-api --config-file vm_config.json
 ```
 
 ### 64-bit RISC-V
