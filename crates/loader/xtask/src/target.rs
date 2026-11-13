@@ -82,7 +82,7 @@ impl Target {
 			],
 			Self::Riscv64Sbi => &[
 				"-Crelocation-model=static",
-				"-Clink-arg=--image-base=0x801ffe00",
+				"-Clink-arg=--image-base=0x801ff000",
 				"-Clink-arg=--section-start=.init=0x80200000",
 			],
 			Self::X86_64Linux | Self::X86_64Multiboot | Self::Aarch64Linux => {
