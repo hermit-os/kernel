@@ -9,10 +9,11 @@ use async_lock::Mutex;
 use embedded_io::{ErrorType, Read, Write};
 use memory_addresses::VirtAddr;
 use uhyve_interface::GuestPhysAddr;
-use uhyve_interface::v2::Hypercall;
-use uhyve_interface::v2::parameters::{
-	CloseParams, FstatParams, GetdentParams, GetdentResult, LseekParams, OpenParams, ReadParams,
-	StatKind, StatParams, StatResult, UnlinkParams, WriteParams,
+use uhyve_interface::v3::Hypercall;
+use uhyve_interface::v3::util::RawResult;
+use uhyve_interface::v3::parameters::{
+	CloseParams, GetdentParams, GetdentResult, LseekParams, LseekWhence, OpenParams, ReadParams,
+	StatParams, StatTarget, UnlinkParams, WriteParams,
 };
 
 use crate::arch::mm::paging::virtual_to_physical;
@@ -23,26 +24,31 @@ use crate::fs::{
 	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
 use crate::syscalls::DirentFormat;
-use crate::uhyve::uhyve_hypercall;
+use crate::uhyve::{as_mut_sized_guest_buf, as_sized_guest_buf, uhyve_hypercall};
 use crate::{env, io};
 
-fn fstat_hypercall(fd: i32) -> io::Result<FileAttr> {
+fn stat_hypercall(target: StatTarget) -> io::Result<FileAttr> {
 	let mut attr = FileAttr::default();
-	let mut fstat_params = FstatParams {
-		fd,
-		attr: GuestPhysAddr::new(
-			virtual_to_physical(VirtAddr::from_ptr((&raw mut attr).cast::<FileAttr>()))
-				.unwrap()
-				.as_u64(),
-		),
-		ret: StatResult::None,
+	let mut params = StatParams {
+		target: target.into(),
+		attr: phys_addr((&raw mut attr).cast::<FileAttr>()),
+		ret: RawResult::default(),
 	};
-	uhyve_hypercall(Hypercall::FileFstat(&mut fstat_params));
-	match fstat_params.ret {
-		StatResult::None => Err(Errno::Nosys),
-		StatResult::Success => Ok(attr),
-		StatResult::Error(errno) => Err(Errno::try_from(errno).unwrap()),
-	}
+	uhyve_hypercall(Hypercall::FileStat(&mut params));
+	params
+		.ret
+		.decode()
+		.unwrap()
+		.map_err(|e| Errno::try_from(e).unwrap())?;
+	Ok(attr)
+}
+
+fn phys_addr<T>(ptr: *const T) -> GuestPhysAddr {
+	GuestPhysAddr::new(
+		virtual_to_physical(VirtAddr::from_ptr(ptr))
+			.unwrap()
+			.as_u64(),
+	)
 }
 
 #[derive(Debug)]
@@ -54,22 +60,30 @@ impl UhyveFileHandleInner {
 	}
 
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> io::Result<isize> {
-		let mut lseek_params = LseekParams {
+		let mut params = LseekParams {
 			fd: self.0,
-			offset: offset.try_into().unwrap(),
-			whence: u8::from(whence).into(),
-		};
-		uhyve_hypercall(Hypercall::FileLseek(&mut lseek_params));
-		// TODO: Although we can generally assume that what Uhyve delivers should be
-		// correct for now, it might make sense to build in checks (or at least debug_assert's)
-		match lseek_params.offset {
-			offset if offset >= 0 => Ok(offset.try_into().unwrap()),
-			errno if errno < 0 => Err((errno as i32).abs().try_into().unwrap()),
-			_ => {
-				debug!("Uhyve lseek hypercall yielded a zero.");
-				Err(Errno::Inval)
+			whence: match whence {
+				SeekWhence::Set => LseekWhence::SeekSet {
+					offset: offset as u64,
+				},
+				SeekWhence::Cur => LseekWhence::SeekCur {
+					offset: offset as i64,
+				},
+				SeekWhence::End => LseekWhence::SeekEnd {
+					offset: offset as i64,
+				},
+				SeekWhence::Data => LseekWhence::SeekData {
+					offset: offset as u64,
+				},
+				SeekWhence::Hole => LseekWhence::SeekHole {
+					offset: offset as u64,
+				},
 			}
-		}
+			.into(),
+			ret: RawResult::default(),
+		};
+		uhyve_hypercall(Hypercall::FileLseek(&mut params));
+		params.ret.decode().unwrap().map(|offs| offs as isize).map_err(|e| e.into())
 	}
 }
 
@@ -79,49 +93,35 @@ impl ErrorType for UhyveFileHandleInner {
 
 impl Read for UhyveFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-		let mut read_params = ReadParams {
+		let mut params = ReadParams {
 			fd: self.0,
-			buf: GuestPhysAddr::new(
-				virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
-					.unwrap()
-					.as_u64(),
-			),
-			len: buf.len().try_into().unwrap(),
-			ret: 0i64,
+			buf: as_mut_sized_guest_buf(buf),
+			ret: RawResult::default(),
 		};
-		uhyve_hypercall(Hypercall::FileRead(&mut read_params));
-		match read_params.ret {
-			ret if ret >= 0 => Ok(ret.try_into().unwrap()),
-			_ => Err((read_params.ret as i32).abs().try_into().unwrap()),
-		}
+		uhyve_hypercall(Hypercall::FileRead(&mut params));
+		params
+			.ret
+			.decode()
+			.unwrap()
+			.map(|i| i as usize)
+			.map_err(|e| e.into())
 	}
 }
 
 impl Write for UhyveFileHandleInner {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		let mut write_params = WriteParams {
+		let mut params = WriteParams {
 			fd: self.0,
-			buf: GuestPhysAddr::new(
-				virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
-					.unwrap()
-					.as_u64(),
-			),
-			len: buf.len().try_into().unwrap(),
-			ret: 0i64,
+			buf: as_sized_guest_buf(buf),
+			ret: RawResult::default(),
 		};
-		// fd refers to a regular file
-		uhyve_hypercall(Hypercall::FileWrite(&mut write_params));
-		match write_params.ret {
-			// Assumption: fd is a regular file, a zero is only valid if the len
-			// (aka. "count") is also zero. Otherwise, however, we assume that something
-			// is wrong in Hermit<>Uhyve communication.
-			ret if ret > 0 || (ret == 0 && write_params.len == 0) => Ok(ret.try_into().unwrap()),
-			errno if errno < 0 => Err((errno as i32).abs().try_into().unwrap()),
-			_ => {
-				debug!("Uhyve write hypercall yielded a zero.");
-				Err(Errno::Inval)
-			}
-		}
+		uhyve_hypercall(Hypercall::FileWrite(&mut params));
+		params
+			.ret
+			.decode()
+			.unwrap()
+			.map(|i| i as usize)
+			.map_err(|e| e.into())
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {
@@ -131,12 +131,16 @@ impl Write for UhyveFileHandleInner {
 
 impl Drop for UhyveFileHandleInner {
 	fn drop(&mut self) {
-		let mut close_params = CloseParams { fd: self.0, ret: 0 };
+		let mut close_params = CloseParams {
+			fd: self.0,
+			ret: RawResult::default(),
+		};
 		uhyve_hypercall(Hypercall::FileClose(&mut close_params));
-		if close_params.ret != 0 {
-			let ret = close_params.ret; // circumvent packed field access
-			panic!("Can't close fd {} - return value {ret}", self.0);
-		}
+		close_params
+			.ret
+			.decode()
+			.unwrap()
+			.unwrap_or_else(|e| panic!("Can't close fd {}: {e:?}", self.0));
 	}
 }
 
@@ -162,7 +166,7 @@ impl ObjectInterface for UhyveFileHandle {
 	}
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
-		fstat_hypercall(self.0.lock().await.0)
+		stat_hypercall(StatTarget::Fd(self.0.lock().await.0))
 	}
 }
 
@@ -187,7 +191,7 @@ impl Drop for UhyveDirectoryHandle {
 	fn drop(&mut self) {
 		let mut close_params = CloseParams {
 			fd: self.fd,
-			ret: 0,
+			ret: RawResult::default(),
 		};
 		uhyve_hypercall(Hypercall::FileClose(&mut close_params));
 	}
@@ -204,27 +208,21 @@ impl ObjectInterface for UhyveDirectoryHandle {
 			DirentFormat::Dirent64 => {
 				let mut read_dir_params = GetdentParams {
 					fd: self.fd,
-					buf: GuestPhysAddr::new(
-						virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
-							.unwrap()
-							.as_u64(),
-					),
-					len: buf.len().try_into().unwrap(),
-					ret: GetdentResult::None,
+					buf: as_mut_sized_guest_buf(buf),
+					ret: RawResult::default(),
 				};
 				uhyve_hypercall(Hypercall::Getdents(&mut read_dir_params));
-				match read_dir_params.ret {
-					GetdentResult::None => Err(Errno::Nosys),
-					GetdentResult::Success(len) => Ok(len.try_into().unwrap()),
+				match read_dir_params.ret.decode().unwrap() {
+					GetdentResult::Success(len) => Ok(len.get().try_into().unwrap()),
 					GetdentResult::EndOfDirectory => Ok(0),
-					GetdentResult::Error(errno) => Err(Errno::try_from(errno).unwrap()),
+					GetdentResult::Errno(errno) => Err(errno.into()),
 				}
 			}
 		}
 	}
 
 	async fn fstat(&self) -> io::Result<FileAttr> {
-		fstat_hypercall(self.fd)
+		stat_hypercall(StatTarget::Fd(self.fd))
 	}
 }
 
@@ -251,31 +249,6 @@ impl UhyveDirectory {
 		let path = [prefix, path].join("/");
 		CString::new(path).unwrap()
 	}
-
-	fn stat_hypercall(&self, path: &str, kind: StatKind) -> io::Result<FileAttr> {
-		let path = self.traversal_path(path);
-		let mut attr = FileAttr::default();
-		let mut stat_params = StatParams {
-			name: GuestPhysAddr::new(
-				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
-					.unwrap()
-					.as_u64(),
-			),
-			kind,
-			attr: GuestPhysAddr::new(
-				virtual_to_physical(VirtAddr::from_ptr((&raw mut attr).cast::<FileAttr>()))
-					.unwrap()
-					.as_u64(),
-			),
-			ret: StatResult::None,
-		};
-		uhyve_hypercall(Hypercall::FileStat(&mut stat_params));
-		match stat_params.ret {
-			StatResult::None => Err(Errno::Nosys),
-			StatResult::Success => Ok(attr),
-			StatResult::Error(errno) => Err(Errno::try_from(errno).unwrap()),
-		}
-	}
 }
 
 impl VfsNode for UhyveDirectory {
@@ -285,15 +258,18 @@ impl VfsNode for UhyveDirectory {
 	}
 
 	fn get_file_attributes(&self) -> io::Result<FileAttr> {
-		self.stat_hypercall("", StatKind::Stat)
+		let path = self.traversal_path("");
+		stat_hypercall(StatTarget::Path(phys_addr(path.as_ptr())))
 	}
 
 	fn traverse_stat(&self, path: &str) -> io::Result<FileAttr> {
-		self.stat_hypercall(path, StatKind::Stat)
+		let path = self.traversal_path(path);
+		stat_hypercall(StatTarget::Path(phys_addr(path.as_ptr())))
 	}
 
 	fn traverse_lstat(&self, path: &str) -> io::Result<FileAttr> {
-		self.stat_hypercall(path, StatKind::LStat)
+		let path = self.traversal_path(path);
+		stat_hypercall(StatTarget::Link(phys_addr(path.as_ptr())))
 	}
 
 	fn traverse_open(
@@ -305,28 +281,27 @@ impl VfsNode for UhyveDirectory {
 		let path = self.traversal_path(path);
 
 		let mut open_params = OpenParams {
-			name: GuestPhysAddr::new(
+			path: GuestPhysAddr::new(
 				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
 			flags: opt.bits(),
-			mode: mode.bits() as i32,
-			ret: -1,
+			mode: mode.bits(),
+			ret: RawResult::default(),
 		};
 		uhyve_hypercall(Hypercall::FileOpen(&mut open_params));
-		let ret = open_params.ret; // circumvent packed field access
-		match ret {
+		match open_params.ret.decode().unwrap() {
 			// Assumption: Uhyve will never return a standard stream.
-			ret if ret >= 0 => {
+			Ok(fd) => {
 				let obj = if opt.contains(OpenOption::O_DIRECTORY) {
-					UhyveDirectoryHandle::new(ret).into()
+					UhyveDirectoryHandle::new(fd).into()
 				} else {
-					UhyveFileHandle::new(ret).into()
+					UhyveFileHandle::new(fd).into()
 				};
 				Ok(Arc::new(async_lock::RwLock::new(obj)))
 			}
-			_ => Err(ret.abs().try_into().unwrap()),
+			Err(errno) => Err(errno.into()),
 		}
 	}
 
@@ -334,19 +309,15 @@ impl VfsNode for UhyveDirectory {
 		let path = self.traversal_path(path);
 
 		let mut unlink_params = UnlinkParams {
-			name: GuestPhysAddr::new(
+			path: GuestPhysAddr::new(
 				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
-			ret: -1,
+			ret: RawResult::default(),
 		};
 		uhyve_hypercall(Hypercall::FileUnlink(&mut unlink_params));
-		let ret = unlink_params.ret; // circumvent packed field access
-		match ret {
-			0 => Ok(()),
-			_ => Err(unlink_params.ret.abs().try_into().unwrap()),
-		}
+		unlink_params.ret.decode().unwrap().map_err(|e| e.into())
 	}
 
 	fn traverse_rmdir(&self, _path: &str) -> io::Result<()> {
@@ -361,23 +332,26 @@ impl VfsNode for UhyveDirectory {
 	fn get_object(&self) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
 		let path = CString::new(self.prefix.clone()).unwrap();
 		let mut open_params = OpenParams {
-			name: GuestPhysAddr::new(
+			path: GuestPhysAddr::new(
 				virtual_to_physical(VirtAddr::from_ptr(path.as_ptr()))
 					.unwrap()
 					.as_u64(),
 			),
 			flags: (OpenOption::O_RDONLY | OpenOption::O_DIRECTORY).bits(),
 			mode: 0,
-			ret: -1,
+			ret: RawResult::default(),
 		};
 		uhyve_hypercall(Hypercall::FileOpen(&mut open_params));
-		let fd = open_params.ret;
-		match fd {
-			fd if fd >= 0 => Ok(Arc::new(async_lock::RwLock::new(
-				UhyveDirectoryHandle::new(fd).into(),
-			))),
-			_ => Err(fd.abs().try_into().unwrap()),
-		}
+		open_params
+			.ret
+			.decode()
+			.unwrap()
+			.map(|fd| {
+				Arc::new(async_lock::RwLock::new(
+					UhyveDirectoryHandle::new(fd).into(),
+				))
+			})
+			.map_err(|e| e.into())
 	}
 }
 

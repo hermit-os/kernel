@@ -2261,9 +2261,7 @@ dependencies = [
 
 [[package]]
 name = "uhyve-interface"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce486c1c8e5506851de5f819968b80b22fce3cf1246c3a75bf52439448ba9d51"
+version = "0.4.0"
 dependencies = [
  "aarch64",
  "hermit-abi",
