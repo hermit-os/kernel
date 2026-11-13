@@ -10,12 +10,10 @@ align-address = "0.4"
 allocator-api2 = { version = "0.4", default-features = false }
 anstyle = { version = "1", default-features = false }
 cfg-if = "1"
-elf-symbols = "0.1"
 hermit-entry = { version = "0.10", features = ["loader"] }
 log = "0.4"
 one-shot-mutex = "0.2"
 take-static = "0.1"
-vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
@@ -37,7 +35,15 @@ sbi-rt = "0.0.4"
 linux-boot-params = { version = "0.18", optional = true }
 multiboot = { version = "0.8", optional = true }
 uart_16550 = "0.8"
+
+[target.'cfg(all(target_arch = "x86_64", target_os = "none"))'.dependencies]
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
+
+[target.'cfg(any(target_arch = "x86_64", target_os = "uefi"))'.dependencies]
+vm-fdt = { version = "0.3", default-features = false, features = ["alloc"] }
+
+[target.'cfg(target_os = "none")'.dependencies]
+elf-symbols = "0.1"
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 anyhow = { version = "1", default-features = false }
