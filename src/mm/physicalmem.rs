@@ -1,8 +1,8 @@
 use core::alloc::AllocError;
+use core::ops::Range;
 use core::{fmt, iter, ptr, slice};
 
 use align_address::Align;
-use bitvec::prelude::{BitSlice, Lsb0};
 use free_list::{PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
 #[cfg(feature = "hermit-entry")]
@@ -21,7 +21,9 @@ const FRAME_SIZE: usize = BasePageSize::SIZE as usize;
 /// A block is a common size of a page range whose search we speed up
 const BLOCK_SIZE: usize = LargePageSize::SIZE as usize;
 const FRAMES_PER_BLOCK: usize = BLOCK_SIZE / FRAME_SIZE;
-const WORDS_PER_BLOCK: usize = FRAMES_PER_BLOCK / u64::BITS as usize;
+const FULL_BLOCK: u16 = FRAMES_PER_BLOCK as u16;
+const WORDS_PER_BLOCK: usize = FRAMES_PER_BLOCK / BITS;
+const BITS: usize = u64::BITS as usize;
 
 static PHYSICAL_FRAMES: InterruptTicketMutex<FrameBitmap<'static>> =
 	InterruptTicketMutex::new(FrameBitmap::empty());
@@ -33,10 +35,31 @@ struct FrameBitmap<'a> {
 	base: usize,
 	/// Length is a multiple of [`WORDS_PER_BLOCK`].
 	words: &'a mut [u64],
-	/// Index of the lowest free frame, or `bits.len()`.
+	/// Number of free frames per block.
+	free_counts: &'a mut [u16],
+	/// Index of the lowest free frame, or `len()`.
 	first_free: usize,
-	/// Index of the first frame of the lowest completely free [`BLOCK_SIZE`] block, or `bits.len()`.
+	/// Index of the first frame of the lowest completely free [`BLOCK_SIZE`] block, or `len()`.
 	first_free_block: usize,
+}
+
+/// Splits the non-empty range of `bits` into the words it touches, yielding `(word index, mask)`
+/// where `mask` selects the range's bits within that word.
+///
+/// Example: `into_bitmasks(60..132)` yields
+/// `(0, 0xF000_0000_0000_0000)`, `(1, 0xFFFF_FFFF_FFFF_FFFF)`, `(2, 0x0000_0000_0000_000F)`.
+fn into_bitmasks(bits: Range<usize>) -> impl DoubleEndedIterator<Item = (usize, u64)> {
+	(bits.start / BITS..bits.end.div_ceil(BITS)).map(move |w| {
+		let lo = bits.start.max(w * BITS) - w * BITS;
+		let hi = bits.end.min(w * BITS + BITS) - w * BITS;
+		(w, (!0 >> (BITS - (hi - lo))) << lo)
+	})
+}
+
+/// Returns the block range if `frames` consists of whole blocks.
+fn into_block_range(frames: Range<usize>) -> Option<Range<usize>> {
+	(frames.start.is_multiple_of(FRAMES_PER_BLOCK) && frames.end.is_multiple_of(FRAMES_PER_BLOCK))
+		.then_some(frames.start / FRAMES_PER_BLOCK..frames.end / FRAMES_PER_BLOCK)
 }
 
 impl<'a> FrameBitmap<'a> {
@@ -45,6 +68,7 @@ impl<'a> FrameBitmap<'a> {
 		Self {
 			base: 0,
 			words: &mut [],
+			free_counts: &mut [],
 			first_free: 0,
 			first_free_block: 0,
 		}
@@ -52,25 +76,25 @@ impl<'a> FrameBitmap<'a> {
 
 	/// Creates a bitmap with all frames allocated.
 	///
-	/// `words` must be zeroed.
-	fn new(base: usize, words: &'a mut [u64]) -> Self {
+	/// `words` and `free_counts` must be zeroed, with one entry in `free_counts` per
+	/// [`WORDS_PER_BLOCK`] words.
+	fn new(base: usize, words: &'a mut [u64], free_counts: &'a mut [u16]) -> Self {
 		assert!(base.is_multiple_of(BLOCK_SIZE));
 		assert!(words.len().is_multiple_of(WORDS_PER_BLOCK));
-		let first_free = words.len() * u64::BITS as usize;
+		assert_eq!(free_counts.len(), words.len() / WORDS_PER_BLOCK);
+		let first_free = words.len() * BITS;
 		Self {
 			base,
 			words,
+			free_counts,
 			first_free,
 			first_free_block: first_free,
 		}
 	}
 
-	fn bits(&self) -> &BitSlice<u64, Lsb0> {
-		BitSlice::from_slice(self.words)
-	}
-
-	fn bits_mut(&mut self) -> &mut BitSlice<u64, Lsb0> {
-		BitSlice::from_slice_mut(self.words)
+	/// Number of frames in the bitmap.
+	fn len(&self) -> usize {
+		self.words.len() * BITS
 	}
 
 	fn index(&self, addr: usize) -> usize {
@@ -81,24 +105,61 @@ impl<'a> FrameBitmap<'a> {
 		self.base + index * FRAME_SIZE
 	}
 
+	fn is_all_free(&self, frames: Range<usize>) -> bool {
+		into_bitmasks(frames).all(|(w, m)| self.words[w] & m == m)
+	}
+
+	fn is_all_allocated(&self, frames: Range<usize>) -> bool {
+		if frames.len() >= FRAMES_PER_BLOCK
+			&& let Some(blocks) = into_block_range(frames.clone())
+		{
+			return self.free_counts[blocks].iter().all(|&c| c == 0);
+		}
+		into_bitmasks(frames).all(|(w, m)| self.words[w] & m == 0)
+	}
+
+	/// Index of the allocated frame closest to `frames.end` or `None` if all frames in `frames` are
+	/// free.
+	///
+	/// Example: with frames `[free, alloc, free, alloc, free]`, `rfind_allocated(0..5)` is `Some(3)`.
+	fn rfind_allocated(&self, frames: Range<usize>) -> Option<usize> {
+		into_bitmasks(frames).rev().find_map(|(w, m)| {
+			let allocated = !self.words[w] & m;
+			(allocated != 0).then(|| w * BITS + BITS - 1 - allocated.leading_zeros() as usize)
+		})
+	}
+
 	fn is_block_free(&self, index: usize) -> bool {
-		self.bits()[index..][..FRAMES_PER_BLOCK].all()
+		self.free_counts[index / FRAMES_PER_BLOCK] == FULL_BLOCK
+	}
+
+	/// Index of the first free (`free == true`) or allocated frame at or after `from`.
+	fn find(&self, from: usize, free: bool) -> Option<usize> {
+		let flip = if free { 0 } else { !0 };
+		let w = from / BITS;
+		let first = (*self.words.get(w)? ^ flip) & (!0 << (from % BITS));
+		if first != 0 {
+			return Some(w * BITS + first.trailing_zeros() as usize);
+		}
+		self.words[w + 1..]
+			.iter()
+			.position(|&x| x ^ flip != 0)
+			.map(|i| (w + 1 + i) * BITS + (self.words[w + 1 + i] ^ flip).trailing_zeros() as usize)
 	}
 
 	/// Find the next free entry in the bitmap
 	fn next_free(&self, from: usize) -> usize {
-		self.bits()[from..]
-			.first_one()
-			.map_or(self.bits().len(), |i| from + i)
+		self.find(from, true).unwrap_or(self.len())
 	}
 
 	/// Find the next free block in the bitmap.
 	/// `from` must be a multiple of [`FRAMES_PER_BLOCK`].
 	fn next_free_block(&self, from: usize) -> usize {
-		(from..self.bits().len())
-			.step_by(FRAMES_PER_BLOCK)
-			.find(|index| self.is_block_free(*index))
-			.unwrap_or(self.bits().len())
+		let block = from / FRAMES_PER_BLOCK;
+		self.free_counts[block..]
+			.iter()
+			.position(|&c| c == FULL_BLOCK)
+			.map_or(self.len(), |i| (block + i) * FRAMES_PER_BLOCK)
 	}
 
 	fn allocate(&mut self, layout: PageLayout) -> Result<PageRange, AllocError> {
@@ -108,66 +169,119 @@ impl<'a> FrameBitmap<'a> {
 		} else {
 			self.first_free
 		};
+		let block_layout = layout.align() >= BLOCK_SIZE && pages.is_multiple_of(FRAMES_PER_BLOCK);
 
 		loop {
-			index += self.bits()[index..].first_one().ok_or(AllocError)?;
+			index = self.find(index, true).ok_or(AllocError)?;
 			index = self.index(self.addr(index).align_up(layout.align()));
-			let candidate = self.bits().get(index..index + pages).ok_or(AllocError)?;
-			match candidate.last_zero() {
-				Some(i) => index += i + 1,
+			if index + pages > self.len() {
+				return Err(AllocError);
+			}
+			let allocated = if block_layout {
+				// Any candidate overlapping a partially allocated block starts after that block.
+				let blocks = index / FRAMES_PER_BLOCK..(index + pages) / FRAMES_PER_BLOCK;
+				self.free_counts[blocks.clone()]
+					.iter()
+					.rposition(|&c| c != FULL_BLOCK)
+					.map(|i| (blocks.start + i + 1) * FRAMES_PER_BLOCK - 1)
+			} else {
+				self.rfind_allocated(index..index + pages)
+			};
+			match allocated {
+				Some(i) => index = i + 1,
 				None => break,
 			}
 		}
 
-		self.take(index, index + pages);
+		self.take(index..index + pages);
 		Ok(PageRange::from_start_len(self.addr(index), layout.size()).unwrap())
 	}
 
 	fn allocate_at(&mut self, range: PageRange) -> Result<(), AllocError> {
 		let start = range.start().checked_sub(self.base).ok_or(AllocError)? / FRAME_SIZE;
-		let end = start + range.pages().get();
-		if !self.bits().get(start..end).ok_or(AllocError)?.all() {
+		let frames = start..start + range.pages().get();
+		if frames.end > self.len() || !self.is_all_free(frames.clone()) {
 			return Err(AllocError);
 		}
-		self.take(start, end);
+		self.take(frames);
 		Ok(())
 	}
 
 	fn deallocate(&mut self, range: PageRange) {
 		let start = self.index(range.start());
-		let end = start + range.pages().get();
-		let bits = &mut self.bits_mut()[start..end];
-		assert!(bits.not_any(), "{range:#x?} is not allocated");
-		bits.fill(true);
+		let frames = start..start + range.pages().get();
+		assert!(
+			self.is_all_allocated(frames.clone()),
+			"{range:#x?} is not allocated"
+		);
+		for (w, m) in into_bitmasks(frames.clone()) {
+			self.words[w] |= m;
+		}
+		self.update_counts(frames.clone(), true);
 
-		self.first_free = self.first_free.min(start);
-		let mut blocks = (start.align_down(FRAMES_PER_BLOCK)..end.min(self.first_free_block))
+		self.first_free = self.first_free.min(frames.start);
+		let mut blocks = (frames.start.align_down(FRAMES_PER_BLOCK)
+			..frames.end.min(self.first_free_block))
 			.step_by(FRAMES_PER_BLOCK);
 		if let Some(block) = blocks.find(|index| self.is_block_free(*index)) {
 			self.first_free_block = block;
 		}
 	}
 
-	/// Marks the free frames `start..end` as allocated.
-	fn take(&mut self, start: usize, end: usize) {
-		self.bits_mut()[start..end].fill(false);
+	/// Marks the free `frames` as allocated.
+	fn take(&mut self, frames: Range<usize>) {
+		for (w, m) in into_bitmasks(frames.clone()) {
+			self.words[w] &= !m;
+		}
+		self.update_counts(frames.clone(), false);
 
-		if (start..end).contains(&self.first_free) {
-			self.first_free = self.next_free(end);
+		if frames.contains(&self.first_free) {
+			self.first_free = self.next_free(frames.end);
 		}
-		if start < self.first_free_block + FRAMES_PER_BLOCK && self.first_free_block < end {
-			self.first_free_block = self.next_free_block(end.align_up(FRAMES_PER_BLOCK));
+		if frames.start < self.first_free_block + FRAMES_PER_BLOCK
+			&& self.first_free_block < frames.end
+		{
+			self.first_free_block = self.next_free_block(frames.end.align_up(FRAMES_PER_BLOCK));
 		}
+	}
+
+	/// Adjusts the free counters for the non-empty `frames` becoming free (`free == true`)
+	/// or allocated.
+	fn update_counts(&mut self, frames: Range<usize>, free: bool) {
+		let first = frames.start / FRAMES_PER_BLOCK;
+		let last = (frames.end - 1) / FRAMES_PER_BLOCK;
+		if first == last {
+			let n = frames.len() as u16;
+			if free {
+				self.free_counts[first] += n;
+			} else {
+				self.free_counts[first] -= n;
+			}
+			return;
+		}
+
+		let head = ((first + 1) * FRAMES_PER_BLOCK - frames.start) as u16;
+		let tail = (frames.end - last * FRAMES_PER_BLOCK) as u16;
+		if free {
+			self.free_counts[first] += head;
+			self.free_counts[last] += tail;
+			self.free_counts[first + 1..last].fill(FULL_BLOCK);
+		} else {
+			self.free_counts[first] -= head;
+			self.free_counts[last] -= tail;
+			self.free_counts[first + 1..last].fill(0);
+		}
+	}
+
+	fn free_frames(&self) -> usize {
+		self.free_counts.iter().map(|&c| usize::from(c)).sum()
 	}
 
 	fn free_ranges(&self) -> impl Iterator<Item = PageRange> + '_ {
 		let mut index = self.first_free;
 		iter::from_fn(move || {
-			let start = index + self.bits()[index..].first_one()?;
-			let len = self.bits()[start..]
-				.first_zero()
-				.unwrap_or(self.bits().len() - start);
-			index = start + len;
+			let start = self.find(index, true)?;
+			index = self.find(start, false).unwrap_or(self.len());
 			Some(PageRange::new(self.addr(start), self.addr(index)).unwrap())
 		})
 	}
@@ -356,8 +470,10 @@ unsafe fn detect_from_start_info() -> usize {
 		.unwrap()
 		.align_down(BLOCK_SIZE);
 	let end = free_ranges().map(PageRange::end).max().unwrap();
-	let word_count = (end - base).div_ceil(BLOCK_SIZE) * WORDS_PER_BLOCK;
-	let bitmap_size = (word_count * size_of::<u64>()).align_up(FRAME_SIZE);
+	let block_count = (end - base).div_ceil(BLOCK_SIZE);
+	let word_count = block_count * WORDS_PER_BLOCK;
+	let bitmap_size =
+		(word_count * size_of::<u64>() + block_count * size_of::<u16>()).align_up(FRAME_SIZE);
 
 	// The bitmap is placed in the lowest free memory.
 	// We assume this memory is already mapped, or that no new pagetables are
@@ -374,12 +490,17 @@ unsafe fn detect_from_start_info() -> usize {
 
 	// We have to assume working identity mapping here, as the `DeviceAlloc` mapping is
 	// only established by `map_frame_range` below, which requires the bitmap.
-	let words = unsafe {
+	let (words, free_counts) = unsafe {
 		let words = ptr::with_exposed_provenance_mut::<u64>(bitmap_range.start());
 		words.write_bytes(0, word_count);
-		slice::from_raw_parts_mut(words, word_count)
+		let free_counts = words.add(word_count).cast::<u16>();
+		free_counts.write_bytes(0, block_count);
+		(
+			slice::from_raw_parts_mut(words, word_count),
+			slice::from_raw_parts_mut(free_counts, block_count),
+		)
 	};
-	let mut bitmap = FrameBitmap::new(base, words);
+	let mut bitmap = FrameBitmap::new(base, words, free_counts);
 	for frame_range in free_ranges() {
 		bitmap.deallocate(frame_range);
 	}
@@ -394,7 +515,7 @@ unsafe fn detect_from_start_info() -> usize {
 		debug!("Claimed physical memory: {frame_range:#x?}");
 	}
 
-	let free_frames = PHYSICAL_FRAMES.lock().bits().count_ones();
+	let free_frames = PHYSICAL_FRAMES.lock().free_frames();
 	free_frames * FRAME_SIZE
 }
 
@@ -414,6 +535,11 @@ mod tests {
 
 	impl FrameBitmap<'_> {
 		fn assert_first_free_correct(&self) {
+			for (block, &count) in self.free_counts.iter().enumerate() {
+				let words = &self.words[block * WORDS_PER_BLOCK..][..WORDS_PER_BLOCK];
+				let ones: u32 = words.iter().map(|w| w.count_ones()).sum();
+				assert_eq!(u32::from(count), ones);
+			}
 			assert_eq!(self.first_free, self.next_free(0));
 			assert_eq!(self.first_free_block, self.next_free_block(0));
 		}
@@ -422,7 +548,8 @@ mod tests {
 	#[test]
 	fn allocate() {
 		let mut words = [0; WORDS_PER_BLOCK];
-		let mut bitmap = FrameBitmap::new(BASE, &mut words);
+		let mut free_counts = [0; 1];
+		let mut bitmap = FrameBitmap::new(BASE, &mut words, &mut free_counts);
 		bitmap.deallocate(relative_range(0x1000, 0x3000));
 		bitmap.deallocate(relative_range(0x4000, 0x8000));
 
@@ -452,8 +579,9 @@ mod tests {
 	#[test]
 	fn first_free_block() {
 		let mut words = [0; 4 * WORDS_PER_BLOCK];
-		let mut bitmap = FrameBitmap::new(BASE, &mut words);
-		let frame_count = bitmap.bits().len();
+		let mut free_counts = [0; 4];
+		let mut bitmap = FrameBitmap::new(BASE, &mut words, &mut free_counts);
+		let frame_count = bitmap.len();
 		assert_eq!(bitmap.first_free, frame_count);
 		assert_eq!(bitmap.first_free_block, frame_count);
 
@@ -488,7 +616,8 @@ mod tests {
 	#[test]
 	fn first_free_block_at_block_boundary() {
 		let mut words = [0; 3 * WORDS_PER_BLOCK];
-		let mut bitmap = FrameBitmap::new(BASE, &mut words);
+		let mut free_counts = [0; 3];
+		let mut bitmap = FrameBitmap::new(BASE, &mut words, &mut free_counts);
 		bitmap.deallocate(relative_range(0, 3 * BLOCK_SIZE));
 		assert_eq!(bitmap.first_free_block, 0);
 
@@ -515,7 +644,8 @@ mod tests {
 	#[test]
 	fn allocate_at() {
 		let mut words = [0; WORDS_PER_BLOCK];
-		let mut bitmap = FrameBitmap::new(BASE, &mut words);
+		let mut free_counts = [0; 1];
+		let mut bitmap = FrameBitmap::new(BASE, &mut words, &mut free_counts);
 		bitmap.deallocate(relative_range(0x1000, 0x4000));
 		assert!(bitmap.allocate_at(relative_range(0x2000, 0x5000)).is_err());
 		assert!(bitmap.allocate_at(relative_range(0x2000, 0x3000)).is_ok());
