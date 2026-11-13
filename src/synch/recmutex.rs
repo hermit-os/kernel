@@ -1,4 +1,4 @@
-use hermit_sync::TicketMutex;
+use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::kernel::core_local::*;
 use crate::scheduler::PerCoreSchedulerExt;
@@ -11,13 +11,13 @@ struct RecursiveMutexState {
 }
 
 pub struct RecursiveMutex {
-	state: TicketMutex<RecursiveMutexState>,
+	state: InterruptTicketMutex<RecursiveMutexState>,
 }
 
 impl RecursiveMutex {
 	pub const fn new() -> Self {
 		Self {
-			state: TicketMutex::new(RecursiveMutexState {
+			state: InterruptTicketMutex::new(RecursiveMutexState {
 				current_tid: None,
 				count: 0,
 				queue: TaskHandlePriorityQueue::new(),
