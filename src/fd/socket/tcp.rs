@@ -469,6 +469,13 @@ impl ObjectInterface for Socket {
 			SocketOption::SocketOption(SocketOptionSocket::SoRcvbuf) => {
 				Ok(c_int::try_from(socket.recv_capacity()).unwrap())
 			}
+			// mio/tokio query SO_ERROR after a nonblocking connect: 0 means connected.
+			// smoltcp keeps no pending socket error; a refused or reset connection
+			// attempt leaves the socket closed.
+			SocketOption::SocketOption(SocketOptionSocket::SoError) => Ok(match socket.state() {
+				tcp::State::Closed | tcp::State::TimeWait => Errno::Connrefused as c_int,
+				_ => 0,
+			}),
 			other => {
 				warn!("TCP: unsupported option {other:?}");
 				Err(Errno::Inval)
