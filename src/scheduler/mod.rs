@@ -409,7 +409,9 @@ impl PerCoreScheduler {
 	#[cfg(not(feature = "smp"))]
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		without_interrupts(|| {
-			let task = self.blocked_tasks.custom_wakeup(task);
+			let Some(task) = self.blocked_tasks.custom_wakeup(task) else {
+				return;
+			};
 			self.ready_queue.push(task);
 			// The woken task is now ready. Arm the preemption timer so the running
 			// task — which may be CPU-bound and never yield — is preempted soon and
@@ -426,7 +428,9 @@ impl PerCoreScheduler {
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
 			without_interrupts(|| {
-				let task = self.blocked_tasks.custom_wakeup(task);
+				let Some(task) = self.blocked_tasks.custom_wakeup(task) else {
+					return;
+				};
 				self.ready_queue.push(task);
 				// The woken task is now ready on this core. Arm the preemption timer
 				// so the running (possibly non-yielding) task is preempted soon.
@@ -708,8 +712,9 @@ impl PerCoreScheduler {
 		let mut input_locked = CoreLocal::get().scheduler_input.lock();
 
 		while let Some(task) = input_locked.wakeup_tasks.pop_front() {
-			let task = self.blocked_tasks.custom_wakeup(task);
-			self.ready_queue.push(task);
+			if let Some(task) = self.blocked_tasks.custom_wakeup(task) {
+				self.ready_queue.push(task);
+			}
 		}
 
 		while let Some(new_task) = input_locked.new_tasks.pop_front() {
