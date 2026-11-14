@@ -148,11 +148,12 @@ jobs:
           CARGO_BUILD_WARNINGS: warn
       - name: Macro unit tests
         run: cargo test --package hermit-macro
-      - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64-multiboot
+      - name: Build loader
+        run: cargo xtask build --target x86_64-multiboot --release
+        working-directory: crates/loader
       - run: rustup target add x86_64-unknown-none
       - name: Integration tests
-        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64-multiboot
+        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=crates/loader/target/release/hermit-loader-x86_64-multiboot
         env:
           CARGO_BUILD_WARNINGS: warn
 
@@ -186,16 +187,20 @@ jobs:
             packages: qemu-system-x86-hwe uftrace
             qemu_flags: --accel --sudo
             rs_flags: --features hermit/loader
+            loader_targets: x86_64-multiboot x86_64-uefi x86_64-linux
           - arch: aarch64
             packages: qemu-system-arm-hwe
+            loader_targets: aarch64-elf
             rs_flags: --features hermit/loader,hermit/semihosting
           # FIXME: enable semihosting once it works with QEMU
           # See https://github.com/taiki-e/semihosting/issues/18.
           - arch: aarch64_be
             packages: qemu-system-arm-hwe
             rs_flags: --features hermit/loader
+            loader_targets: aarch64_be-elf
           - arch: riscv64
             packages: qemu-system-riscv-hwe
+            loader_targets: riscv64-sbi
             rs_flags: --features hermit/loader,hermit/semihosting
 
     steps:
@@ -220,8 +225,13 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
         with:
           toolchain-file: "kernel/rust-toolchain.toml"
-      - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern 'hermit-loader-${{ matrix.arch }}*'
+      - name: Build loader
+        run: |
+          for target in ${{ matrix.loader_targets }}; do
+            cargo xtask build --target "$target" --release
+          done
+          cp target/release/hermit-loader-* ../..
+        working-directory: kernel/crates/loader
       - name: Install Firecracker
         run: |
           gh release download --repo firecracker-microvm/firecracker v1.12.0 --pattern "firecracker-*-${{ matrix.arch }}.tgz"

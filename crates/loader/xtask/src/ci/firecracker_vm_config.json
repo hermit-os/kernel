@@ -1,0 +1,13 @@
+{{
+  "boot-source": {{
+    "kernel_image_path": "{kernel_image_path}",
+    "initrd_path": "{initrd_path}",
+    "boot_args": ""
+  }},
+  "drives": [],
+  "machine-config": {{
+    "vcpu_count": 1,
+    "mem_size_mib": 256,
+    "smt": false
+  }}
+}}
