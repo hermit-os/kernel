@@ -639,6 +639,44 @@ impl Task {
 			vmas,
 		}
 	}
+
+	/// Create a forked task that starts at the point where the parent called fork.
+	/// `last_stack_pointer` is set to the child's pre-computed stack pointer.
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	#[allow(clippy::too_many_arguments)]
+	pub fn new_fork(
+		tid: TaskId,
+		core_id: CoreId,
+		task_status: TaskStatus,
+		task_prio: Priority,
+		stacks: TaskStacks,
+		last_stack_pointer: VirtAddr,
+		user_stack_pointer: VirtAddr,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+		root_page_table: Arc<RootPageTable>,
+		tls_template: Option<Arc<TlsTemplate>>,
+		vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
+	) -> Task {
+		debug!("Creating forked task {tid} on core {core_id}");
+		Task {
+			id: tid,
+			// A forked child becomes the main thread of a new process.
+			pid: tid.into(),
+			status: task_status,
+			prio: task_prio,
+			last_stack_pointer,
+			user_stack_pointer,
+			last_fpu_state: FPUState::new(),
+			core_id,
+			stacks,
+			object_map,
+			#[cfg(not(feature = "common-os"))]
+			tls: None,
+			root_page_table,
+			tls_template,
+			vmas,
+		}
+	}
 }
 
 /*impl Drop for Task {

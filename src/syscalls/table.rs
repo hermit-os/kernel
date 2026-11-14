@@ -35,6 +35,7 @@ const SYSNO_OPEN: usize = 11;
 const SYSNO_WRITEV: usize = 12;
 /// Number of the system call `readv`
 const SYSNO_READV: usize = 13;
+pub(crate) const SYSNO_FORK: usize = 14;
 const SYSNO_WAITPID: usize = 15;
 const SYSNO_SPAWN_PROCESS: usize = 16;
 const SYSNO_CLOCK_GETTIME: usize = 17;
@@ -157,6 +158,7 @@ impl SyscallTable {
 		table.handle[SYSNO_OPEN] = sys_open as *const _;
 		table.handle[SYSNO_READV] = sys_readv as *const _;
 		table.handle[SYSNO_WRITEV] = sys_writev as *const _;
+		table.handle[SYSNO_FORK] = sys_fork as *const _;
 		table.handle[SYSNO_WAITPID] = sys_waitpid as *const _;
 		table.handle[SYSNO_SPAWN_PROCESS] = sys_spawn_process as *const _;
 		table.handle[SYSNO_CLOCK_GETTIME] = sys_clock_gettime as *const _;

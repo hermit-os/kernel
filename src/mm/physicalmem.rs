@@ -1,3 +1,5 @@
+#[cfg(all(feature = "common-os", feature = "fork"))]
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::alloc::AllocError;
 use core::fmt;
@@ -25,6 +27,40 @@ use crate::mm::{PageRangeAllocator, PageRangeBox};
 static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 	InterruptTicketMutex::new(FreeList::new());
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+/// COW reference counts of the shared frames; exclusively owned frames have no entry.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+static PAGE_REFCOUNTS: InterruptTicketMutex<BTreeMap<usize, u32>> =
+	InterruptTicketMutex::new(BTreeMap::new());
+
+/// Increment the COW reference count for `phys_addr` (4 KiB-aligned frame).
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn frame_ref_inc(phys_addr: PhysAddr) {
+	let frame = (phys_addr.as_u64() as usize) >> 12;
+	*PAGE_REFCOUNTS.lock().entry(frame).or_insert(0) += 1;
+}
+
+/// Decrement the COW reference count for `phys_addr`.
+/// Returns `true` if the count reaches zero.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn frame_ref_dec(phys_addr: PhysAddr) -> bool {
+	let frame = (phys_addr.as_u64() as usize) >> 12;
+	let mut map = PAGE_REFCOUNTS.lock();
+	match map.get_mut(&frame) {
+		None => {
+			warn!("frame_ref_dec: no refcount entry for frame {phys_addr:p}");
+			false
+		}
+		Some(count) if *count <= 1 => {
+			map.remove(&frame);
+			true
+		}
+		Some(count) => {
+			*count -= 1;
+			false
+		}
+	}
+}
 
 pub struct FrameAlloc;
 
@@ -70,6 +106,38 @@ impl fmt::Display for FrameAlloc {
 }
 
 pub type FrameBox = PageRangeBox<FrameAlloc>;
+
+/// Copy the physical page at `src_phys` into a freshly allocated page and return its address.
+#[cfg(feature = "common-os")]
+pub fn copy_page(src_phys: PhysAddr) -> PhysAddr {
+	use crate::arch::mm::paging::BasePageSize;
+	use crate::mm::PageBox;
+
+	let frame_layout = PageLayout::from_size(BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(frame_layout).expect("Failed to allocate page");
+	let dst_phys = PhysAddr::new(frame_range.start().try_into().unwrap());
+
+	let page_layout = PageLayout::from_size(2 * BasePageSize::SIZE as usize).unwrap();
+	let page_box = PageBox::new(page_layout).unwrap();
+	let virt = VirtAddr::from(page_box.start());
+
+	let flags = PageTableEntryFlags::normal();
+	paging::map::<BasePageSize>(virt, src_phys, 1, flags);
+	paging::map::<BasePageSize>(virt + BasePageSize::SIZE, dst_phys, 1, flags);
+
+	unsafe {
+		let src = core::slice::from_raw_parts(virt.as_ptr::<u8>(), BasePageSize::SIZE as usize);
+		let dst = core::slice::from_raw_parts_mut(
+			(virt + BasePageSize::SIZE).as_mut_ptr::<u8>(),
+			BasePageSize::SIZE as usize,
+		);
+		dst.copy_from_slice(src);
+	}
+
+	paging::unmap::<BasePageSize>(virt, 2);
+
+	dst_phys
+}
 
 pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::Relaxed)

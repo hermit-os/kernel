@@ -220,3 +220,154 @@ pub(crate) unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new
 		set_current_kernel_stack = sym set_current_kernel_stack,
 	);
 }
+
+/// Entry point of the child task after a fork.
+///
+/// `switch_to_task` returns here. The user registers pushed by
+/// `syscall_handler` were copied with the kernel stack and
+/// `prepare_fork_child_stack` stored the user RSP at `kernel_top - 8`,
+/// so the child returns directly to user space with `rax = 0`.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+#[unsafe(naked)]
+extern "C" fn fork_child_start() {
+	use core::arch::naked_asm;
+	naked_asm!(
+		// rsp = top of the 14 registers saved by syscall_handler
+		"mov  rsp, gs:{core_local_kernel_stack}",
+		"sub  rsp, 14 * 8",
+		// rcx = user RIP, r11 = user RFLAGS
+		"pop  r15",
+		"pop  r14",
+		"pop  r13",
+		"pop  r12",
+		"pop  r11",
+		"pop  r10",
+		"pop  r9",
+		"pop  r8",
+		"pop  rdi",
+		"pop  rsi",
+		"pop  rbp",
+		"pop  rbx",
+		"pop  rdx",
+		"pop  rcx",
+		// fork() returns 0 in the child.
+		"xor  eax, eax",
+		// Load the user RSP from kernel_top - 8 without clobbering rax.
+		"mov  rsp, gs:{core_local_kernel_stack}",
+		"mov  rsp, [rsp + 8]",
+		"swapgs",
+		"sysretq",
+		core_local_kernel_stack = const core::mem::offset_of!(super::core_local::CoreLocal, kernel_stack),
+	);
+}
+
+/// Returns the base virtual address of the current task's stack allocation.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+extern "C" fn get_current_stack_addr() -> usize {
+	use crate::arch::x86_64::kernel::core_local::core_scheduler;
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_stack_virt_addr()
+		.as_usize()
+}
+
+/// C-callable wrapper: copy the current root page table and return the new PML4 physical address.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+extern "C" fn copy_current_root_page_table() -> usize {
+	crate::arch::x86_64::mm::copy_current_root_page_table()
+}
+
+/// C-callable wrapper: copy the current kernel stack to `stack_addr`.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+extern "C" fn copy_kernel_stack_to(stack_addr: usize) {
+	crate::arch::x86_64::mm::copy_kernel_stack_to(stack_addr);
+}
+
+/// Stores the current user RSP at `child_kernel_top - 8` for
+/// [`fork_child_start`]. The per-CPU `user_stack` slot may be
+/// overwritten by other syscalls before the child runs.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+extern "C" fn stash_user_rsp_in_child_stack(new_stack_addr: usize) {
+	use crate::arch::x86_64::kernel::core_local::CoreLocal;
+	use crate::arch::x86_64::kernel::interrupts::IST_SIZE;
+	use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+	use crate::config::DEFAULT_STACK_SIZE;
+
+	let user_rsp: usize;
+	unsafe {
+		core::arch::asm!(
+			"mov {0}, gs:[{1}]",
+			out(reg) user_rsp,
+			const core::mem::offset_of!(CoreLocal, user_stack),
+			options(nostack, preserves_flags),
+		);
+	}
+
+	let child_kernel_top =
+		new_stack_addr + IST_SIZE + 2 * BasePageSize::SIZE as usize + DEFAULT_STACK_SIZE;
+	unsafe {
+		core::ptr::with_exposed_provenance_mut::<usize>(child_kernel_top - 8).write(user_rsp);
+	}
+}
+
+/// Prepare the child's stack for a fork.
+///
+/// On entry (parent):
+///   rdi = `stack_pointer`   (*mut usize — receives the child's rsp)
+///   rsi = `root_page_table` (*mut usize — receives the child's PML4 phys addr)
+///   rdx = `new_stack_addr`  (base virt addr of the child's stack allocation)
+///
+/// Returns `false` in the parent; the child task's saved context will `ret` to
+/// `fork_child_start` which jumps directly back to user space via `sysretq`.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+#[unsafe(naked)]
+pub unsafe extern "C" fn prepare_fork_child_stack(
+	_stack_pointer: *mut usize,
+	_root_page_table: *mut usize,
+	_new_stack_addr: usize,
+) -> bool {
+	naked_asm!(
+		// Push fork_child_start as the child's future return address.
+		"lea rax, [rip + {fork_child_start}]",
+		"push rax",
+		save_context!(),
+		"push rdi",   // [rsp+16]: stack_pointer ptr
+		"push rdx",   // [rsp+8]:  new_stack_addr
+		"push rsi",   // [rsp+0]:  root_page_table ptr
+
+		// Copy the kernel stack first, so the page table snapshot includes it.
+		"mov  rdi, [rsp+8]",              // rdi = new_stack_addr
+		"call {copy_kernel_stack_to}",    // copy kernel stack pages
+
+		// Store the user RSP at child_kernel_top - 8 for fork_child_start.
+		"mov  rdi, [rsp+8]",              // rdi = new_stack_addr
+		"call {stash_user_rsp_in_child_stack}",
+
+		"call {copy_current_root_page_table}",   // rax = new PML4 phys addr
+		"mov  rsi, [rsp]",                       // rsi = root_page_table ptr
+		"mov  [rsi], rax",                       // *root_page_table = new PML4
+
+		// child_rsp = rsp + (new_stack_addr - current_stack_base)
+		"call {get_current_stack_addr}",  // rax = current stack base addr
+		"pop  rsi",                       // pop root_page_table ptr (already written)
+		"pop  rbx",                       // rbx = new_stack_addr
+		"pop  rdi",                       // rdi = stack_pointer ptr
+		"sub  rbx, rax",                  // rbx = new_stack_addr - stack_base (offset)
+		"add  rbx, rsp",                  // rbx = rsp_after_save_context + offset = child rsp
+		"mov  [rdi], rbx",                // *stack_pointer = child_rsp
+
+		restore_context_without_return!(),
+		// Skip the fork_child_start address we pushed at the top.
+		"add rsp, 8",
+		// Return false (0) — this is the parent.
+		"xor rax, rax",
+		"ret",
+		fork_child_start          = sym fork_child_start,
+		copy_current_root_page_table = sym copy_current_root_page_table,
+		copy_kernel_stack_to      = sym copy_kernel_stack_to,
+		stash_user_rsp_in_child_stack = sym stash_user_rsp_in_child_stack,
+		get_current_stack_addr    = sym get_current_stack_addr,
+	);
+}

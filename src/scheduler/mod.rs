@@ -1179,6 +1179,133 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	}
 }
 
+/// Forks the current task.
+///
+/// Returns the child's `TaskId` in the parent and `TaskId(0)` in the child.
+#[cfg(all(target_arch = "x86_64", feature = "common-os", feature = "fork"))]
+pub unsafe fn fork() -> TaskId {
+	use crate::arch::kernel::prepare_fork_child_stack;
+	use crate::arch::mm::prepare_mem_copy_on_write;
+
+	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
+
+	// Mark user pages COW before copying the page table.
+	prepare_mem_copy_on_write();
+
+	let stack_size = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_user_stack_size();
+	let stacks = TaskStacks::new(stack_size);
+
+	let mut child_stack_pointer: usize = 0;
+	let mut child_root_page_table: usize = 0;
+
+	// Copy the kernel stack and duplicate the page table; returns false in parent.
+	let is_child = unsafe {
+		prepare_fork_child_stack(
+			&raw mut child_stack_pointer,
+			&raw mut child_root_page_table,
+			stacks.get_stack_virt_addr().as_usize(),
+		)
+	};
+
+	if is_child {
+		// Child context: the stacks are owned by the child task created in the parent.
+		core::mem::forget(stacks);
+		return TaskId::from(0);
+	}
+
+	// Parent path: register the child task.
+	let tid = get_tid();
+	let child_last_sp = VirtAddr::new(child_stack_pointer.try_into().unwrap());
+	let parent_user_sp = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.user_stack_pointer;
+	let parent_prio = core_scheduler().get_current_task().borrow().prio;
+	let parent_object_map = Arc::new(RwSpinLock::new(HashMap::<
+		RawFd,
+		Arc<async_lock::RwLock<Fd>>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(
+		0, 0, 0, 0,
+	))));
+	for (key, val) in core_scheduler().get_current_task_object_map().read().iter() {
+		parent_object_map.write().insert(*key, val.clone());
+	}
+	let parent_tls_template = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.tls_template
+		.clone();
+	let parent_vmas = Arc::new(RwSpinLock::new(
+		core_scheduler()
+			.get_current_task()
+			.borrow()
+			.vmas
+			.read()
+			.clone(),
+	));
+
+	let child_task = Task::new_fork(
+		tid,
+		core_id,
+		TaskStatus::Ready,
+		parent_prio,
+		stacks,
+		child_last_sp,
+		parent_user_sp,
+		parent_object_map,
+		Arc::new(RootPageTable::new(child_root_page_table)),
+		parent_tls_template,
+		parent_vmas,
+	);
+
+	let wakeup = {
+		#[cfg(feature = "smp")]
+		let _input_locked = get_scheduler_input(core_id).lock();
+		WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+		TASKS.lock().insert(
+			tid,
+			TaskHandle::new(
+				tid,
+				parent_prio,
+				#[cfg(feature = "smp")]
+				core_id,
+			),
+		);
+		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+		#[cfg(feature = "smp")]
+		if core_id == core_scheduler().core_id {
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		} else {
+			// For SMP we'd need to send to the target core; for now push locally.
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		}
+		#[cfg(not(feature = "smp"))]
+		{
+			let task = Rc::new(RefCell::new(child_task));
+			core_scheduler().ready_queue.push(task);
+			false
+		}
+	};
+
+	if wakeup {
+		kernel::wakeup_core(core_id);
+	}
+
+	debug!("Child was created and has the id {tid}");
+
+	tid
+}
+
 pub fn shutdown(arg: i32) -> ! {
 	crate::syscalls::shutdown(arg)
 }

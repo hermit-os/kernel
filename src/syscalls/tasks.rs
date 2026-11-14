@@ -16,6 +16,32 @@ pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = i32;
 pub type Pid = i32;
 
+/// Fork the current process.
+/// Returns the child's PID to the parent, and 0 to the child.
+#[cfg(feature = "common-os")]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fork() -> i32 {
+	#[cfg(all(feature = "fork", target_arch = "x86_64"))]
+	unsafe {
+		scheduler::fork().into()
+	}
+
+	#[cfg(not(all(feature = "fork", target_arch = "x86_64")))]
+	{
+		-i32::from(Errno::Nosys)
+	}
+}
+
+/// Fork the current process.
+/// In case of a unikernel, this system call always fail.
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_fork() -> i32 {
+	-i32::from(Errno::Nosys)
+}
+
 /// Waitpid block the current process until termination of process `pid`.
 /// Returns 0 is the process terminates
 #[cfg(feature = "common-os")]
