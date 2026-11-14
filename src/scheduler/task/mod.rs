@@ -562,7 +562,14 @@ impl BlockedTaskQueue {
 	}
 
 	/// Manually wake up a blocked task.
-	pub fn custom_wakeup(&mut self, task: TaskHandle) -> Rc<RefCell<Task>> {
+	///
+	/// Returns `None` if the task is not blocked (anymore). This happens when a
+	/// task waiting on a futex with a timeout is woken by the timer, and a
+	/// `futex_wake` on another core pops its handle from the futex queue before
+	/// the task could remove itself. The cross-core wakeup is then delivered via
+	/// `wakeup_tasks` to a task that is already running. Like Linux's
+	/// `try_to_wake_up`, waking a task that is not blocked is a no-op.
+	pub fn custom_wakeup(&mut self, task: TaskHandle) -> Option<Rc<RefCell<Task>>> {
 		let mut first_task = true;
 		let mut cursor = self.list.cursor_front_mut();
 
@@ -584,14 +591,14 @@ impl BlockedTaskQueue {
 				// Wake it up.
 				Self::mark_ready(&task_ref);
 
-				return task_ref;
+				return Some(task_ref);
 			}
 
 			first_task = false;
 			cursor.move_next();
 		}
 
-		unreachable!();
+		None
 	}
 
 	/// Wakes up all tasks whose wakeup time has elapsed.
