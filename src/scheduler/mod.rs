@@ -58,6 +58,8 @@ static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>
 /// Map between Task ID and TaskHandle
 static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 	InterruptTicketMutex::new(BTreeMap::new());
+/// Count the number of spawned tasks
+static SPAWN_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -225,6 +227,16 @@ struct NewTask {
 	core_id: CoreId,
 	stacks: TaskStacks,
 	object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+	/// `Some` for a user-space thread, which shares the root page table and
+	/// the `pid` of its parent.
+	#[cfg(feature = "common-os")]
+	thread_of: Option<(Arc<RootPageTable>, ProcessId)>,
+	/// Per-process TLS template, cloned from the spawning thread.
+	#[cfg(feature = "common-os")]
+	tls_template: Option<Arc<TlsTemplate>>,
+	/// Thread pointer of the new thread. Zero means "do not install a thread pointer".
+	#[cfg(feature = "common-os")]
+	tls_base: u64,
 }
 
 impl From<NewTask> for Task {
@@ -237,7 +249,30 @@ impl From<NewTask> for Task {
 			core_id,
 			stacks,
 			object_map,
+			#[cfg(feature = "common-os")]
+			thread_of,
+			#[cfg(feature = "common-os")]
+			tls_template,
+			#[cfg(feature = "common-os")]
+			tls_base,
 		} = value;
+
+		#[cfg(feature = "common-os")]
+		if let Some((root_page_table, parent_pid)) = thread_of {
+			let mut task = Self::new_thread(
+				tid,
+				parent_pid,
+				core_id,
+				TaskStatus::Ready,
+				prio,
+				stacks,
+				object_map,
+				root_page_table,
+				tls_template,
+			);
+			task.create_user_stack_frame(func, arg, tls_base);
+			return task;
+		}
 
 		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks, object_map);
 		task.create_stack_frame(func, arg);
@@ -265,6 +300,12 @@ impl PerCoreScheduler {
 			core_id,
 			stacks,
 			object_map: core_scheduler().get_current_task_object_map(),
+			#[cfg(feature = "common-os")]
+			thread_of: None,
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(feature = "common-os")]
+			tls_base: 0,
 		};
 
 		// Add it to the task lists.
@@ -311,6 +352,92 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	/// Spawns a user-space thread that shares the current task's address space.
+	#[cfg(feature = "common-os")]
+	pub unsafe fn spawn_thread(
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		prio: Priority,
+		core_id: CoreId,
+		stack_size: usize,
+	) -> TaskId {
+		let tid = get_tid();
+		let stacks = TaskStacks::new(stack_size);
+
+		let (root_page_table, object_map, tls_template, parent_pid) = {
+			let current = core_scheduler().get_current_task();
+			let borrowed = current.borrow();
+			(
+				borrowed.root_page_table.clone(),
+				borrowed.object_map.clone(),
+				borrowed.tls_template.clone(),
+				borrowed.pid,
+			)
+		};
+
+		// Must run in the parent's address space, which is shared with the new thread.
+		let tls_base = if let Some(ref template) = tls_template {
+			crate::arch::mm::allocate_thread_tls(template)
+		} else {
+			0
+		};
+
+		let new_task = NewTask {
+			tid,
+			func,
+			arg,
+			prio,
+			core_id,
+			stacks,
+			object_map,
+			thread_of: Some((root_page_table, parent_pid)),
+			tls_template,
+			tls_base,
+		};
+
+		let wakeup = {
+			#[cfg(feature = "smp")]
+			let mut input_locked = get_scheduler_input(core_id).lock();
+			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(
+				tid,
+				TaskHandle::new(
+					tid,
+					prio,
+					#[cfg(feature = "smp")]
+					core_id,
+				),
+			);
+			NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+			#[cfg(feature = "smp")]
+			if core_id == core_scheduler().core_id {
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				input_locked.new_tasks.push_back(new_task);
+				true
+			}
+			#[cfg(not(feature = "smp"))]
+			if core_id == 0 {
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				panic!("Invalid core_id {core_id}!")
+			}
+		};
+
+		debug!("Creating user thread {tid} with priority {prio} on core {core_id}");
+
+		if wakeup {
+			kernel::wakeup_core(core_id);
+		}
+
+		tid
+	}
+
 	#[cfg(feature = "newlib")]
 	fn clone_impl(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
@@ -342,6 +469,12 @@ impl PerCoreScheduler {
 			core_id,
 			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
 			object_map: current_task_borrowed.object_map.clone(),
+			#[cfg(feature = "common-os")]
+			thread_of: None,
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+			#[cfg(feature = "common-os")]
+			tls_base: 0,
 		};
 
 		// Add it to the task lists.
@@ -979,16 +1112,32 @@ pub unsafe fn spawn(
 	stack_size: usize,
 	selector: isize,
 ) -> TaskId {
-	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
-
 	let core_id = if selector < 0 {
 		// use Round Robin to schedule the cores
-		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+		SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
 	} else {
 		selector as u32
 	};
 
 	unsafe { PerCoreScheduler::spawn(func, arg, prio, core_id, stack_size) }
+}
+
+/// Spawn a user-space thread that shares the current task's address space.
+#[cfg(feature = "common-os")]
+pub unsafe fn spawn_thread(
+	func: unsafe extern "C" fn(usize),
+	arg: usize,
+	prio: Priority,
+	stack_size: usize,
+	selector: isize,
+) -> TaskId {
+	let core_id = if selector < 0 {
+		SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+	} else {
+		selector as u32
+	};
+
+	unsafe { PerCoreScheduler::spawn_thread(func, arg, prio, core_id, stack_size) }
 }
 
 #[allow(clippy::result_unit_err)]

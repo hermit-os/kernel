@@ -48,6 +48,9 @@ pub extern "C" fn sys_getpid() -> Pid {
 
 	#[cfg(feature = "common-os")]
 	{
+		// Return the process ID — equal for every thread of the same
+		// process, set by `Task::new_thread` from the spawning thread's
+		// `pid` and reset to the new `tid` on fork.
 		core_scheduler().get_current_task().borrow().pid.into()
 	}
 }
@@ -198,7 +201,16 @@ pub unsafe extern "C" fn sys_spawn2(
 	stack_size: usize,
 	selector: isize,
 ) -> Tid {
-	unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
+	#[cfg(feature = "common-os")]
+	{
+		unsafe {
+			scheduler::spawn_thread(func, arg, Priority::from(prio), stack_size, selector).into()
+		}
+	}
+	#[cfg(not(feature = "common-os"))]
+	{
+		unsafe { scheduler::spawn(func, arg, Priority::from(prio), stack_size, selector).into() }
+	}
 }
 
 #[hermit_macro::system]
@@ -210,8 +222,16 @@ pub unsafe extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	let new_id = unsafe {
-		scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+	let new_id = {
+		#[cfg(feature = "common-os")]
+		unsafe {
+			scheduler::spawn_thread(func, arg, Priority::from(prio), USER_STACK_SIZE, selector)
+				.into()
+		}
+		#[cfg(not(feature = "common-os"))]
+		unsafe {
+			scheduler::spawn(func, arg, Priority::from(prio), USER_STACK_SIZE, selector).into()
+		}
 	};
 
 	if !id.is_null() {

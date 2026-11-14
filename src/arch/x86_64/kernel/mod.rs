@@ -172,7 +172,10 @@ const USER_STACK_SIZE: usize = 0x8000;
 #[cfg(feature = "common-os")]
 pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
 where
-	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> Result<(), ()>,
+	F: FnOnce(
+		&'static mut [u8],
+		Option<&'static mut [u8]>,
+	) -> Result<Option<alloc::vec::Vec<u8>>, ()>,
 {
 	use alloc::sync::Arc;
 
@@ -248,7 +251,18 @@ where
 		}
 		processor::writefs(thread_ptr.expose_provenance());
 
-		func(code_slice, Some(block))?;
+		let tls_init = func(code_slice, Some(block))?;
+
+		if let Some(init) = tls_init {
+			let template = Arc::new(crate::scheduler::task::TlsTemplate {
+				size: tls_offset,
+				init,
+			});
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.tls_template = Some(template);
+		}
 
 		Ok(())
 	} else {

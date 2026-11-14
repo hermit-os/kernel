@@ -402,13 +402,17 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	mut stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
-	use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
+	use core::arch::asm;
 
-	unsafe {
-		if stack_frame.as_mut().read().code_segment != SegmentSelector(0x08) {
-			core::arch::asm!("swapgs", options(nostack));
+	use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
+	let swapped_gs = unsafe {
+		if stack_frame.as_mut().read().code_segment == SegmentSelector(0x08) {
+			false
+		} else {
+			asm!("swapgs", options(nostack));
+			true
 		}
-	}
+	};
 
 	increment_irq_counter(14);
 
@@ -419,6 +423,22 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 		core_scheduler().get_current_task_id(),
 		faulting_addr
 	);
+
+	// A user thread whose entry function returns jumps to RIP = 0,
+	// which is treated as thread exit.
+	if error_code.contains(PageFaultErrorCode::USER_MODE)
+		&& error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+		&& faulting_addr.as_u64() == 0
+	{
+		debug!(
+			"User thread {} returned from entry; exiting cleanly.",
+			core_scheduler().get_current_task_id()
+		);
+		// Keep the kernel GS: `exit` does not return.
+		let _ = swapped_gs;
+		use crate::scheduler::PerCoreSchedulerExt;
+		core_scheduler().exit(0);
+	}
 
 	error!("Page fault (#PF)!");
 	error!("page_fault_linear_address = {faulting_addr:p}");

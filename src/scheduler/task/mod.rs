@@ -6,6 +6,8 @@ pub(crate) mod tls;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
+#[cfg(feature = "common-os")]
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
 use core::{cmp, fmt};
@@ -441,6 +443,16 @@ impl PriorityTaskQueue {
 	}
 }
 
+/// Per-process TLS template used to initialize the TLS of new threads.
+///
+/// `size` is the size of the TLS data block and `init` the TLS image of the
+/// freshly loaded binary.
+#[cfg(feature = "common-os")]
+pub(crate) struct TlsTemplate {
+	pub size: usize,
+	pub init: Vec<u8>,
+}
+
 /// A task control block, which identifies either a process or a thread
 #[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
 #[cfg_attr(
@@ -475,6 +487,9 @@ pub(crate) struct Task {
 	// Root page table, shared by all threads of the process.
 	#[cfg(feature = "common-os")]
 	pub root_page_table: Arc<RootPageTable>,
+	/// Per-process TLS template; `None` without a `PT_TLS` segment.
+	#[cfg(feature = "common-os")]
+	pub tls_template: Option<Arc<TlsTemplate>>,
 }
 
 pub(crate) trait TaskFrame {
@@ -509,6 +524,8 @@ impl Task {
 			tls: None,
 			#[cfg(feature = "common-os")]
 			root_page_table: Arc::new(RootPageTable::new(arch::mm::create_new_root_page_table())),
+			#[cfg(feature = "common-os")]
+			tls_template: None,
 		}
 	}
 
@@ -575,6 +592,39 @@ impl Task {
 			root_page_table: Arc::new(RootPageTable::new_boot(
 				*crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
 			)),
+			#[cfg(feature = "common-os")]
+			tls_template: None,
+		}
+	}
+
+	/// Creates a user-space thread that shares the address space and `pid` of its parent.
+	#[cfg(feature = "common-os")]
+	#[allow(clippy::too_many_arguments)]
+	pub fn new_thread(
+		tid: TaskId,
+		parent_pid: ProcessId,
+		core_id: CoreId,
+		task_status: TaskStatus,
+		task_prio: Priority,
+		stacks: TaskStacks,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+		root_page_table: Arc<RootPageTable>,
+		tls_template: Option<Arc<TlsTemplate>>,
+	) -> Task {
+		debug!("Creating user thread {tid} (pid {parent_pid}) on core {core_id}");
+		Task {
+			id: tid,
+			pid: parent_pid,
+			status: task_status,
+			prio: task_prio,
+			last_stack_pointer: VirtAddr::zero(),
+			user_stack_pointer: VirtAddr::zero(),
+			last_fpu_state: FPUState::new(),
+			core_id,
+			stacks,
+			object_map,
+			root_page_table,
+			tls_template,
 		}
 	}
 }

@@ -128,11 +128,19 @@ impl TaskStacks {
 		);
 
 		// map user stack into the address space
+		#[cfg(feature = "common-os")]
+		let user_flags = {
+			let mut f = PageTableEntryFlags::normal();
+			f.user();
+			f
+		};
+		#[cfg(not(feature = "common-os"))]
+		let user_flags = flags;
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
-			flags,
+			user_flags,
 		);
 
 		// clear user stack
@@ -263,6 +271,64 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Exit task
 	debug!("Exit thread with error code 0!");
 	core_scheduler().exit(0)
+}
+
+/// Entry trampoline of a new user-space thread.
+///
+/// Crafts an `iretq` frame to enter `func(arg)` in ring 3 on the new user stack.
+#[cfg(feature = "common-os")]
+#[unsafe(naked)]
+extern "C" fn task_start_user(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
+	// rdi = func (user entry)
+	// rsi = arg  (forwarded as first argument to `func`)
+	// rdx = user stack pointer
+	naked_asm!(
+		"swapgs",
+		"push 0x23",    // user SS
+		"push rdx",     // user RSP
+		"push 0x1202",  // RFLAGS (IF=1)
+		"push 0x2b",    // user CS
+		"push rdi",     // RIP = user func
+		"mov rdi, rsi", // first argument for user func
+		"iretq",
+	)
+}
+
+#[cfg(feature = "common-os")]
+impl Task {
+	/// Builds the initial kernel-stack context of a new user-space thread.
+	pub(crate) fn create_user_stack_frame(
+		&mut self,
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		tls_fs_base: u64,
+	) {
+		unsafe {
+			// Debug marker at the very top of the kernel stack.
+			let mut stack = self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			stack -= size_of::<State>();
+			let state = stack.as_mut_ptr::<State>();
+			state.cast::<u8>().write_bytes(0, size_of::<State>());
+
+			(*state).rip = task_start_user;
+			(*state).rdi = func as usize as u64;
+			(*state).rsi = arg as u64;
+			(*state).rflags = 0x1202u64;
+			(*state).fs = tls_fs_base;
+
+			self.last_stack_pointer = stack.into();
+			self.user_stack_pointer = (self.stacks.get_user_stack()
+				+ self.stacks.get_user_stack_size()
+				- TaskStacks::MARKER_SIZE)
+				.into();
+
+			// rdx is used by task_start_user as the new user-mode RSP
+			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;
+		}
+	}
 }
 
 impl TaskFrame for Task {
