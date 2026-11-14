@@ -405,7 +405,9 @@ pub unsafe extern "C" fn sys_readv(fd: RawFd, iov: *const iovec, iovcnt: usize) 
 		);
 
 		if len < 0 {
-			return len;
+			// Report the bytes already transferred instead of the error (#2747).
+			// Otherwise the caller retries data that was already read or written.
+			return if read_bytes > 0 { read_bytes } else { len };
 		}
 
 		read_bytes += len;
@@ -482,7 +484,13 @@ pub unsafe extern "C" fn sys_writev(fd: RawFd, iov: *const iovec, iovcnt: usize)
 		);
 
 		if len < 0 {
-			return len;
+			// Report the bytes already transferred instead of the error (#2747).
+			// Otherwise the caller retries data that was already read or written.
+			return if written_bytes > 0 {
+				written_bytes
+			} else {
+				len
+			};
 		}
 
 		written_bytes += len;
