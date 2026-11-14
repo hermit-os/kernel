@@ -10,7 +10,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
-use core::{mem, str};
+use core::{hint, mem, ptr, str};
 
 use fuse_abi::linux::fuse_out_header;
 use num_enum::TryFromPrimitive;
@@ -30,7 +30,7 @@ use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
 use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
-	AvailBufferToken, BufferElem, BufferType, VirtQueue, Virtq,
+	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
 };
 use crate::drivers::{Driver, InterruptHandlerMap};
 use crate::errno::Errno;
@@ -48,6 +48,9 @@ pub(crate) struct VirtioFsDriver {
 	pub(super) dev_cfg: FsDevCfg,
 	pub(super) caps_coll: UniCapsColl,
 	pub(super) vqueues: Vec<VirtQueue>,
+	/// Used buffers of the request queue that were received while waiting for
+	/// another request, together with the address of their first buffer.
+	completed: Vec<(usize, UsedBufferToken)>,
 }
 
 // Backend-independent interface for Virtio network driver
@@ -84,7 +87,7 @@ impl super::virtio::VirtioDriver for VirtioFsDriver {
 
 			// create the queues and tell device about them
 			for i in 0..vqnum as u16 {
-				let vq = VirtQueue::Split(
+				let mut vq = VirtQueue::Split(
 					SplitVq::new(
 						&mut caps_coll.com_cfg,
 						&caps_coll.notif_cfg,
@@ -94,6 +97,8 @@ impl super::virtio::VirtioDriver for VirtioFsDriver {
 					)
 					.unwrap(),
 				);
+				// Requests are completed by polling the used ring (see `send_command`).
+				vq.disable_notifs();
 				vqueues.push(vq);
 			}
 
@@ -135,6 +140,7 @@ impl super::virtio::VirtioDriver for VirtioFsDriver {
 			dev_cfg,
 			caps_coll,
 			vqueues,
+			completed: Vec::new(),
 		})
 	}
 
@@ -172,9 +178,12 @@ impl VirtioFsDriver {
 	}
 }
 
-impl VirtioFsInterface for VirtioFsDriver {
-	fn send_command<O: virtio_fs::ops::Op + 'static>(
-		&mut self,
+impl VirtioFsDriver {
+	/// Sends a command to the device and waits for the response.
+	///
+	/// Several commands may be in flight at the same time, e.g. from tasks on
+	/// different cores.
+	pub(crate) fn send_command<O: virtio_fs::ops::Op + 'static>(
 		cmd: virtio_fs::Cmd<O>,
 		rsp_payload_len: u32,
 	) -> Result<Rsp<O>, VirtioFsError>
@@ -182,6 +191,8 @@ impl VirtioFsInterface for VirtioFsDriver {
 		<O as virtio_fs::ops::Op>::InStruct: Send,
 		<O as virtio_fs::ops::Op>::OutStruct: Send,
 	{
+		let driver = get_filesystem_driver().ok_or(VirtioFsError::IOError(Errno::Nosys))?;
+
 		let virtio_fs::Cmd {
 			headers: cmd_headers,
 			payload: cmd_payload_opt,
@@ -202,6 +213,8 @@ impl VirtioFsInterface for VirtioFsDriver {
 		// the op_header field is MaybeUninit
 		let rsp_headers =
 			Box::<RspHeader<O, MaybeUninit<O::OutStruct>>, _>::new_uninit_in(DeviceAlloc);
+		// identifies the used buffer of this request
+		let rsp_addr = ptr::from_ref(&*rsp_headers).addr();
 		let recv = if rsp_payload_len == 0 {
 			let mut vec = SmallVec::new();
 			vec.push(BufferElem::Sized(rsp_headers));
@@ -214,8 +227,18 @@ impl VirtioFsInterface for VirtioFsDriver {
 		};
 
 		let buffer_tkn = AvailBufferToken::new(send, recv).unwrap();
-		let mut transfer_result =
-			self.vqueues[1].dispatch_blocking(buffer_tkn, BufferType::Direct)?;
+
+		// The driver is only locked while the request queue is accessed, not while
+		// the device processes the request. Otherwise, every core accessing a file
+		// would wait for the device and then for the other cores, with interrupts
+		// disabled, and no other task could run on these cores in the meantime.
+		driver.lock().vqueues[1].dispatch(buffer_tkn, false, BufferType::Direct)?;
+		let mut transfer_result = loop {
+			if let Some(tkn) = driver.lock().take_used(rsp_addr) {
+				break tkn;
+			}
+			hint::spin_loop();
+		};
 
 		let (dyn_headers, written_header_len) =
 			transfer_result.used_recv_buff.pop_front_raw().unwrap();
@@ -251,6 +274,28 @@ impl VirtioFsInterface for VirtioFsDriver {
 		Ok(Rsp { headers, payload })
 	}
 
+	/// Returns the used buffer whose first buffer is at `addr`, if the device
+	/// has completed that request.
+	///
+	/// Used buffers of other requests are kept for the tasks waiting for them.
+	fn take_used(&mut self, addr: usize) -> Option<UsedBufferToken> {
+		if let Some(i) = self.completed.iter().position(|(a, _)| *a == addr) {
+			return Some(self.completed.swap_remove(i).1);
+		}
+
+		while let Ok(tkn) = self.vqueues[1].try_recv() {
+			let tkn_addr = tkn.used_recv_buff.front_addr().unwrap();
+			if tkn_addr == addr {
+				return Some(tkn);
+			}
+			self.completed.push((tkn_addr, tkn));
+		}
+
+		None
+	}
+}
+
+impl VirtioFsInterface for VirtioFsDriver {
 	fn get_mount_point(&self) -> String {
 		let tag = self.dev_cfg.raw.as_ptr().tag().read();
 		let tag = str::from_utf8(&tag).unwrap();
