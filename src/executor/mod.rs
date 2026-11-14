@@ -93,17 +93,22 @@ impl Wake for TaskNotify {
 	}
 }
 
-pub(crate) fn run() {
+/// Runs up to three ticks of the core-local executor.
+///
+/// Returns `true` if every tick ran a task, i.e. the executor likely still has
+/// runnable tasks and the core should not halt yet (see #2729).
+pub(crate) fn run() -> bool {
 	without_interrupts(|| {
 		// FIXME: We currently have no more than 3 tasks at a time, so this is fine.
 		// Ideally, we would set this value to 200, but the network task currently immediately wakes up again.
 		// This would lead to the network task being polled 200 times back to back, slowing things down considerably.
 		for _ in 0..3 {
 			if !core_local::ex().try_tick() {
-				break;
+				return false;
 			}
 		}
-	});
+		true
+	})
 }
 
 /// Spawns a future on the executor.
