@@ -1,5 +1,6 @@
 use core::arch::naked_asm;
 
+use crate::mm::vma::sys_mmap;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 use crate::syscalls::socket::addrinfo::*;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
@@ -87,6 +88,7 @@ const SYSNO_FREEADDRINFO: usize = 53;
 const SYSNO_AVAILABLE_PARALLELISM: usize = 54;
 const SYSNO_GET_DENTS64: usize = 55;
 const SYSNO_EXEC: usize = 56;
+const SYSNO_MMAP: usize = 57;
 
 /// Total number of system calls
 pub(crate) const NO_SYSCALLS: usize = 64;
@@ -196,6 +198,7 @@ impl SyscallTable {
 		table.handle[SYSNO_AVAILABLE_PARALLELISM] = sys_available_parallelism as *const _;
 		table.handle[SYSNO_GET_DENTS64] = sys_getdents64 as *const _;
 		table.handle[SYSNO_EXEC] = sys_exec as *const _;
+		table.handle[SYSNO_MMAP] = sys_mmap as *const _;
 
 		table
 	}

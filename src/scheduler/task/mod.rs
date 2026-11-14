@@ -3,6 +3,8 @@
 #[cfg(not(feature = "common-os"))]
 pub(crate) mod tls;
 
+#[cfg(feature = "common-os")]
+use alloc::collections::BTreeMap;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
@@ -34,6 +36,8 @@ use crate::arch::kernel::scheduler::TaskStacks;
 #[cfg(not(feature = "common-os"))]
 use crate::fd::stdio;
 use crate::fd::{Fd, RawFd};
+#[cfg(feature = "common-os")]
+use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::CoreId;
 
 /// A process's root page table, shared by its threads and released with the last one.
@@ -490,6 +494,8 @@ pub(crate) struct Task {
 	/// Per-process TLS template; `None` without a `PT_TLS` segment.
 	#[cfg(feature = "common-os")]
 	pub tls_template: Option<Arc<TlsTemplate>>,
+	#[cfg(feature = "common-os")]
+	pub vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 }
 
 pub(crate) trait TaskFrame {
@@ -526,6 +532,8 @@ impl Task {
 			root_page_table: Arc::new(RootPageTable::new(arch::mm::create_new_root_page_table())),
 			#[cfg(feature = "common-os")]
 			tls_template: None,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		}
 	}
 
@@ -594,6 +602,8 @@ impl Task {
 			)),
 			#[cfg(feature = "common-os")]
 			tls_template: None,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		}
 	}
 
@@ -610,6 +620,7 @@ impl Task {
 		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		root_page_table: Arc<RootPageTable>,
 		tls_template: Option<Arc<TlsTemplate>>,
+		vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 	) -> Task {
 		debug!("Creating user thread {tid} (pid {parent_pid}) on core {core_id}");
 		Task {
@@ -625,6 +636,7 @@ impl Task {
 			object_map,
 			root_page_table,
 			tls_template,
+			vmas,
 		}
 	}
 }

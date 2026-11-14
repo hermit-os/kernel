@@ -45,6 +45,8 @@ mod mapped_page_box;
 pub(crate) mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
+#[cfg(feature = "common-os")]
+pub(crate) mod vma;
 
 use core::alloc::Layout;
 use core::mem::MaybeUninit;

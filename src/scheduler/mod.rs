@@ -17,6 +17,8 @@ use hermit_sync::*;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
+#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+use x86_64::VirtAddr;
 
 use crate::arch::kernel;
 use crate::arch::kernel::core_local::*;
@@ -31,6 +33,8 @@ use crate::arch::kernel::{get_processor_count, interrupts};
 use crate::errno::Errno;
 use crate::fd::{Fd, RawFd};
 use crate::io;
+#[cfg(feature = "common-os")]
+use crate::mm::vma::VirtualMemoryArea;
 use crate::scheduler::task::*;
 
 #[cfg(all(
@@ -237,6 +241,8 @@ struct NewTask {
 	/// Thread pointer of the new thread. Zero means "do not install a thread pointer".
 	#[cfg(feature = "common-os")]
 	tls_base: u64,
+	#[cfg(feature = "common-os")]
+	vmas: Arc<RwSpinLock<BTreeMap<VirtAddr, VirtualMemoryArea>>>,
 }
 
 impl From<NewTask> for Task {
@@ -255,6 +261,8 @@ impl From<NewTask> for Task {
 			tls_template,
 			#[cfg(feature = "common-os")]
 			tls_base,
+			#[cfg(feature = "common-os")]
+			vmas,
 		} = value;
 
 		#[cfg(feature = "common-os")]
@@ -269,6 +277,7 @@ impl From<NewTask> for Task {
 				object_map,
 				root_page_table,
 				tls_template,
+				vmas,
 			);
 			task.create_user_stack_frame(func, arg, tls_base);
 			return task;
@@ -306,6 +315,8 @@ impl PerCoreScheduler {
 			tls_template: None,
 			#[cfg(feature = "common-os")]
 			tls_base: 0,
+			#[cfg(feature = "common-os")]
+			vmas: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		};
 
 		// Add it to the task lists.
@@ -364,13 +375,14 @@ impl PerCoreScheduler {
 		let tid = get_tid();
 		let stacks = TaskStacks::new(stack_size);
 
-		let (root_page_table, object_map, tls_template, parent_pid) = {
+		let (root_page_table, object_map, tls_template, vmas, parent_pid) = {
 			let current = core_scheduler().get_current_task();
 			let borrowed = current.borrow();
 			(
 				borrowed.root_page_table.clone(),
 				borrowed.object_map.clone(),
 				borrowed.tls_template.clone(),
+				borrowed.vmas.clone(),
 				borrowed.pid,
 			)
 		};
@@ -393,6 +405,7 @@ impl PerCoreScheduler {
 			thread_of: Some((root_page_table, parent_pid)),
 			tls_template,
 			tls_base,
+			vmas,
 		};
 
 		let wakeup = {

@@ -188,6 +188,7 @@ where
 
 	use crate::arch::mm::paging::{self, PageTableEntryFlags, PageTableEntryFlagsExt};
 	use crate::fd::{Fd, RawFd, stdio};
+	use crate::mm::vma::*;
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 	// Each process has its own object map.
@@ -210,6 +211,27 @@ where
 		code_size / BasePageSize::SIZE as usize,
 		flags,
 	);
+	// vma.rs uses `x86_64::VirtAddr`.
+	{
+		let start: x86_64::VirtAddr = USER_START.into();
+		let end: x86_64::VirtAddr = (USER_START + code_size).align_up(BasePageSize::SIZE).into();
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				start,
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ
+						| VirtualMemoryAreaProt::WRITE
+						| VirtualMemoryAreaProt::EXECUTE,
+					MemoryType::CODE,
+				),
+			);
+	}
 
 	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
 	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
@@ -237,6 +259,25 @@ where
 			tls_memsz / BasePageSize::SIZE as usize,
 			flags,
 		);
+
+		{
+			let start: x86_64::VirtAddr = tls_virt.into();
+			let end: x86_64::VirtAddr = (tls_virt + tls_memsz).align_up(BasePageSize::SIZE).into();
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.vmas
+				.write()
+				.insert(
+					start,
+					VirtualMemoryArea::new(
+						start,
+						end,
+						VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+						MemoryType::TLS,
+					),
+				);
+		}
 
 		let block =
 			unsafe { slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tcb_size) };
@@ -286,6 +327,7 @@ pub unsafe fn jump_to_user_land(
 	use crate::arch::kernel::scheduler::TaskStacks;
 	use crate::arch::mm::paging;
 	use crate::arch::x86_64::mm::paging::PageTableEntryFlagsExt;
+	use crate::mm::vma::*;
 	use crate::mm::{FrameAlloc, PageRangeAllocator};
 
 	debug!("Create new file descriptor table");
@@ -305,6 +347,24 @@ pub unsafe fn jump_to_user_land(
 		USER_STACK_SIZE / BasePageSize::SIZE as usize,
 		flags,
 	);
+	{
+		let start: x86_64::VirtAddr = USER_STACK.into();
+		let end: x86_64::VirtAddr = (USER_STACK + USER_STACK_SIZE).into();
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				start,
+				VirtualMemoryArea::new(
+					start,
+					end,
+					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+					MemoryType::STACK,
+				),
+			);
+	}
 
 	// argv and envp are null-terminated pointer arrays on the user stack.
 	let ptr_count = args.len() + 1 + envs.len() + 1;

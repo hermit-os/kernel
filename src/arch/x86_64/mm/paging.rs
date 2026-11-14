@@ -367,6 +367,12 @@ pub fn clear_user_space() {
 	use crate::fd::STDERR_FILENO;
 
 	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
+		.clear();
+	core_scheduler()
 		.get_current_task_object_map()
 		.write()
 		.retain(|&k, _| k <= STDERR_FILENO);
@@ -417,12 +423,63 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	increment_irq_counter(14);
 
 	let faulting_addr = Cr2::read().unwrap();
+	let virtaddr = faulting_addr.align_down(BasePageSize::SIZE);
 
 	debug!(
 		"Task {} triggers a page fault at {:p}.",
 		core_scheduler().get_current_task_id(),
 		faulting_addr
 	);
+
+	{
+		use core::ops::Bound;
+
+		use crate::mm::vma::VirtualMemoryAreaProt;
+
+		let current_task = core_scheduler().get_current_task();
+		let current_task_borrowed = current_task.borrow();
+		let guard = current_task_borrowed.vmas.read();
+
+		if let Some((_, vma)) = guard
+			.range((Bound::Unbounded, Bound::Included(virtaddr)))
+			.next_back()
+			&& virtaddr >= vma.start
+			&& virtaddr < vma.end
+		{
+			let layout = PageLayout::from_size_align(
+				BasePageSize::SIZE as usize,
+				BasePageSize::SIZE as usize,
+			)
+			.unwrap();
+			let frame_range = FrameAlloc::allocate(layout).unwrap();
+			let physaddr = PhysAddr::from(frame_range.start());
+			let mut flags = PageTableEntryFlags::normal();
+			flags
+				.user()
+				.set_writable(vma.prot.contains(VirtualMemoryAreaProt::WRITE))
+				.set_execute(vma.prot.contains(VirtualMemoryAreaProt::EXECUTE));
+
+			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
+
+			// clear page
+			let slice = unsafe {
+				core::slice::from_raw_parts_mut(
+					virtaddr.as_mut_ptr::<u8>().cast::<u8>(),
+					BasePageSize::SIZE as usize,
+				)
+			};
+			slice.fill(0);
+
+			// Restore the user GS before returning to ring 3.
+			if swapped_gs {
+				unsafe {
+					core::arch::asm!("swapgs", options(nostack));
+				}
+			}
+
+			return;
+		}
+	}
 
 	// A user thread whose entry function returns jumps to RIP = 0,
 	// which is treated as thread exit.
