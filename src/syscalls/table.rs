@@ -134,10 +134,10 @@ pub(crate) unsafe extern "C" fn sys_invalid() {
 	);
 }
 
-/// Placeholder for unregistered syscall slots on aarch64.
+/// Placeholder for unregistered syscall slots on aarch64 and riscv64.
 ///
-/// The dispatcher only compares against its address and never calls it.
-#[cfg(target_arch = "aarch64")]
+/// The dispatchers only compare against its address and never call it.
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 #[unsafe(no_mangle)]
 pub(crate) extern "C" fn sys_invalid() {}
 
@@ -216,7 +216,7 @@ impl SyscallTable {
 }
 
 impl SyscallTable {
-	#[cfg(target_arch = "aarch64")]
+	#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 	#[inline]
 	pub(crate) fn handler(&self, nr: usize) -> *const usize {
 		self.handle[nr]

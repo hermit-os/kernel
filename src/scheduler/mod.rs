@@ -16,6 +16,8 @@ use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
 #[cfg(target_arch = "aarch64")]
 use memory_addresses::VirtAddr;
+#[cfg(all(target_arch = "riscv64", feature = "common-os"))]
+use memory_addresses::VirtAddr;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
@@ -663,7 +665,11 @@ impl PerCoreScheduler {
 	/// clone the standard descriptors.
 	#[cfg(feature = "common-os")]
 	#[cfg_attr(
-		not(any(target_arch = "x86_64", target_arch = "aarch64")),
+		not(any(
+			target_arch = "x86_64",
+			target_arch = "aarch64",
+			target_arch = "riscv64"
+		)),
 		expect(dead_code)
 	)]
 	pub fn recreate_objmap(&self) -> io::Result<()> {
@@ -1042,6 +1048,21 @@ impl PerCoreScheduler {
 			}
 			task.borrow().last_fpu_state.restore();
 
+			// Install the new task's address space before switching to
+			// its kernel stack.
+			#[cfg(feature = "common-os")]
+			{
+				use riscv::register::satp;
+
+				let new_ppn = task.borrow().root_page_table.as_usize() >> 12;
+				if satp::read().ppn() != new_ppn {
+					unsafe {
+						satp::set(satp::Mode::Sv39, 0, new_ppn);
+						riscv::asm::sfence_vma_all();
+					}
+				}
+			}
+
 			self.current_task = task;
 			unsafe {
 				switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
@@ -1307,6 +1328,102 @@ pub unsafe fn fork() -> TaskId {
 
 	if wakeup {
 		kernel::wakeup_core(core_id);
+	}
+
+	debug!("Child was created and has the id {tid}");
+
+	tid
+}
+
+/// Forks the current task from its saved user-mode context (riscv64).
+///
+/// The child gets a fresh kernel stack and resumes user mode with a copy of
+/// the parent's `UserContext`.
+///
+/// Returns the child's `TaskId`; only the parent executes this function.
+#[cfg(all(target_arch = "riscv64", feature = "common-os", feature = "fork"))]
+pub unsafe fn fork_from_user_context(parent_ctx: &trapframe::UserContext) -> TaskId {
+	use crate::arch::mm::{copy_current_root_page_table, prepare_mem_copy_on_write};
+
+	let core_id = SPAWN_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count();
+
+	// Mark user pages COW before copying the page table.
+	prepare_mem_copy_on_write();
+	let child_root_page_table = copy_current_root_page_table();
+
+	let stack_size = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_user_stack_size();
+	let stacks = TaskStacks::new(stack_size);
+
+	// `fork` returns 0 in the child.
+	let mut child_ctx = Box::new(*parent_ctx);
+	child_ctx.general.a0 = 0;
+	let child_last_sp = kernel::scheduler::create_fork_stack_frame(&stacks, child_ctx);
+
+	let tid = get_tid();
+	let parent_user_sp = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.user_stack_pointer;
+	let parent_prio = core_scheduler().get_current_task().borrow().prio;
+	let parent_object_map = Arc::new(RwSpinLock::new(HashMap::<
+		RawFd,
+		Arc<async_lock::RwLock<Fd>>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(
+		0, 0, 0, 0,
+	))));
+	for (key, val) in core_scheduler().get_current_task_object_map().read().iter() {
+		parent_object_map.write().insert(*key, val.clone());
+	}
+	let parent_tls_template = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.tls_template
+		.clone();
+	let parent_vmas = Arc::new(RwSpinLock::new(
+		core_scheduler()
+			.get_current_task()
+			.borrow()
+			.vmas
+			.read()
+			.clone(),
+	));
+
+	let child_task = Task::new_fork(
+		tid,
+		core_id,
+		TaskStatus::Ready,
+		parent_prio,
+		stacks,
+		child_last_sp,
+		parent_user_sp,
+		parent_object_map,
+		Arc::new(RootPageTable::new(child_root_page_table)),
+		parent_tls_template,
+		parent_vmas,
+	);
+
+	{
+		#[cfg(feature = "smp")]
+		let _input_locked = get_scheduler_input(core_id).lock();
+		WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+		TASKS.lock().insert(
+			tid,
+			TaskHandle::new(
+				tid,
+				parent_prio,
+				#[cfg(feature = "smp")]
+				core_id,
+			),
+		);
+		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+		let task = Rc::new(RefCell::new(child_task));
+		core_scheduler().ready_queue.push(task);
 	}
 
 	debug!("Child was created and has the id {tid}");

@@ -64,7 +64,12 @@ bitflags! {
 
 // The user heap must be in the same L0 slot as the user binary (below
 // 0x0180_0000_0000): on aarch64, only this slot is copied on fork.
+#[cfg(not(target_arch = "riscv64"))]
 const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x0140_0000_0000);
+
+// Sv39 only covers 256 GiB: code at 64 GiB, heap at 128 GiB, stack below 192 GiB.
+#[cfg(target_arch = "riscv64")]
+const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x20_0000_0000);
 
 /// Creates a new virtual memory mapping of the `size` specified with
 /// protection bits specified in `prot_flags`.

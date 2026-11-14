@@ -18,6 +18,8 @@ pub type Pid = i32;
 
 /// Fork the current process.
 /// Returns the child's PID to the parent, and 0 to the child.
+///
+/// On riscv64, `user_loop` dispatches fork directly and this entry reports `ENOSYS`.
 #[cfg(feature = "common-os")]
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]

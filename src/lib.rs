@@ -141,7 +141,11 @@ mod acpi;
 pub mod arch;
 #[cfg(all(
 	feature = "common-os",
-	any(target_arch = "x86_64", target_arch = "aarch64")
+	any(
+		target_arch = "x86_64",
+		target_arch = "aarch64",
+		target_arch = "riscv64"
+	)
 ))]
 pub mod common_os;
 pub mod config;
