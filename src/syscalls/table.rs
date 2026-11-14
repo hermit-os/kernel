@@ -92,6 +92,7 @@ const SYSNO_GET_DENTS64: usize = 55;
 const SYSNO_EXEC: usize = 56;
 const SYSNO_MMAP: usize = 57;
 const SYSNO_PIPE: usize = 58;
+const SYSNO_FSYNC: usize = 59;
 
 /// Total number of system calls
 pub(crate) const NO_SYSCALLS: usize = 64;
@@ -212,6 +213,7 @@ impl SyscallTable {
 		table.handle[SYSNO_EXEC] = sys_exec as *const _;
 		table.handle[SYSNO_MMAP] = sys_mmap as *const _;
 		table.handle[SYSNO_PIPE] = sys_pipe as *const _;
+		table.handle[SYSNO_FSYNC] = sys_fsync as *const _;
 
 		table
 	}
