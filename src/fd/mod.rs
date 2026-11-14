@@ -26,6 +26,8 @@ use crate::syscalls::socket::{Ipproto, SOL_SOCKET, socklen_t};
 mod delegate;
 mod eventfd;
 pub(crate) mod null_file;
+#[cfg(feature = "common-os")]
+pub(crate) mod pipe;
 pub(crate) mod random_file;
 #[cfg(any(feature = "net", feature = "virtio-vsock"))]
 pub(crate) mod socket;
@@ -585,6 +587,24 @@ pub fn eventfd(initval: u64, flags: EventFlags) -> io::Result<RawFd> {
 	let fd = core_scheduler().insert_object(Arc::new(async_lock::RwLock::new(obj.into())))?;
 
 	Ok(fd)
+}
+
+/// Creates a unidirectional pipe and returns the file descriptors `(read_fd, write_fd)`.
+#[cfg(feature = "common-os")]
+pub(crate) fn pipe() -> io::Result<(RawFd, RawFd)> {
+	let (receiver, sender) = pipe::pipe();
+
+	let read_fd = insert_object(Arc::new(async_lock::RwLock::new(receiver.into())))?;
+	let write_fd = match insert_object(Arc::new(async_lock::RwLock::new(sender.into()))) {
+		Ok(fd) => fd,
+		Err(e) => {
+			// Undo the read end so we don't leak a descriptor on failure.
+			drop(remove_object(read_fd));
+			return Err(e);
+		}
+	};
+
+	Ok((read_fd, write_fd))
 }
 
 pub(crate) fn get_object(fd: RawFd) -> io::Result<Arc<async_lock::RwLock<Fd>>> {
