@@ -42,7 +42,7 @@
 
 pub(crate) mod device_alloc;
 mod mapped_page_box;
-mod page_range_alloc;
+pub(crate) mod page_range_alloc;
 mod physicalmem;
 mod virtualmem;
 

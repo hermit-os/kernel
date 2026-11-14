@@ -14,11 +14,42 @@ use crate::{arch, scheduler};
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = i32;
+pub type Pid = i32;
+
+/// Waitpid block the current process until termination of process `pid`.
+/// Returns 0 is the process terminates
+#[cfg(feature = "common-os")]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_waitpid(pid: Pid) -> i32 {
+	match scheduler::join(TaskId::from(pid)) {
+		Ok(()) => 0,
+		_ => -i32::from(Errno::Inval),
+	}
+}
+
+/// Waitpid block the current process until termination of process `pid`.
+/// In case of a unikernel, this system call always fail.
+#[cfg(not(feature = "common-os"))]
+#[hermit_macro::system(errno)]
+#[unsafe(no_mangle)]
+pub extern "C" fn sys_waitpid(_pid: Pid) -> i32 {
+	-i32::from(Errno::Nosys)
+}
 
 #[hermit_macro::system]
 #[unsafe(no_mangle)]
-pub extern "C" fn sys_getpid() -> Tid {
-	0
+pub extern "C" fn sys_getpid() -> Pid {
+	#[cfg(not(feature = "common-os"))]
+	{
+		// an unikernel doesn't have a pid => return always 0
+		0
+	}
+
+	#[cfg(feature = "common-os")]
+	{
+		core_scheduler().get_current_task().borrow().pid.into()
+	}
 }
 
 #[cfg(feature = "newlib")]
@@ -43,7 +74,11 @@ pub unsafe extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 fn exit(arg: i32) -> ! {
 	debug!("Exit program with error code {arg}!");
-	super::shutdown(arg)
+	if cfg!(not(feature = "common-os")) {
+		super::shutdown(arg)
+	} else {
+		core_scheduler().exit(arg)
+	}
 }
 
 #[hermit_macro::system]
@@ -132,7 +167,7 @@ pub unsafe extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg
 	0
 }
 
-#[hermit_macro::system(errno)]
+#[hermit_macro::system]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_yield() {
 	core_scheduler().reschedule();

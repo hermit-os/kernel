@@ -12,11 +12,11 @@ use crate::arch::kernel::{apic, interrupts};
 use crate::arch::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
+use crate::arch::x86_64::swapgs;
 use crate::config::*;
 use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::scheduler::{PerCoreSchedulerExt, timer_interrupts};
-
 #[repr(C, packed)]
 struct State {
 	#[cfg(feature = "common-os")]
@@ -297,10 +297,11 @@ impl TaskFrame for Task {
 			(*state).rflags = 0x1202u64;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
-			self.last_stack_pointer = stack;
-			self.user_stack_pointer = self.stacks.get_user_stack()
+			self.last_stack_pointer = stack.into();
+			self.user_stack_pointer = (self.stacks.get_user_stack()
 				+ self.stacks.get_user_stack_size()
-				- TaskStacks::MARKER_SIZE;
+				- TaskStacks::MARKER_SIZE)
+				.into();
 
 			// rdx is required to initialize the stack
 			(*state).rdx = self.user_stack_pointer.as_u64() - size_of::<u64>() as u64;
@@ -308,7 +309,8 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStackFrame) {
+extern "x86-interrupt" fn timer_handler(stack_frame: interrupts::ExceptionStackFrame) {
+	swapgs(&stack_frame);
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
 
 	debug!("Handle timer interrupt");
@@ -317,6 +319,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().reschedule();
+	swapgs(&stack_frame);
 }
 
 pub fn install_timer_handler() {

@@ -2,6 +2,8 @@ use core::{fmt, ptr};
 
 use free_list::PageLayout;
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
+#[cfg(feature = "common-os")]
+use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -91,6 +93,7 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
+		self.insert(PageTableEntryFlags::GLOBAL);
 		self
 	}
 }
@@ -284,6 +287,102 @@ where
 	}
 }
 
+#[cfg(feature = "common-os")]
+fn clear_pml4(pml4_phys: usize) {
+	fn free_frame(phys: usize) {
+		let range = free_list::PageRange::new(phys, phys + free_list::PAGE_SIZE).unwrap();
+		unsafe { FrameAlloc::deallocate(range) };
+	}
+
+	// Usually called from another task's context, so Cr3 does not point to this table.
+	let pml4 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_phys) };
+
+	// Entry 0 is the low kernel mapping, entry 511 the self-reference.
+	for pml4_idx in 1..511usize {
+		let pml4_entry = &mut pml4[pml4_idx];
+		if !pml4_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+			continue;
+		}
+		let pdpt_phys = pml4_entry.addr().as_u64() as usize;
+		let pdpt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pdpt_phys) };
+
+		for pdpt_idx in 0..512usize {
+			let pdpt_entry = &mut pdpt[pdpt_idx];
+			if !pdpt_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+				continue;
+			}
+			let pd_phys = pdpt_entry.addr().as_u64() as usize;
+			let pd = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pd_phys) };
+
+			for pd_idx in 0..512usize {
+				let pd_entry = &mut pd[pd_idx];
+				if !pd_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+					continue;
+				}
+				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
+					warn!("User space isn't able to use huge pages");
+					continue;
+				}
+				let pt_phys = pd_entry.addr().as_u64() as usize;
+				let pt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pt_phys) };
+
+				for pt_idx in 0..512usize {
+					let pt_entry = &mut pt[pt_idx];
+					if pt_entry.flags().contains(
+						PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE,
+					) {
+						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
+						free_frame(phys_addr.as_u64() as usize);
+						pt_entry.set_unused();
+					}
+				}
+
+				free_frame(pt_phys);
+				pd_entry.set_unused();
+			}
+
+			free_frame(pd_phys);
+			pdpt_entry.set_unused();
+		}
+
+		free_frame(pdpt_phys);
+		pml4_entry.set_unused();
+	}
+}
+
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(pml4_phys: usize) {
+	debug!("Drop the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	// No TLB flush needed: the page table is not loaded on any core.
+	let range = free_list::PageRange::new(pml4_phys, pml4_phys + free_list::PAGE_SIZE).unwrap();
+	unsafe { FrameAlloc::deallocate(range) };
+}
+
+#[cfg(feature = "common-os")]
+pub fn clear_user_space() {
+	use crate::arch::kernel::core_local::core_scheduler;
+	use crate::fd::STDERR_FILENO;
+
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&k, _| k <= STDERR_FILENO);
+
+	let (p4_frame, _) = Cr3::read_raw();
+	let pml4_phys = p4_frame.start_address().as_u64() as usize;
+
+	debug!("Clear the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	tlb::flush_all();
+	#[cfg(feature = "smp")]
+	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+}
+
 #[cfg(not(feature = "common-os"))]
 pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
@@ -303,13 +402,26 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	mut stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
+	use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
+
 	unsafe {
 		if stack_frame.as_mut().read().code_segment != SegmentSelector(0x08) {
 			core::arch::asm!("swapgs", options(nostack));
 		}
 	}
+
+	increment_irq_counter(14);
+
+	let faulting_addr = Cr2::read().unwrap();
+
+	debug!(
+		"Task {} triggers a page fault at {:p}.",
+		core_scheduler().get_current_task_id(),
+		faulting_addr
+	);
+
 	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
+	error!("page_fault_linear_address = {faulting_addr:p}");
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());

@@ -13,17 +13,67 @@ use core::{cmp, fmt};
 use ahash::RandomState;
 use crossbeam_utils::CachePadded;
 use hashbrown::HashMap;
-use hermit_sync::{OnceCell, RwSpinLock};
+#[cfg(not(feature = "common-os"))]
+use hermit_sync::OnceCell;
+use hermit_sync::RwSpinLock;
+#[cfg(not(target_arch = "x86_64"))]
 use memory_addresses::VirtAddr;
+#[cfg(target_arch = "x86_64")]
+use x86_64::VirtAddr;
 
 #[cfg(not(feature = "common-os"))]
 use self::tls::Tls;
 use super::timer_interrupts::{Source, create_timer_abs};
+#[cfg(feature = "common-os")]
+use crate::arch;
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::processor::{self, FPUState};
 use crate::arch::kernel::scheduler::TaskStacks;
-use crate::fd::{Fd, RawFd, stdio};
+#[cfg(not(feature = "common-os"))]
+use crate::fd::stdio;
+use crate::fd::{Fd, RawFd};
 use crate::scheduler::CoreId;
+
+/// A process's root page table, shared by its threads and released with the last one.
+#[cfg(feature = "common-os")]
+pub struct RootPageTable {
+	pml4_phys: usize,
+	/// `false` for the boot page table, which must never be released.
+	owned: bool,
+}
+
+#[cfg(feature = "common-os")]
+impl RootPageTable {
+	/// Wraps a freshly allocated PML4 that this process owns.
+	pub fn new(pml4_phys: usize) -> Self {
+		Self {
+			pml4_phys,
+			owned: true,
+		}
+	}
+
+	/// Wraps the boot page table, shared by all idle tasks. Dropping this
+	/// instance is a no-op.
+	pub fn new_boot(pml4_phys: usize) -> Self {
+		Self {
+			pml4_phys,
+			owned: false,
+		}
+	}
+
+	pub fn as_usize(&self) -> usize {
+		self.pml4_phys
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl Drop for RootPageTable {
+	fn drop(&mut self) {
+		if self.owned {
+			arch::mm::drop_user_space(self.pml4_phys);
+		}
+	}
+}
 
 /// Returns the most significant bit.
 ///
@@ -50,21 +100,57 @@ pub(crate) enum TaskStatus {
 	Idle,
 }
 
-/// Unique identifier for a task (i.e. `pid`).
+/// Unique identifier for a task (i.e. `tid`).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct TaskId(i32);
 
 impl TaskId {
-	pub const fn into(self) -> i32 {
-		self.0
-	}
-
 	pub const fn from(x: i32) -> Self {
 		TaskId(x)
 	}
 }
 
+impl From<TaskId> for i32 {
+	fn from(tid: TaskId) -> Self {
+		tid.0
+	}
+}
+
 impl fmt::Display for TaskId {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
+
+/// Process ID, shared by all threads of a process. It equals the [`TaskId`]
+/// of the main thread.
+#[cfg(feature = "common-os")]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
+pub struct ProcessId(i32);
+
+#[cfg(feature = "common-os")]
+impl ProcessId {
+	pub const fn from(x: i32) -> Self {
+		ProcessId(x)
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl From<ProcessId> for i32 {
+	fn from(pid: ProcessId) -> Self {
+		pid.0
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl From<TaskId> for ProcessId {
+	fn from(tid: TaskId) -> Self {
+		ProcessId(tid.0)
+	}
+}
+
+#[cfg(feature = "common-os")]
+impl fmt::Display for ProcessId {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
@@ -364,6 +450,9 @@ impl PriorityTaskQueue {
 pub(crate) struct Task {
 	/// The ID of this context
 	pub id: TaskId,
+	/// Process ID: equal to `id` for the main thread, inherited by additional threads.
+	#[cfg(feature = "common-os")]
+	pub pid: ProcessId,
 	/// Status of a task, e.g. if the task is ready or blocked
 	pub status: TaskStatus,
 	/// Task priority,
@@ -383,9 +472,9 @@ pub(crate) struct Task {
 	/// Task Thread-Local-Storage (TLS)
 	#[cfg(not(feature = "common-os"))]
 	pub tls: Option<Tls>,
-	// Physical address of the 1st level page table
-	#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-	pub root_page_table: usize,
+	// Root page table, shared by all threads of the process.
+	#[cfg(feature = "common-os")]
+	pub root_page_table: Arc<RootPageTable>,
 }
 
 pub(crate) trait TaskFrame {
@@ -406,6 +495,8 @@ impl Task {
 
 		Task {
 			id: tid,
+			#[cfg(feature = "common-os")]
+			pid: tid.into(),
 			status: task_status,
 			prio: task_prio,
 			last_stack_pointer: VirtAddr::zero(),
@@ -416,19 +507,24 @@ impl Task {
 			object_map,
 			#[cfg(not(feature = "common-os"))]
 			tls: None,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: crate::arch::mm::paging::create_new_root_page_table(),
+			#[cfg(feature = "common-os")]
+			root_page_table: Arc::new(RootPageTable::new(arch::mm::create_new_root_page_table())),
 		}
 	}
 
 	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
 		debug!("Creating idle task {tid}");
 
-		/// All cores use the same mapping between file descriptor and the referenced object
+		/// In the unikernel case all cores share the same mapping between
+		/// file descriptor and the referenced object. Under `common-os`,
+		/// each process gets its own `object_map` when the application is
+		/// loaded, so the idle task only needs an empty placeholder.
+		#[cfg(not(feature = "common-os"))]
 		static OBJECT_MAP: OnceCell<
 			Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
 		> = OnceCell::new();
 
+		#[cfg(not(feature = "common-os"))]
 		if core_id == 0 {
 			OBJECT_MAP
 				.set(Arc::new(RwSpinLock::new(HashMap::<
@@ -454,6 +550,8 @@ impl Task {
 
 		Task {
 			id: tid,
+			#[cfg(feature = "common-os")]
+			pid: tid.into(),
 			status: TaskStatus::Idle,
 			prio: IDLE_PRIO,
 			last_stack_pointer: VirtAddr::zero(),
@@ -461,11 +559,22 @@ impl Task {
 			last_fpu_state: FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
+			#[cfg(not(feature = "common-os"))]
 			object_map: OBJECT_MAP.get().unwrap().clone(),
+			#[cfg(feature = "common-os")]
+			object_map: Arc::new(RwSpinLock::new(HashMap::<
+				RawFd,
+				Arc<async_lock::RwLock<Fd>>,
+				RandomState,
+			>::with_hasher(RandomState::with_seeds(
+				0, 0, 0, 0,
+			)))),
 			#[cfg(not(feature = "common-os"))]
 			tls,
-			#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
-			root_page_table: *crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			#[cfg(feature = "common-os")]
+			root_page_table: Arc::new(RootPageTable::new_boot(
+				*crate::scheduler::BOOT_ROOT_PAGE_TABLE.get().unwrap(),
+			)),
 		}
 	}
 }

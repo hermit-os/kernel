@@ -238,6 +238,7 @@ impl From<NewTask> for Task {
 			stacks,
 			object_map,
 		} = value;
+
 		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks, object_map);
 		task.create_stack_frame(func, arg);
 		task
@@ -476,6 +477,22 @@ impl PerCoreScheduler {
 		without_interrupts(|| self.current_task.borrow().id)
 	}
 
+	/// Returns the Rc<RefCell<Task>> for the currently running task.
+	#[cfg(feature = "common-os")]
+	#[inline]
+	pub fn get_current_task(&self) -> Rc<RefCell<Task>> {
+		self.current_task.clone()
+	}
+
+	#[cfg(feature = "common-os")]
+	#[inline]
+	pub fn set_current_task_object_map(
+		&mut self,
+		object_map: Arc<RwSpinLock<HashMap<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>>>,
+	) {
+		without_interrupts(|| self.current_task.borrow_mut().object_map = object_map);
+	}
+
 	#[inline]
 	pub fn get_current_task_object_map(
 		&self,
@@ -699,7 +716,15 @@ impl PerCoreScheduler {
 	fn cleanup_tasks(&mut self) {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		while let Some(finished_task) = self.finished_tasks.pop_front() {
-			debug!("Cleaning up task {}", finished_task.borrow().id);
+			let id = finished_task.borrow().id;
+			drop(finished_task);
+			#[cfg(feature = "common-os")]
+			trace!(
+				"Cleaned up task {id} — free frames: {} KiB",
+				crate::mm::FrameAlloc::free_space() >> 10
+			);
+			#[cfg(not(all(target_arch = "x86_64", feature = "common-os")))]
+			debug!("Cleaned up task {id}");
 		}
 	}
 
@@ -865,6 +890,7 @@ impl PerCoreScheduler {
 				self.current_task.borrow_mut().last_fpu_state.save();
 			}
 			task.borrow().last_fpu_state.restore();
+
 			self.current_task = task;
 			unsafe {
 				switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
@@ -1005,5 +1031,5 @@ pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]
 pub(crate) fn get_root_page_table() -> usize {
 	let current_task_borrowed = core_scheduler().current_task.borrow_mut();
-	current_task_borrowed.root_page_table
+	current_task_borrowed.root_page_table.as_usize()
 }

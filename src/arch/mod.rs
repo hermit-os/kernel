@@ -15,5 +15,7 @@ pub(crate) use self::riscv64::*;
 
 #[cfg(target_arch = "x86_64")]
 mod x86_64;
+#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+pub use self::x86_64::mm::{BasePageSize, PageSize, clear_user_space};
 #[cfg(target_arch = "x86_64")]
 pub(crate) use self::x86_64::*;
