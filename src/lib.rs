@@ -139,7 +139,10 @@ mod logging;
 #[cfg(feature = "acpi")]
 mod acpi;
 pub mod arch;
-#[cfg(all(feature = "common-os", target_arch = "x86_64"))]
+#[cfg(all(
+	feature = "common-os",
+	any(target_arch = "x86_64", target_arch = "aarch64")
+))]
 pub mod common_os;
 pub mod config;
 pub mod console;

@@ -1,3 +1,4 @@
+#[cfg(target_arch = "x86_64")]
 use core::arch::naked_asm;
 
 use crate::mm::vma::sys_mmap;
@@ -121,6 +122,7 @@ pub extern "C" fn sys_exec(
 	-i32::from(Errno::Nosys)
 }
 
+#[cfg(target_arch = "x86_64")]
 #[allow(unused_assignments)]
 #[unsafe(no_mangle)]
 #[unsafe(naked)]
@@ -131,6 +133,13 @@ pub(crate) unsafe extern "C" fn sys_invalid() {
 		sym invalid_syscall,
 	);
 }
+
+/// Placeholder for unregistered syscall slots on aarch64.
+///
+/// The dispatcher only compares against its address and never calls it.
+#[cfg(target_arch = "aarch64")]
+#[unsafe(no_mangle)]
+pub(crate) extern "C" fn sys_invalid() {}
 
 #[repr(align(64))]
 #[repr(C)]
@@ -203,6 +212,14 @@ impl SyscallTable {
 		table.handle[SYSNO_MMAP] = sys_mmap as *const _;
 
 		table
+	}
+}
+
+impl SyscallTable {
+	#[cfg(target_arch = "aarch64")]
+	#[inline]
+	pub(crate) fn handler(&self, nr: usize) -> *const usize {
+		self.handle[nr]
 	}
 }
 

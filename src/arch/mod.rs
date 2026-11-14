@@ -5,6 +5,8 @@
 // https://github.com/rust-lang/rust/issues/158400
 #[cfg(target_arch = "aarch64")]
 mod aarch64;
+#[cfg(all(target_arch = "aarch64", feature = "common-os"))]
+pub use self::aarch64::mm::paging::{BasePageSize, PageSize, clear_user_space};
 #[cfg(target_arch = "aarch64")]
 pub(crate) use self::aarch64::*;
 

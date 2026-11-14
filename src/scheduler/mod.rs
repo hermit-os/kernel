@@ -14,6 +14,8 @@ use ahash::RandomState;
 use crossbeam_utils::Backoff;
 use hashbrown::{HashMap, hash_map};
 use hermit_sync::*;
+#[cfg(target_arch = "aarch64")]
+use memory_addresses::VirtAddr;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::sstatus;
 use timer_interrupts::TimerList;
@@ -660,7 +662,10 @@ impl PerCoreScheduler {
 	/// Creates a new map between file descriptor and their IO interface and
 	/// clone the standard descriptors.
 	#[cfg(feature = "common-os")]
-	#[cfg_attr(not(target_arch = "x86_64"), expect(dead_code))]
+	#[cfg_attr(
+		not(any(target_arch = "x86_64", target_arch = "aarch64")),
+		expect(dead_code)
+	)]
 	pub fn recreate_objmap(&self) -> io::Result<()> {
 		let mut map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
@@ -925,7 +930,7 @@ impl PerCoreScheduler {
 
 	#[inline]
 	#[cfg(target_arch = "aarch64")]
-	pub fn get_last_stack_pointer(&self) -> memory_addresses::VirtAddr {
+	pub fn get_last_stack_pointer(&self) -> VirtAddr {
 		self.current_task.borrow().last_stack_pointer
 	}
 
@@ -1182,7 +1187,10 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 /// Forks the current task.
 ///
 /// Returns the child's `TaskId` in the parent and `TaskId(0)` in the child.
-#[cfg(all(target_arch = "x86_64", feature = "common-os", feature = "fork"))]
+#[cfg(all(
+	any(target_arch = "x86_64", target_arch = "aarch64"),
+	all(feature = "common-os", feature = "fork")
+))]
 pub unsafe fn fork() -> TaskId {
 	use crate::arch::kernel::prepare_fork_child_stack;
 	use crate::arch::mm::prepare_mem_copy_on_write;
@@ -1314,7 +1322,7 @@ fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
 	TASKS.lock().get(&id).copied()
 }
 
-#[cfg(all(target_arch = "x86_64", feature = "common-os"))]
+#[cfg(feature = "common-os")]
 pub(crate) static BOOT_ROOT_PAGE_TABLE: OnceCell<usize> = OnceCell::new();
 
 #[cfg(all(target_arch = "x86_64", feature = "common-os"))]

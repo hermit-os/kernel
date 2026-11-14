@@ -90,6 +90,27 @@ pub unsafe extern "C" fn pre_init(boot_info: Option<&'static RawBootInfo>, cpu_i
 	// Memory barrier
 	dsb(SY);
 
+	// With FEAT_PAN, kernel accesses to user-accessible pages fault.
+	// common-os needs them: set SCTLR_EL1.SPAN to keep PSTATE.PAN
+	// unchanged on exception entry and clear PSTATE.PAN if implemented.
+	#[cfg(feature = "common-os")]
+	unsafe {
+		asm!(
+			"mrs {tmp}, sctlr_el1",
+			"orr {tmp}, {tmp}, #(1 << 23)",
+			"msr sctlr_el1, {tmp}",
+			"isb",
+			"mrs {tmp}, id_aa64mmfr1_el1",
+			"ubfx {tmp}, {tmp}, #20, #4",
+			"cbz {tmp}, 1f",
+			".arch_extension pan",
+			"msr pan, #0",
+			"1:",
+			tmp = out(reg) _,
+			options(nostack, preserves_flags),
+		);
+	}
+
 	if cpu_id == 0 {
 		unsafe {
 			env::set_start_info(*boot_info.unwrap());

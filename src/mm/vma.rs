@@ -62,6 +62,8 @@ bitflags! {
 	}
 }
 
+// The user heap must be in the same L0 slot as the user binary (below
+// 0x0180_0000_0000): on aarch64, only this slot is copied on fork.
 const HEAP_START_ADDR: VirtAddr = VirtAddr::new(0x0140_0000_0000);
 
 /// Creates a new virtual memory mapping of the `size` specified with

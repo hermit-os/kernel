@@ -29,6 +29,9 @@ const PPI_START: u8 = 16;
 const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
+/// Pseudo IRQ number for page-fault statistics; not a GIC interrupt.
+#[cfg(feature = "common-os")]
+pub(crate) const PAGE_FAULT_IRQ: u8 = 14;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
@@ -169,43 +172,122 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 }
 
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn do_sync(state: &State) {
+pub(crate) extern "C" fn do_sync(state: &mut State) {
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	use crate::arch::mm::paging::do_cow_fault;
+
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
 	let iss = ESR_EL1.read(ESR_EL1::ISS);
 	let pc = ELR_EL1.get();
 
-	/* data abort from lower or current level */
-	if (ec == ESR_EL1::EC::Value::DataAbortCurrentEL)
-		|| (ec == ESR_EL1::EC::Value::DataAbortLowerEL)
-	{
-		/* check if value in far_el1 is valid */
-		if (iss & (1 << 10)) == 0 {
-			/* read far_el1 register, which holds the faulting virtual address */
-			let far = FAR_EL1.get();
+	// SVC64: user-space syscall
+	#[cfg(feature = "common-os")]
+	if ec_raw == 0x15 {
+		dispatch_svc64(state);
+		return;
+	}
 
-			// add page fault handler
+	// A user thread whose entry function returns branches to LR = 0,
+	// which is treated as thread exit.
+	#[cfg(feature = "common-os")]
+	if ec == ESR_EL1::EC::Value::InstrAbortLowerEL && ELR_EL1.get() == 0 {
+		use crate::scheduler::PerCoreSchedulerExt;
+		debug!(
+			"User thread {} returned from entry; exiting cleanly.",
+			core_scheduler().get_current_task_id()
+		);
+		core_scheduler().exit(0);
+	}
 
-			error!("Current stack pointer {state:p}");
-			error!("Unable to handle page fault at {far:#x}");
-			error!("Exception return address {:#x}", ELR_EL1.get());
-			error!("Thread ID register {:#x}", TPIDR_EL0.get());
-			error!("Table Base Register {:#x}", TTBR0_EL1.get());
-			error!("Exception Syndrome Register {esr:#x}");
+	// Data Abort: COW or demand-paging fault, possibly raised by the kernel
+	// while it writes to a user page.
+	if ec == ESR_EL1::EC::Value::DataAbortCurrentEL || ec == ESR_EL1::EC::Value::DataAbortLowerEL {
+		#[cfg(feature = "common-os")]
+		increment_irq_counter(PAGE_FAULT_IRQ);
 
-			if let Some(irqid) =
-				GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
-			{
-				GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
-			} else {
-				error!("Unable to acknowledge interrupt!");
-			}
+		let far = FAR_EL1.get();
+		// ISS of a Data Abort: bits 5:0 = DFSC, bit 6 = WnR
+		// Permission faults have a DFSC of 0b001100..0b001111.
+		let dfsc = iss & 0b11_1111;
+		let is_write = (iss & (1 << 6)) != 0;
+		#[cfg(all(feature = "common-os", feature = "fork"))]
+		let is_permission_fault = (0b00_1100..=0b00_1111).contains(&dfsc);
 
-			scheduler::abort()
-		} else {
-			error!("Unknown exception");
+		#[cfg(all(feature = "common-os", feature = "fork"))]
+		if is_write && is_permission_fault && do_cow_fault(VirtAddr::new(far)) {
+			// Faulting instruction is retried on `eret` from the trap.
+			return;
 		}
+
+		#[cfg(feature = "common-os")]
+		{
+			use core::ops::Bound;
+
+			use align_address::Align;
+
+			use crate::mm::FrameAlloc;
+			use crate::mm::vma::VirtualMemoryAreaProt;
+
+			let addr = VirtAddr::new(far).align_down(BasePageSize::SIZE);
+			let current_task = core_scheduler().get_current_task();
+			let current_task_borrowed = current_task.borrow();
+			let guard = current_task_borrowed.vmas.read();
+
+			if let Some((_, vma)) = guard
+				.range((Bound::Unbounded, Bound::Included(addr)))
+				.next_back() && addr >= vma.start
+				&& addr < vma.end
+			{
+				let layout = PageLayout::from_size_align(
+					BasePageSize::SIZE as usize,
+					BasePageSize::SIZE as usize,
+				)
+				.unwrap();
+				let frame_range = FrameAlloc::allocate(layout).unwrap();
+				let physaddr = PhysAddr::from(frame_range.start());
+				let mut flags = PageTableEntryFlags::normal();
+				flags
+					.user()
+					.set_writable(vma.prot.contains(VirtualMemoryAreaProt::WRITE))
+					.set_execute(vma.prot.contains(VirtualMemoryAreaProt::EXECUTE));
+
+				paging::map::<BasePageSize>(addr, physaddr, 1, flags);
+
+				// clear page
+				let slice = unsafe {
+					core::slice::from_raw_parts_mut(
+						addr.as_mut_ptr::<u8>().cast::<u8>(),
+						BasePageSize::SIZE as usize,
+					)
+				};
+				slice.fill(0);
+
+				#[cfg(feature = "fork")]
+				crate::mm::frame_ref_inc(physaddr);
+
+				return;
+			}
+		}
+
+		let kind = dfsc_kind(dfsc);
+		let access = if is_write { "write" } else { "read" };
+		error!("Current stack pointer {state:p}");
+		error!("Unhandled data abort: {kind} on {access} of {far:#x} (DFSC={dfsc:#x})");
+		error!("Exception return address {:#x}", ELR_EL1.get());
+		error!("Thread ID register {:#x}", TPIDR_EL0.get());
+		error!("Table Base Register {:#x}", TTBR0_EL1.get());
+		error!("Exception Syndrome Register {esr:#x}");
+
+		if let Some(irqid) = GicCpuInterface::get_and_acknowledge_interrupt(InterruptGroup::Group1)
+		{
+			GicCpuInterface::end_interrupt(irqid, InterruptGroup::Group1);
+		} else {
+			error!("Unable to acknowledge interrupt!");
+		}
+
+		scheduler::abort()
 	} else if ec == ESR_EL1::EC::Value::Brk64 {
 		error!("Trap to debugger, PC={pc:#x}");
 		loop {
@@ -229,6 +311,52 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			core::hint::spin_loop();
 		}
 	}
+}
+
+/// Returns a short label for the DFSC of `ESR_EL1.ISS`.
+fn dfsc_kind(dfsc: u64) -> &'static str {
+	match dfsc {
+		0b00_0000..=0b00_0011 => "address size fault",
+		0b00_0100..=0b00_0111 => "translation fault",
+		0b00_1000..=0b00_1011 => "access flag fault",
+		0b00_1100..=0b00_1111 => "permission fault",
+		0b01_0000 => "synchronous external abort",
+		0b01_0001 => "synchronous tag check fail",
+		0b01_0100..=0b01_0111 => "external abort on translation table walk",
+		0b01_1000 => "synchronous parity/ECC error",
+		0b01_1100..=0b01_1111 => "parity/ECC error on translation table walk",
+		0b10_0001 => "alignment fault",
+		0b11_0000 => "TLB conflict abort",
+		0b11_0001 => "unsupported atomic hardware-update fault",
+		_ => "unknown data fault",
+	}
+}
+
+/// Dispatches a syscall issued via `svc #0` from EL0.
+///
+/// The syscall number is passed in `x8`, the arguments in `x0`..`x5`,
+/// and the result is returned in `x0`.
+#[cfg(feature = "common-os")]
+fn dispatch_svc64(state: &mut State) {
+	use crate::errno::Errno;
+	use crate::syscalls::table::{NO_SYSCALLS, SYSHANDLER_TABLE, invalid_syscall, sys_invalid};
+
+	let nr = state.x8 as usize;
+
+	if nr >= NO_SYSCALLS {
+		error!("Invalid syscall number {nr}");
+		state.x0 = u64::from((-i32::from(Errno::Nosys)) as u32);
+		return;
+	}
+
+	let handler_ptr = SYSHANDLER_TABLE.handler(nr);
+	if handler_ptr == sys_invalid as *const usize {
+		invalid_syscall(state.x8);
+	}
+
+	let f: extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 =
+		unsafe { core::mem::transmute(handler_ptr) };
+	state.x0 = f(state.x0, state.x1, state.x2, state.x3, state.x4, state.x5);
 }
 
 #[unsafe(no_mangle)]
@@ -428,6 +556,8 @@ pub(crate) fn init() {
 		.unwrap();
 	gic.enable_interrupt(reschedid, Some(cpu_id), true).unwrap();
 	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
+	#[cfg(feature = "common-os")]
+	IRQ_NAMES.lock().insert(PAGE_FAULT_IRQ, "Page Fault");
 
 	*GIC.lock() = Some(gic);
 }

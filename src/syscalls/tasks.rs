@@ -22,12 +22,12 @@ pub type Pid = i32;
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_fork() -> i32 {
-	#[cfg(all(feature = "fork", target_arch = "x86_64"))]
+	#[cfg(all(feature = "fork", any(target_arch = "x86_64", target_arch = "aarch64")))]
 	unsafe {
 		scheduler::fork().into()
 	}
 
-	#[cfg(not(all(feature = "fork", target_arch = "x86_64")))]
+	#[cfg(not(all(feature = "fork", any(target_arch = "x86_64", target_arch = "aarch64"))))]
 	{
 		-i32::from(Errno::Nosys)
 	}
