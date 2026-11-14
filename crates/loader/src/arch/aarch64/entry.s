@@ -21,6 +21,7 @@ _start:
 	// https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/blob/master/16_virtual_mem_part4_higher_half_kernel/src/bsp/raspberrypi/link.ld
 	adrp	x4, {BOOT_STACK}
 	add		x4, x4, #:lo12:{BOOT_STACK}
+	add		x4, x4, #{BOOT_STACK_SIZE}
 	mov		sp, x4
 
 	// Set correct Exception level!
