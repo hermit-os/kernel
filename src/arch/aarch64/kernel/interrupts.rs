@@ -237,7 +237,8 @@ pub(crate) extern "C" fn do_sync(state: &mut State) {
 
 			if let Some((_, vma)) = guard
 				.range((Bound::Unbounded, Bound::Included(addr)))
-				.next_back() && addr >= vma.start
+				.next_back()
+				&& addr >= vma.start
 				&& addr < vma.end
 			{
 				let layout = PageLayout::from_size_align(

@@ -591,9 +591,9 @@ impl Task {
 				RawFd,
 				Arc<async_lock::RwLock<Fd>>,
 				RandomState,
-			>::with_hasher(RandomState::with_seeds(
-				0, 0, 0, 0,
-			)))),
+			>::with_hasher(
+				RandomState::with_seeds(0, 0, 0, 0)
+			))),
 			#[cfg(not(feature = "common-os"))]
 			tls,
 			#[cfg(feature = "common-os")]
