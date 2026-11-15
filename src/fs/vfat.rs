@@ -383,6 +383,18 @@ pub(crate) fn init() {
 	}
 }
 
+/// Mounts the directory `src` of the FAT volume at `dst`.
+pub(crate) fn mount_dir(src: &str, dst: &str) -> io::Result<()> {
+	if VFAT.get().is_none() {
+		return Err(Errno::Nodev);
+	}
+
+	fs::FILESYSTEM.get().ok_or(Errno::Inval)?.mount(
+		dst,
+		Box::new(VfatDirectory::new(src.trim_matches('/').to_string())),
+	)
+}
+
 /// Stamps directory entries with the system's wall-clock time.
 #[derive(Debug)]
 struct FatTimeProvider;
