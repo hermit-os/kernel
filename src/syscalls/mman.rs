@@ -9,8 +9,7 @@
 use core::ffi::{c_int, c_void};
 
 use align_address::Align;
-use free_list::{FreeList, PageLayout, PageRange};
-use hermit_sync::SpinMutex;
+use free_list::{PageLayout, PageRange};
 use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(target_arch = "x86_64")]
@@ -33,7 +32,29 @@ bitflags! {
 	}
 }
 
-static PROT_NONE_FREE_LIST: SpinMutex<FreeList<16>> = SpinMutex::new(FreeList::new());
+const PAGE_SIZE: usize = BasePageSize::SIZE as usize;
+
+/// Looks at up to `count` pages starting at `virtual_address` and returns how many of them,
+/// from the start, share the state of the first page, together with the first page's frame.
+///
+/// Sharing the state means: all pages are unmapped (frame is `None`), or all pages are mapped
+/// to physically contiguous frames.
+fn contiguous_pages(virtual_address: VirtAddr, count: usize) -> (usize, Option<PhysAddr>) {
+	let first_frame = paging::virtual_to_physical(virtual_address);
+
+	let mut len = 1;
+	while len < count {
+		let offset = (len * PAGE_SIZE) as u64;
+		let frame = paging::virtual_to_physical(virtual_address + offset);
+		let expected_frame = first_frame.map(|phys| phys + offset);
+		if frame != expected_frame {
+			break;
+		}
+		len += 1;
+	}
+
+	(len, first_frame)
+}
 
 /// Creates a new virtual memory mapping of the `size` specified with
 /// protection bits specified in `prot_flags`.
@@ -46,9 +67,6 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 	let virtual_address = VirtAddr::from(page_range.start());
 	if prot_flags.is_empty() {
 		*ret = virtual_address.as_mut_ptr();
-		unsafe {
-			PROT_NONE_FREE_LIST.lock().deallocate(page_range).unwrap();
-		}
 		return 0;
 	}
 	let frame_layout = PageLayout::from_size(size).unwrap();
@@ -77,19 +95,23 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 	let size = size.align_up(BasePageSize::SIZE as usize);
 	let page_range = PageRange::from_start_len(virtual_address.as_usize(), size).unwrap();
 
-	if PROT_NONE_FREE_LIST.lock().allocate_at(page_range).is_ok() {
-		return 0;
-	}
+	// Unmap and free the frames run by run, as the range may consist of several mappings.
+	let mut virt = virtual_address;
+	let mut remaining = size / PAGE_SIZE;
+	while remaining > 0 {
+		let (count, phys) = contiguous_pages(virt, remaining);
+		if let Some(phys) = phys {
+			paging::unmap::<BasePageSize>(virt, count);
+			debug!("Unmapping {virt:X} ({count} pages) -> {phys:X}");
 
-	if let Some(physical_address) = paging::virtual_to_physical(virtual_address) {
-		paging::unmap::<BasePageSize>(virtual_address, size / BasePageSize::SIZE as usize);
-		debug!("Unmapping {virtual_address:X} ({size}) -> {physical_address:X}");
-
-		let frame_range =
-			PageRange::from_start_len(physical_address.as_u64() as usize, size).unwrap();
-		unsafe {
-			FrameAlloc::deallocate(frame_range);
+			let frame_range =
+				PageRange::from_start_len(phys.as_u64() as usize, count * PAGE_SIZE).unwrap();
+			unsafe {
+				FrameAlloc::deallocate(frame_range);
+			}
 		}
+		virt += (count * PAGE_SIZE) as u64;
+		remaining -= count;
 	}
 
 	unsafe {
@@ -106,7 +128,11 @@ pub extern "C" fn sys_munmap(ptr: *mut u8, size: usize) -> i32 {
 #[hermit_macro::system(errno)]
 #[unsafe(no_mangle)]
 pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProtection) -> i32 {
-	let count = size / BasePageSize::SIZE as usize;
+	let size = size.align_up(PAGE_SIZE);
+	let count = size / PAGE_SIZE;
+	if count == 0 {
+		return 0;
+	}
 	let mut flags = PageTableEntryFlags::normal();
 	flags
 		.set_writable(prot_flags.contains(MemoryProtection::Write))
@@ -114,8 +140,13 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 
 	let virtual_address = VirtAddr::from_ptr(ptr);
 
+	let (run_len, mapped) = contiguous_pages(virtual_address, count);
+	if run_len < count {
+		unimplemented!("mprotect on a partially mapped or non-contiguous range");
+	}
+
 	debug!("Mprotect {virtual_address:X} ({size}) -> {prot_flags:?})");
-	if let Some(physical_address) = paging::virtual_to_physical(virtual_address) {
+	if let Some(physical_address) = mapped {
 		// Memory is already mapped
 		if prot_flags == MemoryProtection::None {
 			unimplemented!("mprotect to PROT_NONE is not yet supported");
