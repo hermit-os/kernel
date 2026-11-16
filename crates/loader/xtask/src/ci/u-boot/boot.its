@@ -1,0 +1,18 @@
+/dts-v1/;
+
+/ {
+    description = "Script to boot Hermit on QEMU virt";
+
+    images {
+        default = "script-1";
+
+        script-1 {
+            data = /incbin/("./boot.txt");
+            type = "script";
+            compression = "none";
+            hash {
+                algo = "sha256";
+            };
+        };
+    };
+};
