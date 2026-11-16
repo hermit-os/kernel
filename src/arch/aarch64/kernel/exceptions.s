@@ -243,13 +243,52 @@ el1_sp0_error:
 .size el1_sp0_error, .-el1_sp0_error
 .type el1_sp0_error, @function
 
-el0_sync_invalid:
-   invalid 0
-.type el0_sync_invalid, @function
+/*
+ * Synchronous exception from a lower EL (EL0) using AArch64. This is the
+ * SVC entry point — the dispatcher in do_sync decodes ESR_EL1.EC.
+ *
+ * On exception entry from EL0, the hardware automatically switches to
+ * SP_EL1, so we don't need to flip SPSEL here.
+ */
+.align 6
+el0_sync:
+      trap_entry 0
+      mov     x0, sp
+      bl      do_sync
+      trap_exit
+      eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
+.size el0_sync, .-el0_sync
+.type el0_sync, @function
 
-el0_irq_invalid:
-   invalid 1
-.type el0_irq_invalid, @function
+/*
+ * IRQ from a lower EL (EL0). Mirrors el1_irq, including the optional
+ * task switch when do_irq returns the saved-SP slot of the next task.
+ */
+.align 6
+el0_irq:
+      trap_entry 0
+      mov     x0, sp
+      bl      do_irq
+      cmp x0, 0
+      b.eq 5f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+5:
+      trap_exit
+      eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
+.size el0_irq, .-el0_irq
+.type el0_irq, @function
 
 el0_fiq_invalid:
    invalid 2
@@ -293,14 +332,14 @@ ventry el1_fiq                  // FIQ EL1h
 ventry el1_error                // Error EL1h
 
 /* Lower EL using AArch64 */
-ventry el0_sync_invalid         // Synchronous 64-bit EL0
-ventry el0_irq_invalid          // IRQ 64-bit EL0
+ventry el0_sync                 // Synchronous 64-bit EL0
+ventry el0_irq                  // IRQ 64-bit EL0
 ventry el0_fiq_invalid          // FIQ 64-bit EL0
 ventry el0_error_invalid        // Error 64-bit EL0
 
-/* Lower EL using AArch32 */
-ventry el0_sync_invalid         // Synchronous 32-bit EL0
-ventry el0_irq_invalid          // IRQ 32-bit EL0
+/* Lower EL using AArch32 — not supported, route to invalid */
+ventry el0_fiq_invalid          // Synchronous 32-bit EL0
+ventry el0_fiq_invalid          // IRQ 32-bit EL0
 ventry el0_fiq_invalid          // FIQ 32-bit EL0
 ventry el0_error_invalid        // Error 32-bit EL0
 .size vector_table, .-vector_table

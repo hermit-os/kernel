@@ -406,6 +406,12 @@ pub(crate) fn init() {
 	dev_directory::init();
 }
 
+/// Mounts the directory `src` of the FAT volume at `dst`.
+#[cfg(feature = "virtio-blk")]
+pub fn mount_vfat_dir(src: &str, dst: &str) -> io::Result<()> {
+	vfat::mount_dir(src, dst)
+}
+
 pub fn create_file(name: &str, data: &'static [u8], mode: AccessPermission) -> io::Result<()> {
 	with_relative_filename(name, |name| {
 		FILESYSTEM

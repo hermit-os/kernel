@@ -10,6 +10,8 @@ pub mod scheduler;
 pub mod serial;
 pub mod switch;
 pub mod systemtime;
+#[cfg(feature = "common-os")]
+use alloc::ffi::CString;
 use alloc::vec::Vec;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
@@ -108,6 +110,12 @@ fn finish_processor_init() {
 	}
 	trace!("SSTATUS FS: {:?}", sstatus::read().fs());
 
+	// S-mode may only access user pages with SUM set.
+	#[cfg(feature = "common-os")]
+	unsafe {
+		sstatus::set_sum();
+	}
+
 	let current_hart_id = get_current_boot_id() as usize;
 
 	// Add hart to HARTS_AVAILABLE, the hart id is stored in current_boot_id
@@ -170,4 +178,479 @@ pub fn boot_next_processor() {
 
 pub fn print_statistics() {
 	interrupts::print_statistics();
+}
+
+/// Start of the user-mode binary (Sv39 root slot 64).
+#[cfg(feature = "common-os")]
+pub(crate) const USER_START: memory_addresses::VirtAddr =
+	memory_addresses::VirtAddr::new(crate::arch::riscv64::mm::paging::USER_SPACE_START as u64);
+/// Top of the user stack: end of Sv39 root slot 191.
+#[cfg(feature = "common-os")]
+const USER_STACK: memory_addresses::VirtAddr =
+	memory_addresses::VirtAddr::new(0x30_0000_0000 - USER_STACK_SIZE as u64);
+#[cfg(feature = "common-os")]
+const USER_STACK_SIZE: usize = 0x8000;
+
+/// Thread pointers prepared by `load_application` and consumed by
+/// `jump_to_user_land`, keyed by task id. `tp` is a plain GPR, so there is
+/// no CSR to hold the value in between.
+#[cfg(feature = "common-os")]
+static USER_TP: hermit_sync::InterruptTicketMutex<
+	alloc::collections::BTreeMap<crate::scheduler::task::TaskId, u64>,
+> = hermit_sync::InterruptTicketMutex::new(alloc::collections::BTreeMap::new());
+
+/// Map the user-mode binary into the address space and run the ELF-loader
+/// closure against the freshly-mapped pages.
+#[allow(clippy::result_unit_err)]
+#[cfg(feature = "common-os")]
+pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
+where
+	F: FnOnce(&'static mut [u8], Option<&'static mut [u8]>) -> Result<Option<Vec<u8>>, ()>,
+{
+	use alloc::sync::Arc;
+
+	use ahash::RandomState;
+	use align_address::Align;
+	use hashbrown::HashMap;
+	use hermit_sync::RwSpinLock;
+	use memory_addresses::PhysAddr;
+
+	use crate::arch::riscv64::kernel::core_local::core_scheduler;
+	use crate::arch::riscv64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+	use crate::fd::{Fd, RawFd};
+	use crate::mm::vma::*;
+
+	// Each process has its own object map.
+	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
+		RandomState::with_seeds(0, 0, 0, 0),
+	);
+	crate::fd::stdio::setup(&mut object_map);
+	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
+
+	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
+	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let physaddr = PhysAddr::from(frame_range.start());
+	#[cfg(feature = "fork")]
+	for i in 0..code_size / BasePageSize::SIZE as usize {
+		crate::mm::frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
+	}
+
+	let mut flags = PageTableEntryFlags::normal();
+	flags.user().set_execute(true);
+	paging::map::<BasePageSize>(
+		USER_START,
+		physaddr,
+		code_size / BasePageSize::SIZE as usize,
+		flags,
+	);
+	core_scheduler()
+		.get_current_task()
+		.borrow_mut()
+		.vmas
+		.write()
+		.insert(
+			USER_START,
+			VirtualMemoryArea::new(
+				USER_START,
+				(USER_START + code_size).align_up(BasePageSize::SIZE),
+				VirtualMemoryAreaProt::READ
+					| VirtualMemoryAreaProt::WRITE
+					| VirtualMemoryAreaProt::EXECUTE,
+				MemoryType::CODE,
+			),
+		);
+
+	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
+	let code_slice = unsafe { core::slice::from_raw_parts_mut(loader_start_ptr, code_size) };
+
+	let current_task_id = core_scheduler().get_current_task().borrow().id;
+
+	if tls_size > 0 {
+		// TLS Variant I: `tp` points to the TLS data; the two-word TCB sits
+		// directly below it.
+		let tcb_size = 2 * size_of::<*mut ()>();
+		let tls_offset = tcb_size;
+
+		let tls_memsz = (tls_offset + tls_size as usize).align_up(BasePageSize::SIZE as usize);
+		let layout = PageLayout::from_size(tls_memsz).unwrap();
+		let frame_range = FrameAlloc::allocate(layout).unwrap();
+		let physaddr = PhysAddr::from(frame_range.start());
+		#[cfg(feature = "fork")]
+		for i in 0..tls_memsz / BasePageSize::SIZE as usize {
+			crate::mm::frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
+		}
+
+		let mut flags = PageTableEntryFlags::normal();
+		flags.user();
+		let tls_virt = USER_START + code_size as u64 + BasePageSize::SIZE;
+		paging::map::<BasePageSize>(
+			tls_virt,
+			physaddr,
+			tls_memsz / BasePageSize::SIZE as usize,
+			flags,
+		);
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				tls_virt,
+				VirtualMemoryArea::new(
+					tls_virt,
+					(tls_virt + tls_memsz as u64).align_up(BasePageSize::SIZE),
+					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+					MemoryType::TLS,
+				),
+			);
+
+		let block = unsafe {
+			core::slice::from_raw_parts_mut(
+				tls_virt.as_mut_ptr::<u8>(),
+				tls_offset + tls_size as usize,
+			)
+		};
+		for elem in block.iter_mut() {
+			*elem = 0;
+		}
+
+		USER_TP
+			.lock()
+			.insert(current_task_id, (tls_virt + tls_offset as u64).as_u64());
+
+		let tls_image = &mut block[tls_offset..];
+		let tls_init = func(code_slice, Some(tls_image))?;
+
+		if let Some(init) = tls_init {
+			let template = Arc::new(crate::scheduler::task::TlsTemplate {
+				size: tls_size as usize,
+				init,
+			});
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.tls_template = Some(template);
+		}
+
+		Ok(())
+	} else {
+		// Drop a stale value, because `exec` re-enters this path.
+		USER_TP.lock().remove(&current_task_id);
+		func(code_slice, None)?;
+		Ok(())
+	}
+}
+
+/// Runs `ctx` in user mode until the next trap.
+///
+/// The trap return path does not restore `gp`, which the kernel uses as
+/// `CoreLocal` pointer, so it is saved and restored here.
+#[cfg(feature = "common-os")]
+fn run_user(ctx: &mut trapframe::UserContext) {
+	let gp: usize;
+	unsafe {
+		core::arch::asm!("mv {}, gp", out(reg) gp);
+	}
+	ctx.run();
+	unsafe {
+		core::arch::asm!("mv gp, {}", in(reg) gp);
+	}
+}
+
+/// Handles a user-mode page fault by mapping one page of the surrounding VMA.
+///
+/// Returns `true` if the fault was resolved.
+#[cfg(feature = "common-os")]
+pub(crate) fn do_user_page_fault(fault_addr: usize) -> bool {
+	use core::ops::Bound;
+
+	use align_address::Align;
+	use memory_addresses::{PhysAddr, VirtAddr};
+
+	use crate::arch::riscv64::kernel::core_local::core_scheduler;
+	use crate::arch::riscv64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+	use crate::mm::vma::VirtualMemoryAreaProt;
+
+	let addr = VirtAddr::new(fault_addr as u64).align_down(BasePageSize::SIZE);
+	let current_task = core_scheduler().get_current_task();
+	let current_task_borrowed = current_task.borrow();
+	let guard = current_task_borrowed.vmas.read();
+
+	if let Some((_, vma)) = guard
+		.range((Bound::Unbounded, Bound::Included(addr)))
+		.next_back()
+		&& addr >= vma.start
+		&& addr < vma.end
+	{
+		let layout =
+			PageLayout::from_size_align(BasePageSize::SIZE as usize, BasePageSize::SIZE as usize)
+				.unwrap();
+		let frame_range = FrameAlloc::allocate(layout).unwrap();
+		let physaddr = PhysAddr::from(frame_range.start());
+
+		let mut flags = PageTableEntryFlags::normal();
+		flags
+			.user()
+			.set_writable(vma.prot.contains(VirtualMemoryAreaProt::WRITE))
+			.set_execute(vma.prot.contains(VirtualMemoryAreaProt::EXECUTE));
+
+		paging::map::<BasePageSize>(addr, physaddr, 1, flags);
+		#[cfg(feature = "fork")]
+		crate::mm::frame_ref_inc(physaddr);
+
+		// Use the identity mapping, which works independently of `sstatus.SUM`.
+		let slice = unsafe {
+			core::slice::from_raw_parts_mut(
+				ptr::with_exposed_provenance_mut::<u8>(physaddr.as_usize()),
+				BasePageSize::SIZE as usize,
+			)
+		};
+		slice.fill(0);
+
+		return true;
+	}
+
+	false
+}
+
+/// Dispatch a system call raised by `ecall` from user mode.
+///
+/// Calling convention: syscall number in `a7`, up to six
+/// arguments in `a0`..`a5`, return value in `a0`.
+#[cfg(feature = "common-os")]
+fn dispatch_syscall(ctx: &mut trapframe::UserContext) {
+	use crate::syscalls::table::{NO_SYSCALLS, SYSHANDLER_TABLE, sys_invalid};
+
+	// Resume execution after the 4-byte `ecall` instruction.
+	ctx.sepc += 4;
+
+	let nr = ctx.general.a7;
+	if nr >= NO_SYSCALLS {
+		crate::syscalls::table::invalid_syscall(nr as u64);
+	}
+
+	let handler_ptr = SYSHANDLER_TABLE.handler(nr);
+	if handler_ptr == sys_invalid as *const usize {
+		crate::syscalls::table::invalid_syscall(nr as u64);
+	}
+
+	let f: extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 =
+		unsafe { core::mem::transmute(handler_ptr) };
+
+	// The handlers may block and run with interrupts enabled.
+	unsafe { sstatus::set_sie() };
+	let result = f(
+		ctx.general.a0 as u64,
+		ctx.general.a1 as u64,
+		ctx.general.a2 as u64,
+		ctx.general.a3 as u64,
+		ctx.general.a4 as u64,
+		ctx.general.a5 as u64,
+	);
+	unsafe { sstatus::clear_sie() };
+
+	ctx.general.a0 = result as usize;
+}
+
+/// Enters user mode at `entry` and services all traps of the user code. Never returns.
+#[cfg(feature = "common-os")]
+pub(crate) fn user_loop(
+	entry: usize,
+	stack_pointer: usize,
+	thread_pointer: u64,
+	args: [usize; 3],
+) -> ! {
+	// SPP = User, SPIE = 1, SUM = 1, FS = Initial
+	const SSTATUS_SPIE: usize = 1 << 5;
+	const SSTATUS_SPP: usize = 1 << 8;
+	const SSTATUS_FS_MASK: usize = 0b11 << 13;
+	const SSTATUS_FS_INITIAL: usize = 0b01 << 13;
+	const SSTATUS_SUM: usize = 1 << 18;
+
+	let sstatus_raw: usize;
+	unsafe {
+		core::arch::asm!("csrr {}, sstatus", out(reg) sstatus_raw);
+	}
+	let user_sstatus = (sstatus_raw & !(SSTATUS_SPP | SSTATUS_FS_MASK))
+		| SSTATUS_SPIE
+		| SSTATUS_FS_INITIAL
+		| SSTATUS_SUM;
+
+	let mut ctx = trapframe::UserContext {
+		sepc: entry,
+		sstatus: user_sstatus,
+		..Default::default()
+	};
+	ctx.general.sp = stack_pointer;
+	ctx.general.tp = thread_pointer as usize;
+	ctx.general.a0 = args[0];
+	ctx.general.a1 = args[1];
+	ctx.general.a2 = args[2];
+
+	debug!("Jump to user space at {entry:#x}, stack pointer {stack_pointer:#x}");
+
+	user_loop_resume(ctx)
+}
+
+/// Services all traps of the user code, starting from `ctx`. Never returns.
+#[cfg(feature = "common-os")]
+pub(crate) fn user_loop_resume(mut ctx: trapframe::UserContext) -> ! {
+	use riscv::interrupt::{Exception, Interrupt, Trap};
+	use riscv::register::{scause, stval};
+
+	use crate::arch::riscv64::kernel::core_local::core_scheduler;
+	use crate::scheduler::PerCoreSchedulerExt;
+
+	loop {
+		run_user(&mut ctx);
+
+		let scause = scause::read();
+		let cause = Trap::<Interrupt, Exception>::try_from(scause.cause()).unwrap();
+
+		match cause {
+			Trap::Exception(Exception::UserEnvCall) => {
+				// `fork` needs the full user context and bypasses the syscall table.
+				#[cfg(feature = "fork")]
+				if ctx.general.a7 == crate::syscalls::table::SYSNO_FORK {
+					ctx.sepc += 4;
+					let pid: i32 = unsafe { crate::scheduler::fork_from_user_context(&ctx) }.into();
+					ctx.general.a0 = pid as usize;
+					continue;
+				}
+
+				dispatch_syscall(&mut ctx);
+			}
+			Trap::Exception(
+				Exception::InstructionPageFault
+				| Exception::LoadPageFault
+				| Exception::StorePageFault,
+			) => {
+				let fault_addr = stval::read();
+
+				#[cfg(feature = "fork")]
+				if matches!(cause, Trap::Exception(Exception::StorePageFault))
+					&& crate::arch::riscv64::mm::paging::do_cow_fault(
+						memory_addresses::VirtAddr::new(fault_addr as u64),
+					) {
+					continue;
+				}
+
+				if !do_user_page_fault(fault_addr) {
+					error!("Unhandled user page fault at {fault_addr:#x} ({cause:?})");
+					error!("sepc = {:#x}", ctx.sepc);
+					core_scheduler().exit(1);
+				}
+			}
+			Trap::Interrupt(Interrupt::SupervisorTimer) => {
+				scheduler::timer_handler();
+			}
+			Trap::Interrupt(Interrupt::SupervisorExternal) => {
+				interrupts::external_handler();
+			}
+			#[cfg(feature = "smp")]
+			Trap::Interrupt(Interrupt::SupervisorSoft) => {
+				scheduler::wakeup_handler();
+			}
+			cause => {
+				error!("Fatal user trap: {cause:?}");
+				error!("sepc = {:#x}, stval = {:#x}", ctx.sepc, stval::read());
+				core_scheduler().exit(1);
+			}
+		}
+	}
+}
+
+/// Jump into the user-space application that `load_application` placed at
+/// `USER_START`.
+#[cfg(feature = "common-os")]
+pub unsafe fn jump_to_user_land(entry_point: usize, args: Vec<CString>, envs: Vec<CString>) -> ! {
+	use align_address::Align;
+	use memory_addresses::PhysAddr;
+
+	use crate::arch::riscv64::kernel::core_local::core_scheduler;
+	use crate::arch::riscv64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+	use crate::mm::vma::*;
+
+	debug!("Create new file descriptor table");
+	core_scheduler().recreate_objmap().unwrap();
+
+	let entry_point: usize = USER_START.as_usize() | entry_point;
+	let stack_top: usize = USER_STACK.as_usize() + USER_STACK_SIZE;
+
+	let layout = PageLayout::from_size(USER_STACK_SIZE).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	#[cfg(feature = "fork")]
+	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
+		crate::mm::frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
+	}
+	let mut flags = PageTableEntryFlags::normal();
+	flags.user();
+	paging::map::<BasePageSize>(
+		USER_STACK,
+		phys_addr,
+		USER_STACK_SIZE / BasePageSize::SIZE as usize,
+		flags,
+	);
+	core_scheduler()
+		.get_current_task()
+		.borrow_mut()
+		.vmas
+		.write()
+		.insert(
+			USER_STACK,
+			VirtualMemoryArea::new(
+				USER_STACK,
+				USER_STACK + USER_STACK_SIZE as u64,
+				VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+				MemoryType::STACK,
+			),
+		);
+
+	// argv and envp are null-terminated pointer arrays on the user stack.
+	let ptr_count = args.len() + 1 + envs.len() + 1;
+	let stack_pointer = stack_top - ptr_count * size_of::<*mut u8>();
+	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
+	let arrays = unsafe { core::slice::from_raw_parts_mut(stack_ptr, ptr_count) };
+	let (argv, envp) = arrays.split_at_mut(args.len() + 1);
+	let len = args
+		.iter()
+		.chain(envs.iter())
+		.fold(0, |acc, x| acc + x.as_bytes_with_nul().len());
+	// The RISC-V psABI requires SP to be 16-byte aligned at function entry.
+	let stack_pointer = (stack_pointer - len).align_down(16);
+
+	let mut pos: usize = 0;
+	for (dst, s) in argv
+		.iter_mut()
+		.zip(args.iter())
+		.chain(envp.iter_mut().zip(envs.iter()))
+	{
+		let bytes = s.as_bytes_with_nul();
+		*dst = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
+		pos += bytes.len();
+
+		unsafe {
+			dst.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
+		}
+	}
+	argv[args.len()] = ptr::null_mut();
+	envp[envs.len()] = ptr::null_mut();
+
+	let argc = args.len();
+	let argv_ptr = argv.as_ptr().expose_provenance();
+	let envp_ptr = envp.as_ptr().expose_provenance();
+	drop(args);
+	drop(envs);
+
+	let current_task_id = core_scheduler().get_current_task().borrow().id;
+	let thread_pointer = USER_TP.lock().remove(&current_task_id).unwrap_or_default();
+
+	user_loop(
+		entry_point,
+		stack_pointer,
+		thread_pointer,
+		[argc, argv_ptr, envp_ptr],
+	)
 }

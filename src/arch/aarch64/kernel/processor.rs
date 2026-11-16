@@ -215,22 +215,28 @@ pub fn halt() {
 }
 
 /// Shutdown the system
+///
+/// Without the `semihosting` feature, PSCI `SYSTEM_OFF` is used: under
+/// `accel=hvf`/`accel=kvm`, the semihosting `HLT #0xf000` is not trapped
+/// and raises an UNDEF exception.
 #[allow(unused_variables)]
 pub fn shutdown(error_code: i32) -> ! {
 	info!("Shutting down system");
 
 	cfg_select! {
 		feature = "semihosting" => semihosting::process::exit(error_code),
-		_ => {unsafe {
-			const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
-			// call hypervisor to shut down the system
-			asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+		_ => {
+			unsafe {
+				const PSCI_SYSTEM_OFF: u64 = 0x8400_0008;
+				// call hypervisor to shut down the system
+				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+			}
 
-			// we should never reach this point
+			// Last resort: park the CPU forever.
 			loop {
 				aarch64_cpu::asm::wfe();
 			}
-		}}
+		}
 	}
 }
 

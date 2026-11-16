@@ -2,6 +2,8 @@ use core::{fmt, ptr};
 
 use free_list::PageLayout;
 use memory_addresses::arch::x86_64::{PhysAddr, VirtAddr};
+#[cfg(feature = "common-os")]
+use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr2, Cr3};
 #[cfg(feature = "common-os")]
 use x86_64::registers::segmentation::SegmentSelector;
@@ -51,6 +53,10 @@ pub trait PageTableEntryFlagsExt {
 	#[expect(dead_code)]
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self;
+
+	/// Mark a page as Copy-On-Write: remove WRITABLE, remove DIRTY, set BIT_9 as COW marker.
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	fn copy_on_write(&mut self) -> &mut Self;
 }
 
 impl PageTableEntryFlagsExt for PageTableEntryFlags {
@@ -91,6 +97,15 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	#[cfg(feature = "common-os")]
 	fn kernel(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::USER_ACCESSIBLE);
+		self.insert(PageTableEntryFlags::GLOBAL);
+		self
+	}
+
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	fn copy_on_write(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::WRITABLE);
+		self.remove(PageTableEntryFlags::DIRTY);
+		self.insert(PageTableEntryFlags::BIT_9); // BIT_9 = COW marker
 		self
 	}
 }
@@ -284,6 +299,224 @@ where
 	}
 }
 
+/// Walk user pages in the current PML4 and mark all writable user pages as Copy-On-Write.
+/// This must be called before duplicating the page table for a fork.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn mark_user_pages_copy_on_write() {
+	// Physical memory is identity-mapped.
+	let (frame, _) = Cr3::read();
+	let pml4 = unsafe {
+		&mut *ptr::with_exposed_provenance_mut::<PageTable>(frame.start_address().as_u64() as usize)
+	};
+
+	// Entry 0 is the low kernel mapping, entry 511 the self-reference.
+	for pml4_idx in 1..511usize {
+		let pml4_entry = &mut pml4[pml4_idx];
+		if !pml4_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+			continue;
+		}
+		let pdpt = unsafe {
+			&mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_entry.addr().as_u64() as usize)
+		};
+		for pdpt_idx in 0..512usize {
+			let pdpt_entry = &mut pdpt[pdpt_idx];
+			if !pdpt_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+				continue;
+			}
+			let pd = unsafe {
+				&mut *ptr::with_exposed_provenance_mut::<PageTable>(
+					pdpt_entry.addr().as_u64().try_into().unwrap(),
+				)
+			};
+			for pd_idx in 0..512usize {
+				let pd_entry = &mut pd[pd_idx];
+				if !pd_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+					continue;
+				}
+				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
+					warn!("User space isn't able to use huge pages");
+					continue;
+				}
+				let pt = unsafe {
+					&mut *ptr::with_exposed_provenance_mut::<PageTable>(
+						pd_entry.addr().as_u64().try_into().unwrap(),
+					)
+				};
+				for pt_idx in 0..512usize {
+					let pt_entry = &mut pt[pt_idx];
+					if pt_entry.flags().contains(
+						PageTableEntryFlags::PRESENT
+							| PageTableEntryFlags::WRITABLE
+							| PageTableEntryFlags::USER_ACCESSIBLE,
+					) && !pt_entry.flags().contains(PageTableEntryFlags::BIT_9)
+					{
+						let new_flags = *pt_entry.flags().copy_on_write();
+						pt_entry.set_addr(pt_entry.addr(), new_flags);
+					}
+				}
+			}
+		}
+	}
+
+	tlb::flush_all();
+	#[cfg(feature = "smp")]
+	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+}
+
+#[cfg(feature = "common-os")]
+fn clear_pml4(pml4_phys: usize) {
+	fn free_frame(phys: usize) {
+		let range = free_list::PageRange::new(phys, phys + free_list::PAGE_SIZE).unwrap();
+		unsafe { FrameAlloc::deallocate(range) };
+	}
+
+	// Usually called from another task's context, so Cr3 does not point to this table.
+	let pml4 = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pml4_phys) };
+
+	// Entry 0 is the low kernel mapping, entry 511 the self-reference.
+	for pml4_idx in 1..511usize {
+		let pml4_entry = &mut pml4[pml4_idx];
+		if !pml4_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+			continue;
+		}
+		let pdpt_phys = pml4_entry.addr().as_u64() as usize;
+		let pdpt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pdpt_phys) };
+
+		for pdpt_idx in 0..512usize {
+			let pdpt_entry = &mut pdpt[pdpt_idx];
+			if !pdpt_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+				continue;
+			}
+			let pd_phys = pdpt_entry.addr().as_u64() as usize;
+			let pd = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pd_phys) };
+
+			for pd_idx in 0..512usize {
+				let pd_entry = &mut pd[pd_idx];
+				if !pd_entry.flags().contains(PageTableEntryFlags::PRESENT) {
+					continue;
+				}
+				if pd_entry.flags().contains(PageTableEntryFlags::HUGE_PAGE) {
+					warn!("User space isn't able to use huge pages");
+					continue;
+				}
+				let pt_phys = pd_entry.addr().as_u64() as usize;
+				let pt = unsafe { &mut *ptr::with_exposed_provenance_mut::<PageTable>(pt_phys) };
+
+				for pt_idx in 0..512usize {
+					let pt_entry = &mut pt[pt_idx];
+					if pt_entry.flags().contains(
+						PageTableEntryFlags::PRESENT | PageTableEntryFlags::USER_ACCESSIBLE,
+					) {
+						let phys_addr = PhysAddr::new(pt_entry.addr().as_u64());
+						#[cfg(feature = "fork")]
+						if crate::mm::frame_ref_dec(phys_addr) {
+							free_frame(phys_addr.as_u64() as usize);
+						}
+						#[cfg(not(feature = "fork"))]
+						{
+							free_frame(phys_addr.as_u64() as usize);
+						}
+						pt_entry.set_unused();
+					}
+				}
+
+				free_frame(pt_phys);
+				pd_entry.set_unused();
+			}
+
+			free_frame(pd_phys);
+			pdpt_entry.set_unused();
+		}
+
+		free_frame(pdpt_phys);
+		pml4_entry.set_unused();
+	}
+}
+
+#[cfg(feature = "common-os")]
+pub fn drop_user_space(pml4_phys: usize) {
+	debug!("Drop the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	// No TLB flush needed: the page table is not loaded on any core.
+	let range = free_list::PageRange::new(pml4_phys, pml4_phys + free_list::PAGE_SIZE).unwrap();
+	unsafe { FrameAlloc::deallocate(range) };
+}
+
+#[cfg(feature = "common-os")]
+pub fn clear_user_space() {
+	use crate::arch::kernel::core_local::core_scheduler;
+	use crate::fd::STDERR_FILENO;
+
+	core_scheduler()
+		.get_current_task()
+		.borrow()
+		.vmas
+		.write()
+		.clear();
+	core_scheduler()
+		.get_current_task_object_map()
+		.write()
+		.retain(|&k, _| k <= STDERR_FILENO);
+
+	let (p4_frame, _) = Cr3::read_raw();
+	let pml4_phys = p4_frame.start_address().as_u64() as usize;
+
+	debug!("Clear the user space at PML4 {pml4_phys:#x}");
+
+	clear_pml4(pml4_phys);
+
+	tlb::flush_all();
+	#[cfg(feature = "smp")]
+	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+}
+
+/// Copies the current task's kernel stack to the already mapped `stack_address`.
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub fn copy_kernel_stack_to(stack_address: usize) {
+	use crate::arch::kernel::core_local::core_scheduler;
+
+	let virt_addr = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_stack_virt_addr();
+	let total_size = core_scheduler()
+		.get_current_task()
+		.borrow()
+		.stacks
+		.get_total_stack_size();
+
+	let addr_diff = stack_address as u64 - virt_addr.as_u64();
+
+	let page_table = unsafe { identity_mapped_page_table() };
+
+	// The range includes 4 unmapped guard pages.
+	let full_virt_size = total_size as u64 + 4 * BasePageSize::SIZE;
+	for i in (virt_addr.as_u64()..(virt_addr.as_u64() + full_virt_size))
+		.step_by(BasePageSize::SIZE as usize)
+	{
+		let virt = x86_64::VirtAddr::new(i);
+		match page_table.translate(virt) {
+			TranslateResult::Mapped { .. } => {
+				let src = ptr::with_exposed_provenance::<u8>(i as usize);
+				let dst = ptr::with_exposed_provenance_mut::<u8>((i + addr_diff) as usize);
+				unsafe {
+					dst.copy_from_nonoverlapping(src, BasePageSize::SIZE as usize);
+				}
+			}
+			TranslateResult::NotMapped => {}
+			TranslateResult::InvalidFrameAddress(_) => {
+				error!("Unexpected translation result for stack page at {i:#X}");
+				scheduler::abort();
+			}
+		}
+	}
+
+	tlb::flush_all();
+}
+
 #[cfg(not(feature = "common-os"))]
 pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
@@ -303,13 +536,141 @@ pub(crate) extern "x86-interrupt" fn page_fault_handler(
 	mut stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
-	unsafe {
-		if stack_frame.as_mut().read().code_segment != SegmentSelector(0x08) {
-			core::arch::asm!("swapgs", options(nostack));
+	use core::arch::asm;
+
+	use crate::arch::kernel::core_local::{core_scheduler, increment_irq_counter};
+	let swapped_gs = unsafe {
+		if stack_frame.as_mut().read().code_segment == SegmentSelector(0x08) {
+			false
+		} else {
+			asm!("swapgs", options(nostack));
+			true
+		}
+	};
+
+	increment_irq_counter(14);
+
+	let faulting_addr = Cr2::read().unwrap();
+	let virtaddr = faulting_addr.align_down(BasePageSize::SIZE);
+
+	debug!(
+		"Task {} triggers a page fault at {:p}.",
+		core_scheduler().get_current_task_id(),
+		faulting_addr
+	);
+
+	// Handle Copy-On-Write faults: write fault on a read-only page with BIT_9 set.
+	#[cfg(feature = "fork")]
+	if error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE)
+		&& !error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+	{
+		let page_table = unsafe { identity_mapped_page_table() };
+		if let TranslateResult::Mapped { flags, .. } = page_table.translate(virtaddr)
+			&& flags.contains(PageTableEntryFlags::BIT_9)
+			&& !flags.contains(PageTableEntryFlags::WRITABLE)
+		{
+			// COW fault: allocate a new page, copy old contents, map as writable.
+			if let Some(src_phys) = virtual_to_physical(virtaddr.into()) {
+				let mut new_flags = flags;
+				new_flags.insert(PageTableEntryFlags::WRITABLE);
+				new_flags.remove(PageTableEntryFlags::BIT_9);
+				// Drop this task's COW reference
+				let ref_is_zero = crate::mm::frame_ref_dec(src_phys);
+
+				if ref_is_zero {
+					crate::mm::frame_ref_inc(src_phys);
+					map::<BasePageSize>(virtaddr.into(), src_phys, 1, new_flags);
+				} else {
+					let new_phys = crate::mm::copy_page(src_phys);
+					crate::mm::frame_ref_inc(new_phys);
+					map::<BasePageSize>(virtaddr.into(), new_phys, 1, new_flags);
+				}
+
+				if swapped_gs {
+					unsafe {
+						core::arch::asm!("swapgs", options(nostack));
+					}
+				}
+
+				return;
+			} else {
+				error!("COW: failed to resolve physical address for {virtaddr:p}");
+				scheduler::abort();
+			}
 		}
 	}
+
+	{
+		use core::ops::Bound;
+
+		use crate::mm::vma::VirtualMemoryAreaProt;
+
+		let current_task = core_scheduler().get_current_task();
+		let current_task_borrowed = current_task.borrow();
+		let guard = current_task_borrowed.vmas.read();
+
+		if let Some((_, vma)) = guard
+			.range((Bound::Unbounded, Bound::Included(virtaddr)))
+			.next_back()
+			&& virtaddr >= vma.start
+			&& virtaddr < vma.end
+		{
+			let layout = PageLayout::from_size_align(
+				BasePageSize::SIZE as usize,
+				BasePageSize::SIZE as usize,
+			)
+			.unwrap();
+			let frame_range = FrameAlloc::allocate(layout).unwrap();
+			let physaddr = PhysAddr::from(frame_range.start());
+			let mut flags = PageTableEntryFlags::normal();
+			flags
+				.user()
+				.set_writable(vma.prot.contains(VirtualMemoryAreaProt::WRITE))
+				.set_execute(vma.prot.contains(VirtualMemoryAreaProt::EXECUTE));
+
+			map::<BasePageSize>(virtaddr.into(), physaddr, 1, flags);
+
+			// clear page
+			let slice = unsafe {
+				core::slice::from_raw_parts_mut(
+					virtaddr.as_mut_ptr::<u8>().cast::<u8>(),
+					BasePageSize::SIZE as usize,
+				)
+			};
+			slice.fill(0);
+
+			#[cfg(feature = "fork")]
+			crate::mm::frame_ref_inc(physaddr);
+
+			// Restore the user GS before returning to ring 3.
+			if swapped_gs {
+				unsafe {
+					core::arch::asm!("swapgs", options(nostack));
+				}
+			}
+
+			return;
+		}
+	}
+
+	// A user thread whose entry function returns jumps to RIP = 0,
+	// which is treated as thread exit.
+	if error_code.contains(PageFaultErrorCode::USER_MODE)
+		&& error_code.contains(PageFaultErrorCode::INSTRUCTION_FETCH)
+		&& faulting_addr.as_u64() == 0
+	{
+		debug!(
+			"User thread {} returned from entry; exiting cleanly.",
+			core_scheduler().get_current_task_id()
+		);
+		// Keep the kernel GS: `exit` does not return.
+		let _ = swapped_gs;
+		use crate::scheduler::PerCoreSchedulerExt;
+		core_scheduler().exit(0);
+	}
+
 	error!("Page fault (#PF)!");
-	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
+	error!("page_fault_linear_address = {faulting_addr:p}");
 	error!("error_code = {error_code:?}");
 	error!("fs = {:#X}", processor::readfs());
 	error!("gs = {:#X}", processor::readgs());

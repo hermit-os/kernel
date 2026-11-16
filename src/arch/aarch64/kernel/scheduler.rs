@@ -1,6 +1,8 @@
 //! Architecture dependent interface to initialize a task
 
 use core::arch::naked_asm;
+#[cfg(feature = "common-os")]
+use core::mem;
 use core::sync::atomic::Ordering;
 
 use aarch64_cpu::asm::barrier::{SY, isb};
@@ -140,22 +142,32 @@ impl TaskStacks {
 			total_size >> 10
 		);
 
-		let flags = PageTableEntryFlags::normal();
+		let kernel_flags = PageTableEntryFlags::normal();
 
 		// map kernel stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
-			flags,
+			kernel_flags,
 		);
+
+		// Under common-os, the user stack is accessed from EL0.
+		#[cfg(feature = "common-os")]
+		let user_flags = {
+			let mut f = PageTableEntryFlags::normal();
+			f.user();
+			f
+		};
+		#[cfg(not(feature = "common-os"))]
+		let user_flags = kernel_flags;
 
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE,
 			phys_addr + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
-			flags,
+			user_flags,
 		);
 
 		// clear user stack
@@ -183,6 +195,24 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => 0,
 			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE,
+		}
+	}
+
+	/// Returns the start address of the stack region (virt_addr of CommonStack).
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	pub fn get_stack_virt_addr(&self) -> VirtAddr {
+		match self {
+			TaskStacks::Boot(stacks) => stacks.stack,
+			TaskStacks::Common(stacks) => stacks.virt_addr,
+		}
+	}
+
+	/// Returns total size of all stacks combined.
+	#[cfg(all(feature = "common-os", feature = "fork"))]
+	pub fn get_total_stack_size(&self) -> usize {
+		match self {
+			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
+			TaskStacks::Common(stacks) => stacks.total_size,
 		}
 	}
 
@@ -246,12 +276,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-/*
- * https://fuchsia.dev/fuchsia-src/development/kernel/threads/tls and
- * and https://uclibc.org/docs/tls.pdf is used to understand variant 1
- * of the TLS implementations.
- */
-
 extern "C" fn thread_exit(status: i32) -> ! {
 	debug!("Exit thread with error code {status}!");
 	core_scheduler().exit(status)
@@ -274,6 +298,50 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 		l0 = const 0,
 		exit = sym thread_exit,
 	)
+}
+
+#[cfg(feature = "common-os")]
+impl Task {
+	/// Builds the initial trap frame of a new user-space thread.
+	///
+	/// `tls_thread_ptr` is the value for `TPIDR_EL0`.
+	pub(crate) fn create_user_stack_frame(
+		&mut self,
+		func: unsafe extern "C" fn(usize),
+		arg: usize,
+		tls_thread_ptr: u64,
+	) {
+		unsafe {
+			// Debug marker at the very top of the kernel stack.
+			let mut stack = self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*stack.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			stack -= size_of::<State>();
+			let state = stack.as_mut_ptr::<State>();
+			state.cast::<u8>().write_bytes(0, size_of::<State>());
+
+			self.user_stack_pointer = self.stacks.get_user_stack()
+				+ self.stacks.get_user_stack_size()
+				- TaskStacks::MARKER_SIZE;
+			*self.user_stack_pointer.as_mut_ptr::<u64>() = 0xdead_beefu64;
+
+			(*state).elr_el1 = mem::transmute::<
+				unsafe extern "C" fn(usize),
+				extern "C" fn(extern "C" fn(usize), usize) -> !,
+			>(func);
+			// EL0t, interrupts unmasked
+			(*state).spsr_el1 = 0;
+			(*state).sp_el0 = self.user_stack_pointer.as_u64();
+			(*state).tpidr_el0 = tls_thread_ptr;
+			(*state).x0 = arg as u64;
+			// SPSEL is consumed by trap_exit but does not affect the
+			// post-eret EL0 SP selection (SPSR_EL1 alone determines it).
+			(*state).spsel = 1;
+
+			self.last_stack_pointer = stack;
+		}
+	}
 }
 
 impl TaskFrame for Task {
@@ -330,5 +398,72 @@ pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
 	CPACR_EL1.modify(CPACR_EL1::FPEN::TrapEl0El1);
 	isb(SY);
 
-	core_scheduler().get_last_stack_pointer().as_u64()
+	let scheduler = core_scheduler();
+
+	// Switch TTBR0_EL1 if the address space changes between two tasks.
+	#[cfg(feature = "common-os")]
+	{
+		let new_pt = scheduler
+			.get_current_task()
+			.borrow()
+			.root_page_table
+			.as_usize() as u64;
+		let cur_pt = TTBR0_EL1.get_baddr();
+		if cur_pt != new_pt {
+			use aarch64_cpu::asm::barrier::{ISH, ISHST, dsb};
+
+			// Barrier sequence per ARM D8.13.2
+			dsb(ISHST);
+			TTBR0_EL1.set_baddr(new_pt);
+			isb(SY);
+			// Invalidate TLB entries from the old translation regime.
+			unsafe {
+				core::arch::asm!("tlbi vmalle1is", options(nostack));
+			}
+			dsb(ISH);
+			isb(SY);
+		}
+	}
+
+	scheduler.get_last_stack_pointer().as_u64()
+}
+
+/// Prepares the child's kernel stack and root page table for `fork`.
+///
+/// The copied stack contains the `State` pushed by `trap_entry`. With
+/// `x0` patched to 0, the child returns to user space via `trap_exit`.
+///
+/// Returns `false` (the parent path).
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub unsafe fn prepare_fork_child_stack(
+	stack_pointer: *mut usize,
+	root_page_table: *mut usize,
+	new_stack_addr: usize,
+) -> bool {
+	use crate::arch::aarch64::mm::{copy_current_root_page_table, copy_kernel_stack_to};
+
+	// Must run before the page table is duplicated.
+	copy_kernel_stack_to(new_stack_addr);
+
+	let new_pt = copy_current_root_page_table();
+	unsafe { *root_page_table = new_pt };
+
+	// Locate the `State` pushed by `trap_entry` in the child's stack copy.
+	let task = core_scheduler().get_current_task();
+	let parent_stack_base = task.borrow().stacks.get_stack_virt_addr().as_usize();
+	let kernel_stack_top = task.borrow().stacks.get_kernel_stack().as_usize()
+		+ task.borrow().stacks.get_kernel_stack_size();
+	let parent_state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - size_of::<State>();
+	let offset = new_stack_addr.wrapping_sub(parent_stack_base);
+	let child_state_addr = parent_state_addr.wrapping_add(offset);
+
+	// fork() returns 0 in the child.
+	unsafe {
+		let state = core::ptr::with_exposed_provenance_mut::<State>(child_state_addr);
+		(*state).x0 = 0;
+	}
+
+	unsafe { *stack_pointer = child_state_addr };
+
+	false
 }

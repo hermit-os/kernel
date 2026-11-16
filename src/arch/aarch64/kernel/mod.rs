@@ -14,12 +14,21 @@ pub mod systemtime;
 
 use alloc::alloc::alloc;
 use core::alloc::Layout;
+#[cfg(feature = "common-os")]
+use core::arch::asm;
 use core::arch::global_asm;
 use core::ptr;
+#[cfg(feature = "common-os")]
+use core::slice;
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
+
+#[cfg(feature = "common-os")]
+use memory_addresses::{PhysAddr, VirtAddr};
 
 pub(crate) use self::interrupts::wakeup_core;
 pub(crate) use self::processor::set_oneshot_timer;
+#[cfg(all(feature = "common-os", feature = "fork"))]
+pub use self::scheduler::prepare_fork_child_stack;
 use crate::arch::kernel::core_local::*;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::config::*;
@@ -114,6 +123,7 @@ pub fn boot_next_processor() {
 		use core::arch::asm;
 		use core::hint::spin_loop;
 
+		#[cfg(not(feature = "common-os"))]
 		use memory_addresses::VirtAddr;
 
 		use crate::arch::start::smp::{TTBR0, smp_start};
@@ -174,4 +184,303 @@ pub fn boot_next_processor() {
 
 pub fn print_statistics() {
 	interrupts::print_statistics();
+}
+
+#[cfg(feature = "common-os")]
+pub(crate) const USER_START: VirtAddr = VirtAddr::new(0x0100_0000_0000);
+// The user stack must be in the L0 slot of USER_START: only this slot is
+// copied per address space.
+#[cfg(feature = "common-os")]
+const USER_STACK: VirtAddr = VirtAddr::new(0x0180_0000_0000 - USER_STACK_SIZE as u64);
+#[cfg(feature = "common-os")]
+const USER_STACK_SIZE: usize = 0x8000;
+
+/// Map the user-mode binary into the address space and run the ELF-loader
+/// closure against the freshly-mapped pages.
+#[allow(clippy::result_unit_err)]
+#[cfg(feature = "common-os")]
+pub fn load_application<F>(code_size: u64, tls_size: u64, func: F) -> Result<(), ()>
+where
+	F: FnOnce(
+		&'static mut [u8],
+		Option<&'static mut [u8]>,
+	) -> Result<Option<alloc::vec::Vec<u8>>, ()>,
+{
+	use alloc::sync::Arc;
+
+	use ahash::RandomState;
+	use align_address::Align;
+	use free_list::PageLayout;
+	use hashbrown::HashMap;
+	use hermit_sync::RwSpinLock;
+
+	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
+	use crate::fd::{Fd, RawFd};
+	#[cfg(feature = "fork")]
+	use crate::mm::frame_ref_inc;
+	use crate::mm::vma::*;
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
+
+	// Each process has its own object map.
+	let mut object_map = HashMap::<RawFd, Arc<async_lock::RwLock<Fd>>, RandomState>::with_hasher(
+		RandomState::with_seeds(0, 0, 0, 0),
+	);
+	crate::fd::stdio::setup(&mut object_map);
+	core_scheduler().set_current_task_object_map(Arc::new(RwSpinLock::new(object_map)));
+
+	let code_size = (code_size as usize).align_up(BasePageSize::SIZE as usize);
+	let layout = PageLayout::from_size_align(code_size, BasePageSize::SIZE as usize).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let physaddr = PhysAddr::from(frame_range.start());
+	#[cfg(feature = "fork")]
+	for i in 0..code_size / BasePageSize::SIZE as usize {
+		frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
+	}
+
+	let mut flags = PageTableEntryFlags::normal();
+	flags.user().execute_enable();
+	paging::map::<BasePageSize>(
+		USER_START,
+		physaddr,
+		code_size / BasePageSize::SIZE as usize,
+		flags,
+	);
+	core_scheduler()
+		.get_current_task()
+		.borrow_mut()
+		.vmas
+		.write()
+		.insert(
+			USER_START,
+			VirtualMemoryArea::new(
+				USER_START,
+				(USER_START + code_size).align_up(BasePageSize::SIZE),
+				VirtualMemoryAreaProt::READ
+					| VirtualMemoryAreaProt::WRITE
+					| VirtualMemoryAreaProt::EXECUTE,
+				MemoryType::CODE,
+			),
+		);
+
+	let loader_start_ptr = ptr::with_exposed_provenance_mut(USER_START.as_usize());
+	let code_slice = unsafe { slice::from_raw_parts_mut(loader_start_ptr, code_size) };
+
+	if tls_size > 0 {
+		// TLS Variant I: TPIDR_EL0 points to the two-word TCB, followed by
+		// the TLS image.
+		let tcb_size = 2 * size_of::<*mut ()>();
+		let tls_offset = tcb_size;
+
+		let tls_memsz = (tls_offset + tls_size as usize).align_up(BasePageSize::SIZE as usize);
+		let layout = PageLayout::from_size(tls_memsz).unwrap();
+		let frame_range = FrameAlloc::allocate(layout).unwrap();
+		let physaddr = PhysAddr::from(frame_range.start());
+		#[cfg(feature = "fork")]
+		for i in 0..tls_memsz / BasePageSize::SIZE as usize {
+			frame_ref_inc(physaddr + i * BasePageSize::SIZE as usize);
+		}
+
+		let mut flags = PageTableEntryFlags::normal();
+		flags.user();
+		let tls_virt = USER_START + code_size + BasePageSize::SIZE as usize;
+		paging::map::<BasePageSize>(
+			tls_virt,
+			physaddr,
+			tls_memsz / BasePageSize::SIZE as usize,
+			flags,
+		);
+		core_scheduler()
+			.get_current_task()
+			.borrow_mut()
+			.vmas
+			.write()
+			.insert(
+				tls_virt,
+				VirtualMemoryArea::new(
+					tls_virt,
+					(tls_virt + tls_memsz).align_up(BasePageSize::SIZE),
+					VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+					MemoryType::TLS,
+				),
+			);
+
+		let block = unsafe {
+			slice::from_raw_parts_mut(tls_virt.as_mut_ptr(), tls_offset + tls_size as usize)
+		};
+		for elem in block.iter_mut() {
+			*elem = 0;
+		}
+
+		let thread_ptr = block.as_mut_ptr().cast::<()>();
+		set_user_tpidr_el0(thread_ptr.expose_provenance() as u64);
+
+		let tls_image = &mut block[tls_offset..];
+		let tls_init = func(code_slice, Some(tls_image))?;
+
+		if let Some(init) = tls_init {
+			let template = Arc::new(crate::scheduler::task::TlsTemplate {
+				size: tls_size as usize,
+				init,
+			});
+			core_scheduler()
+				.get_current_task()
+				.borrow_mut()
+				.tls_template = Some(template);
+		}
+
+		Ok(())
+	} else {
+		// Reset TPIDR_EL0, because `exec()` re-enters this path.
+		set_user_tpidr_el0(0);
+		func(code_slice, None)?;
+		Ok(())
+	}
+}
+
+/// Set the user-space `TPIDR_EL0` value for the *current* task.
+#[cfg(feature = "common-os")]
+fn set_user_tpidr_el0(value: u64) {
+	use crate::arch::aarch64::kernel::scheduler::{State, TaskStacks};
+
+	unsafe {
+		asm!(
+			"msr tpidr_el0, {0}",
+			in(reg) value,
+			options(nomem, nostack, preserves_flags),
+		);
+	}
+
+	// Patch the saved trap frame, otherwise `trap_exit` restores the old value.
+	let task = core_scheduler().get_current_task();
+	let kernel_stack_top = task.borrow().stacks.get_kernel_stack().as_usize()
+		+ task.borrow().stacks.get_kernel_stack_size();
+	let state_addr = kernel_stack_top - TaskStacks::MARKER_SIZE - size_of::<State>();
+	unsafe {
+		let state = ptr::with_exposed_provenance_mut::<State>(state_addr);
+		(*state).tpidr_el0 = value;
+	}
+}
+
+/// Drop into EL0, executing the freshly-loaded user binary at `entry_point`.
+#[cfg(feature = "common-os")]
+pub unsafe fn jump_to_user_land(
+	entry_point: usize,
+	args: alloc::vec::Vec<alloc::ffi::CString>,
+	envs: alloc::vec::Vec<alloc::ffi::CString>,
+) -> ! {
+	use align_address::Align;
+	use free_list::PageLayout;
+
+	use crate::arch::aarch64::kernel::scheduler::TaskStacks;
+	use crate::arch::aarch64::mm::paging::{self, PageTableEntryFlags};
+	#[cfg(feature = "fork")]
+	use crate::mm::frame_ref_inc;
+	use crate::mm::vma::*;
+	use crate::mm::{FrameAlloc, PageRangeAllocator};
+
+	debug!("Create new file descriptor table");
+	core_scheduler().recreate_objmap().unwrap();
+
+	let entry_point: usize = USER_START.as_usize() | entry_point;
+	let stack_top: usize = USER_STACK.as_usize() + USER_STACK_SIZE - TaskStacks::MARKER_SIZE;
+
+	let layout = PageLayout::from_size(USER_STACK_SIZE).unwrap();
+	let frame_range = FrameAlloc::allocate(layout).unwrap();
+	let phys_addr = PhysAddr::from(frame_range.start());
+	let mut flags = PageTableEntryFlags::normal();
+	flags.user();
+	paging::map::<BasePageSize>(
+		USER_STACK,
+		phys_addr,
+		USER_STACK_SIZE / BasePageSize::SIZE as usize,
+		flags,
+	);
+	core_scheduler()
+		.get_current_task()
+		.borrow_mut()
+		.vmas
+		.write()
+		.insert(
+			USER_STACK,
+			VirtualMemoryArea::new(
+				USER_STACK,
+				USER_STACK + USER_STACK_SIZE,
+				VirtualMemoryAreaProt::READ | VirtualMemoryAreaProt::WRITE,
+				MemoryType::STACK,
+			),
+		);
+	#[cfg(feature = "fork")]
+	for i in 0..USER_STACK_SIZE / BasePageSize::SIZE as usize {
+		frame_ref_inc(phys_addr + i * BasePageSize::SIZE as usize);
+	}
+
+	// argv and envp are null-terminated pointer arrays on the user stack.
+	let ptr_count = args.len() + 1 + envs.len() + 1;
+	let stack_pointer = stack_top - ptr_count * size_of::<*mut u8>();
+	let stack_ptr = ptr::with_exposed_provenance_mut::<*mut u8>(stack_pointer);
+	let arrays = unsafe { slice::from_raw_parts_mut(stack_ptr, ptr_count) };
+	let (argv, envp) = arrays.split_at_mut(args.len() + 1);
+	let len = args
+		.iter()
+		.chain(envs.iter())
+		.fold(0, |acc, x| acc + x.as_bytes_with_nul().len());
+	// AAPCS64 requires SP to be 16-byte aligned at function entry.
+	let stack_pointer = (stack_pointer - len).align_down(16);
+
+	let mut pos: usize = 0;
+	for (dst, s) in argv
+		.iter_mut()
+		.zip(args.iter())
+		.chain(envp.iter_mut().zip(envs.iter()))
+	{
+		let bytes = s.as_bytes_with_nul();
+		*dst = ptr::with_exposed_provenance_mut::<u8>(stack_pointer + pos);
+		pos += bytes.len();
+
+		unsafe {
+			dst.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len());
+		}
+	}
+	argv[args.len()] = ptr::null_mut();
+	envp[envs.len()] = ptr::null_mut();
+
+	let argc = args.len();
+	drop(args);
+	drop(envs);
+
+	debug!("Jump to user space at 0x{entry_point:x}, stack pointer 0x{stack_pointer:x}");
+
+	// EL0t, all interrupts enabled
+	const USER_SPSR: u64 = 0;
+
+	unsafe {
+		asm!(
+			// Mask all interrupts during the EL1t→EL1h→EL0t transition.
+			"msr daifset, #0b1111",
+			// Switch to EL1h: writing SP_EL0 while it is the active stack
+			// pointer is UNDEFINED.
+			"msr spsel, #1",
+			"msr sp_el0,   {sp}",
+			"msr elr_el1,  {pc}",
+			"msr spsr_el1, {spsr}",
+			// Clear the registers so EL1 state cannot leak into EL0.
+			// x0, x1, and x2 carry argc, argv, and envp.
+			"mov x3,  xzr", "mov x4,  xzr", "mov x5,  xzr",
+			"mov x6,  xzr", "mov x7,  xzr", "mov x8,  xzr", "mov x9,  xzr",
+			"mov x10, xzr", "mov x11, xzr", "mov x12, xzr", "mov x13, xzr",
+			"mov x14, xzr", "mov x15, xzr", "mov x16, xzr", "mov x17, xzr",
+			"mov x18, xzr", "mov x29, xzr", "mov x30, xzr",
+			"eret",
+			// Speculation barrier behind ERET
+			"dsb nsh",
+			"isb",
+			sp   = in(reg) stack_pointer,
+			pc   = in(reg) entry_point,
+			spsr = in(reg) USER_SPSR,
+			in("x0") argc,
+			in("x1") argv.as_ptr(),
+			in("x2") envp.as_ptr(),
+			options(nostack, noreturn)
+		);
+	}
 }

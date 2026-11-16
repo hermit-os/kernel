@@ -52,6 +52,20 @@ use crate::env::{self, FdtStartInfo};
 #[cfg(all(any(feature = "gem-net", feature = "virtio-net"), not(feature = "pci")))]
 use crate::executor::device::NETWORK_DEVICE;
 
+/// Identity-maps the device registers at `start` with 2 MiB pages.
+///
+/// 1 GiB pages would be root-level entries, which are copied into the root
+/// table of each process and therefore not visible to existing processes.
+fn identity_map_region(start: PhysAddr, size: usize) {
+	let step = paging::LargePageSize::SIZE;
+	let end = start.as_u64() + size as u64;
+	let mut addr = start.as_u64() & !(step - 1);
+	while addr < end {
+		paging::identity_map::<paging::LargePageSize>(PhysAddr::new(addr));
+		addr += step;
+	}
+}
+
 #[cfg_attr(
 	any(not(any(feature = "gem-net", feature = "virtio")), feature = "pci"),
 	expect(unused_variables)
@@ -78,11 +92,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				plic_region_start,
 				plic_region.size.unwrap()
 			);
-			assert!(
-				plic_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
-			);
-
-			paging::identity_map::<paging::HugePageSize>(plic_region_start);
+			identity_map_region(plic_region_start, plic_region.size.unwrap());
 
 			// Route interrupts to the boot hart, which runs the async executor
 			let boot_hart_id = super::HARTS_AVAILABLE.finalize()[0];
@@ -130,10 +140,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 
 			let gem_region_start = PhysAddr::from(gem_region.starting_address.expose_provenance());
 			debug!("Init GEM at {gem_region_start:p}, irq: {irq}, phy_addr: {phy_addr}");
-			assert!(
-				gem_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
-			);
-			paging::identity_map::<paging::HugePageSize>(gem_region_start);
+			identity_map_region(gem_region_start, gem_region.size.unwrap());
 			match gem::init_device(
 				VirtAddr::new(gem_region_start.as_u64()),
 				irq.try_into().unwrap(),
@@ -175,10 +182,7 @@ pub fn init_drivers(handlers: &mut InterruptHandlerMap) {
 				PhysAddr::from(virtio_region.starting_address.expose_provenance());
 
 			debug!("Init virtio_mmio at {virtio_region_start:p}, irq: {irq}");
-			assert!(
-				virtio_region.size.unwrap() < usize::try_from(paging::HugePageSize::SIZE).unwrap()
-			);
-			paging::identity_map::<paging::HugePageSize>(virtio_region_start);
+			identity_map_region(virtio_region_start, virtio_region.size.unwrap());
 
 			// Verify the first register value to find out if this is really an MMIO magic-value.
 			let ptr = virtio_region.starting_address as *mut DeviceRegisters;
