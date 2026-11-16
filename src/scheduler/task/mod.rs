@@ -6,6 +6,7 @@ pub(crate) mod tls;
 use alloc::collections::LinkedList;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::num::NonZeroU64;
 use core::{cmp, fmt};
@@ -453,15 +454,22 @@ impl BlockedTask {
 	}
 }
 
+/// The blocked tasks of a core.
+///
+/// Tasks with a wakeup time come first, ordered by their wakeup time, followed
+/// by the tasks that wait indefinitely.
+///
+/// This is a `Vec` rather than a `LinkedList`: every blocking operation (e.g. a
+/// contended futex) adds a task and every wakeup removes it again, and a list
+/// node would be allocated and freed on each of them. The vector keeps its
+/// capacity, so blocking does not allocate once the queue has grown.
 pub(crate) struct BlockedTaskQueue {
-	list: LinkedList<BlockedTask>,
+	list: Vec<BlockedTask>,
 }
 
 impl BlockedTaskQueue {
 	pub const fn new() -> Self {
-		Self {
-			list: LinkedList::new(),
-		}
+		Self { list: Vec::new() }
 	}
 
 	fn mark_ready(task: &RefCell<Task>) {
@@ -507,57 +515,44 @@ impl BlockedTaskQueue {
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
-			let mut cursor = self.list.cursor_front_mut();
-
-			while let Some(node) = cursor.current() {
-				let node_wakeup_time = node.wakeup_time;
-				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
-					cursor.insert_before(new_node);
-
-					create_timer_abs(Source::Scheduler, wt);
-					return;
-				}
-
-				cursor.move_next();
-			}
+			let index = self
+				.list
+				.iter()
+				.position(|node| node.wakeup_time.is_none_or(|node_wt| wt < node_wt))
+				.unwrap_or(self.list.len());
+			self.list.insert(index, new_node);
 
 			create_timer_abs(Source::Scheduler, wt);
+			return;
 		}
 
-		self.list.push_back(new_node);
+		self.list.push(new_node);
 	}
 
 	/// Manually wake up a blocked task.
 	pub fn custom_wakeup(&mut self, task: TaskHandle) -> Rc<RefCell<Task>> {
-		let mut first_task = true;
-		let mut cursor = self.list.cursor_front_mut();
+		// Find the task in the list of blocked tasks.
+		let index = self
+			.list
+			.iter()
+			.position(|node| node.task.borrow().id == task.get_id())
+			.unwrap();
 
-		// Loop through all blocked tasks to find it.
-		while let Some(node) = cursor.current() {
-			if node.task.borrow().id == task.get_id() {
-				// Remove it from the list of blocked tasks.
-				let task_ref = node.task.clone();
-				cursor.remove_current();
+		// Remove it from the list of blocked tasks.
+		let task_ref = self.list.remove(index).task;
 
-				// If this is the first task, adjust the One-Shot Timer to fire at the
-				// next task's wakeup time (if any).
-				if first_task
-					&& let Some(wakeup) = cursor.current().and_then(|node| node.wakeup_time)
-				{
-					create_timer_abs(Source::Scheduler, wakeup);
-				}
-
-				// Wake it up.
-				Self::mark_ready(&task_ref);
-
-				return task_ref;
-			}
-
-			first_task = false;
-			cursor.move_next();
+		// If this was the first task, adjust the One-Shot Timer to fire at the
+		// next task's wakeup time (if any).
+		if index == 0
+			&& let Some(wakeup) = self.list.first().and_then(|node| node.wakeup_time)
+		{
+			create_timer_abs(Source::Scheduler, wakeup);
 		}
 
-		unreachable!();
+		// Wake it up.
+		Self::mark_ready(&task_ref);
+
+		task_ref
 	}
 
 	/// Wakes up all tasks whose wakeup time has elapsed.
@@ -571,7 +566,7 @@ impl BlockedTaskQueue {
 		// Get the wakeup time of this task and check if we have reached the first task
 		// that hasn't elapsed yet or waits indefinitely.
 		// This iterator has to be consumed to actually remove the elements.
-		let newly_ready_tasks = self.list.extract_if(|blocked_task| {
+		let newly_ready_tasks = self.list.extract_if(.., |blocked_task| {
 			blocked_task
 				.wakeup_time
 				.is_some_and(|wakeup_time| wakeup_time < time)
@@ -582,7 +577,7 @@ impl BlockedTaskQueue {
 			ready_queue.push(task.task);
 		}
 
-		let new_task_wakeup_time = self.list.front().and_then(|task| task.wakeup_time);
+		let new_task_wakeup_time = self.list.first().and_then(|task| task.wakeup_time);
 
 		if let Some(wakeup) = new_task_wakeup_time {
 			create_timer_abs(Source::Scheduler, wakeup);
