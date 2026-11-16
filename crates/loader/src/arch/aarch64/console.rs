@@ -66,10 +66,7 @@ impl Default for Console {
 		let stdout = stdout();
 		#[cfg(feature = "linux")]
 		unsafe {
-			ptr::write_volatile(
-				&raw mut super::entry::EXCEPTION_UART,
-				stdout.get_addr() as usize,
-			);
+			(&raw mut super::entry::EXCEPTION_UART).write_volatile(stdout.get_addr() as usize);
 		}
 		Self { stdout }
 	}

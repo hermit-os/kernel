@@ -168,6 +168,20 @@ jobs:
         env:
           CARGO_BUILD_WARNINGS: warn
 
+  loader-check:
+    name: Loader (check)
+    runs-on: ubuntu-26.04
+    defaults:
+      run:
+        working-directory: crates/loader
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mkroening/rust-toolchain-toml@main
+      - run: rustup component add clippy rustfmt
+      - run: cargo fmt --all --check
+      - run: cargo update -w --locked
+      - run: cargo xtask clippy
+
   run-hermit:
     name: Run
     runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}

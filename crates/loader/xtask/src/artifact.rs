@@ -98,7 +98,7 @@ impl CmdExt for Cmd<'_> {
 		let cmd = self.target_dir_args(artifact).args(artifact.release_args());
 
 		if let Some(profile) = &artifact.profile {
-			cmd.args(&["--profile", profile])
+			cmd.args(["--profile", profile])
 		} else {
 			cmd
 		}
