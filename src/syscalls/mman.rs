@@ -20,7 +20,7 @@ use crate::mm::{FrameAlloc, PageAlloc, PageRangeAllocator};
 
 bitflags! {
 	#[repr(transparent)]
-	#[derive(Debug, Copy, Clone, Default)]
+	#[derive(Debug, Copy, Clone, Default, PartialEq)]
 	pub struct MemoryProtection: u32 {
 		/// Pages may not be accessed.
 		const None = 0;
@@ -116,9 +116,14 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 
 	debug!("Mprotect {virtual_address:X} ({size}) -> {prot_flags:?})");
 	if let Some(physical_address) = paging::virtual_to_physical(virtual_address) {
+		// Memory is already mapped
 		paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0
+	} else if prot_flags == MemoryProtection::None {
+		// Unmapped memory stays reserved without frames
+		0
 	} else {
+		// Memory was not mapped but now becomes accessible
 		let frame_layout = PageLayout::from_size(size).unwrap();
 		let frame_range = FrameAlloc::allocate_zeroed(frame_layout).unwrap();
 		let physical_address = PhysAddr::from(frame_range.start());
