@@ -52,7 +52,7 @@ pub extern "C" fn sys_mmap(size: usize, prot_flags: MemoryProtection, ret: &mut 
 		return 0;
 	}
 	let frame_layout = PageLayout::from_size(size).unwrap();
-	let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+	let frame_range = FrameAlloc::allocate_zeroed(frame_layout).unwrap();
 	let physical_address = PhysAddr::from(frame_range.start());
 
 	debug!("Mmap {physical_address:X} -> {virtual_address:X} ({size})");
@@ -120,7 +120,7 @@ pub extern "C" fn sys_mprotect(ptr: *mut u8, size: usize, prot_flags: MemoryProt
 		0
 	} else {
 		let frame_layout = PageLayout::from_size(size).unwrap();
-		let frame_range = FrameAlloc::allocate(frame_layout).unwrap();
+		let frame_range = FrameAlloc::allocate_zeroed(frame_layout).unwrap();
 		let physical_address = PhysAddr::from(frame_range.start());
 		paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 		0

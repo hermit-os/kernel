@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use align_address::Align;
 use free_list::{FreeList, PageLayout, PageRange};
 use hermit_sync::InterruptTicketMutex;
-use memory_addresses::VirtAddr;
+use memory_addresses::{PhysAddr, VirtAddr};
 
 #[cfg(all(target_arch = "x86_64", feature = "hermit-entry"))]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
@@ -20,6 +20,20 @@ static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList<16>> =
 pub static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 pub struct FrameAlloc;
+
+impl FrameAlloc {
+	/// Like [`FrameAlloc::allocate`], but the returned frames are zeroed.
+	pub fn allocate_zeroed(layout: PageLayout) -> Result<PageRange, AllocError> {
+		let range = Self::allocate(layout)?;
+		let phys_addr = PhysAddr::from(range.start());
+		unsafe {
+			DeviceAlloc
+				.ptr_from::<u8>(phys_addr)
+				.write_bytes(0, range.len().get());
+		}
+		Ok(range)
+	}
+}
 
 impl PageRangeAllocator for FrameAlloc {
 	unsafe fn init() {
@@ -64,8 +78,6 @@ pub fn total_memory_size() -> usize {
 
 #[cfg(feature = "hermit-entry")]
 pub unsafe fn map_frame_range(frame_range: PageRange) {
-	use memory_addresses::PhysAddr;
-
 	use crate::arch::mm::paging::PageTableEntryFlags;
 
 	cfg_select! {
