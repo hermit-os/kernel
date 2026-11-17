@@ -8,17 +8,20 @@ on:
   workflow_dispatch:
 
 env:
+  GH_TOKEN: ${{ github.token }}
   CARGO_BUILD_WARNINGS: deny
 
 defaults:
   run:
     shell: bash
-    working-directory: crates/loader
 
-jobs:W
+jobs:
   check:
     name: Check
     runs-on: ubuntu-26.04
+    defaults:
+      run:
+        working-directory: crates/loader
     steps:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
@@ -26,3 +29,87 @@ jobs:W
       - run: cargo fmt --all --check
       - run: cargo update -w --locked
       - run: cargo xtask clippy
+
+  run:
+    name: Run (${{ matrix.arch }}, ${{ matrix.profile }})
+    runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
+    defaults:
+      run:
+        working-directory: kernel/crates/loader
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64, aarch64_be, riscv64]
+        profile: [dev, release]
+        include:
+          - arch: x86_64
+            packages: qemu-system-x86-hwe
+            flags: --accel --sudo
+            rs_features: hermit/loader
+          - arch: aarch64
+            packages: qemu-system-arm-hwe ipxe-qemu u-boot-qemu u-boot-tools
+            rs_features: hermit/loader,hermit/semihosting
+          - arch: aarch64_be
+            packages: qemu-system-arm-hwe ipxe-qemu
+            rs_features: hermit/loader
+          - arch: riscv64
+            packages: qemu-system-riscv-hwe opensbi
+            rs_features: hermit/loader
+    steps:
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends ${{ matrix.packages }}
+        working-directory: .
+      - name: Install Firecracker
+        run: |
+          gh release download --repo firecracker-microvm/firecracker v1.12.0 --pattern "firecracker-*-${{ matrix.arch }}.tgz"
+          tar -xvf firecracker-*-${{ matrix.arch }}.tgz
+          mv release*/firecracker-*-${{ matrix.arch }} firecracker
+          echo "FIRECRACKER=$PWD/firecracker" >> "$GITHUB_ENV"
+        working-directory: ${{ runner.temp }}
+        if: matrix.arch == 'x86_64'
+      - name: Checkout hermit-rs
+        uses: actions/checkout@v7
+        with:
+          repository: hermit-os/hermit-rs
+      - name: Checkout hermit-kernel
+        uses: actions/checkout@v7
+        with:
+          path: kernel
+      - uses: mkroening/rust-toolchain-toml@main
+      - run: rustup component add llvm-tools
+        working-directory: .
+      - uses: mkroening/rust-toolchain-toml@main
+        with:
+          toolchain-file: "kernel/rust-toolchain.toml"
+      - name: Build test images
+        run: |
+          image=../target/${{ matrix.arch == 'riscv64' && 'riscv64gc' || matrix.arch }}-unknown-hermit/release/hello_world
+          data=crates/loader/data/${{ matrix.arch }}
+          mkdir -p $data
+          cargo xtask ci rs --arch ${{ matrix.arch }} --profile release --features ${{ matrix.rs_features }} --package hello_world build
+          cp $image $data/hello_world
+          if [ ${{ matrix.arch }} = x86_64 ]; then
+            cargo xtask ci rs --arch ${{ matrix.arch }} --profile release --no-default-features --features ${{ matrix.rs_features }} --package hello_world build
+            cp $image $data/hello_world-microvm
+          fi
+        working-directory: kernel
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-elf
+        if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-elf --u-boot
+        if: matrix.arch == 'aarch64'
+      - run: cargo xtask build --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-linux
+        if: matrix.arch == 'aarch64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-sbi
+        if: matrix.arch == 'riscv64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-multiboot
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-multiboot --microvm
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-uefi --esp
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-uefi
+        if: matrix.arch == 'x86_64'
+      - run: cargo xtask ci firecracker --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-linux --sudo
+        if: matrix.arch == 'x86_64'
