@@ -404,6 +404,20 @@ impl UsedDeviceWritableBuffer {
 		Some(unsafe { cast.assume_init() })
 	}
 
+	/// Returns the address of the first buffer element.
+	///
+	/// The buffers stay at the same address while the device uses them, so the
+	/// address identifies the request a used buffer belongs to.
+	#[cfg_attr(not(feature = "virtio-fs"), expect(dead_code))]
+	pub fn front_addr(&self) -> Option<usize> {
+		self.elems.first().map(|elem| match elem {
+			BufferElem::Sized(sized) => ptr::from_ref::<dyn Any + Send>(&**sized)
+				.cast::<u8>()
+				.addr(),
+			BufferElem::Vector(vector) => vector.as_ptr().addr(),
+		})
+	}
+
 	pub fn pop_front_vec(&mut self) -> Option<Vec<u8, DeviceAlloc>> {
 		if self.elems.is_empty() {
 			return None;

@@ -17,6 +17,7 @@ use fuse_abi::linux::*;
 
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio::get_filesystem_driver;
+use crate::drivers::fs::VirtioFsDriver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::error::VirtqError;
@@ -42,19 +43,13 @@ const MAX_WRITE_LEN: usize = 1024 * 64;
 
 const U64_SIZE: usize = size_of::<u64>();
 
+/// The ID of the next request (`fuse_in_header::unique`).
+static NEXT_UNIQUE: AtomicU64 = AtomicU64::new(1);
+
 const S_IFLNK: u32 = 0o120_000;
 const S_IFMT: u32 = 0o170_000;
 
 pub(crate) trait VirtioFsInterface {
-	fn send_command<O: ops::Op + 'static>(
-		&mut self,
-		cmd: Cmd<O>,
-		rsp_payload_len: u32,
-	) -> Result<Rsp<O>, VirtioFsError>
-	where
-		<O as ops::Op>::InStruct: Send,
-		<O as ops::Op>::OutStruct: Send;
-
 	fn get_mount_point(&self) -> String;
 }
 
@@ -575,7 +570,8 @@ impl<O: ops::Op> CmdHeader<O> {
 					.expect("The command is too large"),
 				opcode: O::OP_CODE.into(),
 				nodeid,
-				unique: 1,
+				// Several requests may be in flight, so each needs its own ID.
+				unique: NEXT_UNIQUE.fetch_add(1, Ordering::Relaxed),
 				..Default::default()
 			},
 			op_header,
@@ -673,11 +669,7 @@ impl From<VirtioFsError> for Errno {
 
 fn lookup(name: CString) -> Option<u64> {
 	let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, name);
-	let rsp = get_filesystem_driver()
-		.unwrap()
-		.lock()
-		.send_command(cmd, rsp_payload_len)
-		.ok()?;
+	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len).ok()?;
 	Some(rsp.headers.op_header.nodeid)
 }
 
@@ -696,10 +688,7 @@ fn resolve_parent(path: &CStr) -> io::Result<(u64, CString)> {
 	for component in components {
 		let component = CString::new(component).map_err(|_| Errno::Inval)?;
 		let (cmd, rsp_payload_len) = ops::Lookup::create(nid, component);
-		nid = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?
+		nid = VirtioFsDriver::send_command(cmd, rsp_payload_len)?
 			.headers
 			.op_header
 			.nodeid;
@@ -711,10 +700,7 @@ fn resolve_parent(path: &CStr) -> io::Result<(u64, CString)> {
 fn readlink(nid: u64) -> io::Result<String> {
 	let len = MAX_READ_LEN as u32;
 	let (cmd, rsp_payload_len) = ops::Readlink::create(nid, len);
-	let rsp = get_filesystem_driver()
-		.unwrap()
-		.lock()
-		.send_command(cmd, rsp_payload_len)?;
+	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 	let len: usize = if rsp.headers.out_header.len as usize - size_of::<fuse_out_header>()
 		>= usize::try_from(len).unwrap()
 	{
@@ -756,10 +742,7 @@ impl VirtioFsFileHandleInner {
 			};
 
 			let (cmd, rsp_payload_len) = ops::Poll::create(nid, fh, kh, events);
-			let rsp = get_filesystem_driver()
-				.ok_or(Errno::Nosys)?
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
+			let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 			if rsp.headers.out_header.error < 0 {
 				return Poll::Ready(Err(Errno::Io));
@@ -795,10 +778,7 @@ impl VirtioFsFileHandleInner {
 				let fh = self.fuse_fh.ok_or(Errno::Io)?;
 
 				let (cmd, rsp_payload_len) = ops::Lseek::create(nid, fh, offset, whence);
-				let rsp = get_filesystem_driver()
-					.ok_or(Errno::Nosys)?
-					.lock()
-					.send_command(cmd, rsp_payload_len)?;
+				let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 				if rsp.headers.out_header.error < 0 {
 					return Err(Errno::Io);
@@ -829,10 +809,7 @@ impl VirtioFsFileHandleInner {
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
 
 		let (cmd, rsp_payload_len) = ops::Getattr::create(nid, fh, FUSE_GETATTR_FH);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error < 0 {
 			return Err(Errno::Io);
@@ -848,10 +825,7 @@ impl VirtioFsFileHandleInner {
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
 
 		let (cmd, rsp_payload_len) = ops::Setattr::create(nid, fh, attr, valid);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error < 0 {
 			return Err(Errno::Io);
@@ -867,10 +841,7 @@ impl VirtioFsFileHandleInner {
 		let fh = self.fuse_fh.ok_or(Errno::Io)?;
 
 		let (cmd, rsp_payload_len) = ops::Fsync::create(nid, fh, false);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		fsync_result(rsp.headers.out_header.error)
 	}
@@ -906,10 +877,7 @@ impl Read for VirtioFsFileHandleInner {
 
 		let (cmd, rsp_payload_len) =
 			ops::Read::create(nid, fh, len.try_into().unwrap(), self.offset as u64);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		let len: usize =
 			if (rsp.headers.out_header.len as usize) - size_of::<fuse_out_header>() >= len {
 				len
@@ -942,10 +910,7 @@ impl Write for VirtioFsFileHandleInner {
 
 		let truncated_buf = Box::<[u8]>::from(&buf[..truncated_len]);
 		let (cmd, rsp_payload_len) = ops::Write::create(nid, fh, truncated_buf, self.offset as u64);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error < 0 {
 			return Err(Errno::Io);
@@ -977,11 +942,7 @@ impl Drop for VirtioFsFileHandleInner {
 		};
 
 		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
-		get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)
-			.unwrap();
+		VirtioFsDriver::send_command(cmd, rsp_payload_len).unwrap();
 	}
 }
 
@@ -1087,10 +1048,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
 		debug!("virtio-fs readdir: {path:#?}");
@@ -1103,10 +1061,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 		// read content of the directory
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_READDIR as u32;
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		let len = usize::min(
 			MAX_READ_LEN,
@@ -1154,10 +1109,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 		}
 
 		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
-		get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		Ok(buf_offset)
 	}
@@ -1177,26 +1129,17 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 		// the flush. Flag 0x10000 is O_DIRECTORY, as in `getdents`.
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
 		let (mut cmd, rsp_payload_len) = ops::Fsync::create(fuse_nid, fuse_fh, false);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_FSYNCDIR as u32;
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		let result = fsync_result(rsp.headers.out_header.error);
 
 		let (mut cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_RELEASEDIR as u32;
-		get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		result
 	}
@@ -1277,10 +1220,7 @@ impl VfsNode for VirtioFsDirectory {
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		let fuse_fh = rsp.headers.op_header.fh;
 
 		debug!("virtio-fs readdir: {path:#?}");
@@ -1292,10 +1232,7 @@ impl VfsNode for VirtioFsDirectory {
 		// read content of the directory
 		let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 		cmd.headers.in_header.opcode = fuse_opcode::FUSE_READDIR as u32;
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		let len: usize = if rsp.headers.out_header.len as usize - size_of::<fuse_out_header>()
 			>= usize::try_from(len).unwrap()
@@ -1338,10 +1275,7 @@ impl VfsNode for VirtioFsDirectory {
 		}
 
 		let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
-		get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		Ok(entries)
 	}
@@ -1353,10 +1287,7 @@ impl VfsNode for VirtioFsDirectory {
 
 		// Is there a better way to implement this?
 		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path);
-		let rsp = get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 		if rsp.headers.out_header.error != 0 {
 			return Err(Errno::try_from(-rsp.headers.out_header.error).unwrap());
@@ -1379,10 +1310,7 @@ impl VfsNode for VirtioFsDirectory {
 		debug!("virtio-fs lstat: {path:#?}");
 
 		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path);
-		let rsp = get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		Ok(FileAttr::from(rsp.headers.op_header.attr))
 	}
 
@@ -1404,10 +1332,7 @@ impl VfsNode for VirtioFsDirectory {
 			}
 
 			let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path.clone());
-			let rsp = get_filesystem_driver()
-				.unwrap()
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
+			let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 			let attr = FileAttr::from(rsp.headers.op_header.attr);
 			if !attr.st_mode.contains(AccessPermission::S_IFDIR) {
@@ -1433,10 +1358,7 @@ impl VfsNode for VirtioFsDirectory {
 			let (parent, name) = resolve_parent(&path)?;
 			let (cmd, rsp_payload_len) =
 				ops::Create::create(parent, name, opt.bits().try_into().unwrap(), mode.bits());
-			let rsp = get_filesystem_driver()
-				.ok_or(Errno::Nosys)?
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
+			let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 
 			let inner = rsp.headers.op_header;
 			file_guard.fuse_nid = Some(inner.entry.nodeid);
@@ -1453,10 +1375,7 @@ impl VfsNode for VirtioFsDirectory {
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, rsp_payload_len) =
 				ops::Open::create(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
-			let rsp = get_filesystem_driver()
-				.ok_or(Errno::Nosys)?
-				.lock()
-				.send_command(cmd, rsp_payload_len)?;
+			let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 			file_guard.fuse_fh = Some(rsp.headers.op_header.fh);
 		}
 
@@ -1470,10 +1389,7 @@ impl VfsNode for VirtioFsDirectory {
 
 		let (parent, name) = resolve_parent(&path)?;
 		let (cmd, rsp_payload_len) = ops::Unlink::create(parent, name);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		trace!("unlink answer {rsp:?}");
 
 		Ok(())
@@ -1484,10 +1400,7 @@ impl VfsNode for VirtioFsDirectory {
 
 		let (parent, name) = resolve_parent(&path)?;
 		let (cmd, rsp_payload_len) = ops::Rmdir::create(parent, name);
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		trace!("rmdir answer {rsp:?}");
 
 		Ok(())
@@ -1498,10 +1411,7 @@ impl VfsNode for VirtioFsDirectory {
 		let (parent, name) = resolve_parent(&path)?;
 		let (cmd, rsp_payload_len) = ops::Mkdir::create(parent, name, mode.bits());
 
-		let rsp = get_filesystem_driver()
-			.ok_or(Errno::Nosys)?
-			.lock()
-			.send_command(cmd, rsp_payload_len)?;
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
 		if rsp.headers.out_header.error != 0 {
 			return Err(Errno::try_from(-rsp.headers.out_header.error).unwrap());
 		}
@@ -1518,7 +1428,7 @@ pub(crate) fn init() {
 	};
 
 	let (cmd, rsp_payload_len) = ops::Init::create();
-	let rsp = driver.lock().send_command(cmd, rsp_payload_len).unwrap();
+	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len).unwrap();
 	trace!("virtio-fs init answer: {rsp:?}");
 
 	let mount_point = driver.lock().get_mount_point();
@@ -1546,11 +1456,7 @@ pub(crate) fn init() {
 	// Flag 0x10000 for O_DIRECTORY might not be necessary
 	let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
 	cmd.headers.in_header.opcode = fuse_opcode::FUSE_OPENDIR as u32;
-	let rsp = get_filesystem_driver()
-		.unwrap()
-		.lock()
-		.send_command(cmd, rsp_payload_len)
-		.unwrap();
+	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len).unwrap();
 	let fuse_fh = rsp.headers.op_header.fh;
 
 	// Linux seems to allocate a single page to store the dirfile
@@ -1560,11 +1466,7 @@ pub(crate) fn init() {
 	// read content of the directory
 	let (mut cmd, rsp_payload_len) = ops::Read::create(fuse_nid, fuse_fh, len, 0);
 	cmd.headers.in_header.opcode = fuse_opcode::FUSE_READDIR as u32;
-	let rsp = get_filesystem_driver()
-		.unwrap()
-		.lock()
-		.send_command(cmd, rsp_payload_len)
-		.unwrap();
+	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len).unwrap();
 
 	let len: usize = if rsp.headers.out_header.len as usize - size_of::<fuse_out_header>()
 		>= usize::try_from(len).unwrap()
@@ -1602,11 +1504,7 @@ pub(crate) fn init() {
 	}
 
 	let (cmd, rsp_payload_len) = ops::Release::create(fuse_nid, fuse_fh);
-	get_filesystem_driver()
-		.unwrap()
-		.lock()
-		.send_command(cmd, rsp_payload_len)
-		.unwrap();
+	VirtioFsDriver::send_command(cmd, rsp_payload_len).unwrap();
 
 	// remove predefined directories
 	entries.retain(|x| x != ".");
@@ -1620,11 +1518,7 @@ pub(crate) fn init() {
 	for entry in entries {
 		let i_cstr = CString::new(entry.as_str()).unwrap();
 		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, i_cstr);
-		let rsp = get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd, rsp_payload_len)
-			.unwrap();
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len).unwrap();
 
 		let attr = FileAttr::from(rsp.headers.op_header.attr);
 		if attr.st_mode.contains(AccessPermission::S_IFDIR) {
