@@ -7,7 +7,7 @@ use core::{cmp, ptr};
 
 use align_address::Align;
 use free_list::PageLayout;
-use hermit_sync::{OnceCell, SpinMutex, without_interrupts};
+use hermit_sync::{InterruptSpinMutex, OnceCell, SpinMutex, without_interrupts};
 use memory_addresses::{AddrRange, PhysAddr, VirtAddr};
 #[cfg(feature = "smp")]
 use x86_64::registers::control::Cr3;
@@ -136,7 +136,7 @@ static IOAPICS: SpinMutex<Vec<IoApic>> = SpinMutex::new(Vec::new());
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).
-static CPU_LOCAL_APIC_IDS: SpinMutex<Vec<u8>> = SpinMutex::new(Vec::new());
+static CPU_LOCAL_APIC_IDS: InterruptSpinMutex<Vec<u8>> = InterruptSpinMutex::new(Vec::new());
 
 /// After calibration, initialize the APIC Timer with this counter value to let it fire an interrupt
 /// after 1 microsecond.
@@ -825,20 +825,18 @@ pub fn ipi_tlb_flush() {
 		}
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
-		without_interrupts(|| {
-			for (core_id_to_interrupt, &apic_id) in apic_ids.iter().enumerate() {
-				if core_id_to_interrupt != usize::try_from(core_id).unwrap() {
-					let destination = u64::from(apic_id) << 32;
-					local_apic_write(
-						IA32_X2APIC_ICR,
-						destination
-							| APIC_ICR_LEVEL_ASSERT
-							| APIC_ICR_DELIVERY_MODE_FIXED
-							| u64::from(TLB_FLUSH_INTERRUPT_NUMBER),
-					);
-				}
+		for (core_id_to_interrupt, &apic_id) in apic_ids.iter().enumerate() {
+			if core_id_to_interrupt != usize::try_from(core_id).unwrap() {
+				let destination = u64::from(apic_id) << 32;
+				local_apic_write(
+					IA32_X2APIC_ICR,
+					destination
+						| APIC_ICR_LEVEL_ASSERT
+						| APIC_ICR_DELIVERY_MODE_FIXED
+						| u64::from(TLB_FLUSH_INTERRUPT_NUMBER),
+				);
 			}
-		});
+		}
 	}
 }
 
@@ -850,18 +848,16 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 		&& !processor::supports_mwait()
 		&& scheduler::sleep_state::try_wake_up(core_id_to_wakeup)
 	{
-		without_interrupts(|| {
-			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
-			let local_apic_id = apic_ids[core_id_to_wakeup as usize];
-			let destination = u64::from(local_apic_id) << 32;
-			local_apic_write(
-				IA32_X2APIC_ICR,
-				destination
-					| APIC_ICR_LEVEL_ASSERT
-					| APIC_ICR_DELIVERY_MODE_FIXED
-					| u64::from(WAKEUP_INTERRUPT_NUMBER),
-			);
-		});
+		let apic_ids = CPU_LOCAL_APIC_IDS.lock();
+		let local_apic_id = apic_ids[core_id_to_wakeup as usize];
+		let destination = u64::from(local_apic_id) << 32;
+		local_apic_write(
+			IA32_X2APIC_ICR,
+			destination
+				| APIC_ICR_LEVEL_ASSERT
+				| APIC_ICR_DELIVERY_MODE_FIXED
+				| u64::from(WAKEUP_INTERRUPT_NUMBER),
+		);
 	}
 }
 

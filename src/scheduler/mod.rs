@@ -50,8 +50,8 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 const PREEMPTION_SLICE_US: u64 = 10_000;
 /// Map between Core ID and per-core scheduler
 #[cfg(feature = "smp")]
-static SCHEDULER_INPUTS: SpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
-	SpinMutex::new(Vec::new());
+static SCHEDULER_INPUTS: InterruptSpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
+	InterruptSpinMutex::new(Vec::new());
 /// Map between Task ID and Queue of waiting tasks
 static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
