@@ -131,13 +131,13 @@ pub fn boot_processor_main() -> ! {
 	info!("Enabled features: {}", built_info::FEATURES_LOWERCASE_STR);
 	info!("Built on {}", built_info::BUILT_TIME_UTC);
 
-	info!("Executable start: {:p}", elf_symbols::executable_start());
-	info!("ELF header:       {:p}", elf_symbols::elf_header());
-	info!("Text segment end: {:p}", elf_symbols::text_end());
-	info!("Data segment end: {:p}", elf_symbols::data_end());
-	info!("Executable end:   {:p}", elf_symbols::executable_end());
+	debug!("Executable start: {:p}", elf_symbols::executable_start());
+	debug!("ELF header:       {:p}", elf_symbols::elf_header());
+	debug!("Text segment end: {:p}", elf_symbols::text_end());
+	debug!("Data segment end: {:p}", elf_symbols::data_end());
+	debug!("Executable end:   {:p}", elf_symbols::executable_end());
 
-	info!("{}", env::start_info().display());
+	debug!("{}", env::start_info().display());
 
 	kernel::boot_processor_init();
 

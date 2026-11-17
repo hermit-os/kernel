@@ -294,8 +294,8 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn print_information() {
-	info!("{FrameAlloc}");
-	info!("{PageAlloc}");
+	debug!("{FrameAlloc}");
+	debug!("{PageAlloc}");
 }
 
 /// Maps a given physical address and size in virtual space and returns address.
