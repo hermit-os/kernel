@@ -1,5 +1,4 @@
 use alloc::collections::vec_deque::VecDeque;
-use alloc::vec::Vec;
 use core::future;
 use core::task::{Poll, Waker};
 
@@ -8,25 +7,6 @@ use hermit_sync::InterruptTicketMutex;
 use crate::errno::Errno;
 use crate::fd::{EventFlags, ObjectInterface, PollEvent};
 use crate::io;
-
-// The state is protected by an `InterruptTicketMutex` instead of an
-// `async_lock::Mutex`.
-//
-// The critical sections are short and never block, so there is nothing to
-// wait for while holding the lock. With an `async_lock::Mutex`, the lock future
-// was created anew inside `poll_fn` (`pin!(self.state.lock())`) and dropped at
-// the end of every poll. If another core held the lock at that moment, the lock
-// future returned `Pending` and its listener was dropped together with it, so
-// nobody would ever poll the operation again: a lost wakeup.
-//
-// This is easy to hit with tokio: a `spawn_blocking` thread finishes and wakes
-// the I/O driver through mio's eventfd waker while the driver thread is inside
-// `poll(2)` on the same eventfd. The `write` gets lost and the runtime stops
-// making progress.
-//
-// Now `Pending` is only returned for a semantic reason (counter empty or full),
-// and the waker is enqueued under the lock, so the wakeup cannot be missed.
-// Wakers are invoked after the lock is released.
 
 #[derive(Debug)]
 struct EventState {
@@ -71,7 +51,7 @@ fn enqueue(queue: &mut VecDeque<Waker>, waker: &Waker) {
 }
 
 /// Wakes the given wakers. Must be called without holding the state lock.
-fn wake_all(wakers: Vec<Waker>) {
+fn wake_all(wakers: VecDeque<Waker>) {
 	for waker in wakers {
 		waker.wake();
 	}
@@ -96,7 +76,7 @@ impl ObjectInterface for EventFd {
 				};
 				buf[..len].copy_from_slice(&u64::to_ne_bytes(value));
 				// The counter decreased, so pending writers may be able to proceed.
-				let wakers: Vec<Waker> = guard.write_queue.drain(..).collect();
+				let wakers = core::mem::take(&mut guard.write_queue);
 				drop(guard);
 				wake_all(wakers);
 				Poll::Ready(Ok(len))
@@ -127,7 +107,7 @@ impl ObjectInterface for EventFd {
 				// just one: a readable notification is level-triggered, and the
 				// `poll`-based fd multiplexing re-registers a fresh waker on every
 				// poll, so the queue may contain stale wakers.
-				let wakers: Vec<Waker> = guard.read_queue.drain(..).collect();
+				let wakers = core::mem::take(&mut guard.read_queue);
 				drop(guard);
 				wake_all(wakers);
 				Poll::Ready(Ok(len))
