@@ -6,11 +6,6 @@ targets = [
 ]
 all-features = true
 
-[advisories]
-ignore = [
-    { id = "RUSTSEC-2024-0436", reason = "`paste` is unmaintained, but finished. See https://github.com/rustsec/advisory-db/pull/2215#issuecomment-2709315704." },
-]
-
 [licenses]
 allow = [
     "0BSD",
