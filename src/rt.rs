@@ -3,11 +3,7 @@ use crate::arch::kernel::core_local::{core_id, core_scheduler};
 use crate::arch::kernel::interrupts;
 use crate::env::{self, StartInfo};
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
-use crate::{console, drivers, executor, fs, logging, mm, scheduler, syscalls};
-
-mod built_info {
-	include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
+use crate::{built_info, console, drivers, executor, fs, logging, mm, scheduler, syscalls};
 
 #[cfg(feature = "hermit-entry")]
 hermit_entry::define_abi_tag!();
