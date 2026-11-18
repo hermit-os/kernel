@@ -163,3 +163,7 @@ pub mod syscalls;
 pub mod time;
 #[cfg(feature = "uhyve")]
 mod uhyve;
+
+pub(crate) mod built_info {
+	include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
