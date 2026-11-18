@@ -266,6 +266,7 @@ pub fn get_timestamp() -> u64 {
 	time::read64()
 }
 
+#[allow(dead_code)]
 pub fn supports_1gib_pages() -> bool {
 	true
 }

@@ -7,7 +7,8 @@ use free_list::{PageLayout, PageRange};
 
 /// An allocator that allocates memory in page granularity.
 pub trait PageRangeAllocator {
-	unsafe fn init();
+	/// Returns the available memory in Bytes for this allocator.
+	unsafe fn init() -> usize;
 
 	/// Attempts to allocate a range of memory in page granularity.
 	fn allocate(layout: PageLayout) -> Result<PageRange, AllocError>;
