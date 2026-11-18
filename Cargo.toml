@@ -369,7 +369,6 @@ async-executor = { git = "https://github.com/hermit-os/async-executor.git", bran
 async-lock = { version = "3.4.2", default-features = false }
 bit_field = "0.10"
 bitflags = "2"
-build-time = "0.1.3"
 crossbeam-utils = { version = "0.8", default-features = false }
 delegate = "0.13"
 document-features = { version = "0.2", optional = true }

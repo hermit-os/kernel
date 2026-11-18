@@ -343,7 +343,7 @@ pub enum SeekWhence {
 
 pub(crate) fn init() {
 	const VERSION: &str = env!("CARGO_PKG_VERSION");
-	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
+	const BUILT_TIME_UTC: &str = crate::built_info::BUILT_TIME_UTC;
 
 	let root_filesystem = Filesystem::new();
 
@@ -380,7 +380,7 @@ pub(crate) fn init() {
 	FILESYSTEM.set(root_filesystem).unwrap();
 
 	if let Ok(mut file) = File::create("/proc/version") {
-		if write!(file, "Hermit version {VERSION} # UTC {UTC_BUILT_TIME}").is_err() {
+		if write!(file, "Hermit version {VERSION} # {BUILT_TIME_UTC}").is_err() {
 			error!("Unable to write in /proc/version");
 		}
 	} else {
