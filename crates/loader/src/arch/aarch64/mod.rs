@@ -39,11 +39,11 @@ static mut DEVICE_TREE: u64 = RAM_START;
 
 #[cfg(feature = "linux")]
 unsafe fn set_device_tree(addr: u64) {
-	unsafe { ptr::write_volatile(&raw mut DEVICE_TREE, addr) }
+	unsafe { (&raw mut DEVICE_TREE).write_volatile(addr) }
 }
 
 fn device_tree() -> u64 {
-	unsafe { ptr::read_volatile(&raw const DEVICE_TREE) }
+	unsafe { (&raw const DEVICE_TREE).read_volatile() }
 }
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
@@ -67,9 +67,8 @@ unsafe fn relocate_device_tree(dst: u64) -> u64 {
 	};
 	let size = fdt.total_size();
 	unsafe {
-		ptr::copy_nonoverlapping(
+		ptr::with_exposed_provenance_mut::<u8>(dst as usize).copy_from_nonoverlapping(
 			ptr::with_exposed_provenance::<u8>(device_tree() as usize),
-			ptr::with_exposed_provenance_mut::<u8>(dst as usize),
 			size,
 		);
 		set_device_tree(dst);
@@ -119,7 +118,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	}
 	#[cfg(feature = "linux")]
 	unsafe {
-		ptr::write_volatile(&raw mut entry::EXCEPTION_UART, 0x1000);
+		(&raw mut entry::EXCEPTION_UART).write_volatile(0x1000);
 	}
 
 	let fdt = unsafe {

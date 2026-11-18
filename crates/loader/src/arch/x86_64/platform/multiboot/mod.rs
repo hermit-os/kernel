@@ -1,5 +1,4 @@
 use alloc::borrow::ToOwned;
-use core::ptr::write_bytes;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{mem, ptr, slice};
 
@@ -165,7 +164,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	// clear stack
 	unsafe {
-		write_bytes(stack, 0, KERNEL_STACK_SIZE.try_into().unwrap());
+		stack.write_bytes(0, KERNEL_STACK_SIZE.try_into().unwrap());
 	}
 
 	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");

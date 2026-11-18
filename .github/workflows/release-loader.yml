@@ -1,0 +1,33 @@
+name: Release loader
+
+on:
+  push:
+    tags:
+      - "loader-*.*.*"
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+defaults:
+  run:
+    shell: bash
+    working-directory: crates/loader
+
+jobs:
+  release:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: mkroening/rust-toolchain-toml@main
+      - name: Check version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "hermit-loader") | .version')
+          test "${GITHUB_REF_NAME#loader-}" = "$version"
+      - run: cargo xtask build --release --target aarch64-elf
+      - run: cargo xtask build --release --target aarch64-linux
+      - run: cargo xtask build --release --target aarch64_be-elf
+      - run: cargo xtask build --release --target riscv64-sbi
+      - run: cargo xtask build --release --target x86_64-linux
+      - run: cargo xtask build --release --target x86_64-multiboot
+      - run: cargo xtask build --release --target x86_64-uefi
+      - run: gh release create "$GITHUB_REF_NAME" --draft --title "Loader ${GITHUB_REF_NAME#loader-}" target/release/hermit-loader-*

@@ -70,8 +70,8 @@ impl Qemu {
 		let arg = self.sudo.then_some(qemu.as_str());
 
 		let qemu = cmd!(sh, "{program} {arg...}")
-			.args(&["-display", "none"])
-			.args(&["-serial", "stdio"])
+			.args(["-display", "none"])
+			.args(["-serial", "stdio"])
 			.args(self.machine_args())
 			.args(self.cpu_args())
 			.args(self.memory_args());
