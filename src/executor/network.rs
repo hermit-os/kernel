@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 #[cfg(feature = "dns")]
 use alloc::vec::Vec;
 use core::future;
-use core::sync::atomic::{AtomicU16, Ordering};
+use core::sync::atomic::{AtomicU16, AtomicU32, Ordering};
 use core::task::Poll;
 
 use hermit_sync::InterruptTicketMutex;
@@ -234,6 +234,14 @@ async fn dhcpv4_run() {
 pub(crate) static NETWORK_WAKER: InterruptTicketMutex<WakerRegistration> =
 	InterruptTicketMutex::new(WakerRegistration::new());
 
+/// The core whose executor runs `network_run` (the core that called `init`),
+/// or `u32::MAX` if the network has not been initialized.
+///
+/// Waking the network waker only queues the task on that core's executor. If
+/// the core is halted, a socket operation issued on another core would only be
+/// processed on the next interrupt, so we also send it a wakeup IPI (#2729).
+static NETWORK_CORE: AtomicU32 = AtomicU32::new(u32::MAX);
+
 #[track_caller]
 pub(crate) fn wake_network_waker() {
 	if log_enabled!(log::Level::Trace) {
@@ -247,6 +255,14 @@ pub(crate) fn wake_network_waker() {
 	}
 
 	NETWORK_WAKER.lock().wake();
+
+	#[cfg(feature = "smp")]
+	{
+		let core = NETWORK_CORE.load(Ordering::Relaxed);
+		if core != u32::MAX && core != crate::arch::kernel::core_local::core_id() {
+			crate::arch::kernel::wakeup_core(core);
+		}
+	}
 }
 
 async fn network_run() {
@@ -326,6 +342,10 @@ pub(crate) fn init() {
 	*guard = NetworkInterface::create();
 
 	if let NetworkState::Initialized(_) = &mut *guard {
+		NETWORK_CORE.store(
+			crate::arch::kernel::core_local::core_id(),
+			Ordering::Relaxed,
+		);
 		spawn(network_run());
 		#[cfg(feature = "dhcpv4")]
 		spawn(dhcpv4_run());

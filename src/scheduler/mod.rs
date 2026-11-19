@@ -197,7 +197,7 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 				current_task_borrowed.id, exit_code
 			);
 			current_task_borrowed.status = TaskStatus::Finished;
-			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
+			let remaining_tasks = NO_TASKS.fetch_sub(1, Ordering::SeqCst) - 1;
 
 			let current_id = current_task_borrowed.id;
 			drop(current_task_borrowed);
@@ -210,6 +210,11 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 			}
 
 			TASKS.lock().remove(&current_id);
+
+			assert!(
+				remaining_tasks != 0,
+				"Last task exited with exit code {exit_code}"
+			);
 		});
 
 		self.reschedule();
@@ -734,7 +739,7 @@ impl PerCoreScheduler {
 			interrupts::disable();
 
 			// run async tasks
-			crate::executor::run();
+			let async_pending = crate::executor::run();
 
 			// do housekeeping
 			#[cfg(feature = "smp")]
@@ -742,7 +747,10 @@ impl PerCoreScheduler {
 			core_scheduler.cleanup_tasks();
 
 			if core_scheduler.ready_queue.is_empty() {
-				if backoff.is_completed() {
+				// Do not halt while async tasks are still runnable, e.g. the network
+				// task that re-queued itself because another core holds the NIC lock
+				// (#2729). Otherwise it would only run again on the next interrupt.
+				if backoff.is_completed() && !async_pending {
 					interrupts::enable_and_wait();
 					backoff.reset();
 				} else {
@@ -893,7 +901,16 @@ fn get_tid() -> TaskId {
 
 #[inline]
 pub(crate) fn abort() -> ! {
-	core_scheduler().exit(-1)
+	cfg_select! {
+		feature = "common-os" => {
+			error!("Aborting tread execution");
+			core_scheduler().exit(-1)
+		}
+		_ => {
+			error!("Aborting kernel execution");
+			shutdown(-1);
+		}
+	}
 }
 
 /// Add a per-core scheduler for the current core.
