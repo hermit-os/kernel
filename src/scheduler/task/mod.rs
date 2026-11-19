@@ -530,13 +530,14 @@ impl BlockedTaskQueue {
 	}
 
 	/// Manually wake up a blocked task.
-	pub fn custom_wakeup(&mut self, task: TaskHandle) -> Rc<RefCell<Task>> {
+	///
+	/// Returns `None` if the task is not blocked.
+	pub fn custom_wakeup(&mut self, task: TaskHandle) -> Option<Rc<RefCell<Task>>> {
 		// Find the task in the list of blocked tasks.
 		let index = self
 			.list
 			.iter()
-			.position(|node| node.task.borrow().id == task.get_id())
-			.unwrap();
+			.position(|node| node.task.borrow().id == task.get_id())?;
 
 		// Remove it from the list of blocked tasks.
 		let task_ref = self.list.remove(index).task;
@@ -552,7 +553,7 @@ impl BlockedTaskQueue {
 		// Wake it up.
 		Self::mark_ready(&task_ref);
 
-		task_ref
+		Some(task_ref)
 	}
 
 	/// Wakes up all tasks whose wakeup time has elapsed.
