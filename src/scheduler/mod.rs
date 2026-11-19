@@ -729,7 +729,7 @@ impl PerCoreScheduler {
 			interrupts::disable();
 
 			// run async tasks
-			crate::executor::run();
+			let async_pending = crate::executor::run();
 
 			// do housekeeping
 			#[cfg(feature = "smp")]
@@ -737,7 +737,10 @@ impl PerCoreScheduler {
 			core_scheduler.cleanup_tasks();
 
 			if core_scheduler.ready_queue.is_empty() {
-				if backoff.is_completed() {
+				// Do not halt while async tasks are still runnable, e.g. the network
+				// task that re-queued itself because another core holds the NIC lock
+				// (#2729). Otherwise it would only run again on the next interrupt.
+				if backoff.is_completed() && !async_pending {
 					interrupts::enable_and_wait();
 					backoff.reset();
 				} else {
