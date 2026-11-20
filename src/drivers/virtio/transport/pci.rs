@@ -152,10 +152,20 @@ impl CapCfg for virtio::console::Config {
 
 impl CapCfg for virtio::fs::Config {
 	const TYPE: CapCfgType = CapCfgType::Device;
+
+	fn min_size() -> usize {
+		// `notify_buf_size` is optional.
+		size_of::<Self>() - size_of::<le32>()
+	}
 }
 
 impl CapCfg for virtio::net::Config {
 	const TYPE: CapCfgType = CapCfgType::Device;
+
+	fn min_size() -> usize {
+		// `supported_hash_types` and `supported_tunnel_types` are optional.
+		size_of::<Self>() - size_of::<[le32; 2]>()
+	}
 }
 
 impl CapCfg for virtio::vsock::Config {
