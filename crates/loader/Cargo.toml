@@ -12,6 +12,7 @@ anstyle = { version = "1", default-features = false }
 cfg-if = "1"
 hermit-entry = { version = "0.10", features = ["loader"] }
 log = "0.4"
+pci_types = "0.6"
 one-shot-mutex = "0.2"
 take-static = "0.1"
 

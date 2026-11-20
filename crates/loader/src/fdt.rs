@@ -88,8 +88,15 @@ impl Fdt {
 
 #[cfg(feature = "multiboot")]
 mod x86_64 {
+	use alloc::format;
+	use alloc::vec::Vec;
+
+	use log::info;
 	use multiboot::information::{MemoryMapIter, MemoryType};
+	use pci_types::{Bar, EndpointHeader, MAX_BARS, PciAddress, PciHeader};
 	use vm_fdt::FdtWriterResult;
+
+	use crate::arch::pci::{PCI_MAX_BUS_NUMBER, PCI_MAX_DEVICE_NUMBER, PciConfigRegion};
 
 	impl super::Fdt {
 		pub fn memory_regions(
@@ -105,6 +112,138 @@ mod x86_64 {
 						..memory_region.base_address() + memory_region.length(),
 				)?;
 			}
+
+			Ok(self)
+		}
+
+		pub fn pci(mut self) -> FdtWriterResult<Self> {
+			let fdt = &mut self.writer;
+
+			let pci_node = fdt.begin_node("pci")?;
+			fdt.property_string("device_type", "pci")?;
+
+			// TODO: Address cells and size cells should be 3 and 2 respectively. 1 and 1 are only used for compatibility with devicetree output tool.
+			fdt.property_u32("#address-cells", 0x1)?;
+			fdt.property_u32("#size-cells", 0x1)?;
+
+			info!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
+
+			// Hermit only uses PCI for network devices.
+			// Therefore, multifunction devices as well as additional bridges are not scanned.
+			// We also limit scanning to the first 32 buses.
+			let pci_config = PciConfigRegion::new();
+			for bus in 0..PCI_MAX_BUS_NUMBER {
+				for device in 0..PCI_MAX_DEVICE_NUMBER {
+					let pci_address = PciAddress::new(0, bus, device, 0);
+					let header = PciHeader::new(pci_address);
+
+					let (vendor_id, device_id) = header.id(&pci_config);
+					if device_id != u16::MAX && vendor_id != u16::MAX {
+						let addr = ((pci_address.bus() as u32) << 16)
+							| ((pci_address.device() as u32) << 11);
+						info!("Addr: {:#x}", addr);
+						let endpoint = EndpointHeader::from_header(header, &pci_config).unwrap();
+						let (_pin, line) = endpoint.interrupt(&pci_config);
+
+						info!("Device ID: {:#x}  Vendor ID: {:#x}", device_id, vendor_id);
+
+						if vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id) {
+							info!("Network card found.");
+							let net_node =
+								fdt.begin_node(format!("ethernet@{:x}", addr).as_str())?;
+
+							fdt.property_string("compatible", "realtek,rtl8139")?;
+							fdt.property_u32("vendor-id", vendor_id as u32)?;
+							fdt.property_u32("device-id", device_id as u32)?;
+							fdt.property_u32("interrupts", line as u32)?;
+
+							// The creation of "reg" and "assigned-addresses" properties is based on the
+							// PCI Bus Binding to IEEE Std 1275-1994 Revision 2.1 (https://www.devicetree.org/open-firmware/bindings/pci/pci2_1.pdf)
+							fdt.property_array_u32(
+								"reg",
+								&[
+									addr,
+									0,
+									0,
+									0,
+									0,
+									(0x02000010 | addr),
+									0,
+									0,
+									0,
+									0x100,
+									(0x01000014 | addr),
+									0,
+									0,
+									0,
+									0x100,
+								],
+							)?;
+
+							let mut assigned_addresses: Vec<u32> = Vec::new();
+							for i in 0..MAX_BARS {
+								if let Some(bar) = endpoint.bar(i.try_into().unwrap(), &pci_config)
+								{
+									match bar {
+										Bar::Io { port } => {
+											info!("BAR{:x} IO {{port: {:#X}}}", i, port);
+											assigned_addresses.extend(alloc::vec![
+												(0x81000014 | addr),
+												0,
+												port,
+												0,
+												0x100
+											]);
+										}
+										Bar::Memory32 {
+											address,
+											size,
+											prefetchable,
+										} => {
+											info!(
+												"BAR{:x} Memory32 {{address: {:#X}, size {:#X}, prefetchable: {:?}}}",
+												i, address, size, prefetchable
+											);
+											assigned_addresses.extend(alloc::vec![
+												(0x82000010 | addr),
+												0,
+												address,
+												0,
+												size
+											]);
+										}
+										Bar::Memory64 {
+											address,
+											size,
+											prefetchable,
+										} => {
+											info!(
+												"BAR{:x} Memory64 {{address: {:#X}, size {:#X}, prefetchable: {:?}}}",
+												i, address, size, prefetchable
+											);
+											assigned_addresses.extend(alloc::vec![
+												(0x82000010 | addr),
+												(address >> 32) as u32,
+												address as u32,
+												(size >> 32) as u32,
+												size as u32
+											]);
+										}
+									}
+								}
+							}
+							fdt.property_array_u32(
+								"assigned-addresses",
+								assigned_addresses.as_slice(),
+							)?;
+
+							fdt.end_node(net_node)?;
+						}
+					}
+				}
+			}
+
+			fdt.end_node(pci_node)?;
 
 			Ok(self)
 		}
