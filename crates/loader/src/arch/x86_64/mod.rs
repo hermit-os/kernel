@@ -3,6 +3,8 @@ mod console;
 mod gdt;
 #[cfg(target_os = "none")]
 mod page_tables;
+#[cfg(all(not(target_os = "uefi"), not(feature = "fc")))]
+pub(crate) mod pci;
 #[cfg(target_os = "none")]
 mod physicalmem;
 mod platform;
