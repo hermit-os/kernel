@@ -878,17 +878,17 @@ pub(crate) fn init<T: 'static>(
 			|mut caller: Caller<'_, _>, number_env_variables_ptr: i32, env_buffer_size_ptr: i32| {
 				if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
 					let mut env_buffer_size: u32 = 0;
-					let mut nnumber_env_variables: u32 = 0;
+					let mut number_env_variables: u32 = 0;
 
 					for (key, value) in std::env::vars() {
-						nnumber_env_variables += 1;
+						number_env_variables += 1;
 						env_buffer_size += u32::try_from(key.len() + value.len() + 2).unwrap(); // +2 for the null terminator and '='
 					}
 
 					let _ = mem.write(
 						caller.as_context_mut(),
 						number_env_variables_ptr.try_into().unwrap(),
-						nnumber_env_variables.as_bytes(),
+						number_env_variables.as_bytes(),
 					);
 					let _ = mem.write(
 						caller.as_context_mut(),

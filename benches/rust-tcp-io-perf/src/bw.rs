@@ -118,7 +118,7 @@ impl BwClient {
 	fn teardown(self) {
 		match self {
 			Self::Tcp { mut stream, .. } => {
-				stream.flush().expect("Unexpected behaviour");
+				stream.flush().expect("Unexpected behavior");
 				connection::close_connection(&stream);
 			}
 			Self::Udp { .. } => {}
