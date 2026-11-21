@@ -52,7 +52,7 @@ pub const O_EXCL: i32 = 0o200;
 pub const O_TRUNC: i32 = 0o1000;
 pub const O_APPEND: i32 = 0o2000;
 pub const O_NONBLOCK: i32 = 0o4000;
-pub const O_DIRECTORY: i32 = 0o200000;
+pub const O_DIRECTORY: i32 = 0o200_000;
 pub const F_DUPFD: i32 = 0;
 pub const F_GETFD: i32 = 1;
 pub const F_SETFD: i32 = 2;
@@ -84,7 +84,7 @@ pub struct timeval {
 }
 
 /// The largest number `rand` will return
-pub const RAND_MAX: i32 = 2_147_483_647;
+pub const RAND_MAX: i32 = i32::MAX;
 
 pub const AF_UNSPEC: i32 = 0;
 /// Socket address family: IPv4
@@ -130,7 +130,7 @@ pub const SO_RCVTIMEO: i32 = 0x1006;
 pub const SO_ERROR: i32 = 0x1007;
 pub const TCP_NODELAY: i32 = 1;
 pub const MSG_PEEK: i32 = 1;
-pub const FIONBIO: i32 = 0x8008667eu32 as i32;
+pub const FIONBIO: i32 = 0x8008_667eu32 as i32;
 pub const EAI_AGAIN: i32 = 2;
 pub const EAI_BADFLAGS: i32 = 3;
 pub const EAI_FAIL: i32 = 4;
@@ -886,11 +886,13 @@ extern "C" {
 /// Determine the priority of the current thread
 #[inline(always)]
 pub unsafe fn get_priority() -> Priority {
-	Priority::from(sys_get_priority())
+	// SAFETY: the kernel only reads the state of the current thread.
+	Priority::from(unsafe { sys_get_priority() })
 }
 
 /// Determine the priority of the current thread
 #[inline(always)]
 pub unsafe fn set_priority(tid: Tid, prio: Priority) {
-	sys_set_priority(tid, prio.into());
+	// SAFETY: the caller upholds the requirements of `sys_set_priority`.
+	unsafe { sys_set_priority(tid, prio.into()) };
 }

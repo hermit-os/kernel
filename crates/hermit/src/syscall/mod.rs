@@ -1,3 +1,9 @@
+#![allow(
+	clippy::cast_lossless,
+	trivial_numeric_casts,
+	reason = "`syscall!` casts all arguments to u64"
+)]
+
 mod math;
 #[cfg(target_arch = "x86_64")]
 #[macro_use]
@@ -395,6 +401,6 @@ pub unsafe extern "C" fn _start(_argc: i32, _argv: *const *const c_char) -> ! {
 	let environ = core::ptr::null::<*const c_char>();
 	let argv = [c"dummy".as_ptr()];
 
-	// And finally start the application.
-	runtime_entry(1, argv.as_ptr(), environ)
+	// SAFETY: `argv` and `environ` are valid for the lifetime of the program.
+	unsafe { runtime_entry(1, argv.as_ptr(), environ) }
 }

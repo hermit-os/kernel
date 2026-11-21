@@ -3,7 +3,6 @@ name = "micro_benchmarks"
 edition = "2021"
 
 [dependencies]
-rayon = "1.12"
 hermit_bench_output = "0.1.1"
 
 [target.'cfg(target_os = "hermit")'.dependencies]

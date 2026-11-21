@@ -13,7 +13,7 @@ static ALLOC: Lazy<RawSpinlock, Talck<RawSpinlock, ErrOnOom>> = Lazy::new(|| {
 
 	let mem = MEM.take().unwrap();
 
-	let mut talc = Talc::new(talc::ErrOnOom);
+	let mut talc = Talc::new(ErrOnOom);
 	unsafe {
 		talc.claim(mem.into()).unwrap();
 	}

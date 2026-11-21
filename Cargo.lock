@@ -1208,8 +1208,6 @@ version = "0.0.0"
 dependencies = [
  "hermit",
  "hermit-abi 0.5.3",
- "time",
- "tiny_http",
 ]
 
 [[package]]
@@ -2490,7 +2488,6 @@ dependencies = [
  "aarch64-cpu 11.2.0",
  "hermit",
  "hermit_bench_output",
- "rayon",
  "riscv",
  "syscalls",
 ]
@@ -3021,9 +3018,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "poll"
 version = "0.0.0"
 dependencies = [
- "env_logger",
  "hermit",
- "log",
  "polling",
 ]
 
@@ -3398,7 +3393,6 @@ dependencies = [
 name = "rust-tcp-io-perf"
 version = "0.0.0"
 dependencies = [
- "bytes",
  "clap",
  "core_affinity",
  "hdrhist",
