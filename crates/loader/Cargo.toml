@@ -1,6 +1,6 @@
 [package]
 name = "hermit-loader"
-version = "0.5.8"
+version = "0.5.9"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -50,7 +50,7 @@ anyhow = { version = "1", default-features = false }
 uefi = { version = "0.40", features = ["alloc", "panic_handler", "qemu"] }
 
 [build-dependencies]
-built = { version = "0.8", features = ["git2", "chrono"] }
+built = { version = "0.9", features = ["git2", "jiff"] }
 
 # FIXME: When target-specific features exist, remove the workaround features.
 # https://github.com/rust-lang/cargo/issues/1197
