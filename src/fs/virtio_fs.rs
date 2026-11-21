@@ -667,34 +667,54 @@ impl From<VirtioFsError> for Errno {
 	}
 }
 
-fn lookup(name: CString) -> Option<u64> {
-	let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, name);
-	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len).ok()?;
-	Some(rsp.headers.op_header.nodeid)
+/// Looks up `path` component by component, starting at the root node.
+///
+/// Returns `None` for the root node itself. virtiofsd rejects lookup names,
+/// which contain `/`.
+fn lookup_entry(path: &str) -> io::Result<Option<fuse_entry_out>> {
+	let mut entry: Option<fuse_entry_out> = None;
+	for component in path.split('/').filter(|component| !component.is_empty()) {
+		let parent = entry.as_ref().map_or(FUSE_ROOT_ID, |entry| entry.nodeid);
+		let component = CString::new(component).map_err(|_| Errno::Inval)?;
+		let (cmd, rsp_payload_len) = ops::Lookup::create(parent, component);
+		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
+		entry = Some(rsp.headers.op_header);
+	}
+	Ok(entry)
 }
 
-/// Looks up the parent directory of `path` component by component and
-/// returns its node id and the last component.
+fn lookup(path: &CStr) -> io::Result<u64> {
+	let path = path.to_str().map_err(|_| Errno::Inval)?;
+	Ok(lookup_entry(path)?.map_or(FUSE_ROOT_ID, |entry| entry.nodeid))
+}
+
+fn lookup_attr(path: &CStr) -> io::Result<(u64, fuse_attr)> {
+	let path = path.to_str().map_err(|_| Errno::Inval)?;
+	if let Some(entry) = lookup_entry(path)? {
+		return Ok((entry.nodeid, entry.attr));
+	}
+
+	let (cmd, rsp_payload_len) = ops::Getattr::create(FUSE_ROOT_ID, 0, 0);
+	let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
+	Ok((FUSE_ROOT_ID, rsp.headers.op_header.attr))
+}
+
+/// Looks up the parent directory of `path` and returns its node id and the
+/// last component.
 ///
 /// virtiofsd resolves the names of `unlink`, `rmdir` and `mkdir` with `*at`
 /// system calls relative to the parent node, so an absolute name below the
 /// root node refers to the root of the host.
 fn resolve_parent(path: &CStr) -> io::Result<(u64, CString)> {
 	let path = path.to_str().map_err(|_| Errno::Inval)?;
-	let mut components = path.split('/').filter(|component| !component.is_empty());
-	let name = components.next_back().ok_or(Errno::Inval)?;
-
-	let mut nid = FUSE_ROOT_ID;
-	for component in components {
-		let component = CString::new(component).map_err(|_| Errno::Inval)?;
-		let (cmd, rsp_payload_len) = ops::Lookup::create(nid, component);
-		nid = VirtioFsDriver::send_command(cmd, rsp_payload_len)?
-			.headers
-			.op_header
-			.nodeid;
+	let path = path.trim_end_matches('/');
+	let (parent, name) = path.rsplit_once('/').unwrap_or(("", path));
+	if name.is_empty() {
+		return Err(Errno::Inval);
 	}
 
-	Ok((nid, CString::new(name).map_err(|_| Errno::Inval)?))
+	let parent = lookup_entry(parent)?.map_or(FUSE_ROOT_ID, |entry| entry.nodeid);
+	Ok((parent, CString::new(name).map_err(|_| Errno::Inval)?))
 }
 
 fn readlink(nid: u64) -> io::Result<String> {
@@ -1042,7 +1062,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 
 		debug!("virtio-fs opendir: {path:#?}");
 
-		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
+		let fuse_nid = lookup(&path)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
@@ -1123,7 +1143,7 @@ impl ObjectInterface for VirtioFsDirectoryHandle {
 
 		debug!("virtio-fs fsyncdir: {path:#?}");
 
-		let fuse_nid = lookup(path).ok_or(Errno::Noent)?;
+		let fuse_nid = lookup(&path)?;
 
 		// The handle is not kept anywhere, so it is opened and released around
 		// the flush. Flag 0x10000 is O_DIRECTORY, as in `getdents`.
@@ -1214,7 +1234,7 @@ impl VfsNode for VirtioFsDirectory {
 
 		debug!("virtio-fs opendir: {path:#?}");
 
-		let fuse_nid = lookup(path.clone()).ok_or(Errno::Noent)?;
+		let fuse_nid = lookup(&path)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
@@ -1285,22 +1305,12 @@ impl VfsNode for VirtioFsDirectory {
 
 		debug!("virtio-fs stat: {path:#?}");
 
-		// Is there a better way to implement this?
-		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path);
-		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
-
-		if rsp.headers.out_header.error != 0 {
-			return Err(Errno::try_from(-rsp.headers.out_header.error).unwrap());
-		}
-
-		let entry_out = rsp.headers.op_header;
-		let attr = entry_out.attr;
-
+		let (nid, attr) = lookup_attr(&path)?;
 		if attr.mode & S_IFMT != S_IFLNK {
 			return Ok(FileAttr::from(attr));
 		}
 
-		let path = readlink(entry_out.nodeid)?;
+		let path = readlink(nid)?;
 		self.traverse_stat(&path)
 	}
 
@@ -1309,9 +1319,8 @@ impl VfsNode for VirtioFsDirectory {
 
 		debug!("virtio-fs lstat: {path:#?}");
 
-		let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path);
-		let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
-		Ok(FileAttr::from(rsp.headers.op_header.attr))
+		let (_, attr) = lookup_attr(&path)?;
+		Ok(FileAttr::from(attr))
 	}
 
 	fn traverse_open(
@@ -1331,10 +1340,8 @@ impl VfsNode for VirtioFsDirectory {
 				return Err(Errno::Inval);
 			}
 
-			let (cmd, rsp_payload_len) = ops::Lookup::create(FUSE_ROOT_ID, path.clone());
-			let rsp = VirtioFsDriver::send_command(cmd, rsp_payload_len)?;
-
-			let attr = FileAttr::from(rsp.headers.op_header.attr);
+			let (_, attr) = lookup_attr(&path)?;
+			let attr = FileAttr::from(attr);
 			if !attr.st_mode.contains(AccessPermission::S_IFDIR) {
 				return Err(Errno::Notdir);
 			}
@@ -1364,13 +1371,7 @@ impl VfsNode for VirtioFsDirectory {
 			file_guard.fuse_nid = Some(inner.entry.nodeid);
 			file_guard.fuse_fh = Some(inner.open.fh);
 		} else {
-			// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-			file_guard.fuse_nid = lookup(path);
-
-			if file_guard.fuse_nid.is_none() {
-				warn!("virtio-fs lookup seems to have failed!");
-				return Err(Errno::Noent);
-			}
+			file_guard.fuse_nid = Some(lookup(&path)?);
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, rsp_payload_len) =
@@ -1451,7 +1452,7 @@ pub(crate) fn init() {
 		return;
 	}
 
-	let fuse_nid = lookup(c"/".to_owned()).unwrap();
+	let fuse_nid = FUSE_ROOT_ID;
 	// Opendir
 	// Flag 0x10000 for O_DIRECTORY might not be necessary
 	let (mut cmd, rsp_payload_len) = ops::Open::create(fuse_nid, 0x10000);
