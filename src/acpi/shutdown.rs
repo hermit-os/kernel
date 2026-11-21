@@ -55,7 +55,7 @@ fn write_pm1x_cnt<H: Handler>(pm1x_cnt: &MappedGas<H>, slp_typx: u8) -> Result<(
 	// SLP_TYPx
 	value.set_bits(10..13, u64::from(slp_typx));
 	// SLP_EN
-	value.set_bit(13, true);
+	BitField::set_bit(&mut value, 13, true);
 	pm1x_cnt.write(value)?;
 
 	Ok(())
