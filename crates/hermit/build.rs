@@ -1,0 +1,257 @@
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::{env, str};
+
+fn main() {
+	let targets_hermit =
+		env::var_os("CARGO_CFG_TARGET_OS").is_some_and(|target_os| target_os == "hermit");
+	let runs_clippy =
+		env::var("RUSTC_WORKSPACE_WRAPPER").is_ok_and(|feature| feature.ends_with("clippy-driver"));
+	let is_docs_rs = env::var_os("DOCS_RS").is_some();
+	let is_common_os = has_feature("common-os");
+	if !targets_hermit || runs_clippy || is_docs_rs || is_common_os {
+		return;
+	}
+
+	let kernel_src = KernelSrc::get();
+
+	kernel_src.build();
+
+	if has_feature("libc") {
+		let libc = cc::Build::new()
+			.get_compiler()
+			.to_command()
+			.arg("-print-file-name=libc.a")
+			.output()
+			.unwrap()
+			.stdout;
+		let libc = str::from_utf8(&libc).unwrap().trim_ascii_end();
+		let libc_dir = Path::new(libc).parent().unwrap();
+		if libc_dir.is_dir() {
+			println!("cargo:rustc-link-search={}", libc_dir.display());
+		}
+
+		println!("cargo:rustc-link-lib=static=c");
+	}
+}
+
+struct KernelSrc {
+	src_dir: PathBuf,
+}
+
+impl KernelSrc {
+	fn get() -> Self {
+		if let Some(src_dir) = env::var_os("HERMIT_MANIFEST_DIR") {
+			assert!(
+				!src_dir.is_empty(),
+				"HERMIT_MANIFEST_DIR is set to the empty string"
+			);
+			let src_dir = PathBuf::from(src_dir);
+			return Self { src_dir };
+		}
+
+		let mut src_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
+		src_dir.set_file_name("kernel");
+		assert!(src_dir.exists(), "could not find kernel source");
+		Self { src_dir }
+	}
+
+	fn build(self) {
+		let target_dir = target_dir();
+		let manifest_path = self.src_dir.join("Cargo.toml");
+		assert!(
+			manifest_path.exists(),
+			"kernel manifest path `{}` does not exist",
+			manifest_path.display()
+		);
+		let mut arch = env::var_os("CARGO_CFG_TARGET_ARCH").unwrap();
+		let endian = env::var_os("CARGO_CFG_TARGET_ENDIAN").unwrap();
+		let profile = env::var("PROFILE").expect("PROFILE was not set");
+
+		if arch == "aarch64" && endian == "big" {
+			arch = "aarch64_be".into();
+		}
+
+		let mut cargo = cargo();
+
+		cargo
+			.current_dir(&self.src_dir)
+			.arg("run")
+			.arg("--package=xtask")
+			.arg("--no-default-features")
+			.arg("--target-dir")
+			.arg(&target_dir)
+			.arg("--")
+			.arg("build")
+			.arg("--arch")
+			.arg(&arch)
+			.args([
+				"--profile",
+				match profile.as_str() {
+					"debug" => "dev",
+					profile => profile,
+				},
+			])
+			.arg("--target-dir")
+			.arg(&target_dir);
+
+		forward_features(&mut cargo);
+
+		fs::create_dir_all(&target_dir).unwrap();
+		let lock = File::create(target_dir.join("hermit-build.lock")).unwrap();
+		lock.lock().unwrap();
+
+		eprintln!("$ {cargo:?}");
+		let status = cargo.status().expect("failed to start kernel build");
+		assert!(status.success());
+
+		// The target dir is shared between feature sets, so link against a private copy.
+		let lib_location = out_dir();
+		fs::copy(
+			target_dir.join(&arch).join(&profile).join("libhermit.a"),
+			lib_location.join("libhermit.a"),
+		)
+		.unwrap();
+		drop(lock);
+
+		println!("cargo:rustc-link-search=native={}", lib_location.display());
+		println!("cargo:rustc-link-lib=static=hermit");
+
+		self.rerun_if_changed_cargo(&self.src_dir.join("Cargo.toml"));
+		self.rerun_if_changed_cargo(&self.src_dir.join("hermit-builtins/Cargo.toml"));
+		self.rerun_if_changed_cargo(&self.src_dir.join("hermit-macro/Cargo.toml"));
+
+		println!(
+			"cargo:rerun-if-changed={}",
+			self.src_dir.join("rust-toolchain.toml").display()
+		);
+
+		println!("cargo:rerun-if-env-changed=HERMIT_CAREFUL");
+		println!("cargo:rerun-if-env-changed=HERMIT_DNS1");
+		println!("cargo:rerun-if-env-changed=HERMIT_DNS2");
+		println!("cargo:rerun-if-env-changed=HERMIT_GATEWAY");
+		println!("cargo:rerun-if-env-changed=HERMIT_IP");
+		println!("cargo:rerun-if-env-changed=HERMIT_LOG_LEVEL_FILTER");
+		println!("cargo:rerun-if-env-changed=HERMIT_MANIFEST_DIR");
+		println!("cargo:rerun-if-env-changed=HERMIT_MASK");
+		println!("cargo:rerun-if-env-changed=HERMIT_MRG_RXBUF_SIZE");
+		println!("cargo:rerun-if-env-changed=HERMIT_MTU");
+		println!("cargo:rerun-if-env-changed=NO_COLOR");
+		println!("cargo:rerun-if-env-changed=UHYVE_MOUNT");
+	}
+
+	fn rerun_if_changed_cargo(&self, cargo_toml: &Path) {
+		let mut cargo = cargo();
+
+		let output = cargo
+			.arg("tree")
+			.arg(format!("--manifest-path={}", cargo_toml.display()))
+			.arg("--prefix=none")
+			.arg("--workspace")
+			.output()
+			.unwrap();
+
+		let output = str::from_utf8(&output.stdout).unwrap();
+
+		let path_deps = output.lines().filter_map(|dep| {
+			let mut split = dep.split(&['(', ')']);
+			split.next();
+			let path = split.next()?;
+			path.starts_with('/').then_some(path)
+		});
+
+		for path_dep in path_deps {
+			println!("cargo:rerun-if-changed={path_dep}/src");
+			println!("cargo:rerun-if-changed={path_dep}/Cargo.toml");
+			if Path::new(path_dep).join("Cargo.lock").exists() {
+				println!("cargo:rerun-if-changed={path_dep}/Cargo.lock");
+			}
+			if Path::new(path_dep).join("build.rs").exists() {
+				println!("cargo:rerun-if-changed={path_dep}/build.rs");
+			}
+		}
+	}
+}
+
+fn cargo() -> Command {
+	let cargo = {
+		let exe = format!("cargo{}", env::consts::EXE_SUFFIX);
+		// On windows, the userspace toolchain ends up in front of the rustup proxy in $PATH.
+		// To reach the rustup proxy nonetheless, we explicitly query $CARGO_HOME.
+		let mut cargo_home = home::cargo_home().unwrap();
+		cargo_home.push("bin");
+		cargo_home.push(&exe);
+		if cargo_home.exists() {
+			cargo_home
+		} else {
+			PathBuf::from(exe)
+		}
+	};
+
+	let mut cargo = Command::new(cargo);
+
+	// Remove rust-toolchain-specific environment variables from kernel cargo
+	cargo.env_remove("LD_LIBRARY_PATH");
+	let keep_env_vars = ["RUSTC_BOOTSTRAP", "CARGO_HOME", "RUSTUP_HOME"];
+	env::vars()
+		.filter(|(key, _value)| {
+			(key.starts_with("CARGO") || key.starts_with("RUST"))
+				&& !keep_env_vars.contains(&key.as_str())
+		})
+		.for_each(|(key, _value)| {
+			cargo.env_remove(&key);
+		});
+
+	cargo
+}
+
+fn out_dir() -> PathBuf {
+	env::var_os("OUT_DIR").unwrap().into()
+}
+
+/// Kernel target dir, shared by all feature sets.
+///
+/// `OUT_DIR` is `<target>/<triple>/<profile>/build/hermit[-/]<hash>/out`, where the hash depends on the features.
+fn target_dir() -> PathBuf {
+	let out_dir = out_dir();
+	let build_dir = out_dir
+		.ancestors()
+		.find(|dir| dir.file_name().is_some_and(|name| name == "build"))
+		.expect("OUT_DIR is not inside a `build` directory");
+	build_dir.parent().unwrap().join("hermit-kernel")
+}
+
+fn has_feature(feature: &str) -> bool {
+	let mut var = "CARGO_FEATURE_".to_string();
+
+	var.extend(feature.chars().map(|c| match c {
+		'-' => '_',
+		c => c.to_ascii_uppercase(),
+	}));
+
+	env::var_os(&var).is_some()
+}
+
+/// Forward Cargo features to kernel build.
+fn forward_features(cargo: &mut Command) {
+	cargo.arg("--no-default-features");
+
+	let cargo_cfg_feature = env::var("CARGO_CFG_FEATURE").unwrap();
+	let cargo_cfg_feature = cargo_cfg_feature
+		.split(',')
+		.map(|feature| {
+			if let Some(log_feature) = feature.strip_prefix("log-") {
+				["log/", log_feature].join("")
+			} else if let Some(smoltcp_feature) = feature.strip_prefix("smoltcp-") {
+				["smoltcp/", smoltcp_feature].join("")
+			} else {
+				feature.to_owned()
+			}
+		})
+		.filter(|feature| *feature != "libc")
+		.collect::<Vec<_>>();
+	let cargo_cfg_feature = cargo_cfg_feature.join(",");
+
+	cargo.arg("--features").arg(cargo_cfg_feature);
+}

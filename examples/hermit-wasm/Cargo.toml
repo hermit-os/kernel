@@ -1,0 +1,36 @@
+[package]
+name = "hermit-wasm"
+version = "0.2.0"
+edition = "2024"
+repository = "https://github.com/hermit-os/hermit-rs/tree/main/examples/hermit-wasm"
+description = "Running WASM modules inside a lightweight virtual machine"
+readme = "README.md"
+license = "MIT/Apache-2.0"
+keywords = ["wasm", "webassembly"]
+categories = ["os", "wasm"]
+
+[lib]
+name = "hermit_wasm"
+
+[features]
+default = []
+dns = ["hermit/dns"]
+tcp = ["hermit/tcp"]
+udp = ["hermit/udp"]
+
+[dependencies]
+clap = { version ="4.6", features = ["derive", "env"] }
+chrono = { version = "0.4" }
+bitflags = "2.13"
+cfg-if = "1"
+log = { version = "0.4" } #, features = ["kv_unstable"]}
+libc = "0.2"
+env_logger = { version = "0.11", default-features = false }
+wasip1 = "1.0.0"
+wasmtime = { version = "50", default-features = false, features = ["std", "runtime", "cranelift", "parallel-compilation", "custom-virtual-memory", "gc", "gc-drc", 'gc-null', "component-model"] } #"pooling-allocator", "incremental-cache"] }
+wasmtime-wasi-io = { version = "50", default-features = false, features = ["std"] }
+zerocopy = { version = "0.8", default-features = false, features = ["alloc", "derive", "simd-nightly"] }
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../hermit", default-features = false, features = ["fsgsbase", "mmap"] }
+hermit-abi = { version = "=0.5", path = "../../hermit-abi", default-features = false }

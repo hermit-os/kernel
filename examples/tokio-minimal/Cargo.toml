@@ -1,0 +1,12 @@
+[package]
+name = "tokio-minimal"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.19", default-features = false, features = ["rt", "rt-multi-thread", "macros"] }
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../hermit", default-features = false }
+
+[features]
+default = ["hermit/acpi", "hermit/dhcpv4", "hermit/pci", "hermit/pci-ids", "hermit/tcp"]

@@ -1,0 +1,13 @@
+[package]
+name = "rusty_demo"
+edition = "2024"
+
+[dependencies]
+rayon = "1.12"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../hermit", default-features = false }
+
+[features]
+default = ["hermit/acpi", "hermit/pci", "hermit/smp"]
+fs = ["hermit/virtio-fs"]

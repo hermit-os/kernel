@@ -1,0 +1,115 @@
+[package]
+name = "hermit"
+version = "0.13.2"
+edition = "2021"
+description = "The Hermit unikernel for Rust."
+repository = "https://github.com/hermit-os/hermit-rs"
+license = "MIT OR Apache-2.0"
+keywords = ["unikernel", "libos"]
+categories = ["os"]
+links = "hermit"
+
+[dependencies]
+hermit-abi = { version = "0.4", optional = true }
+generic_once_cell = { version = "0.1", optional = true }
+libm = { version = "0.2", optional = true }
+spinning_top = { version = "0.3", optional = true }
+take-static = { version = "0.1", optional = true }
+talc = { version = "4.4", default-features = false, features = ["lock_api"], optional = true }
+
+[features]
+default = []
+common-os = [
+	"dep:hermit-abi",
+	"dep:generic_once_cell",
+	"dep:libm",
+	"dep:spinning_top",
+	"dep:take-static",
+	"dep:talc",
+]
+
+## Links against libc.a.
+libc = []
+
+#! ### Logging Features
+#!
+#! Enables the corresponding feature for the kernel's `log` crate.
+#!
+#! For details, see [log compile time filters](https://docs.rs/log/0.4.33/log/#compile-time-filters).
+
+log-max_level_off = []
+log-max_level_error = []
+log-max_level_warn = []
+log-max_level_info = []
+log-max_level_debug = []
+log-max_level_trace = []
+log-release_max_level_off = []
+log-release_max_level_error = []
+log-release_max_level_warn = []
+log-release_max_level_info = []
+log-release_max_level_debug = []
+log-release_max_level_trace = []
+
+#! ### Smoltcp Features
+#!
+#! Enables the corresponding feature for the kernel's `smoltcp` crate.
+
+## Automatically reply on an ICMP echo request
+smoltcp-auto-icmp-echo-reply = []
+
+#! ### Kernel Features
+#!
+#! For details, see the kernel [docs].
+#!
+#! [docs]: https://hermit-os.github.io/kernel
+
+mman = []
+newlib = []
+pvh = []
+loader = []
+uhyve = []
+initramfs = []
+acpi = []
+fsgsbase = []
+pci = []
+pci-ids = []
+riscv-plic = []
+semihosting = []
+smp = []
+tcp = []
+udp = []
+dhcpv4 = []
+dns = []
+net-trace = []
+write-pcap-file = []
+virtio-net = []
+rtl8139 = []
+gem-net = []
+virtio-console = []
+virtio-fs = []
+virtio-rng = []
+virtio-vsock = []
+virtio-blk = []
+vga = []
+idle-poll = []
+alloc-stats = []
+instrument-mcount = []
+kernel-stack = []
+randomize-layout = []
+shell = []
+strace = []
+document-features = []
+net = []
+virtio = []
+warn-prebuilt = []
+console = []
+fs = []
+fuse = []
+mmap = []
+nostd = []
+trace = []
+vsock = []
+
+[build-dependencies]
+cc = "1"
+home = "0.5"
