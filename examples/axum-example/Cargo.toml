@@ -8,4 +8,6 @@ tokio = "1"
 serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit" }
+hermit = { path = "../../crates/hermit" }
+
+[lints]

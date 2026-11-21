@@ -113,3 +113,6 @@ vsock = []
 [build-dependencies]
 cc = "1"
 home = "0.5"
+
+[lints]
+workspace = true

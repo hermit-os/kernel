@@ -51,9 +51,11 @@ impl KernelSrc {
 			return Self { src_dir };
 		}
 
-		let mut src_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-		src_dir.set_file_name("kernel");
-		assert!(src_dir.exists(), "could not find kernel source");
+		let src_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("../..");
+		assert!(
+			src_dir.join("Cargo.toml").exists(),
+			"could not find kernel source"
+		);
 		Self { src_dir }
 	}
 

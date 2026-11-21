@@ -14,7 +14,9 @@ hdrhist = "0.5"
 hermit_bench_output = "0.1.0"
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit", default-features = false }
+hermit = { path = "../../crates/hermit", default-features = false }
 
 [features]
 default = ["hermit/acpi", "hermit/loader", "hermit/pci", "hermit/smp", "hermit/tcp", "hermit/udp"]
+
+[lints]

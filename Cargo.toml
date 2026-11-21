@@ -1,6 +1,6 @@
 [package]
 name = "hermit-kernel"
-version = "0.13.0"
+version = "0.14.0"
 license = "MIT OR Apache-2.0"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
@@ -14,6 +14,9 @@ exclude = [
 	"/img/*",
 	".gitattributes",
 	".gitignore",
+	"/benches/*",
+	"/examples/*",
+	"/crates/*",
 ]
 
 [package.metadata.docs.rs]
@@ -458,8 +461,8 @@ built = { version = "0.8", features = ["git2", "chrono"] }
 llvm-tools = "0.1"
 
 [workspace]
-members = ["hermit-macro", "xtask"]
-exclude = ["hermit-builtins"]
+members = ["benches/*", "crates/*", "examples/*", "hermit-macro", "xtask"]
+exclude = ["crates/loader", "hermit-builtins"]
 
 [workspace.lints.rust]
 # Lint groups
@@ -511,6 +514,8 @@ unused_dependencies = "allow"
 
 [patch.crates-io]
 safe-mmio = { git = "https://github.com/hermit-os/safe-mmio", branch = "0.3.x" }
+socket2 = { git = "https://github.com/hermit-os/socket2.git", branch = "v0.5.x" }
+tokio = { git = "https://github.com/hermit-os/tokio.git", branch = "v/tokio-1.45.0" }
 
 [profile.dist]
 inherits = "release"

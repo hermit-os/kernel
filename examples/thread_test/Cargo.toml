@@ -3,4 +3,6 @@ name = "thread_test"
 edition = "2024"
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit", default-features = false }
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[lints]

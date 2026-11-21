@@ -3,10 +3,12 @@ name = "mutex_benchmark"
 edition = "2021"
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit", default-features = false }
+hermit = { path = "../../crates/hermit", default-features = false }
 
 [dependencies]
 hermit_bench_output = "0.1.1"
 
 [features]
 default = ["hermit/acpi", "hermit/loader", "hermit/pci", "hermit/smp"]
+
+[lints]

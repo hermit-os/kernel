@@ -5,10 +5,12 @@ edition = "2021"
 [dependencies]
 time = "0.3"
 tiny_http = "0.12"
-hermit-abi = { path = "../../hermit-abi" }
+hermit-abi = { path = "../../crates/hermit-abi" }
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit", default-features = false }
+hermit = { path = "../../crates/hermit", default-features = false }
 
 [features]
 default = ["hermit/acpi", "hermit/pci", "hermit/pci-ids", "hermit/tcp", "hermit/dns"]
+
+[lints]

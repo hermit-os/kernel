@@ -22,11 +22,13 @@ rustls-rustcrypto = "0.0.2-alpha"
 env_logger = { version = "0.11" }
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit", default-features = false }
+hermit = { path = "../../crates/hermit", default-features = false }
 
 [features]
 default = ["hermit/acpi", "hermit/dhcpv4", "hermit/fsgsbase", "hermit/pci", "hermit/pci-ids", "hermit/tcp"]
 ci = []
 
 [target.'cfg(all(target_os = "hermit", target_arch = "x86_64"))'.dependencies]
-hermit = { path = "../../hermit", default-features = false, features = ["shell"] }
+hermit = { path = "../../crates/hermit", default-features = false, features = ["shell"] }
+
+[lints]

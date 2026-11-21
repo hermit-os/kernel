@@ -7,7 +7,7 @@ rayon = "1.12"
 hermit_bench_output = "0.1.1"
 
 [target.'cfg(target_os = "hermit")'.dependencies]
-hermit = { path = "../../hermit", default-features = false }
+hermit = { path = "../../crates/hermit", default-features = false }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
@@ -20,3 +20,5 @@ syscalls = { version = "0.8", default-features = false }
 
 [features]
 default = ["hermit/acpi", "hermit/loader", "hermit/pci", "hermit/smp"]
+
+[lints]
