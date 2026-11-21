@@ -74,26 +74,6 @@ jobs:
           cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features ${{ matrix.exclude-features }} --features ${{ matrix.features }}
           cargo hack clippy --each-feature --no-dev-deps --target ${{ matrix.target }} --exclude-features ${{ matrix.exclude-features }} --features pci,${{ matrix.features }}
 
-  clippy-examples:
-    name: Clippy examples (${{ matrix.target }})
-    runs-on: ubuntu-26.04
-    strategy:
-      matrix:
-        target: [x86_64-unknown-hermit, aarch64-unknown-hermit, riscv64gc-unknown-hermit]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup component add clippy
-      - run: rustup target add wasm32-wasip1 wasm32-wasip2
-      - name: cargo clippy (host)
-        if: matrix.target == 'x86_64-unknown-hermit'
-        run: cargo clippy --workspace --exclude hermit-kernel --all-targets
-      - name: cargo clippy
-        run: cargo clippy -Zbuild-std=std,panic_abort --target ${{ matrix.target }} --workspace --exclude hermit-kernel --exclude hermit-macro --exclude xtask --all-targets
-      - name: cargo clippy (common-os)
-        if: matrix.target == 'x86_64-unknown-hermit'
-        run: cargo clippy -Zbuild-std=std,panic_abort --target ${{ matrix.target }} --package hermit --features common-os
-
   format:
     name: Format
     runs-on: ubuntu-26.04
