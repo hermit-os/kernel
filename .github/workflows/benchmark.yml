@@ -16,32 +16,25 @@ jobs:
     strategy:
       matrix:
         include:
-          - benchmark-file: kernel/.github/benchmarks/general.yaml
+          - benchmark-file: .github/benchmarks/general.yaml
             benchmark-matrix-name: General
             runner-tag: benchmark1
-          - benchmark-file: kernel/.github/benchmarks/misc.yaml
+          - benchmark-file: .github/benchmarks/misc.yaml
             benchmark-matrix-name: Misc
             runner-tag: benchmark2
 
     steps:
-      - name: Checkout hermit-rs
-        uses: actions/checkout@v7
-        with:
-          repository: hermit-os/hermit-rs
-      - name: Checkout hermit-kernel
-        uses: actions/checkout@v7
-        with:
-          path: kernel
+      - uses: actions/checkout@v7
       - name: Install packages
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends qemu-system-x86 gh
       - uses: mkroening/rust-toolchain-toml@main
-      - uses: mkroening/rust-toolchain-toml@main
-        with:
-          toolchain-file: "kernel/rust-toolchain.toml"
-      - name: Download loader
-        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64-multiboot
+      - name: Build loader
+        run: |
+          cargo xtask build --target x86_64-multiboot --release
+          cp target/release/hermit-loader-x86_64-multiboot ../..
+        working-directory: crates/loader
       - name: Run benchmarks
         uses: hermit-os/hermit-bench@main
         id: run-bench

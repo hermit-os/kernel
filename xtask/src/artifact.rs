@@ -107,8 +107,7 @@ impl Artifact {
 	#[cfg(feature = "ci")]
 	pub fn ci_image(&self, package: &str) -> PathBuf {
 		[
-			crate::ci::parent_root(),
-			"target".as_ref(),
+			self.target_dir().as_path(),
 			self.arch.hermit_triple().as_ref(),
 			self.profile_path_component().as_ref(),
 			package.as_ref(),
