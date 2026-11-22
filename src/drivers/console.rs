@@ -20,6 +20,7 @@ use crate::console::{CONSOLE, IoDevice};
 use crate::drivers::error::DriverError;
 use crate::drivers::virtio::error::{VirtioConsoleError, VirtioError};
 use crate::drivers::virtio::transport::{InterruptCapability, UniCapsColl};
+use crate::drivers::virtio::virtqueue::error::VirtqError;
 use crate::drivers::virtio::virtqueue::split::SplitVq;
 use crate::drivers::virtio::virtqueue::{
 	AvailBufferToken, BufferElem, BufferType, UsedBufferToken, VirtQueue, Virtq,
@@ -167,30 +168,39 @@ impl TxQueue {
 		while vq.try_recv().is_ok() {}
 	}
 
-	/// Provides a slice to copy the packet and transfer the packet
-	/// to the send queue. The caller has to create the header
-	/// for the vsock interface.
-	pub fn send_packet(&mut self, buf: &[u8]) {
-		// We need to poll to get the queue to remove elements from the table and make space for
-		// what we are about to add
-		self.poll();
-		let vq = self.vq.as_mut().unwrap();
+	/// Transfers at most `packet_length` bytes of `buf` to the send queue
+	/// and returns the number of transferred bytes.
+	///
+	/// If the queue is full, it waits until the device has consumed packets.
+	pub fn send_packet(&mut self, buf: &[u8]) -> usize {
+		let len = buf.len().min(usize::try_from(self.packet_length).unwrap());
+		loop {
+			// Polling removes the consumed packets from the queue.
+			self.poll();
 
-		assert!(buf.len() < usize::try_from(self.packet_length).unwrap());
-		let mut packet = Vec::with_capacity_in(buf.len(), DeviceAlloc);
-		packet.extend_from_slice(buf);
+			let mut packet = Vec::with_capacity_in(len, DeviceAlloc);
+			packet.extend_from_slice(&buf[..len]);
+			let buff_tkn = AvailBufferToken::new(
+				{
+					let mut vec = SmallVec::new();
+					vec.push(BufferElem::Vector(packet));
+					vec
+				},
+				SmallVec::new(),
+			)
+			.unwrap();
 
-		let buff_tkn = AvailBufferToken::new(
+			match self
+				.vq
+				.as_mut()
+				.unwrap()
+				.dispatch(buff_tkn, false, BufferType::Direct)
 			{
-				let mut vec = SmallVec::new();
-				vec.push(BufferElem::Vector(packet));
-				vec
-			},
-			SmallVec::new(),
-		)
-		.unwrap();
-
-		vq.dispatch(buff_tkn, false, BufferType::Direct).unwrap();
+				Ok(()) => return len,
+				Err(VirtqError::NoDescrAvail) => core::hint::spin_loop(),
+				Err(err) => panic!("unable to send console packet: {err:?}"),
+			}
+		}
 	}
 }
 
@@ -358,9 +368,7 @@ impl Read for VirtioConsoleDriver {
 
 impl Write for VirtioConsoleDriver {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-		self.send_vq.send_packet(buf);
-
-		Ok(buf.len())
+		Ok(self.send_vq.send_packet(buf))
 	}
 
 	fn flush(&mut self) -> Result<(), Self::Error> {
