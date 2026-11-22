@@ -19,6 +19,8 @@ use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef};
 
 use crate::drivers::InterruptHandlerMap;
 use crate::scheduler;
+#[cfg(feature = "trap-handler")]
+use crate::syscalls::trap;
 
 const NUMBER_OF_SOURCES: usize = 1024;
 const NUMBER_OF_CONTEXTS: usize = 15871;
@@ -246,6 +248,13 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 	trace!("sepc = {sepc:x}");
 	trace!("SSTATUS FS = {:?}", sstatus::read().fs());
 
+	#[cfg(feature = "trap-handler")]
+	if let Trap::Exception(exception) = cause
+		&& redirect_trap(tf, exception, stval)
+	{
+		return;
+	}
+
 	match cause {
 		Trap::Interrupt(Interrupt::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
@@ -266,6 +275,41 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 		}
 	}
 	trace!("Interrupt end");
+}
+
+/// Delivers a trap to the handler registered with `sys_set_trap_handler`.
+///
+/// In contrast to the other architectures, traps of the kernel cannot be
+/// distinguished from traps of a task: there is no separate kernel stack and
+/// tasks may run with disabled interrupts. The handler ignores traps outside
+/// of its code and `trap_entry` aborts the task in this case.
+#[cfg(feature = "trap-handler")]
+fn redirect_trap(tf: &mut TrapFrame, exception: Exception, stval: usize) -> bool {
+	let (kind, has_faulting_addr) = match exception {
+		Exception::IllegalInstruction => (trap::TRAP_ILLEGAL_INSTRUCTION, false),
+		Exception::InstructionFault
+		| Exception::LoadFault
+		| Exception::StoreFault
+		| Exception::InstructionPageFault
+		| Exception::LoadPageFault
+		| Exception::StorePageFault => (trap::TRAP_MEMORY_FAULT, true),
+		_ => return false,
+	};
+
+	let sp = tf.general.sp & !0xf;
+	if !trap::can_deliver(sp, sp) {
+		return false;
+	}
+
+	tf.general.a0 = kind as usize;
+	tf.general.a1 = has_faulting_addr.into();
+	tf.general.a2 = tf.sepc;
+	tf.general.a3 = tf.general.s0;
+	tf.general.a4 = tf.general.sp;
+	tf.general.a5 = if has_faulting_addr { stval } else { 0 };
+	tf.general.sp = sp;
+	tf.sepc = trap::entry();
+	true
 }
 
 /// Handles external interrupts

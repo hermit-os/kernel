@@ -81,6 +81,15 @@ mman = []
 ## [hermit-c]: https://github.com/hermit-os/hermit-c
 newlib = []
 
+## Enables applications to register a handler for synchronous exceptions (traps).
+##
+## Illegal instructions, memory faults and arithmetic errors of a task are
+## delivered to the handler, which is registered with [`syscalls::sys_set_trap_handler`].
+## Runtimes like Wasmtime use this to implement WebAssembly traps.
+##
+## For details, see [`syscalls::trap`].
+trap-handler = []
+
 #! ### Platform Features
 
 ## Enables [Hermit loader] support.

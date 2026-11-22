@@ -286,9 +286,19 @@ where
 
 #[cfg(not(feature = "common-os"))]
 pub(crate) extern "x86-interrupt" fn page_fault_handler(
-	stack_frame: ExceptionStackFrame,
+	#[cfg_attr(not(feature = "trap-handler"), allow(unused_mut))]
+	mut stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
+	#[cfg(feature = "trap-handler")]
+	if crate::arch::kernel::interrupts::redirect_trap(
+		&mut stack_frame,
+		crate::syscalls::trap::TRAP_MEMORY_FAULT,
+		Some(Cr2::read_raw()),
+	) {
+		return;
+	}
+
 	error!("Page fault (#PF)!");
 	error!("page_fault_linear_address = {:p}", Cr2::read().unwrap());
 	error!("error_code = {error_code:?}");

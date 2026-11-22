@@ -21,6 +21,8 @@ use crate::drivers::InterruptHandlerMap;
 use crate::env::{self, FdtStartInfo};
 use crate::mm::{PageAlloc, PageRangeAllocator};
 use crate::scheduler::{self, CoreId, timer_interrupts};
+#[cfg(feature = "trap-handler")]
+use crate::syscalls::trap;
 
 /// The ID of the first Private Peripheral Interrupt.
 const PPI_START: u8 = 16;
@@ -169,12 +171,17 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 }
 
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn do_sync(state: &State) {
+pub(crate) extern "C" fn do_sync(state: &mut State) {
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
 	let iss = ESR_EL1.read(ESR_EL1::ISS);
 	let pc = ELR_EL1.get();
+
+	#[cfg(feature = "trap-handler")]
+	if state.spsel == 0 && redirect_trap(state, ec, iss, pc) {
+		return;
+	}
 
 	/* data abort from lower or current level */
 	if (ec == ESR_EL1::EC::Value::DataAbortCurrentEL)
@@ -229,6 +236,33 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			core::hint::spin_loop();
 		}
 	}
+}
+
+/// Delivers a trap of a task to the handler registered with `sys_set_trap_handler`.
+#[cfg(feature = "trap-handler")]
+fn redirect_trap(state: &mut State, ec: ESR_EL1::EC::Value, iss: u64, pc: u64) -> bool {
+	let (kind, has_faulting_addr) = match ec {
+		ESR_EL1::EC::Value::Unknown => (trap::TRAP_ILLEGAL_INSTRUCTION, false),
+		ESR_EL1::EC::Value::DataAbortCurrentEL | ESR_EL1::EC::Value::InstrAbortCurrentEL => {
+			(trap::TRAP_MEMORY_FAULT, iss & (1 << 10) == 0)
+		}
+		_ => return false,
+	};
+
+	let sp = state.sp_el0 & !0xf;
+	if !trap::can_deliver(sp as usize, sp as usize) {
+		return false;
+	}
+
+	state.x0 = kind.into();
+	state.x1 = has_faulting_addr.into();
+	state.x2 = pc;
+	state.x3 = state.x29;
+	state.x4 = state.sp_el0;
+	state.x5 = if has_faulting_addr { FAR_EL1.get() } else { 0 };
+	state.sp_el0 = sp;
+	state.elr_el1 = trap::entry() as u64;
+	true
 }
 
 #[unsafe(no_mangle)]
