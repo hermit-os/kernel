@@ -18,6 +18,8 @@ use volatile::access::{NoAccess, ReadOnly};
 use volatile::{VolatileFieldAccess, VolatilePtr, VolatileRef};
 
 use crate::drivers::InterruptHandlerMap;
+#[cfg(feature = "event-log")]
+use crate::event_log::{self, Event};
 use crate::scheduler;
 
 const NUMBER_OF_SOURCES: usize = 1024;
@@ -177,6 +179,8 @@ pub(crate) fn enable_and_wait() {
 			// trace!("sip: {:x?}", pending_interrupts);
 			#[cfg(feature = "smp")]
 			if pending_interrupts.ssoft() {
+				#[cfg(feature = "event-log")]
+				event_log::record(Event::IpiReceive);
 				//Clear Supervisor-level software interrupt
 				unsafe { sip::clear_ssoft() };
 				trace!("SOFT");
@@ -249,6 +253,8 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 		Trap::Interrupt(Interrupt::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
 		Trap::Interrupt(Interrupt::SupervisorSoft) => {
+			#[cfg(feature = "event-log")]
+			event_log::record(Event::IpiReceive);
 			unsafe { sip::clear_ssoft() };
 			crate::arch::kernel::scheduler::wakeup_handler();
 		}
