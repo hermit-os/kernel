@@ -2,14 +2,38 @@ use core::ptr;
 
 use memory_addresses::VirtAddr;
 use uhyve_interface::GuestPhysAddr;
-use uhyve_interface::v2::parameters::SerialWriteBufferParams;
-use uhyve_interface::v2::{Hypercall, HypercallAddress};
+use uhyve_interface::v3::parameters::{
+	MutSizedGuestBuffer, SerialWriteBufferParams, SizedGuestBuffer,
+};
+use uhyve_interface::v3::{Hypercall, HypercallAddress};
 
 use crate::arch::kernel::processor;
 use crate::arch::mm::paging::virtual_to_physical;
 
 #[cfg(target_os = "none")]
 hermit_entry::define_uhyve_interface_version!(uhyve_interface::UHYVE_INTERFACE_VERSION);
+
+pub(crate) fn as_sized_guest_buf<T>(buf: &[T]) -> SizedGuestBuffer {
+	SizedGuestBuffer {
+		addr: GuestPhysAddr::new(
+			virtual_to_physical(VirtAddr::from_ptr(buf.as_ptr()))
+				.unwrap()
+				.as_u64(),
+		),
+		len: buf.len().try_into().unwrap(),
+	}
+}
+
+pub(crate) fn as_mut_sized_guest_buf<T>(buf: &mut [T]) -> MutSizedGuestBuffer {
+	MutSizedGuestBuffer {
+		addr: GuestPhysAddr::new(
+			virtual_to_physical(VirtAddr::from_ptr(buf.as_mut_ptr()))
+				.unwrap()
+				.as_u64(),
+		),
+		len: buf.len().try_into().unwrap(),
+	}
+}
 
 /// perform a SerialWriteBuffer hypercall with `buf` as payload
 #[inline]
@@ -50,7 +74,6 @@ fn hypercall_data(hypercall: &Hypercall<'_>) -> u64 {
 		Hypercall::FileWrite(data) => data_addr(*data),
 		Hypercall::Getdents(data) => data_addr(*data),
 		Hypercall::FileStat(data) => data_addr(*data),
-		Hypercall::FileFstat(data) => data_addr(*data),
 		Hypercall::SerialWriteBuffer(data) => data_addr(*data),
 		Hypercall::SerialWriteByte(byte) => u64::from(*byte),
 		h => todo!("unimplemented hypercall {h:?}"),
