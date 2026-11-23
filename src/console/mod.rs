@@ -3,10 +3,11 @@ mod uhyve;
 
 #[cfg(feature = "virtio-console")]
 use alloc::boxed::Box;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use core::{fmt, mem};
 
 use embedded_io::{ErrorType, Read, ReadReady, Write};
-use heapless::Vec;
+use heapless::{String, Vec};
 use hermit_sync::{InterruptTicketMutex, Lazy};
 
 use crate::arch::kernel::serial::SerialDevice;
@@ -16,6 +17,7 @@ use crate::errno::Errno;
 use crate::executor::WakerRegistration;
 
 const SERIAL_BUFFER_SIZE: usize = 256;
+const DEFERRED_BUFFER_SIZE: usize = 512;
 
 pub(crate) enum IoDevice {
 	#[cfg(feature = "uhyve")]
@@ -170,9 +172,52 @@ pub(crate) static CONSOLE: Lazy<InterruptTicketMutex<Console>> = Lazy::new(|| {
 	InterruptTicketMutex::new(Console::new(IoDevice::Uart(SerialDevice::new())))
 });
 
+static NONBLOCKING_PRINT: AtomicUsize = AtomicUsize::new(0);
+static DEFERRED: InterruptTicketMutex<String<DEFERRED_BUFFER_SIZE>> =
+	InterruptTicketMutex::new(String::new());
+
+/// Makes printing on all cores never wait for a lock until all returned guards are dropped.
+///
+/// Output is deferred if the console is busy and dropped if the deferred buffer is busy or full.
+pub(crate) fn nonblocking_print() -> NonblockingPrintGuard {
+	NONBLOCKING_PRINT.fetch_add(1, Ordering::Relaxed);
+	NonblockingPrintGuard(())
+}
+
+pub(crate) struct NonblockingPrintGuard(());
+
+impl Drop for NonblockingPrintGuard {
+	fn drop(&mut self) {
+		NONBLOCKING_PRINT.fetch_sub(1, Ordering::Relaxed);
+	}
+}
+
+fn flush_deferred(console: &mut Console) {
+	if let Some(mut deferred) = DEFERRED.try_lock()
+		&& !deferred.is_empty()
+	{
+		console.write_all(deferred.as_bytes()).unwrap();
+		deferred.clear();
+	}
+}
+
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments<'_>) {
-	CONSOLE.lock().write_fmt(args).unwrap();
+	let mut console = if NONBLOCKING_PRINT.load(Ordering::Relaxed) > 0 {
+		match CONSOLE.try_lock() {
+			Some(console) => console,
+			None => {
+				if let Some(mut deferred) = DEFERRED.try_lock() {
+					fmt::Write::write_fmt(&mut *deferred, args).ok();
+				}
+				return;
+			}
+		}
+	} else {
+		CONSOLE.lock()
+	};
+	flush_deferred(&mut console);
+	console.write_fmt(args).unwrap();
 }
 
 #[doc(hidden)]
