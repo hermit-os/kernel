@@ -4,7 +4,7 @@ use core::hint;
 use core::ptr::{self, NonNull};
 
 use acpi::aml::AmlError;
-use acpi::{Handle, Handler, PciAddress, PhysicalMapping};
+use acpi::{Handle, Handler, PciAddress, RawPhysicalMapping};
 use align_address::Align;
 use hermit_sync::{RawSpinMutex, SpinMutex};
 use lock_api::RawMutex;
@@ -30,11 +30,10 @@ impl Handler for AcpiHandler {
 		&self,
 		physical_address: usize,
 		size: usize,
-	) -> PhysicalMapping<Self, T> {
+	) -> RawPhysicalMapping<T> {
 		let physical_start = physical_address.align_down(0x1000);
 		let physical_end = (physical_address + size).align_up(0x1000);
 		let mapped_length = physical_end - physical_start;
-		let handler = self.clone();
 
 		trace!(
 			"Mapping physical region...   paddr = {physical_start:#x}, len = {mapped_length:#x}"
@@ -48,16 +47,15 @@ impl Handler for AcpiHandler {
 		let virtual_start = NonNull::new(virtual_start).unwrap();
 		let region_length = size;
 
-		PhysicalMapping {
+		RawPhysicalMapping {
 			physical_start,
 			virtual_start,
 			region_length,
 			mapped_length,
-			handler,
 		}
 	}
 
-	fn unmap_physical_region<T>(region: &PhysicalMapping<Self, T>) {
+	unsafe fn unmap_physical_region<T>(&self, region: RawPhysicalMapping<T>) {
 		trace!(
 			"Unmapping physical region... paddr = {:#x}, len = {:#x}",
 			region.physical_start, region.mapped_length
