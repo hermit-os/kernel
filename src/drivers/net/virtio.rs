@@ -91,6 +91,9 @@ fn determine_rx_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 pub struct RxQueues {
 	vqs: Vec<VirtQueue>,
 	buf_size: u32,
+	/// Consumed buffers, which are returned to the device in batches to save notifications.
+	refill: Vec<(AvailBufferToken, BufferType)>,
+	refill_threshold: usize,
 }
 
 impl RxQueues {
@@ -98,6 +101,8 @@ impl RxQueues {
 		Self {
 			vqs,
 			buf_size: determine_rx_buf_size(dev_cfg),
+			refill: Vec::new(),
+			refill_threshold: 1,
 		}
 	}
 
@@ -108,6 +113,17 @@ impl RxQueues {
 		let num_bufs = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
+		// Keep at least three quarters of the buffers in the queue.
+		self.refill_threshold = usize::from(num_bufs / 4).max(1);
+	}
+
+	/// Returns a consumed buffer to the first queue.
+	fn refill(&mut self, buffer_tkn: AvailBufferToken) {
+		self.refill.push((buffer_tkn, BufferType::Direct));
+		if self.refill.len() >= self.refill_threshold {
+			let tkns = mem::replace(&mut self.refill, Vec::with_capacity(self.refill_threshold));
+			self.vqs[0].dispatch_batch(tkns, false).unwrap();
+		}
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
@@ -497,9 +513,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 				header,
 				self.recv_vqs.buf_size,
 			);
-			self.recv_vqs.vqs[0]
-				.dispatch(tkn, false, BufferType::Direct)
-				.unwrap();
+			self.recv_vqs.refill(tkn);
 		}
 
 		let res = if self.is_ethernet_frame_passable(&first_header, &combined_packets) {
@@ -518,9 +532,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 			},
 			self.recv_vqs.buf_size,
 		);
-		self.recv_vqs.vqs[0]
-			.dispatch(first_tkn, false, BufferType::Direct)
-			.unwrap();
+		self.recv_vqs.refill(first_tkn);
 
 		res
 	}

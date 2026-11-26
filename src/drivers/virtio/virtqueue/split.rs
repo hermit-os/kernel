@@ -209,10 +209,38 @@ impl Virtq for SplitVq {
 
 	fn dispatch_batch(
 		&mut self,
-		_tkns: Vec<(AvailBufferToken, BufferType)>,
-		_notif: bool,
+		tkns: Vec<(AvailBufferToken, BufferType)>,
+		notif: bool,
 	) -> Result<(), VirtqError> {
-		unimplemented!();
+		if notif {
+			unimplemented!();
+		}
+
+		let mut range = None;
+		let mut result = Ok(());
+		for (buffer_tkn, buffer_type) in tkns {
+			let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type);
+			match self.ring.push(transfer_tkn) {
+				Ok(next_idx) => {
+					let old_idx = range.map_or(next_idx.wrapping_sub(1), |(old_idx, _)| old_idx);
+					range = Some((old_idx, next_idx));
+				}
+				Err(err) => {
+					result = Err(err);
+					break;
+				}
+			}
+		}
+
+		if let Some((old_idx, next_idx)) = range
+			&& self.ring.dev_is_notif(old_idx, next_idx)
+		{
+			let notification_data = NotificationData::new()
+				.with_vq_notif_config_data(self.index)
+				.with_next_idx(next_idx);
+			self.notif_ctrl.notify_dev(notification_data);
+		}
+		result
 	}
 
 	fn dispatch_batch_await(
