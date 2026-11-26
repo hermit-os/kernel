@@ -143,35 +143,17 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		});
 	}
 
-	/// Trigger an interrupt to reschedule the system
+	/// Switches to the next task with a supervisor call. In contrast to an SGI to
+	/// the own core, a supervisor call does not trap to the hypervisor.
 	#[cfg(target_arch = "aarch64")]
 	fn reschedule(self) {
-		use aarch64_cpu::asm::barrier::{NSH, SY, dsb, isb};
-		use arm_gic::IntId;
-		use arm_gic::gicv3::{GicCpuInterface, SgiTarget, SgiTargetGroup};
+		use crate::arch::kernel::interrupts::SVC_RESCHED;
 
-		use crate::arch::kernel::interrupts::SGI_RESCHED;
-
-		dsb(NSH);
-		isb(SY);
-
-		let reschedid = IntId::sgi(SGI_RESCHED.into());
-		#[cfg(feature = "smp")]
-		let core_id = self.core_id;
-		#[cfg(not(feature = "smp"))]
-		let core_id = 0;
-
-		GicCpuInterface::send_sgi(
-			reschedid,
-			SgiTarget::List {
-				affinity3: 0,
-				affinity2: 0,
-				affinity1: 0,
-				target_list: 1 << core_id,
-			},
-			SgiTargetGroup::CurrentGroup1,
-		)
-		.unwrap();
+		// SAFETY: The exception handler saves and restores all general-purpose
+		// registers. The FPU registers are saved lazily on the next FPU trap.
+		unsafe {
+			core::arch::asm!("svc #{imm}", imm = const SVC_RESCHED);
+		}
 
 		interrupts::enable();
 	}

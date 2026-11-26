@@ -85,6 +85,14 @@ el1_sync:
       trap_entry 1
       mov     x0, sp
       bl      do_sync
+      cmp x0, 0
+      b.eq 5f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+5:
       trap_exit
       eret
       // speculation barrier after the ERET to prevent the CPU
@@ -167,6 +175,14 @@ el1_sp0_sync:
       trap_entry 0
       mov     x0, sp
       bl      do_sync
+      cmp x0, 0
+      b.eq 6f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+6:
       trap_exit
       eret
       // speculation barrier after the ERET to prevent the CPU
