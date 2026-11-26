@@ -148,15 +148,17 @@ pub fn boot_next_processor() {
 			for cpu_id in 1..get_possible_cpus() {
 				debug!("Try to wake-up core {cpu_id}");
 
+				// According to the SMC Calling Convention, the call returns results in
+				// x0-x3 and may change x4-x17, which `clobber_abi("C")` covers.
 				if method == "hvc" {
 					// call hypervisor to wakeup next core
 					unsafe {
-						asm!("hvc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, options(nomem, nostack));
+						asm!("hvc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, clobber_abi("C"), options(nostack));
 					}
 				} else if method == "smc" {
 					// call secure monitor to wakeup next core
 					unsafe {
-						asm!("smc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, options(nomem, nostack));
+						asm!("smc #0", in("x0") cpu_on, in("x1") cpu_id, in("x2") phys_start.as_u64(), in("x3") cpu_id, clobber_abi("C"), options(nostack));
 					}
 				} else {
 					warn!("Method {method} isn't supported!");
