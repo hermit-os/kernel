@@ -214,6 +214,9 @@ pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
 		let context = *PLIC_CONTEXT.get().unwrap();
 		let source = NonZeroU16::new(u16::from(*irq_number)).unwrap();
 
+		// Enable irq for context. QEMU does not deliver an already pending
+		// interrupt on enabling, but on the following priority write.
+		plic_ptr.set_enable_bit(context, source, true);
 		// Set priority to 7 (highest on FU740)
 		plic_ptr.interrupt_priority(source).write(1);
 		// Set Threshold to 0 (lowest)
@@ -221,8 +224,6 @@ pub(crate) fn install_handlers(handlers: InterruptHandlerMap) {
 			.context_based_register(context)
 			.priority_threshold()
 			.write(0);
-		// Enable irq for context
-		plic_ptr.set_enable_bit(context, source, true);
 	}
 
 	INTERRUPT_HANDLERS.set(handlers).unwrap();
