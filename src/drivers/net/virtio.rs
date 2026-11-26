@@ -605,11 +605,15 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 		// We only support segmentation offload on and enable the corresponding feature of smoltcp for TCP.
 		#[cfg(feature = "tcp")]
 		{
+			// The 16-bit IPv4 total length field includes the IP header, so an IPv4 frame
+			// handed to the device must not exceed the Ethernet header plus u16::MAX bytes.
+			let max_tso4_buffer_size =
+				MAX_TSO_BUFFER_SIZE.min(ETHERNET_HEADER_LEN + usize::from(u16::MAX));
 			device_capabilities.segmentation.tcpv4 = self
 				.dev_cfg
 				.features
 				.contains(virtio::net::F::HOST_TSO4)
-				.then_some(NonZeroUsize::new(MAX_TSO_BUFFER_SIZE).unwrap());
+				.then_some(NonZeroUsize::new(max_tso4_buffer_size).unwrap());
 			device_capabilities.segmentation.tcpv6 = self
 				.dev_cfg
 				.features
