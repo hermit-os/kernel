@@ -584,6 +584,8 @@ impl NetworkDriver for VirtioNetDriver {
 			self.handle_device_configuration_interrupt();
 		}
 
+		// The network task polls until the queues are empty and reenables the interrupts.
+		self.disable_interrupts();
 		wake_network_waker();
 	}
 }
@@ -728,15 +730,17 @@ impl VirtioNetDriver {
 	}
 
 	pub fn disable_interrupts(&mut self) {
-		// For send and receive queues?
-		// Only for receive? Because send is off anyway?
 		self.recv_vqs.disable_notifs();
 	}
 
+	/// Enables the receive interrupts. If a packet arrived before, the device
+	/// might not send an interrupt for it, so the network task is woken instead.
 	pub fn enable_interrupts(&mut self) {
-		// For send and receive queues?
-		// Only for receive? Because send is off anyway?
 		self.recv_vqs.enable_notifs();
+		if self.recv_vqs.has_packet() {
+			self.recv_vqs.disable_notifs();
+			wake_network_waker();
+		}
 	}
 
 	/// If necessary, sets the TCP or UDP checksum field to the checksum of the

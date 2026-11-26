@@ -532,6 +532,7 @@ pub struct PackedVq {
 impl Virtq for PackedVq {
 	fn enable_notifs(&mut self) {
 		self.drv_event.enable_notif();
+		super::virtio_mem_barrier(BarrierType::General, self.descr_ring.order_platform);
 	}
 
 	fn disable_notifs(&mut self) {
