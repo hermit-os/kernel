@@ -28,7 +28,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add x86_64-unknown-none
-      - uses: dtolnay/install@cargo-docs-rs
+      # The released cargo-docs-rs fails with nightly-2026-11-18 (dtolnay/cargo-docs-rs#34).
+      - run: cargo install --git https://github.com/dtolnay/cargo-docs-rs --rev 9859937a8454699f8891167a7881c989678f40bf cargo-docs-rs
       - run: cargo docs-rs --package hermit-kernel --target x86_64-unknown-none
       - name: Add HTML redirect to doc root
         run: echo '<meta http-equiv="refresh" content="0;url=hermit">' > target/x86_64-unknown-none/doc/index.html
