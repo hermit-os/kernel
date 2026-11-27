@@ -37,6 +37,10 @@ struct DescrRing {
 	avail_ring_cell: Box<UnsafeCell<virtq::Avail>, DeviceAlloc>,
 	used_ring_cell: Box<UnsafeCell<virtq::Used>, DeviceAlloc>,
 	order_platform: bool,
+	/// Whether `VIRTIO_F_EVENT_IDX` was negotiated.
+	event_idx: bool,
+	/// Whether the driver wants used buffer notifications.
+	notif_enabled: bool,
 }
 
 impl DescrRing {
@@ -127,27 +131,57 @@ impl DescrRing {
 		}
 
 		self.read_idx = self.read_idx.wrapping_add(1);
+		if self.event_idx && self.notif_enabled {
+			// Request a notification for the next used buffer.
+			self.set_used_event(self.read_idx);
+		}
 		Ok(UsedBufferToken::from_avail_buffer_token(
 			tkn.buff_tkn,
 			used_elem.len.to_ne(),
 		))
 	}
 
+	/// Sets `used_event`, i.e. the device notifies the driver as soon as the
+	/// used ring passes `idx`.
+	fn set_used_event(&mut self, idx: u16) {
+		*self.avail_ring_mut().used_event_mut(true).unwrap() = idx.into();
+		super::virtio_mem_barrier(BarrierType::General, self.order_platform);
+	}
+
 	fn drv_enable_notif(&mut self) {
+		self.notif_enabled = true;
 		self.avail_ring_mut()
 			.flags
 			.remove(virtq::AvailF::NO_INTERRUPT);
+		if self.event_idx {
+			self.set_used_event(self.read_idx);
+		}
 	}
 
 	fn drv_disable_notif(&mut self) {
+		self.notif_enabled = false;
 		self.avail_ring_mut()
 			.flags
 			.insert(virtq::AvailF::NO_INTERRUPT);
+		if self.event_idx {
+			// The device ignores the flags. The used ring passes the index
+			// only after a wraparound, which results in a spurious notification
+			// at most.
+			self.set_used_event(self.read_idx.wrapping_sub(1));
+		}
 	}
 
-	fn dev_is_notif(&self) -> bool {
+	/// Returns whether the device has to be notified about the available
+	/// buffers from `old_idx` up to `new_idx`.
+	fn dev_is_notif(&self, old_idx: u16, new_idx: u16) -> bool {
 		super::virtio_mem_barrier(BarrierType::General, self.order_platform);
-		!self.used_ring().flags.contains(virtq::UsedF::NO_NOTIFY)
+		if self.event_idx {
+			// See `vring_need_event` in the VIRTIO specification, 2.7.10
+			let avail_event = self.used_ring().avail_event().unwrap().to_ne();
+			new_idx.wrapping_sub(avail_event).wrapping_sub(1) < new_idx.wrapping_sub(old_idx)
+		} else {
+			!self.used_ring().flags.contains(virtq::UsedF::NO_NOTIFY)
+		}
 	}
 }
 
@@ -175,10 +209,38 @@ impl Virtq for SplitVq {
 
 	fn dispatch_batch(
 		&mut self,
-		_tkns: Vec<(AvailBufferToken, BufferType)>,
-		_notif: bool,
+		tkns: Vec<(AvailBufferToken, BufferType)>,
+		notif: bool,
 	) -> Result<(), VirtqError> {
-		unimplemented!();
+		if notif {
+			unimplemented!();
+		}
+
+		let mut range = None;
+		let mut result = Ok(());
+		for (buffer_tkn, buffer_type) in tkns {
+			let transfer_tkn = Self::transfer_token_from_buffer_token(buffer_tkn, buffer_type);
+			match self.ring.push(transfer_tkn) {
+				Ok(next_idx) => {
+					let old_idx = range.map_or(next_idx.wrapping_sub(1), |(old_idx, _)| old_idx);
+					range = Some((old_idx, next_idx));
+				}
+				Err(err) => {
+					result = Err(err);
+					break;
+				}
+			}
+		}
+
+		if let Some((old_idx, next_idx)) = range
+			&& self.ring.dev_is_notif(old_idx, next_idx)
+		{
+			let notification_data = NotificationData::new()
+				.with_vq_notif_config_data(self.index)
+				.with_next_idx(next_idx);
+			self.notif_ctrl.notify_dev(notification_data);
+		}
+		result
 	}
 
 	fn dispatch_batch_await(
@@ -204,7 +266,7 @@ impl Virtq for SplitVq {
 			unimplemented!();
 		}
 
-		if self.ring.dev_is_notif() {
+		if self.ring.dev_is_notif(next_idx.wrapping_sub(1), next_idx) {
 			let notification_data = NotificationData::new()
 				.with_vq_notif_config_data(self.index)
 				.with_next_idx(next_idx);
@@ -295,6 +357,7 @@ impl SplitVq {
 		vq_handler.set_dev_ctrl_addr(DeviceAlloc.phys_addr_from(used_ring_cell.as_mut()));
 
 		let order_platform = features.contains(virtio::F::ORDER_PLATFORM);
+		let event_idx = features.contains(virtio::F::EVENT_IDX);
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
@@ -308,6 +371,8 @@ impl SplitVq {
 			avail_ring_cell,
 			used_ring_cell,
 			order_platform,
+			event_idx,
+			notif_enabled: true,
 		};
 
 		let mut notif_ctrl = NotifCtrl::new(notif_cfg.notification_location(&mut vq_handler));

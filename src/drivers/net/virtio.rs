@@ -91,6 +91,9 @@ fn determine_rx_buf_size(dev_cfg: &NetDevCfg) -> u32 {
 pub struct RxQueues {
 	vqs: Vec<VirtQueue>,
 	buf_size: u32,
+	/// Consumed buffers, which are returned to the device in batches to save notifications.
+	refill: Vec<(AvailBufferToken, BufferType)>,
+	refill_threshold: usize,
 }
 
 impl RxQueues {
@@ -98,6 +101,8 @@ impl RxQueues {
 		Self {
 			vqs,
 			buf_size: determine_rx_buf_size(dev_cfg),
+			refill: Vec::new(),
+			refill_threshold: 1,
 		}
 	}
 
@@ -108,6 +113,17 @@ impl RxQueues {
 		let num_bufs = vq.size() / BUFF_PER_PACKET;
 		fill_queue(&mut vq, num_bufs, self.buf_size);
 		self.vqs.push(vq);
+		// Keep at least three quarters of the buffers in the queue.
+		self.refill_threshold = usize::from(num_bufs / 4).max(1);
+	}
+
+	/// Returns a consumed buffer to the first queue.
+	fn refill(&mut self, buffer_tkn: AvailBufferToken) {
+		self.refill.push((buffer_tkn, BufferType::Direct));
+		if self.refill.len() >= self.refill_threshold {
+			let tkns = mem::replace(&mut self.refill, Vec::with_capacity(self.refill_threshold));
+			self.vqs[0].dispatch_batch(tkns, false).unwrap();
+		}
 	}
 
 	fn get_next(&mut self) -> Option<UsedBufferToken> {
@@ -497,9 +513,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 				header,
 				self.recv_vqs.buf_size,
 			);
-			self.recv_vqs.vqs[0]
-				.dispatch(tkn, false, BufferType::Direct)
-				.unwrap();
+			self.recv_vqs.refill(tkn);
 		}
 
 		let res = if self.is_ethernet_frame_passable(&first_header, &combined_packets) {
@@ -518,9 +532,7 @@ impl smoltcp::phy::RxToken for RxToken<'_> {
 			},
 			self.recv_vqs.buf_size,
 		);
-		self.recv_vqs.vqs[0]
-			.dispatch(first_tkn, false, BufferType::Direct)
-			.unwrap();
+		self.recv_vqs.refill(first_tkn);
 
 		res
 	}
@@ -572,6 +584,8 @@ impl NetworkDriver for VirtioNetDriver {
 			self.handle_device_configuration_interrupt();
 		}
 
+		// The network task polls until the queues are empty and reenables the interrupts.
+		self.disable_interrupts();
 		wake_network_waker();
 	}
 }
@@ -591,11 +605,15 @@ impl smoltcp::phy::Device for VirtioNetDriver {
 		// We only support segmentation offload on and enable the corresponding feature of smoltcp for TCP.
 		#[cfg(feature = "tcp")]
 		{
+			// The 16-bit IPv4 total length field includes the IP header, so an IPv4 frame
+			// handed to the device must not exceed the Ethernet header plus u16::MAX bytes.
+			let max_tso4_buffer_size =
+				MAX_TSO_BUFFER_SIZE.min(ETHERNET_HEADER_LEN + usize::from(u16::MAX));
 			device_capabilities.segmentation.tcpv4 = self
 				.dev_cfg
 				.features
 				.contains(virtio::net::F::HOST_TSO4)
-				.then_some(NonZeroUsize::new(MAX_TSO_BUFFER_SIZE).unwrap());
+				.then_some(NonZeroUsize::new(max_tso4_buffer_size).unwrap());
 			device_capabilities.segmentation.tcpv6 = self
 				.dev_cfg
 				.features
@@ -716,15 +734,17 @@ impl VirtioNetDriver {
 	}
 
 	pub fn disable_interrupts(&mut self) {
-		// For send and receive queues?
-		// Only for receive? Because send is off anyway?
 		self.recv_vqs.disable_notifs();
 	}
 
+	/// Enables the receive interrupts. If a packet arrived before, the device
+	/// might not send an interrupt for it, so the network task is woken instead.
 	pub fn enable_interrupts(&mut self) {
-		// For send and receive queues?
-		// Only for receive? Because send is off anyway?
 		self.recv_vqs.enable_notifs();
+		if self.recv_vqs.has_packet() {
+			self.recv_vqs.disable_notifs();
+			wake_network_waker();
+		}
 	}
 
 	/// If necessary, sets the TCP or UDP checksum field to the checksum of the
@@ -836,6 +856,8 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 		virtio::net::F::INDIRECT_DESC
 			// Packed Vq can be used
 			.union(virtio::net::F::RING_PACKED)
+			// Notifications can be suppressed with event indices
+			.union(virtio::net::F::EVENT_IDX)
 			.union(virtio::net::F::NOTIFICATION_DATA)
 			// MTU setting can be used
 			.union(virtio::net::F::MTU)

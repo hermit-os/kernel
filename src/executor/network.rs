@@ -352,6 +352,36 @@ pub(crate) fn init() {
 	}
 }
 
+/// Default size in bytes of the send and receive buffer of each TCP socket.
+#[cfg(feature = "tcp")]
+const DEFAULT_TCP_BUFFER_SIZE: usize = 0x40000;
+
+/// Returns the size of the send and receive buffer of each TCP socket.
+///
+/// The size can be set with the environment variable `HERMIT_TCP_BUFFER_SIZE`.
+/// The receive buffer bounds the TCP window advertised to the peer and the send
+/// buffer bounds the amount of unacknowledged data in flight. Both directly limit
+/// the throughput to `buffer size / round-trip time`.
+#[cfg(feature = "tcp")]
+fn tcp_buffer_size() -> usize {
+	static SIZE: hermit_sync::Lazy<usize> = hermit_sync::Lazy::new(|| {
+		let Some(value) = hermit_var!("HERMIT_TCP_BUFFER_SIZE") else {
+			return DEFAULT_TCP_BUFFER_SIZE;
+		};
+		match value.parse::<usize>() {
+			Ok(size) if size > 0 => size,
+			_ => {
+				warn!(
+					"Invalid HERMIT_TCP_BUFFER_SIZE {value:?}, using default of {DEFAULT_TCP_BUFFER_SIZE} bytes"
+				);
+				DEFAULT_TCP_BUFFER_SIZE
+			}
+		}
+	});
+
+	*SIZE
+}
+
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "udp")]
 	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
@@ -368,7 +398,7 @@ impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "tcp")]
 	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
 		let buf_size = usize::max(
-			0x10000,
+			tcp_buffer_size(),
 			4 * self.device.capabilities().max_transmission_unit,
 		);
 		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; buf_size]);
