@@ -173,9 +173,6 @@ jobs:
     runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     env:
       HERMIT_CAREFUL: ${{ matrix.hermit-careful }}
-    defaults:
-      run:
-        working-directory: kernel
     strategy:
       matrix:
         arch: [x86_64, aarch64, aarch64_be, riscv64]
@@ -204,34 +201,21 @@ jobs:
             rs_flags: --features hermit/loader,hermit/semihosting
 
     steps:
-      - name: Checkout hermit-rs
-        uses: actions/checkout@v7
-        with:
-          repository: hermit-os/hermit-rs
-      - name: Checkout hermit-kernel
-        uses: actions/checkout@v7
-        with:
-          path: kernel
+      - uses: actions/checkout@v7
       - name: Install QEMU
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends ipxe-qemu libcap-ng-dev libseccomp-dev ${{ matrix.packages }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup component add llvm-tools
-        working-directory: .
       - run: rustup target add wasm32-wasip1
-        working-directory: .
-      - uses: mkroening/rust-toolchain-toml@main
-        with:
-          toolchain-file: "kernel/rust-toolchain.toml"
       - name: Build loader
         run: |
           for target in ${{ matrix.loader_targets }}; do
             cargo xtask build --target "$target" --release
           done
           cp target/release/hermit-loader-* ../..
-        working-directory: kernel/crates/loader
+        working-directory: crates/loader
       - name: Install Firecracker
         run: |
           gh release download --repo firecracker-microvm/firecracker v1.12.0 --pattern "firecracker-*-${{ matrix.arch }}.tgz"
@@ -276,11 +260,9 @@ jobs:
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package fuse_test --no-default-features --features hermit/virtio-fs qemu ${{ matrix.qemu_flags }} --devices virtio-fs-mmio
         if: matrix.arch != 'aarch64_be'
       - run: |
-          cd ..
           cargo build --target wasm32-wasip1 --profile release --package hello_world
-          mkdir -p kernel/shared
-          cp target/wasm32-wasip1/release/hello_world.wasm kernel/shared
-          cd kernel
+          mkdir -p shared
+          cp target/wasm32-wasip1/release/hello_world.wasm shared
           cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package hermit-wasm --features hermit/virtio-fs,hermit/pci qemu ${{ matrix.qemu_flags }} --devices virtio-fs-pci
         if: matrix.arch == 'x86_64'
       - run: cargo xtask ci rs --arch ${{ matrix.arch }} --profile ${{ matrix.profile }} ${{ matrix.rs_flags }} --package stdin qemu ${{ matrix.qemu_flags }}

@@ -19,3 +19,9 @@ ReadWriteable = "ReadWriteable"
 Writeable = "Writeable"
 LSR_THR_EMPTY = "LSR_THR_EMPTY"
 new_with_mem_reserv = "new_with_mem_reserv"
+
+[default.extend-words]
+tolen = "tolen"
+
+[files]
+extend-exclude = ["examples/hermit-wasm/wit/deps"]

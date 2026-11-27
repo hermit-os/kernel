@@ -60,7 +60,7 @@ impl Rs {
 		}
 
 		let mut rustflags = Vec::new();
-		let parent_root = super::parent_root();
+		let project_root = crate::project_root();
 
 		if self.package.contains("rftrace") {
 			rustflags.push("-Zinstrument-mcount");
@@ -74,7 +74,7 @@ impl Rs {
 		}
 
 		cargo
-			.current_dir(parent_root)
+			.current_dir(project_root)
 			.arg("build")
 			.args(self.cargo_build.artifact.arch.ci_cargo_args())
 			.args(self.cargo_build.cargo_build_args())
@@ -91,7 +91,7 @@ impl Rs {
 			let cur_package = cargo_metadata::PackageName::new(self.package.clone());
 			let mut cargo = cargo_metadata::MetadataCommand::new();
 			cargo
-				.current_dir(parent_root)
+				.current_dir(project_root)
 				.no_deps()
 				.verbose(true)
 				.exec()?

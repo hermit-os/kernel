@@ -1,0 +1,13 @@
+[package]
+name = "startup_benchmark"
+edition = "2021"
+
+[dependencies]
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[features]
+default = ["hermit/acpi", "hermit/loader", "hermit/pci"]
+
+[lints]

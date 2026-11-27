@@ -1,0 +1,16 @@
+[package]
+name = "httpd"
+edition = "2021"
+
+[dependencies]
+time = "0.3"
+tiny_http = "0.12"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[features]
+default = ["hermit/acpi", "hermit/pci", "hermit/pci-ids", "hermit/tcp"]
+ci = []
+
+[lints]

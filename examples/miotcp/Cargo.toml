@@ -1,0 +1,15 @@
+[package]
+name = "miotcp"
+edition = "2021"
+
+[dependencies]
+mio = { version = "1", features = ["net", "os-poll"] }
+env_logger = { version = "0.11.10", default-features = false }
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[features]
+default = ["hermit/acpi", "hermit/pci", "hermit/pci-ids", "hermit/tcp"]
+
+[lints]

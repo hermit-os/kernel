@@ -583,7 +583,7 @@ pub(crate) mod msix {
 			// of an entry while it is unmasked." (PCIe spec. 6.1.4.2)
 			msix_entry
 				.vector_control()
-				.update(|mut control| *control.set_bit(0, true));
+				.update(|mut control| *BitField::set_bit(&mut control, 0, true));
 
 			// Format described in Intel 64 and IA-32 Architectures Software Developer’s Manual volume 3 section 12.11.2.
 			msix_entry
@@ -594,7 +594,7 @@ pub(crate) mod msix {
 				.update(|mut data| *data.set_bits(0..8, u32::from(vector)));
 			msix_entry
 				.vector_control()
-				.update(|mut control| *control.set_bit(0, false));
+				.update(|mut control| *BitField::set_bit(&mut control, 0, false));
 		}
 	}
 }

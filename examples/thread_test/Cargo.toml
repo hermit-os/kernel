@@ -1,0 +1,8 @@
+[package]
+name = "thread_test"
+edition = "2024"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[lints]

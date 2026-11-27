@@ -1,0 +1,11 @@
+[package]
+name = "testtcp"
+edition = "2021"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[features]
+default = ["hermit/acpi", "hermit/pci", "hermit/pci-ids", "hermit/tcp"]
+
+[lints]

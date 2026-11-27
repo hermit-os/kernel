@@ -95,7 +95,7 @@ impl<'a> PlicVolatileMemberAccess<'a> for VolatilePtr<'a, Plic> {
 						.offset((source / 32).try_into().unwrap())
 				})
 				.update(|mut word| {
-					word.set_bit(source % 32, value);
+					BitField::set_bit(&mut word, source % 32, value);
 					word
 				});
 		};

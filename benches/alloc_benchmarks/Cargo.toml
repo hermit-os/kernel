@@ -1,0 +1,18 @@
+[package]
+name = "alloc_benchmarks"
+edition = "2021"
+
+[dependencies]
+fastrand = "2.4.1"
+hermit_bench_output = "0.1.0"
+
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit = { path = "../../crates/hermit", default-features = false }
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+riscv = "0.16"
+
+[features]
+default = ["hermit/acpi", "hermit/loader", "hermit/pci"]
+
+[lints]

@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ (matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be') && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     defaults:
       run:
-        working-directory: kernel/crates/loader
+        working-directory: crates/loader
     strategy:
       fail-fast: false
       matrix:
@@ -69,23 +69,11 @@ jobs:
           echo "FIRECRACKER=$PWD/firecracker" >> "$GITHUB_ENV"
         working-directory: ${{ runner.temp }}
         if: matrix.arch == 'x86_64'
-      - name: Checkout hermit-rs
-        uses: actions/checkout@v7
-        with:
-          repository: hermit-os/hermit-rs
-      - name: Checkout hermit-kernel
-        uses: actions/checkout@v7
-        with:
-          path: kernel
+      - uses: actions/checkout@v7
       - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup component add llvm-tools
-        working-directory: .
-      - uses: mkroening/rust-toolchain-toml@main
-        with:
-          toolchain-file: "kernel/rust-toolchain.toml"
       - name: Build test images
         run: |
-          image=../target/${{ matrix.arch == 'riscv64' && 'riscv64gc' || matrix.arch }}-unknown-hermit/release/hello_world
+          image=target/${{ matrix.arch == 'riscv64' && 'riscv64gc' || matrix.arch }}-unknown-hermit/release/hello_world
           data=crates/loader/data/${{ matrix.arch }}
           mkdir -p $data
           cargo xtask ci rs --arch ${{ matrix.arch }} --profile release --features ${{ matrix.rs_features }} --package hello_world build
@@ -94,7 +82,7 @@ jobs:
             cargo xtask ci rs --arch ${{ matrix.arch }} --profile release --no-default-features --features ${{ matrix.rs_features }} --package hello_world build
             cp $image $data/hello_world-microvm
           fi
-        working-directory: kernel
+        working-directory: .
       - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-elf
         if: matrix.arch == 'aarch64' || matrix.arch == 'aarch64_be'
       - run: cargo xtask ci qemu ${{ matrix.flags }} --profile ${{ matrix.profile }} --target ${{ matrix.arch }}-elf --u-boot
