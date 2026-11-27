@@ -23,7 +23,7 @@ pub(crate) struct State {
 	/// Stack selector
 	pub spsel: u64,
 	/// Exception Link Register
-	pub elr_el1: extern "C" fn(extern "C" fn(usize), usize) -> !,
+	pub elr_el1: u64,
 	/// Program Status Register
 	pub spsr_el1: u64,
 	/// User-level stack
@@ -303,7 +303,7 @@ impl TaskFrame for Task {
 
 			// The elr_el1 needs to hold the address of the
 			// first function to be called when returning from exception handler.
-			(*state).elr_el1 = task_start;
+			(*state).elr_el1 = (task_start as *const ()).expose_provenance() as u64;
 			(*state).x0 = func as usize as u64; // use second argument to transfer the entry point
 			(*state).x1 = arg as u64;
 			(*state).spsel = 1;

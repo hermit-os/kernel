@@ -20,6 +20,8 @@ pub use self::semaphore::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+#[cfg(feature = "trap-handler")]
+pub use self::trap::*;
 use crate::errno::{Errno, ToErrno};
 use crate::executor::block_on;
 use crate::fd::{
@@ -46,6 +48,8 @@ mod system;
 pub(crate) mod table;
 mod tasks;
 mod timer;
+#[cfg(feature = "trap-handler")]
+pub mod trap;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

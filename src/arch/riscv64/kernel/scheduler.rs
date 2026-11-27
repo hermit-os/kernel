@@ -306,7 +306,7 @@ impl TaskFrame for Task {
 				self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10u64;
 
 			(*state).sp = self.last_stack_pointer.as_usize();
-			(*state).a2 = self.user_stack_pointer.as_usize() - size_of::<u64>();
+			(*state).a2 = self.user_stack_pointer.as_usize();
 			// trace!("state: {:#X?}", *state);
 		}
 	}

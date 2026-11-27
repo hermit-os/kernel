@@ -19,6 +19,8 @@ use crate::arch::swapgs;
 use crate::arch::x86_64::kernel::pic::PIC1_OFFSET;
 use crate::drivers::InterruptHandlerMap;
 use crate::scheduler::{self, CoreId};
+#[cfg(feature = "trap-handler")]
+use crate::syscalls::trap;
 
 static IRQ_HANDLERS: OnceCell<InterruptHandlerMap> = OnceCell::new();
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
@@ -207,6 +209,64 @@ fn handle_interrupt(stack_frame: ExceptionStackFrame, index: u8, _error_code: Op
 	swapgs(&stack_frame);
 }
 
+/// Delivers a trap of a task to the handler registered with `sys_set_trap_handler`.
+///
+/// Traps in the kernel, i.e. on the kernel stack or with disabled interrupts,
+/// are not delivered.
+#[cfg(feature = "trap-handler")]
+pub(crate) fn redirect_trap(
+	stack_frame: &mut ExceptionStackFrame,
+	kind: u32,
+	faulting_addr: Option<u64>,
+) -> bool {
+	use core::ptr;
+
+	use x86_64::registers::rflags::RFlags;
+
+	use crate::arch::kernel::core_local::CoreLocal;
+	use crate::config::DEFAULT_STACK_SIZE;
+
+	if cfg!(feature = "common-os") || !stack_frame.cpu_flags.contains(RFlags::INTERRUPT_FLAG) {
+		return false;
+	}
+
+	let rsp = stack_frame.stack_pointer.as_u64();
+	let kernel_stack = CoreLocal::get().kernel_stack.get().addr() as u64;
+	if rsp <= kernel_stack && rsp > kernel_stack.saturating_sub(DEFAULT_STACK_SIZE as u64) {
+		return false;
+	}
+
+	// Skip the red zone of the interrupted code.
+	const RED_ZONE: u64 = 128;
+	let Some(sp) = rsp.checked_sub(RED_ZONE) else {
+		return false;
+	};
+	let args = [
+		kind.into(),
+		faulting_addr.is_some().into(),
+		stack_frame.instruction_pointer.as_u64(),
+		0,
+		rsp,
+		faulting_addr.unwrap_or_default(),
+	];
+	let sp = (sp & !0xf) - size_of_val(&args) as u64;
+	let top = sp + size_of_val(&args) as u64;
+	if !trap::can_deliver(sp as usize, top as usize) {
+		return false;
+	}
+
+	// SAFETY: the memory is mapped, below the red zone and therefore not in use.
+	unsafe {
+		ptr::with_exposed_provenance_mut::<[u64; trap::TRAMPOLINE_ARGS]>(sp as usize).write(args);
+		stack_frame.as_mut().update(|frame| {
+			frame.instruction_pointer =
+				x86_64::VirtAddr::new((trap::trap_trampoline as *const ()).addr() as u64);
+			frame.stack_pointer = x86_64::VirtAddr::new(sp);
+		});
+	}
+	true
+}
+
 fn abort(stack_frame: ExceptionStackFrame, index: u8, error_code: Option<u64>) {
 	error!("Exception {index}");
 	error!("Error code: {error_code:?}");
@@ -214,8 +274,16 @@ fn abort(stack_frame: ExceptionStackFrame, index: u8, error_code: Option<u64>) {
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn divide_error_exception(stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn divide_error_exception(
+	#[cfg_attr(not(feature = "trap-handler"), allow(unused_mut))]
+	mut stack_frame: ExceptionStackFrame,
+) {
 	swapgs(&stack_frame);
+	#[cfg(feature = "trap-handler")]
+	if redirect_trap(&mut stack_frame, trap::TRAP_ARITHMETIC, None) {
+		swapgs(&stack_frame);
+		return;
+	}
 	error!("Divide Error (#DE) Exception: {stack_frame:#?}");
 	scheduler::abort();
 }
@@ -250,8 +318,16 @@ extern "x86-interrupt" fn bound_range_exceeded_exception(stack_frame: ExceptionS
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn invalid_opcode_exception(stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn invalid_opcode_exception(
+	#[cfg_attr(not(feature = "trap-handler"), allow(unused_mut))]
+	mut stack_frame: ExceptionStackFrame,
+) {
 	swapgs(&stack_frame);
+	#[cfg(feature = "trap-handler")]
+	if redirect_trap(&mut stack_frame, trap::TRAP_ILLEGAL_INSTRUCTION, None) {
+		swapgs(&stack_frame);
+		return;
+	}
 	error!("Invalid Opcode (#UD) Exception: {stack_frame:#?}");
 	scheduler::abort();
 }
@@ -298,10 +374,16 @@ extern "x86-interrupt" fn stack_segment_fault_exception(
 }
 
 extern "x86-interrupt" fn general_protection_exception(
-	stack_frame: ExceptionStackFrame,
+	#[cfg_attr(not(feature = "trap-handler"), allow(unused_mut))]
+	mut stack_frame: ExceptionStackFrame,
 	error_code: u64,
 ) {
 	swapgs(&stack_frame);
+	#[cfg(feature = "trap-handler")]
+	if redirect_trap(&mut stack_frame, trap::TRAP_MEMORY_FAULT, None) {
+		swapgs(&stack_frame);
+		return;
+	}
 	error!("General Protection (#GP) Exception: {stack_frame:#?}, error {error_code:#X}");
 	error!(
 		"fs = {:#X}, gs = {:#X}",

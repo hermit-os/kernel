@@ -517,6 +517,18 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
+	translate(&ROOT_PAGETABLE.lock(), virtual_address)
+}
+
+/// Like [`virtual_to_physical`], but returns `None` instead of waiting for
+/// the lock of the page table, e.g. in exception handlers.
+#[cfg(feature = "trap-handler")]
+pub(crate) fn try_virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
+	let page_table = ROOT_PAGETABLE.try_lock()?;
+	translate(&page_table, virtual_address)
+}
+
+fn translate(page_table: &PageTable<L2Table>, virtual_address: VirtAddr) -> Option<PhysAddr> {
 	// panic!("Not implemented!");
 	/* if virtual_address < mm::kernel_start_address() {
 		// Parts of the memory below the kernel image are identity-mapped.
@@ -553,16 +565,14 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 		);
 	}
 
-	let page_table = ROOT_PAGETABLE.lock();
-	let mut page_table_addr = ptr::from_ref(&*page_table);
+	let mut page_table_addr = ptr::from_ref(page_table);
 	for i in (0..PAGE_LEVELS).rev() {
 		let pte = unsafe { (*page_table_addr).entries[(vpn[i]) as usize] };
 		// trace!("PTE: {:?} , i: {}, vpn[i]: {:#X}", pte, i, vpn[i]);
 		//Translation would raise a page-fault exception
-		assert!(
-			pte.is_present() && (pte.is_readable() || !pte.is_writable()),
-			"Invalid PTE: {pte:?}"
-		);
+		if !pte.is_present() || (pte.is_writable() && !pte.is_readable()) {
+			return None;
+		}
 
 		if pte.is_executable() || pte.is_readable() {
 			//PTE is a leaf
