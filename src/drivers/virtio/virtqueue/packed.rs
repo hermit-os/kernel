@@ -625,12 +625,11 @@ impl Virtq for PackedVq {
 			self.drv_event.enable_specific(next_idx);
 		}
 
-		// FIXME: impl PartialEq for EventSuppressDesc in virtio-spec instead of converting into bits.
+		let range = self.last_next.get()..next_idx;
 		let notif_specific = self
 			.dev_event
 			.notif_specific()
-			.map(EventSuppressDesc::into_bits)
-			== Some(self.last_next.get().into_bits());
+			.is_some_and(|idx| range.wrapping_contains(&idx));
 
 		if self.dev_event.is_notif() || notif_specific {
 			let notification_data = NotificationData::new()
@@ -708,6 +707,7 @@ impl PackedVq {
 		let order_platform = features.contains(virtio::F::ORDER_PLATFORM);
 
 		let mut descr_ring = DescriptorRing::new(vq_size, order_platform);
+		let descr_ring_start = descr_ring.write_index;
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = size_of::<pvirtq::EventSuppress>().align_up(BasePageSize::SIZE as usize);
 
@@ -730,7 +730,7 @@ impl PackedVq {
 			raw: drv_event,
 		};
 
-		let dev_event = DevNotif {
+		let mut dev_event = DevNotif {
 			order_platform,
 			f_notif_idx: false,
 			raw: dev_event,
@@ -744,6 +744,7 @@ impl PackedVq {
 
 		if features.contains(virtio::F::EVENT_IDX) {
 			drv_event.f_notif_idx = true;
+			dev_event.f_notif_idx = true;
 		}
 
 		vq_handler.enable_queue();
@@ -757,7 +758,7 @@ impl PackedVq {
 			notif_ctrl,
 			size: vq_size,
 			index,
-			last_next: Cell::default(),
+			last_next: Cell::new(descr_ring_start),
 		})
 	}
 }

@@ -836,6 +836,8 @@ impl crate::drivers::virtio::VirtioDriver for VirtioNetDriver {
 		virtio::net::F::INDIRECT_DESC
 			// Packed Vq can be used
 			.union(virtio::net::F::RING_PACKED)
+			// Notifications can be suppressed with event indices
+			.union(virtio::net::F::EVENT_IDX)
 			.union(virtio::net::F::NOTIFICATION_DATA)
 			// MTU setting can be used
 			.union(virtio::net::F::MTU)

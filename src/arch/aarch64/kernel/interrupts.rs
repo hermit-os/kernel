@@ -29,6 +29,8 @@ const PPI_START: u8 = 16;
 const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
+/// Immediate of the supervisor call, with which a task gives up the core
+pub(crate) const SVC_RESCHED: u16 = 1;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
@@ -168,13 +170,20 @@ pub(crate) extern "C" fn do_irq(_state: &State) -> *mut usize {
 	core_scheduler().scheduler().unwrap_or_default()
 }
 
+/// Handles synchronous exceptions and returns, like [`do_irq`], where to store the
+/// stack pointer of the current task, if the exception switches to another task.
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn do_sync(state: &State) {
+pub(crate) extern "C" fn do_sync(state: &State) -> *mut usize {
 	let esr = ESR_EL1.get();
 	let ec_raw = ESR_EL1.read(ESR_EL1::EC);
 	let ec: ESR_EL1::EC::Value = ESR_EL1.read_as_enum(ESR_EL1::EC).unwrap();
 	let iss = ESR_EL1.read(ESR_EL1::ISS);
 	let pc = ELR_EL1.get();
+
+	if ec == ESR_EL1::EC::Value::SVC64 && iss == u64::from(SVC_RESCHED) {
+		core_scheduler().handle_waiting_tasks();
+		return core_scheduler().scheduler().unwrap_or_default();
+	}
 
 	/* data abort from lower or current level */
 	if (ec == ESR_EL1::EC::Value::DataAbortCurrentEL)
@@ -229,6 +238,8 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 			core::hint::spin_loop();
 		}
 	}
+
+	ptr::null_mut()
 }
 
 #[unsafe(no_mangle)]
