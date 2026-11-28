@@ -238,13 +238,13 @@ checksum = "c3d036a3c4ab069c7b410a2ce876bd74808d2d0888a82667669f8e783a898bf1"
 
 [[package]]
 name = "arm-gic"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aae38b5192f8463cef6c94ec9804774c2b106b16b0bb7c41401f9457d5e99229"
+checksum = "c515ae78e71b0da6996b07c9afc2be190df9f60a631fe201d3be991d1e3e7c17"
 dependencies = [
  "arm-sysregs",
  "bitflags 2.13.2",
- "safe-mmio",
+ "safe-mmio 0.4.1",
  "thiserror",
  "zerocopy",
 ]
@@ -256,7 +256,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da0601ab96b18e55589d286dc635d1aac547e266aeaf3393813bb37c79318a71"
 dependencies = [
  "bitflags 2.13.2",
- "safe-mmio",
+ "safe-mmio 0.3.1",
  "thiserror",
  "zerocopy",
 ]
@@ -3564,6 +3564,15 @@ checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 name = "safe-mmio"
 version = "0.3.1"
 source = "git+https://github.com/hermit-os/safe-mmio?branch=0.3.x#7761a450a69f37ea524dbd2ec3e7c6919d13a3b5"
+dependencies = [
+ "zerocopy",
+]
+
+[[package]]
+name = "safe-mmio"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8417ffe7fb920724b1d5a66161b4bea7e650649df91747ded6851728da4a90cc"
 dependencies = [
  "zerocopy",
 ]
